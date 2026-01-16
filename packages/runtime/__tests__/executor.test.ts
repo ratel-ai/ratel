@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { executeAgent, streamAgent } from "../executor"
-import { createTraceEmitter } from "../../traces/emitter"
-import type { AgentConfig } from "../../config/schema"
+import { executeAgent, streamAgent } from "../src/agent/executor"
+import { createTraceEmitter } from "../src/traces/emitter"
+import type { AgentConfig } from "../src/config/schema"
 import type { LanguageModel } from "ai"
 
 const createMockModel = (response: string = "Hello!"): LanguageModel => {

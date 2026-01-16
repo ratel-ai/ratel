@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { AgentConfigSchema, type AgentConfig } from "../schema"
+import { AgentConfigSchema, type AgentConfig } from "../src/config/schema"
 
 describe("AgentConfigSchema", () => {
   describe("valid configs", () => {

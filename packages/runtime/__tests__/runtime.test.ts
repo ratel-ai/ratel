@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { createAgentRuntime } from "../runtime"
-import { createTraceEmitter } from "../traces/emitter"
-import { createInMemoryDecisionGraph } from "../capabilities/builtins"
-import type { AgentConfig } from "../config/schema"
+import { createAgentRuntime } from "../src/runtime"
+import { createTraceEmitter } from "../src/traces/emitter"
+import { createInMemoryDecisionGraph } from "../src/capabilities/builtins"
+import type { AgentConfig } from "../src/config/schema"
 import type { LanguageModel } from "ai"
-import type { Capability } from "../types"
+import type { Capability } from "../src/types"
 
 const createMockModel = (response: string = "Hello!"): LanguageModel => {
   return {

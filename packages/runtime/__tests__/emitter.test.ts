@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
-import { createTraceEmitter } from "../emitter"
-import type { Trace } from "../../types"
+import { createTraceEmitter } from "../src/traces/emitter"
+import type { Trace } from "../src/types"
 
 const createTestTrace = (overrides: Partial<Trace> = {}): Trace => ({
   id: "trace-123",

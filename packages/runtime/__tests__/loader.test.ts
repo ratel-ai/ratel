@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { loadConfig, parseConfig } from "../loader"
+import { loadConfig, parseConfig } from "../src/config/loader"
 
 const validYaml = `
 version: "1"
