@@ -1,0 +1,9 @@
+version: "1"
+agent:
+  id: fixture-agent
+  name: Fixture Agent
+model:
+  provider: openai
+  model: gpt-4o
+persona:
+  system: You are a helpful assistant.

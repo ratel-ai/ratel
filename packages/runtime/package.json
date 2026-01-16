@@ -26,11 +26,24 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "zod": "^3.24",
+    "yaml": "^2.7"
+  },
   "peerDependencies": {
-    "ai": ">=3.0.0"
+    "ai": ">=3.0.0",
+    "@ai-sdk/openai": ">=1.0.0",
+    "@ai-sdk/anthropic": ">=1.0.0",
+    "@ai-sdk/google": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/openai": { "optional": true },
+    "@ai-sdk/anthropic": { "optional": true },
+    "@ai-sdk/google": { "optional": true }
   },
   "devDependencies": {
-    "ai": "^4.1.0"
+    "ai": "^4.1.0",
+    "@ai-sdk/openai": "^1.0.0"
   },
   "publishConfig": {
     "access": "public"
