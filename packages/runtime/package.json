@@ -1,0 +1,46 @@
+{
+  "name": "@agentified/runtime",
+  "version": "0.0.0",
+  "description": "Agent execution from config using Vercel AI SDK",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "ai": ">=3.0.0"
+  },
+  "devDependencies": {
+    "ai": "^4.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentified/agentified.git",
+    "directory": "packages/runtime"
+  },
+  "bugs": {
+    "url": "https://github.com/agentified/agentified/issues"
+  },
+  "homepage": "https://github.com/agentified/agentified/tree/main/packages/runtime#readme"
+}

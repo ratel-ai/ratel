@@ -4,42 +4,56 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Agentified** is a newly initialized Node.js project using CommonJS modules. The project structure and codebase are currently being developed.
+**Agentified** is a pnpm monorepo containing npm packages for agent development:
+
+- `@agentified/sdk` - Platform API client (Node)
+- `@agentified/runtime` - Agent execution from config (Vercel AI SDK)
+- `@agentified/react` - React hooks/components (depends on sdk)
+- `@agentified/cli` - Developer CLI (depends on runtime + sdk)
 
 ## Development Commands
 
-### Setup and Installation
 ```bash
-npm install          # Install dependencies
+pnpm install          # Install dependencies
+pnpm build            # Build all packages
+pnpm typecheck        # Type-check all packages
+pnpm lint             # Run ESLint
+pnpm lint:fix         # Fix lint errors
+pnpm test             # Run tests
+pnpm test:watch       # Run tests in watch mode
 ```
 
-### Testing
-```bash
-npm test             # Run test suite
-```
+### Changesets (versioning)
 
-### Build and Development
-Currently, there are no build or lint commands configured. Add these as the project develops:
-- Consider adding a linter (ESLint) for code quality
-- Consider adding a test framework (Jest, Mocha) for proper test coverage
+```bash
+pnpm changeset        # Create a changeset
+pnpm version          # Apply changesets to versions
+pnpm release          # Build and publish packages
+```
 
 ## Project Structure
 
-The repository is in its initial stages with minimal structure. As the project grows:
-- Organize source code in a `src/` directory
-- Place tests in a `tests/` or `__tests__/` directory
-- Consider adding `lib/` for any compiled or generated code
+```
+packages/
+  sdk/                # @agentified/sdk
+  runtime/            # @agentified/runtime
+  react/              # @agentified/react
+  cli/                # @agentified/cli
+```
 
 ## Key Information
 
-- **Module System**: CommonJS (`"type": "commonjs"` in package.json)
+- **Package manager**: pnpm with workspaces
+- **Module system**: ESM (with CJS builds)
+- **Versioning**: Changesets (fixed - all packages same version)
+- **Build**: tsup (ESM + CJS + types)
+- **Testing**: Vitest
+- **Linting**: ESLint v9 flat config
 - **Repository**: https://github.com/agentified/agentified
-- **Main Entry**: `index.js` (to be created)
 
-## Next Steps for Development
+## Package Dependencies
 
-1. Create the main entry point (`index.js`)
-2. Define project scope and add appropriate dependencies
-3. Implement a testing framework and write tests
-4. Add a linter (ESLint) for code quality
-5. Consider adding a build process if needed
+- `sdk`: no internal deps
+- `runtime`: peerDep on `ai` (Vercel AI SDK)
+- `react`: peerDep on `react`, `@agentified/sdk`
+- `cli`: dep on `@agentified/runtime`, `@agentified/sdk`
