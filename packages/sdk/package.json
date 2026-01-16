@@ -1,6 +1,6 @@
 {
   "name": "@agentified/sdk",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Platform API client for Agentified",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -18,7 +18,9 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
