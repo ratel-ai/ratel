@@ -10,6 +10,8 @@ Started: Fri Feb 20 19:04:57 CET 2026
 
 - [x] Phase 1.3: Tool Registration — POST /api/v1/tools registers tools w/ embeddings, GET /api/v1/tools lists them. EmbeddingService trait for testability, OpenAI text-embedding-3-small impl, embedding cache by content hash. TDD: 4 tests.
 
+- [x] Phase 1.4: Discover Endpoint — POST /api/v1/discover ranks tools via hybrid scoring (0.7 cosine similarity + 0.3 normalized BM25). Cosine similarity, BM25 w/ IDF+TF, min-max normalization. TDD: 10 tests total.
+
 ## Next
 
-- [ ] Phase 1.4: Discover Endpoint (Tool Selection)
+- [ ] Phase 1.5: Test Script

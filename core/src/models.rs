@@ -30,3 +30,24 @@ pub struct RegisterToolsResponse {
 pub struct ListToolsResponse {
     pub tools: Vec<Tool>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct DiscoverRequest {
+    pub query: String,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub history: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DiscoverResponse {
+    pub tools: Vec<RankedTool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RankedTool {
+    #[serde(flatten)]
+    pub tool: Tool,
+    pub score: f32,
+}
