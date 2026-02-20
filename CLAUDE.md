@@ -1,59 +1,41 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-**Agentified** is a pnpm monorepo containing npm packages for agent development:
-
-- `@agentified/sdk` - Platform API client (Node)
-- `@agentified/runtime` - Agent execution from config (Vercel AI SDK)
-- `@agentified/react` - React hooks/components (depends on sdk)
-- `@agentified/cli` - Developer CLI (depends on runtime + sdk)
-
-## Development Commands
-
-```bash
-pnpm install          # Install dependencies
-pnpm build            # Build all packages
-pnpm typecheck        # Type-check all packages
-pnpm lint             # Run ESLint
-pnpm lint:fix         # Fix lint errors
-pnpm test             # Run tests
-pnpm test:watch       # Run tests in watch mode
-```
-
-### Changesets (versioning)
-
-```bash
-pnpm changeset        # Create a changeset
-pnpm version          # Apply changesets to versions
-pnpm release          # Build and publish packages
-```
+**Agentified** — Context Intelligence Layer for AI agents. This repo contains `agentified-core`, a Rust HTTP server for tool registration and context resolution (intelligent tool selection).
 
 ## Project Structure
 
 ```
-packages/
-  sdk/                # @agentified/sdk
-  runtime/            # @agentified/runtime
-  react/              # @agentified/react
-  cli/                # @agentified/cli
+agentified/
+├── core/                 # Rust server
+│   ├── Cargo.toml
+│   └── src/
+├── scripts/              # Test scripts
+└── README.md
+```
+
+## Development Commands
+
+```bash
+cd core
+cargo build               # Build
+cargo build --release     # Release build
+cargo run                 # Run server (localhost:9119)
+cargo test                # Run tests
 ```
 
 ## Key Information
 
-- **Package manager**: pnpm with workspaces
-- **Module system**: ESM (with CJS builds)
-- **Versioning**: Changesets (fixed - all packages same version)
-- **Build**: tsup (ESM + CJS + types)
-- **Testing**: Vitest
-- **Linting**: ESLint v9 flat config
-- **Repository**: https://github.com/agentified/agentified
+- **Language**: Rust
+- **HTTP framework**: axum
+- **Runtime**: tokio
+- **Embeddings**: OpenAI text-embedding-3-small
+- **Ranking**: Hybrid (0.7 * semantic + 0.3 * BM25)
+- **Storage**: In-memory (HashMap)
+- **Default port**: 9119
 
-## Package Dependencies
+## Environment Variables
 
-- `sdk`: no internal deps
-- `runtime`: peerDep on `ai` (Vercel AI SDK)
-- `react`: peerDep on `react`, `@agentified/sdk`
-- `cli`: dep on `@agentified/runtime`, `@agentified/sdk`
+- `OPENAI_API_KEY` — required for embeddings
+- `AGENTIFIED_PORT` — server port (default: 9119)
