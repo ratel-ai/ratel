@@ -12,6 +12,8 @@ Started: Fri Feb 20 19:04:57 CET 2026
 
 - [x] Phase 1.4: Discover Endpoint — POST /api/v1/discover ranks tools via hybrid scoring (0.7 cosine similarity + 0.3 normalized BM25). Cosine similarity, BM25 w/ IDF+TF, min-max normalization. TDD: 10 tests total.
 
-## Next
+- [x] Phase 1.5: Test Script — scripts/test-server.sh registers 8 tools, validates health/list/discover endpoints, tests 4 PRD scenarios (refund, password reset, 401 errors, billing update), checks limit param. Run: `./scripts/test-server.sh`
 
-- [ ] Phase 1.5: Test Script
+## Status
+
+All Phase 1 tasks complete.
