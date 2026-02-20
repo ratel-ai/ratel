@@ -1,0 +1,15 @@
+# Progress for Issue #5
+
+Started: Fri Feb 20 19:04:57 CET 2026
+
+## Completed
+
+- [x] Phase 1.1: Repository Setup — removed packages/, apps/, pnpm-workspace.yaml, old JS tooling. Created core/ and scripts/ dirs. Updated .gitignore, README.md, CLAUDE.md for Rust project.
+
+- [x] Phase 1.2: Rust Server Setup — initialized Cargo project, added axum/tokio/serde/reqwest/tracing deps, created health endpoint with TDD, verified release build. Server runs on port 9119 (AGENTIFIED_PORT env).
+
+- [x] Phase 1.3: Tool Registration — POST /api/v1/tools registers tools w/ embeddings, GET /api/v1/tools lists them. EmbeddingService trait for testability, OpenAI text-embedding-3-small impl, embedding cache by content hash. TDD: 4 tests.
+
+## Next
+
+- [ ] Phase 1.4: Discover Endpoint (Tool Selection)
