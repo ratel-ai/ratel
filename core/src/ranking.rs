@@ -1,6 +1,38 @@
 use std::collections::HashMap;
 
+use crate::models::{EmbeddingFieldWeights, FieldEmbeddings};
+
+pub fn weighted_semantic_score(
+    query_emb: &[f32],
+    field_embs: &FieldEmbeddings,
+    weights: &EmbeddingFieldWeights,
+) -> f32 {
+    let mut total_score = 0.0;
+    let mut total_weight = 0.0;
+
+    // Name field (always present)
+    total_score += weights.name * cosine_similarity(query_emb, &field_embs.name);
+    total_weight += weights.name;
+
+    // Description field (always present)
+    total_score += weights.description * cosine_similarity(query_emb, &field_embs.description);
+    total_weight += weights.description;
+
+    // Optional fields
+    if let Some(ref emb) = field_embs.input_schema {
+        total_score += weights.input_schema * cosine_similarity(query_emb, emb);
+        total_weight += weights.input_schema;
+    }
+    if let Some(ref emb) = field_embs.output_schema {
+        total_score += weights.output_schema * cosine_similarity(query_emb, emb);
+        total_weight += weights.output_schema;
+    }
+
+    if total_weight > 0.0 { total_score / total_weight } else { 0.0 }
+}
+
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    debug_assert_eq!(a.len(), b.len(), "cosine_similarity: vector length mismatch");
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let norm_a = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b = b.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -23,7 +55,6 @@ pub fn bm25_scores(query: &str, documents: &[String]) -> Vec<f32> {
     let doc_terms: Vec<Vec<String>> = documents.iter().map(|d| tokenize(d)).collect();
     let avg_dl = doc_terms.iter().map(|d| d.len()).sum::<usize>() as f32 / n as f32;
 
-    // Document frequency: how many docs contain each term
     let mut df: HashMap<String, usize> = HashMap::new();
     for terms in &doc_terms {
         let unique: std::collections::HashSet<&str> = terms.iter().map(|s| s.as_str()).collect();
@@ -37,7 +68,6 @@ pub fn bm25_scores(query: &str, documents: &[String]) -> Vec<f32> {
         .map(|terms| {
             let dl = terms.len() as f32;
 
-            // Term frequencies in this doc
             let mut tf: HashMap<&str, f32> = HashMap::new();
             for t in terms {
                 *tf.entry(t.as_str()).or_default() += 1.0;
@@ -104,5 +134,62 @@ mod tests {
         let docs = vec!["get customer account details".to_string()];
         let scores = bm25_scores("refund", &docs);
         assert!((scores[0]).abs() < 1e-6, "no match should score ~0: {:?}", scores);
+    }
+
+    #[test]
+    fn weighted_semantic_score_uses_field_weights() {
+        // Query vector aligned with name_emb
+        let query = vec![1.0, 0.0, 0.0];
+        let name_emb = vec![1.0, 0.0, 0.0]; // cosine = 1.0
+        let desc_emb = vec![0.0, 1.0, 0.0]; // cosine = 0.0
+
+        let field_embs = FieldEmbeddings {
+            name: name_emb,
+            description: desc_emb,
+            input_schema: None,
+            output_schema: None,
+        };
+
+        // Heavy name weight
+        let weights = EmbeddingFieldWeights {
+            name: 0.9,
+            description: 0.1,
+            input_schema: 0.0,
+            output_schema: 0.0,
+        };
+
+        let score = weighted_semantic_score(&query, &field_embs, &weights);
+        // Expected: (0.9 * 1.0 + 0.1 * 0.0) / (0.9 + 0.1) = 0.9
+        assert!((score - 0.9).abs() < 1e-6, "expected ~0.9, got {score}");
+
+        // Heavy description weight
+        let weights2 = EmbeddingFieldWeights {
+            name: 0.1,
+            description: 0.9,
+            input_schema: 0.0,
+            output_schema: 0.0,
+        };
+        let score2 = weighted_semantic_score(&query, &field_embs, &weights2);
+        // Expected: (0.1 * 1.0 + 0.9 * 0.0) / (0.1 + 0.9) = 0.1
+        assert!((score2 - 0.1).abs() < 1e-6, "expected ~0.1, got {score2}");
+    }
+
+    #[test]
+    fn weighted_semantic_score_handles_missing_fields() {
+        let query = vec![1.0, 0.0, 0.0];
+        let field_embs = FieldEmbeddings {
+            name: vec![1.0, 0.0, 0.0],
+            description: vec![0.5, 0.5, 0.0],
+            input_schema: None,
+            output_schema: None,
+        };
+
+        let weights = EmbeddingFieldWeights::default();
+        let score = weighted_semantic_score(&query, &field_embs, &weights);
+
+        // Only name (0.1) + description (0.5) active, total weight = 0.6
+        let desc_cos = cosine_similarity(&query, &field_embs.description);
+        let expected = (0.1 * 1.0 + 0.5 * desc_cos) / 0.6;
+        assert!((score - expected).abs() < 1e-6, "expected {expected}, got {score}");
     }
 }
