@@ -59,44 +59,92 @@ HEALTH=$(curl -sf "$BASE_URL/health" 2>&1) || { fail "Health check — server no
 assert_contains "$HEALTH" '"status":"ok"' "Health endpoint returns ok"
 
 # -------------------------------------------------------------------
-# 2. Register sample tools
+# 2. Register sample tools (with multi-field embeddings)
 # -------------------------------------------------------------------
-log "Registering tools..."
+log "Registering tools with fields..."
 REG_RESPONSE=$(curl -sf -X POST "$BASE_URL/api/v1/tools" \
   -H "Content-Type: application/json" \
   -d '{
     "tools": [
       {
         "name": "getAccountInfo",
-        "description": "Get customer account details including name, email, and plan"
+        "description": "Get customer account details including name, email, and plan",
+        "fields": {
+          "name": "getAccountInfo",
+          "description": "Get customer account details including name, email, and plan",
+          "input_schema": "{ accountId: string }",
+          "output_schema": "{ name: string, email: string, plan: string }"
+        }
       },
       {
         "name": "processRefund",
-        "description": "Process a refund for a specific invoice or purchase"
+        "description": "Process a refund for a specific invoice or purchase",
+        "fields": {
+          "name": "processRefund",
+          "description": "Process a refund for a specific invoice or purchase",
+          "input_schema": "{ invoiceId: string, amount: number, reason: string }",
+          "output_schema": "{ success: boolean, refundId: string }"
+        }
       },
       {
         "name": "getInvoices",
-        "description": "List invoices and billing history for a customer account"
+        "description": "List invoices and billing history for a customer account",
+        "fields": {
+          "name": "getInvoices",
+          "description": "List invoices and billing history for a customer account",
+          "input_schema": "{ accountId: string, limit?: number }",
+          "output_schema": "{ invoices: Array<{ id: string, amount: number, date: string }> }"
+        }
       },
       {
         "name": "resetPassword",
-        "description": "Reset user password and send a recovery email"
+        "description": "Reset user password and send a recovery email",
+        "fields": {
+          "name": "resetPassword",
+          "description": "Reset user password and send a recovery email",
+          "input_schema": "{ email: string }",
+          "output_schema": "{ success: boolean, message: string }"
+        }
       },
       {
         "name": "runDiagnostics",
-        "description": "Run diagnostics on a service, check for errors and outages"
+        "description": "Run diagnostics on a service, check for errors and outages",
+        "fields": {
+          "name": "runDiagnostics",
+          "description": "Run diagnostics on a service, check for errors and outages",
+          "input_schema": "{ serviceId: string }",
+          "output_schema": "{ status: string, errors: string[], uptime: number }"
+        }
       },
       {
         "name": "checkServiceStatus",
-        "description": "Check the current status of API services and uptime"
+        "description": "Check the current status of API services and uptime",
+        "fields": {
+          "name": "checkServiceStatus",
+          "description": "Check the current status of API services and uptime",
+          "input_schema": "{ serviceId?: string }",
+          "output_schema": "{ services: Array<{ name: string, status: string, uptime: number }> }"
+        }
       },
       {
         "name": "updateBillingInfo",
-        "description": "Update payment method or billing address for an account"
+        "description": "Update payment method or billing address for an account",
+        "fields": {
+          "name": "updateBillingInfo",
+          "description": "Update payment method or billing address for an account",
+          "input_schema": "{ accountId: string, paymentMethod?: object, address?: object }",
+          "output_schema": "{ success: boolean }"
+        }
       },
       {
         "name": "sendNotification",
-        "description": "Send a push notification or email to a user"
+        "description": "Send a push notification or email to a user",
+        "fields": {
+          "name": "sendNotification",
+          "description": "Send a push notification or email to a user",
+          "input_schema": "{ userId: string, type: \"push\" | \"email\", message: string }",
+          "output_schema": "{ sent: boolean, messageId: string }"
+        }
       }
     ]
   }')
@@ -114,13 +162,27 @@ else
   fail "GET /api/v1/tools — expected 8 tools, got $TOOL_COUNT"
 fi
 
+# Verify fields are present in response
+HAS_FIELDS=$(echo "$LIST_RESPONSE" | jq '[.tools[].fields] | map(select(. != null)) | length')
+if [ "$HAS_FIELDS" -eq 8 ]; then
+  pass "All tools have fields in response"
+else
+  fail "Expected 8 tools with fields, got $HAS_FIELDS"
+fi
+
 # -------------------------------------------------------------------
-# 4. Discover — test scenarios from PRD
+# 4. Discover — test scenarios
 # -------------------------------------------------------------------
 discover() {
   curl -sf -X POST "$BASE_URL/api/v1/discover" \
     -H "Content-Type: application/json" \
     -d "{\"query\": \"$1\", \"limit\": $2}"
+}
+
+discover_with_weights() {
+  curl -sf -X POST "$BASE_URL/api/v1/discover" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\": \"$1\", \"limit\": $2, \"embedding_weights\": $3}"
 }
 
 log "Testing discover: 'I want a refund'"
@@ -150,6 +212,10 @@ if [ "$RETURNED" -le 2 ]; then
 else
   fail "Limit=2 returned $RETURNED tools"
 fi
+
+log "Testing discover: custom weights"
+R6=$(discover_with_weights "refund" 5 '{"name": 0.9, "description": 0.1, "input_schema": 0.0, "output_schema": 0.0}')
+assert_top_tool "$R6" "processRefund" "Custom weights (high name) → processRefund top"
 
 # -------------------------------------------------------------------
 # Summary

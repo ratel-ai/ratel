@@ -35,7 +35,10 @@ pub struct OpenAIEmbedding {
 impl OpenAIEmbedding {
     pub fn new(api_key: String) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect("failed to build HTTP client"),
             api_key,
         }
     }
@@ -92,8 +95,70 @@ impl FakeEmbedding {
 #[cfg(test)]
 #[async_trait]
 impl EmbeddingService for FakeEmbedding {
-    async fn embed(&self, _text: &str) -> anyhow::Result<Vec<f32>> {
+    async fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
         self.call_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Ok(vec![0.1; 1536])
+
+        const DIMS: usize = 256;
+        let mut vec = Vec::with_capacity(DIMS);
+        for i in 0..DIMS {
+            let mut hasher = DefaultHasher::new();
+            text.hash(&mut hasher);
+            i.hash(&mut hasher);
+            let h = hasher.finish();
+            // Map hash to [-1, 1]
+            vec.push((h as f64 / u64::MAX as f64) * 2.0 - 1.0);
+        }
+
+        // Normalize to unit vector
+        let norm: f64 = vec.iter().map(|x| x * x).sum::<f64>().sqrt();
+        Ok(vec.into_iter().map(|x| (x / norm) as f32).collect())
+    }
+}
+
+#[cfg(test)]
+pub struct FailingEmbedding;
+
+#[cfg(test)]
+#[async_trait]
+impl EmbeddingService for FailingEmbedding {
+    async fn embed(&self, _text: &str) -> anyhow::Result<Vec<f32>> {
+        anyhow::bail!("embedding service unavailable")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn fake_embedding_returns_distinct_vectors() {
+        let fake = FakeEmbedding::new();
+        let a = fake.embed("hello world").await.unwrap();
+        let b = fake.embed("goodbye moon").await.unwrap();
+
+        // Cosine similarity should be < 1.0 for distinct inputs
+        let dot: f32 = a.iter().zip(&b).map(|(x, y)| x * y).sum();
+        let norm_a = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let cosine = dot / (norm_a * norm_b);
+        assert!(cosine < 0.99, "distinct texts should produce cosine < 0.99, got {cosine}");
+    }
+
+    #[tokio::test]
+    async fn fake_embedding_is_deterministic() {
+        let fake = FakeEmbedding::new();
+        let a = fake.embed("same text").await.unwrap();
+        let b = fake.embed("same text").await.unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[tokio::test]
+    async fn failing_embedding_returns_error() {
+        let failing = FailingEmbedding;
+        let result = failing.embed("anything").await;
+        assert!(result.is_err());
     }
 }
