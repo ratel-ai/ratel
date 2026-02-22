@@ -1,11 +1,6 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-
-# Test coverage
-coverage/
+# Rust
+target/
+**/*.rs.bk
 
 # Environment
 .env
@@ -24,10 +19,3 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-pnpm-debug.log*
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
