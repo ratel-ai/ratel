@@ -20,11 +20,14 @@ Note: all SDK work was already done before this session
 - [x] subscribe(listener) for state changes
 - [x] Unit tests (18 passing)
 
-## Package 4: @agentified/react ⬜
-- [ ] Create packages/react/
-- [ ] AgentifiedProvider context
-- [ ] useAgentified() hook
-- [ ] Inspector component (tabs: Overview, Agentified, Tokens, Events)
+## Package 4: @agentified/react ✅
+- [x] Create packages/react/ (package.json, tsconfig, vitest config)
+- [x] AgentifiedProvider context (with onRun prop)
+- [x] useAgentified() hook (state, client, run, reset)
+- [x] Unit tests for provider + hook (6 passing)
+- [x] Inspector component (tabs: Overview, Agentified, Tokens, Events)
+  - Toggle button, 4 tabs, position prop, CSS-only inline styles
+  - 16 tests passing
 
 ## Package 2: @agentified/mastra ⬜
 - [ ] Create packages/mastra/
