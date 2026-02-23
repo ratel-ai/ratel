@@ -15,12 +15,11 @@ export class AgentifiedMastraAdapter {
   private mastraAgent: MastraAgent;
   private eventSubject = new Subject<BaseEvent>();
 
+  readonly onEvent: (event: AgentifiedEvent) => void;
+
   constructor(config: AgentifiedMastraAdapterConfig) {
     this.mastraAgent = config.mastraAgent;
-  }
-
-  get onEvent(): (event: AgentifiedEvent) => void {
-    return (event) => {
+    this.onEvent = (event) => {
       this.eventSubject.next({
         type: "CUSTOM",
         name: event.type,

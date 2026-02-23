@@ -29,8 +29,13 @@ Note: all SDK work was already done before this session
   - Toggle button, 4 tabs, position prop, CSS-only inline styles
   - 16 tests passing
 
-## Package 2: @agentified/mastra ⬜
-- [ ] Create packages/mastra/
-- [ ] AgentifiedMastraAdapter
-- [ ] RxJS Subject + merge for event stream
-- [ ] Tests with real Mastra instance
+## Package 2: @agentified/mastra ✅
+- [x] Create packages/mastra/ (package.json, tsconfig, vitest config, stub adapter)
+  - Peer deps: @ag-ui/client, @ag-ui/mastra, @mastra/core >=1.0.0
+  - Runtime dep: rxjs
+- [x] AgentifiedMastraAdapter (full implementation)
+  - onEvent converts AgentifiedEvent → AG-UI CUSTOM event via Subject
+  - run() merges mastraAgent.run() Observable with Subject stream
+- [x] RxJS Subject + merge for event stream
+- [x] Tests (4 passing: event conversion, stream merging, all event types, stable reference)
+Note: adapter was already fully implemented in scaffold step, tests confirmed GREEN
