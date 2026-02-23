@@ -1,19 +1,33 @@
-# Progress for Issue #5
+# Progress for Issue #12
 
-Started: Fri Feb 20 19:04:57 CET 2026
+Started: Mon Feb 23 22:22:28 CET 2026
 
-## Completed
+## Package 1: @agentified/sdk ✅
+- [x] onEvent callback in AgentifiedConfig
+- [x] prefetch:start/complete events
+- [x] discover:start/complete events
+- [x] durationMs in complete events
+- [x] tokenUsage when available
+- [x] Event type definitions
+- [x] Tests (7 passing)
+Note: all SDK work was already done before this session
 
-- [x] Phase 1.1: Repository Setup — removed packages/, apps/, pnpm-workspace.yaml, old JS tooling. Created core/ and scripts/ dirs. Updated .gitignore, README.md, CLAUDE.md for Rust project.
+## Package 3: @agentified/fe-client ✅
+- [x] Create packages/fe-client/
+- [x] AgentifiedClient wrapping HttpAgent
+- [x] InspectorState tracking (connection, run, agentified, tokens, streaming, events)
+- [x] Parse agentified:* CUSTOM events
+- [x] subscribe(listener) for state changes
+- [x] Unit tests (18 passing)
 
-- [x] Phase 1.2: Rust Server Setup — initialized Cargo project, added axum/tokio/serde/reqwest/tracing deps, created health endpoint with TDD, verified release build. Server runs on port 9119 (AGENTIFIED_PORT env).
+## Package 4: @agentified/react ⬜
+- [ ] Create packages/react/
+- [ ] AgentifiedProvider context
+- [ ] useAgentified() hook
+- [ ] Inspector component (tabs: Overview, Agentified, Tokens, Events)
 
-- [x] Phase 1.3: Tool Registration — POST /api/v1/tools registers tools w/ embeddings, GET /api/v1/tools lists them. EmbeddingService trait for testability, OpenAI text-embedding-3-small impl, embedding cache by content hash. TDD: 4 tests.
-
-- [x] Phase 1.4: Discover Endpoint — POST /api/v1/discover ranks tools via hybrid scoring (0.7 cosine similarity + 0.3 normalized BM25). Cosine similarity, BM25 w/ IDF+TF, min-max normalization. TDD: 10 tests total.
-
-- [x] Phase 1.5: Test Script — scripts/test-server.sh registers 8 tools, validates health/list/discover endpoints, tests 4 PRD scenarios (refund, password reset, 401 errors, billing update), checks limit param. Run: `./scripts/test-server.sh`
-
-## Status
-
-All Phase 1 tasks complete.
+## Package 2: @agentified/mastra ⬜
+- [ ] Create packages/mastra/
+- [ ] AgentifiedMastraAdapter
+- [ ] RxJS Subject + merge for event stream
+- [ ] Tests with real Mastra instance
