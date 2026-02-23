@@ -1,0 +1,25 @@
+{
+  "name": "@agentified/mastra",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@ag-ui/client": ">=0.0.45",
+    "@ag-ui/mastra": ">=1.0.0",
+    "@mastra/core": ">=1.0.0"
+  },
+  "dependencies": {
+    "rxjs": "^7.8.0"
+  },
+  "devDependencies": {
+    "@ag-ui/client": "^0.0.45",
+    "@ag-ui/mastra": "^1.0.0",
+    "@mastra/core": "^1.6.0",
+    "typescript": "^5.9.0",
+    "vitest": "^2.1.0"
+  }
+}
