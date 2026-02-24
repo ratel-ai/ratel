@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, act, cleanup, fireEvent } from "@testing-library/react";
-import { AgentifiedProvider } from "../provider.js";
 import { Inspector } from "../inspector.js";
 import type { InspectorState } from "@agentified/fe-client";
+import { AgentifiedContext } from "../provider.js";
+import type { AgentifiedContextValue } from "../provider.js";
 
 function createInitialState(overrides?: Partial<InspectorState>): InspectorState {
   return {
@@ -11,6 +12,7 @@ function createInitialState(overrides?: Partial<InspectorState>): InspectorState
     agentified: { prefetchResults: [], discoveries: [], currentTools: [] },
     tokens: { input: 0, output: 0, cached: 0, reasoning: 0 },
     streaming: { messageCount: 0, toolCallCount: 0 },
+    toolCalls: [],
     events: [],
     messages: [],
     isLoading: false,
@@ -19,18 +21,9 @@ function createInitialState(overrides?: Partial<InspectorState>): InspectorState
   };
 }
 
-// For inspector tests we mock at the AgentifiedClient level since the provider
-// creates its own client internally. We intercept via vi.mock.
-// Actually, inspector uses useAgentified → AgentifiedContext. We need to provide context.
-// The simplest approach: mock the module to intercept client creation.
-
-// Instead, we'll use a thin wrapper that provides the context directly.
-import { AgentifiedContext } from "../provider.js";
-import type { AgentifiedContextValue } from "../provider.js";
-
 function renderInspector(
   state: InspectorState,
-  props?: { position?: "bottom-right" | "bottom-left"; defaultOpen?: boolean },
+  props?: { defaultOpen?: boolean },
 ) {
   const contextValue: AgentifiedContextValue = {
     state,
@@ -71,23 +64,36 @@ afterEach(cleanup);
 
 describe("Inspector", () => {
   describe("toggle", () => {
-    it("renders toggle button when closed", () => {
+    it("renders trigger button when closed", () => {
       renderInspector(createInitialState());
       expect(screen.getByTestId("inspector-toggle")).toBeTruthy();
       expect(screen.queryByTestId("inspector-panel")).toBeNull();
     });
 
-    it("opens panel when toggle clicked", () => {
+    it("trigger is fixed bottom-center", () => {
+      renderInspector(createInitialState());
+      const trigger = screen.getByTestId("inspector-toggle");
+      expect(trigger.style.bottom).toBe("16px");
+      expect(trigger.style.left).toBe("50%");
+    });
+
+    it("opens modal when trigger clicked", () => {
       renderInspector(createInitialState());
       fireEvent.click(screen.getByTestId("inspector-toggle"));
       expect(screen.getByTestId("inspector-panel")).toBeTruthy();
+      expect(screen.getByTestId("inspector-overlay")).toBeTruthy();
     });
 
-    it("closes panel when close button clicked", () => {
+    it("closes modal when close button clicked", () => {
       renderInspector(createInitialState(), { defaultOpen: true });
       fireEvent.click(screen.getByTestId("inspector-close"));
       expect(screen.queryByTestId("inspector-panel")).toBeNull();
-      expect(screen.getByTestId("inspector-toggle")).toBeTruthy();
+    });
+
+    it("closes modal when overlay clicked", () => {
+      renderInspector(createInitialState(), { defaultOpen: true });
+      fireEvent.click(screen.getByTestId("inspector-overlay"));
+      expect(screen.queryByTestId("inspector-panel")).toBeNull();
     });
 
     it("respects defaultOpen prop", () => {
@@ -96,12 +102,30 @@ describe("Inspector", () => {
     });
   });
 
-  describe("Overview tab", () => {
-    it("shows connection status and streaming metrics", () => {
+  describe("tabs", () => {
+    it("shows 3 tabs: Timeline, Learning, Data", () => {
+      renderInspector(createInitialState(), { defaultOpen: true });
+      expect(screen.getByTestId("tab-timeline")).toBeTruthy();
+      expect(screen.getByTestId("tab-learning")).toBeTruthy();
+      expect(screen.getByTestId("tab-data")).toBeTruthy();
+    });
+
+    it("defaults to Timeline tab", () => {
+      renderInspector(createInitialState({
+        connection: "connected",
+        run: { runId: "r1" },
+      }), { defaultOpen: true });
+      // Timeline tab content is visible — shows Run section with status
+      expect(screen.getByText("Connected")).toBeTruthy();
+    });
+  });
+
+  describe("Timeline tab", () => {
+    it("shows run status metrics", () => {
       renderInspector(
         createInitialState({
           connection: "connected",
-          run: { runId: "r1", threadId: "t1" },
+          run: { runId: "r1", durationMs: 3400 },
           streaming: { messageCount: 5, toolCallCount: 2, timeToFirstTokenMs: 120 },
         }),
         { defaultOpen: true },
@@ -109,26 +133,44 @@ describe("Inspector", () => {
 
       expect(screen.getByText("Connected")).toBeTruthy();
       expect(screen.getByText("r1")).toBeTruthy();
-      expect(screen.getByText("t1")).toBeTruthy();
-      expect(screen.getByText("5")).toBeTruthy();
-      expect(screen.getByText("2")).toBeTruthy();
-      expect(screen.getByText("120ms")).toBeTruthy();
+      expect(screen.getAllByText("3400ms").length).toBeGreaterThanOrEqual(1);
     });
 
-    it("shows run duration when available", () => {
+    it("shows interaction timeline entries", () => {
       renderInspector(
         createInitialState({
-          connection: "disconnected",
-          run: { durationMs: 3400 },
+          events: [
+            { timestamp: Date.now(), event: { type: "RUN_STARTED", runId: "r1" } as any, isAgentified: false },
+            { timestamp: Date.now(), event: { type: "TOOL_CALL_START", toolCallId: "tc1", toolCallName: "search" } as any, isAgentified: false },
+          ],
+          toolCalls: [{ id: "tc1", name: "search", args: '{"q":"test"}', startedAt: Date.now(), endedAt: Date.now() + 100, durationMs: 100 }],
         }),
         { defaultOpen: true },
       );
-      expect(screen.getByText("3400ms")).toBeTruthy();
+
+      const items = screen.getAllByTestId("timeline-item");
+      expect(items.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("shows empty state when no events", () => {
+      renderInspector(createInitialState(), { defaultOpen: true });
+      expect(screen.getByText("No events yet")).toBeTruthy();
+    });
+
+    it("shows streaming metrics", () => {
+      renderInspector(
+        createInitialState({
+          streaming: { messageCount: 3, toolCallCount: 1, timeToFirstTokenMs: 80 },
+        }),
+        { defaultOpen: true },
+      );
+      expect(screen.getByText("3")).toBeTruthy();
+      expect(screen.getByText("1")).toBeTruthy();
     });
   });
 
-  describe("Agentified tab", () => {
-    it("shows current tools", () => {
+  describe("Learning tab", () => {
+    it("shows current tools with score bars", () => {
       renderInspector(
         createInitialState({
           agentified: {
@@ -141,13 +183,13 @@ describe("Inspector", () => {
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-agentified"));
+      fireEvent.click(screen.getByTestId("tab-learning"));
 
       expect(screen.getByText("search_docs")).toBeTruthy();
-      expect(screen.getByText("score: 0.95")).toBeTruthy();
+      expect(screen.getByText("0.95")).toBeTruthy();
     });
 
-    it("shows last prefetch result", () => {
+    it("shows prefetch history", () => {
       renderInspector(
         createInitialState({
           agentified: {
@@ -160,9 +202,10 @@ describe("Inspector", () => {
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-agentified"));
+      fireEvent.click(screen.getByTestId("tab-learning"));
 
       expect(screen.getByText("200ms")).toBeTruthy();
+      expect(screen.getByText("1 tools")).toBeTruthy();
     });
 
     it("shows discoveries", () => {
@@ -171,18 +214,14 @@ describe("Inspector", () => {
           agentified: {
             prefetchResults: [],
             discoveries: [
-              {
-                query: "find email tools",
-                tools: [{ name: "a", description: "", score: 0.8 }],
-                durationMs: 150,
-              },
+              { query: "find email tools", tools: [{ name: "a", description: "", score: 0.8 }], durationMs: 150 },
             ],
             currentTools: [],
           },
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-agentified"));
+      fireEvent.click(screen.getByTestId("tab-learning"));
 
       expect(screen.getByText('"find email tools"')).toBeTruthy();
       expect(screen.getByText("1 tools · 150ms")).toBeTruthy();
@@ -190,26 +229,40 @@ describe("Inspector", () => {
 
     it("shows empty state when no interactions", () => {
       renderInspector(createInitialState(), { defaultOpen: true });
-      fireEvent.click(screen.getByTestId("tab-agentified"));
+      fireEvent.click(screen.getByTestId("tab-learning"));
 
       expect(screen.getByText("No Agentified interactions yet")).toBeTruthy();
     });
   });
 
-  describe("Tokens tab", () => {
-    it("shows token breakdown and total", () => {
+  describe("Data tab", () => {
+    it("shows session summary grid", () => {
+      renderInspector(
+        createInitialState({
+          streaming: { messageCount: 5, toolCallCount: 2 },
+          events: [
+            { timestamp: Date.now(), event: { type: "RUN_STARTED" } as any, isAgentified: false },
+          ],
+        }),
+        { defaultOpen: true },
+      );
+      fireEvent.click(screen.getByTestId("tab-data"));
+
+      const cells = screen.getAllByTestId("stat-cell");
+      expect(cells.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("shows token breakdown when tokens present", () => {
       renderInspector(
         createInitialState({
           tokens: { input: 1500, output: 300, cached: 200, reasoning: 0 },
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-tokens"));
+      fireEvent.click(screen.getByTestId("tab-data"));
 
       expect(screen.getByText("1.5k")).toBeTruthy();
       expect(screen.getByText("300")).toBeTruthy();
-      expect(screen.getByText("200")).toBeTruthy();
-      expect(screen.getByText("2.0k")).toBeTruthy(); // total
     });
 
     it("shows context window bar when available", () => {
@@ -219,33 +272,23 @@ describe("Inspector", () => {
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-tokens"));
+      fireEvent.click(screen.getByTestId("tab-data"));
 
       expect(screen.getByTestId("context-bar")).toBeTruthy();
-      expect(screen.getByText("42.5%")).toBeTruthy();
+      expect(screen.getByText("Context: 42.5%")).toBeTruthy();
     });
-  });
 
-  describe("Events tab", () => {
-    it("renders event log entries", () => {
+    it("renders event log with entries", () => {
       renderInspector(
         createInitialState({
           events: [
-            {
-              timestamp: Date.now(),
-              event: { type: "RUN_STARTED" } as any,
-              isAgentified: false,
-            },
-            {
-              timestamp: Date.now(),
-              event: { type: "CUSTOM", name: "agentified:prefetch:complete" } as any,
-              isAgentified: true,
-            },
+            { timestamp: Date.now(), event: { type: "RUN_STARTED" } as any, isAgentified: false },
+            { timestamp: Date.now(), event: { type: "CUSTOM", name: "agentified:prefetch:complete" } as any, isAgentified: true },
           ],
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-events"));
+      fireEvent.click(screen.getByTestId("tab-data"));
 
       const rows = screen.getAllByTestId("event-row");
       expect(rows).toHaveLength(2);
@@ -253,20 +296,40 @@ describe("Inspector", () => {
       expect(screen.getByText("agentified:prefetch:complete")).toBeTruthy();
     });
 
-    it("shows empty state when no events", () => {
+    it("shows empty event log state", () => {
       renderInspector(createInitialState(), { defaultOpen: true });
-      fireEvent.click(screen.getByTestId("tab-events"));
+      fireEvent.click(screen.getByTestId("tab-data"));
 
-      expect(screen.getByText("No events yet")).toBeTruthy();
+      expect(screen.getByText("No events")).toBeTruthy();
     });
-  });
 
-  describe("position", () => {
-    it("applies bottom-left positioning", () => {
-      renderInspector(createInitialState(), { position: "bottom-left" });
-      const toggle = screen.getByTestId("inspector-toggle");
-      expect(toggle.style.left).toBe("16px");
-      expect(toggle.style.bottom).toBe("16px");
+    it("filter buttons filter events", () => {
+      renderInspector(
+        createInitialState({
+          events: [
+            { timestamp: Date.now(), event: { type: "RUN_STARTED" } as any, isAgentified: false },
+            { timestamp: Date.now(), event: { type: "CUSTOM", name: "agentified:prefetch:complete" } as any, isAgentified: true },
+            { timestamp: Date.now(), event: { type: "TOOL_CALL_START", toolCallId: "tc1" } as any, isAgentified: false },
+          ],
+        }),
+        { defaultOpen: true },
+      );
+      fireEvent.click(screen.getByTestId("tab-data"));
+
+      // Default: all
+      expect(screen.getAllByTestId("event-row")).toHaveLength(3);
+
+      // Filter: agentified
+      fireEvent.click(screen.getByTestId("filter-agentified"));
+      expect(screen.getAllByTestId("event-row")).toHaveLength(1);
+
+      // Filter: tool_calls
+      fireEvent.click(screen.getByTestId("filter-tool_calls"));
+      expect(screen.getAllByTestId("event-row")).toHaveLength(1);
+
+      // Back to all
+      fireEvent.click(screen.getByTestId("filter-all"));
+      expect(screen.getAllByTestId("event-row")).toHaveLength(3);
     });
   });
 

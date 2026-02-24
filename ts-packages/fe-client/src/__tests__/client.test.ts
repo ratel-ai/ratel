@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentifiedClient } from "../client.js";
 import type { InspectorState } from "../types.js";
-import type { BaseEvent, CustomEvent, RunStartedEvent, RunFinishedEvent, TextMessageStartEvent, TextMessageContentEvent, TextMessageEndEvent, ToolCallStartEvent, RunErrorEvent, AgentSubscriber, AbstractAgent } from "@ag-ui/client";
+import type { BaseEvent, CustomEvent, RunStartedEvent, RunFinishedEvent, TextMessageStartEvent, TextMessageContentEvent, TextMessageEndEvent, ToolCallStartEvent, ToolCallArgsEvent, ToolCallEndEvent, ToolCallResultEvent, RunErrorEvent, AgentSubscriber, AbstractAgent } from "@ag-ui/client";
 import { EventType } from "@ag-ui/client";
 
 function createMockAgent() {
@@ -44,6 +44,7 @@ function initialState(): InspectorState {
     agentified: { prefetchResults: [], discoveries: [], currentTools: [] },
     tokens: { input: 0, output: 0, cached: 0, reasoning: 0 },
     streaming: { messageCount: 0, toolCallCount: 0 },
+    toolCalls: [],
     events: [],
     messages: [],
     isLoading: false,
@@ -389,6 +390,77 @@ describe("AgentifiedClient", () => {
 
       expect(client.getState().agentified.prefetchResults).toHaveLength(0);
       expect(client.getState().agentified.discoveries).toHaveLength(0);
+    });
+  });
+
+  describe("tool call tracking", () => {
+    it("TOOL_CALL_START creates ToolCallDetail with id, name, startedAt", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+
+      const toolCalls = client.getState().toolCalls;
+      expect(toolCalls).toHaveLength(1);
+      expect(toolCalls[0]!.id).toBe("tc1");
+      expect(toolCalls[0]!.name).toBe("search");
+      expect(toolCalls[0]!.args).toBe("");
+      expect(toolCalls[0]!.startedAt).toBeGreaterThan(0);
+    });
+
+    it("TOOL_CALL_ARGS appends delta to correct tool call", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_ARGS, toolCallId: "tc1", delta: '{"q":' } as ToolCallArgsEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_ARGS, toolCallId: "tc1", delta: '"hello"}' } as ToolCallArgsEvent);
+
+      expect(client.getState().toolCalls[0]!.args).toBe('{"q":"hello"}');
+    });
+
+    it("TOOL_CALL_END sets endedAt and durationMs", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_END, toolCallId: "tc1" } as ToolCallEndEvent);
+
+      const tc = client.getState().toolCalls[0]!;
+      expect(tc.endedAt).toBeGreaterThan(0);
+      expect(tc.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it("TOOL_CALL_RESULT stores result", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_RESULT, toolCallId: "tc1", messageId: "m1", content: "found 3 results" } as ToolCallResultEvent);
+
+      expect(client.getState().toolCalls[0]!.result).toBe("found 3 results");
+    });
+
+    it("tracks multiple concurrent tool calls independently", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc2", toolCallName: "calculate" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_ARGS, toolCallId: "tc1", delta: "arg1" } as ToolCallArgsEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_ARGS, toolCallId: "tc2", delta: "arg2" } as ToolCallArgsEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_END, toolCallId: "tc1" } as ToolCallEndEvent);
+
+      const toolCalls = client.getState().toolCalls;
+      expect(toolCalls).toHaveLength(2);
+      expect(toolCalls[0]!.name).toBe("search");
+      expect(toolCalls[0]!.args).toBe("arg1");
+      expect(toolCalls[0]!.endedAt).toBeDefined();
+      expect(toolCalls[1]!.name).toBe("calculate");
+      expect(toolCalls[1]!.args).toBe("arg2");
+      expect(toolCalls[1]!.endedAt).toBeUndefined();
+    });
+
+    it("toolCalls persist across multiple run() calls", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+
+      // Simulate a new run — run() doesn't reset toolCalls
+      await client.run({ messages: [] });
+
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc2", toolCallName: "calc" } as ToolCallStartEvent);
+
+      expect(client.getState().toolCalls).toHaveLength(2);
+    });
+
+    it("reset() clears toolCalls", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+      client.reset();
+      expect(client.getState().toolCalls).toEqual([]);
     });
   });
 

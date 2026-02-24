@@ -1,6 +1,6 @@
 import type { AbstractAgent, BaseEvent, CustomEvent, Message, Context } from "@ag-ui/client";
 import { HttpAgent, EventType, randomUUID } from "@ag-ui/client";
-import type { AgentifiedClientConfig, InspectorState, StateListener, Subscription } from "./types.js";
+import type { AgentifiedClientConfig, InspectorState, StateListener, Subscription, ToolCallDetail } from "./types.js";
 import { isAgentifiedEvent } from "./types.js";
 
 export class AgentifiedClient {
@@ -138,12 +138,47 @@ export class AgentifiedClient {
         this.pendingMessages.delete(e.messageId);
         break;
       }
-      case EventType.TOOL_CALL_START:
+      case EventType.TOOL_CALL_START: {
+        const e = event as unknown as { toolCallId: string; toolCallName: string };
+        const detail: ToolCallDetail = { id: e.toolCallId, name: e.toolCallName, args: "", startedAt: Date.now() };
         this.state = {
           ...this.state,
           streaming: { ...this.state.streaming, toolCallCount: this.state.streaming.toolCallCount + 1 },
+          toolCalls: [...this.state.toolCalls, detail],
         };
         break;
+      }
+      case EventType.TOOL_CALL_ARGS: {
+        const e = event as unknown as { toolCallId: string; delta: string };
+        this.state = {
+          ...this.state,
+          toolCalls: this.state.toolCalls.map(tc =>
+            tc.id === e.toolCallId ? { ...tc, args: tc.args + e.delta } : tc,
+          ),
+        };
+        break;
+      }
+      case EventType.TOOL_CALL_END: {
+        const now = Date.now();
+        const e = event as unknown as { toolCallId: string };
+        this.state = {
+          ...this.state,
+          toolCalls: this.state.toolCalls.map(tc =>
+            tc.id === e.toolCallId ? { ...tc, endedAt: now, durationMs: now - tc.startedAt } : tc,
+          ),
+        };
+        break;
+      }
+      case EventType.TOOL_CALL_RESULT: {
+        const e = event as unknown as { toolCallId: string; content: string };
+        this.state = {
+          ...this.state,
+          toolCalls: this.state.toolCalls.map(tc =>
+            tc.id === e.toolCallId ? { ...tc, result: e.content } : tc,
+          ),
+        };
+        break;
+      }
       case EventType.CUSTOM:
         if (isAgentifiedEvent(event)) {
           this.handleAgentifiedEvent(event as CustomEvent);
@@ -202,6 +237,7 @@ function createInitialState(): InspectorState {
     agentified: { prefetchResults: [], discoveries: [], currentTools: [] },
     tokens: { input: 0, output: 0, cached: 0, reasoning: 0 },
     streaming: { messageCount: 0, toolCallCount: 0 },
+    toolCalls: [],
     events: [],
     messages: [],
     isLoading: false,

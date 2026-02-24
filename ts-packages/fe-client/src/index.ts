@@ -14,6 +14,7 @@ export type {
   Subscription,
   TokenState,
   TokenUsage,
+  ToolCallDetail,
 } from "./types.js";
 export type { Message, Context } from "./types.js";
 export { isAgentifiedEvent } from "./types.js";

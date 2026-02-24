@@ -41,6 +41,18 @@ export interface DiscoveryResult {
   tokenUsage?: TokenUsage;
 }
 
+// Tool call tracking
+
+export interface ToolCallDetail {
+  id: string;
+  name: string;
+  args: string;
+  result?: string;
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number;
+}
+
 // Inspector state
 
 export type ConnectionStatus =
@@ -89,6 +101,7 @@ export interface InspectorState {
   agentified: AgentifiedInteractions;
   tokens: TokenState;
   streaming: StreamingMetrics;
+  toolCalls: ToolCallDetail[];
   events: EventLogEntry[];
   messages: import("@ag-ui/client").Message[];
   isLoading: boolean;

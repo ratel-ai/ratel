@@ -5,214 +5,392 @@ import type {
   EventLogEntry,
   AgentifiedTool,
   ConnectionStatus,
+  ToolCallDetail,
 } from "@agentified/fe-client";
 import { useAgentified } from "./hook.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type InspectorPosition =
-  | "bottom-right"
-  | "bottom-left"
-  | "top-right"
-  | "top-left";
-
-type Tab = "overview" | "agentified" | "tokens" | "events";
+type Tab = "timeline" | "learning" | "data";
+type EventFilter = "all" | "agentified" | "tool_calls" | "messages";
 
 export interface InspectorProps {
-  position?: InspectorPosition;
   defaultOpen?: boolean;
 }
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "overview", label: "Overview" },
-  { key: "agentified", label: "Agentified" },
-  { key: "tokens", label: "Tokens" },
-  { key: "events", label: "Events" },
+  { key: "timeline", label: "Timeline" },
+  { key: "learning", label: "Learning" },
+  { key: "data", label: "Data" },
 ];
 
 // ── Inspector ──────────────────────────────────────────────────────────
 
-export function Inspector({ position = "bottom-right", defaultOpen = false }: InspectorProps) {
+export function Inspector({ defaultOpen = false }: InspectorProps) {
   const { state } = useAgentified();
   const [open, setOpen] = useState(defaultOpen);
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTab] = useState<Tab>("timeline");
 
   if (!open) {
     return (
       <button
         data-testid="inspector-toggle"
         onClick={() => setOpen(true)}
-        style={toggleStyle(position)}
+        style={S.trigger}
         aria-label="Open Agentified Inspector"
       >
-        <span style={S.toggleIcon}>◈</span>
+        <span style={S.triggerIcon}>◈</span>
       </button>
     );
   }
 
   return (
-    <div data-testid="inspector-panel" style={panelStyle(position)}>
-      <div style={S.header}>
-        <div style={S.headerLeft}>
-          <span style={S.headerDot(state.connection)} />
-          <span style={S.headerTitle}>Agentified</span>
-        </div>
-        <button
-          data-testid="inspector-close"
-          onClick={() => setOpen(false)}
-          style={S.closeBtn}
-          aria-label="Close Inspector"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div style={S.tabs}>
-        {TABS.map((t) => (
+    <>
+      <div
+        data-testid="inspector-overlay"
+        style={S.overlay}
+        onClick={() => setOpen(false)}
+      />
+      <div data-testid="inspector-panel" style={S.modal}>
+        <div style={S.header}>
+          <div style={S.headerLeft}>
+            <span style={S.headerDot(state.connection)} />
+            <span style={S.headerTitle}>Agentified</span>
+          </div>
           <button
-            key={t.key}
-            data-testid={`tab-${t.key}`}
-            onClick={() => setActiveTab(t.key)}
-            style={tabStyle(t.key === activeTab)}
+            data-testid="inspector-close"
+            onClick={() => setOpen(false)}
+            style={S.closeBtn}
+            aria-label="Close Inspector"
           >
-            {t.label}
+            ✕
           </button>
-        ))}
-      </div>
+        </div>
 
-      <div style={S.body}>
-        {activeTab === "overview" && <OverviewTab state={state} />}
-        {activeTab === "agentified" && <AgentifiedTab state={state} />}
-        {activeTab === "tokens" && <TokensTab state={state} />}
-        {activeTab === "events" && <EventsTab state={state} />}
+        <div style={S.tabs}>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              data-testid={`tab-${t.key}`}
+              onClick={() => setActiveTab(t.key)}
+              style={tabStyle(t.key === activeTab)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={S.body}>
+          {activeTab === "timeline" && <TimelineTab state={state} />}
+          {activeTab === "learning" && <LearningTab state={state} />}
+          {activeTab === "data" && <DataTab state={state} />}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
-// ── Tab: Overview ──────────────────────────────────────────────────────
+// ── Tab: Timeline ─────────────────────────────────────────────────────
 
-function OverviewTab({ state }: { state: InspectorState }) {
-  const { connection, run, streaming } = state;
+function TimelineTab({ state }: { state: InspectorState }) {
+  const { connection, run, streaming, events, toolCalls } = state;
 
   return (
     <div>
       <Section title="Run">
-        <Row label="Status" value={connectionLabel(connection)} />
-        {run.runId && <Row label="Run ID" value={run.runId} mono />}
-        {run.threadId && <Row label="Thread" value={run.threadId} mono />}
-        {run.durationMs != null && <Row label="Duration" value={`${run.durationMs}ms`} />}
+        <div style={S.metricsRow}>
+          <MetricPill label="Status" value={connectionLabel(connection)} />
+          {run.runId && <MetricPill label="Run" value={run.runId} mono />}
+          {run.durationMs != null && <MetricPill label="Duration" value={`${run.durationMs}ms`} />}
+          {streaming.timeToFirstTokenMs != null && <MetricPill label="TTFT" value={`${streaming.timeToFirstTokenMs}ms`} />}
+        </div>
       </Section>
 
-      <Section title="Streaming">
-        <Row label="Messages" value={String(streaming.messageCount)} />
-        <Row label="Tool Calls" value={String(streaming.toolCallCount)} />
-        {streaming.timeToFirstTokenMs != null && (
-          <Row label="TTFT" value={`${streaming.timeToFirstTokenMs}ms`} />
-        )}
+      <Section title="Interaction Timeline">
+        <TimelineList events={events} toolCalls={toolCalls} />
+      </Section>
+
+      <Section title="Metrics">
+        <div style={S.metricsRow}>
+          <MetricPill label="Messages" value={String(streaming.messageCount)} />
+          <MetricPill label="Tool Calls" value={String(streaming.toolCallCount)} />
+          {streaming.timeToFirstTokenMs != null && <MetricPill label="TTFT" value={`${streaming.timeToFirstTokenMs}ms`} />}
+          {run.durationMs != null && <MetricPill label="Total" value={`${run.durationMs}ms`} />}
+          {(state.tokens.input > 0 || state.tokens.output > 0) && (
+            <MetricPill label="Tokens" value={formatNumber(state.tokens.input + state.tokens.output + state.tokens.cached + state.tokens.reasoning)} />
+          )}
+        </div>
       </Section>
     </div>
   );
 }
 
-// ── Tab: Agentified ────────────────────────────────────────────────────
+function TimelineList({ events, toolCalls }: { events: EventLogEntry[]; toolCalls: ToolCallDetail[] }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const prevLen = useRef(events.length);
 
-function AgentifiedTab({ state }: { state: InspectorState }) {
+  useEffect(() => {
+    if (events.length > prevLen.current && listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+    prevLen.current = events.length;
+  }, [events.length]);
+
+  if (events.length === 0) {
+    return <div style={S.emptyState}>No events yet</div>;
+  }
+
+  const items = buildTimelineItems(events, toolCalls);
+
+  return (
+    <div ref={listRef} style={S.timelineList} data-testid="timeline-list">
+      {items.map((item, i) => (
+        <TimelineItem key={i} item={item} />
+      ))}
+    </div>
+  );
+}
+
+interface TimelineItemData {
+  type: "run_started" | "run_finished" | "agentified" | "tool_call" | "message" | "other";
+  label: string;
+  timestamp: number;
+  detail?: string;
+  expandable?: boolean;
+  expanded?: Record<string, unknown>;
+}
+
+function buildTimelineItems(events: EventLogEntry[], toolCalls: ToolCallDetail[]): TimelineItemData[] {
+  const items: TimelineItemData[] = [];
+  const toolCallMap = new Map(toolCalls.map(tc => [tc.id, tc]));
+
+  const seenToolCalls = new Set<string>();
+
+  for (const entry of events) {
+    const e = entry.event as Record<string, unknown>;
+    const type = e.type as string;
+
+    if (type === "RUN_STARTED") {
+      items.push({ type: "run_started", label: `Run started${e.runId ? ` · ${e.runId}` : ""}`, timestamp: entry.timestamp });
+    } else if (type === "RUN_FINISHED") {
+      items.push({ type: "run_finished", label: "Run complete", timestamp: entry.timestamp });
+    } else if (entry.isAgentified) {
+      const name = (e as Record<string, unknown>).name as string;
+      const value = (e as Record<string, unknown>).value as Record<string, unknown> | undefined;
+      if (name === "agentified:prefetch:complete") {
+        const tools = (value?.tools as unknown[]) ?? [];
+        const dur = value?.durationMs ?? "?";
+        items.push({ type: "agentified", label: `Prefetch · ${tools.length} tools · ${dur}ms`, timestamp: entry.timestamp, expandable: true, expanded: value });
+      } else if (name === "agentified:discover:complete") {
+        const query = (value?.query as string) ?? "";
+        const tools = (value?.tools as unknown[]) ?? [];
+        const dur = value?.durationMs ?? "?";
+        items.push({ type: "agentified", label: `Discover "${query}" · ${tools.length} tools · ${dur}ms`, timestamp: entry.timestamp, expandable: true, expanded: value });
+      } else {
+        items.push({ type: "agentified", label: name, timestamp: entry.timestamp });
+      }
+    } else if (type === "TOOL_CALL_START") {
+      const tcId = e.toolCallId as string;
+      if (!seenToolCalls.has(tcId)) {
+        seenToolCalls.add(tcId);
+        const tc = toolCallMap.get(tcId);
+        if (tc) {
+          const dur = tc.durationMs != null ? ` · ${tc.durationMs}ms` : "";
+          items.push({ type: "tool_call", label: `${tc.name}${dur}`, timestamp: entry.timestamp, expandable: true, expanded: { args: tc.args, result: tc.result } });
+        }
+      }
+    } else if (type === "TEXT_MESSAGE_START") {
+      const role = (e.role as string) ?? "assistant";
+      items.push({ type: "message", label: `${role} message`, timestamp: entry.timestamp });
+    } else if (type !== "TEXT_MESSAGE_CONTENT" && type !== "TEXT_MESSAGE_END" && type !== "TOOL_CALL_ARGS" && type !== "TOOL_CALL_END" && type !== "TOOL_CALL_RESULT") {
+      items.push({ type: "other", label: type, timestamp: entry.timestamp });
+    }
+  }
+  return items;
+}
+
+function TimelineItem({ item }: { item: TimelineItemData }) {
+  const [expanded, setExpanded] = useState(false);
+  const time = new Date(item.timestamp).toLocaleTimeString();
+  const color = item.type === "agentified" ? C.agentified
+    : item.type === "tool_call" ? C.accent
+    : item.type === "run_started" || item.type === "run_finished" ? C.green
+    : C.text;
+
+  return (
+    <div style={S.timelineItem} data-testid="timeline-item">
+      <div
+        style={{ ...S.timelineItemHeader, cursor: item.expandable ? "pointer" : "default" }}
+        onClick={() => item.expandable && setExpanded(!expanded)}
+      >
+        <span style={S.timelineDot(color)} />
+        <span style={S.timelineLabel(color)}>{item.label}</span>
+        <span style={S.timelineTime}>{time}</span>
+        {item.expandable && <span style={S.expandArrow}>{expanded ? "▾" : "▸"}</span>}
+      </div>
+      {expanded && item.expanded && (
+        <pre style={S.timelineDetail} data-testid="timeline-detail">
+          {JSON.stringify(item.expanded, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: Learning ─────────────────────────────────────────────────────
+
+function LearningTab({ state }: { state: InspectorState }) {
   const { agentified } = state;
-  const lastPrefetch = agentified.prefetchResults[agentified.prefetchResults.length - 1];
+  const hasContent = agentified.currentTools.length > 0 || agentified.prefetchResults.length > 0 || agentified.discoveries.length > 0;
+
+  if (!hasContent) {
+    return <div style={S.emptyState}>No Agentified interactions yet</div>;
+  }
 
   return (
     <div>
       {agentified.currentTools.length > 0 && (
         <Section title="Current Tools">
-          {agentified.currentTools.map((tool, i) => (
-            <ToolRow key={`${tool.name}-${i}`} tool={tool} />
-          ))}
+          <div style={S.toolTable}>
+            {agentified.currentTools.map((tool, i) => (
+              <ToolRow key={`${tool.name}-${i}`} tool={tool} />
+            ))}
+          </div>
         </Section>
       )}
 
-      {lastPrefetch && (
-        <Section title="Last Prefetch">
-          <Row label="Tools" value={String(lastPrefetch.tools.length)} />
-          <Row label="Duration" value={`${lastPrefetch.durationMs}ms`} />
-        </Section>
-      )}
-
-      {agentified.discoveries.length > 0 && (
-        <Section title="Discoveries">
-          {agentified.discoveries.map((d, i) => (
-            <div key={i} style={S.discoveryItem}>
-              <div style={S.discoveryQuery}>"{d.query}"</div>
-              <div style={S.discoveryMeta}>
-                {d.tools.length} tools · {d.durationMs}ms
-              </div>
+      {agentified.prefetchResults.length > 0 && (
+        <Section title="Prefetch History">
+          {agentified.prefetchResults.map((pr, i) => (
+            <div key={i} style={S.historyItem}>
+              <span style={S.historyLabel}>{pr.tools.length} tools</span>
+              <span style={S.historyMeta}>{pr.durationMs}ms</span>
             </div>
           ))}
         </Section>
       )}
 
-      {agentified.currentTools.length === 0 &&
-        !lastPrefetch &&
-        agentified.discoveries.length === 0 && (
-          <div style={S.emptyState}>No Agentified interactions yet</div>
-        )}
-    </div>
-  );
-}
-
-// ── Tab: Tokens ────────────────────────────────────────────────────────
-
-function TokensTab({ state }: { state: InspectorState }) {
-  const { tokens } = state;
-  const total = tokens.input + tokens.output + tokens.cached + tokens.reasoning;
-
-  return (
-    <div>
-      <Section title="Usage">
-        <Row label="Input" value={formatNumber(tokens.input)} />
-        <Row label="Output" value={formatNumber(tokens.output)} />
-        <Row label="Cached" value={formatNumber(tokens.cached)} />
-        <Row label="Reasoning" value={formatNumber(tokens.reasoning)} />
-        <div style={S.totalRow}>
-          <span>Total</span>
-          <span style={S.totalValue}>{formatNumber(total)}</span>
-        </div>
-      </Section>
-
-      {tokens.contextWindowPercent != null && (
-        <Section title="Context Window">
-          <div style={S.barOuter}>
-            <div
-              data-testid="context-bar"
-              style={barFill(tokens.contextWindowPercent)}
-            />
-          </div>
-          <div style={S.barLabel}>{tokens.contextWindowPercent.toFixed(1)}%</div>
+      {agentified.discoveries.length > 0 && (
+        <Section title="Discovery History">
+          {agentified.discoveries.map((d, i) => (
+            <div key={i} style={S.historyItem}>
+              <span style={S.discoveryQuery}>"{d.query}"</span>
+              <span style={S.historyMeta}>{d.tools.length} tools · {d.durationMs}ms</span>
+            </div>
+          ))}
         </Section>
       )}
     </div>
   );
 }
 
-// ── Tab: Events ────────────────────────────────────────────────────────
+function ToolRow({ tool }: { tool: AgentifiedTool }) {
+  const pct = Math.round(tool.score * 100);
+  return (
+    <div style={S.toolRow} data-testid="tool-row">
+      <div style={S.toolRowTop}>
+        <span style={S.toolName}>{tool.name}</span>
+        <span style={S.toolScore}>{tool.score.toFixed(2)}</span>
+      </div>
+      <div style={S.scoreBarOuter}>
+        <div style={{ ...S.scoreBarFill, width: `${pct}%` }} />
+      </div>
+      {tool.description && <div style={S.toolDesc}>{tool.description.length > 60 ? tool.description.slice(0, 60) + "…" : tool.description}</div>}
+    </div>
+  );
+}
 
-function EventsTab({ state }: { state: InspectorState }) {
+// ── Tab: Data ─────────────────────────────────────────────────────────
+
+function DataTab({ state }: { state: InspectorState }) {
+  const [filter, setFilter] = useState<EventFilter>("all");
+  const { tokens, streaming, run, events } = state;
+  const total = tokens.input + tokens.output + tokens.cached + tokens.reasoning;
+
+  const filteredEvents = filterEvents(events, filter);
+
+  return (
+    <div>
+      <Section title="Session Summary">
+        <div style={S.statGrid}>
+          <StatCell label="Events" value={String(events.length)} />
+          <StatCell label="Messages" value={String(streaming.messageCount)} />
+          <StatCell label="Tool Calls" value={String(streaming.toolCallCount)} />
+          <StatCell label="Duration" value={run.durationMs != null ? `${run.durationMs}ms` : "—"} />
+          <StatCell label="TTFT" value={streaming.timeToFirstTokenMs != null ? `${streaming.timeToFirstTokenMs}ms` : "—"} />
+          <StatCell label="Tokens" value={total > 0 ? formatNumber(total) : "—"} />
+        </div>
+        {total > 0 && (
+          <div style={S.tokenBreakdown}>
+            <Row label="Input" value={formatNumber(tokens.input)} />
+            <Row label="Output" value={formatNumber(tokens.output)} />
+            <Row label="Cached" value={formatNumber(tokens.cached)} />
+            <Row label="Reasoning" value={formatNumber(tokens.reasoning)} />
+          </div>
+        )}
+        {tokens.contextWindowPercent != null && (
+          <div style={{ marginTop: 8 }}>
+            <div style={S.barOuter}>
+              <div data-testid="context-bar" style={barFill(tokens.contextWindowPercent)} />
+            </div>
+            <div style={S.barLabel}>Context: {tokens.contextWindowPercent.toFixed(1)}%</div>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Event Log">
+        <div style={S.filterRow}>
+          {(["all", "agentified", "tool_calls", "messages"] as EventFilter[]).map(f => (
+            <button
+              key={f}
+              data-testid={`filter-${f}`}
+              onClick={() => setFilter(f)}
+              style={filterBtnStyle(f === filter)}
+            >
+              {filterLabel(f)}
+            </button>
+          ))}
+        </div>
+        <EventLog events={filteredEvents} />
+      </Section>
+    </div>
+  );
+}
+
+function filterEvents(events: EventLogEntry[], filter: EventFilter): EventLogEntry[] {
+  if (filter === "all") return events;
+  if (filter === "agentified") return events.filter(e => e.isAgentified);
+  if (filter === "tool_calls") return events.filter(e => {
+    const t = e.event.type as string;
+    return t === "TOOL_CALL_START" || t === "TOOL_CALL_ARGS" || t === "TOOL_CALL_END" || t === "TOOL_CALL_RESULT";
+  });
+  if (filter === "messages") return events.filter(e => {
+    const t = e.event.type as string;
+    return t === "TEXT_MESSAGE_START" || t === "TEXT_MESSAGE_CONTENT" || t === "TEXT_MESSAGE_END";
+  });
+  return events;
+}
+
+function filterLabel(f: EventFilter): string {
+  const map: Record<EventFilter, string> = { all: "All", agentified: "Agentified", tool_calls: "Tool Calls", messages: "Messages" };
+  return map[f];
+}
+
+function EventLog({ events }: { events: EventLogEntry[] }) {
   const listRef = useRef<HTMLDivElement>(null);
-  const prevLen = useRef(state.events.length);
+  const prevLen = useRef(events.length);
 
   useEffect(() => {
-    if (state.events.length > prevLen.current && listRef.current) {
+    if (events.length > prevLen.current && listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-    prevLen.current = state.events.length;
-  }, [state.events.length]);
+    prevLen.current = events.length;
+  }, [events.length]);
 
   return (
     <div ref={listRef} style={S.eventList} data-testid="event-list">
-      {state.events.length === 0 && (
-        <div style={S.emptyState}>No events yet</div>
-      )}
-      {state.events.map((entry, i) => (
+      {events.length === 0 && <div style={S.emptyState}>No events</div>}
+      {events.map((entry, i) => (
         <EventRow key={i} entry={entry} />
       ))}
     </div>
@@ -220,15 +398,23 @@ function EventsTab({ state }: { state: InspectorState }) {
 }
 
 function EventRow({ entry }: { entry: EventLogEntry }) {
+  const [expanded, setExpanded] = useState(false);
   const time = new Date(entry.timestamp).toLocaleTimeString();
-  const eventType = "name" in entry.event
-    ? (entry.event as unknown as { name: string }).name
-    : entry.event.type;
+  const e = entry.event as Record<string, unknown>;
+  const eventType = entry.isAgentified ? (e.name as string) : (e.type as string);
 
   return (
     <div style={eventRowStyle(entry.isAgentified)} data-testid="event-row">
-      <span style={S.eventTime}>{time}</span>
-      <span style={S.eventType(entry.isAgentified)}>{eventType}</span>
+      <div style={S.eventRowHeader} onClick={() => setExpanded(!expanded)}>
+        <span style={S.eventTime}>{time}</span>
+        <span style={S.eventType(entry.isAgentified)}>{eventType}</span>
+        <span style={S.expandArrow}>{expanded ? "▾" : "▸"}</span>
+      </div>
+      {expanded && (
+        <pre style={S.eventDetail} data-testid="event-detail">
+          {JSON.stringify(entry.event, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }
@@ -244,22 +430,29 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={S.row}>
       <span style={S.rowLabel}>{label}</span>
-      <span style={mono ? S.rowValueMono : S.rowValue}>{value}</span>
+      <span style={S.rowValue}>{value}</span>
     </div>
   );
 }
 
-function ToolRow({ tool }: { tool: AgentifiedTool }) {
+function MetricPill({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div style={S.toolRow}>
-      <div style={S.toolName}>{tool.name}</div>
-      <div style={S.toolMeta}>
-        score: {tool.score.toFixed(2)}
-      </div>
+    <div style={S.metricPill}>
+      <div style={S.metricPillLabel}>{label}</div>
+      <div style={mono ? S.metricPillValueMono : S.metricPillValue}>{value}</div>
+    </div>
+  );
+}
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={S.statCell} data-testid="stat-cell">
+      <div style={S.statValue}>{value}</div>
+      <div style={S.statLabel}>{label}</div>
     </div>
   );
 }
@@ -301,54 +494,6 @@ const C = {
   sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif",
 };
 
-function positionCss(pos: InspectorPosition): CSSProperties {
-  const base: CSSProperties = { position: "fixed", zIndex: 99999 };
-  switch (pos) {
-    case "bottom-right": return { ...base, bottom: 16, right: 16 };
-    case "bottom-left": return { ...base, bottom: 16, left: 16 };
-    case "top-right": return { ...base, top: 16, right: 16 };
-    case "top-left": return { ...base, top: 16, left: 16 };
-  }
-}
-
-function toggleStyle(pos: InspectorPosition): CSSProperties {
-  return {
-    ...positionCss(pos),
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    border: `1px solid ${C.border}`,
-    background: C.bg,
-    color: C.agentified,
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 18,
-    padding: 0,
-    boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
-  };
-}
-
-function panelStyle(pos: InspectorPosition): CSSProperties {
-  return {
-    ...positionCss(pos),
-    width: 340,
-    maxHeight: 480,
-    borderRadius: 10,
-    border: `1px solid ${C.border}`,
-    background: C.bg,
-    color: C.text,
-    fontFamily: C.sans,
-    fontSize: 12,
-    lineHeight: "1.5",
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
-  };
-}
-
 function tabStyle(active: boolean): CSSProperties {
   return {
     background: "none",
@@ -358,7 +503,7 @@ function tabStyle(active: boolean): CSSProperties {
     fontFamily: C.sans,
     fontSize: 11,
     fontWeight: active ? 600 : 400,
-    padding: "6px 10px",
+    padding: "6px 12px",
     cursor: "pointer",
     whiteSpace: "nowrap",
   };
@@ -377,22 +522,84 @@ function barFill(pct: number): CSSProperties {
 
 function eventRowStyle(isAgentified: boolean): CSSProperties {
   return {
-    display: "flex",
-    gap: 8,
-    padding: "3px 0",
+    padding: "2px 0",
     borderBottom: `1px solid ${C.border}`,
     ...(isAgentified ? { background: "rgba(210,168,255,0.04)" } : {}),
   };
 }
 
+function filterBtnStyle(active: boolean): CSSProperties {
+  return {
+    background: active ? "rgba(88,166,255,0.12)" : "none",
+    border: `1px solid ${active ? C.accent : C.border}`,
+    borderRadius: 4,
+    color: active ? C.accent : C.textDim,
+    fontSize: 10,
+    padding: "2px 8px",
+    cursor: "pointer",
+    fontFamily: C.sans,
+  };
+}
+
 const S = {
-  toggleIcon: { lineHeight: 1 } as CSSProperties,
+  trigger: {
+    position: "fixed",
+    bottom: 16,
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 99999,
+    width: 36,
+    height: 36,
+    borderRadius: "50%",
+    border: `1px solid ${C.border}`,
+    background: C.bg,
+    color: C.agentified,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 18,
+    padding: 0,
+    boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
+  } as CSSProperties,
+
+  triggerIcon: { lineHeight: 1 } as CSSProperties,
+
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.4)",
+    zIndex: 99998,
+  } as CSSProperties,
+
+  modal: {
+    position: "fixed",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    zIndex: 99999,
+    width: 500,
+    maxWidth: "90vw",
+    height: "70vh",
+    maxHeight: 600,
+    borderRadius: 12,
+    border: `1px solid ${C.border}`,
+    background: C.bg,
+    color: C.text,
+    fontFamily: C.sans,
+    fontSize: 12,
+    lineHeight: "1.5",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    boxShadow: "0 8px 48px rgba(0,0,0,0.7)",
+  } as CSSProperties,
 
   header: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "8px 12px",
+    padding: "10px 16px",
     borderBottom: `1px solid ${C.border}`,
   } as CSSProperties,
 
@@ -415,7 +622,7 @@ const S = {
 
   headerTitle: {
     fontWeight: 700,
-    fontSize: 12,
+    fontSize: 13,
     letterSpacing: "0.02em",
   } as CSSProperties,
 
@@ -424,7 +631,7 @@ const S = {
     border: "none",
     color: C.textDim,
     cursor: "pointer",
-    fontSize: 13,
+    fontSize: 14,
     padding: "2px 4px",
     lineHeight: 1,
   } as CSSProperties,
@@ -432,17 +639,17 @@ const S = {
   tabs: {
     display: "flex",
     borderBottom: `1px solid ${C.border}`,
-    padding: "0 4px",
+    padding: "0 8px",
   } as CSSProperties,
 
   body: {
     flex: 1,
     overflowY: "auto",
-    padding: "8px 12px",
+    padding: "10px 16px",
   } as CSSProperties,
 
   section: {
-    marginBottom: 12,
+    marginBottom: 14,
   } as CSSProperties,
 
   sectionTitle: {
@@ -469,23 +676,213 @@ const S = {
     fontWeight: 500,
   } as CSSProperties,
 
-  rowValueMono: {
+  // Timeline
+  metricsRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+  } as CSSProperties,
+
+  metricPill: {
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+    padding: "4px 8px",
+    minWidth: 60,
+  } as CSSProperties,
+
+  metricPillLabel: {
+    fontSize: 9,
+    color: C.textDim,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+  } as CSSProperties,
+
+  metricPillValue: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: C.text,
+  } as CSSProperties,
+
+  metricPillValueMono: {
+    fontSize: 11,
+    fontWeight: 600,
     color: C.text,
     fontFamily: C.mono,
-    fontSize: 11,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    maxWidth: 120,
   } as CSSProperties,
 
-  totalRow: {
+  timelineList: {
+    overflowY: "auto",
+    maxHeight: 300,
+  } as CSSProperties,
+
+  timelineItem: {
+    borderBottom: `1px solid ${C.border}`,
+    padding: "4px 0",
+  } as CSSProperties,
+
+  timelineItemHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  } as CSSProperties,
+
+  timelineDot: (color: string): CSSProperties => ({
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: color,
+    flexShrink: 0,
+  }),
+
+  timelineLabel: (color: string): CSSProperties => ({
+    fontFamily: C.mono,
+    fontSize: 11,
+    color,
+    flex: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  }),
+
+  timelineTime: {
+    fontFamily: C.mono,
+    fontSize: 10,
+    color: C.textDim,
+    flexShrink: 0,
+  } as CSSProperties,
+
+  timelineDetail: {
+    fontFamily: C.mono,
+    fontSize: 10,
+    color: C.textDim,
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 4,
+    padding: 8,
+    margin: "4px 0 0 12px",
+    overflow: "auto",
+    maxHeight: 150,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-all",
+  } as CSSProperties,
+
+  expandArrow: {
+    fontSize: 10,
+    color: C.textDim,
+    flexShrink: 0,
+    width: 12,
+    textAlign: "center",
+  } as CSSProperties,
+
+  // Learning
+  toolTable: {} as CSSProperties,
+
+  toolRow: {
+    padding: "4px 0",
+    borderBottom: `1px solid ${C.border}`,
+  } as CSSProperties,
+
+  toolRowTop: {
     display: "flex",
     justifyContent: "space-between",
-    padding: "4px 0 0",
-    marginTop: 4,
-    borderTop: `1px solid ${C.border}`,
-    fontWeight: 600,
+    alignItems: "center",
   } as CSSProperties,
 
-  totalValue: {
+  toolName: {
+    fontFamily: C.mono,
+    fontSize: 11,
+    color: C.text,
+  } as CSSProperties,
+
+  toolScore: {
+    fontFamily: C.mono,
+    fontSize: 11,
     color: C.accent,
+  } as CSSProperties,
+
+  scoreBarOuter: {
+    height: 3,
+    background: C.bar,
+    borderRadius: 2,
+    overflow: "hidden",
+    marginTop: 2,
+  } as CSSProperties,
+
+  scoreBarFill: {
+    height: "100%",
+    background: C.accent,
+    borderRadius: 2,
+    transition: "width 0.3s ease",
+  } as CSSProperties,
+
+  toolDesc: {
+    fontSize: 10,
+    color: C.textDim,
+    marginTop: 2,
+  } as CSSProperties,
+
+  historyItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "3px 0",
+    borderBottom: `1px solid ${C.border}`,
+  } as CSSProperties,
+
+  historyLabel: {
+    fontSize: 11,
+    color: C.text,
+  } as CSSProperties,
+
+  historyMeta: {
+    fontSize: 10,
+    color: C.textDim,
+  } as CSSProperties,
+
+  discoveryQuery: {
+    fontFamily: C.mono,
+    fontSize: 11,
+    color: C.agentified,
+  } as CSSProperties,
+
+  // Data
+  statGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 6,
+  } as CSSProperties,
+
+  statCell: {
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+    padding: "6px 8px",
+    textAlign: "center",
+  } as CSSProperties,
+
+  statValue: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: C.text,
+  } as CSSProperties,
+
+  statLabel: {
+    fontSize: 9,
+    color: C.textDim,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+  } as CSSProperties,
+
+  tokenBreakdown: {
+    marginTop: 8,
+    padding: "6px 8px",
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
   } as CSSProperties,
 
   barOuter: {
@@ -502,41 +899,23 @@ const S = {
     marginTop: 2,
   } as CSSProperties,
 
-  toolRow: {
-    padding: "3px 0",
-    borderBottom: `1px solid ${C.border}`,
-  } as CSSProperties,
-
-  toolName: {
-    fontFamily: C.mono,
-    fontSize: 11,
-    color: C.text,
-  } as CSSProperties,
-
-  toolMeta: {
-    fontSize: 10,
-    color: C.textDim,
-  } as CSSProperties,
-
-  discoveryItem: {
-    padding: "4px 0",
-    borderBottom: `1px solid ${C.border}`,
-  } as CSSProperties,
-
-  discoveryQuery: {
-    fontFamily: C.mono,
-    fontSize: 11,
-    color: C.agentified,
-  } as CSSProperties,
-
-  discoveryMeta: {
-    fontSize: 10,
-    color: C.textDim,
+  filterRow: {
+    display: "flex",
+    gap: 4,
+    marginBottom: 8,
   } as CSSProperties,
 
   eventList: {
     overflowY: "auto",
-    maxHeight: 340,
+    maxHeight: 250,
+  } as CSSProperties,
+
+  eventRowHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    cursor: "pointer",
+    padding: "2px 0",
   } as CSSProperties,
 
   eventTime: {
@@ -553,7 +932,23 @@ const S = {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+    flex: 1,
   }),
+
+  eventDetail: {
+    fontFamily: C.mono,
+    fontSize: 10,
+    color: C.textDim,
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 4,
+    padding: 6,
+    margin: "4px 0 0",
+    overflow: "auto",
+    maxHeight: 120,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-all",
+  } as CSSProperties,
 
   emptyState: {
     textAlign: "center",
