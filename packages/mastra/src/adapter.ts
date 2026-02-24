@@ -1,6 +1,6 @@
 import type { BaseEvent, CustomEvent, RunAgentInput } from "@ag-ui/client";
 import type { MastraAgent } from "@ag-ui/mastra";
-import { Subject, merge, type Observable } from "rxjs";
+import { Observable, Subject } from "rxjs";
 
 export interface AgentifiedEvent {
   type: string;
@@ -29,9 +29,19 @@ export class AgentifiedMastraAdapter {
   }
 
   run(input: RunAgentInput): Observable<BaseEvent> {
-    return merge(
-      this.mastraAgent.run(input),
-      this.eventSubject.asObservable(),
-    );
+    return new Observable<BaseEvent>((subscriber) => {
+      const agentSub = this.mastraAgent.run(input).subscribe({
+        next: (event) => subscriber.next(event),
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+      const eventSub = this.eventSubject.subscribe({
+        next: (event) => subscriber.next(event),
+      });
+      return () => {
+        agentSub.unsubscribe();
+        eventSub.unsubscribe();
+      };
+    });
   }
 }

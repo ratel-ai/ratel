@@ -36,7 +36,7 @@ function createMockClient(initial?: Partial<InspectorState>): AgentifiedClient &
     emit(s: InspectorState) {
       for (const l of listeners) l(s);
     },
-  } as AgentifiedClient & { emit: (s: InspectorState) => void };
+  } as unknown as AgentifiedClient & { emit: (s: InspectorState) => void };
 }
 
 function TestConsumer() {

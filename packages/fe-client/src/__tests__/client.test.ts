@@ -126,7 +126,7 @@ describe("AgentifiedClient", () => {
 
     it("tracks time to first token on first TEXT_MESSAGE_CONTENT", async () => {
       await mockAgent.emitEvent({ type: EventType.RUN_STARTED, runId: "r1", threadId: "t1" } as RunStartedEvent);
-      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", content: "hi" } as TextMessageContentEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "hi" } as TextMessageContentEvent);
 
       expect(client.getState().streaming.timeToFirstTokenMs).toBeGreaterThanOrEqual(0);
     });

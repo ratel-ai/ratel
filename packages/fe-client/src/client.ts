@@ -43,7 +43,7 @@ export class AgentifiedClient {
   private processEvent(event: BaseEvent): void {
     switch (event.type) {
       case EventType.RUN_STARTED: {
-        const e = event as { runId: string; threadId?: string };
+        const e = event as unknown as { runId: string; threadId?: string };
         this.state = {
           ...this.state,
           connection: "connected",

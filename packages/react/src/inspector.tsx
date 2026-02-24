@@ -222,7 +222,7 @@ function EventsTab({ state }: { state: InspectorState }) {
 function EventRow({ entry }: { entry: EventLogEntry }) {
   const time = new Date(entry.timestamp).toLocaleTimeString();
   const eventType = "name" in entry.event
-    ? (entry.event as { name: string }).name
+    ? (entry.event as unknown as { name: string }).name
     : entry.event.type;
 
   return (
