@@ -7,10 +7,11 @@ settings:
 importers:
 
   .:
-    devDependencies:
+    dependencies:
       '@ag-ui/client':
         specifier: ^0.0.45
         version: 0.0.45
+    devDependencies:
       typescript:
         specifier: ^5.9.0
         version: 5.9.3

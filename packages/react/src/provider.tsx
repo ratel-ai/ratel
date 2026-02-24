@@ -1,28 +1,32 @@
-import { createContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { AgentifiedClient, InspectorState } from "@agentified/fe-client";
-
-export type RunFn = (input: { threadId?: string; runId?: string }) => void;
+import { AgentifiedClient } from "@agentified/fe-client";
+import type { InspectorState, Message } from "@agentified/fe-client";
 
 export interface AgentifiedContextValue {
   state: InspectorState;
-  client: AgentifiedClient;
-  run: RunFn;
+  messages: Message[];
+  sendMessage: (content: string) => Promise<void>;
+  isLoading: boolean;
+  error: string | null;
   reset: () => void;
 }
 
 export const AgentifiedContext = createContext<AgentifiedContextValue | null>(null);
 
 export interface AgentifiedProviderProps {
-  client: AgentifiedClient;
-  onRun?: RunFn;
+  agentUrl: string;
+  headers?: Record<string, string>;
   children: ReactNode;
 }
 
-export function AgentifiedProvider({ client, onRun, children }: AgentifiedProviderProps) {
+export function AgentifiedProvider({ agentUrl, headers, children }: AgentifiedProviderProps) {
+  const client = useMemo(
+    () => new AgentifiedClient({ agentUrl, headers }),
+    [agentUrl, headers],
+  );
+
   const [state, setState] = useState<InspectorState>(() => client.getState());
-  const onRunRef = useRef(onRun);
-  onRunRef.current = onRun;
 
   useEffect(() => {
     setState(client.getState());
@@ -30,17 +34,25 @@ export function AgentifiedProvider({ client, onRun, children }: AgentifiedProvid
     return () => sub.unsubscribe();
   }, [client]);
 
-  const run = useCallback<RunFn>((input) => {
-    onRunRef.current?.(input);
-  }, []);
+  const sendMessage = useCallback(
+    (content: string) => client.sendMessage(content),
+    [client],
+  );
 
   const reset = useCallback(() => {
     client.reset();
   }, [client]);
 
   const value = useMemo<AgentifiedContextValue>(
-    () => ({ state, client, run, reset }),
-    [state, client, run, reset],
+    () => ({
+      state,
+      messages: state.messages,
+      sendMessage,
+      isLoading: state.isLoading,
+      error: state.error,
+      reset,
+    }),
+    [state, sendMessage, reset],
   );
 
   return <AgentifiedContext.Provider value={value}>{children}</AgentifiedContext.Provider>;

@@ -2,12 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, act, cleanup, fireEvent } from "@testing-library/react";
 import { AgentifiedProvider } from "../provider.js";
 import { Inspector } from "../inspector.js";
-import type {
-  AgentifiedClient,
-  InspectorState,
-  StateListener,
-  Subscription,
-} from "@agentified/fe-client";
+import type { InspectorState } from "@agentified/fe-client";
 
 function createInitialState(overrides?: Partial<InspectorState>): InspectorState {
   return {
@@ -17,39 +12,59 @@ function createInitialState(overrides?: Partial<InspectorState>): InspectorState
     tokens: { input: 0, output: 0, cached: 0, reasoning: 0 },
     streaming: { messageCount: 0, toolCallCount: 0 },
     events: [],
+    messages: [],
+    isLoading: false,
+    error: null,
     ...overrides,
   };
 }
 
-function createMockClient(
-  initial?: Partial<InspectorState>,
-): AgentifiedClient & { emit: (s: InspectorState) => void } {
-  let state = createInitialState(initial);
-  const listeners = new Set<StateListener>();
+// For inspector tests we mock at the AgentifiedClient level since the provider
+// creates its own client internally. We intercept via vi.mock.
+// Actually, inspector uses useAgentified → AgentifiedContext. We need to provide context.
+// The simplest approach: mock the module to intercept client creation.
 
-  return {
-    getState: () => state,
-    subscribe: (listener: StateListener): Subscription => {
-      listeners.add(listener);
-      return { unsubscribe: () => listeners.delete(listener) };
-    },
-    reset: vi.fn(),
-    emit(s: InspectorState) {
-      state = s;
-      for (const l of listeners) l(s);
-    },
-  } as unknown as AgentifiedClient & { emit: (s: InspectorState) => void };
-}
+// Instead, we'll use a thin wrapper that provides the context directly.
+import { AgentifiedContext } from "../provider.js";
+import type { AgentifiedContextValue } from "../provider.js";
 
 function renderInspector(
-  client: AgentifiedClient,
+  state: InspectorState,
   props?: { position?: "bottom-right" | "bottom-left"; defaultOpen?: boolean },
 ) {
-  return render(
-    <AgentifiedProvider client={client}>
+  const contextValue: AgentifiedContextValue = {
+    state,
+    messages: state.messages,
+    sendMessage: vi.fn(),
+    isLoading: state.isLoading,
+    error: state.error,
+    reset: vi.fn(),
+  };
+
+  const result = render(
+    <AgentifiedContext.Provider value={contextValue}>
       <Inspector {...props} />
-    </AgentifiedProvider>,
+    </AgentifiedContext.Provider>,
   );
+
+  return {
+    ...result,
+    updateState: (newState: InspectorState) => {
+      const newValue: AgentifiedContextValue = {
+        state: newState,
+        messages: newState.messages,
+        sendMessage: vi.fn(),
+        isLoading: newState.isLoading,
+        error: newState.error,
+        reset: vi.fn(),
+      };
+      result.rerender(
+        <AgentifiedContext.Provider value={newValue}>
+          <Inspector {...props} />
+        </AgentifiedContext.Provider>,
+      );
+    },
+  };
 }
 
 afterEach(cleanup);
@@ -57,42 +72,40 @@ afterEach(cleanup);
 describe("Inspector", () => {
   describe("toggle", () => {
     it("renders toggle button when closed", () => {
-      const client = createMockClient();
-      renderInspector(client);
+      renderInspector(createInitialState());
       expect(screen.getByTestId("inspector-toggle")).toBeTruthy();
       expect(screen.queryByTestId("inspector-panel")).toBeNull();
     });
 
     it("opens panel when toggle clicked", () => {
-      const client = createMockClient();
-      renderInspector(client);
+      renderInspector(createInitialState());
       fireEvent.click(screen.getByTestId("inspector-toggle"));
       expect(screen.getByTestId("inspector-panel")).toBeTruthy();
     });
 
     it("closes panel when close button clicked", () => {
-      const client = createMockClient();
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(createInitialState(), { defaultOpen: true });
       fireEvent.click(screen.getByTestId("inspector-close"));
       expect(screen.queryByTestId("inspector-panel")).toBeNull();
       expect(screen.getByTestId("inspector-toggle")).toBeTruthy();
     });
 
     it("respects defaultOpen prop", () => {
-      const client = createMockClient();
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(createInitialState(), { defaultOpen: true });
       expect(screen.getByTestId("inspector-panel")).toBeTruthy();
     });
   });
 
   describe("Overview tab", () => {
     it("shows connection status and streaming metrics", () => {
-      const client = createMockClient({
-        connection: "connected",
-        run: { runId: "r1", threadId: "t1" },
-        streaming: { messageCount: 5, toolCallCount: 2, timeToFirstTokenMs: 120 },
-      });
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(
+        createInitialState({
+          connection: "connected",
+          run: { runId: "r1", threadId: "t1" },
+          streaming: { messageCount: 5, toolCallCount: 2, timeToFirstTokenMs: 120 },
+        }),
+        { defaultOpen: true },
+      );
 
       expect(screen.getByText("Connected")).toBeTruthy();
       expect(screen.getByText("r1")).toBeTruthy();
@@ -103,27 +116,31 @@ describe("Inspector", () => {
     });
 
     it("shows run duration when available", () => {
-      const client = createMockClient({
-        connection: "disconnected",
-        run: { durationMs: 3400 },
-      });
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(
+        createInitialState({
+          connection: "disconnected",
+          run: { durationMs: 3400 },
+        }),
+        { defaultOpen: true },
+      );
       expect(screen.getByText("3400ms")).toBeTruthy();
     });
   });
 
   describe("Agentified tab", () => {
     it("shows current tools", () => {
-      const client = createMockClient({
-        agentified: {
-          prefetchResults: [],
-          discoveries: [],
-          currentTools: [
-            { name: "search_docs", description: "Search documentation", score: 0.95 },
-          ],
-        },
-      });
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(
+        createInitialState({
+          agentified: {
+            prefetchResults: [],
+            discoveries: [],
+            currentTools: [
+              { name: "search_docs", description: "Search documentation", score: 0.95 },
+            ],
+          },
+        }),
+        { defaultOpen: true },
+      );
       fireEvent.click(screen.getByTestId("tab-agentified"));
 
       expect(screen.getByText("search_docs")).toBeTruthy();
@@ -131,36 +148,40 @@ describe("Inspector", () => {
     });
 
     it("shows last prefetch result", () => {
-      const client = createMockClient({
-        agentified: {
-          prefetchResults: [
-            { tools: [{ name: "a", description: "", score: 0.5 }], durationMs: 200 },
-          ],
-          discoveries: [],
-          currentTools: [],
-        },
-      });
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(
+        createInitialState({
+          agentified: {
+            prefetchResults: [
+              { tools: [{ name: "a", description: "", score: 0.5 }], durationMs: 200 },
+            ],
+            discoveries: [],
+            currentTools: [],
+          },
+        }),
+        { defaultOpen: true },
+      );
       fireEvent.click(screen.getByTestId("tab-agentified"));
 
       expect(screen.getByText("200ms")).toBeTruthy();
     });
 
     it("shows discoveries", () => {
-      const client = createMockClient({
-        agentified: {
-          prefetchResults: [],
-          discoveries: [
-            {
-              query: "find email tools",
-              tools: [{ name: "a", description: "", score: 0.8 }],
-              durationMs: 150,
-            },
-          ],
-          currentTools: [],
-        },
-      });
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(
+        createInitialState({
+          agentified: {
+            prefetchResults: [],
+            discoveries: [
+              {
+                query: "find email tools",
+                tools: [{ name: "a", description: "", score: 0.8 }],
+                durationMs: 150,
+              },
+            ],
+            currentTools: [],
+          },
+        }),
+        { defaultOpen: true },
+      );
       fireEvent.click(screen.getByTestId("tab-agentified"));
 
       expect(screen.getByText('"find email tools"')).toBeTruthy();
@@ -168,8 +189,7 @@ describe("Inspector", () => {
     });
 
     it("shows empty state when no interactions", () => {
-      const client = createMockClient();
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(createInitialState(), { defaultOpen: true });
       fireEvent.click(screen.getByTestId("tab-agentified"));
 
       expect(screen.getByText("No Agentified interactions yet")).toBeTruthy();
@@ -178,10 +198,12 @@ describe("Inspector", () => {
 
   describe("Tokens tab", () => {
     it("shows token breakdown and total", () => {
-      const client = createMockClient({
-        tokens: { input: 1500, output: 300, cached: 200, reasoning: 0 },
-      });
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(
+        createInitialState({
+          tokens: { input: 1500, output: 300, cached: 200, reasoning: 0 },
+        }),
+        { defaultOpen: true },
+      );
       fireEvent.click(screen.getByTestId("tab-tokens"));
 
       expect(screen.getByText("1.5k")).toBeTruthy();
@@ -191,10 +213,12 @@ describe("Inspector", () => {
     });
 
     it("shows context window bar when available", () => {
-      const client = createMockClient({
-        tokens: { input: 0, output: 0, cached: 0, reasoning: 0, contextWindowPercent: 42.5 },
-      });
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(
+        createInitialState({
+          tokens: { input: 0, output: 0, cached: 0, reasoning: 0, contextWindowPercent: 42.5 },
+        }),
+        { defaultOpen: true },
+      );
       fireEvent.click(screen.getByTestId("tab-tokens"));
 
       expect(screen.getByTestId("context-bar")).toBeTruthy();
@@ -204,21 +228,23 @@ describe("Inspector", () => {
 
   describe("Events tab", () => {
     it("renders event log entries", () => {
-      const client = createMockClient({
-        events: [
-          {
-            timestamp: Date.now(),
-            event: { type: "RUN_STARTED" } as any,
-            isAgentified: false,
-          },
-          {
-            timestamp: Date.now(),
-            event: { type: "CUSTOM", name: "agentified:prefetch:complete" } as any,
-            isAgentified: true,
-          },
-        ],
-      });
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(
+        createInitialState({
+          events: [
+            {
+              timestamp: Date.now(),
+              event: { type: "RUN_STARTED" } as any,
+              isAgentified: false,
+            },
+            {
+              timestamp: Date.now(),
+              event: { type: "CUSTOM", name: "agentified:prefetch:complete" } as any,
+              isAgentified: true,
+            },
+          ],
+        }),
+        { defaultOpen: true },
+      );
       fireEvent.click(screen.getByTestId("tab-events"));
 
       const rows = screen.getAllByTestId("event-row");
@@ -228,8 +254,7 @@ describe("Inspector", () => {
     });
 
     it("shows empty state when no events", () => {
-      const client = createMockClient();
-      renderInspector(client, { defaultOpen: true });
+      renderInspector(createInitialState(), { defaultOpen: true });
       fireEvent.click(screen.getByTestId("tab-events"));
 
       expect(screen.getByText("No events yet")).toBeTruthy();
@@ -238,8 +263,7 @@ describe("Inspector", () => {
 
   describe("position", () => {
     it("applies bottom-left positioning", () => {
-      const client = createMockClient();
-      renderInspector(client, { position: "bottom-left" });
+      renderInspector(createInitialState(), { position: "bottom-left" });
       const toggle = screen.getByTestId("inspector-toggle");
       expect(toggle.style.left).toBe("16px");
       expect(toggle.style.bottom).toBe("16px");
@@ -248,12 +272,14 @@ describe("Inspector", () => {
 
   describe("live updates", () => {
     it("re-renders when state changes", () => {
-      const client = createMockClient({ connection: "idle" });
-      renderInspector(client, { defaultOpen: true });
+      const { updateState } = renderInspector(
+        createInitialState({ connection: "idle" }),
+        { defaultOpen: true },
+      );
       expect(screen.getByText("Idle")).toBeTruthy();
 
       act(() => {
-        client.emit(createInitialState({ connection: "connected" }));
+        updateState(createInitialState({ connection: "connected" }));
       });
 
       expect(screen.getByText("Connected")).toBeTruthy();

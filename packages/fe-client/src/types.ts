@@ -1,4 +1,16 @@
-import type { BaseEvent, CustomEvent } from "@ag-ui/client";
+import type { BaseEvent, CustomEvent, AbstractAgent } from "@ag-ui/client";
+export type { Message, Context } from "@ag-ui/client";
+
+// Client config
+
+export interface AgentifiedClientConfig {
+  agentUrl: string;
+  headers?: Record<string, string>;
+  contextWindowSize?: number;
+  maxEventLogSize?: number;
+  /** @internal */
+  _agentFactory?: (url: string, headers?: Record<string, string>) => AbstractAgent;
+}
 
 // Agentified event data (mirrors SDK event shapes)
 
@@ -78,6 +90,9 @@ export interface InspectorState {
   tokens: TokenState;
   streaming: StreamingMetrics;
   events: EventLogEntry[];
+  messages: import("@ag-ui/client").Message[];
+  isLoading: boolean;
+  error: string | null;
 }
 
 // Client types

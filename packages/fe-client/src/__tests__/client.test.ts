@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentifiedClient } from "../client.js";
 import type { InspectorState } from "../types.js";
-import type { BaseEvent, CustomEvent, RunStartedEvent, RunFinishedEvent, TextMessageStartEvent, TextMessageContentEvent, ToolCallStartEvent, RunErrorEvent, AgentSubscriber } from "@ag-ui/client";
+import type { BaseEvent, CustomEvent, RunStartedEvent, RunFinishedEvent, TextMessageStartEvent, TextMessageContentEvent, TextMessageEndEvent, ToolCallStartEvent, RunErrorEvent, AgentSubscriber, AbstractAgent } from "@ag-ui/client";
 import { EventType } from "@ag-ui/client";
 
-// Minimal mock HttpAgent that captures subscriber and dispatches via onEvent
 function createMockAgent() {
   let subscriber: AgentSubscriber | undefined;
   return {
@@ -12,6 +11,9 @@ function createMockAgent() {
       subscriber = sub;
       return { unsubscribe: () => { subscriber = undefined; } };
     }),
+    setMessages: vi.fn(),
+    runAgent: vi.fn(() => Promise.resolve({ result: null, newMessages: [] })),
+    abortRun: vi.fn(),
     async emitEvent(event: BaseEvent) {
       const params = {
         messages: [],
@@ -24,6 +26,17 @@ function createMockAgent() {
   };
 }
 
+type MockAgent = ReturnType<typeof createMockAgent>;
+
+function createClient(agent?: MockAgent) {
+  const mock = agent ?? createMockAgent();
+  const client = new AgentifiedClient({
+    agentUrl: "http://localhost:9119",
+    _agentFactory: () => mock as unknown as AbstractAgent,
+  });
+  return { client, mockAgent: mock };
+}
+
 function initialState(): InspectorState {
   return {
     connection: "idle",
@@ -32,16 +45,20 @@ function initialState(): InspectorState {
     tokens: { input: 0, output: 0, cached: 0, reasoning: 0 },
     streaming: { messageCount: 0, toolCallCount: 0 },
     events: [],
+    messages: [],
+    isLoading: false,
+    error: null,
   };
 }
 
 describe("AgentifiedClient", () => {
-  let mockAgent: ReturnType<typeof createMockAgent>;
+  let mockAgent: MockAgent;
   let client: AgentifiedClient;
 
   beforeEach(() => {
-    mockAgent = createMockAgent();
-    client = new AgentifiedClient(mockAgent as any);
+    const result = createClient();
+    client = result.client;
+    mockAgent = result.mockAgent;
   });
 
   describe("initialization", () => {
@@ -138,6 +155,190 @@ describe("AgentifiedClient", () => {
     });
   });
 
+  describe("message tracking", () => {
+    it("TEXT_MESSAGE_START creates a pending message entry", async () => {
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m1", role: "assistant" } as TextMessageStartEvent);
+
+      const messages = client.getMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.id).toBe("m1");
+      expect(messages[0]!.role).toBe("assistant");
+      expect(messages[0]!.content).toBe("");
+    });
+
+    it("TEXT_MESSAGE_CONTENT appends delta and notifies", async () => {
+      const listener = vi.fn();
+      client.subscribe(listener);
+
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m1", role: "assistant" } as TextMessageStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "Hello" } as TextMessageContentEvent);
+
+      const messages = client.getMessages();
+      expect(messages[0]!.content).toBe("Hello");
+      // listener called for both events
+      expect(listener.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("TEXT_MESSAGE_CONTENT appends multiple deltas", async () => {
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m1", role: "assistant" } as TextMessageStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "Hel" } as TextMessageContentEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "lo" } as TextMessageContentEvent);
+
+      expect(client.getMessages()[0]!.content).toBe("Hello");
+    });
+
+    it("TEXT_MESSAGE_END finalizes message", async () => {
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m1", role: "assistant" } as TextMessageStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "Done" } as TextMessageContentEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_END, messageId: "m1" } as TextMessageEndEvent);
+
+      const messages = client.getMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.content).toBe("Done");
+    });
+
+    it("tracks multiple messages by messageId", async () => {
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m1", role: "assistant" } as TextMessageStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "First" } as TextMessageContentEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_END, messageId: "m1" } as TextMessageEndEvent);
+
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m2", role: "assistant" } as TextMessageStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m2", delta: "Second" } as TextMessageContentEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_END, messageId: "m2" } as TextMessageEndEvent);
+
+      const messages = client.getMessages();
+      expect(messages).toHaveLength(2);
+      expect(messages[0]!.content).toBe("First");
+      expect(messages[1]!.content).toBe("Second");
+    });
+
+    it("getMessages returns current messages including in-progress", async () => {
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m1", role: "assistant" } as TextMessageStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "stream" } as TextMessageContentEvent);
+
+      // Message is still in-progress but visible via getMessages
+      const messages = client.getMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.content).toBe("stream");
+    });
+
+    it("messages are included in state", async () => {
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m1", role: "assistant" } as TextMessageStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "hi" } as TextMessageContentEvent);
+
+      expect(client.getState().messages).toHaveLength(1);
+      expect(client.getState().messages[0]!.content).toBe("hi");
+    });
+  });
+
+  describe("run()", () => {
+    it("sets isLoading=true during run", async () => {
+      let loadingDuringRun = false;
+      mockAgent.runAgent.mockImplementation(async () => {
+        loadingDuringRun = client.getState().isLoading;
+        return { result: null, newMessages: [] };
+      });
+
+      await client.run({ messages: [] });
+
+      expect(loadingDuringRun).toBe(true);
+      expect(client.getState().isLoading).toBe(false);
+    });
+
+    it("calls agent.setMessages and runAgent", async () => {
+      const messages = [{ id: "u1", role: "user" as const, content: "hello" }];
+      await client.run({ messages });
+
+      expect(mockAgent.setMessages).toHaveBeenCalledWith(messages);
+      expect(mockAgent.runAgent).toHaveBeenCalled();
+    });
+
+    it("passes context to runAgent", async () => {
+      const context = [{ description: "test", value: "val" }];
+      await client.run({ messages: [], context });
+
+      expect(mockAgent.runAgent).toHaveBeenCalledWith({ context });
+    });
+
+    it("sets error on failure", async () => {
+      mockAgent.runAgent.mockRejectedValue(new Error("network error"));
+
+      await client.run({ messages: [] });
+
+      expect(client.getState().error).toBe("network error");
+      expect(client.getState().isLoading).toBe(false);
+    });
+
+    it("clears previous error on new run", async () => {
+      mockAgent.runAgent.mockRejectedValueOnce(new Error("fail"));
+      await client.run({ messages: [] });
+      expect(client.getState().error).toBe("fail");
+
+      mockAgent.runAgent.mockResolvedValueOnce({ result: null, newMessages: [] });
+      await client.run({ messages: [] });
+      expect(client.getState().error).toBeNull();
+    });
+  });
+
+  describe("sendMessage()", () => {
+    it("creates user message and appends to messages", async () => {
+      await client.sendMessage("hello");
+
+      const messages = client.getMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.role).toBe("user");
+      expect(messages[0]!.content).toBe("hello");
+    });
+
+    it("calls run with all messages", async () => {
+      await client.sendMessage("hi");
+
+      expect(mockAgent.setMessages).toHaveBeenCalled();
+      expect(mockAgent.runAgent).toHaveBeenCalled();
+    });
+
+    it("preserves existing messages", async () => {
+      await client.sendMessage("first");
+      mockAgent.runAgent.mockResolvedValueOnce({ result: null, newMessages: [] });
+      await client.sendMessage("second");
+
+      const messages = client.getMessages();
+      const userMessages = messages.filter(m => m.role === "user");
+      expect(userMessages).toHaveLength(2);
+      expect(userMessages[0]!.content).toBe("first");
+      expect(userMessages[1]!.content).toBe("second");
+    });
+  });
+
+  describe("reset()", () => {
+    it("clears messages, isLoading, error", async () => {
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_START, messageId: "m1", role: "assistant" } as TextMessageStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: "m1", delta: "hi" } as TextMessageContentEvent);
+
+      client.reset();
+
+      expect(client.getState().messages).toEqual([]);
+      expect(client.getState().isLoading).toBe(false);
+      expect(client.getState().error).toBeNull();
+    });
+
+    it("calls abortRun on agent", () => {
+      client.reset();
+      expect(mockAgent.abortRun).toHaveBeenCalled();
+    });
+
+    it("resets to initial state and notifies listeners", async () => {
+      await mockAgent.emitEvent({ type: EventType.RUN_STARTED, runId: "r1", threadId: "t1" } as RunStartedEvent);
+
+      const listener = vi.fn();
+      client.subscribe(listener);
+      client.reset();
+
+      expect(client.getState()).toEqual(initialState());
+      expect(listener).toHaveBeenCalledWith(initialState());
+    });
+  });
+
   describe("agentified CUSTOM events", () => {
     it("parses prefetch:complete and stores result", async () => {
       const tools = [{ name: "weather", description: "Get weather", score: 0.9 }];
@@ -213,19 +414,6 @@ describe("AgentifiedClient", () => {
       const events = client.getState().events;
       expect(events).toHaveLength(1);
       expect(events[0]!.isAgentified).toBe(true);
-    });
-  });
-
-  describe("reset", () => {
-    it("resets state to initial and notifies listeners", async () => {
-      await mockAgent.emitEvent({ type: EventType.RUN_STARTED, runId: "r1", threadId: "t1" } as RunStartedEvent);
-
-      const listener = vi.fn();
-      client.subscribe(listener);
-      client.reset();
-
-      expect(client.getState()).toEqual(initialState());
-      expect(listener).toHaveBeenCalledWith(initialState());
     });
   });
 });

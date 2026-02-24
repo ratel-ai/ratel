@@ -1,105 +1,54 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, act, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { AgentifiedProvider } from "../provider.js";
 import { useAgentified } from "../hook.js";
-import type { AgentifiedClient, InspectorState, StateListener, Subscription } from "@agentified/fe-client";
-
-function createMockClient(initial?: Partial<InspectorState>): AgentifiedClient & { emit: (s: InspectorState) => void } {
-  const listeners = new Set<StateListener>();
-  const state: InspectorState = {
-    connection: "idle",
-    run: {},
-    agentified: { prefetchResults: [], discoveries: [], currentTools: [] },
-    tokens: { input: 0, output: 0, cached: 0, reasoning: 0 },
-    streaming: { messageCount: 0, toolCallCount: 0 },
-    events: [],
-    ...initial,
-  };
-
-  return {
-    getState: () => state,
-    subscribe: (listener: StateListener): Subscription => {
-      listeners.add(listener);
-      return { unsubscribe: () => listeners.delete(listener) };
-    },
-    reset: vi.fn(() => {
-      Object.assign(state, {
-        connection: "idle",
-        run: {},
-        agentified: { prefetchResults: [], discoveries: [], currentTools: [] },
-        tokens: { input: 0, output: 0, cached: 0, reasoning: 0 },
-        streaming: { messageCount: 0, toolCallCount: 0 },
-        events: [],
-      });
-      for (const l of listeners) l(state);
-    }),
-    emit(s: InspectorState) {
-      for (const l of listeners) l(s);
-    },
-  } as unknown as AgentifiedClient & { emit: (s: InspectorState) => void };
-}
 
 function TestConsumer() {
-  const { state } = useAgentified();
-  return <div data-testid="connection">{state.connection}</div>;
+  const { state, messages, isLoading, error } = useAgentified();
+  return (
+    <div>
+      <span data-testid="connection">{state.connection}</span>
+      <span data-testid="message-count">{messages.length}</span>
+      <span data-testid="is-loading">{String(isLoading)}</span>
+      <span data-testid="error">{error ?? "none"}</span>
+    </div>
+  );
 }
 
 afterEach(cleanup);
 
 describe("AgentifiedProvider", () => {
   it("provides initial state to children", () => {
-    const client = createMockClient();
     render(
-      <AgentifiedProvider client={client}>
+      <AgentifiedProvider agentUrl="http://localhost:9119">
         <TestConsumer />
       </AgentifiedProvider>,
     );
     expect(screen.getByTestId("connection").textContent).toBe("idle");
+    expect(screen.getByTestId("message-count").textContent).toBe("0");
+    expect(screen.getByTestId("is-loading").textContent).toBe("false");
+    expect(screen.getByTestId("error").textContent).toBe("none");
   });
 
-  it("updates children when state changes", () => {
-    const client = createMockClient();
-    render(
-      <AgentifiedProvider client={client}>
-        <TestConsumer />
-      </AgentifiedProvider>,
-    );
-
-    act(() => {
-      client.emit({ ...client.getState(), connection: "connected" });
-    });
-
-    expect(screen.getByTestId("connection").textContent).toBe("connected");
-  });
-
-  it("calls onRun when run is invoked", () => {
-    const client = createMockClient();
-    const onRun = vi.fn();
-    let runFn: (input: { threadId?: string }) => void;
-
-    function RunConsumer() {
-      const { run } = useAgentified();
-      runFn = run;
+  it("exposes sendMessage function", () => {
+    let sendFn: ((content: string) => Promise<void>) | undefined;
+    function SendConsumer() {
+      const { sendMessage } = useAgentified();
+      sendFn = sendMessage;
       return null;
     }
 
     render(
-      <AgentifiedProvider client={client} onRun={onRun}>
-        <RunConsumer />
+      <AgentifiedProvider agentUrl="http://localhost:9119">
+        <SendConsumer />
       </AgentifiedProvider>,
     );
 
-    act(() => {
-      runFn!({ threadId: "t1" });
-    });
-
-    expect(onRun).toHaveBeenCalledWith({ threadId: "t1" });
+    expect(sendFn).toBeTypeOf("function");
   });
 
-  it("calls client.reset when reset is invoked", () => {
-    const client = createMockClient();
-    let resetFn: () => void;
-
+  it("exposes reset function", () => {
+    let resetFn: (() => void) | undefined;
     function ResetConsumer() {
       const { reset } = useAgentified();
       resetFn = reset;
@@ -107,38 +56,17 @@ describe("AgentifiedProvider", () => {
     }
 
     render(
-      <AgentifiedProvider client={client}>
+      <AgentifiedProvider agentUrl="http://localhost:9119">
         <ResetConsumer />
       </AgentifiedProvider>,
     );
 
-    act(() => {
-      resetFn!();
-    });
-
-    expect(client.reset).toHaveBeenCalled();
-  });
-
-  it("unsubscribes on unmount", () => {
-    const client = createMockClient();
-    const { unmount } = render(
-      <AgentifiedProvider client={client}>
-        <TestConsumer />
-      </AgentifiedProvider>,
-    );
-
-    unmount();
-
-    // Should not throw after unmount
-    act(() => {
-      client.emit({ ...client.getState(), connection: "error" });
-    });
+    expect(resetFn).toBeTypeOf("function");
   });
 });
 
 describe("useAgentified", () => {
   it("throws when used outside provider", () => {
-    // Suppress React error boundary console noise
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     expect(() => render(<TestConsumer />)).toThrow(

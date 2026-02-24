@@ -7,11 +7,10 @@
   "scripts": {
     "test": "vitest run"
   },
-  "peerDependencies": {
-    "@ag-ui/client": ">=0.0.45"
+  "dependencies": {
+    "@ag-ui/client": "^0.0.45"
   },
   "devDependencies": {
-    "@ag-ui/client": "^0.0.45",
     "typescript": "^5.9.0",
     "vitest": "^2.1.0"
   }
