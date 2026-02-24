@@ -1,0 +1,11 @@
+{
+  "name": "agentified",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "release": "pnpm changeset publish"
+  }
+}

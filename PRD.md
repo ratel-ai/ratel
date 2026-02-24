@@ -37,7 +37,7 @@ Build four TypeScript packages that integrate Agentified with the AG-UI protocol
 - [ ] Add tests for event emission
 
 ### Package 2: @agentified/mastra (new)
-- [ ] Create `packages/mastra/`
+- [ ] Create `ts-packages/mastra/`
 - [ ] Implement `AgentifiedMastraAdapter` class that wraps `MastraAgent` + `Agentified` SDK
 - [ ] Wire SDK `onEvent` to RxJS Subject
 - [ ] Convert Agentified events to AG-UI `CUSTOM` events (name = event type, value = event data)
@@ -46,7 +46,7 @@ Build four TypeScript packages that integrate Agentified with the AG-UI protocol
 - [ ] Add tests with real Mastra instance
 
 ### Package 3: @agentified/fe-client (new)
-- [ ] Create `packages/fe-client/`
+- [ ] Create `ts-packages/fe-client/`
 - [ ] Implement `AgentifiedClient` class wrapping `@ag-ui/client`'s `HttpAgent`
 - [ ] Build `InspectorState` tracking:
   - Connection status
@@ -60,7 +60,7 @@ Build four TypeScript packages that integrate Agentified with the AG-UI protocol
 - [ ] Add unit tests
 
 ### Package 4: @agentified/react (new, replace empty dir)
-- [ ] Create proper package in `packages/react/`
+- [ ] Create proper package in `ts-packages/react/`
 - [ ] Implement `<AgentifiedProvider client={...}>` context provider
 - [ ] Implement `useAgentified()` hook returning state, client, run, reset
 - [ ] Implement `<Inspector />` component with:
@@ -98,7 +98,7 @@ Build four TypeScript packages that integrate Agentified with the AG-UI protocol
 
 - OpenAI API key is in `.env` at repo root
 - Start Rust server with `docker compose up -d` in `core/` before running integration tests
-- Existing SDK code in `packages/sdk/` is clean — just add `onEvent`, don't restructure
+- Existing SDK code in `ts-packages/sdk/` is clean — just add `onEvent`, don't restructure
 - For Mastra tests, create a minimal test agent that echoes input
 - Implementation order: SDK → fe-client (pure unit tests) → react (unit tests) → mastra (integration)
 - Check `@ag-ui/mastra` source at https://github.com/ag-ui-protocol/ag-ui for exact types

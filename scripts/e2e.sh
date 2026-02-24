@@ -51,7 +51,7 @@ AGENTIFIED_URL=http://localhost:9119 bash "$REPO_ROOT/scripts/test-server.sh"
 
 # 5. SDK integration tests
 echo -e "\n${YELLOW}▶${NC} Running SDK integration tests..."
-cd "$REPO_ROOT/packages/sdk"
+cd "$REPO_ROOT/ts-packages/sdk"
 AGENTIFIED_TEST_URL=http://localhost:9119 npx vitest run src/__tests__/integration.test.ts
 
 echo -e "\n${GREEN}✓${NC} All e2e tests passed!"

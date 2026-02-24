@@ -7,7 +7,7 @@
     "react": ">=18.0.0"
   },
   "dependencies": {
-    "@agentified/fe-client": "file:../fe-client"
+    "@agentified/fe-client": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",
