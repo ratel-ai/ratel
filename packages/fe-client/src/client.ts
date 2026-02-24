@@ -7,7 +7,7 @@ export class AgentifiedClient {
   private state: InspectorState;
   private listeners: Set<StateListener> = new Set();
   private agent: AbstractAgent;
-  private pendingMessages: Map<string, { role: string; content: string }> = new Map();
+  private pendingMessages: Map<string, { role: "assistant" | "user"; content: string }> = new Map();
 
   constructor(config: AgentifiedClientConfig) {
     this.state = createInitialState();
@@ -98,11 +98,13 @@ export class AgentifiedClient {
         break;
       case EventType.TEXT_MESSAGE_START: {
         const e = event as unknown as { messageId: string; role?: string };
-        this.pendingMessages.set(e.messageId, { role: e.role ?? "assistant", content: "" });
+        const role = (e.role ?? "assistant") as "assistant" | "user";
+        this.pendingMessages.set(e.messageId, { role, content: "" });
+        const newMsg = { id: e.messageId, role, content: "" } as unknown as Message;
         this.state = {
           ...this.state,
           streaming: { ...this.state.streaming, messageCount: this.state.streaming.messageCount + 1 },
-          messages: [...this.state.messages, { id: e.messageId, role: e.role ?? "assistant", content: "" }],
+          messages: [...this.state.messages, newMsg],
         };
         break;
       }
@@ -114,7 +116,9 @@ export class AgentifiedClient {
           this.state = {
             ...this.state,
             messages: this.state.messages.map(m =>
-              m.id === e.messageId ? { ...m, content: pending.content } : m,
+              m.id === e.messageId 
+                ? ({ ...m, content: pending.content } as unknown as Message)
+                : m,
             ),
           };
         }
