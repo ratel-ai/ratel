@@ -2,6 +2,7 @@ export { Agentified } from "./agentified.js";
 export { tool } from "./tool.js";
 export type {
   AgentifiedConfig,
+  AgentifiedEvent,
   DiscoverResponse,
   DiscoverTool,
   DiscoverToolInput,
@@ -12,5 +13,6 @@ export type {
   RegisterResponse,
   ServerTool,
   ServerToolFields,
+  TokenUsage,
   ToolDefinition,
 } from "./types.js";
