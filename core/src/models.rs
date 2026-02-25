@@ -93,6 +93,27 @@ pub struct DiscoverRequest {
     pub embedding_weights: Option<EmbeddingFieldWeights>,
     #[serde(default)]
     pub exclude: Option<Vec<String>>,
+    #[serde(default)]
+    pub turn_id: Option<String>,
+}
+
+// Session/turn tracking
+
+#[derive(Debug, Clone)]
+pub struct Turn {
+    pub tools_loaded: Vec<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CaptureTurnRequest {
+    pub tools_loaded: Vec<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CaptureTurnResponse {
+    pub turn_id: String,
 }
 
 #[derive(Debug, Serialize)]

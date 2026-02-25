@@ -12,8 +12,9 @@ use tokio::sync::RwLock;
 pub use embedding::{EmbeddingService, OpenAIEmbedding};
 
 use models::{
-    DiscoverRequest, DiscoverResponse, ErrorResponse, FieldEmbeddings, ListToolsResponse,
-    RankedTool, RegisterToolsRequest, RegisterToolsResponse, StoredTool,
+    CaptureTurnRequest, CaptureTurnResponse, DiscoverRequest, DiscoverResponse, ErrorResponse,
+    FieldEmbeddings, ListToolsResponse, RankedTool, RegisterToolsRequest, RegisterToolsResponse,
+    StoredTool, Turn,
 };
 use ranking::{bm25_scores, weighted_semantic_score};
 
@@ -26,6 +27,7 @@ struct HealthResponse {
 
 pub struct AppState {
     tools: RwLock<HashMap<String, StoredTool>>,
+    turns: RwLock<HashMap<String, Turn>>,
     embedding_cache: RwLock<HashMap<String, Vec<f32>>>,
     embedding: Arc<dyn EmbeddingService>,
 }
@@ -35,6 +37,7 @@ pub struct AppState {
 pub fn app(embedding: Arc<dyn EmbeddingService>) -> Router {
     let state = Arc::new(AppState {
         tools: RwLock::new(HashMap::new()),
+        turns: RwLock::new(HashMap::new()),
         embedding_cache: RwLock::new(HashMap::new()),
         embedding,
     });
@@ -43,6 +46,7 @@ pub fn app(embedding: Arc<dyn EmbeddingService>) -> Router {
         .route("/health", get(health))
         .route("/api/v1/tools", post(register_tools).get(list_tools))
         .route("/api/v1/discover", post(discover))
+        .route("/api/v1/turns", post(capture_turn))
         .with_state(state)
 }
 
@@ -167,6 +171,19 @@ async fn discover(
     State(state): State<Arc<AppState>>,
     Json(body): Json<DiscoverRequest>,
 ) -> Result<Json<DiscoverResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let limit = body.limit.unwrap_or(5).min(100);
+
+    // If turn_id present, load turn and prepend base tools
+    let base_tool_names: Vec<String> = if let Some(ref turn_id) = body.turn_id {
+        let turns = state.turns.read().await;
+        let turn = turns.get(turn_id).ok_or_else(|| {
+            (StatusCode::NOT_FOUND, Json(ErrorResponse { error: format!("turn not found: {turn_id}") }))
+        })?;
+        turn.tools_loaded.clone()
+    } else {
+        vec![]
+    };
+
     // Compute query embedding before acquiring tools lock
     let query_embedding = embed_cached(&state, &body.query).await.map_err(embed_err)?;
 
@@ -175,12 +192,25 @@ async fn discover(
         return Ok(Json(DiscoverResponse { tools: vec![] }));
     }
 
+    // Build base tools from turn (score=1.0, no graph_expanded)
+    let mut base_tools: Vec<RankedTool> = base_tool_names.iter()
+        .filter_map(|name| tools.get(name))
+        .map(|st| RankedTool { tool: st.tool.clone(), score: 1.0, graph_expanded: None })
+        .collect();
+
     let weights = body.embedding_weights.unwrap_or_default();
-    let exclude = body.exclude.unwrap_or_default();
+    let mut exclude = body.exclude.unwrap_or_default();
+    // Exclude base tools from semantic+BM25 ranking
+    exclude.extend(base_tool_names);
+
     let stored: Vec<&StoredTool> = tools
         .values()
         .filter(|t| !exclude.contains(&t.tool.name))
         .collect();
+
+    if stored.is_empty() && !base_tools.is_empty() {
+        return Ok(Json(DiscoverResponse { tools: base_tools }));
+    }
 
     // Semantic scores (weighted multi-field)
     let semantic_scores: Vec<f32> = stored
@@ -213,14 +243,28 @@ async fn discover(
         .collect();
 
     ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-
-    let limit = body.limit.unwrap_or(5).min(100);
     ranked.truncate(limit);
 
-    // 1-hop graph expansion: inject provider tools for required params
+    // Graph-expand only additional tools (not base tools)
     let ranked = expand_with_providers(ranked, &tools, limit);
 
-    Ok(Json(DiscoverResponse { tools: ranked }))
+    // Prepend base tools
+    base_tools.extend(ranked);
+
+    Ok(Json(DiscoverResponse { tools: base_tools }))
+}
+
+async fn capture_turn(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CaptureTurnRequest>,
+) -> (StatusCode, Json<CaptureTurnResponse>) {
+    let turn_id = uuid::Uuid::new_v4().to_string();
+    let turn = Turn {
+        tools_loaded: body.tools_loaded,
+        message: body.message,
+    };
+    state.turns.write().await.insert(turn_id.clone(), turn);
+    (StatusCode::CREATED, Json(CaptureTurnResponse { turn_id }))
 }
 
 // Helpers
@@ -539,6 +583,7 @@ mod tests {
 
         let state = Arc::new(AppState {
             tools: RwLock::new(tools_map),
+            turns: RwLock::new(HashMap::new()),
             embedding_cache: RwLock::new(HashMap::new()),
             embedding: Arc::new(FailingEmbedding),
         });
@@ -1037,6 +1082,159 @@ mod tests {
         // adjustSalary should NOT have graph_expanded
         let salary_tool = tools.iter().find(|t| t["name"] == "adjustSalary").unwrap();
         assert!(salary_tool.get("graph_expanded").is_none() || salary_tool["graph_expanded"].is_null());
+    }
+
+    #[tokio::test]
+    async fn capture_turn_stores_and_returns_id() {
+        let app = test_app();
+
+        let body = serde_json::json!({
+            "tools_loaded": ["getAccountInfo", "processRefund"],
+            "message": "I need account info"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/turns")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json["turn_id"].as_str().unwrap().len() > 0);
+    }
+
+    #[tokio::test]
+    async fn discover_with_turn_id_includes_base_tools() {
+        let embedding = Arc::new(FakeEmbedding::new());
+        let state = Arc::new(AppState {
+            tools: RwLock::new(HashMap::new()),
+            turns: RwLock::new(HashMap::new()),
+            embedding_cache: RwLock::new(HashMap::new()),
+            embedding: embedding.clone(),
+        });
+
+        let app = Router::new()
+            .route("/api/v1/tools", post(register_tools))
+            .route("/api/v1/discover", post(discover))
+            .route("/api/v1/turns", post(capture_turn))
+            .with_state(state);
+
+        // Register 3 tools
+        let reg = serde_json::json!({
+            "tools": [
+                { "name": "getAccountInfo", "description": "Get customer account details", "parameters": {} },
+                { "name": "processRefund", "description": "Process a refund for invoice", "parameters": {} },
+                { "name": "sendEmail", "description": "Send an email to a customer", "parameters": {} }
+            ]
+        });
+
+        app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tools")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&reg).unwrap()))
+                .unwrap(),
+        ).await.unwrap();
+
+        // Capture a turn with getAccountInfo as loaded tool
+        let turn_body = serde_json::json!({
+            "tools_loaded": ["getAccountInfo"],
+            "message": "I need account info"
+        });
+
+        let turn_resp = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/turns")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&turn_body).unwrap()))
+                .unwrap(),
+        ).await.unwrap();
+
+        let turn_bytes = axum::body::to_bytes(turn_resp.into_body(), usize::MAX).await.unwrap();
+        let turn_json: serde_json::Value = serde_json::from_slice(&turn_bytes).unwrap();
+        let turn_id = turn_json["turn_id"].as_str().unwrap();
+
+        // Discover with turn_id — base tool (getAccountInfo) should appear with score=1.0
+        let query = serde_json::json!({
+            "query": "I want a refund",
+            "limit": 1,
+            "turn_id": turn_id
+        });
+
+        let response = app.oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/discover")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&query).unwrap()))
+                .unwrap(),
+        ).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let tools = json["tools"].as_array().unwrap();
+
+        // Should have base tool (getAccountInfo) + at least 1 additional tool
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(names.contains(&"getAccountInfo"), "base tool must be present");
+
+        // Base tool should be first and have score 1.0
+        let base_tool = tools.iter().find(|t| t["name"] == "getAccountInfo").unwrap();
+        assert_eq!(base_tool["score"].as_f64().unwrap(), 1.0);
+        assert!(base_tool.get("graph_expanded").is_none() || base_tool["graph_expanded"].is_null());
+
+        // Additional tools should NOT include the base tool name
+        let additional: Vec<&serde_json::Value> = tools.iter()
+            .filter(|t| t["name"] != "getAccountInfo")
+            .collect();
+        assert!(!additional.is_empty(), "should have additional tools beyond base");
+    }
+
+    #[tokio::test]
+    async fn discover_with_invalid_turn_id_returns_error() {
+        let app = test_app();
+
+        let reg = serde_json::json!({
+            "tools": [{ "name": "t", "description": "d", "parameters": {} }]
+        });
+        app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tools")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&reg).unwrap()))
+                .unwrap(),
+        ).await.unwrap();
+
+        let query = serde_json::json!({
+            "query": "test",
+            "turn_id": "nonexistent-id"
+        });
+
+        let response = app.oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/discover")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&query).unwrap()))
+                .unwrap(),
+        ).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json["error"].as_str().unwrap().contains("turn"));
     }
 
     #[tokio::test]

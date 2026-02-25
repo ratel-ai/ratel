@@ -3,6 +3,8 @@ export { tool } from "./tool.js";
 export type {
   AgentifiedConfig,
   AgentifiedEvent,
+  CaptureTurnOptions,
+  CaptureTurnResponse,
   DiscoverResponse,
   DiscoverTool,
   DiscoverToolInput,

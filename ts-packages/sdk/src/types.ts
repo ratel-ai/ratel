@@ -50,6 +50,16 @@ export interface PrefetchOptions {
   messages: Message[];
   limit?: number;
   exclude?: string[];
+  turnId?: string;
+}
+
+export interface CaptureTurnOptions {
+  toolsLoaded: string[];
+  message: string;
+}
+
+export interface CaptureTurnResponse {
+  turnId: string;
 }
 
 export interface DiscoverToolInput {

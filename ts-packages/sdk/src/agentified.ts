@@ -1,6 +1,8 @@
 import type {
   AgentifiedConfig,
   AgentifiedEvent,
+  CaptureTurnOptions,
+  CaptureTurnResponse,
   DiscoverResponse,
   DiscoverTool,
   DiscoverToolInput,
@@ -31,7 +33,7 @@ export class Agentified {
     const start = performance.now();
 
     const query = options.messages.map((m) => m.content).join("\n");
-    const tools = await this.discover(query, options.limit, options.exclude);
+    const tools = await this.discover(query, options.limit, options.exclude, options.turnId);
 
     this.emit({
       type: "agentified:prefetch:complete",
@@ -39,6 +41,16 @@ export class Agentified {
       durationMs: performance.now() - start,
     });
     return tools;
+  }
+
+  async captureTurn(options: CaptureTurnOptions): Promise<CaptureTurnResponse> {
+    const res = await fetch(`${this.config.serverUrl}/api/v1/turns`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tools_loaded: options.toolsLoaded, message: options.message }),
+    });
+    const data = (await res.json()) as { turn_id: string };
+    return { turnId: data.turn_id };
   }
 
   getFrontendTools(): ServerTool[] {
@@ -80,10 +92,11 @@ export class Agentified {
     };
   }
 
-  private async discover(query: string, limit?: number, exclude?: string[]): Promise<RankedTool[]> {
+  private async discover(query: string, limit?: number, exclude?: string[], turnId?: string): Promise<RankedTool[]> {
     const body: Record<string, unknown> = { query };
     if (limit !== undefined) body.limit = limit;
     if (exclude !== undefined) body.exclude = exclude;
+    if (turnId !== undefined) body.turn_id = turnId;
 
     const res = await fetch(`${this.config.serverUrl}/api/v1/discover`, {
       method: "POST",

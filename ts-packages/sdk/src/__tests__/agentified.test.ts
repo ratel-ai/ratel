@@ -112,11 +112,11 @@ describe("Agentified", () => {
 
       expect(discoverTool.definition).toEqual({
         name: "agentified_discover",
-        description: "Discover relevant tools from Agentified",
+        description: "Find tools relevant to the current task. Call this when you need capabilities you don't have.",
         parameters: {
           type: "object",
           properties: {
-            query: { type: "string", description: "Search query for tool discovery" },
+            query: { type: "string", description: "Natural language description of what you need to do" },
             limit: { type: "number", description: "Max number of tools to return" },
           },
           required: ["query"],
@@ -257,6 +257,72 @@ describe("Agentified", () => {
       });
 
       expect(agent.getFrontendToolNames()).toEqual(["confirm_action"]);
+    });
+  });
+
+  describe("captureTurn", () => {
+    it("posts turn data and returns turnId", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ turn_id: "abc-123" }), { status: 201 }),
+      );
+
+      const agent = new Agentified({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.captureTurn({
+        toolsLoaded: ["get_weather"],
+        message: "What is the weather?",
+      });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/turns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tools_loaded: ["get_weather"],
+          message: "What is the weather?",
+        }),
+      });
+      expect(result).toEqual({ turnId: "abc-123" });
+    });
+  });
+
+  describe("prefetch with turnId", () => {
+    it("passes turn_id to discover body", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new Agentified({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.prefetch({
+        messages: [{ role: "user", content: "test" }],
+        limit: 5,
+        turnId: "turn-xyz",
+      });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "test",
+          limit: 5,
+          turn_id: "turn-xyz",
+        }),
+      });
+    });
+
+    it("omits turn_id when not provided", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new Agentified({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.prefetch({
+        messages: [{ role: "user", content: "test" }],
+      });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test" }),
+      });
     });
   });
 

@@ -1,0 +1,30 @@
+{
+  "name": "@agentified/benchmark-context-base",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "benchmark": "vitest run benchmark.test.ts",
+    "benchmark:watch": "vitest watch benchmark.test.ts",
+    "test": "vitest run --exclude 'benchmark.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx scripts/seed-tools.ts",
+    "compare": "tsx scripts/compare.ts",
+    "benchmark:all": "tsx scripts/run-all.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.35",
+    "@ai-sdk/google": "^3.0.29",
+    "@ai-sdk/openai": "^3.0.25",
+    "@agentified/sdk": "workspace:*",
+    "ai": "^6.0.73",
+    "dotenv": "^16.5.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.1.0"
+  }
+}
