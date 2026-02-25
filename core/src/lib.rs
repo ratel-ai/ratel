@@ -58,36 +58,78 @@ async fn register_tools(
 ) -> Result<(StatusCode, Json<RegisterToolsResponse>), (StatusCode, Json<ErrorResponse>)> {
     let count = body.tools.len();
 
-    // Compute embeddings outside the tools write lock
-    let mut tool_data = Vec::with_capacity(count);
-    for tool in &body.tools {
-        let (name_text, desc_text, input_text, output_text) = if let Some(ref fields) = tool.fields {
-            (
-                fields.name.clone(),
-                fields.description.clone(),
-                fields.input_schema.clone(),
-                fields.output_schema.clone(),
-            )
-        } else {
-            (tool.name.clone(), tool.description.clone(), None, None)
-        };
+    // 1. Collect all texts per tool and gather unique uncached texts
+    struct ToolTexts {
+        name: String,
+        description: String,
+        input_schema: Option<String>,
+        output_schema: Option<String>,
+    }
 
-        let name_emb = embed_cached(&state, &name_text).await.map_err(embed_err)?;
-        let desc_emb = embed_cached(&state, &desc_text).await.map_err(embed_err)?;
-        let input_emb = match &input_text {
-            Some(t) => Some(embed_cached(&state, t).await.map_err(embed_err)?),
-            None => None,
-        };
-        let output_emb = match &output_text {
-            Some(t) => Some(embed_cached(&state, t).await.map_err(embed_err)?),
-            None => None,
-        };
+    let mut all_tool_texts = Vec::with_capacity(count);
+    let mut unique_texts = Vec::new();
+
+    {
+        let cache = state.embedding_cache.read().await;
+        for tool in &body.tools {
+            let texts = if let Some(ref fields) = tool.fields {
+                ToolTexts {
+                    name: fields.name.clone(),
+                    description: fields.description.clone(),
+                    input_schema: fields.input_schema.clone(),
+                    output_schema: fields.output_schema.clone(),
+                }
+            } else {
+                ToolTexts {
+                    name: tool.name.clone(),
+                    description: tool.description.clone(),
+                    input_schema: None,
+                    output_schema: None,
+                }
+            };
+
+            // Collect uncached texts (deduped)
+            for text in [Some(&texts.name), Some(&texts.description), texts.input_schema.as_ref(), texts.output_schema.as_ref()].into_iter().flatten() {
+                if !cache.contains_key(text) && !unique_texts.contains(text) {
+                    unique_texts.push(text.clone());
+                }
+            }
+
+            all_tool_texts.push(texts);
+        }
+    }
+
+    // 2. Batch-embed all uncached texts in a single API call
+    if !unique_texts.is_empty() {
+        let embeddings = state.embedding.embed_batch(&unique_texts).await.map_err(embed_err)?;
+        let mut cache = state.embedding_cache.write().await;
+        for (text, emb) in unique_texts.into_iter().zip(embeddings) {
+            cache.insert(text, emb);
+        }
+    }
+
+    // 3. Build FieldEmbeddings from cache
+    let cache = state.embedding_cache.read().await;
+    let mut tool_data = Vec::with_capacity(count);
+    for texts in &all_tool_texts {
+        let name_emb = cache.get(&texts.name).cloned()
+            .ok_or_else(|| embed_err(anyhow::anyhow!("missing cached embedding for name")))?;
+        let desc_emb = cache.get(&texts.description).cloned()
+            .ok_or_else(|| embed_err(anyhow::anyhow!("missing cached embedding for description")))?;
+        let input_emb = texts.input_schema.as_ref().map(|t| {
+            cache.get(t).cloned()
+                .ok_or_else(|| embed_err(anyhow::anyhow!("missing cached embedding for input_schema")))
+        }).transpose()?;
+        let output_emb = texts.output_schema.as_ref().map(|t| {
+            cache.get(t).cloned()
+                .ok_or_else(|| embed_err(anyhow::anyhow!("missing cached embedding for output_schema")))
+        }).transpose()?;
 
         let bm25_text = [
-            Some(name_text),
-            Some(desc_text),
-            input_text,
-            output_text,
+            Some(texts.name.clone()),
+            Some(texts.description.clone()),
+            texts.input_schema.clone(),
+            texts.output_schema.clone(),
         ]
         .into_iter()
         .flatten()
@@ -104,8 +146,9 @@ async fn register_tools(
             bm25_text,
         ));
     }
+    drop(cache);
 
-    // Batch insert with write lock
+    // 4. Batch insert with write lock
     let mut tools = state.tools.write().await;
     for (tool, (embeddings, bm25_text)) in body.tools.into_iter().zip(tool_data) {
         tools.insert(tool.name.clone(), StoredTool { tool, embeddings, bm25_text });
@@ -133,7 +176,11 @@ async fn discover(
     }
 
     let weights = body.embedding_weights.unwrap_or_default();
-    let stored: Vec<&StoredTool> = tools.values().collect();
+    let exclude = body.exclude.unwrap_or_default();
+    let stored: Vec<&StoredTool> = tools
+        .values()
+        .filter(|t| !exclude.contains(&t.tool.name))
+        .collect();
 
     // Semantic scores (weighted multi-field)
     let semantic_scores: Vec<f32> = stored
@@ -652,6 +699,134 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let tools = json["tools"].as_array().unwrap();
         assert_eq!(tools[0]["name"], "processRefund");
+    }
+
+    #[tokio::test]
+    async fn discover_with_exclude_filters_out_named_tools() {
+        let app = test_app();
+
+        let reg = serde_json::json!({
+            "tools": [
+                { "name": "serverTool", "description": "A server-side tool", "parameters": {} },
+                { "name": "frontendTool", "description": "A frontend tool", "parameters": {} },
+                { "name": "anotherServer", "description": "Another server tool", "parameters": {} }
+            ]
+        });
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/tools")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&reg).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let query = serde_json::json!({
+            "query": "tool",
+            "limit": 10,
+            "exclude": ["frontendTool"]
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/discover")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&query).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let tools = json["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 2);
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(!names.contains(&"frontendTool"));
+    }
+
+    #[tokio::test]
+    async fn discover_with_empty_exclude_returns_all() {
+        let app = test_app();
+
+        let reg = serde_json::json!({
+            "tools": [
+                { "name": "tool1", "description": "First tool", "parameters": {} },
+                { "name": "tool2", "description": "Second tool", "parameters": {} }
+            ]
+        });
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/tools")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&reg).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let query = serde_json::json!({ "query": "tool", "exclude": [] });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/discover")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&query).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["tools"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn register_tools_uses_batch_embedding() {
+        let embedding = Arc::new(FakeEmbedding::new());
+        let app = app(embedding.clone() as Arc<dyn EmbeddingService>);
+
+        let body = serde_json::json!({
+            "tools": [
+                { "name": "tool1", "description": "desc1", "parameters": {} },
+                { "name": "tool2", "description": "desc2", "parameters": {} },
+                { "name": "tool3", "description": "desc3", "parameters": {} }
+            ]
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/tools")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        // Should use embed_batch (at least one batch call)
+        assert!(
+            embedding.batch_call_count.load(std::sync::atomic::Ordering::SeqCst) >= 1,
+            "register_tools should use embed_batch"
+        );
     }
 
     #[tokio::test]

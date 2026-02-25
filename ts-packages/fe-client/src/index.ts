@@ -6,6 +6,7 @@ export type {
   ConnectionStatus,
   DiscoveryResult,
   EventLogEntry,
+  FrontendToolHandler,
   InspectorState,
   PrefetchResult,
   RunInfo,

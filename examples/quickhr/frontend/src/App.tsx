@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AgentifiedProvider, Inspector } from "@agentified/react";
+import { useState, useCallback } from "react";
+import { AgentifiedProvider, Inspector, useAgentifiedTool } from "@agentified/react";
 import { Dashboard } from "./pages/Dashboard";
 import { Employees } from "./pages/Employees";
 import { TimeOff } from "./pages/TimeOff";
@@ -18,11 +18,27 @@ function renderPage(page: Page) {
   }
 }
 
+function FrontendTools() {
+  const handler = useCallback(
+    async (args: unknown) => {
+      const { action, details } = args as { action: string; details?: string };
+      const message = details ? `${action}\n\n${details}` : action;
+      const confirmed = window.confirm(message);
+      return { confirmed };
+    },
+    [],
+  );
+
+  useAgentifiedTool("confirm_action", handler);
+  return null;
+}
+
 export function App() {
   const [page, setPage] = useState<Page>("dashboard");
 
   return (
     <AgentifiedProvider agentUrl="/api/chat">
+      <FrontendTools />
       <div className="app-container">
         <div className="quickhr-platform">
           <header className="app-header">
@@ -58,7 +74,7 @@ export function App() {
           <Chat />
         </aside>
 
-        <Inspector position="bottom-right" defaultOpen={false} />
+        <Inspector defaultOpen={false} />
       </div>
     </AgentifiedProvider>
   );

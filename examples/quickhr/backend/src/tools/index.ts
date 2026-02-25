@@ -42,6 +42,7 @@ export interface ToolDefinition {
   category: ToolCategory;
   parameters: Record<string, unknown>;
   adminOnly?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
@@ -2227,6 +2228,25 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
       required: ["employeeId", "trainingName", "cost", "justification"],
     },
+  },
+
+  // -------------------------------------------------------------------------
+  // FRONTEND TOOLS (executed client-side)
+  // -------------------------------------------------------------------------
+  {
+    name: "confirm_action",
+    description:
+      "Ask the user to confirm a destructive or sensitive action before proceeding. Returns whether the user confirmed or denied.",
+    category: "admin" as ToolCategory,
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", description: "Description of the action to confirm" },
+        details: { type: "string", description: "Additional details about the action" },
+      },
+      required: ["action"],
+    },
+    metadata: { location: "frontend" },
   },
 ];
 

@@ -5,6 +5,7 @@ export function tool(def: ToolDefinition): ServerTool {
     name: def.name,
     description: def.description,
     parameters: def.parameters,
+    ...(def.metadata && { metadata: def.metadata }),
     fields: {
       name: def.name,
       description: def.description,

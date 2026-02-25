@@ -1,13 +1,16 @@
 import type { AbstractAgent, BaseEvent, CustomEvent, Message, Context } from "@ag-ui/client";
 import { HttpAgent, EventType, randomUUID } from "@ag-ui/client";
-import type { AgentifiedClientConfig, InspectorState, StateListener, Subscription, ToolCallDetail } from "./types.js";
+import type { AgentifiedClientConfig, FrontendToolHandler, InspectorState, StateListener, Subscription, ToolCallDetail } from "./types.js";
 import { isAgentifiedEvent } from "./types.js";
+
+const MAX_FRONTEND_TOOL_ITERATIONS = 5;
 
 export class AgentifiedClient {
   private state: InspectorState;
   private listeners: Set<StateListener> = new Set();
   private agent: AbstractAgent;
   private pendingMessages: Map<string, { role: "assistant" | "user"; content: string }> = new Map();
+  private frontendToolHandlers: Map<string, FrontendToolHandler> = new Map();
 
   constructor(config: AgentifiedClientConfig) {
     this.state = createInitialState();
@@ -26,6 +29,18 @@ export class AgentifiedClient {
     return this.state.messages;
   }
 
+  registerToolHandler(name: string, handler: FrontendToolHandler): void {
+    this.frontendToolHandlers.set(name, handler);
+  }
+
+  unregisterToolHandler(name: string): void {
+    this.frontendToolHandlers.delete(name);
+  }
+
+  getAvailableFrontendToolNames(): string[] {
+    return [...this.frontendToolHandlers.keys()];
+  }
+
   subscribe(listener: StateListener): Subscription {
     this.listeners.add(listener);
     return { unsubscribe: () => this.listeners.delete(listener) };
@@ -36,14 +51,62 @@ export class AgentifiedClient {
     this.notify();
 
     try {
-      this.agent.setMessages(input.messages);
-      await this.agent.runAgent(input.context ? { context: input.context } : undefined);
+      await this.executeRun(input.messages, input.context, 0);
     } catch (err) {
       this.state = { ...this.state, error: (err as Error).message };
     } finally {
       this.state = { ...this.state, isLoading: false };
       this.notify();
     }
+  }
+
+  private async executeRun(messages: Message[], context?: Context[], iteration = 0): Promise<void> {
+    this.agent.setMessages(messages);
+    const params: Record<string, unknown> = {};
+    if (context) params.context = context;
+    if (this.frontendToolHandlers.size > 0) {
+      params.forwardedProps = { availableFrontendTools: this.getAvailableFrontendToolNames() };
+    }
+    await this.agent.runAgent(Object.keys(params).length > 0 ? params : undefined);
+
+    if (iteration >= MAX_FRONTEND_TOOL_ITERATIONS) return;
+
+    const rerunMessages = await this.handlePendingFrontendToolCalls();
+    if (rerunMessages) {
+      await this.executeRun(rerunMessages, context, iteration + 1);
+    }
+  }
+
+  private async handlePendingFrontendToolCalls(): Promise<Message[] | null> {
+    const pending = this.state.toolCalls.filter(
+      (tc) => tc.result === undefined && this.frontendToolHandlers.has(tc.name),
+    );
+    if (pending.length === 0) return null;
+
+    const results = await Promise.all(
+      pending.map(async (tc) => {
+        const handler = this.frontendToolHandlers.get(tc.name)!;
+        let result: string;
+        try {
+          const parsed = tc.args ? JSON.parse(tc.args) : {};
+          const value = await handler(parsed);
+          result = JSON.stringify(value);
+        } catch (err) {
+          result = JSON.stringify({ error: (err as Error).message });
+        }
+
+        this.state = {
+          ...this.state,
+          toolCalls: this.state.toolCalls.map((t) =>
+            t.id === tc.id ? { ...t, result } : t,
+          ),
+        };
+
+        return { toolCallId: tc.id, name: tc.name, result, parentMessageId: tc.parentMessageId };
+      }),
+    );
+
+    return reconstructMessagesWithToolResults(this.state.messages, results);
   }
 
   async sendMessage(content: string): Promise<void> {
@@ -139,8 +202,8 @@ export class AgentifiedClient {
         break;
       }
       case EventType.TOOL_CALL_START: {
-        const e = event as unknown as { toolCallId: string; toolCallName: string };
-        const detail: ToolCallDetail = { id: e.toolCallId, name: e.toolCallName, args: "", startedAt: Date.now() };
+        const e = event as unknown as { toolCallId: string; toolCallName: string; parentMessageId?: string };
+        const detail: ToolCallDetail = { id: e.toolCallId, name: e.toolCallName, args: "", parentMessageId: e.parentMessageId, startedAt: Date.now() };
         this.state = {
           ...this.state,
           streaming: { ...this.state.streaming, toolCallCount: this.state.streaming.toolCallCount + 1 },
@@ -228,6 +291,32 @@ export class AgentifiedClient {
 
 function defaultAgentFactory(url: string, headers?: Record<string, string>): AbstractAgent {
   return new HttpAgent({ url, headers: headers ?? {} });
+}
+
+interface ToolResult {
+  toolCallId: string;
+  name: string;
+  result: string;
+  parentMessageId?: string;
+}
+
+function reconstructMessagesWithToolResults(
+  messages: Message[],
+  results: ToolResult[],
+): Message[] {
+  const rebuilt = [...messages];
+
+  for (const r of results) {
+    const toolMsg = {
+      id: randomUUID(),
+      role: "tool" as const,
+      content: r.result,
+      toolCallId: r.toolCallId,
+    } as unknown as Message;
+    rebuilt.push(toolMsg);
+  }
+
+  return rebuilt;
 }
 
 function createInitialState(): InspectorState {

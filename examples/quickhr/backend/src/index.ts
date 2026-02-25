@@ -1,11 +1,10 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { Agentified, tool } from "@agentified/sdk";
-import type { Message } from "@agentified/sdk";
-import { TOOL_DEFINITIONS } from "./tools/index.js";
+import { Agent } from "@mastra/core/agent";
+import { tool } from "@agentified/sdk";
+import { AgentifiedMastra, streamSSE } from "@agentified/mastra";
+import { TOOL_DEFINITIONS, toolHandlers } from "./tools/index.js";
 import { registerRoutes } from "./routes.js";
-import { createRequestAgent } from "./agent.js";
-import { serveAgUi } from "./serve-ag-ui.js";
 
 const PORT = Number(process.env.PORT) || 3003;
 const AGENTIFIED_URL = process.env.AGENTIFIED_URL || "http://localhost:9119";
@@ -29,8 +28,26 @@ Guidelines:
 `;
 
 const sdkTools = TOOL_DEFINITIONS.map((def) =>
-  tool({ name: def.name, description: def.description, parameters: def.parameters }),
+  tool({
+    name: def.name,
+    description: def.description,
+    parameters: def.parameters,
+    ...(def.metadata && { metadata: def.metadata }),
+  }),
 );
+
+const myAgent = new Agent({
+  name: "quickhr",
+  instructions: SYSTEM_PROMPT,
+  model: "openai/gpt-5-nano",
+});
+
+const agent = new AgentifiedMastra({
+  agentifiedUrl: AGENTIFIED_URL,
+  tools: sdkTools,
+  toolHandlers,
+  agent: myAgent,
+});
 
 async function main() {
   const app = Fastify({ logger: true });
@@ -40,95 +57,23 @@ async function main() {
     methods: ["GET", "POST", "OPTIONS"],
   });
 
-  // Register tools with Agentified Core
-  const agentified = new Agentified({
-    serverUrl: AGENTIFIED_URL,
-    tools: sdkTools,
-  });
-  await agentified.register();
+  await agent.register();
   app.log.info(`Registered ${sdkTools.length} tools with Agentified`);
 
-  // REST endpoints
   registerRoutes(app);
 
-  // AG-UI chat endpoint
   app.post("/api/chat", async (req, reply) => {
-    const body = req.body as { messages?: Array<{ role: string; content: string }> };
-    const messages: Message[] = (body.messages || []).map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const body = req.body as {
+      messages?: Array<{ role: string; content: string }>;
+      forwardedProps?: { availableFrontendTools?: string[] };
+    };
 
-    // Prefetch relevant tools
-    const prefetchStart = performance.now();
-    const ranked = await agentified.prefetch({ messages });
-    const prefetchDurationMs = performance.now() - prefetchStart;
-
-    req.log.info({ toolCount: ranked.length, prefetchDurationMs }, "Prefetch complete");
-
-    const runId = crypto.randomUUID();
-    const threadId = crypto.randomUUID();
-
-    // SSE headers
-    reply.raw.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
+    const observable = await agent.run({
+      messages: (body.messages ?? []).map((m) => ({ role: m.role, content: m.content })),
+      frontendTools: body.forwardedProps?.availableFrontendTools,
     });
 
-    // AG-UI requires RUN_STARTED as the first event
-    reply.raw.write(
-      `data: ${JSON.stringify({ type: "RUN_STARTED", runId, threadId })}\n\n`,
-    );
-
-    reply.raw.write(
-      `data: ${JSON.stringify({
-        type: "CUSTOM",
-        name: "agentified:prefetch:complete",
-        value: { tools: ranked, durationMs: prefetchDurationMs },
-      })}\n\n`,
-    );
-
-    // Create per-request agent with prefetched tools
-    const { adapter } = createRequestAgent({
-      ranked,
-      agentifiedUrl: AGENTIFIED_URL,
-      sdkTools,
-      systemPrompt: SYSTEM_PROMPT,
-    });
-
-    // Stream adapter events, skipping duplicate RUN_STARTED
-    const observable = adapter.run({
-      messages: messages.map((m) => ({
-        id: crypto.randomUUID(),
-        role: m.role as "user" | "assistant" | "system",
-        content: m.content,
-      })),
-      threadId,
-      runId,
-      tools: [],
-      context: [],
-    });
-
-    let seenRunStarted = false;
-    observable.subscribe({
-      next: (e) => {
-        if (e.type === "RUN_STARTED") {
-          if (seenRunStarted) return;
-          seenRunStarted = true;
-          return; // already sent manually
-        }
-        reply.raw.write(`data: ${JSON.stringify(e)}\n\n`);
-      },
-      complete: () => reply.raw.end(),
-      error: (err) => {
-        req.log.error({ err }, "Chat stream error");
-        reply.raw.write(
-          `data: ${JSON.stringify({ type: "RUN_ERROR", message: (err as Error).message })}\n\n`,
-        );
-        reply.raw.end();
-      },
-    });
+    return streamSSE(observable, reply.raw);
   });
 
   app.get("/health", async () => ({ status: "ok" }));

@@ -77,23 +77,30 @@ describe("Inspector", () => {
       expect(trigger.style.left).toBe("50%");
     });
 
-    it("opens modal when trigger clicked", () => {
+    it("opens panel when trigger clicked", () => {
       renderInspector(createInitialState());
       fireEvent.click(screen.getByTestId("inspector-toggle"));
       expect(screen.getByTestId("inspector-panel")).toBeTruthy();
-      expect(screen.getByTestId("inspector-overlay")).toBeTruthy();
+      expect(screen.queryByTestId("inspector-overlay")).toBeNull();
     });
 
-    it("closes modal when close button clicked", () => {
+    it("closes panel when close button clicked", () => {
       renderInspector(createInitialState(), { defaultOpen: true });
       fireEvent.click(screen.getByTestId("inspector-close"));
       expect(screen.queryByTestId("inspector-panel")).toBeNull();
     });
 
-    it("closes modal when overlay clicked", () => {
+    it("panel has position styles", () => {
       renderInspector(createInitialState(), { defaultOpen: true });
-      fireEvent.click(screen.getByTestId("inspector-overlay"));
-      expect(screen.queryByTestId("inspector-panel")).toBeNull();
+      const panel = screen.getByTestId("inspector-panel");
+      expect(panel.style.position).toBe("fixed");
+      expect(panel.style.width).toBeTruthy();
+      expect(panel.style.height).toBeTruthy();
+    });
+
+    it("resize handle renders", () => {
+      renderInspector(createInitialState(), { defaultOpen: true });
+      expect(screen.getByTestId("inspector-resize")).toBeTruthy();
     });
 
     it("respects defaultOpen prop", () => {

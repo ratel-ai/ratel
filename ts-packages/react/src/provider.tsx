@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AgentifiedClient } from "@agentified/fe-client";
 import type { InspectorState, Message } from "@agentified/fe-client";
@@ -13,6 +13,15 @@ export interface AgentifiedContextValue {
 }
 
 export const AgentifiedContext = createContext<AgentifiedContextValue | null>(null);
+export const AgentifiedClientContext = createContext<AgentifiedClient | null>(null);
+
+export function useAgentifiedClient(): AgentifiedClient {
+  const client = useContext(AgentifiedClientContext);
+  if (!client) {
+    throw new Error("useAgentifiedClient must be used within <AgentifiedProvider>");
+  }
+  return client;
+}
 
 export interface AgentifiedProviderProps {
   agentUrl: string;
@@ -55,5 +64,9 @@ export function AgentifiedProvider({ agentUrl, headers, children }: AgentifiedPr
     [state, sendMessage, reset],
   );
 
-  return <AgentifiedContext.Provider value={value}>{children}</AgentifiedContext.Provider>;
+  return (
+    <AgentifiedClientContext.Provider value={client}>
+      <AgentifiedContext.Provider value={value}>{children}</AgentifiedContext.Provider>
+    </AgentifiedClientContext.Provider>
+  );
 }

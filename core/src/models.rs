@@ -91,6 +91,8 @@ pub struct DiscoverRequest {
     pub limit: Option<usize>,
     #[serde(default)]
     pub embedding_weights: Option<EmbeddingFieldWeights>,
+    #[serde(default)]
+    pub exclude: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]

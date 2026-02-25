@@ -23,6 +23,7 @@ export interface ToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 // API types
@@ -47,6 +48,7 @@ export interface Message {
 export interface PrefetchOptions {
   messages: Message[];
   limit?: number;
+  exclude?: string[];
 }
 
 export interface DiscoverToolInput {

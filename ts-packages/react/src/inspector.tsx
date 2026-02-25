@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { CSSProperties } from "react";
 import type {
   InspectorState,
@@ -11,7 +11,7 @@ import { useAgentified } from "./hook.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-type Tab = "timeline" | "learning" | "data";
+type Tab = "timeline" | "session" | "log";
 type EventFilter = "all" | "agentified" | "tool_calls" | "messages";
 
 export interface InspectorProps {
@@ -20,8 +20,8 @@ export interface InspectorProps {
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "timeline", label: "Timeline" },
-  { key: "learning", label: "Learning" },
-  { key: "data", label: "Data" },
+  { key: "session", label: "Session" },
+  { key: "log", label: "Log" },
 ];
 
 // ── Inspector ──────────────────────────────────────────────────────────
@@ -30,6 +30,50 @@ export function Inspector({ defaultOpen = false }: InspectorProps) {
   const { state } = useAgentified();
   const [open, setOpen] = useState(defaultOpen);
   const [activeTab, setActiveTab] = useState<Tab>("timeline");
+  const [pos, setPos] = useState({ x: typeof window !== "undefined" ? window.innerWidth - 520 : 80, y: 80 });
+  const [size, setSize] = useState({ w: 500, h: 500 });
+  const [dragging, setDragging] = useState(false);
+
+  const handleDragStart = useCallback((e: ReactPointerEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    setDragging(true);
+    const startX = e.clientX - pos.x;
+    const startY = e.clientY - pos.y;
+    const onMove = (ev: globalThis.PointerEvent) => {
+      setPos({ x: ev.clientX - startX, y: ev.clientY - startY });
+    };
+    const onUp = () => {
+      setDragging(false);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }, [pos.x, pos.y]);
+
+  const handleResizeStart = useCallback((e: ReactPointerEvent) => {
+    e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = size.w;
+    const startH = size.h;
+    const onMove = (ev: globalThis.PointerEvent) => {
+      setSize({
+        w: Math.max(300, startW + ev.clientX - startX),
+        h: Math.max(200, startH + ev.clientY - startY),
+      });
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }, [size.w, size.h]);
 
   if (!open) {
     return (
@@ -44,56 +88,66 @@ export function Inspector({ defaultOpen = false }: InspectorProps) {
     );
   }
 
+  const modalStyle: CSSProperties = {
+    ...S.modal,
+    left: pos.x,
+    top: pos.y,
+    width: size.w,
+    height: size.h,
+  };
+
   return (
-    <>
+    <div data-testid="inspector-panel" style={modalStyle}>
       <div
-        data-testid="inspector-overlay"
-        style={S.overlay}
-        onClick={() => setOpen(false)}
-      />
-      <div data-testid="inspector-panel" style={S.modal}>
-        <div style={S.header}>
-          <div style={S.headerLeft}>
-            <span style={S.headerDot(state.connection)} />
-            <span style={S.headerTitle}>Agentified</span>
-          </div>
-          <button
-            data-testid="inspector-close"
-            onClick={() => setOpen(false)}
-            style={S.closeBtn}
-            aria-label="Close Inspector"
-          >
-            ✕
-          </button>
+        style={{ ...S.header, cursor: dragging ? "grabbing" : "grab" }}
+        onPointerDown={handleDragStart}
+      >
+        <div style={S.headerLeft}>
+          <span style={S.headerDot(state.connection)} />
+          <span style={S.headerTitle}>Agentified</span>
         </div>
-
-        <div style={S.tabs}>
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              data-testid={`tab-${t.key}`}
-              onClick={() => setActiveTab(t.key)}
-              style={tabStyle(t.key === activeTab)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={S.body}>
-          {activeTab === "timeline" && <TimelineTab state={state} />}
-          {activeTab === "learning" && <LearningTab state={state} />}
-          {activeTab === "data" && <DataTab state={state} />}
-        </div>
+        <button
+          data-testid="inspector-close"
+          onClick={() => setOpen(false)}
+          style={S.closeBtn}
+          aria-label="Close Inspector"
+        >
+          ✕
+        </button>
       </div>
-    </>
+
+      <div style={S.tabs}>
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            data-testid={`tab-${t.key}`}
+            onClick={() => setActiveTab(t.key)}
+            style={tabStyle(t.key === activeTab)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={S.body}>
+        {activeTab === "timeline" && <TimelineTab state={state} />}
+        {activeTab === "session" && <SessionTab state={state} />}
+        {activeTab === "log" && <LogTab state={state} />}
+      </div>
+
+      <div
+        data-testid="inspector-resize"
+        style={S.resizeHandle}
+        onPointerDown={handleResizeStart}
+      />
+    </div>
   );
 }
 
 // ── Tab: Timeline ─────────────────────────────────────────────────────
 
 function TimelineTab({ state }: { state: InspectorState }) {
-  const { connection, run, streaming, events, toolCalls } = state;
+  const { connection, run, streaming, events, toolCalls, agentified } = state;
 
   return (
     <div>
@@ -110,17 +164,15 @@ function TimelineTab({ state }: { state: InspectorState }) {
         <TimelineList events={events} toolCalls={toolCalls} />
       </Section>
 
-      <Section title="Metrics">
-        <div style={S.metricsRow}>
-          <MetricPill label="Messages" value={String(streaming.messageCount)} />
-          <MetricPill label="Tool Calls" value={String(streaming.toolCallCount)} />
-          {streaming.timeToFirstTokenMs != null && <MetricPill label="TTFT" value={`${streaming.timeToFirstTokenMs}ms`} />}
-          {run.durationMs != null && <MetricPill label="Total" value={`${run.durationMs}ms`} />}
-          {(state.tokens.input > 0 || state.tokens.output > 0) && (
-            <MetricPill label="Tokens" value={formatNumber(state.tokens.input + state.tokens.output + state.tokens.cached + state.tokens.reasoning)} />
-          )}
-        </div>
-      </Section>
+      {agentified.currentTools.length > 0 && (
+        <Section title="Active Tools">
+          <div style={S.toolTable}>
+            {agentified.currentTools.map((tool, i) => (
+              <ToolRow key={`${tool.name}-${i}`} tool={tool} />
+            ))}
+          </div>
+        </Section>
+      )}
     </div>
   );
 }
@@ -237,25 +289,53 @@ function TimelineItem({ item }: { item: TimelineItemData }) {
   );
 }
 
-// ── Tab: Learning ─────────────────────────────────────────────────────
+// ── Tab: Session ──────────────────────────────────────────────────────
 
-function LearningTab({ state }: { state: InspectorState }) {
-  const { agentified } = state;
-  const hasContent = agentified.currentTools.length > 0 || agentified.prefetchResults.length > 0 || agentified.discoveries.length > 0;
-
-  if (!hasContent) {
-    return <div style={S.emptyState}>No Agentified interactions yet</div>;
-  }
+function SessionTab({ state }: { state: InspectorState }) {
+  const { tokens, streaming, run, events, agentified } = state;
+  const total = tokens.input + tokens.output + tokens.cached + tokens.reasoning;
 
   return (
     <div>
-      {agentified.currentTools.length > 0 && (
-        <Section title="Current Tools">
-          <div style={S.toolTable}>
-            {agentified.currentTools.map((tool, i) => (
-              <ToolRow key={`${tool.name}-${i}`} tool={tool} />
-            ))}
+      <Section title="Metrics">
+        <div style={S.metricsRow}>
+          <MetricPill label="Messages" value={String(streaming.messageCount)} />
+          <MetricPill label="Tool Calls" value={String(streaming.toolCallCount)} />
+          {streaming.timeToFirstTokenMs != null && <MetricPill label="TTFT" value={`${streaming.timeToFirstTokenMs}ms`} />}
+          {run.durationMs != null && <MetricPill label="Total" value={`${run.durationMs}ms`} />}
+          {(tokens.input > 0 || tokens.output > 0) && (
+            <MetricPill label="Tokens" value={formatNumber(total)} />
+          )}
+        </div>
+      </Section>
+
+      <Section title="Session Summary">
+        <div style={S.statGrid}>
+          <StatCell label="Events" value={String(events.length)} />
+          <StatCell label="Messages" value={String(streaming.messageCount)} />
+          <StatCell label="Tool Calls" value={String(streaming.toolCallCount)} />
+          <StatCell label="Duration" value={run.durationMs != null ? `${run.durationMs}ms` : "—"} />
+          <StatCell label="TTFT" value={streaming.timeToFirstTokenMs != null ? `${streaming.timeToFirstTokenMs}ms` : "—"} />
+          <StatCell label="Tokens" value={total > 0 ? formatNumber(total) : "—"} />
+        </div>
+      </Section>
+
+      {total > 0 && (
+        <Section title="Token Breakdown">
+          <div style={S.tokenBreakdown}>
+            <Row label="Input" value={formatNumber(tokens.input)} />
+            <Row label="Output" value={formatNumber(tokens.output)} />
+            <Row label="Cached" value={formatNumber(tokens.cached)} />
+            <Row label="Reasoning" value={formatNumber(tokens.reasoning)} />
           </div>
+          {tokens.contextWindowPercent != null && (
+            <div style={{ marginTop: 8 }}>
+              <div style={S.barOuter}>
+                <div data-testid="context-bar" style={barFill(tokens.contextWindowPercent)} />
+              </div>
+              <div style={S.barLabel}>Context: {tokens.contextWindowPercent.toFixed(1)}%</div>
+            </div>
+          )}
         </Section>
       )}
 
@@ -300,44 +380,14 @@ function ToolRow({ tool }: { tool: AgentifiedTool }) {
   );
 }
 
-// ── Tab: Data ─────────────────────────────────────────────────────────
+// ── Tab: Log ──────────────────────────────────────────────────────────
 
-function DataTab({ state }: { state: InspectorState }) {
+function LogTab({ state }: { state: InspectorState }) {
   const [filter, setFilter] = useState<EventFilter>("all");
-  const { tokens, streaming, run, events } = state;
-  const total = tokens.input + tokens.output + tokens.cached + tokens.reasoning;
-
-  const filteredEvents = filterEvents(events, filter);
+  const filteredEvents = filterEvents(state.events, filter);
 
   return (
     <div>
-      <Section title="Session Summary">
-        <div style={S.statGrid}>
-          <StatCell label="Events" value={String(events.length)} />
-          <StatCell label="Messages" value={String(streaming.messageCount)} />
-          <StatCell label="Tool Calls" value={String(streaming.toolCallCount)} />
-          <StatCell label="Duration" value={run.durationMs != null ? `${run.durationMs}ms` : "—"} />
-          <StatCell label="TTFT" value={streaming.timeToFirstTokenMs != null ? `${streaming.timeToFirstTokenMs}ms` : "—"} />
-          <StatCell label="Tokens" value={total > 0 ? formatNumber(total) : "—"} />
-        </div>
-        {total > 0 && (
-          <div style={S.tokenBreakdown}>
-            <Row label="Input" value={formatNumber(tokens.input)} />
-            <Row label="Output" value={formatNumber(tokens.output)} />
-            <Row label="Cached" value={formatNumber(tokens.cached)} />
-            <Row label="Reasoning" value={formatNumber(tokens.reasoning)} />
-          </div>
-        )}
-        {tokens.contextWindowPercent != null && (
-          <div style={{ marginTop: 8 }}>
-            <div style={S.barOuter}>
-              <div data-testid="context-bar" style={barFill(tokens.contextWindowPercent)} />
-            </div>
-            <div style={S.barLabel}>Context: {tokens.contextWindowPercent.toFixed(1)}%</div>
-          </div>
-        )}
-      </Section>
-
       <Section title="Event Log">
         <div style={S.filterRow}>
           {(["all", "agentified", "tool_calls", "messages"] as EventFilter[]).map(f => (
@@ -565,23 +615,9 @@ const S = {
 
   triggerIcon: { lineHeight: 1 } as CSSProperties,
 
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.4)",
-    zIndex: 99998,
-  } as CSSProperties,
-
   modal: {
     position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
     zIndex: 99999,
-    width: 500,
-    maxWidth: "90vw",
-    height: "70vh",
-    maxHeight: 600,
     borderRadius: 12,
     border: `1px solid ${C.border}`,
     background: C.bg,
@@ -593,6 +629,17 @@ const S = {
     flexDirection: "column",
     overflow: "hidden",
     boxShadow: "0 8px 48px rgba(0,0,0,0.7)",
+  } as CSSProperties,
+
+  resizeHandle: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 12,
+    height: 12,
+    cursor: "nwse-resize",
+    background: "linear-gradient(135deg, transparent 50%, rgba(200,200,208,0.3) 50%)",
+    borderRadius: "0 0 12px 0",
   } as CSSProperties,
 
   header: {

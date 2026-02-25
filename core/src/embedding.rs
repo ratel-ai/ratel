@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[async_trait]
 pub trait EmbeddingService: Send + Sync {
     async fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>>;
+    async fn embed_batch(&self, texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>>;
 }
 
 // OpenAI API types
@@ -15,6 +16,12 @@ struct EmbeddingRequest<'a> {
     model: &'a str,
 }
 
+#[derive(Serialize)]
+struct BatchEmbeddingRequest<'a> {
+    input: &'a [String],
+    model: &'a str,
+}
+
 #[derive(Deserialize)]
 struct EmbeddingResponse {
     data: Vec<EmbeddingData>,
@@ -22,6 +29,7 @@ struct EmbeddingResponse {
 
 #[derive(Deserialize)]
 struct EmbeddingData {
+    index: usize,
     embedding: Vec<f32>,
 }
 
@@ -36,7 +44,7 @@ impl OpenAIEmbedding {
     pub fn new(api_key: String) -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(60))
                 .build()
                 .expect("failed to build HTTP client"),
             api_key,
@@ -46,6 +54,41 @@ impl OpenAIEmbedding {
 
 #[async_trait]
 impl EmbeddingService for OpenAIEmbedding {
+    async fn embed_batch(&self, texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
+        if texts.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let response = self
+            .client
+            .post("https://api.openai.com/v1/embeddings")
+            .bearer_auth(&self.api_key)
+            .json(&BatchEmbeddingRequest {
+                input: texts,
+                model: "text-embedding-3-small",
+            })
+            .send()
+            .await
+            .context("failed to call OpenAI embeddings API")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("OpenAI API error {status}: {body}");
+        }
+
+        let body: EmbeddingResponse = response
+            .json()
+            .await
+            .context("failed to parse OpenAI response")?;
+
+        // Sort by index to guarantee order matches input
+        let mut data = body.data;
+        data.sort_by_key(|d| d.index);
+
+        Ok(data.into_iter().map(|d| d.embedding).collect())
+    }
+
     async fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>> {
         let response = self
             .client
@@ -81,6 +124,7 @@ impl EmbeddingService for OpenAIEmbedding {
 #[cfg(test)]
 pub struct FakeEmbedding {
     pub call_count: std::sync::atomic::AtomicUsize,
+    pub batch_call_count: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(test)]
@@ -88,6 +132,7 @@ impl FakeEmbedding {
     pub fn new() -> Self {
         Self {
             call_count: std::sync::atomic::AtomicUsize::new(0),
+            batch_call_count: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 }
@@ -95,6 +140,15 @@ impl FakeEmbedding {
 #[cfg(test)]
 #[async_trait]
 impl EmbeddingService for FakeEmbedding {
+    async fn embed_batch(&self, texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
+        self.batch_call_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut results = Vec::with_capacity(texts.len());
+        for text in texts {
+            results.push(self.embed(text).await?);
+        }
+        Ok(results)
+    }
+
     async fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -124,6 +178,10 @@ pub struct FailingEmbedding;
 #[cfg(test)]
 #[async_trait]
 impl EmbeddingService for FailingEmbedding {
+    async fn embed_batch(&self, _texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
+        anyhow::bail!("embedding service unavailable")
+    }
+
     async fn embed(&self, _text: &str) -> anyhow::Result<Vec<f32>> {
         anyhow::bail!("embedding service unavailable")
     }
@@ -160,5 +218,54 @@ mod tests {
         let failing = FailingEmbedding;
         let result = failing.embed("anything").await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn failing_embedding_batch_returns_error() {
+        let failing = FailingEmbedding;
+        let texts = vec!["anything".to_string()];
+        let result = failing.embed_batch(&texts).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn fake_embedding_batch_empty_input_returns_empty() {
+        let fake = FakeEmbedding::new();
+        let results = fake.embed_batch(&[]).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn fake_embedding_batch_results_match_individual() {
+        let fake = FakeEmbedding::new();
+        let texts = vec![
+            "hello world".to_string(),
+            "foo bar".to_string(),
+            "baz qux".to_string(),
+        ];
+
+        let batch_results = fake.embed_batch(&texts).await.unwrap();
+
+        // Each batch result should match calling embed individually
+        for (i, text) in texts.iter().enumerate() {
+            let individual = fake.embed(text).await.unwrap();
+            assert_eq!(batch_results[i], individual, "mismatch at index {i}");
+        }
+    }
+
+    #[tokio::test]
+    async fn fake_embedding_batch_returns_correct_count() {
+        let fake = FakeEmbedding::new();
+        let texts = vec![
+            "hello world".to_string(),
+            "foo bar".to_string(),
+            "baz qux".to_string(),
+        ];
+        let results = fake.embed_batch(&texts).await.unwrap();
+        assert_eq!(results.len(), 3);
+        // Each embedding should have the expected dimensionality
+        for emb in &results {
+            assert_eq!(emb.len(), 256);
+        }
     }
 }

@@ -7,6 +7,7 @@ import type {
   PrefetchOptions,
   RankedTool,
   RegisterResponse,
+  ServerTool,
 } from "./types.js";
 
 export class Agentified {
@@ -30,7 +31,7 @@ export class Agentified {
     const start = performance.now();
 
     const query = options.messages.map((m) => m.content).join("\n");
-    const tools = await this.discover(query, options.limit);
+    const tools = await this.discover(query, options.limit, options.exclude);
 
     this.emit({
       type: "agentified:prefetch:complete",
@@ -38,6 +39,14 @@ export class Agentified {
       durationMs: performance.now() - start,
     });
     return tools;
+  }
+
+  getFrontendTools(): ServerTool[] {
+    return this.config.tools.filter((t) => t.metadata?.location === "frontend");
+  }
+
+  getFrontendToolNames(): string[] {
+    return this.getFrontendTools().map((t) => t.name);
   }
 
   asDiscoverTool(): DiscoverTool {
@@ -70,11 +79,15 @@ export class Agentified {
     };
   }
 
-  private async discover(query: string, limit?: number): Promise<RankedTool[]> {
+  private async discover(query: string, limit?: number, exclude?: string[]): Promise<RankedTool[]> {
+    const body: Record<string, unknown> = { query };
+    if (limit !== undefined) body.limit = limit;
+    if (exclude !== undefined) body.exclude = exclude;
+
     const res = await fetch(`${this.config.serverUrl}/api/v1/discover`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, limit }),
+      body: JSON.stringify(body),
     });
     const data = (await res.json()) as DiscoverResponse;
     return data.tools;

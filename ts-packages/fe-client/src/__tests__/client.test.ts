@@ -464,6 +464,220 @@ describe("AgentifiedClient", () => {
     });
   });
 
+  describe("frontend tool handlers", () => {
+    it("registerToolHandler and getAvailableFrontendToolNames", () => {
+      const handler = vi.fn();
+      client.registerToolHandler("confirm_action", handler);
+
+      expect(client.getAvailableFrontendToolNames()).toEqual(["confirm_action"]);
+    });
+
+    it("unregisterToolHandler removes handler", () => {
+      const handler = vi.fn();
+      client.registerToolHandler("confirm_action", handler);
+      client.unregisterToolHandler("confirm_action");
+
+      expect(client.getAvailableFrontendToolNames()).toEqual([]);
+    });
+
+    it("auto-reruns when frontend tool call has no result and handler exists", async () => {
+      let runCount = 0;
+      const capturedBodies: unknown[] = [];
+
+      mockAgent.runAgent.mockImplementation(async () => {
+        runCount++;
+        if (runCount === 1) {
+          // First run: emit tool call with no result, then finish
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_START,
+            toolCallId: "tc1",
+            toolCallName: "confirm_action",
+            parentMessageId: "assistant-1",
+          } as unknown as ToolCallStartEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_ARGS,
+            toolCallId: "tc1",
+            delta: '{"action":"delete"}',
+          } as ToolCallArgsEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_END,
+            toolCallId: "tc1",
+          } as ToolCallEndEvent);
+          await mockAgent.emitEvent({
+            type: EventType.RUN_FINISHED,
+            runId: "run-1",
+          } as RunFinishedEvent);
+        }
+        // Second run: just finish normally
+        return { result: null, newMessages: [] };
+      });
+
+      client.registerToolHandler("confirm_action", async (args) => {
+        return { confirmed: true };
+      });
+
+      await client.run({ messages: [{ id: "u1", role: "user" as const, content: "delete my account" }] });
+
+      // Should have called runAgent twice (initial + re-run)
+      expect(runCount).toBe(2);
+    });
+
+    it("executes handler and sends result on re-run", async () => {
+      let runCount = 0;
+
+      mockAgent.runAgent.mockImplementation(async () => {
+        runCount++;
+        if (runCount === 1) {
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_START,
+            toolCallId: "tc1",
+            toolCallName: "confirm_action",
+            parentMessageId: "assistant-1",
+          } as unknown as ToolCallStartEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_ARGS,
+            toolCallId: "tc1",
+            delta: '{"action":"delete"}',
+          } as ToolCallArgsEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_END,
+            toolCallId: "tc1",
+          } as ToolCallEndEvent);
+          await mockAgent.emitEvent({
+            type: EventType.RUN_FINISHED,
+            runId: "run-1",
+          } as RunFinishedEvent);
+        }
+        return { result: null, newMessages: [] };
+      });
+
+      const handler = vi.fn().mockResolvedValue({ confirmed: true });
+      client.registerToolHandler("confirm_action", handler);
+
+      await client.run({ messages: [{ id: "u1", role: "user" as const, content: "delete" }] });
+
+      expect(handler).toHaveBeenCalledWith({ action: "delete" });
+    });
+
+    it("does not re-run when no pending frontend tool calls", async () => {
+      let runCount = 0;
+
+      mockAgent.runAgent.mockImplementation(async () => {
+        runCount++;
+        if (runCount === 1) {
+          // Emit a server tool call WITH result (backend-executed)
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_START,
+            toolCallId: "tc1",
+            toolCallName: "server_tool",
+          } as ToolCallStartEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_RESULT,
+            toolCallId: "tc1",
+            messageId: "m1",
+            content: "server result",
+          } as ToolCallResultEvent);
+          await mockAgent.emitEvent({
+            type: EventType.RUN_FINISHED,
+            runId: "run-1",
+          } as RunFinishedEvent);
+        }
+        return { result: null, newMessages: [] };
+      });
+
+      await client.run({ messages: [{ id: "u1", role: "user" as const, content: "test" }] });
+
+      expect(runCount).toBe(1);
+    });
+
+    it("handles handler errors gracefully", async () => {
+      let runCount = 0;
+
+      mockAgent.runAgent.mockImplementation(async () => {
+        runCount++;
+        if (runCount === 1) {
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_START,
+            toolCallId: "tc1",
+            toolCallName: "confirm_action",
+            parentMessageId: "assistant-1",
+          } as unknown as ToolCallStartEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_ARGS,
+            toolCallId: "tc1",
+            delta: "{}",
+          } as ToolCallArgsEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_END,
+            toolCallId: "tc1",
+          } as ToolCallEndEvent);
+          await mockAgent.emitEvent({
+            type: EventType.RUN_FINISHED,
+            runId: "run-1",
+          } as RunFinishedEvent);
+        }
+        return { result: null, newMessages: [] };
+      });
+
+      client.registerToolHandler("confirm_action", async () => {
+        throw new Error("handler failed");
+      });
+
+      await client.run({ messages: [{ id: "u1", role: "user" as const, content: "test" }] });
+
+      // Should still re-run with error result
+      expect(runCount).toBe(2);
+    });
+
+    it("enforces max 5 re-run iterations", async () => {
+      let runCount = 0;
+
+      mockAgent.runAgent.mockImplementation(async () => {
+        runCount++;
+        // Always emit a frontend tool call to trigger re-run
+        await mockAgent.emitEvent({
+          type: EventType.TOOL_CALL_START,
+          toolCallId: `tc${runCount}`,
+          toolCallName: "confirm_action",
+          parentMessageId: `assistant-${runCount}`,
+        } as unknown as ToolCallStartEvent);
+        await mockAgent.emitEvent({
+          type: EventType.TOOL_CALL_ARGS,
+          toolCallId: `tc${runCount}`,
+          delta: "{}",
+        } as ToolCallArgsEvent);
+        await mockAgent.emitEvent({
+          type: EventType.TOOL_CALL_END,
+          toolCallId: `tc${runCount}`,
+        } as ToolCallEndEvent);
+        await mockAgent.emitEvent({
+          type: EventType.RUN_FINISHED,
+          runId: `run-${runCount}`,
+        } as RunFinishedEvent);
+        return { result: null, newMessages: [] };
+      });
+
+      client.registerToolHandler("confirm_action", async () => ({ ok: true }));
+
+      await client.run({ messages: [{ id: "u1", role: "user" as const, content: "test" }] });
+
+      // 1 initial + 5 max re-runs = 6
+      expect(runCount).toBe(6);
+    });
+
+    it("captures parentMessageId from TOOL_CALL_START", async () => {
+      await mockAgent.emitEvent({
+        type: EventType.TOOL_CALL_START,
+        toolCallId: "tc1",
+        toolCallName: "confirm_action",
+        parentMessageId: "assistant-msg-1",
+      } as unknown as ToolCallStartEvent);
+
+      const tc = client.getState().toolCalls[0]!;
+      expect(tc.parentMessageId).toBe("assistant-msg-1");
+    });
+  });
+
   describe("event log", () => {
     it("logs all events with timestamps", async () => {
       await mockAgent.emitEvent({ type: EventType.RUN_STARTED, runId: "r1", threadId: "t1" } as RunStartedEvent);

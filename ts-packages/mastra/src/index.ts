@@ -1,5 +1,3 @@
-export { AgentifiedMastraAdapter } from "./adapter.js";
-export type {
-  AgentifiedEvent,
-  AgentifiedMastraAdapterConfig,
-} from "./adapter.js";
+export { AgentifiedMastra } from "./adapter.js";
+export { streamSSE } from "./stream-sse.js";
+export type { AgentifiedMastraConfig, RunOptions } from "./adapter.js";

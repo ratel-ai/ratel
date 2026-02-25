@@ -162,6 +162,104 @@ describe("Agentified", () => {
     });
   });
 
+  describe("prefetch with exclude", () => {
+    it("passes exclude to discover body", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new Agentified({
+        serverUrl: TEST_URL,
+        tools: [testTool],
+      });
+
+      await agent.prefetch({
+        messages: [{ role: "user", content: "test" }],
+        exclude: ["frontendTool"],
+      });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "test",
+          exclude: ["frontendTool"],
+        }),
+      });
+    });
+
+    it("omits exclude from body when not provided", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new Agentified({
+        serverUrl: TEST_URL,
+        tools: [testTool],
+      });
+
+      await agent.prefetch({
+        messages: [{ role: "user", content: "test" }],
+      });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test" }),
+      });
+    });
+  });
+
+  describe("getFrontendTools", () => {
+    it("returns tools with metadata.location=frontend", () => {
+      const frontendTool: ServerTool = {
+        name: "confirm_action",
+        description: "Confirm an action",
+        parameters: {},
+        metadata: { location: "frontend" },
+      };
+      const serverTool: ServerTool = {
+        name: "get_data",
+        description: "Get data",
+        parameters: {},
+      };
+
+      const agent = new Agentified({
+        serverUrl: TEST_URL,
+        tools: [frontendTool, serverTool],
+      });
+
+      expect(agent.getFrontendTools()).toEqual([frontendTool]);
+    });
+
+    it("returns empty array when no frontend tools", () => {
+      const agent = new Agentified({
+        serverUrl: TEST_URL,
+        tools: [testTool],
+      });
+
+      expect(agent.getFrontendTools()).toEqual([]);
+    });
+  });
+
+  describe("getFrontendToolNames", () => {
+    it("returns names of frontend tools", () => {
+      const frontendTool: ServerTool = {
+        name: "confirm_action",
+        description: "Confirm",
+        parameters: {},
+        metadata: { location: "frontend" },
+      };
+
+      const agent = new Agentified({
+        serverUrl: TEST_URL,
+        tools: [frontendTool, testTool],
+      });
+
+      expect(agent.getFrontendToolNames()).toEqual(["confirm_action"]);
+    });
+  });
+
   describe("onEvent optional", () => {
     it("does not crash when onEvent is not provided", async () => {
       vi.spyOn(globalThis, "fetch").mockImplementation(() =>

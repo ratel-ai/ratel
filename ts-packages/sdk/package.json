@@ -3,6 +3,7 @@
   "version": "0.0.3",
   "private": true,
   "type": "module",
+  "main": "src/index.ts",
   "scripts": {
     "test": "vitest run",
     "test:e2e": "AGENTIFIED_TEST_URL=http://localhost:9119 vitest run src/__tests__/integration.test.ts"

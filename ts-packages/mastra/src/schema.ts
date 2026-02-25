@@ -1,31 +1,12 @@
-import { createTool } from "@mastra/core/tools";
 import { z, type ZodTypeAny } from "zod";
-import type { RankedTool } from "@agentified/sdk";
-import { TOOL_DEFINITIONS, toolHandlers } from "./index.js";
 
-export function buildMastraToolsFromRanked(ranked: RankedTool[]) {
-  const names = new Set(ranked.map((t) => t.name));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tools: Record<string, any> = {};
-
-  for (const def of TOOL_DEFINITIONS) {
-    if (!names.has(def.name)) continue;
-    const handler = toolHandlers[def.name];
-    if (!handler) continue;
-
-    tools[def.name] = createTool({
-      id: def.name,
-      description: def.description,
-      inputSchema: jsonSchemaToZod(def.parameters),
-      execute: async (inputData) => handler(inputData as Record<string, unknown>),
-    });
-  }
-
-  return tools;
-}
-
-function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodObject<Record<string, ZodTypeAny>> {
-  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+export function jsonSchemaToZod(
+  schema: Record<string, unknown>,
+): z.ZodObject<Record<string, ZodTypeAny>> {
+  const props = (schema.properties ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
   const required = new Set((schema.required ?? []) as string[]);
   const shape: Record<string, ZodTypeAny> = {};
 

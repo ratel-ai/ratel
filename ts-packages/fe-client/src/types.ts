@@ -41,6 +41,10 @@ export interface DiscoveryResult {
   tokenUsage?: TokenUsage;
 }
 
+// Frontend tool handler
+
+export type FrontendToolHandler = (args: unknown) => Promise<unknown>;
+
 // Tool call tracking
 
 export interface ToolCallDetail {
@@ -48,6 +52,7 @@ export interface ToolCallDetail {
   name: string;
   args: string;
   result?: string;
+  parentMessageId?: string;
   startedAt: number;
   endedAt?: number;
   durationMs?: number;
