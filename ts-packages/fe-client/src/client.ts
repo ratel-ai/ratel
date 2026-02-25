@@ -1,6 +1,6 @@
 import type { AbstractAgent, BaseEvent, CustomEvent, Message, Context } from "@ag-ui/client";
 import { HttpAgent, EventType, randomUUID } from "@ag-ui/client";
-import type { AgentifiedClientConfig, FrontendToolHandler, InspectorState, StateListener, Subscription, ToolCallDetail } from "./types.js";
+import type { AgentifiedClientConfig, FrontendToolHandler, InspectorState, SharedContext, StateListener, Subscription, ToolCallDetail } from "./types.js";
 import { isAgentifiedEvent } from "./types.js";
 
 const MAX_FRONTEND_TOOL_ITERATIONS = 5;
@@ -31,10 +31,19 @@ export class AgentifiedClient {
 
   registerToolHandler(name: string, handler: FrontendToolHandler): void {
     this.frontendToolHandlers.set(name, handler);
+    this.state = { ...this.state, frontendTools: [...this.frontendToolHandlers.keys()] };
+    this.notify();
   }
 
   unregisterToolHandler(name: string): void {
     this.frontendToolHandlers.delete(name);
+    this.state = { ...this.state, frontendTools: [...this.frontendToolHandlers.keys()] };
+    this.notify();
+  }
+
+  setSharedContext(ctx: SharedContext): void {
+    this.state = { ...this.state, sharedContext: ctx };
+    this.notify();
   }
 
   getAvailableFrontendToolNames(): string[] {
@@ -102,7 +111,7 @@ export class AgentifiedClient {
           ),
         };
 
-        return { toolCallId: tc.id, name: tc.name, result, parentMessageId: tc.parentMessageId };
+        return { toolCallId: tc.id, name: tc.name, args: tc.args, result, parentMessageId: tc.parentMessageId };
       }),
     );
 
@@ -266,6 +275,15 @@ export class AgentifiedClient {
       if (tokenUsage) {
         this.state = { ...this.state, tokens: { ...this.state.tokens, ...tokenUsage } };
       }
+    } else if (name === "agentified:prefetch:skipped") {
+      const { tools, durationMs } = value;
+      this.state = {
+        ...this.state,
+        agentified: {
+          ...this.state.agentified,
+          prefetchResults: [...this.state.agentified.prefetchResults, { tools, durationMs, skipped: true }],
+        },
+      };
     } else if (name === "agentified:discover:complete") {
       const { tools, durationMs, query, tokenUsage } = value;
       this.state = {
@@ -296,6 +314,7 @@ function defaultAgentFactory(url: string, headers?: Record<string, string>): Abs
 interface ToolResult {
   toolCallId: string;
   name: string;
+  args: string;
   result: string;
   parentMessageId?: string;
 }
@@ -304,16 +323,54 @@ function reconstructMessagesWithToolResults(
   messages: Message[],
   results: ToolResult[],
 ): Message[] {
-  const rebuilt = [...messages];
-
+  const byParent = new Map<string, ToolResult[]>();
   for (const r of results) {
-    const toolMsg = {
+    const key = r.parentMessageId ?? "";
+    const group = byParent.get(key) ?? [];
+    group.push(r);
+    byParent.set(key, group);
+  }
+
+  const parentIds = new Set(
+    results.map((r) => r.parentMessageId).filter(Boolean),
+  );
+
+  const rebuilt = messages.map((m) => {
+    if (!parentIds.has(m.id)) return m;
+    const group = byParent.get(m.id)!;
+    byParent.delete(m.id);
+    return {
+      ...m,
+      toolCalls: group.map((r) => ({
+        id: r.toolCallId,
+        type: "function" as const,
+        function: { name: r.name, arguments: r.args },
+      })),
+    } as unknown as Message;
+  });
+
+  // Orphan groups — no matching parent message
+  for (const [, group] of byParent) {
+    rebuilt.push({
+      id: randomUUID(),
+      role: "assistant",
+      content: "",
+      toolCalls: group.map((r) => ({
+        id: r.toolCallId,
+        type: "function" as const,
+        function: { name: r.name, arguments: r.args },
+      })),
+    } as unknown as Message);
+  }
+
+  // Append tool result messages
+  for (const r of results) {
+    rebuilt.push({
       id: randomUUID(),
       role: "tool" as const,
       content: r.result,
       toolCallId: r.toolCallId,
-    } as unknown as Message;
-    rebuilt.push(toolMsg);
+    } as unknown as Message);
   }
 
   return rebuilt;
@@ -331,5 +388,6 @@ function createInitialState(): InspectorState {
     messages: [],
     isLoading: false,
     error: null,
+    frontendTools: [],
   };
 }

@@ -53,11 +53,11 @@ export class Agentified {
     return {
       definition: {
         name: "agentified_discover",
-        description: "Discover relevant tools from Agentified",
+        description: "Find tools relevant to the current task. Call this when you need capabilities you don't have.",
         parameters: {
           type: "object",
           properties: {
-            query: { type: "string", description: "Search query for tool discovery" },
+            query: { type: "string", description: "Natural language description of what you need to do" },
             limit: { type: "number", description: "Max number of tools to return" },
           },
           required: ["query"],
@@ -71,6 +71,7 @@ export class Agentified {
 
         this.emit({
           type: "agentified:discover:complete",
+          query: input.query,
           tools,
           durationMs: performance.now() - start,
         });

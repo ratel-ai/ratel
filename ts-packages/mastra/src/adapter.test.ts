@@ -281,6 +281,139 @@ describe("AgentifiedMastra", () => {
     sub.unsubscribe();
   });
 
+  it("run() preserves toolCallId on tool messages", async () => {
+    const am = new AgentifiedMastra(defaultConfig());
+    const obs = await am.run({
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: "Sure",
+          toolCalls: [
+            { id: "tc1", type: "function" as const, function: { name: "navigate_to_page", arguments: '{"page":"timeoff"}' } },
+          ],
+        },
+        { role: "tool", content: '{"ok":true}', toolCallId: "tc1" },
+      ],
+    });
+
+    const sub = obs.subscribe(() => {});
+
+    const runCall = mockMastraAgentRun.mock.calls[0]![0];
+    const toolMsg = runCall.messages.find((m: any) => m.role === "tool");
+    expect(toolMsg).toBeDefined();
+    expect(toolMsg.toolCallId).toBe("tc1");
+
+    agentStream.complete();
+    sub.unsubscribe();
+  });
+
+  it("run() preserves toolCalls on assistant messages", async () => {
+    const am = new AgentifiedMastra(defaultConfig());
+    const obs = await am.run({
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            { id: "tc1", type: "function" as const, function: { name: "nav", arguments: "{}" } },
+          ],
+        },
+        { role: "tool", content: '{"ok":true}', toolCallId: "tc1" },
+      ],
+    });
+
+    const sub = obs.subscribe(() => {});
+
+    const runCall = mockMastraAgentRun.mock.calls[0]![0];
+    const assistantMsg = runCall.messages.find((m: any) => m.toolCalls);
+    expect(assistantMsg).toBeDefined();
+    expect(assistantMsg.toolCalls[0].id).toBe("tc1");
+
+    agentStream.complete();
+    sub.unsubscribe();
+  });
+
+  describe("prefetch caching", () => {
+    it("skips prefetch when cache exists and messages contain role=tool", async () => {
+      const am = new AgentifiedMastra(defaultConfig());
+
+      // First run — normal prefetch
+      const obs1 = await am.run({ messages: [{ role: "user", content: "hi" }] });
+      const sub1 = obs1.subscribe(() => {});
+      agentStream.complete();
+      sub1.unsubscribe();
+
+      expect(mockSdkPrefetch).toHaveBeenCalledTimes(1);
+
+      // Reset stream for second run
+      agentStream = new Subject<BaseEvent>();
+      mockMastraAgentRun.mockReturnValue(agentStream.asObservable());
+
+      // Second run — with tool results (re-run)
+      const obs2 = await am.run({
+        messages: [
+          { role: "user", content: "hi" },
+          { role: "assistant", content: "", toolCalls: [{ id: "tc1", type: "function" as const, function: { name: "nav", arguments: "{}" } }] },
+          { role: "tool", content: '{"ok":true}', toolCallId: "tc1" },
+        ],
+      });
+      const sub2 = obs2.subscribe(() => {});
+      agentStream.complete();
+      sub2.unsubscribe();
+
+      // Prefetch should NOT have been called again
+      expect(mockSdkPrefetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("emits prefetch:skipped event when skipping", async () => {
+      const am = new AgentifiedMastra(defaultConfig());
+
+      // First run
+      const obs1 = await am.run({ messages: [{ role: "user", content: "hi" }] });
+      const sub1 = obs1.subscribe(() => {});
+      agentStream.complete();
+      sub1.unsubscribe();
+
+      agentStream = new Subject<BaseEvent>();
+      mockMastraAgentRun.mockReturnValue(agentStream.asObservable());
+
+      // Second run with tool results
+      const obs2 = await am.run({
+        messages: [
+          { role: "user", content: "hi" },
+          { role: "tool", content: '{}', toolCallId: "tc1" },
+        ],
+      });
+      const events: BaseEvent[] = [];
+      const sub2 = obs2.subscribe((e) => events.push(e));
+      agentStream.complete();
+      sub2.unsubscribe();
+
+      const skippedEvent = events.find(
+        (e: any) => e.type === "CUSTOM" && e.name === "agentified:prefetch:skipped",
+      );
+      expect(skippedEvent).toBeDefined();
+    });
+
+    it("does NOT skip prefetch on first run even with tool messages", async () => {
+      const am = new AgentifiedMastra(defaultConfig());
+
+      const obs = await am.run({
+        messages: [
+          { role: "user", content: "hi" },
+          { role: "tool", content: '{}', toolCallId: "tc1" },
+        ],
+      });
+      const sub = obs.subscribe(() => {});
+      agentStream.complete();
+      sub.unsubscribe();
+
+      expect(mockSdkPrefetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("run() injects tools into agent via __setTools", async () => {
     const config = defaultConfig();
     const am = new AgentifiedMastra(config);

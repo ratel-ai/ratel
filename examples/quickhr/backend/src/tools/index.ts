@@ -34,7 +34,8 @@ export type ToolCategory =
   | "benefits"
   | "admin"
   | "reporting"
-  | "learning";
+  | "learning"
+  | "frontend";
 
 export interface ToolDefinition {
   name: string;
@@ -54,6 +55,107 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 function generateId(prefix: string): string {
   return `${prefix}${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 }
+
+// =============================================================================
+// Parameter Dependencies
+// =============================================================================
+
+const TOOL_DEPENDENCIES: Record<string, { provides?: string[]; requires?: string[] }> = {
+  // Providers
+  searchEmployees: { provides: ["employeeId"] },
+  listEmployees: { provides: ["employeeId"] },
+  listCandidates: { provides: ["candidateId"] },
+  listTimeOffRequests: { provides: ["requestId"] },
+
+  // Employee-dependent tools
+  viewEmployee: { requires: ["employeeId"] },
+  updateEmployee: { requires: ["employeeId"] },
+  terminateEmployee: { requires: ["employeeId"] },
+  getEmployeeDocuments: { requires: ["employeeId"] },
+  getPerformanceReview: { requires: ["employeeId"] },
+  getEmployeeGoals: { requires: ["employeeId"] },
+  setEmployeeGoals: { requires: ["employeeId"] },
+  getEmployeeSkills: { requires: ["employeeId"] },
+  updateEmployeeSkills: { requires: ["employeeId"] },
+  getCertifications: { requires: ["employeeId"] },
+  getAttendanceRecord: { requires: ["employeeId"] },
+  recordAttendance: { requires: ["employeeId"] },
+  transferEmployee: { requires: ["employeeId"] },
+  promoteEmployee: { requires: ["employeeId"] },
+
+  // Payroll (employee-dependent)
+  adjustSalary: { requires: ["employeeId"] },
+  addBonus: { requires: ["employeeId"] },
+  getDeductions: { requires: ["employeeId"] },
+  updateDeductions: { requires: ["employeeId"] },
+  submitExpense: { requires: ["employeeId"] },
+  getExpenseHistory: { requires: ["employeeId"] },
+  getBonusHistory: { requires: ["employeeId"] },
+
+  // Benefits (employee-dependent)
+  enrollBenefits: { requires: ["employeeId"] },
+  updateDependents: { requires: ["employeeId"] },
+  getBenefitsSummary: { requires: ["employeeId"] },
+  getClaimStatus: { requires: ["employeeId"] },
+  submitClaim: { requires: ["employeeId"] },
+  process401kChange: { requires: ["employeeId"] },
+  getFSABalance: { requires: ["employeeId"] },
+  getHSAContributions: { requires: ["employeeId"] },
+  updateHSAContribution: { requires: ["employeeId"] },
+  getWellnessPoints: { requires: ["employeeId"] },
+  logWellnessActivity: { requires: ["employeeId"] },
+
+  // Time-off (employee-dependent)
+  requestPTO: { requires: ["employeeId"] },
+  getPTOBalance: { requires: ["employeeId"] },
+  viewTimesheet: { requires: ["employeeId"] },
+  getOvertimeHours: { requires: ["employeeId"] },
+  getShiftSchedule: { requires: ["employeeId"] },
+  updateShiftSchedule: { requires: ["employeeId"] },
+  requestLeaveOfAbsence: { requires: ["employeeId"] },
+  getAbsenceHistory: { requires: ["employeeId"] },
+
+  // Onboarding (employee-dependent)
+  startOnboarding: { requires: ["employeeId"] },
+  createAccounts: { requires: ["employeeId"] },
+  scheduleOrientation: { requires: ["employeeId"] },
+  assignEquipment: { requires: ["employeeId"] },
+  assignMentor: { requires: ["employeeId"] },
+  getOnboardingStatus: { requires: ["employeeId"] },
+  getRampGoals: { requires: ["employeeId"] },
+  setRampGoals: { requires: ["employeeId"] },
+  scheduleWelcomeMeeting: { requires: ["employeeId"] },
+  requestBadge: { requires: ["employeeId"] },
+
+  // Compliance (employee-dependent)
+  fileWorkersCompClaim: { requires: ["employeeId"] },
+  updateLicense: { requires: ["employeeId"] },
+
+  // Learning (employee-dependent)
+  enrollCourse: { requires: ["employeeId"] },
+  getTrainingProgress: { requires: ["employeeId"] },
+  completeTraining: { requires: ["employeeId"] },
+  recommendCourses: { requires: ["employeeId"] },
+  assignLearningPath: { requires: ["employeeId"] },
+  requestExternalTraining: { requires: ["employeeId"] },
+
+  // Admin (employee-dependent)
+  deleteEmployeeRecord: { requires: ["employeeId"] },
+  overridePayroll: { requires: ["employeeId"] },
+
+  // Candidate-dependent tools
+  reviewApplication: { requires: ["candidateId"] },
+  scheduleInterview: { requires: ["candidateId"] },
+  moveCandidate: { requires: ["candidateId"] },
+  sendRejection: { requires: ["candidateId"] },
+  getCandidateScorecard: { requires: ["candidateId"] },
+  addToTalentPool: { requires: ["candidateId"] },
+  sendOfferLetter: { requires: ["candidateId"] },
+
+  // Request-dependent tools
+  approvePTO: { requires: ["requestId"] },
+  cancelPTORequest: { requires: ["requestId"] },
+};
 
 // =============================================================================
 // Tool Definitions (54 tools)
@@ -2248,7 +2350,104 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
     metadata: { location: "frontend" },
   },
+  {
+    name: "navigate_to_page",
+    description: "Navigate the UI to a specific page",
+    category: "frontend",
+    parameters: {
+      type: "object",
+      properties: {
+        page: {
+          type: "string",
+          enum: ["dashboard", "employees", "timeoff"],
+          description: "Target page to navigate to",
+        },
+      },
+      required: ["page"],
+    },
+    metadata: { location: "frontend" },
+  },
+  {
+    name: "open_add_employee_modal",
+    description: "Open the Add Employee modal with optional prefilled fields",
+    category: "frontend",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Prefill employee name" },
+        email: { type: "string", description: "Prefill employee email" },
+        role: { type: "string", description: "Prefill employee role" },
+        department: { type: "string", description: "Prefill department" },
+        startDate: { type: "string", description: "Prefill start date" },
+      },
+      required: [],
+    },
+    metadata: { location: "frontend" },
+  },
+  {
+    name: "open_timeoff_request_modal",
+    description: "Open the Time Off Request modal with optional prefilled fields",
+    category: "frontend",
+    parameters: {
+      type: "object",
+      properties: {
+        employeeId: { type: "string", description: "Prefill employee ID" },
+        type: { type: "string", description: "Prefill leave type" },
+        startDate: { type: "string", description: "Prefill start date" },
+        endDate: { type: "string", description: "Prefill end date" },
+        notes: { type: "string", description: "Prefill notes" },
+      },
+      required: [],
+    },
+    metadata: { location: "frontend" },
+  },
+  {
+    name: "switch_tab",
+    description: "Switch to a specific sub-tab in the current view",
+    category: "frontend",
+    parameters: {
+      type: "object",
+      properties: {
+        tab: { type: "string", description: "Tab identifier to switch to" },
+      },
+      required: ["tab"],
+    },
+    metadata: { location: "frontend" },
+  },
+  {
+    name: "navigate_calendar",
+    description: "Navigate the calendar view to a specific month and year",
+    category: "frontend",
+    parameters: {
+      type: "object",
+      properties: {
+        month: { type: "number", description: "Target month (1-12)" },
+        year: { type: "number", description: "Target year" },
+      },
+      required: ["month", "year"],
+    },
+    metadata: { location: "frontend" },
+  },
+  {
+    name: "get_page_snapshot",
+    description: "Return a structured snapshot of the current page state",
+    category: "frontend",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    metadata: { location: "frontend" },
+  },
 ];
+
+// Apply dependency metadata to tool definitions
+for (const def of TOOL_DEFINITIONS) {
+  const deps = TOOL_DEPENDENCIES[def.name];
+  if (deps) {
+    def.metadata = { ...def.metadata, ...deps };
+  }
+}
 
 // =============================================================================
 // Tool Handlers

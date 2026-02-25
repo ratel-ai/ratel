@@ -3,16 +3,17 @@ import type { Employee, TimeOffRequest } from "../types/hr";
 
 interface TimeOffFormProps {
   employees: Employee[];
+  prefill?: Record<string, string> | null;
   onSubmit: (data: Omit<TimeOffRequest, "id" | "createdAt" | "status" | "approvedBy">) => void;
   onCancel: () => void;
 }
 
-export function TimeOffForm({ employees, onSubmit, onCancel }: TimeOffFormProps) {
-  const [employeeId, setEmployeeId] = useState("");
-  const [type, setType] = useState<TimeOffRequest["type"]>("vacation");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [notes, setNotes] = useState("");
+export function TimeOffForm({ employees, prefill, onSubmit, onCancel }: TimeOffFormProps) {
+  const [employeeId, setEmployeeId] = useState(prefill?.employeeId || "");
+  const [type, setType] = useState<TimeOffRequest["type"]>((prefill?.type as TimeOffRequest["type"]) || "vacation");
+  const [startDate, setStartDate] = useState(prefill?.startDate || "");
+  const [endDate, setEndDate] = useState(prefill?.endDate || "");
+  const [notes, setNotes] = useState(prefill?.notes || "");
 
   const selectedEmployee = employees.find((e) => e.id === employeeId);
 

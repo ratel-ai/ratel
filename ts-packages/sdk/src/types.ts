@@ -17,6 +17,7 @@ export interface ServerTool {
 
 export interface RankedTool extends ServerTool {
   score: number;
+  graphExpanded?: boolean;
 }
 
 export interface ToolDefinition {
@@ -78,9 +79,15 @@ export type AgentifiedEvent =
       durationMs: number;
       tokenUsage?: TokenUsage;
     }
+  | {
+      type: "agentified:prefetch:skipped";
+      tools: RankedTool[];
+      durationMs: number;
+    }
   | { type: "agentified:discover:start"; query: string }
   | {
       type: "agentified:discover:complete";
+      query: string;
       tools: RankedTool[];
       durationMs: number;
       tokenUsage?: TokenUsage;

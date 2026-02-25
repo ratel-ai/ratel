@@ -208,6 +208,7 @@ async fn discover(
         .map(|(i, t)| RankedTool {
             tool: t.tool.clone(),
             score: 0.7 * semantic_scores[i] + 0.3 * norm_bm25[i],
+            graph_expanded: None,
         })
         .collect();
 
@@ -216,10 +217,72 @@ async fn discover(
     let limit = body.limit.unwrap_or(5).min(100);
     ranked.truncate(limit);
 
+    // 1-hop graph expansion: inject provider tools for required params
+    let ranked = expand_with_providers(ranked, &tools, limit);
+
     Ok(Json(DiscoverResponse { tools: ranked }))
 }
 
 // Helpers
+
+fn get_string_array(metadata: &serde_json::Value, key: &str) -> Vec<String> {
+    metadata.get(key)
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default()
+}
+
+fn expand_with_providers(
+    mut ranked: Vec<RankedTool>,
+    all_tools: &HashMap<String, StoredTool>,
+    limit: usize,
+) -> Vec<RankedTool> {
+    // Collect required params from ranked tools
+    let mut required_params: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let ranked_names: std::collections::HashSet<String> = ranked.iter().map(|r| r.tool.name.clone()).collect();
+
+    for rt in &ranked {
+        if let Some(ref meta) = rt.tool.metadata {
+            for param in get_string_array(meta, "requires") {
+                required_params.insert(param);
+            }
+        }
+    }
+
+    if required_params.is_empty() {
+        return ranked;
+    }
+
+    // Build provides index from all tools
+    let mut providers: Vec<(String, usize, &StoredTool)> = Vec::new(); // (name, coverage_count, tool)
+    for stored in all_tools.values() {
+        if ranked_names.contains(&stored.tool.name) {
+            continue;
+        }
+        if let Some(ref meta) = stored.tool.metadata {
+            let provides = get_string_array(meta, "provides");
+            let coverage = provides.iter().filter(|p| required_params.contains(*p)).count();
+            if coverage > 0 {
+                providers.push((stored.tool.name.clone(), coverage, stored));
+            }
+        }
+    }
+
+    // Sort by coverage (most params provided first)
+    providers.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Append up to ceil(limit * 0.6) extra provider slots
+    let max_extra = ((limit as f64) * 0.6).ceil() as usize;
+    for (_, _, stored) in providers.into_iter().take(max_extra) {
+        ranked.push(RankedTool {
+            tool: stored.tool.clone(),
+            score: 0.0,
+            graph_expanded: Some(true),
+        });
+    }
+
+    ranked
+}
 
 async fn embed_cached(state: &AppState, text: &str) -> anyhow::Result<Vec<f32>> {
     let cached = { state.embedding_cache.read().await.get(text).cloned() };
@@ -899,5 +962,134 @@ mod tests {
         assert_eq!(tools.len(), 2);
         // processRefund name matches "refund" better
         assert_eq!(tools[0]["name"], "processRefund");
+    }
+
+    #[tokio::test]
+    async fn discover_graph_expansion_injects_providers() {
+        let app = test_app();
+
+        // Register: adjustSalary requires employeeId, searchEmployees provides employeeId
+        let reg = serde_json::json!({
+            "tools": [
+                {
+                    "name": "adjustSalary",
+                    "description": "Adjust employee salary",
+                    "parameters": {},
+                    "metadata": { "requires": ["employeeId"] }
+                },
+                {
+                    "name": "searchEmployees",
+                    "description": "Search employees by name",
+                    "parameters": {},
+                    "metadata": { "provides": ["employeeId"] }
+                },
+                {
+                    "name": "unrelatedTool",
+                    "description": "Does something unrelated",
+                    "parameters": {}
+                }
+            ]
+        });
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/tools")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&reg).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Query for salary adjustment — limit=1 so only adjustSalary is semantically matched
+        let query = serde_json::json!({ "query": "adjust employee salary", "limit": 1 });
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/discover")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&query).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let tools = json["tools"].as_array().unwrap();
+
+        // Should have adjustSalary (semantic) + searchEmployees (graph expanded)
+        assert!(tools.len() >= 2, "expected at least 2 tools, got {}", tools.len());
+
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(names.contains(&"adjustSalary"));
+        assert!(names.contains(&"searchEmployees"));
+
+        // searchEmployees should be marked as graph_expanded
+        let search_tool = tools.iter().find(|t| t["name"] == "searchEmployees").unwrap();
+        assert_eq!(search_tool["graph_expanded"], true);
+        assert_eq!(search_tool["score"].as_f64().unwrap(), 0.0);
+
+        // adjustSalary should NOT have graph_expanded
+        let salary_tool = tools.iter().find(|t| t["name"] == "adjustSalary").unwrap();
+        assert!(salary_tool.get("graph_expanded").is_none() || salary_tool["graph_expanded"].is_null());
+    }
+
+    #[tokio::test]
+    async fn discover_no_graph_expansion_without_requires() {
+        let app = test_app();
+
+        let reg = serde_json::json!({
+            "tools": [
+                {
+                    "name": "listEmployees",
+                    "description": "List all employees",
+                    "parameters": {},
+                    "metadata": { "provides": ["employeeId"] }
+                },
+                {
+                    "name": "getOrgChart",
+                    "description": "Get org chart",
+                    "parameters": {}
+                }
+            ]
+        });
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/tools")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&reg).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let query = serde_json::json!({ "query": "org chart", "limit": 2 });
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/discover")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&query).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let tools = json["tools"].as_array().unwrap();
+
+        // No tool requires anything, so no graph expansion
+        let expanded: Vec<_> = tools.iter().filter(|t| t["graph_expanded"] == true).collect();
+        assert!(expanded.is_empty(), "no tools should be graph_expanded");
     }
 }

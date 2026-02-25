@@ -49,6 +49,7 @@ function initialState(): InspectorState {
     messages: [],
     isLoading: false,
     error: null,
+    frontendTools: [],
   };
 }
 
@@ -381,6 +382,21 @@ describe("AgentifiedClient", () => {
       expect(state.tokens).toMatchObject(tokenUsage);
     });
 
+    it("parses prefetch:skipped and stores result with skipped flag", async () => {
+      const tools = [{ name: "weather", description: "Get weather", score: 0.9 }];
+      await mockAgent.emitEvent({
+        type: EventType.CUSTOM,
+        name: "agentified:prefetch:skipped",
+        value: { tools, durationMs: 0 },
+      } as CustomEvent);
+
+      const state = client.getState();
+      expect(state.agentified.prefetchResults).toHaveLength(1);
+      expect(state.agentified.prefetchResults[0]).toEqual({ tools, durationMs: 0, skipped: true });
+      // currentTools should NOT change on skip
+      expect(state.agentified.currentTools).toEqual([]);
+    });
+
     it("ignores non-agentified CUSTOM events for agentified state", async () => {
       await mockAgent.emitEvent({
         type: EventType.CUSTOM,
@@ -675,6 +691,133 @@ describe("AgentifiedClient", () => {
 
       const tc = client.getState().toolCalls[0]!;
       expect(tc.parentMessageId).toBe("assistant-msg-1");
+    });
+  });
+
+  describe("re-run message chain", () => {
+    it("includes assistant toolCalls and tool result toolCallId on re-run", async () => {
+      let runCount = 0;
+
+      mockAgent.runAgent.mockImplementation(async () => {
+        runCount++;
+        if (runCount === 1) {
+          // Simulate assistant message followed by a frontend tool call
+          await mockAgent.emitEvent({
+            type: EventType.TEXT_MESSAGE_START,
+            messageId: "assistant-1",
+            role: "assistant",
+          } as TextMessageStartEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TEXT_MESSAGE_CONTENT,
+            messageId: "assistant-1",
+            delta: "Let me do that",
+          } as TextMessageContentEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TEXT_MESSAGE_END,
+            messageId: "assistant-1",
+          } as TextMessageEndEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_START,
+            toolCallId: "tc1",
+            toolCallName: "navigate_to_page",
+            parentMessageId: "assistant-1",
+          } as unknown as ToolCallStartEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_ARGS,
+            toolCallId: "tc1",
+            delta: '{"page":"timeoff"}',
+          } as ToolCallArgsEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_END,
+            toolCallId: "tc1",
+          } as ToolCallEndEvent);
+          await mockAgent.emitEvent({
+            type: EventType.RUN_FINISHED,
+            runId: "run-1",
+          } as RunFinishedEvent);
+        }
+        return { result: null, newMessages: [] };
+      });
+
+      client.registerToolHandler("navigate_to_page", async () => ({ success: true }));
+
+      await client.run({
+        messages: [{ id: "u1", role: "user" as const, content: "go to time off" }],
+      });
+
+      expect(runCount).toBe(2);
+
+      // Inspect messages passed to second run
+      const secondCallMessages = mockAgent.setMessages.mock.calls[1]![0] as any[];
+
+      // Should have: user msg, assistant msg (with toolCalls), tool result msg
+      const assistantMsg = secondCallMessages.find(
+        (m: any) => m.id === "assistant-1",
+      );
+      expect(assistantMsg).toBeDefined();
+      expect(assistantMsg.toolCalls).toEqual([
+        {
+          id: "tc1",
+          type: "function",
+          function: { name: "navigate_to_page", arguments: '{"page":"timeoff"}' },
+        },
+      ]);
+
+      const toolMsg = secondCallMessages.find((m: any) => m.role === "tool");
+      expect(toolMsg).toBeDefined();
+      expect(toolMsg.toolCallId).toBe("tc1");
+      expect(JSON.parse(toolMsg.content)).toEqual({ success: true });
+    });
+
+    it("creates synthetic assistant message for orphan tool results", async () => {
+      let runCount = 0;
+
+      mockAgent.runAgent.mockImplementation(async () => {
+        runCount++;
+        if (runCount === 1) {
+          // Tool call WITHOUT parentMessageId (orphan)
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_START,
+            toolCallId: "tc1",
+            toolCallName: "navigate_to_page",
+          } as ToolCallStartEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_ARGS,
+            toolCallId: "tc1",
+            delta: '{"page":"employees"}',
+          } as ToolCallArgsEvent);
+          await mockAgent.emitEvent({
+            type: EventType.TOOL_CALL_END,
+            toolCallId: "tc1",
+          } as ToolCallEndEvent);
+          await mockAgent.emitEvent({
+            type: EventType.RUN_FINISHED,
+            runId: "run-1",
+          } as RunFinishedEvent);
+        }
+        return { result: null, newMessages: [] };
+      });
+
+      client.registerToolHandler("navigate_to_page", async () => ({ ok: true }));
+
+      await client.run({
+        messages: [{ id: "u1", role: "user" as const, content: "show employees" }],
+      });
+
+      expect(runCount).toBe(2);
+
+      const secondCallMessages = mockAgent.setMessages.mock.calls[1]![0] as any[];
+
+      // Should have a synthetic assistant with toolCalls
+      const assistantMsg = secondCallMessages.find(
+        (m: any) => m.role === "assistant" && m.toolCalls,
+      );
+      expect(assistantMsg).toBeDefined();
+      expect(assistantMsg.toolCalls[0].id).toBe("tc1");
+
+      const toolMsg = secondCallMessages.find((m: any) => m.role === "tool");
+      expect(toolMsg).toBeDefined();
+      expect(toolMsg.toolCallId).toBe("tc1");
     });
   });
 

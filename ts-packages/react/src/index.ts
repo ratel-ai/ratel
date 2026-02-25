@@ -1,4 +1,4 @@
-export { AgentifiedProvider } from "./provider.js";
+export { AgentifiedProvider, useAgentifiedClient } from "./provider.js";
 export { useAgentified } from "./hook.js";
 export { useAgentifiedTool } from "./use-tool.js";
 export { Inspector } from "./inspector.js";

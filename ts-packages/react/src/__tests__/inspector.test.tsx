@@ -17,6 +17,7 @@ function createInitialState(overrides?: Partial<InspectorState>): InspectorState
     messages: [],
     isLoading: false,
     error: null,
+    frontendTools: [],
     ...overrides,
   };
 }
@@ -110,11 +111,11 @@ describe("Inspector", () => {
   });
 
   describe("tabs", () => {
-    it("shows 3 tabs: Timeline, Learning, Data", () => {
+    it("shows 3 tabs: Timeline, Session, Log", () => {
       renderInspector(createInitialState(), { defaultOpen: true });
       expect(screen.getByTestId("tab-timeline")).toBeTruthy();
-      expect(screen.getByTestId("tab-learning")).toBeTruthy();
-      expect(screen.getByTestId("tab-data")).toBeTruthy();
+      expect(screen.getByTestId("tab-session")).toBeTruthy();
+      expect(screen.getByTestId("tab-log")).toBeTruthy();
     });
 
     it("defaults to Timeline tab", () => {
@@ -122,7 +123,6 @@ describe("Inspector", () => {
         connection: "connected",
         run: { runId: "r1" },
       }), { defaultOpen: true });
-      // Timeline tab content is visible — shows Run section with status
       expect(screen.getByText("Connected")).toBeTruthy();
     });
   });
@@ -164,36 +164,80 @@ describe("Inspector", () => {
       expect(screen.getByText("No events yet")).toBeTruthy();
     });
 
-    it("shows streaming metrics", () => {
+    it("shows TTFT metric when available", () => {
       renderInspector(
         createInitialState({
           streaming: { messageCount: 3, toolCallCount: 1, timeToFirstTokenMs: 80 },
         }),
         { defaultOpen: true },
       );
-      expect(screen.getByText("3")).toBeTruthy();
-      expect(screen.getByText("1")).toBeTruthy();
+      expect(screen.getByText("80ms")).toBeTruthy();
     });
-  });
 
-  describe("Learning tab", () => {
-    it("shows current tools with score bars", () => {
+    it("shows frontend tools badges", () => {
       renderInspector(
         createInitialState({
-          agentified: {
-            prefetchResults: [],
-            discoveries: [],
-            currentTools: [
-              { name: "search_docs", description: "Search documentation", score: 0.95 },
-            ],
-          },
+          frontendTools: ["navigate_to_page", "get_page_snapshot"],
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-learning"));
+      expect(screen.getByText("navigate_to_page")).toBeTruthy();
+      expect(screen.getByText("get_page_snapshot")).toBeTruthy();
+    });
 
-      expect(screen.getByText("search_docs")).toBeTruthy();
-      expect(screen.getByText("0.95")).toBeTruthy();
+    it("shows shared context", () => {
+      renderInspector(
+        createInitialState({
+          sharedContext: { page: "employees", openModals: ["employeeModal"], activeTab: undefined },
+        }),
+        { defaultOpen: true },
+      );
+      expect(screen.getByText("employees")).toBeTruthy();
+      expect(screen.getByText("employeeModal")).toBeTruthy();
+    });
+  });
+
+  describe("Session tab", () => {
+    it("shows session summary grid", () => {
+      renderInspector(
+        createInitialState({
+          streaming: { messageCount: 5, toolCallCount: 2 },
+          events: [
+            { timestamp: Date.now(), event: { type: "RUN_STARTED" } as any, isAgentified: false },
+          ],
+        }),
+        { defaultOpen: true },
+      );
+      fireEvent.click(screen.getByTestId("tab-session"));
+
+      const cells = screen.getAllByTestId("stat-cell");
+      expect(cells.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("shows token breakdown when tokens present", () => {
+      renderInspector(
+        createInitialState({
+          tokens: { input: 1500, output: 300, cached: 200, reasoning: 0 },
+        }),
+        { defaultOpen: true },
+      );
+      fireEvent.click(screen.getByTestId("tab-session"));
+
+      expect(screen.getByText("1.5k")).toBeTruthy();
+      expect(screen.getByText("300")).toBeTruthy();
+    });
+
+    it("shows context window bar when available", () => {
+      renderInspector(
+        createInitialState({
+          tokens: { input: 100, output: 50, cached: 0, reasoning: 0, contextWindowPercent: 42.5 },
+        }),
+        { defaultOpen: true },
+      );
+      fireEvent.click(screen.getByTestId("tab-session"));
+
+      expect(screen.getByTestId("context-bar")).toBeTruthy();
+      expect(screen.getByText("Context: 42.5%")).toBeTruthy();
     });
 
     it("shows prefetch history", () => {
@@ -209,7 +253,7 @@ describe("Inspector", () => {
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-learning"));
+      fireEvent.click(screen.getByTestId("tab-session"));
 
       expect(screen.getByText("200ms")).toBeTruthy();
       expect(screen.getByText("1 tools")).toBeTruthy();
@@ -228,63 +272,14 @@ describe("Inspector", () => {
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-learning"));
+      fireEvent.click(screen.getByTestId("tab-session"));
 
       expect(screen.getByText('"find email tools"')).toBeTruthy();
       expect(screen.getByText("1 tools · 150ms")).toBeTruthy();
     });
-
-    it("shows empty state when no interactions", () => {
-      renderInspector(createInitialState(), { defaultOpen: true });
-      fireEvent.click(screen.getByTestId("tab-learning"));
-
-      expect(screen.getByText("No Agentified interactions yet")).toBeTruthy();
-    });
   });
 
-  describe("Data tab", () => {
-    it("shows session summary grid", () => {
-      renderInspector(
-        createInitialState({
-          streaming: { messageCount: 5, toolCallCount: 2 },
-          events: [
-            { timestamp: Date.now(), event: { type: "RUN_STARTED" } as any, isAgentified: false },
-          ],
-        }),
-        { defaultOpen: true },
-      );
-      fireEvent.click(screen.getByTestId("tab-data"));
-
-      const cells = screen.getAllByTestId("stat-cell");
-      expect(cells.length).toBeGreaterThanOrEqual(3);
-    });
-
-    it("shows token breakdown when tokens present", () => {
-      renderInspector(
-        createInitialState({
-          tokens: { input: 1500, output: 300, cached: 200, reasoning: 0 },
-        }),
-        { defaultOpen: true },
-      );
-      fireEvent.click(screen.getByTestId("tab-data"));
-
-      expect(screen.getByText("1.5k")).toBeTruthy();
-      expect(screen.getByText("300")).toBeTruthy();
-    });
-
-    it("shows context window bar when available", () => {
-      renderInspector(
-        createInitialState({
-          tokens: { input: 0, output: 0, cached: 0, reasoning: 0, contextWindowPercent: 42.5 },
-        }),
-        { defaultOpen: true },
-      );
-      fireEvent.click(screen.getByTestId("tab-data"));
-
-      expect(screen.getByTestId("context-bar")).toBeTruthy();
-      expect(screen.getByText("Context: 42.5%")).toBeTruthy();
-    });
-
+  describe("Log tab", () => {
     it("renders event log with entries", () => {
       renderInspector(
         createInitialState({
@@ -295,7 +290,7 @@ describe("Inspector", () => {
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-data"));
+      fireEvent.click(screen.getByTestId("tab-log"));
 
       const rows = screen.getAllByTestId("event-row");
       expect(rows).toHaveLength(2);
@@ -305,7 +300,7 @@ describe("Inspector", () => {
 
     it("shows empty event log state", () => {
       renderInspector(createInitialState(), { defaultOpen: true });
-      fireEvent.click(screen.getByTestId("tab-data"));
+      fireEvent.click(screen.getByTestId("tab-log"));
 
       expect(screen.getByText("No events")).toBeTruthy();
     });
@@ -321,7 +316,7 @@ describe("Inspector", () => {
         }),
         { defaultOpen: true },
       );
-      fireEvent.click(screen.getByTestId("tab-data"));
+      fireEvent.click(screen.getByTestId("tab-log"));
 
       // Default: all
       expect(screen.getAllByTestId("event-row")).toHaveLength(3);

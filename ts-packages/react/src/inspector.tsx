@@ -33,6 +33,20 @@ export function Inspector({ defaultOpen = false }: InspectorProps) {
   const [pos, setPos] = useState({ x: typeof window !== "undefined" ? window.innerWidth - 520 : 80, y: 80 });
   const [size, setSize] = useState({ w: 500, h: 500 });
   const [dragging, setDragging] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (open && panelRef.current) {
+      try { panelRef.current.showPopover(); } catch { /* popover not supported */ }
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open && triggerRef.current) {
+      try { triggerRef.current.showPopover(); } catch { /* popover not supported */ }
+    }
+  }, [open]);
 
   const handleDragStart = useCallback((e: ReactPointerEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
@@ -78,6 +92,9 @@ export function Inspector({ defaultOpen = false }: InspectorProps) {
   if (!open) {
     return (
       <button
+        ref={triggerRef}
+        // @ts-expect-error popover attribute not yet in React types
+        popover="manual"
         data-testid="inspector-toggle"
         onClick={() => setOpen(true)}
         style={S.trigger}
@@ -97,7 +114,13 @@ export function Inspector({ defaultOpen = false }: InspectorProps) {
   };
 
   return (
-    <div data-testid="inspector-panel" style={modalStyle}>
+    <div
+      ref={panelRef}
+      // @ts-expect-error popover attribute not yet in React types
+      popover="manual"
+      data-testid="inspector-panel"
+      style={modalStyle}
+    >
       <div
         style={{ ...S.header, cursor: dragging ? "grabbing" : "grab" }}
         onPointerDown={handleDragStart}
@@ -147,7 +170,7 @@ export function Inspector({ defaultOpen = false }: InspectorProps) {
 // ── Tab: Timeline ─────────────────────────────────────────────────────
 
 function TimelineTab({ state }: { state: InspectorState }) {
-  const { connection, run, streaming, events, toolCalls, agentified } = state;
+  const { connection, run, streaming, events, toolCalls, agentified, frontendTools = [], sharedContext } = state;
 
   return (
     <div>
@@ -170,6 +193,31 @@ function TimelineTab({ state }: { state: InspectorState }) {
             {agentified.currentTools.map((tool, i) => (
               <ToolRow key={`${tool.name}-${i}`} tool={tool} />
             ))}
+          </div>
+        </Section>
+      )}
+
+      {frontendTools.length > 0 && (
+        <Section title="Frontend Tools">
+          <div style={S.frontendToolsList}>
+            {frontendTools.map((name) => (
+              <span key={name} style={S.frontendToolBadge}>
+                <span style={S.frontendToolDot} />
+                {name}
+              </span>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {sharedContext && (
+        <Section title="Shared Context">
+          <div style={S.sharedContext}>
+            <Row label="Page" value={sharedContext.page} />
+            {sharedContext.activeTab && <Row label="Tab" value={sharedContext.activeTab} />}
+            {sharedContext.openModals.length > 0 && (
+              <Row label="Open Modals" value={sharedContext.openModals.join(", ")} />
+            )}
           </div>
         </Section>
       )}
@@ -1002,5 +1050,39 @@ const S = {
     color: C.textDim,
     padding: "24px 0",
     fontSize: 11,
+  } as CSSProperties,
+
+  frontendToolsList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 4,
+  } as CSSProperties,
+
+  frontendToolBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    background: "rgba(63,185,80,0.1)",
+    border: `1px solid rgba(63,185,80,0.3)`,
+    borderRadius: 4,
+    padding: "2px 8px",
+    fontFamily: C.mono,
+    fontSize: 10,
+    color: C.green,
+  } as CSSProperties,
+
+  frontendToolDot: {
+    width: 5,
+    height: 5,
+    borderRadius: "50%",
+    background: C.green,
+    flexShrink: 0,
+  } as CSSProperties,
+
+  sharedContext: {
+    padding: "4px 8px",
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
   } as CSSProperties,
 };

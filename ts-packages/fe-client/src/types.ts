@@ -31,6 +31,7 @@ export interface AgentifiedTool {
 export interface PrefetchResult {
   tools: AgentifiedTool[];
   durationMs: number;
+  skipped?: boolean;
   tokenUsage?: TokenUsage;
 }
 
@@ -100,6 +101,12 @@ export interface EventLogEntry {
   isAgentified: boolean;
 }
 
+export interface SharedContext {
+  page: string;
+  openModals: string[];
+  activeTab?: string;
+}
+
 export interface InspectorState {
   connection: ConnectionStatus;
   run: RunInfo;
@@ -111,6 +118,8 @@ export interface InspectorState {
   messages: import("@ag-ui/client").Message[];
   isLoading: boolean;
   error: string | null;
+  frontendTools: string[];
+  sharedContext?: SharedContext;
 }
 
 // Client types

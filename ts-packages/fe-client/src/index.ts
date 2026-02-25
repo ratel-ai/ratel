@@ -10,6 +10,7 @@ export type {
   InspectorState,
   PrefetchResult,
   RunInfo,
+  SharedContext,
   StateListener,
   StreamingMetrics,
   Subscription,

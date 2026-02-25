@@ -24,13 +24,23 @@ export interface AgentifiedMastraConfig {
 }
 
 export interface RunOptions {
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{
+    role: string;
+    content: string;
+    toolCallId?: string;
+    toolCalls?: Array<{
+      id: string;
+      type: "function";
+      function: { name: string; arguments: string };
+    }>;
+  }>;
   frontendTools?: string[];
 }
 
 export class AgentifiedMastra {
   private config: AgentifiedMastraConfig;
   private sdk: Agentified;
+  private lastPrefetchResult: { ranked: RankedTool[]; durationMs: number } | null = null;
 
   constructor(config: AgentifiedMastraConfig) {
     this.config = config;
@@ -38,6 +48,10 @@ export class AgentifiedMastra {
       serverUrl: config.agentifiedUrl,
       tools: config.tools,
     });
+  }
+
+  private static hasToolResults(messages: RunOptions["messages"]): boolean {
+    return messages.some((m) => m.role === "tool");
   }
 
   async register(): Promise<RegisterResponse> {
@@ -49,15 +63,26 @@ export class AgentifiedMastra {
     const available = new Set(options.frontendTools ?? []);
     const unavailable = allFrontendNames.filter((n) => !available.has(n));
 
-    const prefetchStart = performance.now();
-    const ranked = await this.sdk.prefetch({
-      messages: options.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
-      exclude: unavailable.length > 0 ? unavailable : undefined,
-    });
-    const prefetchDurationMs = performance.now() - prefetchStart;
+    let ranked: RankedTool[];
+    let prefetchDurationMs: number;
+    let prefetchSkipped = false;
+
+    if (this.lastPrefetchResult && AgentifiedMastra.hasToolResults(options.messages)) {
+      ranked = this.lastPrefetchResult.ranked;
+      prefetchDurationMs = this.lastPrefetchResult.durationMs;
+      prefetchSkipped = true;
+    } else {
+      const prefetchStart = performance.now();
+      ranked = await this.sdk.prefetch({
+        messages: options.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        exclude: unavailable.length > 0 ? unavailable : undefined,
+      });
+      prefetchDurationMs = performance.now() - prefetchStart;
+      this.lastPrefetchResult = { ranked, durationMs: prefetchDurationMs };
+    }
 
     const subject = new Subject<BaseEvent>();
     const mastraTools = this.buildMastraTools(ranked);
@@ -88,16 +113,21 @@ export class AgentifiedMastra {
 
       subscriber.next({
         type: "CUSTOM",
-        name: "agentified:prefetch:complete",
+        name: prefetchSkipped ? "agentified:prefetch:skipped" : "agentified:prefetch:complete",
         value: { tools: ranked, durationMs: prefetchDurationMs },
       } as CustomEvent);
 
       const agentObs = mastraAgent.run({
-        messages: options.messages.map((m) => ({
-          id: crypto.randomUUID(),
-          role: m.role as "user" | "assistant" | "system",
-          content: m.content,
-        })),
+        messages: options.messages.map((m) => {
+          const msg: Record<string, unknown> = {
+            id: crypto.randomUUID(),
+            role: m.role as "user" | "assistant" | "system" | "tool",
+            content: m.content,
+          };
+          if (m.toolCallId) msg.toolCallId = m.toolCallId;
+          if (m.toolCalls) msg.toolCalls = m.toolCalls;
+          return msg;
+        }) as unknown[],
         threadId,
         runId,
         tools: frontendToolDefs,
@@ -174,6 +204,7 @@ export class AgentifiedMastra {
           name: "agentified:discover:complete",
           value: {
             type: "agentified:discover:complete",
+            query: input.query,
             tools,
             durationMs: performance.now() - start,
           },

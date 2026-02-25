@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useAgentifiedTool } from "@agentified/react";
 import { useHRStore } from "../store/hrStore";
+import { useUIStore } from "../store/uiStore";
 import { EmployeeCard } from "../components/EmployeeCard";
 import { EmployeeForm } from "../components/EmployeeForm";
 import { Modal } from "../components/Modal";
@@ -8,13 +10,25 @@ import type { Employee } from "../types/hr";
 type FilterStatus = "all" | "active" | "onboarding" | "inactive";
 
 export function Employees() {
+  useAgentifiedTool("open_add_employee_modal", useCallback(async (args: unknown) => {
+    const prefill = args as Record<string, string> | undefined;
+    const store = useUIStore.getState();
+    store.setPage("employees");
+    store.openEmployeeModal(prefill);
+    return { opened: true };
+  }, []));
+
   const { employees, fetchEmployees, addEmployee, updateEmployee, deleteEmployee, loading } =
     useHRStore();
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterStatus>("all");
-  const [modalOpen, setModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | undefined>();
+
+  const modalOpen = useUIStore((s) => s.employeeModalOpen);
+  const prefill = useUIStore((s) => s.employeeModalPrefill);
+  const openModal = useUIStore((s) => s.openEmployeeModal);
+  const closeModal = useUIStore((s) => s.closeEmployeeModal);
 
   useEffect(() => {
     fetchEmployees();
@@ -31,12 +45,12 @@ export function Employees() {
 
   const handleAdd = () => {
     setEditingEmployee(undefined);
-    setModalOpen(true);
+    openModal();
   };
 
   const handleEdit = (employee: Employee) => {
     setEditingEmployee(employee);
-    setModalOpen(true);
+    openModal();
   };
 
   const handleDelete = async (id: string) => {
@@ -51,7 +65,7 @@ export function Employees() {
     } else {
       await addEmployee(data);
     }
-    setModalOpen(false);
+    closeModal();
   };
 
   return (
@@ -106,13 +120,14 @@ export function Employees() {
 
       <Modal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         title={editingEmployee ? "Edit Employee" : "Add Employee"}
       >
         <EmployeeForm
           employee={editingEmployee}
+          prefill={prefill}
           onSubmit={handleSubmit}
-          onCancel={() => setModalOpen(false)}
+          onCancel={closeModal}
         />
       </Modal>
     </div>

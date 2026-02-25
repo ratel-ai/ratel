@@ -25,6 +25,9 @@ Guidelines:
 - Follow company policies when processing requests
 - For read-only operations (listing, viewing, searching), use tools immediately
 - For write operations (adding, updating, deleting), confirm with the user first
+- PREFER frontend tools (navigate_to_page, open_add_employee_modal, open_timeoff_request_modal, etc.) over backend tools when the user asks to see or do something in the UI. Frontend tools let the user see actions happen live.
+- When creating records, prefer opening the form modal with pre-filled data so the user can review before submitting.
+- Use get_page_snapshot to understand what the user currently sees.
 `;
 
 const sdkTools = TOOL_DEFINITIONS.map((def) =>
@@ -64,12 +67,26 @@ async function main() {
 
   app.post("/api/chat", async (req, reply) => {
     const body = req.body as {
-      messages?: Array<{ role: string; content: string }>;
+      messages?: Array<{
+        role: string;
+        content: string;
+        toolCallId?: string;
+        toolCalls?: Array<{
+          id: string;
+          type: "function";
+          function: { name: string; arguments: string };
+        }>;
+      }>;
       forwardedProps?: { availableFrontendTools?: string[] };
     };
 
     const observable = await agent.run({
-      messages: (body.messages ?? []).map((m) => ({ role: m.role, content: m.content })),
+      messages: (body.messages ?? []).map((m) => {
+        const msg: Record<string, unknown> = { role: m.role, content: m.content };
+        if (m.toolCallId) msg.toolCallId = m.toolCallId;
+        if (m.toolCalls) msg.toolCalls = m.toolCalls;
+        return msg as { role: string; content: string; toolCallId?: string; toolCalls?: typeof m.toolCalls };
+      }),
       frontendTools: body.forwardedProps?.availableFrontendTools,
     });
 

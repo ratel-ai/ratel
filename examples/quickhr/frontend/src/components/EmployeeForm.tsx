@@ -3,16 +3,17 @@ import type { Employee } from "../types/hr";
 
 interface EmployeeFormProps {
   employee?: Employee;
+  prefill?: Record<string, string> | null;
   onSubmit: (data: Omit<Employee, "id" | "status">) => void;
   onCancel: () => void;
 }
 
-export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps) {
-  const [name, setName] = useState(employee?.name || "");
-  const [email, setEmail] = useState(employee?.email || "");
-  const [role, setRole] = useState(employee?.role || "");
-  const [department, setDepartment] = useState(employee?.department || "Engineering");
-  const [startDate, setStartDate] = useState(employee?.startDate || "");
+export function EmployeeForm({ employee, prefill, onSubmit, onCancel }: EmployeeFormProps) {
+  const [name, setName] = useState(employee?.name || prefill?.name || "");
+  const [email, setEmail] = useState(employee?.email || prefill?.email || "");
+  const [role, setRole] = useState(employee?.role || prefill?.role || "");
+  const [department, setDepartment] = useState(employee?.department || prefill?.department || "Engineering");
+  const [startDate, setStartDate] = useState(employee?.startDate || prefill?.startDate || "");
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
