@@ -1,0 +1,31 @@
+{
+  "name": "@example-quickhr/backend",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "start": "node --import tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@agentified/sdk": "workspace:*",
+    "@agentified/mastra": "workspace:*",
+    "@ag-ui/client": "^0.0.45",
+    "@ag-ui/mastra": "^1.0.0",
+    "@ai-sdk/openai": "^3.0.12",
+    "@fastify/cors": "^10.0.2",
+    "@mastra/core": "^1.6.0",
+    "fastify": "^5.2.1",
+    "rxjs": "^7.8.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

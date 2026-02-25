@@ -1,2 +1,3 @@
 packages:
   - "ts-packages/*"
+  - "examples/quickhr/*"
