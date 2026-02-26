@@ -95,18 +95,24 @@ export class AgentifiedMastra {
         if (
           m.role === "assistant" &&
           Array.isArray(m.content) &&
-          m.content.some((p: any) => p.type === "tool-call") &&
-          !m.providerOptions?.google?.thoughtSignature
+          m.content.some((p: any) => p.type === "tool-call")
         ) {
           return {
             ...m,
-            providerOptions: {
-              ...m.providerOptions,
-              google: {
-                ...m.providerOptions?.google,
-                thoughtSignature: "skip_thought_signature_validator",
-              },
-            },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            content: m.content.map((part: any) => {
+              if (part.providerOptions?.google?.thoughtSignature) return part;
+              return {
+                ...part,
+                providerOptions: {
+                  ...part.providerOptions,
+                  google: {
+                    ...part.providerOptions?.google,
+                    thoughtSignature: "skip_thought_signature_validator",
+                  },
+                },
+              };
+            }),
           };
         }
         return m;

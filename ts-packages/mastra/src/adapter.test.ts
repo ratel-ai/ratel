@@ -437,7 +437,7 @@ describe("AgentifiedMastra", () => {
   });
 
   describe("patchAgentStreamForGemini()", () => {
-    it("injects thoughtSignature on assistant messages with tool-call content", async () => {
+    it("injects thoughtSignature on each content part of assistant messages with tool-calls", async () => {
       const streamFn = vi.fn(async (messages: any[]) => ({ stream: true }));
       const config = {
         ...defaultConfig(),
@@ -445,12 +445,12 @@ describe("AgentifiedMastra", () => {
       };
       const am = new AgentifiedMastra(config);
 
-      // Call stream directly on the (now-patched) agent
       await config.agent.stream([
         { role: "user", content: "hi" },
         {
           role: "assistant",
           content: [
+            { type: "text", text: "Sure" },
             { type: "tool-call", toolCallId: "tc1", toolName: "nav", args: {} },
           ],
         },
@@ -458,12 +458,13 @@ describe("AgentifiedMastra", () => {
 
       const patched = streamFn.mock.calls[0][0];
       expect(patched[0]).toEqual({ role: "user", content: "hi" });
-      expect(patched[1].providerOptions).toEqual({
-        google: { thoughtSignature: "skip_thought_signature_validator" },
-      });
+      // Each part gets thoughtSignature injected
+      const parts = patched[1].content;
+      expect(parts[0].providerOptions.google.thoughtSignature).toBe("skip_thought_signature_validator");
+      expect(parts[1].providerOptions.google.thoughtSignature).toBe("skip_thought_signature_validator");
     });
 
-    it("does NOT overwrite existing thoughtSignature", async () => {
+    it("does NOT overwrite existing thoughtSignature on parts", async () => {
       const streamFn = vi.fn(async (messages: any[]) => ({ stream: true }));
       const config = {
         ...defaultConfig(),
@@ -474,16 +475,20 @@ describe("AgentifiedMastra", () => {
       await config.agent.stream([
         {
           role: "assistant",
-          content: [{ type: "tool-call", toolCallId: "tc1", toolName: "nav", args: {} }],
-          providerOptions: { google: { thoughtSignature: "real-sig" } },
+          content: [
+            {
+              type: "tool-call", toolCallId: "tc1", toolName: "nav", args: {},
+              providerOptions: { google: { thoughtSignature: "real-sig" } },
+            },
+          ],
         },
       ]);
 
       const patched = streamFn.mock.calls[0][0];
-      expect(patched[0].providerOptions.google.thoughtSignature).toBe("real-sig");
+      expect(patched[0].content[0].providerOptions.google.thoughtSignature).toBe("real-sig");
     });
 
-    it("preserves existing providerOptions when injecting", async () => {
+    it("preserves existing providerOptions on parts when injecting", async () => {
       const streamFn = vi.fn(async (messages: any[]) => ({ stream: true }));
       const config = {
         ...defaultConfig(),
@@ -494,14 +499,19 @@ describe("AgentifiedMastra", () => {
       await config.agent.stream([
         {
           role: "assistant",
-          content: [{ type: "tool-call", toolCallId: "tc1", toolName: "nav", args: {} }],
-          providerOptions: { openai: { mode: "fast" } },
+          content: [
+            {
+              type: "tool-call", toolCallId: "tc1", toolName: "nav", args: {},
+              providerOptions: { openai: { mode: "fast" } },
+            },
+          ],
         },
       ]);
 
       const patched = streamFn.mock.calls[0][0];
-      expect(patched[0].providerOptions.openai).toEqual({ mode: "fast" });
-      expect(patched[0].providerOptions.google.thoughtSignature).toBe("skip_thought_signature_validator");
+      const part = patched[0].content[0];
+      expect(part.providerOptions.openai).toEqual({ mode: "fast" });
+      expect(part.providerOptions.google.thoughtSignature).toBe("skip_thought_signature_validator");
     });
 
     it("skips non-assistant messages", async () => {
@@ -518,8 +528,8 @@ describe("AgentifiedMastra", () => {
       ]);
 
       const patched = streamFn.mock.calls[0][0];
-      expect(patched[0].providerOptions).toBeUndefined();
-      expect(patched[1].providerOptions).toBeUndefined();
+      expect(patched[0]).toEqual({ role: "user", content: "hi" });
+      expect(patched[1]).toEqual({ role: "system", content: "you are helpful" });
     });
 
     it("skips assistant messages without tool-call parts", async () => {
@@ -536,8 +546,8 @@ describe("AgentifiedMastra", () => {
       ]);
 
       const patched = streamFn.mock.calls[0][0];
-      expect(patched[0].providerOptions).toBeUndefined();
-      expect(patched[1].providerOptions).toBeUndefined();
+      expect(patched[0]).toEqual({ role: "assistant", content: "just text" });
+      expect(patched[1].content[0].providerOptions).toBeUndefined();
     });
 
     it("passes through extra args to original stream", async () => {
