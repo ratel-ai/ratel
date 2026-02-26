@@ -1,3 +1,6 @@
+import { config } from "dotenv";
+config();
+config({ path: "../../.env" });
 import { GenericContainer, Wait } from "testcontainers";
 
 let container: any;

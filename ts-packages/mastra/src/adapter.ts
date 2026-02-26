@@ -137,7 +137,7 @@ export class AgentifiedMastra {
       messages: options.messages.map(m => ({ role: m.role, content: m.content })),
       turnId: options.turnId,
       ...(options.toolLimit !== undefined && { limit: options.toolLimit }),
-    });
+    }) ?? [];
     const prefilledNames = ranked.map(t => t.name);
 
     // 2. Build ALL tools (not just ranked — needed for discover → use)
@@ -168,11 +168,13 @@ export class AgentifiedMastra {
       ...(options.seed !== undefined && { seed: options.seed }),
       onStepFinish: options.onStepFinish,
       prepareStep: async ({ stepNumber, steps }: { stepNumber: number; steps: any[] }) => {
-        // Merge discovered tools from prior steps
+        // Merge discovered tools from prior steps (handle AG-UI payload wrapping)
         for (const step of steps) {
           for (const tr of step.toolResults ?? []) {
-            if (tr.toolName === "agentified_discover" && Array.isArray(tr.result)) {
-              for (const t of tr.result) {
+            const trName = tr.toolName ?? tr.payload?.toolName;
+            const trResult = tr.result ?? tr.payload?.result;
+            if (trName === "agentified_discover" && Array.isArray(trResult)) {
+              for (const t of trResult) {
                 if (registryNames.has(t.name)) activeSet.add(t.name);
               }
             }
@@ -189,23 +191,25 @@ export class AgentifiedMastra {
     });
 
     // 7. Collect tool calls (excluding discover)
+    // Mastra wraps tool calls in AG-UI events: { payload: { toolName, toolCallId, args } }
     const toolCalls: GenerateResult["toolCalls"] = [];
     for (const step of result.steps ?? []) {
       for (const tc of step.toolCalls ?? []) {
-        if (tc.toolName === "agentified_discover") continue;
-        toolCalls.push({
-          toolName: tc.toolName,
-          toolCallId: tc.toolCallId,
-          args: tc.args ?? {},
-        });
+        const name = tc.toolName ?? tc.payload?.toolName;
+        const id = tc.toolCallId ?? tc.payload?.toolCallId;
+        const args = tc.args ?? tc.payload?.args ?? {};
+        if (name === "agentified_discover") continue;
+        toolCalls.push({ toolName: name, toolCallId: id, args });
       }
     }
 
-    // 8. Post-process: expand activeSet from result steps (for mocked/non-calling agents)
+    // 8. Post-process: expand activeSet from result steps
     for (const step of result.steps ?? []) {
       for (const tr of step.toolResults ?? []) {
-        if (tr.toolName === "agentified_discover" && Array.isArray(tr.result)) {
-          for (const t of tr.result) {
+        const trName = tr.toolName ?? tr.payload?.toolName;
+        const trResult = tr.result ?? tr.payload?.result;
+        if (trName === "agentified_discover" && Array.isArray(trResult)) {
+          for (const t of trResult) {
             if (registryNames.has(t.name)) activeSet.add(t.name);
           }
         }
@@ -223,14 +227,19 @@ export class AgentifiedMastra {
       turnId = capture.turnId;
     } catch { /* non-fatal */ }
 
+    const usage = result.usage ?? {};
+    const inputTokens = usage.inputTokens ?? usage.promptTokens ?? 0;
+    const outputTokens = usage.outputTokens ?? usage.completionTokens ?? 0;
     return {
       text: result.text ?? "",
       toolCalls,
       steps: result.steps ?? [],
       usage: {
-        inputTokens: result.usage?.promptTokens ?? 0,
-        outputTokens: result.usage?.completionTokens ?? 0,
-        totalTokens: (result.usage?.promptTokens ?? 0) + (result.usage?.completionTokens ?? 0),
+        inputTokens,
+        outputTokens,
+        totalTokens: usage.totalTokens ?? (inputTokens + outputTokens),
+        cachedInputTokens: usage.cachedInputTokens,
+        reasoningTokens: usage.reasoningTokens,
       },
       hydratedTools: toolsLoaded,
       turnId,

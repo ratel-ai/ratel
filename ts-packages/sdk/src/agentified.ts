@@ -104,7 +104,7 @@ export class Agentified {
       body: JSON.stringify(body),
     });
     const data = (await res.json()) as DiscoverResponse;
-    return data.tools;
+    return data.tools ?? [];
   }
 
   private emit(event: AgentifiedEvent): void {
