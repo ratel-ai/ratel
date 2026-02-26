@@ -23,7 +23,10 @@ export function createHttpHarness(port: number): TestHarness {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ history, seed, expectedTools, turnId }),
       });
-      if (!res.ok) throw new Error(`send-message failed: ${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(`send-message failed: ${res.status} ${errBody}`);
+      }
       const data: SendMessageResponse = await res.json();
       return {
         content: data.content,

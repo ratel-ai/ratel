@@ -1,4 +1,6 @@
-import "dotenv/config";
+import { config } from "dotenv";
+config(); // load local .env
+config({ path: "../../.env" }); // load root .env (API keys)
 import { writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
