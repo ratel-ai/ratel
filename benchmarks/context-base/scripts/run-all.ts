@@ -18,7 +18,6 @@ import { scenarios } from "../scenarios/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
-const agentsDir = resolve(rootDir, "agents");
 
 const model = process.argv[2];
 if (!model) {
@@ -40,14 +39,41 @@ function formatDatetime(d: Date): string {
 const runDir = resolve(rootDir, "results", `${formatDatetime(new Date())}-${model}`);
 mkdirSync(runDir, { recursive: true });
 
-const agents = readdirSync(agentsDir)
-  .filter((f) => f.endsWith(".ts") && !f.includes(".test."))
-  .map((f) => f.replace(/\.ts$/, ""));
+interface AgentEntry {
+  name: string;
+  cmd: string;
+}
 
+function discoverAgents(): AgentEntry[] {
+  const entries: AgentEntry[] = [];
+  const tsDir = resolve(rootDir, "agents", "ts");
+  const pyDir = resolve(rootDir, "agents", "py");
+
+  if (existsSync(tsDir)) {
+    for (const f of readdirSync(tsDir)) {
+      if (f.endsWith(".ts") && !f.includes(".test.")) {
+        entries.push({ name: f.replace(/\.ts$/, ""), cmd: `tsx agents/ts/${f}` });
+      }
+    }
+  }
+
+  if (existsSync(pyDir)) {
+    for (const f of readdirSync(pyDir)) {
+      if (f.endsWith(".py") && !f.startsWith("__")) {
+        entries.push({ name: `py-${f.replace(/\.py$/, "")}`, cmd: `python agents/py/${f}` });
+      }
+    }
+  }
+
+  return entries;
+}
+
+const agents = discoverAgents();
+const agentNames = agents.map((a) => a.name);
 const totalScenarios = scenarios.filter((s) => !s.skip).length;
 
 console.log(`Model: ${model}`);
-console.log(`Agents: ${agents.join(", ")}`);
+console.log(`Agents: ${agentNames.join(", ")}`);
 console.log(`Scenarios: ${totalScenarios}`);
 console.log(`Results: ${runDir}\n`);
 
@@ -71,11 +97,11 @@ function parseJsonl(path: string): ScenarioResult[] {
 
 function pollProgress(): Map<string, AgentProgress> {
   const progress = new Map<string, AgentProgress>();
-  for (const agent of agents) {
-    const results = parseJsonl(resolve(runDir, `${agent}.jsonl`));
+  for (const name of agentNames) {
+    const results = parseJsonl(resolve(runDir, `${name}.jsonl`));
     const n = results.length;
     if (n === 0) {
-      progress.set(agent, { completed: 0, f1Avg: 0, tcAvg: 0, hrAvg: 0, costSum: 0 });
+      progress.set(name, { completed: 0, f1Avg: 0, tcAvg: 0, hrAvg: 0, costSum: 0 });
       continue;
     }
     let f1Sum = 0, tcSum = 0, hrSum = 0, costSum = 0;
@@ -85,13 +111,7 @@ function pollProgress(): Map<string, AgentProgress> {
       hrSum += r.scores["Hydration Recall"] ?? 0;
       costSum += r.cost;
     }
-    progress.set(agent, {
-      completed: n,
-      f1Avg: f1Sum / n,
-      tcAvg: tcSum / n,
-      hrAvg: hrSum / n,
-      costSum,
-    });
+    progress.set(name, { completed: n, f1Avg: f1Sum / n, tcAvg: tcSum / n, hrAvg: hrSum / n, costSum });
   }
   return progress;
 }
@@ -101,42 +121,41 @@ function formatElapsed(ms: number): string {
   return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
+let dashboardRendered = false;
+
 function renderDashboard(startMs: number): void {
   const progress = pollProgress();
   const elapsed = formatElapsed(performance.now() - startMs);
-  const maxName = Math.max(...agents.map((a) => a.length));
+  const maxName = Math.max(...agentNames.map((a) => a.length));
 
-  // Move cursor up to overwrite previous dashboard
-  if (dashboardRendered) process.stdout.write(`\x1b[${agents.length}A`);
+  if (dashboardRendered) process.stdout.write(`\x1b[${agentNames.length}A`);
 
-  for (const agent of agents) {
-    const p = progress.get(agent)!;
-    const name = agent.padEnd(maxName);
+  for (const name of agentNames) {
+    const p = progress.get(name)!;
+    const padded = name.padEnd(maxName);
     const count = `${String(p.completed).padStart(2)}/${totalScenarios}`;
     const line = p.completed > 0
-      ? `  ${name}  ${count} | F1 ${p.f1Avg.toFixed(2)} | TC ${p.tcAvg.toFixed(2)} | HR ${p.hrAvg.toFixed(2)} | $${p.costSum.toFixed(2).padStart(5)} | ${elapsed}`
-      : `  ${name}  ${count} | waiting... | ${elapsed}`;
+      ? `  ${padded}  ${count} | F1 ${p.f1Avg.toFixed(2)} | TC ${p.tcAvg.toFixed(2)} | HR ${p.hrAvg.toFixed(2)} | $${p.costSum.toFixed(2).padStart(5)} | ${elapsed}`
+      : `  ${padded}  ${count} | waiting... | ${elapsed}`;
     process.stdout.write(`\x1b[2K${line}\n`);
   }
   dashboardRendered = true;
 }
 
-let dashboardRendered = false;
-
-function runAgent(agent: string): Promise<{ agent: string; logPath: string; ok: boolean }> {
-  const logPath = resolve(runDir, `${agent}.log`);
+function runAgent(entry: AgentEntry): Promise<{ name: string; logPath: string; ok: boolean }> {
+  const logPath = resolve(runDir, `${entry.name}.log`);
   const logStream = createWriteStream(logPath);
   return new Promise((res) => {
     const child = spawn("pnpm", ["benchmark"], {
       cwd: rootDir,
-      env: { ...process.env, MODEL: model, AGENT_PATH: `./agents/${agent}.ts`, RESULTS_DIR: runDir },
+      env: { ...process.env, MODEL: model, AGENT_CMD: entry.cmd, RESULTS_DIR: runDir },
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout.pipe(logStream);
     child.stderr.pipe(logStream);
     child.on("close", (code) => {
       logStream.end();
-      res({ agent, logPath, ok: code === 0 });
+      res({ name: entry.name, logPath, ok: code === 0 });
     });
   });
 }
@@ -157,13 +176,13 @@ async function main() {
   const results = await Promise.all(agents.map(runAgent));
 
   clearInterval(timer);
-  renderDashboard(start); // final render
+  renderDashboard(start);
   showCursor();
 
   console.log();
   for (const r of results) {
     const icon = r.ok ? "PASS" : "FAIL";
-    console.log(`  ${r.agent}: ${icon}`);
+    console.log(`  ${r.name}: ${icon}`);
     if (!r.ok) {
       const log = readFileSync(r.logPath, "utf-8");
       const tail = log.split("\n").slice(-15).join("\n");
@@ -175,7 +194,6 @@ async function main() {
   const elapsed = ((performance.now() - start) / 1000).toFixed(1);
   console.log(`\nAll agents finished in ${elapsed}s\n`);
 
-  // Collect results from run folder
   const files = readdirSync(runDir).filter((f) => f.endsWith(".json"));
   const runs: BenchmarkRunResult[] = files.map((f) =>
     JSON.parse(readFileSync(resolve(runDir, f), "utf-8")),

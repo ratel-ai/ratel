@@ -17,7 +17,7 @@ function buildPrompt(output: BenchmarkOutput): string {
   const { scenario, response } = output;
   const toolsCalled = response.toolCalls.map((tc) => tc.toolName).join(", ") || "(none)";
   const toolArgs = response.toolCalls
-    .map((tc) => `${tc.toolName}(${JSON.stringify((tc as any).args ?? tc.input)})`)
+    .map((tc) => `${tc.toolName}(${JSON.stringify(tc.args)})`)
     .join("\n  ") || "(none)";
 
   const isBehavioral = scenario.type === "negative" || scenario.type === "ambiguous";

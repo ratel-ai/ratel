@@ -8,21 +8,23 @@
     "benchmark:watch": "vitest watch benchmark.test.ts",
     "test": "vitest run --exclude 'benchmark.test.ts'",
     "typecheck": "tsc --noEmit",
-    "seed": "tsx scripts/seed-tools.ts",
-    "compare": "tsx scripts/compare.ts",
+"compare": "tsx scripts/compare.ts",
     "benchmark:all": "tsx scripts/run-all.ts"
   },
   "dependencies": {
+    "@agentified/mastra": "workspace:*",
+    "@agentified/sdk": "workspace:*",
     "@ai-sdk/anthropic": "^3.0.35",
     "@ai-sdk/google": "^3.0.29",
     "@ai-sdk/openai": "^3.0.25",
-    "@agentified/sdk": "workspace:*",
+    "@mastra/core": "^1.6.0",
     "ai": "^6.0.73",
     "dotenv": "^16.5.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/node": "^22.10.10",
+    "testcontainers": "^11.12.0",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
     "vitest": "^3.1.0"

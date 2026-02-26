@@ -7,6 +7,7 @@ import type { BaseEvent } from "@ag-ui/client";
 
 const mockSdkRegister = vi.fn(async () => ({ registered: 5 }));
 const mockSdkPrefetch = vi.fn<[], Promise<unknown[]>>(async () => []);
+const mockSdkCaptureTurn = vi.fn(async () => ({ turnId: "turn-1" }));
 const mockSdkGetFrontendToolNames = vi.fn(() => [] as string[]);
 const mockSdkGetFrontendTools = vi.fn(() => [] as Array<{ name: string; description: string; parameters: Record<string, unknown> }>);
 const mockDiscoverExecute = vi.fn(async () => []);
@@ -23,6 +24,7 @@ vi.mock("@agentified/sdk", () => ({
   Agentified: vi.fn(() => ({
     register: mockSdkRegister,
     prefetch: mockSdkPrefetch,
+    captureTurn: mockSdkCaptureTurn,
     getFrontendToolNames: mockSdkGetFrontendToolNames,
     getFrontendTools: mockSdkGetFrontendTools,
     asDiscoverTool: mockSdkAsDiscoverTool,
@@ -67,7 +69,7 @@ function defaultConfig() {
     toolHandlers: {
       viewEmployee: vi.fn(async () => ({ id: "EMP001", name: "Alice" })),
     },
-    agent: { name: "test", __setTools: vi.fn() } as any,
+    agent: { name: "test", __setTools: vi.fn(), stream: vi.fn() } as any,
   };
 }
 
@@ -432,5 +434,373 @@ describe("AgentifiedMastra", () => {
 
     agentStream.complete();
     sub.unsubscribe();
+  });
+
+  describe("patchAgentStreamForGemini()", () => {
+    it("injects thoughtSignature on assistant messages with tool-call content", async () => {
+      const streamFn = vi.fn(async (messages: any[]) => ({ stream: true }));
+      const config = {
+        ...defaultConfig(),
+        agent: { name: "test", __setTools: vi.fn(), stream: streamFn } as any,
+      };
+      const am = new AgentifiedMastra(config);
+
+      // Call stream directly on the (now-patched) agent
+      await config.agent.stream([
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool-call", toolCallId: "tc1", toolName: "nav", args: {} },
+          ],
+        },
+      ]);
+
+      const patched = streamFn.mock.calls[0][0];
+      expect(patched[0]).toEqual({ role: "user", content: "hi" });
+      expect(patched[1].providerOptions).toEqual({
+        google: { thoughtSignature: "skip_thought_signature_validator" },
+      });
+    });
+
+    it("does NOT overwrite existing thoughtSignature", async () => {
+      const streamFn = vi.fn(async (messages: any[]) => ({ stream: true }));
+      const config = {
+        ...defaultConfig(),
+        agent: { name: "test", __setTools: vi.fn(), stream: streamFn } as any,
+      };
+      const am = new AgentifiedMastra(config);
+
+      await config.agent.stream([
+        {
+          role: "assistant",
+          content: [{ type: "tool-call", toolCallId: "tc1", toolName: "nav", args: {} }],
+          providerOptions: { google: { thoughtSignature: "real-sig" } },
+        },
+      ]);
+
+      const patched = streamFn.mock.calls[0][0];
+      expect(patched[0].providerOptions.google.thoughtSignature).toBe("real-sig");
+    });
+
+    it("preserves existing providerOptions when injecting", async () => {
+      const streamFn = vi.fn(async (messages: any[]) => ({ stream: true }));
+      const config = {
+        ...defaultConfig(),
+        agent: { name: "test", __setTools: vi.fn(), stream: streamFn } as any,
+      };
+      const am = new AgentifiedMastra(config);
+
+      await config.agent.stream([
+        {
+          role: "assistant",
+          content: [{ type: "tool-call", toolCallId: "tc1", toolName: "nav", args: {} }],
+          providerOptions: { openai: { mode: "fast" } },
+        },
+      ]);
+
+      const patched = streamFn.mock.calls[0][0];
+      expect(patched[0].providerOptions.openai).toEqual({ mode: "fast" });
+      expect(patched[0].providerOptions.google.thoughtSignature).toBe("skip_thought_signature_validator");
+    });
+
+    it("skips non-assistant messages", async () => {
+      const streamFn = vi.fn(async (messages: any[]) => ({ stream: true }));
+      const config = {
+        ...defaultConfig(),
+        agent: { name: "test", __setTools: vi.fn(), stream: streamFn } as any,
+      };
+      const am = new AgentifiedMastra(config);
+
+      await config.agent.stream([
+        { role: "user", content: "hi" },
+        { role: "system", content: "you are helpful" },
+      ]);
+
+      const patched = streamFn.mock.calls[0][0];
+      expect(patched[0].providerOptions).toBeUndefined();
+      expect(patched[1].providerOptions).toBeUndefined();
+    });
+
+    it("skips assistant messages without tool-call parts", async () => {
+      const streamFn = vi.fn(async (messages: any[]) => ({ stream: true }));
+      const config = {
+        ...defaultConfig(),
+        agent: { name: "test", __setTools: vi.fn(), stream: streamFn } as any,
+      };
+      const am = new AgentifiedMastra(config);
+
+      await config.agent.stream([
+        { role: "assistant", content: "just text" },
+        { role: "assistant", content: [{ type: "text", text: "hello" }] },
+      ]);
+
+      const patched = streamFn.mock.calls[0][0];
+      expect(patched[0].providerOptions).toBeUndefined();
+      expect(patched[1].providerOptions).toBeUndefined();
+    });
+
+    it("passes through extra args to original stream", async () => {
+      const streamFn = vi.fn(async (messages: any[], opts: any) => ({ stream: true }));
+      const config = {
+        ...defaultConfig(),
+        agent: { name: "test", __setTools: vi.fn(), stream: streamFn } as any,
+      };
+      const am = new AgentifiedMastra(config);
+
+      await config.agent.stream(
+        [{ role: "user", content: "hi" }],
+        { maxSteps: 5 },
+      );
+
+      expect(streamFn).toHaveBeenCalledWith(
+        expect.any(Array),
+        { maxSteps: 5 },
+      );
+    });
+  });
+
+  describe("generate()", () => {
+    const mockAgentGenerate = vi.fn();
+
+    function generateConfig() {
+      return {
+        agentifiedUrl: "http://localhost:9119",
+        tools: [
+          {
+            name: "viewEmployee",
+            description: "View employee details",
+            parameters: {
+              type: "object",
+              properties: { id: { type: "string" } },
+              required: ["id"],
+            },
+          },
+          {
+            name: "updateEmployee",
+            description: "Update employee details",
+            parameters: {
+              type: "object",
+              properties: { id: { type: "string" }, name: { type: "string" } },
+              required: ["id"],
+            },
+          },
+        ],
+        toolHandlers: {
+          viewEmployee: vi.fn(async () => ({ id: "EMP001", name: "Alice" })),
+          updateEmployee: vi.fn(async () => ({ ok: true })),
+        },
+        agent: {
+          name: "test",
+          __setTools: vi.fn(),
+          stream: vi.fn(),
+          generate: mockAgentGenerate,
+        } as any,
+      };
+    }
+
+    function defaultAgentGenerateResult(overrides: Record<string, any> = {}) {
+      return {
+        text: "Done",
+        toolCalls: [],
+        steps: [],
+        usage: { promptTokens: 40, completionTokens: 10 },
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      mockAgentGenerate.mockReset();
+      mockAgentGenerate.mockResolvedValue(defaultAgentGenerateResult());
+      mockSdkPrefetch.mockResolvedValue([
+        { name: "viewEmployee", description: "View employee", parameters: {}, score: 0.9 },
+      ]);
+      mockSdkCaptureTurn.mockResolvedValue({ turnId: "turn-1" });
+    });
+
+    it("calls prefetch with messages and turnId", async () => {
+      const am = new AgentifiedMastra(generateConfig());
+      await am.generate({
+        messages: [{ role: "user", content: "Show Alice" }],
+        turnId: "prev-turn",
+      });
+
+      expect(mockSdkPrefetch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [{ role: "user", content: "Show Alice" }],
+          turnId: "prev-turn",
+        }),
+      );
+    });
+
+    it("sets ALL tools (not just ranked) on agent and calls agent.generate()", async () => {
+      // prefetch returns only viewEmployee
+      mockSdkPrefetch.mockResolvedValue([
+        { name: "viewEmployee", description: "View employee", parameters: {}, score: 0.9 },
+      ]);
+
+      const config = generateConfig();
+      const am = new AgentifiedMastra(config);
+      await am.generate({
+        messages: [{ role: "user", content: "test" }],
+        maxSteps: 5,
+      });
+
+      // __setTools should include BOTH tools + discover
+      expect(config.agent.__setTools).toHaveBeenCalledWith(
+        expect.objectContaining({
+          viewEmployee: expect.anything(),
+          updateEmployee: expect.anything(),
+          agentified_discover: expect.anything(),
+        }),
+      );
+
+      // agent.generate should have been called
+      expect(mockAgentGenerate).toHaveBeenCalledOnce();
+      const [messages, opts] = mockAgentGenerate.mock.calls[0];
+      expect(messages).toEqual([{ role: "user", content: "test" }]);
+      expect(opts.maxSteps).toBe(5);
+    });
+
+    it("returns text and filters out discover from toolCalls", async () => {
+      mockAgentGenerate.mockResolvedValue(defaultAgentGenerateResult({
+        text: "Here is Alice",
+        steps: [
+          {
+            toolCalls: [
+              { toolName: "agentified_discover", toolCallId: "d1", args: { query: "find" } },
+            ],
+            toolResults: [],
+          },
+          {
+            toolCalls: [
+              { toolName: "viewEmployee", toolCallId: "c1", args: { id: "EMP001" } },
+              { toolName: "updateEmployee", toolCallId: "c2", args: { id: "EMP001", name: "Bob" } },
+            ],
+            toolResults: [],
+          },
+        ],
+      }));
+
+      const am = new AgentifiedMastra(generateConfig());
+      const result = await am.generate({
+        messages: [{ role: "user", content: "test" }],
+      });
+
+      expect(result.text).toBe("Here is Alice");
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls[0].toolName).toBe("viewEmployee");
+      expect(result.toolCalls[1].toolName).toBe("updateEmployee");
+      expect(result.toolCalls.find(tc => tc.toolName === "agentified_discover")).toBeUndefined();
+    });
+
+    it("extracts usage tokens from agent result", async () => {
+      mockAgentGenerate.mockResolvedValue(defaultAgentGenerateResult({
+        usage: { promptTokens: 100, completionTokens: 50 },
+      }));
+
+      const am = new AgentifiedMastra(generateConfig());
+      const result = await am.generate({
+        messages: [{ role: "user", content: "test" }],
+      });
+
+      expect(result.usage).toEqual({
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+      });
+    });
+
+    it("calls captureTurn after completion and returns turnId", async () => {
+      mockSdkCaptureTurn.mockResolvedValue({ turnId: "new-turn-42" });
+
+      const am = new AgentifiedMastra(generateConfig());
+      const result = await am.generate({
+        messages: [
+          { role: "user", content: "first" },
+          { role: "user", content: "Show Alice" },
+        ],
+      });
+
+      expect(mockSdkCaptureTurn).toHaveBeenCalledOnce();
+      expect(mockSdkCaptureTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Show Alice",
+          toolsLoaded: expect.arrayContaining(["viewEmployee"]),
+        }),
+      );
+      // discover should NOT be in toolsLoaded
+      const call = mockSdkCaptureTurn.mock.calls[0][0];
+      expect(call.toolsLoaded).not.toContain("agentified_discover");
+
+      expect(result.turnId).toBe("new-turn-42");
+    });
+
+    it("tracks hydratedTools from prefill + discovered", async () => {
+      mockSdkPrefetch.mockResolvedValue([
+        { name: "viewEmployee", description: "View", parameters: {}, score: 0.9 },
+      ]);
+      // Simulate discover adding updateEmployee via steps
+      mockAgentGenerate.mockResolvedValue(defaultAgentGenerateResult({
+        steps: [
+          {
+            toolCalls: [{ toolName: "agentified_discover", toolCallId: "d1", args: { query: "update" } }],
+            toolResults: [
+              { toolName: "agentified_discover", result: [{ name: "updateEmployee" }] },
+            ],
+          },
+          {
+            toolCalls: [{ toolName: "updateEmployee", toolCallId: "c1", args: { id: "1", name: "Bob" } }],
+            toolResults: [],
+          },
+        ],
+      }));
+
+      const am = new AgentifiedMastra(generateConfig());
+      const result = await am.generate({
+        messages: [{ role: "user", content: "test" }],
+      });
+
+      expect(result.hydratedTools).toContain("viewEmployee");
+      expect(result.hydratedTools).toContain("updateEmployee");
+      expect(result.hydratedTools).not.toContain("agentified_discover");
+    });
+
+    it("passes toolLimit to prefetch and seed to agent.generate()", async () => {
+      const am = new AgentifiedMastra(generateConfig());
+      await am.generate({
+        messages: [{ role: "user", content: "test" }],
+        toolLimit: 3,
+        seed: 42,
+      });
+
+      expect(mockSdkPrefetch).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 3 }),
+      );
+
+      const [, opts] = mockAgentGenerate.mock.calls[0];
+      expect(opts.seed).toBe(42);
+    });
+
+    it("captureTurn failure is non-fatal — returns result without turnId", async () => {
+      mockSdkCaptureTurn.mockRejectedValue(new Error("network down"));
+
+      const am = new AgentifiedMastra(generateConfig());
+      const result = await am.generate({
+        messages: [{ role: "user", content: "test" }],
+      });
+
+      expect(result.text).toBe("Done");
+      expect(result.turnId).toBeUndefined();
+    });
+
+    it("measures durationMs", async () => {
+      const am = new AgentifiedMastra(generateConfig());
+      const result = await am.generate({
+        messages: [{ role: "user", content: "test" }],
+      });
+
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    });
   });
 });

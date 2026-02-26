@@ -1,3 +1,4 @@
 export { AgentifiedMastra } from "./adapter.js";
 export { streamSSE } from "./stream-sse.js";
-export type { AgentifiedMastraConfig, RunOptions } from "./adapter.js";
+export { jsonSchemaToZod } from "./schema.js";
+export type { AgentifiedMastraConfig, RunOptions, GenerateOptions, GenerateResult } from "./adapter.js";

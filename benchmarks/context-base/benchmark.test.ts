@@ -1,10 +1,18 @@
 import "dotenv/config";
 import { writeFileSync, appendFileSync, mkdirSync } from "node:fs";
-import { describe, it, expect, afterAll } from "vitest";
+import { resolve } from "node:path";
+import { describe, it, expect, afterAll, beforeAll } from "vitest";
+import { z } from "zod";
 import { scenarios } from "./scenarios/index.js";
 import { toolRegistry } from "./tools/registry.js";
-import { createToolExecutor } from "./tools/executor.js";
-import { loadAgent, runScenario } from "./lib/harness.js";
+import {
+  spawnAgent,
+  sendSetup,
+  killAgent,
+  createHttpHarness,
+  runScenario,
+  type AgentProcess,
+} from "./lib/harness.js";
 import {
   ToolPrecision,
   ToolRecall,
@@ -14,19 +22,20 @@ import {
   HydrationRecall,
 } from "./metrics/index.js";
 import type {
-  AgentSetupFn,
   BenchmarkOutput,
   BenchmarkRunResult,
   ScenarioResult,
   Scorer,
 } from "./lib/types.js";
+import type { ToolDef, SetupBody } from "./lib/protocol.js";
 import { formatSlots } from "./lib/tool-slots.js";
-import { computeCost } from "./lib/constants.js";
+import { computeCost, MODEL, SYSTEM_PROMPT, MAX_STEPS } from "./lib/constants.js";
 
-const agentPath = process.env.AGENT_PATH ?? "./agents/baseline.ts";
-const agentName = agentPath.replace(/^.*\//, "").replace(/\.\w+$/, "");
-const model = process.env.MODEL ?? "gpt-5";
+const agentCmd = process.env.AGENT_CMD ?? "tsx agents/ts/baseline.ts";
+const agentName = agentCmd.replace(/^.*\//, "").replace(/\.\w+$/, "");
+const model = process.env.MODEL ?? MODEL;
 const scenarioFilter = process.env.SCENARIO;
+const agentPort = 9200 + Math.floor(Math.random() * 800);
 
 const scorers: Scorer[] = [
   ToolPrecision,
@@ -41,31 +50,51 @@ const collectedResults: ScenarioResult[] = [];
 const resultsDir = process.env.RESULTS_DIR ?? new URL("./results", import.meta.url).pathname;
 mkdirSync(resultsDir, { recursive: true });
 
-describe("Context Base Benchmark", async () => {
-  const agentModule = await import(agentPath);
-  const setup: AgentSetupFn = agentModule.default;
+function buildToolDefs(): ToolDef[] {
+  const scriptsDir = resolve(import.meta.dirname, "tools", "scripts");
+  return Object.entries(toolRegistry).map(([name, t]) => ({
+    name,
+    description: (t as any).description ?? "",
+    parameters: z.toJSONSchema((t as any).inputSchema) as Record<string, unknown>,
+    script: resolve(scriptsDir, `${name}.sh`),
+  }));
+}
 
-  const toolExecutor = createToolExecutor();
-  const harness = await loadAgent(setup, {
-    tools: toolRegistry,
-    toolExecutor,
-  });
+describe("Context Base Benchmark", () => {
+  let agent: AgentProcess;
 
-  afterAll(() => {
-    if (collectedResults.length === 0) return;
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const runResult: BenchmarkRunResult = {
-      agent: agentName,
-      model,
-      timestamp: new Date().toISOString(),
-      scenarios: collectedResults,
+  beforeAll(async () => {
+    agent = await spawnAgent(agentCmd, agentPort);
+    const tools = buildToolDefs();
+    const setupBody: SetupBody = {
+      tools,
+      config: {
+        agentifiedEndpoint: process.env.AGENTIFIED_ENDPOINT,
+        model,
+        systemPrompt: SYSTEM_PROMPT,
+        maxSteps: MAX_STEPS,
+      },
     };
+    await sendSetup(agentPort, setupBody);
+  }, 60_000);
 
-    const jsonPath = `${resultsDir}/${agentName}-${model}-${timestamp}.json`;
-    writeFileSync(jsonPath, JSON.stringify(runResult, null, 2));
-    console.log(`\nResults written to ${jsonPath}`);
+  afterAll(async () => {
+    if (collectedResults.length > 0) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const runResult: BenchmarkRunResult = {
+        agent: agentName,
+        model,
+        timestamp: new Date().toISOString(),
+        scenarios: collectedResults,
+      };
+      const jsonPath = `${resultsDir}/${agentName}-${model}-${timestamp}.json`;
+      writeFileSync(jsonPath, JSON.stringify(runResult, null, 2));
+      console.log(`\nResults written to ${jsonPath}`);
+    }
+    await killAgent(agent);
   });
+
+  const harness = createHttpHarness(agentPort);
 
   const filtered = (scenarioFilter
     ? scenarios.filter((s) => String(s.id) === scenarioFilter)
@@ -91,7 +120,6 @@ describe("Context Base Benchmark", async () => {
       const tc = results.find((r) => r.name === "Task Correctness");
       const hr = results.find((r) => r.name === "Hydration Recall");
 
-      // Log results
       const toolsCalled = [
         ...new Set(output.response.toolCalls.map((tc) => tc.toolName)),
       ];
@@ -104,7 +132,6 @@ describe("Context Base Benchmark", async () => {
         console.log(`  TC reasoning: ${tc.reasoning}`);
       }
 
-      // Collect structured result
       const scores: Record<string, number> = {};
       for (const r of results) scores[r.name] = r.score;
 
@@ -128,7 +155,6 @@ describe("Context Base Benchmark", async () => {
       collectedResults.push(result);
       appendFileSync(`${resultsDir}/${agentName}.jsonl`, JSON.stringify(result) + "\n");
 
-      // Assertions
       if (scenario.type === "negative") {
         const neg = results.find((r) => r.name === "Negative Correctness");
         expect(neg?.score, "Should call no tools for out-of-scope queries").toBe(1);

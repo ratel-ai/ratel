@@ -4,3 +4,4 @@ benchmark-results.json
 benchmark-report/
 results/
 node_modules/
+tools/scripts/

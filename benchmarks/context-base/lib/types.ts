@@ -1,17 +1,17 @@
-import type { ToolCallPart, ToolResultPart, ToolSet } from "ai";
 import type { ToolSlot } from "./tool-slots.js";
 
-export interface SetupParams {
-  tools: ToolSet;
-  toolExecutor: (call: ToolCallPart) => Promise<ToolResultPart>;
-  onMetrics?: MetricsCallback;
+export interface BenchmarkToolCall {
+  type?: "tool-call";
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
 }
 
 export interface TestHarness {
   sendMessage: (
     history: Message[],
     seed: number,
-    expectedTools?: string[],
+    expectedTools?: ToolSlot[],
     turnId?: string,
   ) => Promise<AgentResponse>;
   cleanup?: () => Promise<void>;
@@ -26,7 +26,7 @@ export interface DebugInfo {
 
 export interface AgentResponse {
   content: string;
-  toolCalls: ToolCallPart[];
+  toolCalls: BenchmarkToolCall[];
   usage: TokenUsage;
   durationMs: number;
   hydratedTools?: string[];
@@ -46,8 +46,6 @@ export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
 }
-
-export type MetricsCallback = (metrics: TokenUsage) => void;
 
 export type ScenarioType =
   | "retrieval"
@@ -74,8 +72,6 @@ export interface Scenario {
   followUps?: string[];
   skip?: boolean;
 }
-
-export type AgentSetupFn = (params: SetupParams) => Promise<TestHarness>;
 
 export interface BenchmarkInput {
   scenario: Scenario;

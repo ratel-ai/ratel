@@ -40,9 +40,10 @@ const sdkTools = TOOL_DEFINITIONS.map((def) =>
 );
 
 const myAgent = new Agent({
+  id: "quickhr",
   name: "quickhr",
   instructions: SYSTEM_PROMPT,
-  model: "openai/gpt-5-nano",
+  model: "google/gemini-3-flash-preview",
 });
 
 const agent = new AgentifiedMastra({

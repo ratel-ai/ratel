@@ -28,7 +28,7 @@ function makeOutput(
         type: "tool-call" as const,
         toolCallId: `call-${name}`,
         toolName: name,
-        input: {},
+        args: {},
       })),
       usage: { totalTokens: 100, inputTokens: 80, outputTokens: 20 },
       durationMs: 500,

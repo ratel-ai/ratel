@@ -1,19 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { computeActionCorrectness, computeNegativeCorrectness } from "./correctness.js";
 import type { BenchmarkOutput } from "../lib/types.js";
-import type { ToolCallPart } from "ai";
+import type { BenchmarkToolCall } from "../lib/types.js";
 
-function makeToolCall(name: string, input: Record<string, unknown>): ToolCallPart {
+function makeToolCall(name: string, args: Record<string, unknown>): BenchmarkToolCall {
   return {
     type: "tool-call",
     toolCallId: `call-${name}`,
     toolName: name,
-    input,
+    args,
   };
 }
 
 function makeActionOutput(
-  toolCalls: ToolCallPart[],
+  toolCalls: BenchmarkToolCall[],
   expectedParams: Record<string, Record<string, unknown>>,
 ): BenchmarkOutput {
   return {

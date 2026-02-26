@@ -13,6 +13,31 @@ import { Observable, Subject } from "rxjs";
 import { z } from "zod";
 import { jsonSchemaToZod } from "./schema.js";
 
+export interface GenerateOptions {
+  messages: Array<{ role: string; content: string }>;
+  maxSteps?: number;
+  turnId?: string;
+  toolLimit?: number;
+  seed?: number;
+  onStepFinish?: (event: { usage: any; toolCalls: any[] }) => void;
+}
+
+export interface GenerateResult {
+  text: string;
+  toolCalls: Array<{ toolName: string; toolCallId: string; args: Record<string, unknown> }>;
+  steps: any[];
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cachedInputTokens?: number;
+    reasoningTokens?: number;
+  };
+  hydratedTools: string[];
+  turnId?: string;
+  durationMs: number;
+}
+
 export interface AgentifiedMastraConfig {
   agentifiedUrl: string;
   tools: ServerTool[];
@@ -48,6 +73,46 @@ export class AgentifiedMastra {
       serverUrl: config.agentifiedUrl,
       tools: config.tools,
     });
+    this.patchAgentStreamForGemini();
+  }
+
+  /**
+   * WORKAROUND: @ag-ui/mastra strips providerOptions during message conversion,
+   * losing Gemini 3's required thoughtSignature on function call parts.
+   * We wrap agent.stream() to inject a dummy signature so Gemini 3 doesn't 400.
+   *
+   * Tracked: https://github.com/ag-ui-protocol/ag-ui/issues/TBD
+   * Remove when: ag-ui preserves providerOptions in convertAGUIMessagesToMastra()
+   */
+  private patchAgentStreamForGemini(): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agent = this.config.agent as any;
+    const originalStream = agent.stream.bind(agent);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agent.stream = async (messages: any[], ...rest: any[]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const patched = messages.map((m: any) => {
+        if (
+          m.role === "assistant" &&
+          Array.isArray(m.content) &&
+          m.content.some((p: any) => p.type === "tool-call") &&
+          !m.providerOptions?.google?.thoughtSignature
+        ) {
+          return {
+            ...m,
+            providerOptions: {
+              ...m.providerOptions,
+              google: {
+                ...m.providerOptions?.google,
+                thoughtSignature: "skip_thought_signature_validator",
+              },
+            },
+          };
+        }
+        return m;
+      });
+      return originalStream(patched, ...rest);
+    };
   }
 
   private static hasToolResults(messages: RunOptions["messages"]): boolean {
@@ -56,6 +121,115 @@ export class AgentifiedMastra {
 
   async register(): Promise<RegisterResponse> {
     return this.sdk.register();
+  }
+
+  async generate(options: GenerateOptions): Promise<GenerateResult> {
+    const start = performance.now();
+
+    // 1. Prefetch (with turnId for session continuity)
+    const ranked = await this.sdk.prefetch({
+      messages: options.messages.map(m => ({ role: m.role, content: m.content })),
+      turnId: options.turnId,
+      ...(options.toolLimit !== undefined && { limit: options.toolLimit }),
+    });
+    const prefilledNames = ranked.map(t => t.name);
+
+    // 2. Build ALL tools (not just ranked — needed for discover → use)
+    const allTools = this.buildAllMastraTools();
+    const registryNames = new Set(Object.keys(allTools));
+
+    // 3. Discover tool
+    const discoverDef = this.sdk.asDiscoverTool();
+    const discoverTool = createTool({
+      id: "agentified_discover",
+      description: discoverDef.definition.description,
+      inputSchema: z.object({ query: z.string(), limit: z.number().optional() }),
+      execute: async (input) => discoverDef.execute(input as DiscoverToolInput),
+    });
+
+    // 4. Active tool set — grows as discover returns results
+    const activeSet = new Set<string>(prefilledNames);
+    activeSet.add("agentified_discover");
+
+    // 5. Inject full tool set into agent
+    const fullTools = { ...allTools, agentified_discover: discoverTool };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this.config.agent as any).__setTools(fullTools);
+
+    // 6. Call agent.generate() with prepareStep
+    const result = await this.config.agent.generate(options.messages, {
+      maxSteps: options.maxSteps ?? 10,
+      ...(options.seed !== undefined && { seed: options.seed }),
+      onStepFinish: options.onStepFinish,
+      prepareStep: async ({ stepNumber, steps }: { stepNumber: number; steps: any[] }) => {
+        // Merge discovered tools from prior steps
+        for (const step of steps) {
+          for (const tr of step.toolResults ?? []) {
+            if (tr.toolName === "agentified_discover" && Array.isArray(tr.result)) {
+              for (const t of tr.result) {
+                if (registryNames.has(t.name)) activeSet.add(t.name);
+              }
+            }
+          }
+        }
+
+        // Build active tools subset
+        const tools: Record<string, any> = {};
+        for (const name of activeSet) {
+          if (fullTools[name]) tools[name] = fullTools[name];
+        }
+        return { tools };
+      },
+    });
+
+    // 7. Collect tool calls (excluding discover)
+    const toolCalls: GenerateResult["toolCalls"] = [];
+    for (const step of result.steps ?? []) {
+      for (const tc of step.toolCalls ?? []) {
+        if (tc.toolName === "agentified_discover") continue;
+        toolCalls.push({
+          toolName: tc.toolName,
+          toolCallId: tc.toolCallId,
+          args: tc.args ?? {},
+        });
+      }
+    }
+
+    // 8. Post-process: expand activeSet from result steps (for mocked/non-calling agents)
+    for (const step of result.steps ?? []) {
+      for (const tr of step.toolResults ?? []) {
+        if (tr.toolName === "agentified_discover" && Array.isArray(tr.result)) {
+          for (const t of tr.result) {
+            if (registryNames.has(t.name)) activeSet.add(t.name);
+          }
+        }
+      }
+    }
+
+    // 9. Capture turn for session continuity
+    const toolsLoaded = [...activeSet].filter(n => n !== "agentified_discover");
+    let turnId: string | undefined;
+    try {
+      const capture = await this.sdk.captureTurn({
+        toolsLoaded,
+        message: options.messages[options.messages.length - 1]?.content ?? "",
+      });
+      turnId = capture.turnId;
+    } catch { /* non-fatal */ }
+
+    return {
+      text: result.text ?? "",
+      toolCalls,
+      steps: result.steps ?? [],
+      usage: {
+        inputTokens: result.usage?.promptTokens ?? 0,
+        outputTokens: result.usage?.completionTokens ?? 0,
+        totalTokens: (result.usage?.promptTokens ?? 0) + (result.usage?.completionTokens ?? 0),
+      },
+      hydratedTools: toolsLoaded,
+      turnId,
+      durationMs: performance.now() - start,
+    };
   }
 
   async run(options: RunOptions): Promise<Observable<BaseEvent>> {
@@ -155,16 +329,12 @@ export class AgentifiedMastra {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private buildMastraTools(ranked: RankedTool[]): Record<string, any> {
-    const names = new Set(ranked.map((t) => t.name));
+  private buildAllMastraTools(): Record<string, any> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: Record<string, any> = {};
-
     for (const def of this.config.tools) {
-      if (!names.has(def.name)) continue;
       const handler = this.config.toolHandlers[def.name];
       if (!handler) continue;
-
       tools[def.name] = createTool({
         id: def.name,
         description: def.description,
@@ -173,8 +343,14 @@ export class AgentifiedMastra {
           handler(inputData as Record<string, unknown>),
       });
     }
-
     return tools;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private buildMastraTools(ranked: RankedTool[]): Record<string, any> {
+    const names = new Set(ranked.map((t) => t.name));
+    const all = this.buildAllMastraTools();
+    return Object.fromEntries(Object.entries(all).filter(([n]) => names.has(n)));
   }
 
   private createDiscoverMastraTool(subject: Subject<BaseEvent>) {

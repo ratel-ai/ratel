@@ -164,7 +164,7 @@ export const MOCK_DATA = { employees, salaries, candidates, jobPostings, benefit
 type Args = Record<string, unknown>;
 type Handler = (args: Args) => unknown;
 
-const handlers: Record<string, Handler> = {
+export const handlers: Record<string, Handler> = {
   // --- Employees ---
   getEmployee: (args) => {
     const emp = args.employeeId
