@@ -45,8 +45,8 @@ export function createCallbacks() {
 
       const activeTools = flatExpected
         ? Object.fromEntries(
-            flatExpected.filter((name) => name in state!.tools).map((name) => [name, state!.tools[name]]),
-          )
+          flatExpected.filter((name) => name in state!.tools).map((name) => [name, state!.tools[name]]),
+        )
         : state.tools;
 
       (state.agent as any).__setTools(activeTools);
@@ -100,7 +100,10 @@ export function createCallbacks() {
   };
 }
 
-if (process.argv[1]?.endsWith("oracle.ts") || process.argv[1]?.endsWith("oracle.js")) {
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+if (fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const cbs = createCallbacks();
   startAgent({ setup: cbs.setup, sendMessage: cbs.sendMessage });
 }
+

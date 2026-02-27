@@ -86,8 +86,10 @@ export function createCallbacks() {
   };
 }
 
-// When run as a process, start the HTTP server
-if (process.argv[1]?.endsWith("baseline.ts") || process.argv[1]?.endsWith("baseline.js")) {
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+if (fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const cbs = createCallbacks();
   startAgent({ setup: cbs.setup, sendMessage: cbs.sendMessage });
 }
+
