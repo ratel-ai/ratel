@@ -147,11 +147,13 @@ async function waitForHealth(url: string, timeoutMs: number): Promise<void> {
 }
 
 function mergeDebugTurns(turns: DebugInfo[]): DebugInfo {
+  const agentifiedLogs = turns.flatMap((t) => t.agentifiedLog ?? []);
   return {
     systemPrompt: turns[0].systemPrompt,
     toolNames: [...new Set(turns.flatMap((t) => t.toolNames))],
     modelResponse: turns.map((t, i) => `[Turn ${i + 1}] ${t.modelResponse}`).join("\n"),
     toolCallsMade: turns.flatMap((t) => t.toolCallsMade),
+    ...(agentifiedLogs.length > 0 && { agentifiedLog: agentifiedLogs }),
   };
 }
 

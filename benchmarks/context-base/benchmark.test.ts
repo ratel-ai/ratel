@@ -67,17 +67,19 @@ describe("Context Base Benchmark", () => {
 
   beforeAll(async () => {
     agent = await spawnAgent(agentCmd, agentPort);
-    const tools = buildToolDefs();
-    const setupBody: SetupBody = {
-      tools,
-      config: {
-        agentifiedEndpoint: process.env.AGENTIFIED_ENDPOINT,
-        model,
-        systemPrompt: SYSTEM_PROMPT,
-        maxSteps: MAX_STEPS,
-      },
-    };
-    await sendSetup(agentPort, setupBody);
+    if (!agentCmd.includes("agentified")) {
+      const tools = buildToolDefs();
+      const setupBody: SetupBody = {
+        tools,
+        config: {
+          agentifiedEndpoint: process.env.AGENTIFIED_ENDPOINT,
+          model,
+          systemPrompt: SYSTEM_PROMPT,
+          maxSteps: MAX_STEPS,
+        },
+      };
+      await sendSetup(agentPort, setupBody);
+    }
   }, 60_000);
 
   afterAll(async () => {
