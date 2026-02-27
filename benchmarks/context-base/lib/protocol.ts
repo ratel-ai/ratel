@@ -48,5 +48,6 @@ export interface SendMessageResponse {
     toolNames: string[];
     modelResponse: string;
     toolCallsMade: Array<{ name: string; args: Record<string, unknown> }>;
+    agentifiedLog?: Array<{ phase: string; detail: Record<string, unknown> }>;
   };
 }

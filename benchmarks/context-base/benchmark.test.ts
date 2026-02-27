@@ -114,6 +114,12 @@ describe("Context Base Benchmark", () => {
         console.log(`Tools (${d.toolNames.length}):`, d.toolNames.join(", "));
         console.log("Response:", d.modelResponse);
         console.log("Tool calls:", JSON.stringify(d.toolCallsMade, null, 2));
+        if (d.agentifiedLog?.length) {
+          console.log("--- Agentified Log ---");
+          for (const entry of d.agentifiedLog) {
+            console.log(`  [${entry.phase}]`, JSON.stringify(entry.detail));
+          }
+        }
         console.log("=== /DEBUG ===\n");
       }
 

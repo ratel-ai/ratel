@@ -58,6 +58,7 @@ export function createCallbacks() {
         turnId: body.turnId,
         toolLimit: TOOL_LIMIT,
         seed: body.seed,
+        debug: !!process.env.DEBUG,
       });
 
       const toolCalls = result.toolCalls.map((tc) => ({
@@ -84,6 +85,7 @@ export function createCallbacks() {
           toolNames: result.hydratedTools ?? [],
           modelResponse: result.text,
           toolCallsMade: toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
+          ...(result.debugLog && { agentifiedLog: result.debugLog }),
         },
       };
     },

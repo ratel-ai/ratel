@@ -19,7 +19,13 @@ export interface GenerateOptions {
   turnId?: string;
   toolLimit?: number;
   seed?: number;
+  debug?: boolean;
   onStepFinish?: (event: { usage: any; toolCalls: any[] }) => void;
+}
+
+export interface DebugEntry {
+  phase: string;
+  detail: Record<string, unknown>;
 }
 
 export interface GenerateResult {
@@ -36,6 +42,7 @@ export interface GenerateResult {
   hydratedTools: string[];
   turnId?: string;
   durationMs: number;
+  debugLog?: DebugEntry[];
 }
 
 export interface AgentifiedMastraConfig {
@@ -131,6 +138,14 @@ export class AgentifiedMastra {
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
     const start = performance.now();
+    const debug = options.debug ?? false;
+    const debugLog: DebugEntry[] = [];
+
+    const log = (phase: string, detail: Record<string, unknown>) => {
+      if (!debug) return;
+      debugLog.push({ phase, detail });
+      console.error(`[agentified] ${phase}:`, JSON.stringify(detail));
+    };
 
     // 1. Prefetch (with turnId for session continuity)
     const ranked = await this.sdk.prefetch({
@@ -139,6 +154,11 @@ export class AgentifiedMastra {
       ...(options.toolLimit !== undefined && { limit: options.toolLimit }),
     }) ?? [];
     const prefilledNames = ranked.map(t => t.name);
+
+    log("prefetch", {
+      toolCount: ranked.length,
+      tools: ranked.map(t => ({ name: t.name, score: t.score })),
+    });
 
     // 2. Build ALL tools (not just ranked — needed for discover → use)
     const allTools = this.buildAllMastraTools();
@@ -150,7 +170,14 @@ export class AgentifiedMastra {
       id: "agentified_discover",
       description: discoverDef.definition.description,
       inputSchema: z.object({ query: z.string(), limit: z.number().optional() }),
-      execute: async (input) => discoverDef.execute(input as DiscoverToolInput),
+      execute: async (input) => {
+        const result = await discoverDef.execute(input as DiscoverToolInput);
+        log("discover-result", {
+          query: input.query,
+          tools: Array.isArray(result) ? result.map((t: any) => t.name) : result,
+        });
+        return result;
+      },
     });
 
     // 4. Active tool set — grows as discover returns results
@@ -162,6 +189,11 @@ export class AgentifiedMastra {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this.config.agent as any).__setTools(fullTools);
 
+    log("setup", {
+      totalToolsRegistered: Object.keys(fullTools).length,
+      initialActiveSet: [...activeSet],
+    });
+
     // 6. Call agent.generate() with prepareStep
     const result = await this.config.agent.generate(options.messages, {
       maxSteps: options.maxSteps ?? 10,
@@ -169,6 +201,7 @@ export class AgentifiedMastra {
       onStepFinish: options.onStepFinish,
       prepareStep: async ({ stepNumber, steps }: { stepNumber: number; steps: any[] }) => {
         // Merge discovered tools from prior steps (handle AG-UI payload wrapping)
+        const prevSize = activeSet.size;
         for (const step of steps) {
           for (const tr of step.toolResults ?? []) {
             const trName = tr.toolName ?? tr.payload?.toolName;
@@ -181,12 +214,17 @@ export class AgentifiedMastra {
           }
         }
 
-        // Build active tools subset
-        const tools: Record<string, any> = {};
-        for (const name of activeSet) {
-          if (fullTools[name]) tools[name] = fullTools[name];
-        }
-        return { tools };
+        const newTools = activeSet.size > prevSize
+          ? [...activeSet].filter(n => !prefilledNames.includes(n) && n !== "agentified_discover")
+          : [];
+
+        log("prepareStep", {
+          stepNumber,
+          activeSet: [...activeSet],
+          newlyAdded: newTools.length > 0 ? newTools : undefined,
+        });
+
+        return { activeTools: [...activeSet] };
       },
     });
 
@@ -244,6 +282,7 @@ export class AgentifiedMastra {
       hydratedTools: toolsLoaded,
       turnId,
       durationMs: performance.now() - start,
+      ...(debug && { debugLog }),
     };
   }
 
