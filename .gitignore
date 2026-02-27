@@ -20,5 +20,17 @@ Thumbs.db
 # Node
 node_modules/
 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.whl
+
 # Logs
 *.log
