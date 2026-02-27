@@ -1,6 +1,9 @@
 mod embedding;
 mod models;
 mod ranking;
+mod storage;
+
+pub use storage::{NoopStorage, SqliteStorage, Storage};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -30,16 +33,22 @@ pub struct AppState {
     turns: RwLock<HashMap<String, Turn>>,
     embedding_cache: RwLock<HashMap<String, Vec<f32>>>,
     embedding: Arc<dyn EmbeddingService>,
+    storage: Arc<dyn Storage>,
 }
 
 // Public API
 
-pub fn app(embedding: Arc<dyn EmbeddingService>) -> Router {
+pub fn app(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>) -> Router {
+    let tools_map = storage.load_all_tools().unwrap_or_default().into_iter().collect();
+    let turns_map = storage.load_all_turns().unwrap_or_default().into_iter().collect();
+    let cache_map = storage.load_all_embeddings().unwrap_or_default().into_iter().collect();
+
     let state = Arc::new(AppState {
-        tools: RwLock::new(HashMap::new()),
-        turns: RwLock::new(HashMap::new()),
-        embedding_cache: RwLock::new(HashMap::new()),
+        tools: RwLock::new(tools_map),
+        turns: RwLock::new(turns_map),
+        embedding_cache: RwLock::new(cache_map),
         embedding,
+        storage,
     });
 
     Router::new()
@@ -158,6 +167,25 @@ async fn register_tools(
         tools.insert(tool.name.clone(), StoredTool { tool, embeddings, bm25_text });
     }
 
+    // 5. Write-through to storage (fire-and-forget)
+    {
+        let storage = state.storage.clone();
+        let tool_pairs: Vec<(String, StoredTool)> = tools.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let cache = state.embedding_cache.read().await;
+        let emb_pairs: Vec<(String, Vec<f32>)> = cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        drop(cache);
+        tokio::task::spawn_blocking(move || {
+            let refs: Vec<(&str, &StoredTool)> = tool_pairs.iter().map(|(k, v)| (k.as_str(), v)).collect();
+            if let Err(e) = storage.save_tools(&refs) {
+                tracing::error!("storage save_tools failed: {e}");
+            }
+            let emb_refs: Vec<(&str, &[f32])> = emb_pairs.iter().map(|(k, v)| (k.as_str(), v.as_slice())).collect();
+            if let Err(e) = storage.save_embeddings(&emb_refs) {
+                tracing::error!("storage save_embeddings failed: {e}");
+            }
+        });
+    }
+
     Ok((StatusCode::CREATED, Json(RegisterToolsResponse { registered: count })))
 }
 
@@ -263,7 +291,19 @@ async fn capture_turn(
         tools_loaded: body.tools_loaded,
         message: body.message,
     };
-    state.turns.write().await.insert(turn_id.clone(), turn);
+    state.turns.write().await.insert(turn_id.clone(), turn.clone());
+
+    // Write-through to storage (fire-and-forget)
+    {
+        let storage = state.storage.clone();
+        let id = turn_id.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = storage.save_turn(&id, &turn) {
+                tracing::error!("storage save_turn failed: {e}");
+            }
+        });
+    }
+
     (StatusCode::CREATED, Json(CaptureTurnResponse { turn_id }))
 }
 
@@ -335,6 +375,19 @@ async fn embed_cached(state: &AppState, text: &str) -> anyhow::Result<Vec<f32>> 
     }
     let emb = state.embedding.embed(text).await?;
     state.embedding_cache.write().await.insert(text.to_string(), emb.clone());
+
+    // Write-through to storage (fire-and-forget)
+    {
+        let storage = state.storage.clone();
+        let key = text.to_string();
+        let val = emb.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = storage.save_embeddings(&[(&key, &val)]) {
+                tracing::error!("storage save_embeddings failed: {e}");
+            }
+        });
+    }
+
     Ok(emb)
 }
 
@@ -348,10 +401,11 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use embedding::{FailingEmbedding, FakeEmbedding};
+    use storage::NoopStorage;
     use tower::ServiceExt;
 
     fn test_app() -> Router {
-        app(Arc::new(FakeEmbedding::new()))
+        app(Arc::new(FakeEmbedding::new()), Arc::new(NoopStorage))
     }
 
     #[tokio::test]
@@ -437,7 +491,7 @@ mod tests {
     #[tokio::test]
     async fn embedding_cached_for_same_content() {
         let embedding = Arc::new(FakeEmbedding::new());
-        let app = app(embedding.clone() as Arc<dyn EmbeddingService>);
+        let app = app(embedding.clone() as Arc<dyn EmbeddingService>, Arc::new(NoopStorage));
 
         let body = serde_json::json!({
             "tools": [{
@@ -530,7 +584,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_tools_returns_error_on_embedding_failure() {
-        let app = app(Arc::new(FailingEmbedding));
+        let app = app(Arc::new(FailingEmbedding), Arc::new(NoopStorage));
 
         let body = serde_json::json!({
             "tools": [{"name": "t", "description": "d", "parameters": {}}]
@@ -586,6 +640,7 @@ mod tests {
             turns: RwLock::new(HashMap::new()),
             embedding_cache: RwLock::new(HashMap::new()),
             embedding: Arc::new(FailingEmbedding),
+            storage: Arc::new(NoopStorage),
         });
 
         let app = Router::new()
@@ -906,7 +961,7 @@ mod tests {
     #[tokio::test]
     async fn register_tools_uses_batch_embedding() {
         let embedding = Arc::new(FakeEmbedding::new());
-        let app = app(embedding.clone() as Arc<dyn EmbeddingService>);
+        let app = app(embedding.clone() as Arc<dyn EmbeddingService>, Arc::new(NoopStorage));
 
         let body = serde_json::json!({
             "tools": [
@@ -1119,6 +1174,7 @@ mod tests {
             turns: RwLock::new(HashMap::new()),
             embedding_cache: RwLock::new(HashMap::new()),
             embedding: embedding.clone(),
+            storage: Arc::new(NoopStorage),
         });
 
         let app = Router::new()
@@ -1289,5 +1345,89 @@ mod tests {
         // No tool requires anything, so no graph expansion
         let expanded: Vec<_> = tools.iter().filter(|t| t["graph_expanded"] == true).collect();
         assert!(expanded.is_empty(), "no tools should be graph_expanded");
+    }
+
+    #[tokio::test]
+    async fn app_hydrates_tools_from_storage() {
+        use storage::SqliteStorage;
+
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+
+        // Pre-populate storage with a tool
+        let fake = FakeEmbedding::new();
+        let name_emb = fake.embed("getThing").await.unwrap();
+        let desc_emb = fake.embed("Get a thing").await.unwrap();
+        let tool = StoredTool {
+            tool: models::Tool {
+                name: "getThing".into(),
+                description: "Get a thing".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+            },
+            embeddings: FieldEmbeddings {
+                name: name_emb,
+                description: desc_emb,
+                input_schema: None,
+                output_schema: None,
+            },
+            bm25_text: "getThing Get a thing".into(),
+        };
+        storage.save_tools(&[("getThing", &tool)]).unwrap();
+
+        // Build app with that storage — should hydrate
+        let app = app(Arc::new(FakeEmbedding::new()), storage as Arc<dyn Storage>);
+
+        let response = app
+            .oneshot(Request::builder().uri("/api/v1/tools").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(json["tools"][0]["name"], "getThing");
+    }
+
+    #[tokio::test]
+    async fn app_hydrates_embedding_cache() {
+        use storage::SqliteStorage;
+
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+
+        // Pre-populate embedding cache
+        let fake = FakeEmbedding::new();
+        let emb = fake.embed("toolName").await.unwrap();
+        storage.save_embeddings(&[("toolName", &emb)]).unwrap();
+        let emb2 = fake.embed("tool description").await.unwrap();
+        storage.save_embeddings(&[("tool description", &emb2)]).unwrap();
+
+        let embedding = Arc::new(FakeEmbedding::new());
+        let app = app(embedding.clone() as Arc<dyn EmbeddingService>, storage as Arc<dyn Storage>);
+
+        // Register a tool whose name+description match cached embeddings
+        let body = serde_json::json!({
+            "tools": [{"name": "toolName", "description": "tool description", "parameters": {}}]
+        });
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/tools")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // No embed calls — cache was hydrated from storage
+        assert_eq!(
+            embedding.batch_call_count.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "should not call embed_batch when cache is hydrated"
+        );
     }
 }

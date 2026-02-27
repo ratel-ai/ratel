@@ -74,6 +74,12 @@ export function createCallbacks() {
         },
         durationMs: performance.now() - start,
         hydratedTools: flatExpected,
+        debug: {
+          systemPrompt: state.config.systemPrompt,
+          toolNames: Object.keys(tools),
+          modelResponse: result.text,
+          toolCallsMade: toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
+        },
       };
     },
   };

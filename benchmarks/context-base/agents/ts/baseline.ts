@@ -61,6 +61,12 @@ export function createCallbacks() {
           outputReasoningTokens: (result.totalUsage as any)?.outputTokenDetails?.reasoningTokens ?? undefined,
         },
         durationMs: performance.now() - start,
+        debug: {
+          systemPrompt: state.config.systemPrompt,
+          toolNames: Object.keys(state.tools),
+          modelResponse: result.text,
+          toolCallsMade: toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
+        },
       };
     },
   };

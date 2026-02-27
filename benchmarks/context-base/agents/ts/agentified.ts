@@ -60,13 +60,15 @@ export function createCallbacks() {
         seed: body.seed,
       });
 
+      const toolCalls = result.toolCalls.map((tc) => ({
+        toolCallId: tc.toolCallId,
+        toolName: tc.toolName,
+        args: tc.args,
+      }));
+
       return {
         content: result.text,
-        toolCalls: result.toolCalls.map((tc) => ({
-          toolCallId: tc.toolCallId,
-          toolName: tc.toolName,
-          args: tc.args,
-        })),
+        toolCalls,
         usage: {
           totalTokens: result.usage.totalTokens,
           inputTokens: result.usage.inputTokens,
@@ -77,6 +79,12 @@ export function createCallbacks() {
         durationMs: result.durationMs,
         hydratedTools: result.hydratedTools,
         turnId: result.turnId,
+        debug: {
+          systemPrompt: state.config.systemPrompt,
+          toolNames: result.hydratedTools ?? [],
+          modelResponse: result.text,
+          toolCallsMade: toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
+        },
       };
     },
   };
