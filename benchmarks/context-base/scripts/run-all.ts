@@ -15,6 +15,7 @@ import type { BenchmarkRunResult, ScenarioResult } from "../lib/types.js";
 import { generateComparisonReport } from "../lib/report.js";
 import { PRICING } from "../lib/constants.js";
 import { scenarios } from "../scenarios/index.js";
+import { Agent } from "node:http";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -51,8 +52,8 @@ function discoverAgents(): AgentEntry[] {
 
   if (existsSync(tsDir)) {
     for (const f of readdirSync(tsDir)) {
-      if (f.endsWith(".ts") && !f.includes(".test.")) {
-        entries.push({ name: f.replace(/\.ts$/, ""), cmd: `tsx agents/ts/${f}` });
+      if (f.endsWith(".ts") && !f.includes(".test.") && !f.startsWith("__")) {
+        entries.push({ name: f, cmd: `tsx agents/ts/${f}` });
       }
     }
   }
@@ -60,7 +61,7 @@ function discoverAgents(): AgentEntry[] {
   if (existsSync(pyDir)) {
     for (const f of readdirSync(pyDir)) {
       if (f.endsWith(".py") && !f.startsWith("__")) {
-        entries.push({ name: `py-${f.replace(/\.py$/, "")}`, cmd: `python agents/py/${f}` });
+        entries.push({ name: f, cmd: `python agents/py/${f}` });
       }
     }
   }
@@ -82,7 +83,9 @@ interface AgentProgress {
   f1Avg: number;
   tcAvg: number;
   hrAvg: number;
+  timeAvg: number;
   costSum: number;
+  isComplete: boolean;
 }
 
 function parseJsonl(path: string): ScenarioResult[] {
@@ -90,28 +93,36 @@ function parseJsonl(path: string): ScenarioResult[] {
   const lines = readFileSync(path, "utf-8").split("\n").filter(Boolean);
   const results: ScenarioResult[] = [];
   for (const line of lines) {
-    try { results.push(JSON.parse(line)); } catch {}
+    try { results.push(JSON.parse(line)); } catch { }
   }
   return results;
 }
 
-function pollProgress(): Map<string, AgentProgress> {
-  const progress = new Map<string, AgentProgress>();
+const progress: Record<string, AgentProgress> = {};
+function pollProgress(totalScenarios: number): Record<string, AgentProgress> {
   for (const name of agentNames) {
-    const results = parseJsonl(resolve(runDir, `${name}.jsonl`));
-    const n = results.length;
-    if (n === 0) {
-      progress.set(name, { completed: 0, f1Avg: 0, tcAvg: 0, hrAvg: 0, costSum: 0 });
+    if (progress[name] && progress[name].isComplete) {
       continue;
     }
-    let f1Sum = 0, tcSum = 0, hrSum = 0, costSum = 0;
+
+    const results = parseJsonl(resolve(runDir, `${name}.jsonl`));
+    const n = results.length;
+
+    if (n === 0) {
+      progress[name] = { completed: 0, f1Avg: 0, tcAvg: 0, hrAvg: 0, timeAvg: 0, costSum: 0, isComplete: false };
+      continue;
+    }
+
+    let f1Sum = 0, tcSum = 0, hrSum = 0, timeSum = 0, costSum = 0;
     for (const r of results) {
       f1Sum += r.scores["Tool F1"] ?? 0;
       tcSum += r.scores["Task Correctness"] ?? 0;
       hrSum += r.scores["Hydration Recall"] ?? 0;
+      timeSum += r.durationMs ?? 0;
       costSum += r.cost;
     }
-    progress.set(name, { completed: n, f1Avg: f1Sum / n, tcAvg: tcSum / n, hrAvg: hrSum / n, costSum });
+
+    progress[name] = { completed: n, f1Avg: f1Sum / n, tcAvg: tcSum / n, hrAvg: hrSum / n, timeAvg: timeSum / n, costSum, isComplete: n >= totalScenarios };
   }
   return progress;
 }
@@ -124,19 +135,20 @@ function formatElapsed(ms: number): string {
 let dashboardRendered = false;
 
 function renderDashboard(startMs: number): void {
-  const progress = pollProgress();
-  const elapsed = formatElapsed(performance.now() - startMs);
+  const elapsedMs = performance.now() - startMs;
+  const progress = pollProgress(totalScenarios);
   const maxName = Math.max(...agentNames.map((a) => a.length));
 
   if (dashboardRendered) process.stdout.write(`\x1b[${agentNames.length}A`);
 
   for (const name of agentNames) {
-    const p = progress.get(name)!;
+    const p = progress[name] as AgentProgress | undefined;
     const padded = name.padEnd(maxName);
-    const count = `${String(p.completed).padStart(2)}/${totalScenarios}`;
-    const line = p.completed > 0
-      ? `  ${padded}  ${count} | F1 ${p.f1Avg.toFixed(2)} | TC ${p.tcAvg.toFixed(2)} | HR ${p.hrAvg.toFixed(2)} | $${p.costSum.toFixed(2).padStart(5)} | ${elapsed}`
-      : `  ${padded}  ${count} | waiting... | ${elapsed}`;
+    const completedScenarios = p?.completed ?? 0;
+    const count = `${String(completedScenarios).padStart(2)}/${totalScenarios}`;
+    const line = p && completedScenarios > 0
+      ? `  ${padded}  ${count} | F1 ${p.f1Avg.toFixed(2)} | TC ${p.tcAvg.toFixed(2)} | HR ${p.hrAvg.toFixed(2)} | $${p.costSum.toFixed(2).padStart(5)} | Avg time: ${formatElapsed(p.timeAvg)} | ${p.completed >= totalScenarios ? `${formatElapsed(p.completed * p.timeAvg)} ✅` : formatElapsed(elapsedMs)}`
+      : `  ${padded}  ${count} | waiting... | ${formatElapsed(elapsedMs)}`;
     process.stdout.write(`\x1b[2K${line}\n`);
   }
   dashboardRendered = true;

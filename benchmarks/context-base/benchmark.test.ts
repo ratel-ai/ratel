@@ -34,7 +34,7 @@ import { formatSlots } from "./lib/tool-slots.js";
 import { computeCost, MODEL, SYSTEM_PROMPT, MAX_STEPS } from "./lib/constants.js";
 
 const agentCmd = process.env.AGENT_CMD ?? "tsx agents/ts/baseline.ts";
-const agentName = agentCmd.replace(/^.*\//, "").replace(/\.\w+$/, "");
+const agentName = agentCmd.replace(/^.*\//, "");
 const model = process.env.MODEL ?? MODEL;
 const scenarioFilter = process.env.SCENARIO;
 const agentPort = 9200 + Math.floor(Math.random() * 800);

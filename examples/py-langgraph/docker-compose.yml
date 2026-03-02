@@ -1,0 +1,28 @@
+services:
+  core:
+    build:
+      context: ../../core
+    ports:
+      - "9119:9119"
+    env_file: ../../.env
+    environment:
+      - AGENTIFIED_PORT=9119
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9119/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  agent:
+    build:
+      context: ../..
+      dockerfile: examples/py-langgraph/Dockerfile
+    env_file: ../../.env
+    environment:
+      - AGENTIFIED_URL=http://core:9119
+    depends_on:
+      core:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
