@@ -1,15 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { SendMessageBody, SendMessageResponse, ToolDef } from "../../lib/protocol.js";
+import type { SendMessageBody, ToolDef } from "../../lib/protocol.js";
 
-const mockGenerateText = vi.fn();
-vi.mock("ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ai")>();
-  return {
-    ...actual,
-    generateText: (...args: unknown[]) => mockGenerateText(...args),
-    stepCountIs: actual.stepCountIs,
-  };
-});
+const mockGenerate = vi.fn();
+vi.mock("@mastra/core/agent", () => ({
+  Agent: class MockAgent {
+    generate = mockGenerate;
+  },
+}));
 
 const { createCallbacks } = await import("./baseline.js");
 
@@ -24,24 +21,15 @@ describe("baseline agent (HTTP)", () => {
     vi.clearAllMocks();
   });
 
-  it("setup stores tools and config", async () => {
-    const cbs = createCallbacks();
-    const execTools = mockTools.map((t) => ({ ...t, execute: vi.fn() }));
-    await cbs.setup(execTools, mockConfig);
-    // No error = success
-  });
-
-  it("sendMessage calls generateText with all tools", async () => {
-    mockGenerateText.mockResolvedValueOnce({
+  it("passes all tools via toolsets", async () => {
+    mockGenerate.mockResolvedValueOnce({
       text: "Hello!",
       steps: [],
-      usage: { promptTokens: 40, completionTokens: 10 },
-      totalUsage: { inputTokens: 40, outputTokens: 10, inputTokenDetails: {}, outputTokenDetails: {} },
+      usage: { inputTokens: 40, outputTokens: 10 },
     });
 
     const cbs = createCallbacks();
-    const execTools = mockTools.map((t) => ({ ...t, execute: vi.fn() }));
-    await cbs.setup(execTools, mockConfig);
+    await cbs.setup(mockTools.map((t) => ({ ...t, execute: vi.fn() })), mockConfig);
 
     const body: SendMessageBody = {
       history: [{ role: "user", content: "Hi" }],
@@ -49,28 +37,42 @@ describe("baseline agent (HTTP)", () => {
     };
     const result = await cbs.sendMessage(body);
 
-    expect(mockGenerateText).toHaveBeenCalledOnce();
-    const call = mockGenerateText.mock.calls[0][0];
-    expect(Object.keys(call.tools)).toEqual(["tool1", "tool2"]);
-    expect(call.seed).toBe(42);
+    expect(mockGenerate).toHaveBeenCalledOnce();
+    const [, opts] = mockGenerate.mock.calls[0];
+    expect(Object.keys(opts.toolsets.all).sort()).toEqual(["tool1", "tool2"]);
+    expect(opts.seed).toBe(42);
     expect(result.content).toBe("Hello!");
     expect(result.toolCalls).toEqual([]);
   });
 
+  it("does not call __setTools", async () => {
+    mockGenerate.mockResolvedValueOnce({
+      text: "ok",
+      steps: [],
+      usage: { inputTokens: 40, outputTokens: 10 },
+    });
+
+    const cbs = createCallbacks();
+    await cbs.setup(mockTools.map((t) => ({ ...t, execute: vi.fn() })), mockConfig);
+
+    // Agent mock doesn't have __setTools — if code calls it, it would throw
+    await cbs.sendMessage({ history: [{ role: "user", content: "test" }], seed: 1 });
+
+    expect(true).toBe(true);
+  });
+
   it("collects tool calls from steps", async () => {
-    mockGenerateText.mockResolvedValueOnce({
+    mockGenerate.mockResolvedValueOnce({
       text: "Done.",
       steps: [
         { toolCalls: [{ toolCallId: "c1", toolName: "tool1", args: { id: "123" } }] },
         { toolCalls: [{ toolCallId: "c2", toolName: "tool2", args: {} }] },
       ],
-      usage: { promptTokens: 80, completionTokens: 10 },
-      totalUsage: { inputTokens: 80, outputTokens: 10, inputTokenDetails: {}, outputTokenDetails: {} },
+      usage: { inputTokens: 80, outputTokens: 10 },
     });
 
     const cbs = createCallbacks();
-    const execTools = mockTools.map((t) => ({ ...t, execute: vi.fn() }));
-    await cbs.setup(execTools, mockConfig);
+    await cbs.setup(mockTools.map((t) => ({ ...t, execute: vi.fn() })), mockConfig);
 
     const result = await cbs.sendMessage({ history: [{ role: "user", content: "Do both" }], seed: 1 });
 
@@ -80,16 +82,10 @@ describe("baseline agent (HTTP)", () => {
   });
 
   it("maps usage correctly", async () => {
-    mockGenerateText.mockResolvedValueOnce({
+    mockGenerate.mockResolvedValueOnce({
       text: "ok",
       steps: [],
-      usage: { promptTokens: 40, completionTokens: 10 },
-      totalUsage: {
-        inputTokens: 40,
-        outputTokens: 10,
-        inputTokenDetails: { cacheReadTokens: 15 },
-        outputTokenDetails: { reasoningTokens: 5 },
-      },
+      usage: { inputTokens: 40, outputTokens: 10, cachedInputTokens: 15, reasoningTokens: 5 },
     });
 
     const cbs = createCallbacks();

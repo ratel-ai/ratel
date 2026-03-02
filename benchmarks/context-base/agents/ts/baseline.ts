@@ -32,7 +32,6 @@ export function createCallbacks() {
         instructions: config.systemPrompt,
         model: toMastraModel(config.model),
       });
-      (agent as any).__setTools(mastraTools);
 
       state = { agent, tools: mastraTools, config };
     },
@@ -47,6 +46,7 @@ export function createCallbacks() {
       }));
 
       const result = await state.agent.generate(messages as any, {
+        toolsets: { all: state.tools },
         maxSteps: state.config.maxSteps,
         ...(body.seed !== undefined && { seed: body.seed }),
       });

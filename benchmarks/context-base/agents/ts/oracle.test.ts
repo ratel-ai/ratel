@@ -1,15 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SendMessageBody, ToolDef } from "../../lib/protocol.js";
 
-const mockGenerateText = vi.fn();
-vi.mock("ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ai")>();
-  return {
-    ...actual,
-    generateText: (...args: unknown[]) => mockGenerateText(...args),
-    stepCountIs: actual.stepCountIs,
-  };
-});
+const mockGenerate = vi.fn();
+vi.mock("@mastra/core/agent", () => ({
+  Agent: class MockAgent {
+    generate = mockGenerate;
+  },
+}));
 
 const { createCallbacks } = await import("./oracle.js");
 
@@ -25,12 +22,11 @@ describe("oracle agent (HTTP)", () => {
     vi.clearAllMocks();
   });
 
-  it("filters tools to only expectedTools", async () => {
-    mockGenerateText.mockResolvedValueOnce({
+  it("passes only expectedTools via toolsets", async () => {
+    mockGenerate.mockResolvedValueOnce({
       text: "Salary is $95k",
       steps: [{ toolCalls: [{ toolCallId: "c1", toolName: "getSalary", args: { id: "EMP001" } }] }],
-      usage: { promptTokens: 40, completionTokens: 10 },
-      totalUsage: { inputTokens: 40, outputTokens: 10, inputTokenDetails: {}, outputTokenDetails: {} },
+      usage: { inputTokens: 40, outputTokens: 10 },
     });
 
     const cbs = createCallbacks();
@@ -43,16 +39,16 @@ describe("oracle agent (HTTP)", () => {
     };
     await cbs.sendMessage(body);
 
-    const call = mockGenerateText.mock.calls[0][0];
-    expect(Object.keys(call.tools).sort()).toEqual(["getEmployee", "getSalary"]);
+    const [, opts] = mockGenerate.mock.calls[0];
+    const toolsetNames = Object.keys(opts.toolsets.active);
+    expect(toolsetNames.sort()).toEqual(["getEmployee", "getSalary"]);
   });
 
   it("returns hydratedTools matching expectedTools", async () => {
-    mockGenerateText.mockResolvedValueOnce({
+    mockGenerate.mockResolvedValueOnce({
       text: "ok",
       steps: [],
-      usage: { promptTokens: 40, completionTokens: 10 },
-      totalUsage: { inputTokens: 40, outputTokens: 10, inputTokenDetails: {}, outputTokenDetails: {} },
+      usage: { inputTokens: 40, outputTokens: 10 },
     });
 
     const cbs = createCallbacks();
@@ -67,12 +63,11 @@ describe("oracle agent (HTTP)", () => {
     expect(result.hydratedTools).toEqual(["getSalary"]);
   });
 
-  it("uses all tools when no expectedTools provided", async () => {
-    mockGenerateText.mockResolvedValueOnce({
+  it("passes all tools via toolsets when no expectedTools", async () => {
+    mockGenerate.mockResolvedValueOnce({
       text: "ok",
       steps: [],
-      usage: { promptTokens: 40, completionTokens: 10 },
-      totalUsage: { inputTokens: 40, outputTokens: 10, inputTokenDetails: {}, outputTokenDetails: {} },
+      usage: { inputTokens: 40, outputTokens: 10 },
     });
 
     const cbs = createCallbacks();
@@ -80,7 +75,29 @@ describe("oracle agent (HTTP)", () => {
 
     await cbs.sendMessage({ history: [{ role: "user", content: "test" }], seed: 1 });
 
-    const call = mockGenerateText.mock.calls[0][0];
-    expect(Object.keys(call.tools).sort()).toEqual(["getEmployee", "getSalary", "listEmployees"]);
+    const [, opts] = mockGenerate.mock.calls[0];
+    const toolsetNames = Object.keys(opts.toolsets.active);
+    expect(toolsetNames.sort()).toEqual(["getEmployee", "getSalary", "listEmployees"]);
+  });
+
+  it("does not call __setTools", async () => {
+    mockGenerate.mockResolvedValueOnce({
+      text: "ok",
+      steps: [],
+      usage: { inputTokens: 40, outputTokens: 10 },
+    });
+
+    const cbs = createCallbacks();
+    await cbs.setup(mockTools.map((t) => ({ ...t, execute: vi.fn() })), mockConfig);
+
+    // Agent mock doesn't have __setTools — if code calls it, it would throw
+    await cbs.sendMessage({
+      history: [{ role: "user", content: "test" }],
+      seed: 1,
+      expectedTools: ["getSalary"],
+    });
+
+    // If we got here without error, __setTools was not called
+    expect(true).toBe(true);
   });
 });

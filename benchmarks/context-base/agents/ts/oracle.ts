@@ -49,14 +49,13 @@ export function createCallbacks() {
         )
         : state.tools;
 
-      (state.agent as any).__setTools(activeTools);
-
       const messages: Array<{ role: "user" | "assistant"; content: string }> = body.history.map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
       }));
 
       const result = await state.agent.generate(messages as any, {
+        toolsets: { active: activeTools },
         maxSteps: state.config.maxSteps,
         ...(body.seed !== undefined && { seed: body.seed }),
       });
