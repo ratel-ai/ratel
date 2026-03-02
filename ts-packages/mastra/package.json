@@ -1,10 +1,21 @@
 {
   "name": "@agentified/mastra",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.0.2",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run"
   },
   "peerDependencies": {
@@ -22,6 +33,7 @@
     "@ag-ui/mastra": "^1.0.0",
     "@agentified/sdk": "workspace:*",
     "@mastra/core": "^1.6.0",
+    "@types/node": "^22.0.0",
     "typescript": "^5.9.0",
     "vitest": "^2.1.0",
     "zod": "^3.25.0"
