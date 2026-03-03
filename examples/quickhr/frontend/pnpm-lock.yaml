@@ -4,19 +4,13 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@agentified/fe-client': file:../../../src/ts-packages/fe-client
-
 importers:
 
   .:
     dependencies:
-      '@agentified/fe-client':
-        specifier: file:../../../src/ts-packages/fe-client
-        version: file:../../../src/ts-packages/fe-client
       '@agentified/react':
-        specifier: file:../../../src/ts-packages/react
-        version: file:../../../src/ts-packages/react(react@18.3.1)
+        specifier: ^0.0.3
+        version: 0.0.3(react@18.3.1)
       react:
         specifier: ^18.3.0
         version: 18.3.1
@@ -57,11 +51,11 @@ packages:
   '@ag-ui/proto@0.0.45':
     resolution: {integrity: sha512-gj+XdbTOyNV1i5my77OaVZa7E2T/XTkoHlzpbd/O9C+BX6wxqMWORATKDJG1KZoanNsWr0Z7mtpwVuehs0GbBA==}
 
-  '@agentified/fe-client@file:../../../src/ts-packages/fe-client':
-    resolution: {directory: ../../../src/ts-packages/fe-client, type: directory}
+  '@agentified/fe-client@0.0.3':
+    resolution: {integrity: sha512-+m9TTPsjvmiEFcQ4z42Lbh+Yhv8bhxkjsZAoy6cNE699e+euadXTojCpr0iwX0TjdGlBMy383PxCpxhnPjY6NQ==}
 
-  '@agentified/react@file:../../../src/ts-packages/react':
-    resolution: {directory: ../../../src/ts-packages/react, type: directory}
+  '@agentified/react@0.0.3':
+    resolution: {integrity: sha512-lQgk82Ev2wt29pFLd7t8t6RjYXxGhvYb/CPtlBSWdTabfy5BNt4fzGHYFVrWSsc4TscyYbdGDzdnHNFiO/YPWQ==}
     peerDependencies:
       react: '>=18.0.0'
 
@@ -761,13 +755,13 @@ snapshots:
       '@bufbuild/protobuf': 2.11.0
       '@protobuf-ts/protoc': 2.11.1
 
-  '@agentified/fe-client@file:../../../src/ts-packages/fe-client':
+  '@agentified/fe-client@0.0.3':
     dependencies:
       '@ag-ui/client': 0.0.45
 
-  '@agentified/react@file:../../../src/ts-packages/react(react@18.3.1)':
+  '@agentified/react@0.0.3(react@18.3.1)':
     dependencies:
-      '@agentified/fe-client': file:../../../src/ts-packages/fe-client
+      '@agentified/fe-client': 0.0.3
       react: 18.3.1
 
   '@babel/code-frame@7.29.0':
