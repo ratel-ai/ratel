@@ -37,8 +37,15 @@ jobs:
 
       - run: pnpm build
 
+      # HACK: changesets/action resolves .changeset and @changesets/cli from
+      # repo root even with cwd set. Remove once resolved:
+      # https://github.com/changesets/action/issues/265
       - name: Symlink .changeset for changesets/action
         run: ln -s src/ts-packages/.changeset .changeset
+        working-directory: ${{ github.workspace }}
+
+      - name: Install @changesets/cli at repo root
+        run: pnpm add -D @changesets/cli
         working-directory: ${{ github.workspace }}
 
       - name: Create Release Pull Request or Publish
