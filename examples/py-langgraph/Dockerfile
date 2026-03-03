@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY py-packages/sdk /app/sdk
+COPY src/py-packages/sdk /app/sdk
 RUN pip install --no-cache-dir /app/sdk
 
 COPY examples/py-langgraph /app/agent

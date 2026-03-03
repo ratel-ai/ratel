@@ -6,11 +6,13 @@ Context Intelligence Layer for AI agents. The middle layer between agent framewo
 
 ```
 agentified/
-├── core/                 # Rust server (agentified-core)
-│   ├── Cargo.toml
-│   └── src/
+├── src/
+│   ├── core/             # Rust server (agentified-core)
+│   ├── ts-packages/      # TypeScript packages (pnpm workspace)
+│   └── py-packages/      # Python packages
+├── examples/             # Example applications
+├── benchmarks/           # Benchmarks
 ├── scripts/              # Test scripts
-│   └── test-server.sh
 └── README.md
 ```
 
@@ -33,7 +35,7 @@ Rust HTTP server providing:
 ## Quick Start
 
 ```bash
-cd core
+cd src/core
 cargo run
 # Server starts on localhost:9119
 ```

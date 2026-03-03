@@ -11,8 +11,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@agentified/mastra": "workspace:*",
-    "@agentified/sdk": "workspace:*",
+    "@agentified/mastra": "^0.0.3",
+    "@agentified/sdk": "^0.0.3",
     "@mastra/core": "^1.6.0",
     "@ai-sdk/google": "^3.0.31",
     "@fastify/cors": "^10.0.2",

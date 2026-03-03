@@ -17,6 +17,10 @@ jobs:
       pull-requests: write
       id-token: write
 
+    defaults:
+      run:
+        working-directory: src/ts-packages
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +30,7 @@ jobs:
         with:
           node-version: "24"
           cache: "pnpm"
+          cache-dependency-path: src/ts-packages/pnpm-lock.yaml
           registry-url: "https://registry.npmjs.org"
 
       - run: pnpm install --frozen-lockfile
@@ -37,6 +42,7 @@ jobs:
         uses: changesets/action@v1
         with:
           publish: pnpm release
+          cwd: src/ts-packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
@@ -54,12 +60,12 @@ jobs:
       - run: pip install --upgrade hatchling build
 
       - run: python -m build
-        working-directory: py-packages/sdk
+        working-directory: src/py-packages/sdk
 
       - uses: actions/upload-artifact@v4
         with:
           name: py-dist
-          path: py-packages/sdk/dist/*
+          path: src/py-packages/sdk/dist/*
 
   pypi-publish:
     needs: pypi-build
@@ -101,7 +107,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: ./core
+          context: ./src/core
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

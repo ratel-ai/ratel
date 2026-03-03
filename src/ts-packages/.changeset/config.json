@@ -6,6 +6,5 @@
   "linked": [],
   "access": "public",
   "baseBranch": "main",
-  "updateInternalDependencies": "patch",
-  "ignore": ["@example-quickhr/frontend", "@example-quickhr/backend", "@agentified/benchmark-context-base"]
+  "updateInternalDependencies": "patch"
 }

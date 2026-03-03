@@ -1,7 +1,7 @@
 services:
   core:
     build:
-      context: ../../core
+      context: ../../src/core
     ports:
       - "9119:9119"
     env_file: ../../.env

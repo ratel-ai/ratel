@@ -1,4 +1,0 @@
-packages:
-  - "ts-packages/*"
-  - "examples/quickhr/*"
-  - "benchmarks/*"

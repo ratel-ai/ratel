@@ -8,14 +8,16 @@
 
 ```
 agentified/
-├── core/                 # Rust server
-│   ├── Cargo.toml
-│   └── src/
-├── ts-packages/          # TypeScript packages (pnpm workspace)
-│   ├── sdk/
-│   ├── fe-client/
-│   ├── react/
-│   └── mastra/
+├── src/
+│   ├── core/             # Rust server
+│   ├── ts-packages/      # TypeScript packages (pnpm workspace)
+│   │   ├── sdk/
+│   │   ├── fe-client/
+│   │   ├── react/
+│   │   └── mastra/
+│   └── py-packages/      # Python packages
+├── examples/             # Example applications
+├── benchmarks/           # Benchmarks
 ├── scripts/              # Test scripts
 └── README.md
 ```

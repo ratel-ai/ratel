@@ -1,6 +1,6 @@
 services:
   core:
-    build: ./core
+    build: ./src/core
     ports:
       - "9119:9119"
     environment:
