@@ -37,6 +37,10 @@ jobs:
 
       - run: pnpm build
 
+      - name: Symlink .changeset for changesets/action
+        run: ln -s src/ts-packages/.changeset .changeset
+        working-directory: ${{ github.workspace }}
+
       - name: Create Release Pull Request or Publish
         id: changesets
         uses: changesets/action@v1
@@ -50,6 +54,8 @@ jobs:
   # ── PyPI (trusted publishing — no API token) ─────────────────────────
   pypi-build:
     runs-on: ubuntu-latest
+    outputs:
+      should-publish: ${{ steps.check.outputs.should-publish }}
     steps:
       - uses: actions/checkout@v4
 
@@ -57,18 +63,37 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install --upgrade hatchling build
+      - id: check
+        name: Check if version already on PyPI
+        working-directory: src/py-packages/sdk
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VERSION"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/agentified/${VERSION}/json")
+          if [ "$STATUS" = "200" ]; then
+            echo "Version $VERSION already on PyPI, skipping"
+            echo "should-publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $VERSION not on PyPI, will publish"
+            echo "should-publish=true" >> "$GITHUB_OUTPUT"
+          fi
 
-      - run: python -m build
+      - if: steps.check.outputs.should-publish == 'true'
+        run: pip install --upgrade hatchling build
+
+      - if: steps.check.outputs.should-publish == 'true'
+        run: python -m build
         working-directory: src/py-packages/sdk
 
-      - uses: actions/upload-artifact@v4
+      - if: steps.check.outputs.should-publish == 'true'
+        uses: actions/upload-artifact@v4
         with:
           name: py-dist
           path: src/py-packages/sdk/dist/*
 
   pypi-publish:
     needs: pypi-build
+    if: needs.pypi-build.outputs.should-publish == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi
