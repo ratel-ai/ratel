@@ -15,8 +15,8 @@ if [ -f "$REPO_ROOT/.env" ]; then
 fi
 
 cleanup() {
-  echo -e "\n${YELLOW}▶${NC} Tearing down containers..."
-  docker compose -f "$REPO_ROOT/docker-compose.yml" down --timeout 5 2>/dev/null || true
+  echo -e "\n${YELLOW}▶${NC} Tearing down container..."
+  docker rm -f agentified-core 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -26,9 +26,13 @@ if [ -z "${OPENAI_API_KEY:-}" ]; then
   exit 1
 fi
 
-# 2. Build & start
-echo -e "${YELLOW}▶${NC} Building and starting containers..."
-docker compose -f "$REPO_ROOT/docker-compose.yml" up -d --build
+# 2. Pull & start
+echo -e "${YELLOW}▶${NC} Starting agentified-core container..."
+docker run -d --name agentified-core \
+  -p 9119:9119 \
+  -e OPENAI_API_KEY="$OPENAI_API_KEY" \
+  -e AGENTIFIED_PORT=9119 \
+  agentified/agentified-core:latest
 
 # 3. Wait for health
 echo -e "${YELLOW}▶${NC} Waiting for server health..."
@@ -39,7 +43,7 @@ for i in $(seq 1 30); do
   fi
   if [ "$i" -eq 30 ]; then
     echo -e "${RED}✗${NC} Server failed to start within 30s"
-    docker compose -f "$REPO_ROOT/docker-compose.yml" logs
+    docker logs agentified-core
     exit 1
   fi
   sleep 1

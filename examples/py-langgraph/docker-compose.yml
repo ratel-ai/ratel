@@ -1,7 +1,6 @@
 services:
   core:
-    build:
-      context: ../../src/core
+    image: agentified/agentified-core:latest
     ports:
       - "9119:9119"
     env_file: ../../.env

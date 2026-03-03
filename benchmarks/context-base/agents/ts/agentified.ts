@@ -45,12 +45,7 @@ async function boot(): Promise<BootResult> {
 
   if (!endpoint) {
     console.error("[agentified] starting agentified-core container...");
-    const coreDir = resolve(import.meta.dirname, "../../../../core");
-    const builder = await GenericContainer.fromDockerfile(coreDir).build(
-      "agentified-core-test",
-      { deleteOnExit: false },
-    );
-    const started = await builder
+    const started = await new GenericContainer("agentified/agentified-core:latest")
       .withExposedPorts(9119)
       .withEnvironment({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",

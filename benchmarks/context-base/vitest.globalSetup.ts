@@ -6,13 +6,7 @@ import { GenericContainer, Wait } from "testcontainers";
 let container: any;
 
 export async function setup() {
-  // Build image from core Dockerfile
-  const builder = await GenericContainer.fromDockerfile("../../core").build(
-    "agentified-core-test",
-    { deleteOnExit: false },
-  );
-
-  container = await builder
+  container = await new GenericContainer("agentified/agentified-core:latest")
     .withExposedPorts(9119)
     .withEnvironment({
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
