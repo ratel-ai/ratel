@@ -37,27 +37,39 @@ jobs:
 
       - run: pnpm build
 
-      # HACK: BEGIN
-        # changesets/action resolves .changeset and @changesets/cli from
-        # repo root even with cwd set. Remove once resolved:
-        # https://github.com/changesets/action/issues/265
-      - name: Symlink .changeset for changesets/action
-        run: ln -s src/ts-packages/.changeset .changeset
-        working-directory: ${{ github.workspace }}
+      # Replaced changesets/action — it can't resolve nested workspaces.
+      # See https://github.com/changesets/action/issues/265
+      - name: Check for pending changesets
+        id: changesets-check
+        run: |
+          COUNT=$(ls .changeset/*.md 2>/dev/null | grep -cv README.md || true)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
-      - name: Install @changesets/cli at repo root
-        run: pnpm add -D @changesets/cli
-        working-directory: ${{ github.workspace }}
-      # HACK: END
+      - name: Version packages
+        if: steps.changesets-check.outputs.count > 0
+        run: pnpm changeset version
 
-      - name: Create Release Pull Request or Publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          publish: pnpm release
-          cwd: src/ts-packages
+      - name: Create release PR
+        if: steps.changesets-check.outputs.count > 0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: version packages"
+          BRANCH="changeset-release/main"
+          git push origin "HEAD:${BRANCH}" --force
+          if ! gh pr list --head "$BRANCH" --state open | grep -q .; then
+            gh pr create --head "$BRANCH" --base main \
+              --title "chore: version packages" \
+              --body "Automated version bump from changesets."
+          fi
+
+      - name: Publish to npm
+        if: steps.changesets-check.outputs.count == 0
+        run: pnpm release
+        env:
           NPM_CONFIG_PROVENANCE: true
 
   # ── PyPI (trusted publishing — no API token) ─────────────────────────
