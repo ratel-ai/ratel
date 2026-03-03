@@ -32,5 +32,12 @@ build/
 .ruff_cache/
 *.whl
 
+# TypeScript
+*.tsbuildinfo
+ts-packages/**/src/**/*.js
+ts-packages/**/src/**/*.js.map
+ts-packages/**/src/**/*.d.ts
+ts-packages/**/src/**/*.d.ts.map
+
 # Logs
 *.log

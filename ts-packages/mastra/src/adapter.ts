@@ -1,4 +1,4 @@
-import type { BaseEvent, CustomEvent } from "@ag-ui/client";
+import type { BaseEvent, CustomEvent, Message } from "@ag-ui/client";
 import type { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { MastraAgent } from "@ag-ui/mastra";
@@ -195,7 +195,7 @@ export class AgentifiedMastra {
     });
 
     // 6. Call agent.generate() with prepareStep
-    const result = await this.config.agent.generate(options.messages, {
+    const result = await this.config.agent.generate(options.messages as any, {
       maxSteps: options.maxSteps ?? 10,
       ...(options.seed !== undefined && { seed: options.seed }),
       onStepFinish: options.onStepFinish,
@@ -232,7 +232,8 @@ export class AgentifiedMastra {
     // Mastra wraps tool calls in AG-UI events: { payload: { toolName, toolCallId, args } }
     const toolCalls: GenerateResult["toolCalls"] = [];
     for (const step of result.steps ?? []) {
-      for (const tc of step.toolCalls ?? []) {
+      for (const _tc of step.toolCalls ?? []) {
+        const tc = _tc as any;
         const name = tc.toolName ?? tc.payload?.toolName;
         const id = tc.toolCallId ?? tc.payload?.toolCallId;
         const args = tc.args ?? tc.payload?.args ?? {};
@@ -243,7 +244,8 @@ export class AgentifiedMastra {
 
     // 8. Post-process: expand activeSet from result steps
     for (const step of result.steps ?? []) {
-      for (const tr of step.toolResults ?? []) {
+      for (const _tr of step.toolResults ?? []) {
+        const tr = _tr as any;
         const trName = tr.toolName ?? tr.payload?.toolName;
         const trResult = tr.result ?? tr.payload?.result;
         if (trName === "agentified_discover" && Array.isArray(trResult)) {
@@ -265,7 +267,7 @@ export class AgentifiedMastra {
       turnId = capture.turnId;
     } catch { /* non-fatal */ }
 
-    const usage = result.usage ?? {};
+    const usage = (result.usage ?? {}) as any;
     const inputTokens = usage.inputTokens ?? usage.promptTokens ?? 0;
     const outputTokens = usage.outputTokens ?? usage.completionTokens ?? 0;
     return {
@@ -355,7 +357,7 @@ export class AgentifiedMastra {
           if (m.toolCallId) msg.toolCallId = m.toolCallId;
           if (m.toolCalls) msg.toolCalls = m.toolCalls;
           return msg;
-        }) as unknown[],
+        }) as Message[],
         threadId,
         runId,
         tools: frontendToolDefs,

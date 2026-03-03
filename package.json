@@ -6,6 +6,10 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
+    "changeset": "changeset",
     "release": "pnpm changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.0"
   }
 }
