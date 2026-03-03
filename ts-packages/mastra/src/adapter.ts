@@ -1,5 +1,4 @@
 import type { BaseEvent, CustomEvent, Message } from "@ag-ui/client";
-import type { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { MastraAgent } from "@ag-ui/mastra";
 import { Agentified } from "@agentified/sdk";
@@ -52,7 +51,9 @@ export interface AgentifiedMastraConfig {
     string,
     (args: Record<string, unknown>) => Promise<unknown>
   >;
-  agent: Agent;
+  // Loose type avoids #private brand mismatch when consumer resolves
+  // a different copy of @mastra/core (common in pnpm workspaces).
+  agent: { name: string; generate: (...args: any[]) => any; stream: (...args: any[]) => any };
 }
 
 export interface RunOptions {
@@ -334,7 +335,7 @@ export class AgentifiedMastra {
       // Inject tools synchronously (safe: runs on subscribe, same tick)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.config.agent as any).__setTools({ ...mastraTools, agentified_discover: discoverTool });
-      const mastraAgent = new MastraAgent({ agent: this.config.agent, resourceId: this.config.agent.name });
+      const mastraAgent = new MastraAgent({ agent: this.config.agent as any, resourceId: this.config.agent.name });
       subscriber.next({
         type: "RUN_STARTED",
         runId,
