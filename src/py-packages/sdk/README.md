@@ -198,3 +198,7 @@ class CaptureTurnResponse:
 - [agentified-core](../../core/README.md)
 - [TypeScript SDK](../../ts-packages/sdk/README.md)
 - [LangGraph Example](../../../examples/py-langgraph/)
+
+## License
+
+[MIT](../../../LICENSE.md#mit-license)

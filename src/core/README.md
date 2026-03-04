@@ -182,3 +182,7 @@ docker run -p 9119:9119 \
 - [TypeScript SDK](../ts-packages/sdk/README.md)
 - [Python SDK](../py-packages/sdk/README.md)
 - [QuickHR Example](../../examples/quickhr/)
+
+## License
+
+[Sustainable Use License](./LICENSE) — free for internal, non-commercial, and personal use. See [LICENSE.md](../../LICENSE.md) for the full dual-license terms.

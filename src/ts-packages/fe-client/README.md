@@ -160,3 +160,7 @@ The client handles frontend tools automatically:
 - [React Bindings](../react/README.md) — React wrapper with Provider/hooks
 - [TypeScript SDK](../sdk/README.md)
 - [agentified-core](../../core/README.md)
+
+## License
+
+[MIT](../../../LICENSE.md#mit-license)

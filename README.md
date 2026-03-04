@@ -16,7 +16,7 @@
     <a href="https://pypi.org/project/agentified/"><img src="https://img.shields.io/pypi/v/agentified?label=pypi&color=3775A9" alt="pypi" /></a>
     <a href="https://github.com/agentified/agentified/stargazers"><img src="https://img.shields.io/github/stars/agentified/agentified?style=social" alt="stars" /></a>
     <a href="https://discord.gg/HTXmrjvsDy"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da" alt="discord" /></a>
-    <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license" /></a>
+    <a href="./LICENSE.md"><img src="https://img.shields.io/badge/license-SUL%20%2B%20MIT-blue" alt="license" /></a>
   </p>
 </div>
 
@@ -199,7 +199,7 @@ We're building Agentified in the open. Join us:
 
 ## License
 
-[MIT](./LICENSE) — Use it however you want.
+`src/core/` is licensed under the [Sustainable Use License](./LICENSE.md#sustainable-use-license). All other packages (SDKs, React, examples) are [MIT](./LICENSE.md#mit-license). See [LICENSE.md](./LICENSE.md) for details.
 
 ---
 

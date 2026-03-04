@@ -180,3 +180,7 @@ interface TokenUsage {
 - [React Bindings](../react/README.md)
 - [Mastra Adapter](../mastra/README.md)
 - [Python SDK](../../py-packages/sdk/README.md)
+
+## License
+
+[MIT](../../../LICENSE.md#mit-license)

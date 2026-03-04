@@ -154,3 +154,7 @@ Supports: `string`, `number`, `integer`, `boolean`, `array`, `object`, `enum`.
 - [Frontend Client](../fe-client/README.md)
 - [React Bindings](../react/README.md)
 - [QuickHR Example](../../../examples/quickhr/) — full Mastra + React app
+
+## License
+
+[MIT](../../../LICENSE.md#mit-license)

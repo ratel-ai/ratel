@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "agentified"
 version = "0.0.4"
 description = "Python SDK for Agentified — Context Intelligence Layer for AI agents"
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.27,<1",

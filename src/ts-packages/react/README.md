@@ -123,3 +123,7 @@ The Inspector is draggable and resizable.
 - [TypeScript SDK](../sdk/README.md)
 - [Mastra Adapter](../mastra/README.md)
 - [QuickHR Example](../../../examples/quickhr/) — full-stack app using all React bindings
+
+## License
+
+[MIT](../../../LICENSE.md#mit-license)
