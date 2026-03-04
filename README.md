@@ -1,6 +1,6 @@
 <p align="center">
   <h1 align="center">Agentified</h1>
-  <p align="center">Context Intelligence Layer for AI Agents</p>
+  <p align="center"></p>
 </p>
 
 <p align="center">
@@ -18,8 +18,8 @@
 
 ```
 ┌─────────────┐      ┌──────────────────────┐      ┌───────────┐
-│  Your Agent  │ ──── │   agentified-core     │ ──── │  OpenAI   │
-│  (TS / Py)   │      │   (Rust HTTP server)  │      │ Embeddings│
+│  Your Agent │ ──── │   agentified-core    │ ──── │  OpenAI   │
+│  (TS / Py)  │      │   (Rust HTTP server) │      │ Embeddings│
 └─────────────┘      └──────────────────────┘      └───────────┘
        │                       │
    1. Register tools      Embeds & caches
