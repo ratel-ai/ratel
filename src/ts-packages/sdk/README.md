@@ -67,7 +67,7 @@ const result = await agent.register();
 
 ### `agent.prefetch(options)`
 
-Discovers relevant tools for a conversation. Uses the last user message as the query.
+Discovers relevant tools for a conversation. Joins all message contents (newline-separated) as the discovery query.
 
 ```typescript
 interface PrefetchOptions {

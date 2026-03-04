@@ -73,7 +73,7 @@ List all registered tools.
 ```json
 {
   "tools": [
-    { "name": "get_weather", "description": "...", "parameters": { ... }, "score": 0, "graph_expanded": false }
+    { "name": "get_weather", "description": "...", "parameters": { ... }, "metadata": null, "fields": { ... } }
   ]
 }
 ```

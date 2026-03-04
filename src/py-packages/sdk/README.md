@@ -167,7 +167,7 @@ See [examples/py-langgraph/](../../../examples/py-langgraph/) for a complete wor
 
 ## Types
 
-All models are Pydantic v2 `BaseModel`s:
+Core models are Pydantic v2 `BaseModel`s (`AgentifiedConfig` and `DiscoverTool` are dataclasses):
 
 ```python
 class ServerTool:

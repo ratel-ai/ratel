@@ -42,8 +42,8 @@ await client.sendMessage("Show me the dashboard");
 interface AgentifiedClientConfig {
   agentUrl: string;                    // AG-UI agent backend URL
   headers?: Record<string, string>;    // custom HTTP headers
-  contextWindowSize?: number;          // for token % calculation
-  maxEventLogSize?: number;            // max events in log (default unbounded)
+  contextWindowSize?: number;          // reserved for future use
+  maxEventLogSize?: number;            // reserved for future use
 }
 ```
 
@@ -73,9 +73,11 @@ Lower-level: runs the agent with full message history and optional context.
 ```typescript
 await client.run({
   messages: [{ role: "user", content: "Hello" }],
-  context: { page: "/dashboard" },
+  context: [{ description: "Current page", value: "/dashboard" }],
 });
 ```
+
+`context` is `Context[]` from `@ag-ui/client`.
 
 ### `client.registerToolHandler(name, handler)`
 

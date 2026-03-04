@@ -41,10 +41,12 @@ await agentified.register();
 interface AgentifiedMastraConfig {
   agentifiedUrl: string;
   tools: ServerTool[];
-  toolHandlers: Record<string, (args: unknown) => Promise<unknown>>;
-  agent: Agent;  // @mastra/core Agent instance
+  toolHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
+  agent: { name: string; generate: (...args: any[]) => any; stream: (...args: any[]) => any };
 }
 ```
+
+The `agent` field accepts any object with `name`, `generate`, and `stream` — typically a `@mastra/core` `Agent` instance.
 
 ### `agentified.register()`
 
@@ -66,7 +68,7 @@ interface GenerateOptions {
   toolLimit?: number;
   seed?: number;
   debug?: boolean;
-  onStepFinish?: (event: { usage: TokenUsage; toolCalls: unknown[] }) => void;
+  onStepFinish?: (event: { usage: any; toolCalls: any[] }) => void;
 }
 
 const result = await agentified.generate({
@@ -94,11 +96,16 @@ The `generate` flow:
 
 ### `agentified.run(options)`
 
-Returns an `Observable<BaseEvent>` for AG-UI streaming — designed for use with the frontend client.
+Returns a `Promise<Observable<BaseEvent>>` for AG-UI streaming — designed for use with the frontend client.
 
 ```typescript
 interface RunOptions {
-  messages: Message[];
+  messages: Array<{
+    role: string;
+    content: string;
+    toolCallId?: string;
+    toolCalls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
+  }>;
   frontendTools?: string[];  // frontend tool names to exclude from prefetch
 }
 
