@@ -30,3 +30,10 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - Cascade delete: delete_instance removes tools from DB + in-memory
 - Instance isolation: TC-R02, TC-R03, TC-R12 all covered
 - All 55 tests pass (24 lib + 31 server)
+
+### Task 4: Instance GC ✅
+- Storage: get_expired_instances(cutoff) returns instance_ids where last_heartbeat < cutoff
+- AgentifiedCore: gc_instances() finds expired instances (heartbeat > 5min), cascade-deletes tools from DB + in-memory
+- Server: tokio::spawn 60s interval background task calling gc_instances
+- Messages NOT deleted (belong to sessions, not instances)
+- All 57 tests pass (26 lib + 31 server)
