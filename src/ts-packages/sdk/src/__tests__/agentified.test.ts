@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Agentified } from "../agentified.js";
+import { ApiClient } from "../agentified.js";
 import type { AgentifiedEvent, RankedTool, ServerTool } from "../types.js";
 
 const TEST_URL = "http://localhost:9119";
@@ -12,7 +12,7 @@ const testTool: ServerTool = {
 
 const rankedTool: RankedTool = { ...testTool, score: 0.95 };
 
-describe("Agentified", () => {
+describe("ApiClient", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -23,7 +23,7 @@ describe("Agentified", () => {
         new Response(JSON.stringify({ registered: 1 }), { status: 200 }),
       );
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
       });
@@ -45,7 +45,7 @@ describe("Agentified", () => {
         new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
       );
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
       });
@@ -74,7 +74,7 @@ describe("Agentified", () => {
       const events: AgentifiedEvent[] = [];
       const messages = [{ role: "user", content: "weather in Paris" }];
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
         onEvent: (e) => events.push(e),
@@ -103,7 +103,7 @@ describe("Agentified", () => {
         new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
       );
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
       });
@@ -139,7 +139,7 @@ describe("Agentified", () => {
       );
 
       const events: AgentifiedEvent[] = [];
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
         onEvent: (e) => events.push(e),
@@ -168,7 +168,7 @@ describe("Agentified", () => {
         new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
       );
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
       });
@@ -193,7 +193,7 @@ describe("Agentified", () => {
         new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
       );
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
       });
@@ -224,7 +224,7 @@ describe("Agentified", () => {
         parameters: {},
       };
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [frontendTool, serverTool],
       });
@@ -233,7 +233,7 @@ describe("Agentified", () => {
     });
 
     it("returns empty array when no frontend tools", () => {
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
       });
@@ -251,7 +251,7 @@ describe("Agentified", () => {
         metadata: { location: "frontend" },
       };
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [frontendTool, testTool],
       });
@@ -266,7 +266,7 @@ describe("Agentified", () => {
         new Response(JSON.stringify({ turn_id: "abc-123" }), { status: 201 }),
       );
 
-      const agent = new Agentified({ serverUrl: TEST_URL, tools: [testTool] });
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
       const result = await agent.captureTurn({
         toolsLoaded: ["get_weather"],
         message: "What is the weather?",
@@ -290,7 +290,7 @@ describe("Agentified", () => {
         new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
       );
 
-      const agent = new Agentified({ serverUrl: TEST_URL, tools: [testTool] });
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
       await agent.prefetch({
         messages: [{ role: "user", content: "test" }],
         limit: 5,
@@ -313,7 +313,7 @@ describe("Agentified", () => {
         new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
       );
 
-      const agent = new Agentified({ serverUrl: TEST_URL, tools: [testTool] });
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
       await agent.prefetch({
         messages: [{ role: "user", content: "test" }],
       });
@@ -332,7 +332,7 @@ describe("Agentified", () => {
         Promise.resolve(new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 })),
       );
 
-      const agent = new Agentified({
+      const agent = new ApiClient({
         serverUrl: TEST_URL,
         tools: [testTool],
       });

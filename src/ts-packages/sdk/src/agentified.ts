@@ -1,5 +1,5 @@
 import type {
-  AgentifiedConfig,
+  ApiClientConfig,
   AgentifiedEvent,
   CaptureTurnOptions,
   CaptureTurnResponse,
@@ -12,10 +12,10 @@ import type {
   ServerTool,
 } from "./types.js";
 
-export class Agentified {
-  private config: AgentifiedConfig;
+export class ApiClient {
+  private config: ApiClientConfig;
 
-  constructor(config: AgentifiedConfig) {
+  constructor(config: ApiClientConfig) {
     this.config = config;
   }
 

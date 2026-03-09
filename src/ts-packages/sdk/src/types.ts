@@ -105,7 +105,7 @@ export type AgentifiedEvent =
 
 // Config
 
-export interface AgentifiedConfig {
+export interface ApiClientConfig {
   serverUrl: string;
   tools: ServerTool[];
   onEvent?: (event: AgentifiedEvent) => void;

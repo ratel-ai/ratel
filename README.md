@@ -1,8 +1,9 @@
 <div align="center">
-  <img src="https://agentified.dev/assets/logo-new-CNqV8zpW.png" alt="Agentified" height="80" />
+  <img src="https://agentified.dev/assets/logo-new-CNqV8zpW.png" alt="Agentified" height="100" />
 
-  <h3>The context engine for AI agents</h3>
-  <p>Smart tool selection for any framework. TypeScript & Python.</p>
+  <h2>Agentified</h2>
+  <h4>The Engine that orchestrates your context and learns from it.</h4>
+  <p>Smart tool, skills and knowledge selection for your agent. Works with any framework, TypeScript & Python.</p>
 
   <p>
     <a href="https://agentified.dev/docs">Docs</a> •
@@ -58,9 +59,9 @@ npm install @agentified/sdk
 ```
 
 ```typescript
-import { Agentified, tool } from "@agentified/sdk";
+import { ApiClient, tool } from "@agentified/sdk";
 
-const agent = new Agentified({
+const ag = new ApiClient({
   serverUrl: "http://localhost:9119",
   tools: [
     tool({ name: "get_weather", description: "Get current weather for a city", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
@@ -68,10 +69,10 @@ const agent = new Agentified({
   ],
 });
 
-await agent.register();
+await ag.register();
 
 // Discover relevant tools for a conversation
-const ranked = await agent.prefetch({
+const ranked = await ag.prefetch({
   messages: [{ role: "user", content: "What's the weather in Rome?" }],
 });
 // → [{ name: "get_weather", score: 0.92, ... }]

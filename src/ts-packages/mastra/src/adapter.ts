@@ -1,7 +1,7 @@
 import type { BaseEvent, CustomEvent, Message } from "@ag-ui/client";
 import { createTool } from "@mastra/core/tools";
 import { MastraAgent } from "@ag-ui/mastra";
-import { Agentified } from "@agentified/sdk";
+import { ApiClient } from "@agentified/sdk";
 import type {
   DiscoverToolInput,
   RankedTool,
@@ -72,12 +72,12 @@ export interface RunOptions {
 
 export class AgentifiedMastra {
   private config: AgentifiedMastraConfig;
-  private sdk: Agentified;
+  private sdk: ApiClient;
   private lastPrefetchResult: { ranked: RankedTool[]; durationMs: number } | null = null;
 
   constructor(config: AgentifiedMastraConfig) {
     this.config = config;
-    this.sdk = new Agentified({
+    this.sdk = new ApiClient({
       serverUrl: config.agentifiedUrl,
       tools: config.tools,
     });

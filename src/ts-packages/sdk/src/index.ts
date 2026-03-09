@@ -1,7 +1,7 @@
-export { Agentified } from "./agentified.js";
+export { ApiClient } from "./agentified.js";
 export { tool } from "./tool.js";
 export type {
-  AgentifiedConfig,
+  ApiClientConfig,
   AgentifiedEvent,
   CaptureTurnOptions,
   CaptureTurnResponse,
