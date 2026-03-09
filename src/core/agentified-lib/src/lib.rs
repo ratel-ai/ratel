@@ -394,6 +394,30 @@ impl AgentifiedCore {
 
         Ok(emb)
     }
+
+    pub async fn gc_instances(&self) -> Result<usize, CoreError> {
+        let cutoff = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();
+        let storage = self.storage.clone();
+        let cutoff_clone = cutoff.clone();
+        let expired = tokio::task::spawn_blocking(move || {
+            storage.get_expired_instances(&cutoff_clone)
+        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+        let count = expired.len();
+        for id in &expired {
+            let storage = self.storage.clone();
+            let id_clone = id.clone();
+            tokio::task::spawn_blocking(move || {
+                storage.delete_instance(&id_clone)
+            }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+              .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+            self.tools.write().await.remove(id);
+        }
+
+        Ok(count)
+    }
 }
 
 // Helpers
@@ -451,4 +475,72 @@ fn expand_with_providers(
     }
 
     ranked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn make_core() -> AgentifiedCore {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        let embedding: Arc<dyn EmbeddingService> = Arc::new(FakeEmbedding {
+            call_count: Default::default(),
+            batch_call_count: Default::default(),
+        });
+        AgentifiedCore::new(embedding, storage)
+    }
+
+    #[tokio::test]
+    async fn gc_deletes_expired_keeps_fresh() {
+        let core = make_core();
+
+        // Create two instances
+        let expired = core.create_instance("ds").await.unwrap();
+        let fresh = core.create_instance("ds").await.unwrap();
+
+        // Register tools on both
+        let tool = models::Tool {
+            name: "t1".into(),
+            description: "d".into(),
+            parameters: serde_json::json!({}),
+            metadata: None,
+            fields: None,
+        };
+        core.register_tools(&expired.instance_id, vec![tool.clone()]).await.unwrap();
+        core.register_tools(&fresh.instance_id, vec![tool]).await.unwrap();
+
+        // Set expired instance heartbeat to the past
+        let old_heartbeat = "2020-01-01T00:00:00Z";
+        let storage = core.storage.clone();
+        let eid = expired.instance_id.clone();
+        tokio::task::spawn_blocking(move || {
+            storage.update_heartbeat(&eid, old_heartbeat).unwrap();
+        }).await.unwrap();
+
+        // Run GC
+        let deleted = core.gc_instances().await.unwrap();
+        assert_eq!(deleted, 1);
+
+        // Expired instance gone from storage
+        let storage = core.storage.clone();
+        let eid = expired.instance_id.clone();
+        let inst = tokio::task::spawn_blocking(move || {
+            storage.get_instance(&eid)
+        }).await.unwrap().unwrap();
+        assert!(inst.is_none());
+
+        // Fresh instance still exists
+        let storage = core.storage.clone();
+        let fid = fresh.instance_id.clone();
+        let inst = tokio::task::spawn_blocking(move || {
+            storage.get_instance(&fid)
+        }).await.unwrap().unwrap();
+        assert!(inst.is_some());
+
+        // In-memory tools cleaned for expired, kept for fresh
+        let tools = core.tools.read().await;
+        assert!(!tools.contains_key(&expired.instance_id));
+        assert!(tools.contains_key(&fresh.instance_id));
+    }
 }

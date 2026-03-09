@@ -132,6 +132,20 @@ async fn main() {
 
     let core = Arc::new(AgentifiedCore::new(embedding, storage));
 
+    // Instance GC: delete expired instances every 60s
+    let gc_core = core.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            match gc_core.gc_instances().await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("gc: deleted {n} expired instances"),
+                Err(e) => tracing::error!("gc failed: {e}"),
+            }
+        }
+    });
+
     tracing::info!("agentified-core listening on {addr}");
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();

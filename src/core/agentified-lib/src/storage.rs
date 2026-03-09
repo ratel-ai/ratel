@@ -16,6 +16,7 @@ pub trait Storage: Send + Sync {
     fn delete_instance(&self, instance_id: &str) -> Result<bool>;
     fn delete_tools_for_instance(&self, instance_id: &str) -> Result<()>;
     fn update_heartbeat(&self, instance_id: &str, heartbeat: &str) -> Result<bool>;
+    fn get_expired_instances(&self, cutoff: &str) -> Result<Vec<String>>;
 }
 
 // Blob helpers
@@ -67,6 +68,9 @@ impl Storage for NoopStorage {
     }
     fn update_heartbeat(&self, _instance_id: &str, _heartbeat: &str) -> Result<bool> {
         Ok(false)
+    }
+    fn get_expired_instances(&self, _cutoff: &str) -> Result<Vec<String>> {
+        Ok(vec![])
     }
 }
 
@@ -299,6 +303,19 @@ impl Storage for SqliteStorage {
         )?;
         Ok(affected > 0)
     }
+
+    fn get_expired_instances(&self, cutoff: &str) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT instance_id FROM instances WHERE last_heartbeat < ?1"
+        )?;
+        let rows = stmt.query_map(rusqlite::params![cutoff], |row| row.get(0))?;
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row?);
+        }
+        Ok(ids)
+    }
 }
 
 #[cfg(test)]
@@ -437,6 +454,29 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].0, "hello");
         assert_eq!(loaded[0].1, vec![0.1, 0.2, 0.3]);
+    }
+
+    #[test]
+    fn sqlite_get_expired_instances() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        // Instance with old heartbeat (expired)
+        s.save_instance(&Instance {
+            instance_id: "old".into(),
+            dataset_id: "ds".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            last_heartbeat: "2026-01-01T00:00:00Z".into(),
+        }).unwrap();
+        // Instance with recent heartbeat (fresh)
+        s.save_instance(&Instance {
+            instance_id: "fresh".into(),
+            dataset_id: "ds".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            last_heartbeat: "2099-01-01T00:00:00Z".into(),
+        }).unwrap();
+
+        let cutoff = "2026-06-01T00:00:00Z";
+        let expired = s.get_expired_instances(cutoff).unwrap();
+        assert_eq!(expired, vec!["old"]);
     }
 
     #[test]
