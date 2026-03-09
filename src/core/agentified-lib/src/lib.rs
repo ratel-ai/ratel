@@ -41,7 +41,7 @@ impl std::fmt::Display for CoreError {
 // AgentifiedCore
 
 pub struct AgentifiedCore {
-    tools: RwLock<HashMap<String, StoredTool>>,
+    tools: RwLock<HashMap<String, HashMap<String, StoredTool>>>,
     turns: RwLock<HashMap<String, Turn>>,
     embedding_cache: RwLock<HashMap<String, Vec<f32>>>,
     embedding: Arc<dyn EmbeddingService>,
@@ -50,12 +50,11 @@ pub struct AgentifiedCore {
 
 impl AgentifiedCore {
     pub fn new(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>) -> Self {
-        let tools_map = storage.load_all_tools().unwrap_or_default().into_iter().collect();
         let turns_map = storage.load_all_turns().unwrap_or_default().into_iter().collect();
         let cache_map = storage.load_all_embeddings().unwrap_or_default().into_iter().collect();
 
         Self {
-            tools: RwLock::new(tools_map),
+            tools: RwLock::new(HashMap::new()),
             turns: RwLock::new(turns_map),
             embedding_cache: RwLock::new(cache_map),
             embedding,
@@ -63,7 +62,17 @@ impl AgentifiedCore {
         }
     }
 
-    pub async fn register_tools(&self, tools: Vec<Tool>) -> Result<RegisterToolsResponse, CoreError> {
+    pub async fn register_tools(&self, instance_id: &str, tools: Vec<Tool>) -> Result<RegisterToolsResponse, CoreError> {
+        // Verify instance exists
+        let storage = self.storage.clone();
+        let iid = instance_id.to_string();
+        let instance = tokio::task::spawn_blocking(move || storage.get_instance(&iid))
+            .await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+            .map_err(|e| CoreError::EmbeddingFailed(e))?;
+        if instance.is_none() {
+            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
+        }
+
         let count = tools.len();
 
         struct ToolTexts {
@@ -153,20 +162,22 @@ impl AgentifiedCore {
         drop(cache);
 
         let mut tools_map = self.tools.write().await;
+        let instance_tools = tools_map.entry(instance_id.to_string()).or_default();
         for (tool, (embeddings, bm25_text)) in tools.into_iter().zip(tool_data) {
-            tools_map.insert(tool.name.clone(), StoredTool { tool, embeddings, bm25_text });
+            instance_tools.insert(tool.name.clone(), StoredTool { tool, embeddings, bm25_text });
         }
 
         // Write-through to storage
         {
             let storage = self.storage.clone();
-            let tool_pairs: Vec<(String, StoredTool)> = tools_map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let iid = instance_id.to_string();
+            let tool_pairs: Vec<(String, StoredTool)> = instance_tools.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             let cache = self.embedding_cache.read().await;
             let emb_pairs: Vec<(String, Vec<f32>)> = cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             drop(cache);
             tokio::task::spawn_blocking(move || {
                 let refs: Vec<(&str, &StoredTool)> = tool_pairs.iter().map(|(k, v)| (k.as_str(), v)).collect();
-                if let Err(e) = storage.save_tools(&refs) {
+                if let Err(e) = storage.save_tools(&iid, &refs) {
                     tracing::error!("storage save_tools failed: {e}");
                 }
                 let emb_refs: Vec<(&str, &[f32])> = emb_pairs.iter().map(|(k, v)| (k.as_str(), v.as_slice())).collect();
@@ -179,13 +190,35 @@ impl AgentifiedCore {
         Ok(RegisterToolsResponse { registered: count })
     }
 
-    pub async fn list_tools(&self) -> ListToolsResponse {
+    pub async fn list_tools(&self, instance_id: &str) -> Result<ListToolsResponse, CoreError> {
+        // Verify instance exists
+        let storage = self.storage.clone();
+        let iid = instance_id.to_string();
+        let instance = tokio::task::spawn_blocking(move || storage.get_instance(&iid))
+            .await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+            .map_err(|e| CoreError::EmbeddingFailed(e))?;
+        if instance.is_none() {
+            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
+        }
+
         let tools = self.tools.read().await;
-        let tool_list = tools.values().map(|st| st.tool.clone()).collect();
-        ListToolsResponse { tools: tool_list }
+        let tool_list = tools.get(instance_id)
+            .map(|m| m.values().map(|st| st.tool.clone()).collect())
+            .unwrap_or_default();
+        Ok(ListToolsResponse { tools: tool_list })
     }
 
-    pub async fn discover(&self, body: DiscoverRequest) -> Result<DiscoverResponse, CoreError> {
+    pub async fn discover(&self, instance_id: &str, body: DiscoverRequest) -> Result<DiscoverResponse, CoreError> {
+        // Verify instance exists
+        let storage = self.storage.clone();
+        let iid = instance_id.to_string();
+        let instance = tokio::task::spawn_blocking(move || storage.get_instance(&iid))
+            .await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+            .map_err(|e| CoreError::EmbeddingFailed(e))?;
+        if instance.is_none() {
+            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
+        }
+
         let limit = body.limit.unwrap_or(5).min(100);
 
         let base_tool_names: Vec<String> = if let Some(ref turn_id) = body.turn_id {
@@ -201,12 +234,16 @@ impl AgentifiedCore {
         let query_embedding = self.embed_cached(&body.query).await.map_err(CoreError::EmbeddingFailed)?;
 
         let tools = self.tools.read().await;
-        if tools.is_empty() {
+        let instance_tools = tools.get(instance_id);
+        let empty = HashMap::new();
+        let instance_tools = instance_tools.unwrap_or(&empty);
+
+        if instance_tools.is_empty() {
             return Ok(DiscoverResponse { tools: vec![] });
         }
 
         let mut base_tools: Vec<RankedTool> = base_tool_names.iter()
-            .filter_map(|name| tools.get(name))
+            .filter_map(|name| instance_tools.get(name))
             .map(|st| RankedTool { tool: st.tool.clone(), score: 1.0, graph_expanded: None })
             .collect();
 
@@ -214,7 +251,7 @@ impl AgentifiedCore {
         let mut exclude = body.exclude.unwrap_or_default();
         exclude.extend(base_tool_names);
 
-        let stored: Vec<&StoredTool> = tools
+        let stored: Vec<&StoredTool> = instance_tools
             .values()
             .filter(|t| !exclude.contains(&t.tool.name))
             .collect();
@@ -252,7 +289,7 @@ impl AgentifiedCore {
         ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         ranked.truncate(limit);
 
-        let ranked = expand_with_providers(ranked, &tools, limit);
+        let ranked = expand_with_providers(ranked, instance_tools, limit);
 
         base_tools.extend(ranked);
 
@@ -328,6 +365,10 @@ impl AgentifiedCore {
         if !deleted {
             return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
         }
+
+        // Remove in-memory tools for this instance
+        self.tools.write().await.remove(instance_id);
+
         Ok(())
     }
 

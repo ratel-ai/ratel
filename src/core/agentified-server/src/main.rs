@@ -24,8 +24,8 @@ struct HealthResponse {
 pub fn app(core: Arc<AgentifiedCore>) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/api/v1/tools", post(register_tools).get(list_tools))
-        .route("/api/v1/discover", post(discover))
+        .route("/api/v1/instances/{id}/tools", post(register_tools).get(list_tools))
+        .route("/api/v1/instances/{id}/discover", post(discover))
         .route("/api/v1/turns", post(capture_turn))
         .route("/api/v1/instances", post(create_instance))
         .route("/api/v1/instances/{id}/heartbeat", post(heartbeat_instance))
@@ -41,21 +41,27 @@ async fn health() -> Json<HealthResponse> {
 
 async fn register_tools(
     State(core): State<Arc<AgentifiedCore>>,
+    Path(id): Path<String>,
     Json(body): Json<RegisterToolsRequest>,
 ) -> Result<(StatusCode, Json<RegisterToolsResponse>), (StatusCode, Json<ErrorResponse>)> {
-    let response = core.register_tools(body.tools).await.map_err(map_error)?;
+    let response = core.register_tools(&id, body.tools).await.map_err(map_error)?;
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-async fn list_tools(State(core): State<Arc<AgentifiedCore>>) -> Json<ListToolsResponse> {
-    Json(core.list_tools().await)
+async fn list_tools(
+    State(core): State<Arc<AgentifiedCore>>,
+    Path(id): Path<String>,
+) -> Result<Json<ListToolsResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let response = core.list_tools(&id).await.map_err(map_error)?;
+    Ok(Json(response))
 }
 
 async fn discover(
     State(core): State<Arc<AgentifiedCore>>,
+    Path(id): Path<String>,
     Json(body): Json<DiscoverRequest>,
 ) -> Result<Json<DiscoverResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let response = core.discover(body).await.map_err(map_error)?;
+    let response = core.discover(&id, body).await.map_err(map_error)?;
     Ok(Json(response))
 }
 
@@ -167,6 +173,9 @@ mod tests {
 
     #[tokio::test]
     async fn register_tools_returns_created() {
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
+
         let body = serde_json::json!({
             "tools": [{
                 "name": "getAccountInfo",
@@ -175,11 +184,11 @@ mod tests {
             }]
         });
 
-        let response = test_app()
+        let response = app
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -192,7 +201,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_tools_returns_registered_tools() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let body = serde_json::json!({
             "tools": [{
@@ -206,7 +216,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -215,7 +225,7 @@ mod tests {
             .unwrap();
 
         let response = app
-            .oneshot(Request::builder().uri("/api/v1/tools").body(Body::empty()).unwrap())
+            .oneshot(Request::builder().uri(&format!("/api/v1/instances/{iid}/tools")).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
@@ -232,11 +242,13 @@ mod tests {
     #[tokio::test]
     async fn embedding_cached_for_same_content() {
         let embedding = Arc::new(FakeEmbedding::new());
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
         let core = Arc::new(AgentifiedCore::new(
             embedding.clone() as Arc<dyn EmbeddingService>,
-            Arc::new(NoopStorage),
+            storage as Arc<dyn Storage>,
         ));
         let app = app(core);
+        let iid = create_test_instance(&app).await;
 
         let body = serde_json::json!({
             "tools": [{
@@ -253,7 +265,7 @@ mod tests {
                 .oneshot(
                     Request::builder()
                         .method("POST")
-                        .uri("/api/v1/tools")
+                        .uri(&format!("/api/v1/instances/{iid}/tools"))
                         .header("content-type", "application/json")
                         .body(Body::from(json_str.clone()))
                         .unwrap(),
@@ -271,7 +283,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_ranks_matching_tool_first() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let register = serde_json::json!({
             "tools": [
@@ -292,7 +305,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&register).unwrap()))
                     .unwrap(),
@@ -306,7 +319,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -329,9 +342,17 @@ mod tests {
 
     #[tokio::test]
     async fn register_tools_returns_error_on_embedding_failure() {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        // Create instance directly in storage
+        storage.save_instance(&agentified_lib::models::Instance {
+            instance_id: "fail-inst".into(),
+            dataset_id: "ds".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            last_heartbeat: "2026-01-01T00:00:00Z".into(),
+        }).unwrap();
         let core = Arc::new(AgentifiedCore::new(
             Arc::new(FailingEmbedding),
-            Arc::new(NoopStorage),
+            storage as Arc<dyn Storage>,
         ));
         let app = app(core);
 
@@ -343,7 +364,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri("/api/v1/instances/fail-inst/tools")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -363,9 +384,15 @@ mod tests {
         let name_emb = fake.embed("test").await.unwrap();
         let desc_emb = fake.embed("test desc").await.unwrap();
 
-        // Pre-populate core with a tool via storage
         let storage = Arc::new(agentified_lib::SqliteStorage::new(":memory:").unwrap());
-        storage.save_tools(&[("test", &StoredTool {
+        // Create instance + tool directly in storage
+        storage.save_instance(&agentified_lib::models::Instance {
+            instance_id: "fail-inst".into(),
+            dataset_id: "ds".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            last_heartbeat: "2026-01-01T00:00:00Z".into(),
+        }).unwrap();
+        storage.save_tools("fail-inst", &[("test", &StoredTool {
             tool: agentified_lib::models::Tool {
                 name: "test".to_string(),
                 description: "test desc".to_string(),
@@ -393,7 +420,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri("/api/v1/instances/fail-inst/discover")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -409,7 +436,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_limit_capped() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let reg = serde_json::json!({
             "tools": [{"name": "t", "description": "d", "parameters": {}}]
@@ -418,7 +446,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&reg).unwrap()))
                     .unwrap(),
@@ -431,7 +459,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -447,7 +475,8 @@ mod tests {
 
     #[tokio::test]
     async fn register_with_multi_field_embeddings() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let body = serde_json::json!({
             "tools": [{
@@ -467,7 +496,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -478,7 +507,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
 
         let response = app
-            .oneshot(Request::builder().uri("/api/v1/tools").body(Body::empty()).unwrap())
+            .oneshot(Request::builder().uri(&format!("/api/v1/instances/{iid}/tools")).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
@@ -492,7 +521,8 @@ mod tests {
 
     #[tokio::test]
     async fn register_backward_compat_no_fields() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let body = serde_json::json!({
             "tools": [{
@@ -506,7 +536,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -521,7 +551,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -538,7 +568,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_with_multi_field_weights() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let reg = serde_json::json!({
             "tools": [
@@ -571,7 +602,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&reg).unwrap()))
                     .unwrap(),
@@ -584,7 +615,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -601,7 +632,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_with_exclude_filters_out_named_tools() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let reg = serde_json::json!({
             "tools": [
@@ -615,7 +647,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&reg).unwrap()))
                     .unwrap(),
@@ -633,7 +665,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -652,7 +684,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_with_empty_exclude_returns_all() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let reg = serde_json::json!({
             "tools": [
@@ -665,7 +698,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&reg).unwrap()))
                     .unwrap(),
@@ -679,7 +712,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -696,11 +729,13 @@ mod tests {
     #[tokio::test]
     async fn register_tools_uses_batch_embedding() {
         let embedding = Arc::new(FakeEmbedding::new());
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
         let core = Arc::new(AgentifiedCore::new(
             embedding.clone() as Arc<dyn EmbeddingService>,
-            Arc::new(NoopStorage),
+            storage as Arc<dyn Storage>,
         ));
         let app = app(core);
+        let iid = create_test_instance(&app).await;
 
         let body = serde_json::json!({
             "tools": [
@@ -714,7 +749,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -732,7 +767,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_with_custom_weights() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let reg = serde_json::json!({
             "tools": [
@@ -761,7 +797,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&reg).unwrap()))
                     .unwrap(),
@@ -784,7 +820,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -802,7 +838,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_graph_expansion_injects_providers() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let reg = serde_json::json!({
             "tools": [
@@ -830,7 +867,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&reg).unwrap()))
                     .unwrap(),
@@ -843,7 +880,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -899,13 +936,9 @@ mod tests {
 
     #[tokio::test]
     async fn discover_with_turn_id_includes_base_tools() {
-        let core = Arc::new(AgentifiedCore::new(
-            Arc::new(FakeEmbedding::new()),
-            Arc::new(NoopStorage),
-        ));
-        let app = app(core);
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
-        // Register 3 tools
         let reg = serde_json::json!({
             "tools": [
                 { "name": "getAccountInfo", "description": "Get customer account details", "parameters": {} },
@@ -917,13 +950,12 @@ mod tests {
         app.clone().oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/tools")
+                .uri(&format!("/api/v1/instances/{iid}/tools"))
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&reg).unwrap()))
                 .unwrap(),
         ).await.unwrap();
 
-        // Capture a turn with getAccountInfo as loaded tool
         let turn_body = serde_json::json!({
             "tools_loaded": ["getAccountInfo"],
             "message": "I need account info"
@@ -951,7 +983,7 @@ mod tests {
         let response = app.oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/discover")
+                .uri(&format!("/api/v1/instances/{iid}/discover"))
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&query).unwrap()))
                 .unwrap(),
@@ -977,7 +1009,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_with_invalid_turn_id_returns_error() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let reg = serde_json::json!({
             "tools": [{ "name": "t", "description": "d", "parameters": {} }]
@@ -985,7 +1018,7 @@ mod tests {
         app.clone().oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/tools")
+                .uri(&format!("/api/v1/instances/{iid}/tools"))
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&reg).unwrap()))
                 .unwrap(),
@@ -999,7 +1032,7 @@ mod tests {
         let response = app.oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/discover")
+                .uri(&format!("/api/v1/instances/{iid}/discover"))
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&query).unwrap()))
                 .unwrap(),
@@ -1013,7 +1046,8 @@ mod tests {
 
     #[tokio::test]
     async fn discover_no_graph_expansion_without_requires() {
-        let app = test_app();
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
 
         let reg = serde_json::json!({
             "tools": [
@@ -1035,7 +1069,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri(&format!("/api/v1/instances/{iid}/tools"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&reg).unwrap()))
                     .unwrap(),
@@ -1048,7 +1082,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/discover")
+                    .uri(&format!("/api/v1/instances/{iid}/discover"))
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&query).unwrap()))
                     .unwrap(),
@@ -1064,49 +1098,6 @@ mod tests {
         assert!(expanded.is_empty(), "no tools should be graph_expanded");
     }
 
-    #[tokio::test]
-    async fn app_hydrates_tools_from_storage() {
-        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
-
-        let fake = FakeEmbedding::new();
-        let name_emb = fake.embed("getThing").await.unwrap();
-        let desc_emb = fake.embed("Get a thing").await.unwrap();
-        let tool = StoredTool {
-            tool: agentified_lib::models::Tool {
-                name: "getThing".into(),
-                description: "Get a thing".into(),
-                parameters: serde_json::json!({}),
-                metadata: None,
-                fields: None,
-            },
-            embeddings: FieldEmbeddings {
-                name: name_emb,
-                description: desc_emb,
-                input_schema: None,
-                output_schema: None,
-            },
-            bm25_text: "getThing Get a thing".into(),
-        };
-        storage.save_tools(&[("getThing", &tool)]).unwrap();
-
-        let core = Arc::new(AgentifiedCore::new(
-            Arc::new(FakeEmbedding::new()),
-            storage as Arc<dyn Storage>,
-        ));
-        let app = app(core);
-
-        let response = app
-            .oneshot(Request::builder().uri("/api/v1/tools").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["tools"].as_array().unwrap().len(), 1);
-        assert_eq!(json["tools"][0]["name"], "getThing");
-    }
-
     // Instance CRUD tests
 
     fn test_app_with_storage() -> Router {
@@ -1116,6 +1107,18 @@ mod tests {
             storage as Arc<dyn Storage>,
         ));
         app(core)
+    }
+
+    async fn create_test_instance(app: &Router) -> String {
+        let resp = app.clone().oneshot(
+            Request::builder()
+                .method("POST").uri("/api/v1/instances")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"dataset":"test"}"#)).unwrap(),
+        ).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        json["instance_id"].as_str().unwrap().to_string()
     }
 
     #[tokio::test]
@@ -1246,6 +1249,48 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
+    // Instance-scoped tools tests
+
+    #[tokio::test]
+    async fn register_tools_on_instance_and_list() {
+        let app = test_app_with_storage();
+
+        // Create instance
+        let resp = app.clone().oneshot(
+            Request::builder()
+                .method("POST").uri("/api/v1/instances")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"dataset":"ds"}"#)).unwrap(),
+        ).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let iid = json["instance_id"].as_str().unwrap().to_string();
+
+        // Register tool on instance
+        let body = serde_json::json!({
+            "tools": [{"name": "myTool", "description": "does stuff", "parameters": {}}]
+        });
+        let resp = app.clone().oneshot(
+            Request::builder()
+                .method("POST").uri(&format!("/api/v1/instances/{iid}/tools"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap())).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        // List tools on instance
+        let resp = app.oneshot(
+            Request::builder()
+                .uri(&format!("/api/v1/instances/{iid}/tools"))
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(json["tools"][0]["name"], "myTool");
+    }
+
     #[tokio::test]
     async fn delete_missing_instance_returns_404() {
         let app = test_app_with_storage();
@@ -1268,6 +1313,14 @@ mod tests {
     async fn app_hydrates_embedding_cache() {
         let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
 
+        // Create an instance directly in storage
+        storage.save_instance(&agentified_lib::models::Instance {
+            instance_id: "cache-inst".into(),
+            dataset_id: "ds".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            last_heartbeat: "2026-01-01T00:00:00Z".into(),
+        }).unwrap();
+
         let fake = FakeEmbedding::new();
         let emb = fake.embed("toolName").await.unwrap();
         storage.save_embeddings(&[("toolName", &emb)]).unwrap();
@@ -1289,7 +1342,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/tools")
+                    .uri("/api/v1/instances/cache-inst/tools")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
@@ -1302,5 +1355,161 @@ mod tests {
             0,
             "should not call embed_batch when cache is hydrated"
         );
+    }
+
+    // TC-R02: same tool name on different instances → separate entries
+    #[tokio::test]
+    async fn instance_isolation_same_tool_name_separate_entries() {
+        let app = test_app_with_storage();
+        let inst_a = create_test_instance(&app).await;
+        let inst_b = create_test_instance(&app).await;
+
+        let tool = serde_json::json!({
+            "tools": [{"name": "sharedName", "description": "tool on A", "parameters": {}}]
+        });
+        app.clone().oneshot(
+            Request::builder().method("POST")
+                .uri(&format!("/api/v1/instances/{inst_a}/tools"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&tool).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        let tool_b = serde_json::json!({
+            "tools": [{"name": "sharedName", "description": "tool on B", "parameters": {}}]
+        });
+        app.clone().oneshot(
+            Request::builder().method("POST")
+                .uri(&format!("/api/v1/instances/{inst_b}/tools"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&tool_b).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        // List A → 1 tool with A's description
+        let resp = app.clone().oneshot(
+            Request::builder().uri(&format!("/api/v1/instances/{inst_a}/tools")).body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(json["tools"][0]["description"], "tool on A");
+
+        // List B → 1 tool with B's description
+        let resp = app.oneshot(
+            Request::builder().uri(&format!("/api/v1/instances/{inst_b}/tools")).body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(json["tools"][0]["description"], "tool on B");
+    }
+
+    // TC-R03/TC-R12: discover scoped to instance — no cross-instance results
+    #[tokio::test]
+    async fn instance_isolation_discover_no_cross_instance() {
+        let app = test_app_with_storage();
+        let inst_a = create_test_instance(&app).await;
+        let inst_b = create_test_instance(&app).await;
+
+        // Register tool only on A
+        let tool = serde_json::json!({
+            "tools": [{"name": "processRefund", "description": "Process a refund", "parameters": {}}]
+        });
+        app.clone().oneshot(
+            Request::builder().method("POST")
+                .uri(&format!("/api/v1/instances/{inst_a}/tools"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&tool).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        // Discover on B → empty
+        let query = serde_json::json!({ "query": "refund" });
+        let resp = app.clone().oneshot(
+            Request::builder().method("POST")
+                .uri(&format!("/api/v1/instances/{inst_b}/discover"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&query).unwrap())).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["tools"].as_array().unwrap().len(), 0);
+
+        // Discover on A → finds it
+        let resp = app.oneshot(
+            Request::builder().method("POST")
+                .uri(&format!("/api/v1/instances/{inst_a}/discover"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&query).unwrap())).unwrap(),
+        ).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(json["tools"][0]["name"], "processRefund");
+    }
+
+    // Cascade delete: deleting instance removes its tools
+    #[tokio::test]
+    async fn delete_instance_cascade_deletes_tools() {
+        let app = test_app_with_storage();
+        let iid = create_test_instance(&app).await;
+
+        // Register tool
+        let tool = serde_json::json!({
+            "tools": [{"name": "myTool", "description": "desc", "parameters": {}}]
+        });
+        app.clone().oneshot(
+            Request::builder().method("POST")
+                .uri(&format!("/api/v1/instances/{iid}/tools"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&tool).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        // Delete instance
+        let resp = app.clone().oneshot(
+            Request::builder().method("DELETE")
+                .uri(&format!("/api/v1/instances/{iid}"))
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        // List tools → 404 (instance gone)
+        let resp = app.oneshot(
+            Request::builder().uri(&format!("/api/v1/instances/{iid}/tools")).body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    // 404 for tools/discover on non-existent instance
+    #[tokio::test]
+    async fn tools_on_nonexistent_instance_returns_404() {
+        let app = test_app_with_storage();
+
+        // Register tools → 404
+        let tool = serde_json::json!({
+            "tools": [{"name": "t", "description": "d", "parameters": {}}]
+        });
+        let resp = app.clone().oneshot(
+            Request::builder().method("POST")
+                .uri("/api/v1/instances/nonexistent/tools")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&tool).unwrap())).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        // List tools → 404
+        let resp = app.clone().oneshot(
+            Request::builder().uri("/api/v1/instances/nonexistent/tools").body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        // Discover → 404
+        let query = serde_json::json!({ "query": "test" });
+        let resp = app.oneshot(
+            Request::builder().method("POST")
+                .uri("/api/v1/instances/nonexistent/discover")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&query).unwrap())).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 }

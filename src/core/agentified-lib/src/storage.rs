@@ -5,8 +5,8 @@ use crate::models::{Instance, StoredTool, Turn};
 // Trait
 
 pub trait Storage: Send + Sync {
-    fn save_tools(&self, tools: &[(&str, &StoredTool)]) -> Result<()>;
-    fn load_all_tools(&self) -> Result<Vec<(String, StoredTool)>>;
+    fn save_tools(&self, instance_id: &str, tools: &[(&str, &StoredTool)]) -> Result<()>;
+    fn load_tools_for_instance(&self, instance_id: &str) -> Result<Vec<(String, StoredTool)>>;
     fn save_turn(&self, id: &str, turn: &Turn) -> Result<()>;
     fn load_all_turns(&self) -> Result<Vec<(String, Turn)>>;
     fn save_embeddings(&self, entries: &[(&str, &[f32])]) -> Result<()>;
@@ -14,6 +14,7 @@ pub trait Storage: Send + Sync {
     fn save_instance(&self, instance: &Instance) -> Result<()>;
     fn get_instance(&self, instance_id: &str) -> Result<Option<Instance>>;
     fn delete_instance(&self, instance_id: &str) -> Result<bool>;
+    fn delete_tools_for_instance(&self, instance_id: &str) -> Result<()>;
     fn update_heartbeat(&self, instance_id: &str, heartbeat: &str) -> Result<bool>;
 }
 
@@ -34,10 +35,10 @@ fn blob_to_vec_f32(b: &[u8]) -> Vec<f32> {
 pub struct NoopStorage;
 
 impl Storage for NoopStorage {
-    fn save_tools(&self, _tools: &[(&str, &StoredTool)]) -> Result<()> {
+    fn save_tools(&self, _instance_id: &str, _tools: &[(&str, &StoredTool)]) -> Result<()> {
         Ok(())
     }
-    fn load_all_tools(&self) -> Result<Vec<(String, StoredTool)>> {
+    fn load_tools_for_instance(&self, _instance_id: &str) -> Result<Vec<(String, StoredTool)>> {
         Ok(vec![])
     }
     fn save_turn(&self, _id: &str, _turn: &Turn) -> Result<()> {
@@ -61,6 +62,9 @@ impl Storage for NoopStorage {
     fn delete_instance(&self, _instance_id: &str) -> Result<bool> {
         Ok(false)
     }
+    fn delete_tools_for_instance(&self, _instance_id: &str) -> Result<()> {
+        Ok(())
+    }
     fn update_heartbeat(&self, _instance_id: &str, _heartbeat: &str) -> Result<bool> {
         Ok(false)
     }
@@ -81,7 +85,8 @@ impl SqliteStorage {
         )?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS tools (
-                name TEXT PRIMARY KEY,
+                instance_id TEXT NOT NULL,
+                name TEXT NOT NULL,
                 description TEXT NOT NULL,
                 parameters TEXT NOT NULL,
                 metadata TEXT,
@@ -90,8 +95,10 @@ impl SqliteStorage {
                 emb_description BLOB NOT NULL,
                 emb_input_schema BLOB,
                 emb_output_schema BLOB,
-                bm25_text TEXT NOT NULL
+                bm25_text TEXT NOT NULL,
+                PRIMARY KEY (instance_id, name)
             );
+            CREATE INDEX IF NOT EXISTS idx_tools_instance ON tools(instance_id);
             CREATE TABLE IF NOT EXISTS turns (
                 id TEXT PRIMARY KEY,
                 tools_loaded TEXT NOT NULL,
@@ -115,7 +122,7 @@ impl SqliteStorage {
 }
 
 impl Storage for SqliteStorage {
-    fn save_tools(&self, tools: &[(&str, &StoredTool)]) -> Result<()> {
+    fn save_tools(&self, instance_id: &str, tools: &[(&str, &StoredTool)]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         for (name, stored) in tools {
@@ -127,21 +134,21 @@ impl Storage for SqliteStorage {
             let emb_input = stored.embeddings.input_schema.as_ref().map(|v| vec_f32_to_blob(v));
             let emb_output = stored.embeddings.output_schema.as_ref().map(|v| vec_f32_to_blob(v));
             tx.execute(
-                "INSERT OR REPLACE INTO tools (name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                rusqlite::params![name, stored.tool.description, params_json, metadata_json, fields_json, emb_name, emb_desc, emb_input, emb_output, stored.bm25_text],
+                "INSERT OR REPLACE INTO tools (instance_id, name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                rusqlite::params![instance_id, name, stored.tool.description, params_json, metadata_json, fields_json, emb_name, emb_desc, emb_input, emb_output, stored.bm25_text],
             )?;
         }
         tx.commit()?;
         Ok(())
     }
 
-    fn load_all_tools(&self) -> Result<Vec<(String, StoredTool)>> {
+    fn load_tools_for_instance(&self, instance_id: &str) -> Result<Vec<(String, StoredTool)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text FROM tools"
+            "SELECT name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text FROM tools WHERE instance_id = ?1"
         )?;
-        let rows = stmt.query_map([], |row| {
+        let rows = stmt.query_map(rusqlite::params![instance_id], |row| {
             let name: String = row.get(0)?;
             let description: String = row.get(1)?;
             let params_json: String = row.get(2)?;
@@ -270,11 +277,18 @@ impl Storage for SqliteStorage {
 
     fn delete_instance(&self, instance_id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM tools WHERE instance_id = ?1", rusqlite::params![instance_id])?;
         let affected = conn.execute(
             "DELETE FROM instances WHERE instance_id = ?1",
             rusqlite::params![instance_id],
         )?;
         Ok(affected > 0)
+    }
+
+    fn delete_tools_for_instance(&self, instance_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM tools WHERE instance_id = ?1", rusqlite::params![instance_id])?;
+        Ok(())
     }
 
     fn update_heartbeat(&self, instance_id: &str, heartbeat: &str) -> Result<bool> {
@@ -305,8 +319,8 @@ mod tests {
     #[test]
     fn noop_save_load_tools_returns_empty() {
         let s = NoopStorage;
-        s.save_tools(&[]).unwrap();
-        assert!(s.load_all_tools().unwrap().is_empty());
+        s.save_tools("inst-1", &[]).unwrap();
+        assert!(s.load_tools_for_instance("inst-1").unwrap().is_empty());
     }
 
     #[test]
@@ -350,8 +364,8 @@ mod tests {
     fn sqlite_roundtrip_tools() {
         let s = SqliteStorage::new(":memory:").unwrap();
         let tool = make_stored_tool("getThing", "Get a thing", true);
-        s.save_tools(&[("getThing", &tool)]).unwrap();
-        let loaded = s.load_all_tools().unwrap();
+        s.save_tools("inst-1", &[("getThing", &tool)]).unwrap();
+        let loaded = s.load_tools_for_instance("inst-1").unwrap();
         assert_eq!(loaded.len(), 1);
         let (name, st) = &loaded[0];
         assert_eq!(name, "getThing");
@@ -370,10 +384,10 @@ mod tests {
     fn sqlite_tool_upsert_replaces() {
         let s = SqliteStorage::new(":memory:").unwrap();
         let t1 = make_stored_tool("t", "v1", false);
-        s.save_tools(&[("t", &t1)]).unwrap();
+        s.save_tools("inst-1", &[("t", &t1)]).unwrap();
         let t2 = make_stored_tool("t", "v2", false);
-        s.save_tools(&[("t", &t2)]).unwrap();
-        let loaded = s.load_all_tools().unwrap();
+        s.save_tools("inst-1", &[("t", &t2)]).unwrap();
+        let loaded = s.load_tools_for_instance("inst-1").unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].1.tool.description, "v2");
     }
@@ -386,8 +400,8 @@ mod tests {
         tool.tool.fields = None;
         tool.embeddings.input_schema = None;
         tool.embeddings.output_schema = None;
-        s.save_tools(&[("t", &tool)]).unwrap();
-        let loaded = s.load_all_tools().unwrap();
+        s.save_tools("inst-1", &[("t", &tool)]).unwrap();
+        let loaded = s.load_tools_for_instance("inst-1").unwrap();
         assert_eq!(loaded.len(), 1);
         assert!(loaded[0].1.tool.metadata.is_none());
         assert!(loaded[0].1.tool.fields.is_none());
