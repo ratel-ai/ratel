@@ -71,3 +71,12 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - captureTurn(instanceId, namespace, session, options) → POST /api/v1/instances/{id}/turns
 - asDiscoverTool(instanceId) → uses instance-scoped discover
 - All 19 SDK tests pass + 1 tool test = 20 total
+
+### Task 8: Message persistence methods (SDK) ✅
+- appendMessages(dataset, namespace, session, messages) → POST /api/v1/messages → { appended, firstSeq, lastSeq }
+- getMessages(dataset, namespace, session, opts?) → GET /api/v1/messages?... → { messages, hasMore, maxSeq }
+- getContext(dataset, namespace, session, opts?) → POST /api/v1/context → { messages, strategyUsed, totalMessages, ... }
+- New types: StoredMessage, AppendMessagesResponse, GetMessagesOpts, GetMessagesResponse, ContextOpts, ContextResponse
+- All types exported from index.ts
+- snake_case server responses mapped to camelCase SDK types
+- All 25 tests pass (24 ApiClient + 1 tool)
