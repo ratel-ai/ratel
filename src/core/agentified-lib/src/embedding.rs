@@ -121,13 +121,15 @@ impl EmbeddingService for OpenAIEmbedding {
     }
 }
 
-#[cfg(test)]
+// Test utilities (available via `test-utils` feature or in tests)
+
+#[cfg(any(test, feature = "test-utils"))]
 pub struct FakeEmbedding {
     pub call_count: std::sync::atomic::AtomicUsize,
     pub batch_call_count: std::sync::atomic::AtomicUsize,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 impl FakeEmbedding {
     pub fn new() -> Self {
         Self {
@@ -137,7 +139,7 @@ impl FakeEmbedding {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 #[async_trait]
 impl EmbeddingService for FakeEmbedding {
     async fn embed_batch(&self, texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
@@ -172,10 +174,10 @@ impl EmbeddingService for FakeEmbedding {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 pub struct FailingEmbedding;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 #[async_trait]
 impl EmbeddingService for FailingEmbedding {
     async fn embed_batch(&self, _texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
