@@ -81,6 +81,15 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - snake_case server responses mapped to camelCase SDK types
 - All 25 tests pass (24 ApiClient + 1 tool)
 
+### Task 10: connect() local auto-spawn ✅
+- OPENAI_API_KEY pre-check (throw if missing)
+- Binary resolution via spawn-utils.ts (resolveBinaryPath, findFreePort)
+- spawn child with --port flag, stdio: ['ignore', 'pipe', 'pipe']
+- Health check loop: 200ms × 25 = 5s, kills process on exhaustion
+- Signal cleanup: SIGINT/SIGTERM/exit handlers, deregistered on disconnect
+- Crash detection: one auto-restart, no restart if restartCount >= 1
+- All 64 mastra tests pass (17 agentified + 31 adapter + 11 schema + 5 stream-sse)
+
 ### Task 9: Agentified class + connect(url) + disconnect() ✅
 - Agentified class: constructor, connect(serverUrl?), dataset(name), disconnect()
 - connect(url): health check GET /health with 5s AbortSignal timeout, creates ApiClient
