@@ -60,3 +60,14 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - Response: messages, strategy_used, total_messages, included_messages, recalled (empty stubs), token_estimate, conversation_messages, fallback
 - CoreError::UnsupportedStrategy variant → 422 HTTP status
 - All 74 tests pass (31 lib + 43 server)
+
+### Task 7: Instance lifecycle + instance-scoped signatures (SDK) ✅
+- createInstance(dataset) → POST /api/v1/instances → { instanceId }
+- heartbeatInstance(instanceId) → POST /api/v1/instances/{id}/heartbeat
+- deleteInstance(instanceId) → DELETE /api/v1/instances/{id}
+- register(instanceId) → POST /api/v1/instances/{id}/tools
+- discover(instanceId, query, limit?, exclude?, turnId?) → public, POST /api/v1/instances/{id}/discover
+- prefetch(instanceId, options) → delegates to instance-scoped discover
+- captureTurn(instanceId, namespace, session, options) → POST /api/v1/instances/{id}/turns
+- asDiscoverTool(instanceId) → uses instance-scoped discover
+- All 19 SDK tests pass + 1 tool test = 20 total
