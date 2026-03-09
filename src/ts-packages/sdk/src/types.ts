@@ -72,6 +72,52 @@ export interface DiscoverTool {
   execute: (input: DiscoverToolInput) => Promise<RankedTool[]>;
 }
 
+// Message persistence types
+
+export interface StoredMessage {
+  id: string;
+  role: string;
+  content: string;
+  tool_call_id?: string;
+  tool_calls?: unknown;
+  created_at: string;
+  seq: number;
+}
+
+export interface AppendMessagesResponse {
+  appended: number;
+  firstSeq: number;
+  lastSeq: number;
+}
+
+export interface GetMessagesOpts {
+  limit?: number;
+  afterSeq?: number;
+  aroundSeq?: number;
+}
+
+export interface GetMessagesResponse {
+  messages: StoredMessage[];
+  hasMore: boolean;
+  maxSeq: number;
+}
+
+export interface ContextOpts {
+  strategy?: string;
+  maxTokens?: number;
+}
+
+export interface ContextResponse {
+  messages: StoredMessage[];
+  strategyUsed: string;
+  totalMessages: number;
+  includedMessages: number;
+  recalled: { tools: unknown[]; memories: unknown[] };
+  tokenEstimate: number;
+  conversationMessages: number;
+  fallback: boolean;
+}
+
 // Event types
 
 export interface TokenUsage {

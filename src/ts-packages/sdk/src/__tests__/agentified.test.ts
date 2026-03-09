@@ -344,6 +344,163 @@ describe("ApiClient", () => {
     });
   });
 
+  describe("appendMessages", () => {
+    it("posts messages and returns seq range", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ appended: 2, first_seq: 42, last_seq: 43 }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.appendMessages("my-dataset", "user-123", "session-abc", [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there!" },
+      ]);
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: "my-dataset",
+          namespace: "user-123",
+          session: "session-abc",
+          messages: [
+            { role: "user", content: "Hello" },
+            { role: "assistant", content: "Hi there!" },
+          ],
+        }),
+      });
+      expect(result).toEqual({ appended: 2, firstSeq: 42, lastSeq: 43 });
+    });
+  });
+
+  describe("getMessages", () => {
+    it("gets messages with no opts", async () => {
+      const stored = { id: "m1", role: "user", content: "Hello", tool_call_id: null, tool_calls: null, created_at: "2026-01-01T00:00:00Z", seq: 1 };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ messages: [stored], has_more: false, max_seq: 1 }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.getMessages("ds", "ns", "sess");
+
+      expect(fetch).toHaveBeenCalledWith(
+        `${TEST_URL}/api/v1/messages?dataset=ds&namespace=ns&session=sess`,
+        { method: "GET" },
+      );
+      expect(result).toEqual({ messages: [stored], hasMore: false, maxSeq: 1 });
+    });
+
+    it("passes limit, afterSeq, aroundSeq as query params", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ messages: [], has_more: false, max_seq: 0 }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.getMessages("ds", "ns", "sess", { limit: 10, afterSeq: 5 });
+
+      expect(fetch).toHaveBeenCalledWith(
+        `${TEST_URL}/api/v1/messages?dataset=ds&namespace=ns&session=sess&limit=10&after_seq=5`,
+        { method: "GET" },
+      );
+    });
+
+    it("passes aroundSeq as query param", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ messages: [], has_more: false, max_seq: 0 }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.getMessages("ds", "ns", "sess", { aroundSeq: 50 });
+
+      expect(fetch).toHaveBeenCalledWith(
+        `${TEST_URL}/api/v1/messages?dataset=ds&namespace=ns&session=sess&around_seq=50`,
+        { method: "GET" },
+      );
+    });
+  });
+
+  describe("getContext", () => {
+    it("posts context request with defaults when no opts", async () => {
+      const contextRes = {
+        messages: [],
+        strategy_used: "recent",
+        total_messages: 0,
+        included_messages: 0,
+        recalled: { tools: [], memories: [] },
+        token_estimate: 0,
+        conversation_messages: 0,
+        fallback: false,
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(contextRes), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.getContext("ds", "ns", "sess");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: "ds",
+          namespace: "ns",
+          session: "sess",
+          messages: {},
+        }),
+      });
+      expect(result).toEqual({
+        messages: [],
+        strategyUsed: "recent",
+        totalMessages: 0,
+        includedMessages: 0,
+        recalled: { tools: [], memories: [] },
+        tokenEstimate: 0,
+        conversationMessages: 0,
+        fallback: false,
+      });
+    });
+
+    it("passes strategy and maxTokens in messages sub-object", async () => {
+      const contextRes = {
+        messages: [],
+        strategy_used: "full",
+        total_messages: 10,
+        included_messages: 10,
+        recalled: { tools: [], memories: [] },
+        token_estimate: 500,
+        conversation_messages: 10,
+        fallback: false,
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(contextRes), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.getContext("ds", "ns", "sess", { strategy: "full", maxTokens: 8000 });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: "ds",
+          namespace: "ns",
+          session: "sess",
+          messages: { strategy: "full", max_tokens: 8000 },
+        }),
+      });
+      expect(result).toEqual({
+        messages: [],
+        strategyUsed: "full",
+        totalMessages: 10,
+        includedMessages: 10,
+        recalled: { tools: [], memories: [] },
+        tokenEstimate: 500,
+        conversationMessages: 10,
+        fallback: false,
+      });
+    });
+  });
+
   describe("onEvent optional", () => {
     it("does not crash when onEvent is not provided", async () => {
       vi.spyOn(globalThis, "fetch").mockImplementation(() =>

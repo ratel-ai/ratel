@@ -1,11 +1,17 @@
 import type {
   ApiClientConfig,
   AgentifiedEvent,
+  AppendMessagesResponse,
   CaptureTurnOptions,
   CaptureTurnResponse,
+  ContextOpts,
+  ContextResponse,
   DiscoverResponse,
   DiscoverTool,
   DiscoverToolInput,
+  GetMessagesOpts,
+  GetMessagesResponse,
+  Message,
   PrefetchOptions,
   RankedTool,
   RegisterResponse,
@@ -93,6 +99,61 @@ export class ApiClient {
     });
     const data = (await res.json()) as { turn_id: string };
     return { turnId: data.turn_id };
+  }
+
+  async appendMessages(dataset: string, namespace: string, session: string, messages: Message[]): Promise<AppendMessagesResponse> {
+    const res = await fetch(`${this.config.serverUrl}/api/v1/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataset, namespace, session, messages }),
+    });
+    const data = (await res.json()) as { appended: number; first_seq: number; last_seq: number };
+    return { appended: data.appended, firstSeq: data.first_seq, lastSeq: data.last_seq };
+  }
+
+  async getMessages(dataset: string, namespace: string, session: string, opts?: GetMessagesOpts): Promise<GetMessagesResponse> {
+    const params = new URLSearchParams({ dataset, namespace, session });
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.afterSeq !== undefined) params.set("after_seq", String(opts.afterSeq));
+    if (opts?.aroundSeq !== undefined) params.set("around_seq", String(opts.aroundSeq));
+
+    const res = await fetch(`${this.config.serverUrl}/api/v1/messages?${params}`, {
+      method: "GET",
+    });
+    const data = (await res.json()) as { messages: unknown[]; has_more: boolean; max_seq: number };
+    return { messages: data.messages as GetMessagesResponse["messages"], hasMore: data.has_more, maxSeq: data.max_seq };
+  }
+
+  async getContext(dataset: string, namespace: string, session: string, opts?: ContextOpts): Promise<ContextResponse> {
+    const messagesConfig: Record<string, unknown> = {};
+    if (opts?.strategy !== undefined) messagesConfig.strategy = opts.strategy;
+    if (opts?.maxTokens !== undefined) messagesConfig.max_tokens = opts.maxTokens;
+
+    const res = await fetch(`${this.config.serverUrl}/api/v1/context`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataset, namespace, session, messages: messagesConfig }),
+    });
+    const data = (await res.json()) as {
+      messages: ContextResponse["messages"];
+      strategy_used: string;
+      total_messages: number;
+      included_messages: number;
+      recalled: { tools: unknown[]; memories: unknown[] };
+      token_estimate: number;
+      conversation_messages: number;
+      fallback: boolean;
+    };
+    return {
+      messages: data.messages,
+      strategyUsed: data.strategy_used,
+      totalMessages: data.total_messages,
+      includedMessages: data.included_messages,
+      recalled: data.recalled,
+      tokenEstimate: data.token_estimate,
+      conversationMessages: data.conversation_messages,
+      fallback: data.fallback,
+    };
   }
 
   getFrontendTools(): ServerTool[] {
