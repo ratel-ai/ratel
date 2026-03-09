@@ -20,3 +20,13 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - POST /api/v1/instances/{id}/heartbeat → 204 / 404
 - DELETE /api/v1/instances/{id} → 204 / 404
 - All 51 tests pass (24 lib + 27 server)
+
+### Task 3: Instance-scoped tools ✅
+- instance_id column added to tools table (composite PK: instance_id + name)
+- Storage trait: save_tools(instance_id, ...), load_tools_for_instance(instance_id), delete_tools_for_instance(instance_id)
+- AgentifiedCore: tools HashMap now HashMap<String, HashMap<String, StoredTool>> (instance → name → tool)
+- Routes migrated: POST/GET /api/v1/instances/{id}/tools, POST /api/v1/instances/{id}/discover
+- Instance existence verified on register/list/discover (404 if missing)
+- Cascade delete: delete_instance removes tools from DB + in-memory
+- Instance isolation: TC-R02, TC-R03, TC-R12 all covered
+- All 55 tests pass (24 lib + 31 server)
