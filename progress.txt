@@ -37,3 +37,14 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - Server: tokio::spawn 60s interval background task calling gc_instances
 - Messages NOT deleted (belong to sessions, not instances)
 - All 57 tests pass (26 lib + 31 server)
+
+### Task 5: Messages table + endpoints ✅
+- messages table (id, dataset_id, namespace_id, session_id, role, content, tool_call_id, tool_calls, created_at, seq)
+- Storage trait: append_messages (BEGIN IMMEDIATE, MAX(seq)+1 per session), get_messages (3 pagination modes)
+- CoreError::BadRequest variant for invalid params
+- POST /api/v1/messages → appended + first_seq + last_seq
+- GET /api/v1/messages → messages + has_more + max_seq
+- Three pagination modes: default (last N asc), after_seq (forward), around_seq (centered window)
+- limit=0 → no messages, returns max_seq; both params → 400
+- Cross-session isolation: independent seq per (dataset, namespace, session)
+- All 65 tests pass (26 lib + 39 server)
