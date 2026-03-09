@@ -80,3 +80,13 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - All types exported from index.ts
 - snake_case server responses mapped to camelCase SDK types
 - All 25 tests pass (24 ApiClient + 1 tool)
+
+### Task 9: Agentified class + connect(url) + disconnect() ✅
+- Agentified class: constructor, connect(serverUrl?), dataset(name), disconnect()
+- connect(url): health check GET /health with 5s AbortSignal timeout, creates ApiClient
+- connect() without URL: throws "Local spawn not yet implemented" (task 10)
+- disconnect(): clears heartbeat intervals, deletes tracked instances (best-effort), kills spawned process, idempotent
+- DatasetRef class: holds agentified ref + datasetName
+- Internal state: sdk, connected flag, spawnedProcess, activeInstances Set, heartbeatIntervals Map
+- Exported from index.ts
+- All 58 tests pass (11 agentified + 31 adapter + 11 schema + 5 stream-sse)
