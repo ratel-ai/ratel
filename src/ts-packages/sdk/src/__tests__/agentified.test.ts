@@ -17,8 +17,56 @@ describe("ApiClient", () => {
     vi.restoreAllMocks();
   });
 
+  describe("createInstance", () => {
+    it("posts dataset and returns instanceId", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ instance_id: "inst-abc" }), { status: 201 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.createInstance("my-dataset");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataset: "my-dataset" }),
+      });
+      expect(result).toEqual({ instanceId: "inst-abc" });
+    });
+  });
+
+  describe("heartbeatInstance", () => {
+    it("posts heartbeat and returns void", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(null, { status: 204 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.heartbeatInstance("inst-abc");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/heartbeat`, {
+        method: "POST",
+      });
+    });
+  });
+
+  describe("deleteInstance", () => {
+    it("sends delete and returns void", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(null, { status: 204 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.deleteInstance("inst-abc");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc`, {
+        method: "DELETE",
+      });
+    });
+  });
+
   describe("register", () => {
-    it("posts tools to server and returns registered count", async () => {
+    it("posts tools to instance endpoint and returns registered count", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValue(
         new Response(JSON.stringify({ registered: 1 }), { status: 200 }),
       );
@@ -28,9 +76,9 @@ describe("ApiClient", () => {
         tools: [testTool],
       });
 
-      const result = await agent.register();
+      const result = await agent.register("inst-abc");
 
-      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/tools`, {
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/tools`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tools: [testTool] }),
@@ -39,29 +87,70 @@ describe("ApiClient", () => {
     });
   });
 
-  describe("prefetch", () => {
-    it("posts discover request built from messages and returns ranked tools", async () => {
+  describe("discover", () => {
+    it("posts to instance discover endpoint and returns ranked tools", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValue(
         new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
       );
 
-      const agent = new ApiClient({
-        serverUrl: TEST_URL,
-        tools: [testTool],
-      });
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.discover("inst-abc", "weather tools", 5);
 
-      const result = await agent.prefetch({
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "weather tools", limit: 5 }),
+      });
+      expect(result).toEqual([rankedTool]);
+    });
+
+    it("passes exclude and turnId when provided", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.discover("inst-abc", "test", undefined, ["excluded"], "turn-1");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test", exclude: ["excluded"], turn_id: "turn-1" }),
+      });
+    });
+
+    it("omits optional params when not provided", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.discover("inst-abc", "test");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test" }),
+      });
+    });
+  });
+
+  describe("prefetch", () => {
+    it("builds query from messages and returns ranked tools via instance discover", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.prefetch("inst-abc", {
         messages: [{ role: "user", content: "What is the weather in Paris?" }],
         limit: 5,
       });
 
-      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: "What is the weather in Paris?",
-          limit: 5,
-        }),
+        body: JSON.stringify({ query: "What is the weather in Paris?", limit: 5 }),
       });
       expect(result).toEqual([rankedTool]);
     });
@@ -80,35 +169,62 @@ describe("ApiClient", () => {
         onEvent: (e) => events.push(e),
       });
 
-      await agent.prefetch({ messages });
+      await agent.prefetch("inst-abc", { messages });
 
       expect(events).toHaveLength(2);
-      expect(events[0]).toEqual({
-        type: "agentified:prefetch:start",
-        messages,
-      });
-      expect(events[1]).toMatchObject({
-        type: "agentified:prefetch:complete",
-        tools: [rankedTool],
-      });
+      expect(events[0]).toEqual({ type: "agentified:prefetch:start", messages });
+      expect(events[1]).toMatchObject({ type: "agentified:prefetch:complete", tools: [rankedTool] });
       expect(
         (events[1] as Extract<AgentifiedEvent, { type: "agentified:prefetch:complete" }>).durationMs,
       ).toBeGreaterThanOrEqual(0);
     });
-  });
 
-  describe("asDiscoverTool", () => {
-    it("returns a DiscoverTool that calls discover endpoint", async () => {
+    it("passes exclude to discover body", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValue(
         new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
       );
 
-      const agent = new ApiClient({
-        serverUrl: TEST_URL,
-        tools: [testTool],
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.prefetch("inst-abc", {
+        messages: [{ role: "user", content: "test" }],
+        exclude: ["frontendTool"],
       });
 
-      const discoverTool = agent.asDiscoverTool();
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test", exclude: ["frontendTool"] }),
+      });
+    });
+
+    it("passes turn_id to discover body", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.prefetch("inst-abc", {
+        messages: [{ role: "user", content: "test" }],
+        limit: 5,
+        turnId: "turn-xyz",
+      });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test", limit: 5, turn_id: "turn-xyz" }),
+      });
+    });
+  });
+
+  describe("asDiscoverTool", () => {
+    it("returns a DiscoverTool that calls instance discover endpoint", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const discoverTool = agent.asDiscoverTool("inst-abc");
 
       expect(discoverTool.definition).toEqual({
         name: "agentified_discover",
@@ -125,7 +241,7 @@ describe("ApiClient", () => {
 
       const result = await discoverTool.execute({ query: "weather tools", limit: 3 });
 
-      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: "weather tools", limit: 3 }),
@@ -145,68 +261,40 @@ describe("ApiClient", () => {
         onEvent: (e) => events.push(e),
       });
 
-      await agent.asDiscoverTool().execute({ query: "weather" });
+      await agent.asDiscoverTool("inst-abc").execute({ query: "weather" });
 
       expect(events).toHaveLength(2);
-      expect(events[0]).toEqual({
-        type: "agentified:discover:start",
-        query: "weather",
-      });
-      expect(events[1]).toMatchObject({
-        type: "agentified:discover:complete",
-        tools: [rankedTool],
-      });
+      expect(events[0]).toEqual({ type: "agentified:discover:start", query: "weather" });
+      expect(events[1]).toMatchObject({ type: "agentified:discover:complete", tools: [rankedTool] });
       expect(
         (events[1] as Extract<AgentifiedEvent, { type: "agentified:discover:complete" }>).durationMs,
       ).toBeGreaterThanOrEqual(0);
     });
   });
 
-  describe("prefetch with exclude", () => {
-    it("passes exclude to discover body", async () => {
+  describe("captureTurn", () => {
+    it("posts turn data to instance endpoint and returns turnId", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+        new Response(JSON.stringify({ turn_id: "abc-123" }), { status: 201 }),
       );
 
-      const agent = new ApiClient({
-        serverUrl: TEST_URL,
-        tools: [testTool],
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.captureTurn("inst-abc", "default", "session-1", {
+        toolsLoaded: ["get_weather"],
+        message: "What is the weather?",
       });
 
-      await agent.prefetch({
-        messages: [{ role: "user", content: "test" }],
-        exclude: ["frontendTool"],
-      });
-
-      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/instances/inst-abc/turns`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: "test",
-          exclude: ["frontendTool"],
+          namespace_id: "default",
+          session_id: "session-1",
+          tools_loaded: ["get_weather"],
+          message: "What is the weather?",
         }),
       });
-    });
-
-    it("omits exclude from body when not provided", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
-      );
-
-      const agent = new ApiClient({
-        serverUrl: TEST_URL,
-        tools: [testTool],
-      });
-
-      await agent.prefetch({
-        messages: [{ role: "user", content: "test" }],
-      });
-
-      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "test" }),
-      });
+      expect(result).toEqual({ turnId: "abc-123" });
     });
   });
 
@@ -233,11 +321,7 @@ describe("ApiClient", () => {
     });
 
     it("returns empty array when no frontend tools", () => {
-      const agent = new ApiClient({
-        serverUrl: TEST_URL,
-        tools: [testTool],
-      });
-
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
       expect(agent.getFrontendTools()).toEqual([]);
     });
   });
@@ -260,89 +344,20 @@ describe("ApiClient", () => {
     });
   });
 
-  describe("captureTurn", () => {
-    it("posts turn data and returns turnId", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ turn_id: "abc-123" }), { status: 201 }),
-      );
-
-      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
-      const result = await agent.captureTurn({
-        toolsLoaded: ["get_weather"],
-        message: "What is the weather?",
-      });
-
-      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/turns`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tools_loaded: ["get_weather"],
-          message: "What is the weather?",
-        }),
-      });
-      expect(result).toEqual({ turnId: "abc-123" });
-    });
-  });
-
-  describe("prefetch with turnId", () => {
-    it("passes turn_id to discover body", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
-      );
-
-      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
-      await agent.prefetch({
-        messages: [{ role: "user", content: "test" }],
-        limit: 5,
-        turnId: "turn-xyz",
-      });
-
-      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: "test",
-          limit: 5,
-          turn_id: "turn-xyz",
-        }),
-      });
-    });
-
-    it("omits turn_id when not provided", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
-      );
-
-      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
-      await agent.prefetch({
-        messages: [{ role: "user", content: "test" }],
-      });
-
-      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/discover`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "test" }),
-      });
-    });
-  });
-
   describe("onEvent optional", () => {
     it("does not crash when onEvent is not provided", async () => {
       vi.spyOn(globalThis, "fetch").mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 })),
       );
 
-      const agent = new ApiClient({
-        serverUrl: TEST_URL,
-        tools: [testTool],
-      });
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
 
       await expect(
-        agent.prefetch({ messages: [{ role: "user", content: "test" }] }),
+        agent.prefetch("inst-abc", { messages: [{ role: "user", content: "test" }] }),
       ).resolves.toEqual([rankedTool]);
 
       await expect(
-        agent.asDiscoverTool().execute({ query: "test" }),
+        agent.asDiscoverTool("inst-abc").execute({ query: "test" }),
       ).resolves.toEqual([rankedTool]);
     });
   });
