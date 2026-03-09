@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::models::{StoredTool, Turn};
+use crate::models::{Instance, StoredTool, Turn};
 
 // Trait
 
@@ -11,6 +11,10 @@ pub trait Storage: Send + Sync {
     fn load_all_turns(&self) -> Result<Vec<(String, Turn)>>;
     fn save_embeddings(&self, entries: &[(&str, &[f32])]) -> Result<()>;
     fn load_all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>>;
+    fn save_instance(&self, instance: &Instance) -> Result<()>;
+    fn get_instance(&self, instance_id: &str) -> Result<Option<Instance>>;
+    fn delete_instance(&self, instance_id: &str) -> Result<bool>;
+    fn update_heartbeat(&self, instance_id: &str, heartbeat: &str) -> Result<bool>;
 }
 
 // Blob helpers
@@ -48,6 +52,18 @@ impl Storage for NoopStorage {
     fn load_all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>> {
         Ok(vec![])
     }
+    fn save_instance(&self, _instance: &Instance) -> Result<()> {
+        Ok(())
+    }
+    fn get_instance(&self, _instance_id: &str) -> Result<Option<Instance>> {
+        Ok(None)
+    }
+    fn delete_instance(&self, _instance_id: &str) -> Result<bool> {
+        Ok(false)
+    }
+    fn update_heartbeat(&self, _instance_id: &str, _heartbeat: &str) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 // SqliteStorage
@@ -84,7 +100,15 @@ impl SqliteStorage {
             CREATE TABLE IF NOT EXISTS embedding_cache (
                 text_content TEXT PRIMARY KEY,
                 embedding BLOB NOT NULL
-            );"
+            );
+            CREATE TABLE IF NOT EXISTS instances (
+                instance_id TEXT PRIMARY KEY,
+                dataset_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_heartbeat TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_instances_dataset ON instances(dataset_id);
+            CREATE INDEX IF NOT EXISTS idx_instances_heartbeat ON instances(last_heartbeat);"
         )?;
         Ok(Self { conn: std::sync::Mutex::new(conn) })
     }
@@ -216,6 +240,50 @@ impl Storage for SqliteStorage {
             result.push((text, blob_to_vec_f32(&blob)));
         }
         Ok(result)
+    }
+
+    fn save_instance(&self, instance: &Instance) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO instances (instance_id, dataset_id, created_at, last_heartbeat) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![instance.instance_id, instance.dataset_id, instance.created_at, instance.last_heartbeat],
+        )?;
+        Ok(())
+    }
+
+    fn get_instance(&self, instance_id: &str) -> Result<Option<Instance>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT instance_id, dataset_id, created_at, last_heartbeat FROM instances WHERE instance_id = ?1"
+        )?;
+        let mut rows = stmt.query(rusqlite::params![instance_id])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(Instance {
+                instance_id: row.get(0)?,
+                dataset_id: row.get(1)?,
+                created_at: row.get(2)?,
+                last_heartbeat: row.get(3)?,
+            })),
+            None => Ok(None),
+        }
+    }
+
+    fn delete_instance(&self, instance_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let affected = conn.execute(
+            "DELETE FROM instances WHERE instance_id = ?1",
+            rusqlite::params![instance_id],
+        )?;
+        Ok(affected > 0)
+    }
+
+    fn update_heartbeat(&self, instance_id: &str, heartbeat: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let affected = conn.execute(
+            "UPDATE instances SET last_heartbeat = ?1 WHERE instance_id = ?2",
+            rusqlite::params![heartbeat, instance_id],
+        )?;
+        Ok(affected > 0)
     }
 }
 

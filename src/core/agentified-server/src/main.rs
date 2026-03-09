@@ -4,11 +4,12 @@ use agentified_lib::{
     AgentifiedCore, CoreError, EmbeddingService, NoopStorage, OpenAIEmbedding,
     SqliteStorage, Storage,
     models::{
-        CaptureTurnRequest, CaptureTurnResponse, DiscoverRequest, DiscoverResponse,
-        ErrorResponse, ListToolsResponse, RegisterToolsRequest, RegisterToolsResponse,
+        CaptureTurnRequest, CaptureTurnResponse, CreateInstanceRequest, CreateInstanceResponse,
+        DiscoverRequest, DiscoverResponse, ErrorResponse, ListToolsResponse,
+        RegisterToolsRequest, RegisterToolsResponse,
     },
 };
-use axum::{extract::State, http::StatusCode, routing::{get, post}, Json, Router};
+use axum::{extract::{Path, State}, http::StatusCode, routing::{delete, get, post}, Json, Router};
 use serde::Serialize;
 
 // Types
@@ -26,6 +27,9 @@ pub fn app(core: Arc<AgentifiedCore>) -> Router {
         .route("/api/v1/tools", post(register_tools).get(list_tools))
         .route("/api/v1/discover", post(discover))
         .route("/api/v1/turns", post(capture_turn))
+        .route("/api/v1/instances", post(create_instance))
+        .route("/api/v1/instances/{id}/heartbeat", post(heartbeat_instance))
+        .route("/api/v1/instances/{id}", delete(delete_instance))
         .with_state(core)
 }
 
@@ -61,6 +65,30 @@ async fn capture_turn(
 ) -> (StatusCode, Json<CaptureTurnResponse>) {
     let response = core.capture_turn(body).await;
     (StatusCode::CREATED, Json(response))
+}
+
+async fn create_instance(
+    State(core): State<Arc<AgentifiedCore>>,
+    Json(body): Json<CreateInstanceRequest>,
+) -> Result<(StatusCode, Json<CreateInstanceResponse>), (StatusCode, Json<ErrorResponse>)> {
+    let response = core.create_instance(&body.dataset).await.map_err(map_error)?;
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+async fn heartbeat_instance(
+    State(core): State<Arc<AgentifiedCore>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    core.heartbeat_instance(&id).await.map_err(map_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_instance(
+    State(core): State<Arc<AgentifiedCore>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    core.delete_instance(&id).await.map_err(map_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // Helpers
@@ -1077,6 +1105,163 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["tools"].as_array().unwrap().len(), 1);
         assert_eq!(json["tools"][0]["name"], "getThing");
+    }
+
+    // Instance CRUD tests
+
+    fn test_app_with_storage() -> Router {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        let core = Arc::new(AgentifiedCore::new(
+            Arc::new(FakeEmbedding::new()),
+            storage as Arc<dyn Storage>,
+        ));
+        app(core)
+    }
+
+    #[tokio::test]
+    async fn create_instance_returns_created_with_id() {
+        let app = test_app_with_storage();
+
+        let body = serde_json::json!({ "dataset": "agent-xyz" });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/instances")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json["instance_id"].as_str().unwrap().len() > 0);
+    }
+
+    #[tokio::test]
+    async fn heartbeat_instance_returns_204() {
+        let app = test_app_with_storage();
+
+        // Create instance first
+        let body = serde_json::json!({ "dataset": "test" });
+        let response = app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/instances")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let instance_id = json["instance_id"].as_str().unwrap();
+
+        // Heartbeat
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(&format!("/api/v1/instances/{instance_id}/heartbeat"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn heartbeat_missing_instance_returns_404() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/instances/nonexistent/heartbeat")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn delete_instance_returns_204() {
+        let app = test_app_with_storage();
+
+        // Create instance
+        let body = serde_json::json!({ "dataset": "test" });
+        let response = app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/instances")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let instance_id = json["instance_id"].as_str().unwrap();
+
+        // Delete
+        let response = app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(&format!("/api/v1/instances/{instance_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Heartbeat should now 404
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(&format!("/api/v1/instances/{instance_id}/heartbeat"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn delete_missing_instance_returns_404() {
+        let app = test_app_with_storage();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/instances/nonexistent")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

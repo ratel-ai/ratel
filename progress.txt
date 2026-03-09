@@ -1,0 +1,22 @@
+# Progress for Issue #17
+
+Started: Mon Mar  9 23:53:04 CET 2026
+
+## Completed
+
+### Task 1: Crate split ✅
+- Cargo workspace: agentified-lib (library) + agentified-server (binary)
+- AgentifiedCore struct in lib with register_tools, list_tools, discover, capture_turn
+- CoreError enum for domain errors (EmbeddingFailed, NotFound)
+- Server is thin axum shell: handlers delegate to AgentifiedCore, map_error for HTTP status
+- FakeEmbedding/FailingEmbedding gated behind `test-utils` feature
+- All 46 tests pass (24 lib + 22 server)
+
+### Task 2: Instances table + CRUD ✅
+- instances table (instance_id, dataset_id, created_at, last_heartbeat) w/ indexes
+- Storage trait: save_instance, get_instance, delete_instance, update_heartbeat
+- AgentifiedCore: create_instance, heartbeat_instance, delete_instance
+- POST /api/v1/instances → 201 + { instance_id }
+- POST /api/v1/instances/{id}/heartbeat → 204 / 404
+- DELETE /api/v1/instances/{id} → 204 / 404
+- All 51 tests pass (24 lib + 27 server)

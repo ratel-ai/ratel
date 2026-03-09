@@ -15,9 +15,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use models::{
-    CaptureTurnRequest, CaptureTurnResponse, DiscoverRequest, DiscoverResponse,
-    FieldEmbeddings, ListToolsResponse, RankedTool, RegisterToolsResponse,
-    StoredTool, Tool, Turn,
+    CaptureTurnRequest, CaptureTurnResponse, CreateInstanceResponse, DiscoverRequest,
+    DiscoverResponse, FieldEmbeddings, Instance, ListToolsResponse, RankedTool,
+    RegisterToolsResponse, StoredTool, Tool, Turn,
 };
 use ranking::{bm25_scores, weighted_semantic_score};
 
@@ -279,6 +279,56 @@ impl AgentifiedCore {
         }
 
         CaptureTurnResponse { turn_id }
+    }
+
+    pub async fn create_instance(&self, dataset: &str) -> Result<CreateInstanceResponse, CoreError> {
+        let instance_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        let instance = Instance {
+            instance_id: instance_id.clone(),
+            dataset_id: dataset.to_string(),
+            created_at: now.clone(),
+            last_heartbeat: now,
+        };
+
+        let storage = self.storage.clone();
+        let inst = instance.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = storage.save_instance(&inst) {
+                tracing::error!("storage save_instance failed: {e}");
+            }
+        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?;
+
+        Ok(CreateInstanceResponse { instance_id })
+    }
+
+    pub async fn heartbeat_instance(&self, instance_id: &str) -> Result<(), CoreError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let storage = self.storage.clone();
+        let id = instance_id.to_string();
+        let updated = tokio::task::spawn_blocking(move || {
+            storage.update_heartbeat(&id, &now)
+        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+        if !updated {
+            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
+        }
+        Ok(())
+    }
+
+    pub async fn delete_instance(&self, instance_id: &str) -> Result<(), CoreError> {
+        let storage = self.storage.clone();
+        let id = instance_id.to_string();
+        let deleted = tokio::task::spawn_blocking(move || {
+            storage.delete_instance(&id)
+        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+        if !deleted {
+            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
+        }
+        Ok(())
     }
 
     async fn embed_cached(&self, text: &str) -> anyhow::Result<Vec<f32>> {
