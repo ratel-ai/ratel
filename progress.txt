@@ -48,3 +48,15 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - limit=0 → no messages, returns max_seq; both params → 400
 - Cross-session isolation: independent seq per (dataset, namespace, session)
 - All 65 tests pass (26 lib + 39 server)
+
+### Task 6: Context endpoint ✅
+- POST /api/v1/context endpoint with body: { dataset, namespace, session, messages: { strategy, max_tokens } }
+- AgentifiedCore::get_context() with full + recent strategies
+- Token counting: char/4 heuristic
+- recent: last N messages fitting budget (newest first, reversed to asc)
+- full: all messages from oldest until budget exceeded
+- summary/recent+summary → 422 "Summary strategies available in a future version"
+- Defaults: strategy=recent, max_tokens=4000
+- Response: messages, strategy_used, total_messages, included_messages, recalled (empty stubs), token_estimate, conversation_messages, fallback
+- CoreError::UnsupportedStrategy variant → 422 HTTP status
+- All 74 tests pass (31 lib + 43 server)
