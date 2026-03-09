@@ -216,3 +216,52 @@ pub struct CreateInstanceRequest {
 pub struct CreateInstanceResponse {
     pub instance_id: String,
 }
+
+// Context types
+
+#[derive(Debug, Deserialize)]
+pub struct ContextMessagesConfig {
+    #[serde(default = "default_context_strategy")]
+    pub strategy: String,
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: usize,
+}
+
+fn default_context_strategy() -> String { "recent".into() }
+fn default_max_tokens() -> usize { 4000 }
+
+impl Default for ContextMessagesConfig {
+    fn default() -> Self {
+        Self {
+            strategy: default_context_strategy(),
+            max_tokens: default_max_tokens(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ContextRequest {
+    pub dataset: String,
+    pub namespace: String,
+    pub session: String,
+    #[serde(default)]
+    pub messages: ContextMessagesConfig,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RecalledContext {
+    pub tools: Vec<serde_json::Value>,
+    pub memories: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ContextResponse {
+    pub messages: Vec<StoredMessage>,
+    pub strategy_used: String,
+    pub total_messages: i64,
+    pub included_messages: usize,
+    pub recalled: RecalledContext,
+    pub token_estimate: usize,
+    pub conversation_messages: usize,
+    pub fallback: bool,
+}

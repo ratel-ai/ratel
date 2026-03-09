@@ -16,9 +16,9 @@ use tokio::sync::RwLock;
 
 use models::{
     AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
-    CreateInstanceResponse, DiscoverRequest, DiscoverResponse, FieldEmbeddings,
-    GetMessagesQuery, GetMessagesResponse, Instance, ListToolsResponse, RankedTool,
-    RegisterToolsResponse, StoredTool, Tool, Turn,
+    ContextRequest, ContextResponse, CreateInstanceResponse, DiscoverRequest, DiscoverResponse,
+    FieldEmbeddings, GetMessagesQuery, GetMessagesResponse, Instance, ListToolsResponse,
+    RankedTool, RecalledContext, RegisterToolsResponse, StoredTool, Tool, Turn,
 };
 use ranking::{bm25_scores, weighted_semantic_score};
 
@@ -29,6 +29,7 @@ pub enum CoreError {
     EmbeddingFailed(anyhow::Error),
     NotFound(String),
     BadRequest(String),
+    UnsupportedStrategy(String),
 }
 
 impl std::fmt::Display for CoreError {
@@ -37,6 +38,7 @@ impl std::fmt::Display for CoreError {
             CoreError::EmbeddingFailed(e) => write!(f, "embedding failed: {e}"),
             CoreError::NotFound(msg) => write!(f, "{msg}"),
             CoreError::BadRequest(msg) => write!(f, "{msg}"),
+            CoreError::UnsupportedStrategy(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -403,6 +405,86 @@ impl AgentifiedCore {
         Ok(GetMessagesResponse { messages, has_more, max_seq })
     }
 
+    pub async fn get_context(&self, req: ContextRequest) -> Result<ContextResponse, CoreError> {
+        let strategy = &req.messages.strategy;
+        if strategy == "summary" || strategy == "recent+summary" {
+            return Err(CoreError::UnsupportedStrategy(
+                "Summary strategies available in a future version".into(),
+            ));
+        }
+        if strategy != "recent" && strategy != "full" {
+            return Err(CoreError::BadRequest(format!("unknown strategy: {strategy}")));
+        }
+
+        let max_tokens = req.messages.max_tokens;
+
+        // Get total message count (limit=0 trick)
+        let storage = self.storage.clone();
+        let ds = req.dataset.clone();
+        let ns = req.namespace.clone();
+        let sess = req.session.clone();
+        let (_, _, total_messages) = tokio::task::spawn_blocking(move || {
+            storage.get_messages(&ds, &ns, &sess, 0, None, None)
+        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+        // Fetch all messages to apply token budgeting
+        let storage = self.storage.clone();
+        let ds = req.dataset.clone();
+        let ns = req.namespace.clone();
+        let sess = req.session.clone();
+        let (all_messages, _, _) = tokio::task::spawn_blocking(move || {
+            storage.get_messages(&ds, &ns, &sess, i64::MAX - 1, None, None)
+        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+        let messages = match strategy.as_str() {
+            "full" => {
+                // Take from oldest until budget exceeded
+                let mut selected = Vec::new();
+                let mut tokens_used = 0usize;
+                for msg in &all_messages {
+                    let msg_tokens = msg.content.len() / 4;
+                    if tokens_used + msg_tokens > max_tokens && !selected.is_empty() {
+                        break;
+                    }
+                    tokens_used += msg_tokens;
+                    selected.push(msg.clone());
+                }
+                selected
+            }
+            "recent" | _ => {
+                // Take from newest, then reverse to ascending order
+                let mut selected = Vec::new();
+                let mut tokens_used = 0usize;
+                for msg in all_messages.iter().rev() {
+                    let msg_tokens = msg.content.len() / 4;
+                    if tokens_used + msg_tokens > max_tokens && !selected.is_empty() {
+                        break;
+                    }
+                    tokens_used += msg_tokens;
+                    selected.push(msg.clone());
+                }
+                selected.reverse();
+                selected
+            }
+        };
+
+        let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
+        let included = messages.len();
+
+        Ok(ContextResponse {
+            messages,
+            strategy_used: strategy.clone(),
+            total_messages,
+            included_messages: included,
+            recalled: RecalledContext { tools: vec![], memories: vec![] },
+            token_estimate,
+            conversation_messages: included,
+            fallback: false,
+        })
+    }
+
     async fn embed_cached(&self, text: &str) -> anyhow::Result<Vec<f32>> {
         let cached = { self.embedding_cache.read().await.get(text).cloned() };
         if let Some(emb) = cached {
@@ -520,6 +602,164 @@ mod tests {
             batch_call_count: Default::default(),
         });
         AgentifiedCore::new(embedding, storage)
+    }
+
+    #[tokio::test]
+    async fn context_recent_returns_messages_fitting_token_budget() {
+        let core = make_core();
+
+        // Append 5 messages with 100 chars each → 100/4 = 25 tokens each
+        let content = "x".repeat(100);
+        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
+            role: "user".into(),
+            content: content.clone(),
+            tool_call_id: None,
+            tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Budget = 60 tokens → fits 2 messages (25 tokens each = 50, 3rd would be 75)
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "recent".into(),
+                max_tokens: 60,
+            },
+        }).await.unwrap();
+
+        assert_eq!(resp.strategy_used, "recent");
+        assert_eq!(resp.messages.len(), 2);
+        assert_eq!(resp.total_messages, 5);
+        assert_eq!(resp.included_messages, 2);
+        assert_eq!(resp.conversation_messages, 2);
+        assert!(resp.token_estimate <= 60);
+        assert!(!resp.fallback);
+        assert!(resp.recalled.tools.is_empty());
+        assert!(resp.recalled.memories.is_empty());
+        // Should be the last 2 messages (seq 4, 5)
+        assert_eq!(resp.messages[0].seq, 4);
+        assert_eq!(resp.messages[1].seq, 5);
+    }
+
+    #[tokio::test]
+    async fn context_summary_returns_unsupported() {
+        let core = make_core();
+        for strategy in &["summary", "recent+summary"] {
+            let err = core.get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: strategy.to_string(),
+                    max_tokens: 4000,
+                },
+            }).await.unwrap_err();
+            match err {
+                CoreError::UnsupportedStrategy(msg) => {
+                    assert!(msg.contains("Summary strategies"));
+                }
+                _ => panic!("expected UnsupportedStrategy, got {err:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn context_empty_session_returns_zeros() {
+        let core = make_core();
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "empty".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "recent".into(),
+                max_tokens: 4000,
+            },
+        }).await.unwrap();
+
+        assert_eq!(resp.messages.len(), 0);
+        assert_eq!(resp.total_messages, 0);
+        assert_eq!(resp.included_messages, 0);
+        assert_eq!(resp.token_estimate, 0);
+        assert_eq!(resp.conversation_messages, 0);
+    }
+
+    #[tokio::test]
+    async fn context_full_returns_all_messages_up_to_budget() {
+        let core = make_core();
+
+        let content = "x".repeat(100); // 25 tokens each
+        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
+            role: "user".into(),
+            content: content.clone(),
+            tool_call_id: None,
+            tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Budget = 60 tokens → fits 2 messages from oldest (seq 1, 2)
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "full".into(),
+                max_tokens: 60,
+            },
+        }).await.unwrap();
+
+        assert_eq!(resp.strategy_used, "full");
+        assert_eq!(resp.messages.len(), 2);
+        // Full takes from oldest
+        assert_eq!(resp.messages[0].seq, 1);
+        assert_eq!(resp.messages[1].seq, 2);
+        assert_eq!(resp.total_messages, 5);
+    }
+
+    #[tokio::test]
+    async fn context_full_returns_all_when_within_budget() {
+        let core = make_core();
+
+        let msgs: Vec<models::MessageInput> = (0..3).map(|i| models::MessageInput {
+            role: "user".into(),
+            content: format!("msg {i}"),
+            tool_call_id: None,
+            tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "full".into(),
+                max_tokens: 4000,
+            },
+        }).await.unwrap();
+
+        assert_eq!(resp.messages.len(), 3);
+        assert_eq!(resp.total_messages, 3);
+        assert_eq!(resp.included_messages, 3);
     }
 
     #[tokio::test]

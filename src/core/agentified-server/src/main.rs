@@ -5,9 +5,9 @@ use agentified_lib::{
     SqliteStorage, Storage,
     models::{
         AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
-        CreateInstanceRequest, CreateInstanceResponse, DiscoverRequest, DiscoverResponse,
-        ErrorResponse, GetMessagesQuery, GetMessagesResponse, ListToolsResponse,
-        RegisterToolsRequest, RegisterToolsResponse,
+        ContextRequest, ContextResponse, CreateInstanceRequest, CreateInstanceResponse,
+        DiscoverRequest, DiscoverResponse, ErrorResponse, GetMessagesQuery,
+        GetMessagesResponse, ListToolsResponse, RegisterToolsRequest, RegisterToolsResponse,
     },
 };
 use axum::{extract::{Path, Query, State}, http::StatusCode, routing::{delete, get, post}, Json, Router};
@@ -32,6 +32,7 @@ pub fn app(core: Arc<AgentifiedCore>) -> Router {
         .route("/api/v1/instances/{id}/heartbeat", post(heartbeat_instance))
         .route("/api/v1/instances/{id}", delete(delete_instance))
         .route("/api/v1/messages", post(append_messages).get(get_messages))
+        .route("/api/v1/context", post(get_context))
         .with_state(core)
 }
 
@@ -115,6 +116,14 @@ async fn get_messages(
     Ok(Json(response))
 }
 
+async fn get_context(
+    State(core): State<Arc<AgentifiedCore>>,
+    Json(body): Json<ContextRequest>,
+) -> Result<Json<ContextResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let response = core.get_context(body).await.map_err(map_error)?;
+    Ok(Json(response))
+}
+
 // Helpers
 
 fn map_error(e: CoreError) -> (StatusCode, Json<ErrorResponse>) {
@@ -122,6 +131,7 @@ fn map_error(e: CoreError) -> (StatusCode, Json<ErrorResponse>) {
         CoreError::EmbeddingFailed(_) => (StatusCode::BAD_GATEWAY, e.to_string()),
         CoreError::NotFound(_) => (StatusCode::NOT_FOUND, e.to_string()),
         CoreError::BadRequest(_) => (StatusCode::BAD_REQUEST, e.to_string()),
+        CoreError::UnsupportedStrategy(_) => (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
     };
     (status, Json(ErrorResponse { error }))
 }
@@ -1774,5 +1784,130 @@ mod tests {
                 .body(Body::from(serde_json::to_string(&query).unwrap())).unwrap(),
         ).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn context_recent_returns_messages_within_budget() {
+        let app = test_app_with_storage();
+
+        // Append 5 messages
+        let content = "y".repeat(100); // 25 tokens each
+        let messages: Vec<serde_json::Value> = (0..5).map(|_| serde_json::json!({
+            "role": "user", "content": content
+        })).collect();
+        let body = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1",
+            "messages": messages
+        });
+        app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/v1/messages")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        // Context with budget=60 → 2 most recent messages
+        let ctx_body = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1",
+            "messages": { "strategy": "recent", "max_tokens": 60 }
+        });
+        let resp = app.oneshot(
+            Request::builder().method("POST").uri("/api/v1/context")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&ctx_body).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["strategy_used"], "recent");
+        assert_eq!(json["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(json["total_messages"], 5);
+        assert_eq!(json["included_messages"], 2);
+        assert_eq!(json["fallback"], false);
+        assert!(json["recalled"]["tools"].as_array().unwrap().is_empty());
+        assert!(json["recalled"]["memories"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn context_full_returns_from_oldest() {
+        let app = test_app_with_storage();
+
+        let content = "z".repeat(100);
+        let messages: Vec<serde_json::Value> = (0..5).map(|_| serde_json::json!({
+            "role": "user", "content": content
+        })).collect();
+        let body = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1",
+            "messages": messages
+        });
+        app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/v1/messages")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        let ctx_body = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1",
+            "messages": { "strategy": "full", "max_tokens": 60 }
+        });
+        let resp = app.oneshot(
+            Request::builder().method("POST").uri("/api/v1/context")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&ctx_body).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["strategy_used"], "full");
+        assert_eq!(json["messages"].as_array().unwrap().len(), 2);
+        // Full takes from oldest → seq 1
+        assert_eq!(json["messages"][0]["seq"], 1);
+    }
+
+    #[tokio::test]
+    async fn context_summary_returns_422() {
+        let app = test_app_with_storage();
+
+        for strategy in &["summary", "recent+summary"] {
+            let ctx_body = serde_json::json!({
+                "dataset": "ds", "namespace": "ns", "session": "s1",
+                "messages": { "strategy": strategy }
+            });
+            let resp = app.clone().oneshot(
+                Request::builder().method("POST").uri("/api/v1/context")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&ctx_body).unwrap())).unwrap(),
+            ).await.unwrap();
+
+            assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+            let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert!(json["error"].as_str().unwrap().contains("Summary strategies"));
+        }
+    }
+
+    #[tokio::test]
+    async fn context_defaults_to_recent_4000() {
+        let app = test_app_with_storage();
+
+        // Append a message
+        append_test_messages(&app, "ds", "ns", "s1", &["hello"]).await;
+
+        // Send context request with minimal body (no messages config)
+        let ctx_body = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1"
+        });
+        let resp = app.oneshot(
+            Request::builder().method("POST").uri("/api/v1/context")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&ctx_body).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["strategy_used"], "recent");
+        assert_eq!(json["messages"].as_array().unwrap().len(), 1);
     }
 }
