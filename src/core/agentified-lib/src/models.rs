@@ -135,6 +135,68 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+// Message types
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageInput {
+    pub role: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredMessage {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<serde_json::Value>,
+    pub created_at: String,
+    pub seq: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AppendMessagesRequest {
+    pub dataset: String,
+    pub namespace: String,
+    pub session: String,
+    pub messages: Vec<MessageInput>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AppendMessagesResponse {
+    pub appended: usize,
+    pub first_seq: i64,
+    pub last_seq: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetMessagesQuery {
+    pub dataset: String,
+    pub namespace: String,
+    pub session: String,
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub after_seq: Option<i64>,
+    #[serde(default)]
+    pub around_seq: Option<i64>,
+}
+
+fn default_limit() -> i64 { 50 }
+
+#[derive(Debug, Serialize)]
+pub struct GetMessagesResponse {
+    pub messages: Vec<StoredMessage>,
+    pub has_more: bool,
+    pub max_seq: i64,
+}
+
 // Instance types
 
 #[derive(Debug, Clone)]

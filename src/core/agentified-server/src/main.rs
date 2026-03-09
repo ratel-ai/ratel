@@ -4,12 +4,13 @@ use agentified_lib::{
     AgentifiedCore, CoreError, EmbeddingService, NoopStorage, OpenAIEmbedding,
     SqliteStorage, Storage,
     models::{
-        CaptureTurnRequest, CaptureTurnResponse, CreateInstanceRequest, CreateInstanceResponse,
-        DiscoverRequest, DiscoverResponse, ErrorResponse, ListToolsResponse,
+        AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
+        CreateInstanceRequest, CreateInstanceResponse, DiscoverRequest, DiscoverResponse,
+        ErrorResponse, GetMessagesQuery, GetMessagesResponse, ListToolsResponse,
         RegisterToolsRequest, RegisterToolsResponse,
     },
 };
-use axum::{extract::{Path, State}, http::StatusCode, routing::{delete, get, post}, Json, Router};
+use axum::{extract::{Path, Query, State}, http::StatusCode, routing::{delete, get, post}, Json, Router};
 use serde::Serialize;
 
 // Types
@@ -30,6 +31,7 @@ pub fn app(core: Arc<AgentifiedCore>) -> Router {
         .route("/api/v1/instances", post(create_instance))
         .route("/api/v1/instances/{id}/heartbeat", post(heartbeat_instance))
         .route("/api/v1/instances/{id}", delete(delete_instance))
+        .route("/api/v1/messages", post(append_messages).get(get_messages))
         .with_state(core)
 }
 
@@ -97,12 +99,29 @@ async fn delete_instance(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn append_messages(
+    State(core): State<Arc<AgentifiedCore>>,
+    Json(body): Json<AppendMessagesRequest>,
+) -> Result<Json<AppendMessagesResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let response = core.append_messages(body).await.map_err(map_error)?;
+    Ok(Json(response))
+}
+
+async fn get_messages(
+    State(core): State<Arc<AgentifiedCore>>,
+    Query(query): Query<GetMessagesQuery>,
+) -> Result<Json<GetMessagesResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let response = core.get_messages(query).await.map_err(map_error)?;
+    Ok(Json(response))
+}
+
 // Helpers
 
 fn map_error(e: CoreError) -> (StatusCode, Json<ErrorResponse>) {
     let (status, error) = match &e {
         CoreError::EmbeddingFailed(_) => (StatusCode::BAD_GATEWAY, e.to_string()),
         CoreError::NotFound(_) => (StatusCode::NOT_FOUND, e.to_string()),
+        CoreError::BadRequest(_) => (StatusCode::BAD_REQUEST, e.to_string()),
     };
     (status, Json(ErrorResponse { error }))
 }
@@ -1491,6 +1510,236 @@ mod tests {
             Request::builder().uri(&format!("/api/v1/instances/{iid}/tools")).body(Body::empty()).unwrap(),
         ).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    // Messages tests
+
+    #[tokio::test]
+    async fn append_messages_returns_seq_range() {
+        let app = test_app_with_storage();
+
+        let body = serde_json::json!({
+            "dataset": "ds",
+            "namespace": "ns",
+            "session": "s1",
+            "messages": [
+                { "role": "user", "content": "Hello" },
+                { "role": "assistant", "content": "Hi there!" }
+            ]
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/messages")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["appended"], 2);
+        assert_eq!(json["first_seq"], 1);
+        assert_eq!(json["last_seq"], 2);
+    }
+
+    #[tokio::test]
+    async fn append_messages_seq_auto_increments() {
+        let app = test_app_with_storage();
+
+        let body = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1",
+            "messages": [{ "role": "user", "content": "First" }]
+        });
+        let json_str = serde_json::to_string(&body).unwrap();
+
+        let resp = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/v1/messages")
+                .header("content-type", "application/json")
+                .body(Body::from(json_str)).unwrap(),
+        ).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["first_seq"], 1);
+        assert_eq!(json["last_seq"], 1);
+
+        // Second append → seq continues
+        let body2 = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1",
+            "messages": [
+                { "role": "assistant", "content": "Reply" },
+                { "role": "user", "content": "Follow-up" }
+            ]
+        });
+        let resp2 = app.oneshot(
+            Request::builder().method("POST").uri("/api/v1/messages")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&body2).unwrap())).unwrap(),
+        ).await.unwrap();
+        let bytes2 = axum::body::to_bytes(resp2.into_body(), usize::MAX).await.unwrap();
+        let json2: serde_json::Value = serde_json::from_slice(&bytes2).unwrap();
+        assert_eq!(json2["appended"], 2);
+        assert_eq!(json2["first_seq"], 2);
+        assert_eq!(json2["last_seq"], 3);
+    }
+
+    #[tokio::test]
+    async fn get_messages_returns_last_n_ascending() {
+        let app = test_app_with_storage();
+
+        // Append 5 messages
+        let body = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1",
+            "messages": [
+                { "role": "user", "content": "m1" },
+                { "role": "assistant", "content": "m2" },
+                { "role": "user", "content": "m3" },
+                { "role": "assistant", "content": "m4" },
+                { "role": "user", "content": "m5" }
+            ]
+        });
+        app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/v1/messages")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        // GET last 3
+        let resp = app.oneshot(
+            Request::builder().uri("/api/v1/messages?dataset=ds&namespace=ns&session=s1&limit=3")
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let msgs = json["messages"].as_array().unwrap();
+        assert_eq!(msgs.len(), 3);
+        // Ascending order: m3, m4, m5
+        assert_eq!(msgs[0]["content"], "m3");
+        assert_eq!(msgs[1]["content"], "m4");
+        assert_eq!(msgs[2]["content"], "m5");
+        assert_eq!(json["has_more"], true);
+        assert_eq!(json["max_seq"], 5);
+    }
+
+    #[tokio::test]
+    async fn get_messages_after_seq_forward() {
+        let app = test_app_with_storage();
+        append_test_messages(&app, "ds", "ns", "s1", &["m1", "m2", "m3", "m4", "m5"]).await;
+
+        let resp = app.oneshot(
+            Request::builder().uri("/api/v1/messages?dataset=ds&namespace=ns&session=s1&limit=2&after_seq=2")
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let msgs = json["messages"].as_array().unwrap();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0]["content"], "m3");
+        assert_eq!(msgs[1]["content"], "m4");
+        assert_eq!(json["has_more"], true);
+    }
+
+    #[tokio::test]
+    async fn get_messages_around_seq_centered() {
+        let app = test_app_with_storage();
+        append_test_messages(&app, "ds", "ns", "s1", &["m1", "m2", "m3", "m4", "m5"]).await;
+
+        let resp = app.oneshot(
+            Request::builder().uri("/api/v1/messages?dataset=ds&namespace=ns&session=s1&limit=3&around_seq=3")
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let msgs = json["messages"].as_array().unwrap();
+        assert_eq!(msgs.len(), 3);
+        // around_seq=3, limit=3 → half=1, start=max(3-1,1)=2 → m2,m3,m4
+        assert_eq!(msgs[0]["content"], "m2");
+        assert_eq!(msgs[1]["content"], "m3");
+        assert_eq!(msgs[2]["content"], "m4");
+    }
+
+    #[tokio::test]
+    async fn get_messages_both_params_returns_400() {
+        let app = test_app_with_storage();
+
+        let resp = app.oneshot(
+            Request::builder().uri("/api/v1/messages?dataset=ds&namespace=ns&session=s1&after_seq=1&around_seq=2")
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn get_messages_limit_zero_returns_max_seq() {
+        let app = test_app_with_storage();
+        append_test_messages(&app, "ds", "ns", "s1", &["m1", "m2", "m3"]).await;
+
+        let resp = app.oneshot(
+            Request::builder().uri("/api/v1/messages?dataset=ds&namespace=ns&session=s1&limit=0")
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["messages"].as_array().unwrap().len(), 0);
+        assert_eq!(json["max_seq"], 3);
+    }
+
+    async fn append_test_messages(app: &Router, dataset: &str, namespace: &str, session: &str, contents: &[&str]) {
+        let messages: Vec<serde_json::Value> = contents.iter()
+            .map(|c| serde_json::json!({ "role": "user", "content": c }))
+            .collect();
+        let body = serde_json::json!({
+            "dataset": dataset, "namespace": namespace, "session": session,
+            "messages": messages
+        });
+        app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/v1/messages")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&body).unwrap())).unwrap(),
+        ).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn messages_cross_session_isolation() {
+        let app = test_app_with_storage();
+
+        // Append to session A
+        append_test_messages(&app, "ds", "ns", "session-a", &["a1", "a2"]).await;
+        // Append to session B
+        append_test_messages(&app, "ds", "ns", "session-b", &["b1"]).await;
+
+        // GET session A → only A's messages, seq starts at 1
+        let resp = app.clone().oneshot(
+            Request::builder().uri("/api/v1/messages?dataset=ds&namespace=ns&session=session-a")
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let msgs = json["messages"].as_array().unwrap();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0]["content"], "a1");
+        assert_eq!(msgs[0]["seq"], 1);
+
+        // GET session B → only B's messages, seq starts at 1
+        let resp = app.oneshot(
+            Request::builder().uri("/api/v1/messages?dataset=ds&namespace=ns&session=session-b")
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let msgs = json["messages"].as_array().unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0]["content"], "b1");
+        assert_eq!(msgs[0]["seq"], 1);
     }
 
     // 404 for tools/discover on non-existent instance

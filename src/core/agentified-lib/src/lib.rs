@@ -15,8 +15,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use models::{
-    CaptureTurnRequest, CaptureTurnResponse, CreateInstanceResponse, DiscoverRequest,
-    DiscoverResponse, FieldEmbeddings, Instance, ListToolsResponse, RankedTool,
+    AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
+    CreateInstanceResponse, DiscoverRequest, DiscoverResponse, FieldEmbeddings,
+    GetMessagesQuery, GetMessagesResponse, Instance, ListToolsResponse, RankedTool,
     RegisterToolsResponse, StoredTool, Tool, Turn,
 };
 use ranking::{bm25_scores, weighted_semantic_score};
@@ -27,6 +28,7 @@ use ranking::{bm25_scores, weighted_semantic_score};
 pub enum CoreError {
     EmbeddingFailed(anyhow::Error),
     NotFound(String),
+    BadRequest(String),
 }
 
 impl std::fmt::Display for CoreError {
@@ -34,6 +36,7 @@ impl std::fmt::Display for CoreError {
         match self {
             CoreError::EmbeddingFailed(e) => write!(f, "embedding failed: {e}"),
             CoreError::NotFound(msg) => write!(f, "{msg}"),
+            CoreError::BadRequest(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -370,6 +373,34 @@ impl AgentifiedCore {
         self.tools.write().await.remove(instance_id);
 
         Ok(())
+    }
+
+    pub async fn append_messages(&self, req: AppendMessagesRequest) -> Result<AppendMessagesResponse, CoreError> {
+        let storage = self.storage.clone();
+        let (first_seq, last_seq) = tokio::task::spawn_blocking(move || {
+            storage.append_messages(&req.dataset, &req.namespace, &req.session, &req.messages)
+        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+        Ok(AppendMessagesResponse {
+            appended: (last_seq - first_seq + 1) as usize,
+            first_seq,
+            last_seq,
+        })
+    }
+
+    pub async fn get_messages(&self, query: GetMessagesQuery) -> Result<GetMessagesResponse, CoreError> {
+        if query.after_seq.is_some() && query.around_seq.is_some() {
+            return Err(CoreError::BadRequest("cannot specify both after_seq and around_seq".into()));
+        }
+
+        let storage = self.storage.clone();
+        let (messages, has_more, max_seq) = tokio::task::spawn_blocking(move || {
+            storage.get_messages(&query.dataset, &query.namespace, &query.session, query.limit, query.after_seq, query.around_seq)
+        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+        Ok(GetMessagesResponse { messages, has_more, max_seq })
     }
 
     async fn embed_cached(&self, text: &str) -> anyhow::Result<Vec<f32>> {

@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::models::{Instance, StoredTool, Turn};
+use crate::models::{Instance, MessageInput, StoredMessage, StoredTool, Turn};
 
 // Trait
 
@@ -17,6 +17,8 @@ pub trait Storage: Send + Sync {
     fn delete_tools_for_instance(&self, instance_id: &str) -> Result<()>;
     fn update_heartbeat(&self, instance_id: &str, heartbeat: &str) -> Result<bool>;
     fn get_expired_instances(&self, cutoff: &str) -> Result<Vec<String>>;
+    fn append_messages(&self, dataset: &str, namespace: &str, session: &str, messages: &[MessageInput]) -> Result<(i64, i64)>;
+    fn get_messages(&self, dataset: &str, namespace: &str, session: &str, limit: i64, after_seq: Option<i64>, around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)>;
 }
 
 // Blob helpers
@@ -72,6 +74,12 @@ impl Storage for NoopStorage {
     fn get_expired_instances(&self, _cutoff: &str) -> Result<Vec<String>> {
         Ok(vec![])
     }
+    fn append_messages(&self, _dataset: &str, _namespace: &str, _session: &str, _messages: &[MessageInput]) -> Result<(i64, i64)> {
+        Ok((0, 0))
+    }
+    fn get_messages(&self, _dataset: &str, _namespace: &str, _session: &str, _limit: i64, _after_seq: Option<i64>, _around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)> {
+        Ok((vec![], false, 0))
+    }
 }
 
 // SqliteStorage
@@ -119,7 +127,20 @@ impl SqliteStorage {
                 last_heartbeat TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_instances_dataset ON instances(dataset_id);
-            CREATE INDEX IF NOT EXISTS idx_instances_heartbeat ON instances(last_heartbeat);"
+            CREATE INDEX IF NOT EXISTS idx_instances_heartbeat ON instances(last_heartbeat);
+            CREATE TABLE IF NOT EXISTS messages (
+                id TEXT PRIMARY KEY,
+                dataset_id TEXT NOT NULL DEFAULT 'default',
+                namespace_id TEXT NOT NULL DEFAULT 'default',
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tool_call_id TEXT,
+                tool_calls TEXT,
+                created_at TEXT NOT NULL,
+                seq INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(dataset_id, namespace_id, session_id, seq);"
         )?;
         Ok(Self { conn: std::sync::Mutex::new(conn) })
     }
@@ -315,6 +336,104 @@ impl Storage for SqliteStorage {
             ids.push(row?);
         }
         Ok(ids)
+    }
+
+    fn append_messages(&self, dataset: &str, namespace: &str, session: &str, messages: &[MessageInput]) -> Result<(i64, i64)> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+
+        let max_seq: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(seq), 0) FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3",
+            rusqlite::params![dataset, namespace, session],
+            |row| row.get(0),
+        )?;
+
+        let first_seq = max_seq + 1;
+        let now = chrono::Utc::now().to_rfc3339();
+
+        for (i, msg) in messages.iter().enumerate() {
+            let seq = first_seq + i as i64;
+            let id = uuid::Uuid::new_v4().to_string();
+            let tool_calls_json = msg.tool_calls.as_ref().map(|v| serde_json::to_string(v)).transpose()?;
+            conn.execute(
+                "INSERT INTO messages (id, dataset_id, namespace_id, session_id, role, content, tool_call_id, tool_calls, created_at, seq)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                rusqlite::params![id, dataset, namespace, session, msg.role, msg.content, msg.tool_call_id, tool_calls_json, now, seq],
+            )?;
+        }
+
+        conn.execute_batch("COMMIT")?;
+        let last_seq = first_seq + messages.len() as i64 - 1;
+        Ok((first_seq, last_seq))
+    }
+
+    fn get_messages(&self, dataset: &str, namespace: &str, session: &str, limit: i64, after_seq: Option<i64>, around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)> {
+        let conn = self.conn.lock().unwrap();
+
+        let max_seq: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(seq), 0) FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3",
+            rusqlite::params![dataset, namespace, session],
+            |row| row.get(0),
+        )?;
+
+        if limit == 0 {
+            return Ok((vec![], false, max_seq));
+        }
+
+        let (query, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(after) = after_seq {
+            (
+                format!("SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 AND seq > ?4 ORDER BY seq ASC LIMIT ?5"),
+                vec![Box::new(dataset.to_string()), Box::new(namespace.to_string()), Box::new(session.to_string()), Box::new(after), Box::new(limit + 1)],
+            )
+        } else if let Some(around) = around_seq {
+            let half = limit / 2;
+            let start = (around - half).max(1);
+            let fetch = limit + 1;
+            (
+                format!("SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 AND seq >= ?4 ORDER BY seq ASC LIMIT ?5"),
+                vec![Box::new(dataset.to_string()), Box::new(namespace.to_string()), Box::new(session.to_string()), Box::new(start), Box::new(fetch)],
+            )
+        } else {
+            // Default: last N messages ascending
+            // Fetch limit+1 desc, reverse to asc, then check has_more
+            (
+                format!("SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM (SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 ORDER BY seq DESC LIMIT ?4) sub ORDER BY seq ASC"),
+                vec![Box::new(dataset.to_string()), Box::new(namespace.to_string()), Box::new(session.to_string()), Box::new(limit + 1)],
+            )
+        };
+
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn.prepare(&query)?;
+        let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            let tool_calls_str: Option<String> = row.get(4)?;
+            Ok(StoredMessage {
+                id: row.get(0)?,
+                role: row.get(1)?,
+                content: row.get(2)?,
+                tool_call_id: row.get(3)?,
+                tool_calls: tool_calls_str.and_then(|s| serde_json::from_str(&s).ok()),
+                created_at: row.get(5)?,
+                seq: row.get(6)?,
+            })
+        })?;
+
+        let mut messages: Vec<StoredMessage> = Vec::new();
+        for row in rows {
+            messages.push(row?);
+        }
+
+        let has_more = messages.len() as i64 > limit;
+        if has_more {
+            if after_seq.is_some() || around_seq.is_some() {
+                // Forward/around: drop last extra
+                messages.truncate(limit as usize);
+            } else {
+                // Default (last N): drop first extra (oldest)
+                messages.remove(0);
+            }
+        }
+
+        Ok((messages, has_more, max_seq))
     }
 }
 
