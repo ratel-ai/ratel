@@ -19,7 +19,7 @@ RUN touch agentified-lib/src/lib.rs agentified-server/src/main.rs \
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/agentified-core /usr/local/bin/agentified-core
+COPY --from=builder /app/target/release/agentified-server /usr/local/bin/agentified-core
 ENV AGENTIFIED_PORT=9119
 EXPOSE 9119
 CMD ["agentified-core"]
