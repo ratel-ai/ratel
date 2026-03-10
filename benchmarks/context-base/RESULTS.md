@@ -6,29 +6,15 @@
 
 ## Overall Scores
 
-| Agent | Model | Tool F1 | Task Correctness | Hydration Recall | Input Tokens | Cost ($) |
-| --- | --- | --- | --- | --- | --- | --- |
-| Oracle | gemini-3-flash-preview | 0.99 | 0.94 | 1.00 | 129,936 | 0.09 |
-| Agentified | gemini-3-flash-preview | 0.91 | 0.96 | 0.99 | 513,716 | 0.21 |
-| Baseline | gemini-3-flash-preview | 0.90 | 0.96 | 1.00 | 3,190,365 | 0.56 |
-| Oracle | claude-sonnet-4-6 | 0.98 | 0.96 | 1.00 | 170,485 | 0.80 |
-| Agentified | claude-sonnet-4-6 | 0.93 | 0.96 | 0.99 | 582,678 | 2.16 |
-| Baseline | claude-sonnet-4-6 | 0.93 | 0.95 | 1.00 | 3,705,179 | 11.50 |
-| Oracle | claude-opus-4-6 | 0.99 | 0.94 | 1.00 | 190,423 | 1.45 |
-| Agentified | claude-opus-4-6 | 0.93 | 0.93 | 0.99 | 562,596 | 3.32 |
-| Baseline | claude-opus-4-6 | 0.97 | 0.97 | 1.00 | 3,827,680 | 19.88 |
-| Oracle | gpt-4o | 0.98 | 0.91 | 1.00 | 132,543 | 0.69 |
-| Agentified | gpt-4o | 0.91 | 0.80 | 0.98 | 232,057 | 0.54 |
-| Baseline | gpt-4o | 0.93 | 0.90 | 1.00 | 1,618,924 | 2.53 |
-| Oracle | gpt-5 | 0.99 | 0.92 | 1.00 | 191,487 | 0.78 |
-| Agentified | gpt-5 | 0.88 | 0.84 | 0.99 | 487,051 | 0.98 |
-| Baseline | gpt-5 | 0.91 | 0.90 | 1.00 | 2,216,803 | 1.08 |
-| Oracle | gpt-5.4 | 0.98 | 0.88 | 1.00 | 75,202 | 0.31 |
-| Agentified | gpt-5.4 | 0.94 | 0.88 | 0.99 | 260,309 | 0.53 |
-| Baseline | gpt-5.4 | 0.95 | 0.93 | 1.00 | 1,602,262 | 0.72 |
-| Oracle | gpt-5-mini | 0.99 | 0.95 | 1.00 | 106,653 | 0.10 |
-| Agentified | gpt-5-mini | 0.89 | 0.84 | 0.99 | 406,282 | 0.14 |
-| Baseline | gpt-5-mini | 0.93 | 0.92 | 1.00 | 1,952,845 | 0.17 |
+| Model | Oracle TC | Oracle Time | Oracle Cost | Baseline TC | Baseline Time | Baseline Cost | Agentified TC | Agentified HR | Agentified Time | Agentified Cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| gemini-3-flash-preview | 94% | 379s | $0.09 | 96% | 622s | $0.56 | 96% | 99% | 541s | $0.21 |
+| claude-sonnet-4-6 | 96% | 499s | $0.80 | 95% | 692s | $11.50 | 96% | 99% | 687s | $2.16 |
+| claude-opus-4-6 | 94% | 699s | $1.45 | 97% | 963s | $19.88 | 93% | 99% | 747s | $3.32 |
+| gpt-4o | 91% | 955s | $0.69 | 90% | 558s | $2.53 | 80% | 98% | 303s | $0.54 |
+| gpt-5 | 92% | 1348s | $0.78 | 90% | 1805s | $1.08 | 84% | 99% | 1566s | $0.98 |
+| gpt-5.4 | 88% | 242s | $0.31 | 93% | 483s | $0.72 | 88% | 99% | 311s | $0.53 |
+| gpt-5-mini | 95% | 876s | $0.10 | 92% | 1204s | $0.17 | 84% | 99% | 1060s | $0.14 |
 
 ### Highlights (gemini-3-flash-preview)
 
