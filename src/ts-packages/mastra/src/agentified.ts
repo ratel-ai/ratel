@@ -1,4 +1,4 @@
-import { ApiClient, type DiscoverToolInput } from "@agentified/sdk";
+import { ApiClient, type DiscoverToolInput, type StoredMessage, type ContextResponse, type AppendMessagesResponse, type GetMessagesOpts as SdkGetMessagesOpts } from "@agentified/sdk";
 import { createTool } from "@mastra/core/tools";
 import { spawn, type ChildProcess } from "node:child_process";
 import { z } from "zod";
@@ -34,8 +34,90 @@ export type PrepareStepFn = (params: {
   steps: any[];
 }) => Promise<{ activeTools: string[] }>;
 
+export interface AssembledContext {
+  messages: StoredMessage[];
+  recalled: { tools: unknown[]; memories: unknown[] };
+  strategyUsed: string;
+  fallback: boolean;
+  tokenEstimate: number;
+  conversationMessages: number;
+  totalMessages: number;
+  includedMessages: number;
+}
+
+export interface GetMessagesOptions {
+  maxMessages?: number;
+  maxTokens?: number;
+  strategy?: string;
+}
+
+export interface GetMessagesResult {
+  messages: StoredMessage[];
+  totalMessages: number;
+  includedMessages: number;
+  strategyUsed: string;
+  fallback: boolean;
+}
+
+export class ContextBuilder {
+  private messageOpts: { strategy?: string; maxTokens?: number } = {};
+
+  constructor(
+    private readonly sdk: ApiClient,
+    private readonly datasetId: string,
+    private readonly namespaceId: string,
+    private readonly sessionId: string,
+  ) {}
+
+  messages(opts: { strategy?: string; maxTokens?: number }): this {
+    this.messageOpts = opts;
+    return this;
+  }
+
+  recall(_opts?: unknown): this {
+    return this;
+  }
+
+  async assemble(): Promise<AssembledContext> {
+    const res = await this.sdk.getContext(this.datasetId, this.namespaceId, this.sessionId, {
+      strategy: this.messageOpts.strategy,
+      maxTokens: this.messageOpts.maxTokens,
+    });
+    return {
+      messages: res.messages,
+      recalled: res.recalled,
+      strategyUsed: res.strategyUsed,
+      fallback: res.fallback,
+      tokenEstimate: res.tokenEstimate,
+      conversationMessages: res.conversationMessages,
+      totalMessages: res.totalMessages,
+      includedMessages: res.includedMessages,
+    };
+  }
+}
+
+export class Conversation {
+  constructor(
+    private readonly sdk: ApiClient,
+    private readonly datasetId: string,
+    private readonly namespaceId: string,
+    private readonly sessionId: string,
+  ) {}
+
+  async append(messages: Array<{ role: string; content: string }>): Promise<AppendMessagesResponse> {
+    return this.sdk.appendMessages(this.datasetId, this.namespaceId, this.sessionId, messages);
+  }
+
+  async messages(opts?: SdkGetMessagesOpts): Promise<StoredMessage[]> {
+    const res = await this.sdk.getMessages(this.datasetId, this.namespaceId, this.sessionId, opts);
+    return res.messages;
+  }
+}
+
 export class Session {
   private lastPersistedSeq = 0;
+
+  readonly conversation: Conversation;
 
   constructor(
     readonly id: string,
@@ -43,7 +125,33 @@ export class Session {
     /** @internal */ private readonly sdk: ApiClient,
     /** @internal */ private readonly datasetId: string,
     /** @internal */ private readonly toolNames: string[],
-  ) {}
+  ) {
+    this.conversation = new Conversation(sdk, datasetId, namespaceId, id);
+  }
+
+  get context(): ContextBuilder {
+    return new ContextBuilder(this.sdk, this.datasetId, this.namespaceId, this.id);
+  }
+
+  async getMessages(opts?: GetMessagesOptions): Promise<GetMessagesResult> {
+    const res = await this.sdk.getContext(this.datasetId, this.namespaceId, this.id, {
+      strategy: opts?.strategy,
+      maxTokens: opts?.maxTokens,
+    });
+    let messages = res.messages;
+    let includedMessages = res.includedMessages;
+    if (opts?.maxMessages && messages.length > opts.maxMessages) {
+      messages = messages.slice(messages.length - opts.maxMessages);
+      includedMessages = messages.length;
+    }
+    return {
+      messages,
+      totalMessages: res.totalMessages,
+      includedMessages,
+      strategyUsed: res.strategyUsed,
+      fallback: res.fallback,
+    };
+  }
 
   readonly prepareStep: PrepareStepFn = async ({ steps }) => {
     const activeTools = new Set([...this.toolNames, "agentified_discover"]);

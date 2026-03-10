@@ -8,6 +8,7 @@ const mockRegister = vi.fn();
 const mockAsDiscoverTool = vi.fn();
 const mockAppendMessages = vi.fn();
 const mockGetMessages = vi.fn();
+const mockGetContext = vi.fn();
 
 vi.mock("@agentified/sdk", () => ({
   ApiClient: vi.fn(() => ({
@@ -18,6 +19,7 @@ vi.mock("@agentified/sdk", () => ({
     asDiscoverTool: mockAsDiscoverTool,
     appendMessages: mockAppendMessages,
     getMessages: mockGetMessages,
+    getContext: mockGetContext,
   })),
 }));
 
@@ -844,6 +846,175 @@ describe("Agentified", () => {
       expect(mockAppendMessages).toHaveBeenCalledWith("default", "default", "chat-1", [
         { role: "user", content: "What's the weather?" },
       ]);
+
+      await ag.disconnect();
+    });
+
+    it("context.messages().assemble() returns assembled context from server (TC-009c)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockGetContext.mockResolvedValue({
+        messages: [
+          { id: "m1", role: "user", content: "Hello", seq: 1, created_at: "2026-01-01" },
+          { id: "m2", role: "assistant", content: "Hi", seq: 2, created_at: "2026-01-01" },
+        ],
+        strategyUsed: "recent",
+        totalMessages: 5,
+        includedMessages: 2,
+        recalled: { tools: [], memories: [] },
+        tokenEstimate: 10,
+        conversationMessages: 5,
+        fallback: false,
+      });
+
+      const ctx = await session.context
+        .messages({ strategy: "recent", maxTokens: 2000 })
+        .assemble();
+
+      expect(mockGetContext).toHaveBeenCalledWith("default", "default", "chat-1", {
+        strategy: "recent",
+        maxTokens: 2000,
+      });
+      expect(ctx.messages).toHaveLength(2);
+      expect(ctx.strategyUsed).toBe("recent");
+      expect(ctx.totalMessages).toBe(5);
+      expect(ctx.includedMessages).toBe(2);
+      expect(ctx.tokenEstimate).toBe(10);
+      expect(ctx.conversationMessages).toBe(5);
+      expect(ctx.fallback).toBe(false);
+      expect(ctx.recalled).toEqual({ tools: [], memories: [] });
+
+      await ag.disconnect();
+    });
+
+    it("context.messages().recall().assemble() works (recall is no-op stub)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockGetContext.mockResolvedValue({
+        messages: [],
+        strategyUsed: "recent",
+        totalMessages: 0,
+        includedMessages: 0,
+        recalled: { tools: [], memories: [] },
+        tokenEstimate: 0,
+        conversationMessages: 0,
+        fallback: false,
+      });
+
+      const ctx = await session.context
+        .messages({ strategy: "recent" })
+        .recall()
+        .assemble();
+
+      expect(ctx).toBeDefined();
+      expect(ctx.messages).toEqual([]);
+
+      await ag.disconnect();
+    });
+
+    it("conversation.append() returns seq range (TC-010)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockAppendMessages.mockResolvedValue({ appended: 2, firstSeq: 1, lastSeq: 2 });
+
+      const result = await session.conversation.append([
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi" },
+      ]);
+
+      expect(result).toEqual({ appended: 2, firstSeq: 1, lastSeq: 2 });
+      expect(mockAppendMessages).toHaveBeenCalledWith("default", "default", "chat-1", [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi" },
+      ]);
+
+      await ag.disconnect();
+    });
+
+    it("conversation.messages() returns stored messages (TC-011)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      const stored = [
+        { id: "m1", role: "user", content: "Hello", seq: 1, created_at: "2026-01-01" },
+        { id: "m2", role: "assistant", content: "Hi", seq: 2, created_at: "2026-01-01" },
+      ];
+      mockGetMessages.mockResolvedValue({ messages: stored, hasMore: false, maxSeq: 2 });
+
+      const msgs = await session.conversation.messages({ limit: 10 });
+
+      expect(msgs).toEqual(stored);
+      expect(mockGetMessages).toHaveBeenCalledWith("default", "default", "chat-1", { limit: 10 });
+
+      await ag.disconnect();
+    });
+
+    it("getMessages() returns context via sdk.getContext (TC-009c)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockGetContext.mockResolvedValue({
+        messages: [
+          { id: "m1", role: "user", content: "Hello", seq: 1, created_at: "2026-01-01" },
+        ],
+        strategyUsed: "recent",
+        totalMessages: 3,
+        includedMessages: 1,
+        recalled: { tools: [], memories: [] },
+        tokenEstimate: 5,
+        conversationMessages: 3,
+        fallback: false,
+      });
+
+      const result = await session.getMessages({ strategy: "recent", maxTokens: 2000 });
+
+      expect(mockGetContext).toHaveBeenCalledWith("default", "default", "chat-1", {
+        strategy: "recent",
+        maxTokens: 2000,
+      });
+      expect(result.messages).toHaveLength(1);
+      expect(result.strategyUsed).toBe("recent");
+      expect(result.totalMessages).toBe(3);
+      expect(result.includedMessages).toBe(1);
+      expect(result.fallback).toBe(false);
+
+      await ag.disconnect();
+    });
+
+    it("getMessages({ maxMessages }) truncates from oldest", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockGetContext.mockResolvedValue({
+        messages: [
+          { id: "m1", role: "user", content: "1", seq: 1, created_at: "2026-01-01" },
+          { id: "m2", role: "assistant", content: "2", seq: 2, created_at: "2026-01-01" },
+          { id: "m3", role: "user", content: "3", seq: 3, created_at: "2026-01-01" },
+        ],
+        strategyUsed: "recent",
+        totalMessages: 3,
+        includedMessages: 3,
+        recalled: { tools: [], memories: [] },
+        tokenEstimate: 15,
+        conversationMessages: 3,
+        fallback: false,
+      });
+
+      const result = await session.getMessages({ maxMessages: 2 });
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].content).toBe("2");
+      expect(result.messages[1].content).toBe("3");
+      expect(result.includedMessages).toBe(2);
 
       await ag.disconnect();
     });
