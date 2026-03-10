@@ -20,7 +20,7 @@
   </p>
 </div>
 
-> **86% cost reduction. Same task accuracy.** [Benchmarks →](https://agentified.dev/benchmarks)
+> **86% cost reduction. Same task accuracy.** [Benchmarks →](./benchmarks/context-base/README.md)
 
 <br />
 
@@ -170,7 +170,7 @@ See Agentified in action. Compare token usage with and without smart tool select
 | Cost per 1K queries | $21.53 | $2.95 | **-86%** |
 | Latency (p50) | 2.1s | 1.4s | **-33%** |
 
-[Full benchmark methodology →](https://agentified.dev/benchmarks)
+[Full benchmark methodology →](./benchmarks/context-base/README.md)
 
 <br />
 
