@@ -1,5 +1,7 @@
-import { ApiClient } from "@agentified/sdk";
+import { ApiClient, type DiscoverToolInput } from "@agentified/sdk";
+import { createTool } from "@mastra/core/tools";
 import { spawn, type ChildProcess } from "node:child_process";
+import { z } from "zod";
 import { resolveBinaryPath, findFreePort } from "./spawn-utils.js";
 
 export interface BackendTool {
@@ -27,15 +29,63 @@ export interface McpTool {
 
 export type AgentifiedTool = BackendTool | ClientTool | McpTool;
 
+export type PrepareStepFn = (params: {
+  stepNumber: number;
+  steps: any[];
+}) => Promise<{ activeTools: string[] }>;
+
+export class Session {
+  constructor(
+    readonly id: string,
+    readonly namespaceId: string,
+  ) {}
+}
+
 export interface RegisterInput {
   tools: AgentifiedTool[];
 }
 
 export class Instance {
+  readonly discoverTool: ReturnType<typeof createTool>;
+
   constructor(
     readonly instanceId: string,
     readonly datasetId: string,
-  ) {}
+    /** @internal */ private readonly sdk: ApiClient,
+    /** @internal */ private readonly toolNames: string[],
+  ) {
+    const discoverDef = sdk.asDiscoverTool(instanceId);
+    this.discoverTool = createTool({
+      id: "agentified_discover",
+      description: discoverDef.definition.description,
+      inputSchema: z.object({ query: z.string(), limit: z.number().optional() }),
+      execute: async (input) => {
+        return discoverDef.execute(input as DiscoverToolInput);
+      },
+    });
+  }
+
+  readonly prepareStep: PrepareStepFn = async ({ steps }) => {
+    const activeTools = new Set([...this.toolNames, "agentified_discover"]);
+
+    for (const step of steps) {
+      if (step.toolResults) {
+        for (const result of step.toolResults) {
+          if (result.toolName === "agentified_discover" && Array.isArray(result.result)) {
+            for (const tool of result.result) {
+              if (tool.name) activeTools.add(tool.name);
+            }
+          }
+        }
+      }
+    }
+
+    return { activeTools: [...activeTools] };
+  };
+
+  session(id: string): Session {
+    return new Session(id, "default");
+  }
 }
 
 function validateTools(tools: AgentifiedTool[]): void {
@@ -88,7 +138,8 @@ export class DatasetRef {
     this.agentified.heartbeatIntervals.set(instanceId, interval);
     this.agentified.activeInstances.add(instanceId);
 
-    return new Instance(instanceId, this.datasetName);
+    const toolNames = input.tools.map((t) => t.name);
+    return new Instance(instanceId, this.datasetName, sdk, toolNames);
   }
 }
 

@@ -5,6 +5,7 @@ const mockCreateInstance = vi.fn();
 const mockHeartbeatInstance = vi.fn();
 const mockDeleteInstance = vi.fn();
 const mockRegister = vi.fn();
+const mockAsDiscoverTool = vi.fn();
 
 vi.mock("@agentified/sdk", () => ({
   ApiClient: vi.fn(() => ({
@@ -12,7 +13,18 @@ vi.mock("@agentified/sdk", () => ({
     heartbeatInstance: mockHeartbeatInstance,
     deleteInstance: mockDeleteInstance,
     register: mockRegister,
+    asDiscoverTool: mockAsDiscoverTool,
   })),
+}));
+
+const mockCreateTool = vi.fn(({ id, execute }: any) => ({
+  id,
+  execute,
+  __mastraTool: true,
+}));
+
+vi.mock("@mastra/core/tools", () => ({
+  createTool: (...args: any[]) => mockCreateTool(...args),
 }));
 
 const { mockSpawn, mockResolveBinary, mockFindFreePort } = vi.hoisted(() => ({
@@ -40,6 +52,10 @@ describe("Agentified", () => {
     fetchSpy = vi.fn();
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
     vi.clearAllMocks();
+    mockAsDiscoverTool.mockReturnValue({
+      definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+      execute: vi.fn().mockResolvedValue([]),
+    });
   });
 
   afterEach(() => {
@@ -535,6 +551,110 @@ describe("Agentified", () => {
       // Should not throw — handler present implies backend type
       const instance = await ag.register({ tools: [tool] });
       expect(instance.instanceId).toBe("inst-type");
+
+      await ag.disconnect();
+    });
+  });
+
+  describe("Instance", () => {
+    async function connectedAgentified(): Promise<Agentified> {
+      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
+      const ag = new Agentified();
+      await ag.connect("http://localhost:9119");
+      return ag;
+    }
+
+    function backendTool(name: string): AgentifiedTool {
+      return {
+        name,
+        description: `${name} tool`,
+        parameters: { type: "object" },
+        handler: async () => "ok",
+      };
+    }
+
+    async function registerInstance(ag: Agentified, tools: AgentifiedTool[] = [backendTool("myTool")]) {
+      mockCreateInstance.mockResolvedValue({ instanceId: "inst-1" });
+      mockRegister.mockResolvedValue({ registered: tools.length });
+      mockAsDiscoverTool.mockReturnValue({
+        definition: {
+          name: "agentified_discover",
+          description: "Find tools",
+          parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        },
+        execute: vi.fn().mockResolvedValue([]),
+      });
+      return ag.register({ tools });
+    }
+
+    it("has a discoverTool that wraps sdk.asDiscoverTool as Mastra createTool", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag);
+
+      expect(instance.discoverTool).toBeDefined();
+      expect(mockAsDiscoverTool).toHaveBeenCalledWith("inst-1");
+      expect(mockCreateTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "agentified_discover",
+          description: "Find tools",
+        }),
+      );
+
+      await ag.disconnect();
+    });
+
+    it("session(id) returns Session with given id and default namespace (TC-005)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag);
+
+      const session = instance.session("chat-1");
+
+      expect(session).toBeDefined();
+      expect(session.id).toBe("chat-1");
+      expect(session.namespaceId).toBe("default");
+
+      await ag.disconnect();
+    });
+
+    it("prepareStep returns all registered tool names + agentified_discover when no discover results (TC-007)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA"), backendTool("toolB")]);
+
+      const result = await instance.prepareStep({ stepNumber: 0, steps: [] });
+
+      expect(result.activeTools).toContain("toolA");
+      expect(result.activeTools).toContain("toolB");
+      expect(result.activeTools).toContain("agentified_discover");
+      expect(result.activeTools).toHaveLength(3);
+
+      await ag.disconnect();
+    });
+
+    it("prepareStep adds discovered tool names from prior steps (TC-007)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+
+      const steps = [
+        {
+          toolResults: [
+            {
+              toolName: "agentified_discover",
+              result: [
+                { name: "discoveredTool1", score: 0.9 },
+                { name: "discoveredTool2", score: 0.8 },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const result = await instance.prepareStep({ stepNumber: 1, steps });
+
+      expect(result.activeTools).toContain("toolA");
+      expect(result.activeTools).toContain("agentified_discover");
+      expect(result.activeTools).toContain("discoveredTool1");
+      expect(result.activeTools).toContain("discoveredTool2");
+      expect(result.activeTools).toHaveLength(4);
 
       await ag.disconnect();
     });
