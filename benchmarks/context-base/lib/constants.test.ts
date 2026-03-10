@@ -14,6 +14,10 @@ describe("PRICING", () => {
     expect(PRICING["gpt-5-nano"]).toEqual({ inputPerM: 0.05, cachedInputPerM: 0.005, outputPerM: 0.4 });
   });
 
+  it("has gpt-5.4 pricing", () => {
+    expect(PRICING["gpt-5.4"]).toEqual({ inputPerM: 2.5, cachedInputPerM: 0.25, outputPerM: 15.0 });
+  });
+
   it("has gpt-4o pricing", () => {
     expect(PRICING["gpt-4o"]).toEqual({ inputPerM: 2.5, cachedInputPerM: 1.25, outputPerM: 10.0 });
   });
@@ -32,6 +36,10 @@ describe("PRICING", () => {
 
   it("has gemini-3-pro-preview pricing", () => {
     expect(PRICING["gemini-3-pro-preview"]).toEqual({ inputPerM: 2.0, cachedInputPerM: 0.2, outputPerM: 12.0 });
+  });
+
+  it("has claude-sonnet-4-6 pricing", () => {
+    expect(PRICING["claude-sonnet-4-6"]).toEqual({ inputPerM: 3.0, cachedInputPerM: 0.3, outputPerM: 15.0 });
   });
 
   it("has claude-opus-4-6 pricing", () => {
@@ -78,6 +86,17 @@ describe("computeCost", () => {
     expect(computeCost(1_000_000, 400_000, 0, "gpt-5-mini")).toBeCloseTo(0.16, 4);
   });
 
+  it("computes gpt-5.4 cost", () => {
+    // 1M input @ $2.50 + 1M output @ $15.00 = $17.50
+    expect(computeCost(1_000_000, 0, 1_000_000, "gpt-5.4")).toBeCloseTo(17.5, 4);
+  });
+
+  it("computes gpt-5.4 cost with cached tokens", () => {
+    // 1M total, 400k cached → 600k non-cached
+    // 600k * $2.50/M + 400k * $0.25/M + 0 = $1.50 + $0.10 = $1.60
+    expect(computeCost(1_000_000, 400_000, 0, "gpt-5.4")).toBeCloseTo(1.6, 4);
+  });
+
   it("computes gpt-4o cost", () => {
     // 1M input @ $2.50 + 1M output @ $10.00 = $12.50
     expect(computeCost(1_000_000, 0, 1_000_000, "gpt-4o")).toBeCloseTo(12.5, 4);
@@ -97,6 +116,17 @@ describe("computeCost", () => {
   it("computes gemini-3-flash-preview cost", () => {
     // 1M input @ $0.50 + 1M output @ $3.00 = $3.50
     expect(computeCost(1_000_000, 0, 1_000_000, "gemini-3-flash-preview")).toBeCloseTo(3.5, 4);
+  });
+
+  it("computes claude-sonnet-4-6 cost", () => {
+    // 1M input @ $3.00 + 1M output @ $15.00 = $18.00
+    expect(computeCost(1_000_000, 0, 1_000_000, "claude-sonnet-4-6")).toBeCloseTo(18.0, 4);
+  });
+
+  it("computes claude-sonnet-4-6 cost with cached tokens", () => {
+    // 1M total, 400k cached → 600k non-cached
+    // 600k * $3.00/M + 400k * $0.30/M + 0 = $1.80 + $0.12 = $1.92
+    expect(computeCost(1_000_000, 400_000, 0, "claude-sonnet-4-6")).toBeCloseTo(1.92, 4);
   });
 
   it("computes claude-opus-4-6 cost", () => {

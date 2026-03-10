@@ -8,11 +8,13 @@ export const PRICING: Record<string, ModelPricing> = {
   "gpt-5": { inputPerM: 1.25, cachedInputPerM: 0.125, outputPerM: 10.0 },
   "gpt-5-mini": { inputPerM: 0.25, cachedInputPerM: 0.025, outputPerM: 2.0 },
   "gpt-5-nano": { inputPerM: 0.05, cachedInputPerM: 0.005, outputPerM: 0.4 },
+  "gpt-5.4": { inputPerM: 2.5, cachedInputPerM: 0.25, outputPerM: 15.0 },
   "gpt-4o": { inputPerM: 2.5, cachedInputPerM: 1.25, outputPerM: 10.0 },
   "claude-sonnet-4-5-20250929": { inputPerM: 3.0, cachedInputPerM: 0.3, outputPerM: 15.0 },
   "claude-haiku-4-5-20251001": { inputPerM: 1.0, cachedInputPerM: 0.1, outputPerM: 5.0 },
   "gemini-3-flash-preview": { inputPerM: 0.5, cachedInputPerM: 0.05, outputPerM: 3.0 },
   "gemini-3-pro-preview": { inputPerM: 2.0, cachedInputPerM: 0.2, outputPerM: 12.0 },
+  "claude-sonnet-4-6": { inputPerM: 3.0, cachedInputPerM: 0.3, outputPerM: 15.0 },
   "claude-opus-4-6": { inputPerM: 5.0, cachedInputPerM: 0.5, outputPerM: 25.0 },
 };
 
