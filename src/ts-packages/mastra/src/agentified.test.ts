@@ -4,12 +4,14 @@ import { EventEmitter } from "node:events";
 const mockCreateInstance = vi.fn();
 const mockHeartbeatInstance = vi.fn();
 const mockDeleteInstance = vi.fn();
+const mockRegister = vi.fn();
 
 vi.mock("@agentified/sdk", () => ({
   ApiClient: vi.fn(() => ({
     createInstance: mockCreateInstance,
     heartbeatInstance: mockHeartbeatInstance,
     deleteInstance: mockDeleteInstance,
+    register: mockRegister,
   })),
 }));
 
@@ -28,7 +30,7 @@ vi.mock("./spawn-utils.js", () => ({
   findFreePort: mockFindFreePort,
 }));
 
-import { Agentified } from "./agentified.js";
+import { Agentified, type AgentifiedTool } from "./agentified.js";
 
 describe("Agentified", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
@@ -349,6 +351,192 @@ describe("Agentified", () => {
       await ag.disconnect(); // should not throw
 
       expect(mockDeleteInstance).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("register()", () => {
+    async function connectedAgentified(): Promise<Agentified> {
+      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
+      const ag = new Agentified();
+      await ag.connect("http://localhost:9119");
+      return ag;
+    }
+
+    it("throws when tool has no type and no handler", async () => {
+      const ag = await connectedAgentified();
+      const badTool = { name: "broken", description: "no type no handler", parameters: {} } as AgentifiedTool;
+
+      await expect(ag.register({ tools: [badTool] })).rejects.toThrow(
+        /Tool 'broken' has no type and no handler/,
+      );
+
+      await ag.disconnect();
+    });
+
+    it("throws when tool has type 'client'", async () => {
+      const ag = await connectedAgentified();
+      const clientTool = { name: "ui-tool", description: "client", parameters: {}, type: "client" as const };
+
+      await expect(ag.register({ tools: [clientTool] })).rejects.toThrow(
+        /Client tools are not yet supported/,
+      );
+      await ag.disconnect();
+    });
+
+    it("throws when tool has type 'mcp'", async () => {
+      const ag = await connectedAgentified();
+      const mcpTool = { name: "mcp-tool", description: "mcp", parameters: {}, type: "mcp" as const, server: "http://mcp" };
+
+      await expect(ag.register({ tools: [mcpTool] })).rejects.toThrow(
+        /MCP tools are not yet supported/,
+      );
+      await ag.disconnect();
+    });
+
+    it("returns Instance with instanceId after registering tools (TC-003)", async () => {
+      const ag = await connectedAgentified();
+      mockCreateInstance.mockResolvedValue({ instanceId: "inst-abc" });
+      mockRegister.mockResolvedValue({ registered: 1 });
+
+      const tool: AgentifiedTool = {
+        name: "myTool",
+        description: "does stuff",
+        parameters: { type: "object" },
+        handler: async () => "ok",
+      };
+
+      const instance = await ag.dataset("my-dataset").register({ tools: [tool] });
+
+      expect(instance.instanceId).toBe("inst-abc");
+      expect(instance.datasetId).toBe("my-dataset");
+      expect(mockCreateInstance).toHaveBeenCalledWith("my-dataset");
+
+      await ag.disconnect();
+    });
+
+    it("uses 'default' dataset when called on Agentified directly (TC-004)", async () => {
+      const ag = await connectedAgentified();
+      mockCreateInstance.mockResolvedValue({ instanceId: "inst-def" });
+      mockRegister.mockResolvedValue({ registered: 1 });
+
+      const tool: AgentifiedTool = {
+        name: "myTool",
+        description: "does stuff",
+        parameters: {},
+        handler: async () => "ok",
+      };
+
+      const instance = await ag.register({ tools: [tool] });
+
+      expect(instance.instanceId).toBe("inst-def");
+      expect(instance.datasetId).toBe("default");
+      expect(mockCreateInstance).toHaveBeenCalledWith("default");
+
+      await ag.disconnect();
+    });
+
+    it("starts 30s heartbeat interval after register", async () => {
+      const ag = await connectedAgentified();
+      mockCreateInstance.mockResolvedValue({ instanceId: "inst-hb" });
+      mockRegister.mockResolvedValue({ registered: 1 });
+      mockHeartbeatInstance.mockResolvedValue(undefined);
+
+      const tool: AgentifiedTool = {
+        name: "t",
+        description: "t",
+        parameters: {},
+        handler: async () => "ok",
+      };
+
+      await ag.register({ tools: [tool] });
+
+      // Heartbeat interval is tracked
+      expect((ag as any).heartbeatIntervals.has("inst-hb")).toBe(true);
+
+      // Disconnect clears the interval (and calls deleteInstance)
+      mockDeleteInstance.mockResolvedValue(undefined);
+      await ag.disconnect();
+      expect((ag as any).heartbeatIntervals.size).toBe(0);
+    });
+
+    it("tracks instance for cleanup on disconnect", async () => {
+      const ag = await connectedAgentified();
+      mockCreateInstance.mockResolvedValue({ instanceId: "inst-track" });
+      mockRegister.mockResolvedValue({ registered: 1 });
+      mockDeleteInstance.mockResolvedValue(undefined);
+
+      const tool: AgentifiedTool = {
+        name: "t",
+        description: "t",
+        parameters: {},
+        handler: async () => "ok",
+      };
+
+      await ag.register({ tools: [tool] });
+      expect((ag as any).activeInstances.has("inst-track")).toBe(true);
+
+      await ag.disconnect();
+      expect(mockDeleteInstance).toHaveBeenCalledWith("inst-track");
+    });
+
+    it("creates two separate instances for two register() calls (TC-014)", async () => {
+      const ag = await connectedAgentified();
+      mockCreateInstance
+        .mockResolvedValueOnce({ instanceId: "inst-1" })
+        .mockResolvedValueOnce({ instanceId: "inst-2" });
+      mockRegister.mockResolvedValue({ registered: 1 });
+
+      const tool: AgentifiedTool = {
+        name: "t",
+        description: "t",
+        parameters: {},
+        handler: async () => "ok",
+      };
+
+      const i1 = await ag.register({ tools: [tool] });
+      const i2 = await ag.register({ tools: [tool] });
+
+      expect(i1.instanceId).toBe("inst-1");
+      expect(i2.instanceId).toBe("inst-2");
+      expect(mockCreateInstance).toHaveBeenCalledTimes(2);
+
+      await ag.disconnect();
+    });
+
+    it("cleans up instance on registration failure", async () => {
+      const ag = await connectedAgentified();
+      mockCreateInstance.mockResolvedValue({ instanceId: "inst-fail" });
+      mockRegister.mockRejectedValue(new Error("registration error"));
+      mockDeleteInstance.mockResolvedValue(undefined);
+
+      const tool: AgentifiedTool = {
+        name: "t",
+        description: "t",
+        parameters: {},
+        handler: async () => "ok",
+      };
+
+      await expect(ag.register({ tools: [tool] })).rejects.toThrow("registration error");
+      expect(mockDeleteInstance).toHaveBeenCalledWith("inst-fail");
+    });
+
+    it("defaults type to 'backend' when handler present without type", async () => {
+      const ag = await connectedAgentified();
+      mockCreateInstance.mockResolvedValue({ instanceId: "inst-type" });
+      mockRegister.mockResolvedValue({ registered: 1 });
+
+      const tool: AgentifiedTool = {
+        name: "myTool",
+        description: "has handler",
+        parameters: {},
+        handler: async () => "result",
+      };
+
+      // Should not throw — handler present implies backend type
+      const instance = await ag.register({ tools: [tool] });
+      expect(instance.instanceId).toBe("inst-type");
+
+      await ag.disconnect();
     });
   });
 });

@@ -2,19 +2,103 @@ import { ApiClient } from "@agentified/sdk";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolveBinaryPath, findFreePort } from "./spawn-utils.js";
 
+export interface BackendTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  type?: "backend";
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+export interface ClientTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  type: "client";
+}
+
+export interface McpTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  type: "mcp";
+  server: string;
+}
+
+export type AgentifiedTool = BackendTool | ClientTool | McpTool;
+
+export interface RegisterInput {
+  tools: AgentifiedTool[];
+}
+
+export class Instance {
+  constructor(
+    readonly instanceId: string,
+    readonly datasetId: string,
+  ) {}
+}
+
+function validateTools(tools: AgentifiedTool[]): void {
+  for (const tool of tools) {
+    if (!("handler" in tool) && !("type" in tool && tool.type)) {
+      throw new Error(`Tool '${tool.name}' has no type and no handler`);
+    }
+    if ("type" in tool && tool.type === "client") {
+      throw new Error("Client tools are not yet supported");
+    }
+    if ("type" in tool && tool.type === "mcp") {
+      throw new Error("MCP tools are not yet supported");
+    }
+  }
+}
+
 export class DatasetRef {
   constructor(
     readonly agentified: Agentified,
     readonly datasetName: string,
   ) {}
+
+  async register(input: RegisterInput): Promise<Instance> {
+    validateTools(input.tools);
+
+    const sdk = this.agentified.sdk;
+    if (!sdk) throw new Error("Not connected");
+
+    const { instanceId } = await sdk.createInstance(this.datasetName);
+
+    try {
+      const serverTools = input.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      }));
+      const regSdk = new ApiClient({
+        serverUrl: this.agentified.serverUrl!,
+        tools: serverTools,
+      });
+      await regSdk.register(instanceId);
+    } catch (err) {
+      await sdk.deleteInstance(instanceId);
+      throw err;
+    }
+
+    const interval = setInterval(() => {
+      sdk.heartbeatInstance(instanceId).catch(() => {});
+    }, 30_000);
+    this.agentified.heartbeatIntervals.set(instanceId, interval);
+    this.agentified.activeInstances.add(instanceId);
+
+    return new Instance(instanceId, this.datasetName);
+  }
 }
 
 export class Agentified {
   /** @internal */ sdk: ApiClient | null = null;
+  /** @internal */ serverUrl: string | null = null;
   private connected = false;
   private spawnedProcess: ChildProcess | null = null;
-  private activeInstances: Set<string> = new Set();
-  private heartbeatIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
+  /** @internal */ activeInstances: Set<string> = new Set();
+  /** @internal */ heartbeatIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
   private cleanupHandlers: Array<[string, (...args: any[]) => void]> = [];
   private restartCount = 0;
   private lastRestartAt = 0;
@@ -40,6 +124,7 @@ export class Agentified {
       this.registerCleanupHandlers();
       this.registerCrashHandler();
 
+      this.serverUrl = url;
       this.sdk = new ApiClient({ serverUrl: url, tools: [] });
       this.connected = true;
       return;
@@ -53,12 +138,17 @@ export class Agentified {
       throw new Error(`Health check failed: ${res.status}`);
     }
 
+    this.serverUrl = serverUrl;
     this.sdk = new ApiClient({ serverUrl, tools: [] });
     this.connected = true;
   }
 
   dataset(name: string): DatasetRef {
     return new DatasetRef(this, name);
+  }
+
+  async register(input: RegisterInput): Promise<Instance> {
+    return this.dataset("default").register(input);
   }
 
   private spawnChild(): void {
@@ -160,6 +250,7 @@ export class Agentified {
 
     this.removeCleanupHandlers();
     this.sdk = null;
+    this.serverUrl = null;
     this.connected = false;
   }
 }
