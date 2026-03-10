@@ -57,6 +57,10 @@ Each run produces a timestamped folder in `results/` containing:
 | Negative Correctness | Did the agent correctly reject out-of-scope queries? |
 | Hydration Recall | Were all expected tools hydrated/selected by the context layer? |
 
+## Latest Results
+
+See [RESULTS.md](./RESULTS.md) for full benchmark results across all tested models.
+
 ## Key Insight
 
 Agentified aims to match oracle-level tool selection accuracy while dramatically reducing input tokens vs baseline — fewer tokens means lower cost and faster responses without sacrificing quality.
