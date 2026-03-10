@@ -125,3 +125,15 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - Session.updateConversation: fetches last N stored, diffs by role+content from start, persists only new messages, skips append if all duplicates
 - Message extraction: step.text → assistant, step.toolCalls → assistant w/ tool_calls, step.toolResults → tool messages
 - All 85 tests pass (38 agentified + 31 adapter + 11 schema + 5 stream-sse)
+
+### Task 14: ContextBuilder + Conversation + getMessages ✅
+- ContextBuilder: fluent .messages({ strategy, maxTokens }).recall().assemble() → single POST /api/v1/context
+- .recall() is no-op stub for API stability
+- AssembledContext type: messages, recalled, strategyUsed, fallback, tokenEstimate, conversationMessages, totalMessages, includedMessages
+- Conversation: .append(messages) → direct appendMessages (no dedup), .messages(opts?) → direct getMessages
+- Session.conversation property returns Conversation scoped to (dataset, namespace, session)
+- Session.context getter returns new ContextBuilder per access
+- Session.getMessages(opts?) convenience wrapper: calls sdk.getContext, supports maxMessages truncation from oldest
+- GetMessagesOptions/GetMessagesResult types exported
+- All classes + types exported from index.ts
+- All 91 tests pass (44 agentified + 31 adapter + 11 schema + 5 stream-sse)
