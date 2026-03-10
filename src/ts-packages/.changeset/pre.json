@@ -1,0 +1,13 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "@agentified/fe-client": "0.0.4",
+    "@agentified/mastra": "0.0.4",
+    "@agentified/react": "0.0.4",
+    "@agentified/sdk": "0.0.4"
+  },
+  "changesets": [
+    "beta-persistent-conversations"
+  ]
+}

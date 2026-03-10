@@ -1,5 +1,13 @@
 # @agentified/mastra
 
+## 0.0.5-beta.0
+
+### Patch Changes
+
+- persistent conversations: dataset-scoped tools, message persistence, context retrieval, session management
+- Updated dependencies
+  - @agentified/sdk@0.0.5-beta.0
+
 ## 0.0.4
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @agentified/fe-client
 
+## 0.0.5-beta.0
+
+### Patch Changes
+
+- persistent conversations: dataset-scoped tools, message persistence, context retrieval, session management
+
 ## 0.0.4
 
 ### Patch Changes
