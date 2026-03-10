@@ -110,3 +110,11 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - Agentified stores serverUrl for creating per-register ApiClient instances
 - All types + Instance exported from index.ts
 - All 74 tests pass (27 agentified + 31 adapter + 11 schema + 5 stream-sse)
+
+### Task 12: Instance class ✅
+- Instance.discoverTool: wraps sdk.asDiscoverTool(instanceId) as Mastra createTool
+- Instance.prepareStep: instance-scoped, initial activeTools = registered names + "agentified_discover", scans prior steps for discover results
+- Instance.session(id): returns Session with namespaceId "default"
+- Session class stub: id + namespaceId (task 13 adds prepareStep/updateConversation)
+- PrepareStepFn type exported
+- All 78 tests pass (31 agentified + 31 adapter + 11 schema + 5 stream-sse)
