@@ -155,7 +155,7 @@ jobs:
         with:
           context: ./src/core
           platforms: ${{ matrix.platform }}
-          outputs: type=image,name=agentified/agentified-core,push-by-digest=true,name-canonical=true
+          outputs: type=image,name=agentified/agentified-core,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,scope=${{ matrix.platform }},mode=max
 
