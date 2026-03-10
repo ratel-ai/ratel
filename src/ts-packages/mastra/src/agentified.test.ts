@@ -6,6 +6,8 @@ const mockHeartbeatInstance = vi.fn();
 const mockDeleteInstance = vi.fn();
 const mockRegister = vi.fn();
 const mockAsDiscoverTool = vi.fn();
+const mockAppendMessages = vi.fn();
+const mockGetMessages = vi.fn();
 
 vi.mock("@agentified/sdk", () => ({
   ApiClient: vi.fn(() => ({
@@ -14,6 +16,8 @@ vi.mock("@agentified/sdk", () => ({
     deleteInstance: mockDeleteInstance,
     register: mockRegister,
     asDiscoverTool: mockAsDiscoverTool,
+    appendMessages: mockAppendMessages,
+    getMessages: mockGetMessages,
   })),
 }));
 
@@ -655,6 +659,224 @@ describe("Agentified", () => {
       expect(result.activeTools).toContain("discoveredTool1");
       expect(result.activeTools).toContain("discoveredTool2");
       expect(result.activeTools).toHaveLength(4);
+
+      await ag.disconnect();
+    });
+  });
+
+  describe("Session", () => {
+    async function connectedAgentified(): Promise<Agentified> {
+      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
+      const ag = new Agentified();
+      await ag.connect("http://localhost:9119");
+      return ag;
+    }
+
+    function backendTool(name: string): AgentifiedTool {
+      return {
+        name,
+        description: `${name} tool`,
+        parameters: { type: "object" },
+        handler: async () => "ok",
+      };
+    }
+
+    async function registerInstance(ag: Agentified, tools: AgentifiedTool[] = [backendTool("myTool")]) {
+      mockCreateInstance.mockResolvedValue({ instanceId: "inst-1" });
+      mockRegister.mockResolvedValue({ registered: tools.length });
+      mockAsDiscoverTool.mockReturnValue({
+        definition: {
+          name: "agentified_discover",
+          description: "Find tools",
+          parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        },
+        execute: vi.fn().mockResolvedValue([]),
+      });
+      return ag.register({ tools });
+    }
+
+    it("prepareStep returns initial tools when no steps (TC-007)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA"), backendTool("toolB")]);
+      const session = instance.session("chat-1");
+
+      const result = await session.prepareStep({ stepNumber: 0, steps: [] });
+
+      expect(result.activeTools).toContain("toolA");
+      expect(result.activeTools).toContain("toolB");
+      expect(result.activeTools).toContain("agentified_discover");
+      expect(result.activeTools).toHaveLength(3);
+      expect(mockAppendMessages).not.toHaveBeenCalled();
+
+      await ag.disconnect();
+    });
+
+    it("prepareStep extracts and persists assistant/tool messages from steps (TC-008)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockAppendMessages.mockResolvedValue({ appended: 3, firstSeq: 1, lastSeq: 3 });
+
+      const steps = [
+        {
+          text: "I'll help you with that.",
+          toolCalls: [{ id: "call-1", toolName: "toolA", args: { x: 1 } }],
+          toolResults: [
+            { toolName: "toolA", toolCallId: "call-1", result: { answer: 42 } },
+          ],
+        },
+      ];
+
+      const result = await session.prepareStep({ stepNumber: 1, steps });
+
+      expect(mockAppendMessages).toHaveBeenCalledWith(
+        "default", // dataset
+        "default", // namespace
+        "chat-1",  // session
+        expect.arrayContaining([
+          expect.objectContaining({ role: "assistant", content: "I'll help you with that." }),
+          expect.objectContaining({ role: "assistant", content: "", tool_calls: steps[0].toolCalls }),
+          expect.objectContaining({ role: "tool", content: JSON.stringify({ answer: 42 }), tool_call_id: "call-1" }),
+        ]),
+      );
+      expect(result.activeTools).toContain("toolA");
+
+      await ag.disconnect();
+    });
+
+    it("prepareStep is no-op when steps have no extractable messages (TC-008)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      // Steps with no text, no toolCalls, no toolResults
+      const steps = [{ someOtherField: true }];
+
+      await session.prepareStep({ stepNumber: 1, steps });
+
+      expect(mockAppendMessages).not.toHaveBeenCalled();
+
+      await ag.disconnect();
+    });
+
+    it("prepareStep adds discovered tool names from prior steps (TC-007)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockAppendMessages.mockResolvedValue({ appended: 2, firstSeq: 1, lastSeq: 2 });
+
+      const steps = [
+        {
+          toolResults: [
+            {
+              toolName: "agentified_discover",
+              result: [
+                { name: "discoveredTool1", score: 0.9 },
+                { name: "discoveredTool2", score: 0.8 },
+              ],
+              toolCallId: "dc-1",
+            },
+          ],
+        },
+      ];
+
+      const result = await session.prepareStep({ stepNumber: 1, steps });
+
+      expect(result.activeTools).toContain("toolA");
+      expect(result.activeTools).toContain("agentified_discover");
+      expect(result.activeTools).toContain("discoveredTool1");
+      expect(result.activeTools).toContain("discoveredTool2");
+      expect(result.activeTools).toHaveLength(4);
+
+      await ag.disconnect();
+    });
+
+    it("updateConversation persists all messages on empty session (TC-009)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      // Empty session — getMessages returns no messages
+      mockGetMessages.mockResolvedValue({ messages: [], hasMore: false, maxSeq: 0 });
+      mockAppendMessages.mockResolvedValue({ appended: 2, firstSeq: 1, lastSeq: 2 });
+
+      const msgs = [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there" },
+      ];
+
+      await session.updateConversation({ messages: msgs });
+
+      expect(mockGetMessages).toHaveBeenCalledWith("default", "default", "chat-1", { limit: 2 });
+      expect(mockAppendMessages).toHaveBeenCalledWith("default", "default", "chat-1", msgs);
+
+      await ag.disconnect();
+    });
+
+    it("updateConversation deduplicates tail and persists only new messages (TC-009)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      // Session already has 2 messages
+      mockGetMessages.mockResolvedValue({
+        messages: [
+          { id: "m1", role: "user", content: "Hello", seq: 1 },
+          { id: "m2", role: "assistant", content: "Hi there", seq: 2 },
+        ],
+        hasMore: false,
+        maxSeq: 2,
+      });
+      mockAppendMessages.mockResolvedValue({ appended: 1, firstSeq: 3, lastSeq: 3 });
+
+      // Incoming: 2 old + 1 new
+      const msgs = [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there" },
+        { role: "user", content: "What's the weather?" },
+      ];
+
+      await session.updateConversation({ messages: msgs });
+
+      // Should only persist the new message
+      expect(mockAppendMessages).toHaveBeenCalledWith("default", "default", "chat-1", [
+        { role: "user", content: "What's the weather?" },
+      ]);
+
+      await ag.disconnect();
+    });
+
+    it("updateConversation is no-op when all messages are duplicates (TC-009b)", async () => {
+      const ag = await connectedAgentified();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      const msgs = [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there" },
+      ];
+
+      // First call: empty session
+      mockGetMessages.mockResolvedValueOnce({ messages: [], hasMore: false, maxSeq: 0 });
+      mockAppendMessages.mockResolvedValueOnce({ appended: 2, firstSeq: 1, lastSeq: 2 });
+      await session.updateConversation({ messages: msgs });
+      expect(mockAppendMessages).toHaveBeenCalledTimes(1);
+
+      // Second call: same messages, now stored
+      mockGetMessages.mockResolvedValueOnce({
+        messages: [
+          { id: "m1", role: "user", content: "Hello", seq: 1 },
+          { id: "m2", role: "assistant", content: "Hi there", seq: 2 },
+        ],
+        hasMore: false,
+        maxSeq: 2,
+      });
+      await session.updateConversation({ messages: msgs });
+
+      // appendMessages should NOT have been called again
+      expect(mockAppendMessages).toHaveBeenCalledTimes(1);
 
       await ag.disconnect();
     });

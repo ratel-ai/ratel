@@ -35,10 +35,84 @@ export type PrepareStepFn = (params: {
 }) => Promise<{ activeTools: string[] }>;
 
 export class Session {
+  private lastPersistedSeq = 0;
+
   constructor(
     readonly id: string,
     readonly namespaceId: string,
+    /** @internal */ private readonly sdk: ApiClient,
+    /** @internal */ private readonly datasetId: string,
+    /** @internal */ private readonly toolNames: string[],
   ) {}
+
+  readonly prepareStep: PrepareStepFn = async ({ steps }) => {
+    const activeTools = new Set([...this.toolNames, "agentified_discover"]);
+
+    // Extract messages from steps for persistence
+    const messages: Array<{ role: string; content: string; tool_calls?: unknown; tool_call_id?: string }> = [];
+    for (const step of steps) {
+      if (step.text) {
+        messages.push({ role: "assistant", content: step.text });
+      }
+      if (step.toolCalls && step.toolCalls.length > 0) {
+        messages.push({ role: "assistant", content: "", tool_calls: step.toolCalls });
+      }
+      if (step.toolResults) {
+        for (const result of step.toolResults) {
+          messages.push({
+            role: "tool",
+            content: typeof result.result === "string" ? result.result : JSON.stringify(result.result),
+            tool_call_id: result.toolCallId,
+          });
+        }
+      }
+    }
+
+    // Persist if there are new messages
+    if (messages.length > 0) {
+      const res = await this.sdk.appendMessages(this.datasetId, this.namespaceId, this.id, messages);
+      this.lastPersistedSeq = res.lastSeq;
+    }
+
+    // Scan for discovered tools
+    for (const step of steps) {
+      if (step.toolResults) {
+        for (const result of step.toolResults) {
+          if (result.toolName === "agentified_discover" && Array.isArray(result.result)) {
+            for (const tool of result.result) {
+              if (tool.name) activeTools.add(tool.name);
+            }
+          }
+        }
+      }
+    }
+
+    return { activeTools: [...activeTools] };
+  };
+
+  async updateConversation(input: { messages: Array<{ role: string; content: string }> }): Promise<void> {
+    const { messages } = input;
+    if (messages.length === 0) return;
+
+    const stored = await this.sdk.getMessages(this.datasetId, this.namespaceId, this.id, { limit: messages.length });
+    const tail = stored.messages;
+
+    // Find how many messages from start of incoming match stored (in order)
+    let overlap = 0;
+    for (let i = 0; i < Math.min(tail.length, messages.length); i++) {
+      if (tail[i].role === messages[i].role && tail[i].content === messages[i].content) {
+        overlap++;
+      } else {
+        break;
+      }
+    }
+
+    const newMessages = messages.slice(overlap);
+    if (newMessages.length === 0) return;
+
+    const res = await this.sdk.appendMessages(this.datasetId, this.namespaceId, this.id, newMessages);
+    this.lastPersistedSeq = res.lastSeq;
+  }
 }
 
 export interface RegisterInput {
@@ -84,7 +158,7 @@ export class Instance {
   };
 
   session(id: string): Session {
-    return new Session(id, "default");
+    return new Session(id, "default", this.sdk, this.datasetId, this.toolNames);
   }
 }
 
