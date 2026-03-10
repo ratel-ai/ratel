@@ -5,6 +5,7 @@ import type { BaseEvent } from "@ag-ui/client";
 
 // --- Mock setup ---
 
+const mockSdkCreateInstance = vi.fn(async () => ({ instanceId: "inst-1" }));
 const mockSdkRegister = vi.fn(async () => ({ registered: 5 }));
 const mockSdkPrefetch = vi.fn<[], Promise<unknown[]>>(async () => []);
 const mockSdkCaptureTurn = vi.fn(async () => ({ turnId: "turn-1" }));
@@ -22,6 +23,7 @@ const mockSdkAsDiscoverTool = vi.fn(() => ({
 
 vi.mock("@agentified/sdk", () => ({
   ApiClient: vi.fn(() => ({
+    createInstance: mockSdkCreateInstance,
     register: mockSdkRegister,
     prefetch: mockSdkPrefetch,
     captureTurn: mockSdkCaptureTurn,
@@ -139,6 +141,7 @@ describe("AgentifiedMastra", () => {
     await am.run({ messages: [{ role: "user", content: "hello" }] });
 
     expect(mockSdkPrefetch).toHaveBeenCalledWith(
+      "inst-1",
       expect.objectContaining({
         messages: [{ role: "user", content: "hello" }],
       }),
@@ -159,6 +162,7 @@ describe("AgentifiedMastra", () => {
     });
 
     expect(mockSdkPrefetch).toHaveBeenCalledWith(
+      "inst-1",
       expect.objectContaining({ exclude: ["show_modal"] }),
     );
     agentStream.complete();
@@ -636,6 +640,7 @@ describe("AgentifiedMastra", () => {
       });
 
       expect(mockSdkPrefetch).toHaveBeenCalledWith(
+        "inst-1",
         expect.objectContaining({
           messages: [{ role: "user", content: "Show Alice" }],
           turnId: "prev-turn",
@@ -734,13 +739,16 @@ describe("AgentifiedMastra", () => {
 
       expect(mockSdkCaptureTurn).toHaveBeenCalledOnce();
       expect(mockSdkCaptureTurn).toHaveBeenCalledWith(
+        "inst-1",
+        "default",
+        "default",
         expect.objectContaining({
           message: "Show Alice",
           toolsLoaded: expect.arrayContaining(["viewEmployee"]),
         }),
       );
       // discover should NOT be in toolsLoaded
-      const call = mockSdkCaptureTurn.mock.calls[0][0];
+      const call = mockSdkCaptureTurn.mock.calls[0][3];
       expect(call.toolsLoaded).not.toContain("agentified_discover");
 
       expect(result.turnId).toBe("new-turn-42");
@@ -785,6 +793,7 @@ describe("AgentifiedMastra", () => {
       });
 
       expect(mockSdkPrefetch).toHaveBeenCalledWith(
+        "inst-1",
         expect.objectContaining({ limit: 3 }),
       );
 

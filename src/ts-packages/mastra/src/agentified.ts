@@ -208,7 +208,9 @@ export class Session {
     // Find how many messages from start of incoming match stored (in order)
     let overlap = 0;
     for (let i = 0; i < Math.min(tail.length, messages.length); i++) {
-      if (tail[i].role === messages[i].role && tail[i].content === messages[i].content) {
+      const stored = tail[i]!;
+      const incoming = messages[i]!;
+      if (stored.role === incoming.role && stored.content === incoming.content) {
         overlap++;
       } else {
         break;
@@ -228,7 +230,8 @@ export interface RegisterInput {
 }
 
 export class Instance {
-  readonly discoverTool: ReturnType<typeof createTool>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly discoverTool: any;
 
   constructor(
     readonly instanceId: string,
@@ -272,14 +275,14 @@ export class Instance {
 
 function validateTools(tools: AgentifiedTool[]): void {
   for (const tool of tools) {
-    if (!("handler" in tool) && !("type" in tool && tool.type)) {
-      throw new Error(`Tool '${tool.name}' has no type and no handler`);
-    }
     if ("type" in tool && tool.type === "client") {
       throw new Error("Client tools are not yet supported");
     }
     if ("type" in tool && tool.type === "mcp") {
       throw new Error("MCP tools are not yet supported");
+    }
+    if (!("handler" in tool)) {
+      throw new Error(`Tool '${(tool as { name: string }).name}' has no type and no handler`);
     }
   }
 }
