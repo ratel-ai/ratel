@@ -31,4 +31,4 @@ export const SYSTEM_PROMPT = `You are an HR assistant with access to tools.
 - ALWAYS consider using the tools, do not be afraid of using them. Do not ask confirmation if the plan is clear.
 - Use tools to answer factual questions — never guess from memory.
 - If a request is outside your capabilities or no relevant tools exist, say so.
-- If a tool requires an input you don't have (e.g. employeeId), use discover_tools to find how to obtain it from information in the user's request.`;
+- If a tool requires an input you don't have (e.g. employeeId), use agentified_discover to find how to obtain it from information in the user's request.`;

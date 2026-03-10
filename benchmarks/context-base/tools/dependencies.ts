@@ -15,6 +15,8 @@ export type ToolDependencyEntry = {
 
 export const TOOL_DEPENDENCIES: Record<string, ToolDependencyEntry> = {
   // ── Employees ──────────────────────────────────────────────
+  getEmployee: { provides: ["employeeId"] },
+  listEmployees: { provides: ["employeeId"] },
   searchEmployees: { provides: ["employeeId"] },
   updateEmployee: { requires: ["employeeId"] },
   deleteEmployee: { requires: ["employeeId"] },
@@ -43,6 +45,8 @@ export const TOOL_DEPENDENCIES: Record<string, ToolDependencyEntry> = {
   // ── Time Off ───────────────────────────────────────────────
   getTimeOffBalance: { requires: ["employeeId"] },
   requestTimeOff: { requires: ["employeeId"] },
+  getPendingTimeOff: { provides: ["requestId"] },
+  approveTimeOff: { requires: ["requestId"] },
   getTimeOffHistory: { requires: ["employeeId"] },
 
   // ── Onboarding ─────────────────────────────────────────────
@@ -69,6 +73,7 @@ export const TOOL_DEPENDENCIES: Record<string, ToolDependencyEntry> = {
   submitPeerFeedback: { requires: ["reviewId"] },
   setGoals: { requires: ["employeeId"] },
   getGoals: { requires: ["employeeId"] },
+  getOKRs: { requires: ["employeeId"] },
   createOKR: { requires: ["employeeId"] },
   requestFeedback: { requires: ["employeeId"] },
 
@@ -78,7 +83,102 @@ export const TOOL_DEPENDENCIES: Record<string, ToolDependencyEntry> = {
   enrollInCourse: { requires: ["employeeId", "courseId"] },
   getCourseProgress: { requires: ["employeeId", "courseId"] },
   completeCourse: { requires: ["employeeId", "courseId"] },
-  listCourseEnrollments: {},
+  listCourseEnrollments: { requires: ["employeeId"] },
   renewCertification: { requires: ["employeeId"] },
   submitAssessment: { requires: ["employeeId"] },
+
+  // ── CRM ───────────────────────────────────────────────────
+  listContacts: { provides: ["contactId"] },
+  getContact: { requires: ["contactId"] },
+  updateContact: { requires: ["contactId"] },
+  getContactHistory: { requires: ["contactId"] },
+  listDeals: { provides: ["dealId"] },
+  getDeal: { requires: ["dealId"] },
+  updateDeal: { requires: ["dealId"] },
+  createQuote: { requires: ["dealId"], provides: ["quoteId"] },
+  getQuote: { requires: ["quoteId"] },
+  sendQuote: { requires: ["quoteId"] },
+
+  // ── IT ────────────────────────────────────────────────────
+  listTickets: { provides: ["ticketId"] },
+  getTicket: { requires: ["ticketId"] },
+  updateTicket: { requires: ["ticketId"] },
+  assignTicket: { requires: ["ticketId"] },
+  resolveTicket: { requires: ["ticketId"] },
+  listAssets: { provides: ["assetId"] },
+  getAsset: { requires: ["assetId"] },
+  assignAsset: { requires: ["assetId"] },
+  retireAsset: { requires: ["assetId"] },
+  listSoftwareLicenses: { provides: ["licenseId"] },
+  getSoftwareLicense: { requires: ["licenseId"] },
+
+  // ── Projects ──────────────────────────────────────────────
+  listProjects: { provides: ["projectId"] },
+  getProject: { requires: ["projectId"] },
+  updateProject: { requires: ["projectId"] },
+  getProjectBudget: { requires: ["projectId"] },
+  getMilestones: { requires: ["projectId"], provides: ["milestoneId"] },
+  updateMilestone: { requires: ["milestoneId"] },
+  listTasks: { provides: ["taskId"] },
+  getTask: { requires: ["taskId"] },
+  updateTask: { requires: ["taskId"] },
+  assignTask: { requires: ["taskId"] },
+
+  // ── Finance ───────────────────────────────────────────────
+  listInvoices: { provides: ["invoiceId"] },
+  getInvoice: { requires: ["invoiceId"] },
+  approveInvoice: { requires: ["invoiceId"] },
+  listExpenseReports: { provides: ["expenseReportId"] },
+  getExpenseReport: { requires: ["expenseReportId"] },
+  approveExpense: { requires: ["expenseReportId"] },
+
+  // ── Procurement ───────────────────────────────────────────
+  listVendors: { provides: ["vendorId"] },
+  getVendor: { requires: ["vendorId"] },
+  updateVendor: { requires: ["vendorId"] },
+  rateVendor: { requires: ["vendorId"] },
+  listPurchaseOrders: { provides: ["poId"] },
+  getPurchaseOrder: { requires: ["poId"] },
+  approvePurchaseOrder: { requires: ["poId"] },
+  listProcurementContracts: { provides: ["procurementContractId"] },
+  getProcurementContract: { requires: ["procurementContractId"] },
+  renewContract: { requires: ["procurementContractId"] },
+
+  // ── Legal ─────────────────────────────────────────────────
+  listLegalContracts: { provides: ["legalContractId"] },
+  getLegalContract: { requires: ["legalContractId"] },
+  requestContractReview: { requires: ["legalContractId"], provides: ["legalReviewId"] },
+  getContractReviewStatus: { requires: ["legalReviewId"] },
+  listNDAs: { provides: ["ndaId"] },
+  getNDA: { requires: ["ndaId"] },
+  listPolicies: { provides: ["policyId"] },
+  getPolicy: { requires: ["policyId"] },
+  updatePolicy: { requires: ["policyId"] },
+
+  // ── Facilities ────────────────────────────────────────────
+  listRooms: { provides: ["roomId"] },
+  bookRoom: { requires: ["roomId"], provides: ["bookingId"] },
+  cancelRoomBooking: { requires: ["bookingId"] },
+  getRoomSchedule: { requires: ["roomId"] },
+  listMaintenanceRequests: { provides: ["maintenanceRequestId"] },
+  getMaintenanceStatus: { requires: ["maintenanceRequestId"] },
+
+  // ── Communications ────────────────────────────────────────
+  listSurveys: { provides: ["surveyId"] },
+  getSurvey: { requires: ["surveyId"] },
+  getSurveyResults: { requires: ["surveyId"] },
+  submitSurveyResponse: { requires: ["surveyId"] },
+  listAnnouncements: { provides: ["announcementId"] },
+  getAnnouncement: { requires: ["announcementId"] },
+  createNewsletter: { provides: ["newsletterId"] },
+  getNewsletter: { requires: ["newsletterId"] },
+  sendNewsletter: { requires: ["newsletterId"] },
+
+  // ── Compliance ────────────────────────────────────────────
+  acknowledgePolicy: { requires: ["employeeId", "policyId"] },
+  getComplianceStatus: { requires: ["employeeId"] },
+
+  // ── Reporting ─────────────────────────────────────────────
+  getHeadcount: {},
+  getAttrition: {},
 };

@@ -10,11 +10,12 @@ import { GenericContainer, Wait, type StartedTestContainer } from "testcontainer
 import { z } from "zod";
 import { startAgent, executeTool } from "../../scaffolding/ts/index.js";
 import { toolRegistry } from "../../tools/registry.js";
+import { TOOL_DEPENDENCIES } from "../../tools/dependencies.js";
 import { toMastraModel } from "../../lib/model.js";
 import { MODEL, SYSTEM_PROMPT, MAX_STEPS } from "../../lib/constants.js";
 import type { SendMessageBody, SendMessageResponse } from "../../lib/protocol.js";
 
-const TOOL_LIMIT = process.env.FORCE_DISCOVERY === "1" ? 0 : 5;
+const TOOL_LIMIT = process.env.FORCE_DISCOVERY === "1" ? 0 : 15;
 
 interface BootResult {
   agentified: AgentifiedMastra;
@@ -30,6 +31,7 @@ async function boot(): Promise<BootResult> {
       name,
       description: (t as any).description ?? "",
       parameters: z.toJSONSchema((t as any).inputSchema) as Record<string, unknown>,
+      ...(TOOL_DEPENDENCIES[name] && { metadata: TOOL_DEPENDENCIES[name] }),
     }),
   );
 

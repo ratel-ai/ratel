@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { TOOL_DEPENDENCIES } from "./dependencies.js";
 import { toolRegistry, TOOL_CATEGORIES } from "./registry.js";
 
-/** HR-critical categories covered by the dependency map */
-const HR_CATEGORIES = [
+/** All categories covered by the dependency map */
+const ANNOTATED_CATEGORIES = [
   "employees",
   "payroll",
   "benefits",
@@ -12,6 +12,16 @@ const HR_CATEGORIES = [
   "recruiting",
   "performance",
   "training",
+  "crm",
+  "it",
+  "projects",
+  "finance",
+  "procurement",
+  "legal",
+  "facilities",
+  "communications",
+  "compliance",
+  "reporting",
 ] as const;
 
 describe("TOOL_DEPENDENCIES", () => {
@@ -21,12 +31,20 @@ describe("TOOL_DEPENDENCIES", () => {
     }
   });
 
-  it("covers only HR-critical categories", () => {
-    const hrToolNames = new Set(
-      HR_CATEGORIES.flatMap((cat) => TOOL_CATEGORIES[cat]),
+  it("covers only annotated categories", () => {
+    const annotatedToolNames = new Set(
+      ANNOTATED_CATEGORIES.flatMap((cat) => TOOL_CATEGORIES[cat]),
     );
     for (const name of Object.keys(TOOL_DEPENDENCIES)) {
-      expect(hrToolNames.has(name), `${name} not in HR categories`).toBe(true);
+      expect(annotatedToolNames.has(name), `${name} not in annotated categories`).toBe(true);
+    }
+  });
+
+  it("every annotated category has at least one dependency entry", () => {
+    for (const cat of ANNOTATED_CATEGORIES) {
+      const toolNames = TOOL_CATEGORIES[cat];
+      const hasEntry = toolNames.some((name) => TOOL_DEPENDENCIES[name] !== undefined);
+      expect(hasEntry, `category "${cat}" has no dependency entries`).toBe(true);
     }
   });
 
