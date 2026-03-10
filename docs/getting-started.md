@@ -26,26 +26,26 @@ curl http://localhost:9119/health
 ### TypeScript
 
 ```bash
-npm install @agentified/sdk
+npm install agentified
 ```
 
 ```typescript
-import { ApiClient, tool } from "@agentified/sdk";
+import { Agentified, tool } from "agentified";
 
-const ag = new ApiClient({
-  serverUrl: "http://localhost:9119",
+const ag = new Agentified();
+await ag.connect("http://localhost:9119");
+
+const dataset = await ag.dataset("my-agent").register({
   tools: [
-    tool({ name: "get_weather", description: "Get current weather for a city", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
-    tool({ name: "search_docs", description: "Search documentation", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } }),
+    { name: "get_weather", description: "Get current weather for a city", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] }, handler: async (args) => ({ temp: 22, city: args.city }) },
+    { name: "search_docs", description: "Search documentation", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }, handler: async (args) => ({ results: [] }) },
   ],
 });
 
-await ag.register();
-
-const ranked = await ag.prefetch({
-  messages: [{ role: "user", content: "What's the weather in Rome?" }],
-});
-// → [{ name: "get_weather", score: 0.92, ... }]
+// dataset.discoverTool — give this to your agent
+// dataset.prepareStep  — use as prepareStep callback
+// dataset.session(id)  — session-scoped tools + conversation
+// dataset.namespace(id) — user-scoped memory (stub)
 ```
 
 ### Python

@@ -7,7 +7,7 @@ Mastra agent + Agentified discovery in one call.
 ## Install
 
 ```bash
-npm install @agentified/mastra @agentified/sdk
+npm install @agentified/mastra agentified
 ```
 
 **Peer dependencies:** `@mastra/core >= 1.0.0`, `@ag-ui/client >= 0.0.45`, `@ag-ui/mastra >= 1.0.0`, `zod >= 3.0.0`
@@ -17,7 +17,7 @@ npm install @agentified/mastra @agentified/sdk
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { AgentifiedMastra, streamSSE } from "@agentified/mastra";
-import { tool } from "@agentified/sdk";
+import { tool } from "agentified";
 
 const agent = new Agent({ name: "my-agent", model: google("gemini-3-flash-preview"), instructions: "You are a helpful assistant." });
 

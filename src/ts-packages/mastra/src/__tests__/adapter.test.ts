@@ -20,7 +20,7 @@ const mockSdkAsDiscoverTool = vi.fn(() => ({
   execute: mockDiscoverExecute,
 }));
 
-vi.mock("@agentified/sdk", () => ({
+vi.mock("agentified", () => ({
   ApiClient: vi.fn(() => ({
     register: mockSdkRegister,
     prefetch: mockSdkPrefetch,

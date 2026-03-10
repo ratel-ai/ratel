@@ -1,5 +1,5 @@
 {
-  "name": "@agentified/sdk",
+  "name": "agentified",
   "version": "0.0.5-beta.0",
   "license": "MIT",
   "type": "module",
@@ -28,6 +28,7 @@
     "test:e2e": "AGENTIFIED_TEST_URL=http://localhost:9119 vitest run src/__tests__/integration.test.ts"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.9.0",
     "vitest": "^2.1.0"
   }

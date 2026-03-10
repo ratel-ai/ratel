@@ -156,3 +156,64 @@ export interface ApiClientConfig {
   tools: ServerTool[];
   onEvent?: (event: AgentifiedEvent) => void;
 }
+
+// High-level SDK types
+
+export interface BackendTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  type?: "backend";
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+export interface ClientTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  type: "client";
+}
+
+export interface McpTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  type: "mcp";
+  server: string;
+}
+
+export type AgentifiedTool = BackendTool | ClientTool | McpTool;
+
+export type PrepareStepFn = (params: {
+  stepNumber: number;
+  steps: any[];
+}) => Promise<{ activeTools: string[] }>;
+
+export interface AssembledContext {
+  messages: StoredMessage[];
+  recalled: { tools: unknown[]; memories: unknown[] };
+  strategyUsed: string;
+  fallback: boolean;
+  tokenEstimate: number;
+  conversationMessages: number;
+  totalMessages: number;
+  includedMessages: number;
+}
+
+export interface GetMessagesOptions {
+  maxMessages?: number;
+  maxTokens?: number;
+  strategy?: string;
+}
+
+export interface GetMessagesResult {
+  messages: StoredMessage[];
+  totalMessages: number;
+  includedMessages: number;
+  strategyUsed: string;
+  fallback: boolean;
+}
+
+export interface RegisterInput {
+  tools: AgentifiedTool[];
+}

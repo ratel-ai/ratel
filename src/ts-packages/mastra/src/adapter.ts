@@ -1,13 +1,13 @@
 import type { BaseEvent, CustomEvent, Message } from "@ag-ui/client";
 import { createTool } from "@mastra/core/tools";
 import { MastraAgent } from "@ag-ui/mastra";
-import { ApiClient } from "@agentified/sdk";
+import { ApiClient } from "agentified";
 import type {
   DiscoverToolInput,
   RankedTool,
   RegisterResponse,
   ServerTool,
-} from "@agentified/sdk";
+} from "agentified";
 import { Observable, Subject } from "rxjs";
 import { z } from "zod";
 import { jsonSchemaToZod } from "./schema.js";

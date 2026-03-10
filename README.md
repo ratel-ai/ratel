@@ -12,7 +12,7 @@
   </p>
 
   <p>
-    <a href="https://www.npmjs.com/package/@agentified/sdk"><img src="https://img.shields.io/npm/v/@agentified/sdk?label=npm&color=cb3837" alt="npm" /></a>
+    <a href="https://www.npmjs.com/package/agentified"><img src="https://img.shields.io/npm/v/agentified?label=npm&color=cb3837" alt="npm" /></a>
     <a href="https://pypi.org/project/agentified/"><img src="https://img.shields.io/pypi/v/agentified?label=pypi&color=3775A9" alt="pypi" /></a>
     <a href="https://github.com/agentified/agentified/stargazers"><img src="https://img.shields.io/github/stars/agentified/agentified?style=social" alt="stars" /></a>
     <a href="https://discord.gg/HTXmrjvsDy"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da" alt="discord" /></a>
@@ -48,23 +48,24 @@ A **context engine** that registers all your tools, then uses hybrid semantic + 
 ### TypeScript
 
 ```bash
-npm install @agentified/sdk
+npm install agentified
 ```
 
 ```typescript
-import { ApiClient, tool } from "@agentified/sdk";
+import { Agentified } from "agentified";
 
-const ag = new ApiClient({
-  serverUrl: "http://localhost:9119",
+const ag = new Agentified();
+await ag.connect("http://localhost:9119");
+
+const dataset = await ag.dataset("my-agent").register({
   tools: [
-    tool({ name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
-    tool({ name: "search_docs", description: "Search documentation", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } }),
+    { name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] }, handler: async (args) => ({ temp: 22 }) },
+    { name: "search_docs", description: "Search documentation", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }, handler: async (args) => ({ results: [] }) },
   ],
 });
 
-await ag.register();
-const ranked = await ag.prefetch({ messages: [{ role: "user", content: "What's the weather in Rome?" }] });
-// → [{ name: "get_weather", score: 0.92, ... }]
+// dataset.discoverTool — agent-callable tool discovery
+// dataset.session(id)  — session-scoped tools + conversation
 ```
 
 ### Python

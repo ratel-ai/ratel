@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ApiClient } from "../agentified.js";
+import { ApiClient } from "../api-client.js";
 import type { AgentifiedEvent, RankedTool, ServerTool } from "../types.js";
 
 const TEST_URL = "http://localhost:9119";
