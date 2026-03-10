@@ -63,9 +63,7 @@ Dataset ──1:N──> Namespace ──1:N──> Session
 
 Sub-namespace notation: `namespace("org:team:user")` is a child of `namespace("org:team")` which is a child of `namespace("org")`. Colon-delimited path, arbitrary depth.
 
-**Instances** are an operational concept (tool registration + lifecycle), not a data scoping concept. They determine which tools are currently callable. See [client-sdk-spec.md](./client-sdk-spec.md) for instance lifecycle.
-
-**Instance binding:** A Session object is created via `instance.session(id)` and holds a reference to its parent Instance. `searchTools` always searches the Instance that created the Session handle. Cross-instance means **messages are shared** across instances, not tools. If you create `instanceA.session("s1")` and `instanceB.session("s1")`, both see the same messages, but `searchTools` returns different results (A's tools vs B's tools).
+Tools are registered per-dataset. A Session object is created via `dataset.session(id)` and holds a reference to its parent DatasetRef. `searchTools` always searches the dataset that created the Session handle.
 
 ### Visibility Rules
 
@@ -336,8 +334,8 @@ Extends the endpoints in [client-sdk-spec.md](./client-sdk-spec.md).
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `POST /api/v1/instances/{id}/skills` | POST | Register skills for instance |
-| `GET /api/v1/instances/{id}/skills` | GET | List skills for instance |
+| `POST /api/v1/datasets/{id}/skills` | POST | Register skills for dataset |
+| `GET /api/v1/datasets/{id}/skills` | GET | List skills for dataset |
 
 Skills are stored alongside tools and returned by the discover/searchTools endpoint. When a skill is activated, the response includes its `instructions` and `tools` list so the client can inject instructions into context and load referenced tools.
 
@@ -425,7 +423,7 @@ CREATE INDEX idx_memories_kind ON memories(kind);
 -- skills table
 CREATE TABLE skills (
     id TEXT PRIMARY KEY,
-    instance_id TEXT NOT NULL,
+    dataset_id TEXT NOT NULL DEFAULT 'default',
     name TEXT NOT NULL,            -- agentskills.io name format
     description TEXT NOT NULL,
     instructions TEXT NOT NULL,    -- SKILL.md body
@@ -435,7 +433,7 @@ CREATE TABLE skills (
     embedding BLOB,               -- vector for discovery
     created_at TEXT NOT NULL
 );
-CREATE INDEX idx_skills_instance ON skills(instance_id);
+CREATE INDEX idx_skills_dataset ON skills(dataset_id);
 
 -- entities table (for graph)
 CREATE TABLE entities (

@@ -197,26 +197,6 @@ pub struct GetMessagesResponse {
     pub max_seq: i64,
 }
 
-// Instance types
-
-#[derive(Debug, Clone)]
-pub struct Instance {
-    pub instance_id: String,
-    pub dataset_id: String,
-    pub created_at: String,
-    pub last_heartbeat: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateInstanceRequest {
-    pub dataset: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CreateInstanceResponse {
-    pub instance_id: String,
-}
-
 // Context types
 
 #[derive(Debug, Deserialize)]

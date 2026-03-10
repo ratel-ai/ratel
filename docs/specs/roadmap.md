@@ -14,12 +14,12 @@
 ```typescript
 const ag = new Agentified();
 await ag.connect();
-const instance = await ag.register({
+const dataset = await ag.register({
   tools: [
     { name: 'lookup', description: '...', parameters: {...}, handler: lookupHandler },
   ],
 });
-const session = instance.session(chatId);
+const session = dataset.session(chatId);
 
 await session.updateConversation({ messages: req.body.messages });
 const { messages } = await session.context.messages({ strategy: 'recent' }).assemble();
@@ -30,9 +30,9 @@ const response = await agent.generate(messages, { prepareStep: session.prepareSt
 
 | Layer | Work |
 |-------|------|
-| Rust core | Crate split (agentified-lib + agentified-server). Instances table + heartbeat/GC. Messages table (dataset_id + session_id). POST/GET /api/v1/messages. Context endpoint (`full` + `recent` strategies only). GET /health. |
-| @agentified/sdk | Instance lifecycle (create, heartbeat, delete). appendMessages, getMessages, getContext. |
-| @agentified/mastra | Agentified, DatasetRef, Instance, Session (no Namespace yet). Unified tool model (`BackendTool` only — shape supports future types). `register({ tools })`. updateConversation + context builder (messages only, no recall). session.prepareStep (persists LLM messages). Local core auto-spawn. |
+| Rust core | Crate split (agentified-lib + agentified-server). Dataset-scoped tools. Messages table. POST/GET messages. Context endpoint (full + recent). GET /health. |
+| @agentified/sdk | Dataset-scoped register, discover, prefetch. appendMessages, getMessages, getContext. |
+| @agentified/mastra | Agentified, DatasetRef, Session (no Namespace yet). Unified tool model (`BackendTool` only — shape supports future types). `register({ tools })`. updateConversation + context builder (messages only, no recall). session.prepareStep (persists LLM messages). Local core auto-spawn. |
 | Migration | AgentifiedMastra stays exported, deprecated. |
 
 ### Agent tools
@@ -54,8 +54,8 @@ Namespaces, memories, knowledge, artifacts, graph, summaries, recall, MCP tools,
 ### Developer experience
 
 ```typescript
-const instance = await ag.dataset("my-app").register({ tools: [...] });
-const session = instance.namespace(userId).session(chatId);
+const dataset = await ag.dataset("my-app").register({ tools: [...] });
+const session = dataset.namespace(userId).session(chatId);
 
 const agent = new Agent({
   tools: {
@@ -138,7 +138,7 @@ Graph, MCP tools, client tools, skills.
 ### Developer experience
 
 ```typescript
-const instance = await ag.register({
+const dataset = await ag.register({
   tools: [
     // Backend — type inferred from handler
     { name: 'lookup', description: '...', parameters: {...}, handler: lookupHandler },
@@ -167,7 +167,7 @@ const instance = await ag.register({
 
 | Layer | Work |
 |-------|------|
-| Rust core | Tool `type` column in tools table. Skills table (instructions, referenced tools, embedding for discovery). POST/GET /api/v1/instances/{id}/skills. Skill discovery: searchTools returns skills alongside tools. Validate skill's referenced tools exist at registration. |
+| Rust core | Tool `type` column in tools table. Skills table (instructions, referenced tools, embedding for discovery). POST/GET /api/v1/datasets/{id}/skills. Skill discovery: searchTools returns skills alongside tools. Validate skill's referenced tools exist at registration. |
 | @agentified/sdk | MCP proxying (forward tool calls to MCP server URI). Frontend tool pass-through (AG-UI frontend tool calls). `mcpTools()` helper function. |
 | @agentified/mastra | Tool routing in prepareStep: backend -> execute handler, client -> AG-UI, mcp -> proxy, skill -> inject instructions + load tools. Skill activation: when agent discovers a skill, system adds instructions to context and referenced tools to activeTools. `register({ tools, skills })`. |
 
@@ -259,6 +259,7 @@ const { messages } = await session.context
 | Cross-namespace inference | Iteration 5 | "Users like this one tend to..." |
 | Memory decay / relevance scoring | Iteration 5 | Recency + frequency weighting. |
 | Skill learning | Iteration 4 | Agent composes new skills from tool usage patterns. |
+| Instance lifecycle (heartbeat, GC, multi-process isolation) | Iteration 2+ | Deferred from Iter 1 — add when multi-agent-process sharing is needed |
 
 ---
 

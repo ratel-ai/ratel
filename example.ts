@@ -8,25 +8,24 @@ import { Agentified } from '@agentified/mastra';
 const ag = new Agentified();
 await ag.connect();
 
-const instance = await ag.registerTools({ tools: [/* ... */] });
+const dataset = await ag.register({ tools: [/* ... */] });
 
 const agent = new Agent({
   system: `You are a helpful agent`,
   tools: {
-    discoverTool: instance.discoverTool,
+    discoverTool: dataset.discoverTool,
   },
-  prepareStep: instance.prepareStep,
+  prepareStep: dataset.prepareStep,
 });
 
 /* ──────────────────────────────────────────────────────────
  * Session-scoped — full control
  *
  * dataset:   segments different agents/contexts (tool namespaces)
- * instance:  dataset + registered tools for this deploy
  * namespace: developer-defined segmentation (user, org, tenant...)
  * session:   current chat — tools, context, conversation
  *
- * namespace and session are independent scopes on instance.
+ * namespace and session are independent scopes on dataset.
  * Every tool can be scoped by namespace, session, or both.
  * ────────────────────────────────────────────────────────── */
 
@@ -36,15 +35,15 @@ import { Agentified } from '@agentified/mastra';
 const ag = new Agentified();
 await ag.connect();
 
-const instance = await ag
+const dataset = await ag
   .dataset("agent-xyz")
-  .registerTools({ tools: [/* ... */] });
+  .register({ tools: [/* ... */] });
 
 // namespace: scopes user-level memories (preferences, history, etc.)
-const userMemory = instance.namespace(userId);
+const userMemory = dataset.namespace(userId);
 
 // session: scopes current conversation (tools, messages, context)
-const session = instance.session(chatId ?? uuid());
+const session = dataset.session(chatId ?? uuid());
 
 const agent = new Agent({
   system: `You are a helpful agent`,

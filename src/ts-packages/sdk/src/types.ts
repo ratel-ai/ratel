@@ -78,9 +78,9 @@ export interface StoredMessage {
   id: string;
   role: string;
   content: string;
-  tool_call_id?: string;
-  tool_calls?: unknown;
-  created_at: string;
+  toolCallId?: string;
+  toolCalls?: unknown;
+  createdAt: string;
   seq: number;
 }
 

@@ -1,22 +1,16 @@
 use anyhow::Result;
 
-use crate::models::{Instance, MessageInput, StoredMessage, StoredTool, Turn};
+use crate::models::{MessageInput, StoredMessage, StoredTool, Turn};
 
 // Trait
 
 pub trait Storage: Send + Sync {
-    fn save_tools(&self, instance_id: &str, tools: &[(&str, &StoredTool)]) -> Result<()>;
-    fn load_tools_for_instance(&self, instance_id: &str) -> Result<Vec<(String, StoredTool)>>;
+    fn save_tools(&self, dataset_id: &str, tools: &[(&str, &StoredTool)]) -> Result<()>;
+    fn load_tools_for_dataset(&self, dataset_id: &str) -> Result<Vec<(String, StoredTool)>>;
     fn save_turn(&self, id: &str, turn: &Turn) -> Result<()>;
     fn load_all_turns(&self) -> Result<Vec<(String, Turn)>>;
     fn save_embeddings(&self, entries: &[(&str, &[f32])]) -> Result<()>;
     fn load_all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>>;
-    fn save_instance(&self, instance: &Instance) -> Result<()>;
-    fn get_instance(&self, instance_id: &str) -> Result<Option<Instance>>;
-    fn delete_instance(&self, instance_id: &str) -> Result<bool>;
-    fn delete_tools_for_instance(&self, instance_id: &str) -> Result<()>;
-    fn update_heartbeat(&self, instance_id: &str, heartbeat: &str) -> Result<bool>;
-    fn get_expired_instances(&self, cutoff: &str) -> Result<Vec<String>>;
     fn append_messages(&self, dataset: &str, namespace: &str, session: &str, messages: &[MessageInput]) -> Result<(i64, i64)>;
     fn get_messages(&self, dataset: &str, namespace: &str, session: &str, limit: i64, after_seq: Option<i64>, around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)>;
 }
@@ -38,10 +32,10 @@ fn blob_to_vec_f32(b: &[u8]) -> Vec<f32> {
 pub struct NoopStorage;
 
 impl Storage for NoopStorage {
-    fn save_tools(&self, _instance_id: &str, _tools: &[(&str, &StoredTool)]) -> Result<()> {
+    fn save_tools(&self, _dataset_id: &str, _tools: &[(&str, &StoredTool)]) -> Result<()> {
         Ok(())
     }
-    fn load_tools_for_instance(&self, _instance_id: &str) -> Result<Vec<(String, StoredTool)>> {
+    fn load_tools_for_dataset(&self, _dataset_id: &str) -> Result<Vec<(String, StoredTool)>> {
         Ok(vec![])
     }
     fn save_turn(&self, _id: &str, _turn: &Turn) -> Result<()> {
@@ -54,24 +48,6 @@ impl Storage for NoopStorage {
         Ok(())
     }
     fn load_all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>> {
-        Ok(vec![])
-    }
-    fn save_instance(&self, _instance: &Instance) -> Result<()> {
-        Ok(())
-    }
-    fn get_instance(&self, _instance_id: &str) -> Result<Option<Instance>> {
-        Ok(None)
-    }
-    fn delete_instance(&self, _instance_id: &str) -> Result<bool> {
-        Ok(false)
-    }
-    fn delete_tools_for_instance(&self, _instance_id: &str) -> Result<()> {
-        Ok(())
-    }
-    fn update_heartbeat(&self, _instance_id: &str, _heartbeat: &str) -> Result<bool> {
-        Ok(false)
-    }
-    fn get_expired_instances(&self, _cutoff: &str) -> Result<Vec<String>> {
         Ok(vec![])
     }
     fn append_messages(&self, _dataset: &str, _namespace: &str, _session: &str, _messages: &[MessageInput]) -> Result<(i64, i64)> {
@@ -97,7 +73,7 @@ impl SqliteStorage {
         )?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS tools (
-                instance_id TEXT NOT NULL,
+                dataset_id TEXT NOT NULL,
                 name TEXT NOT NULL,
                 description TEXT NOT NULL,
                 parameters TEXT NOT NULL,
@@ -108,9 +84,9 @@ impl SqliteStorage {
                 emb_input_schema BLOB,
                 emb_output_schema BLOB,
                 bm25_text TEXT NOT NULL,
-                PRIMARY KEY (instance_id, name)
+                PRIMARY KEY (dataset_id, name)
             );
-            CREATE INDEX IF NOT EXISTS idx_tools_instance ON tools(instance_id);
+            CREATE INDEX IF NOT EXISTS idx_tools_dataset ON tools(dataset_id);
             CREATE TABLE IF NOT EXISTS turns (
                 id TEXT PRIMARY KEY,
                 tools_loaded TEXT NOT NULL,
@@ -120,14 +96,6 @@ impl SqliteStorage {
                 text_content TEXT PRIMARY KEY,
                 embedding BLOB NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS instances (
-                instance_id TEXT PRIMARY KEY,
-                dataset_id TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                last_heartbeat TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_instances_dataset ON instances(dataset_id);
-            CREATE INDEX IF NOT EXISTS idx_instances_heartbeat ON instances(last_heartbeat);
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
                 dataset_id TEXT NOT NULL DEFAULT 'default',
@@ -147,7 +115,7 @@ impl SqliteStorage {
 }
 
 impl Storage for SqliteStorage {
-    fn save_tools(&self, instance_id: &str, tools: &[(&str, &StoredTool)]) -> Result<()> {
+    fn save_tools(&self, dataset_id: &str, tools: &[(&str, &StoredTool)]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         for (name, stored) in tools {
@@ -159,21 +127,21 @@ impl Storage for SqliteStorage {
             let emb_input = stored.embeddings.input_schema.as_ref().map(|v| vec_f32_to_blob(v));
             let emb_output = stored.embeddings.output_schema.as_ref().map(|v| vec_f32_to_blob(v));
             tx.execute(
-                "INSERT OR REPLACE INTO tools (instance_id, name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text)
+                "INSERT OR REPLACE INTO tools (dataset_id, name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                rusqlite::params![instance_id, name, stored.tool.description, params_json, metadata_json, fields_json, emb_name, emb_desc, emb_input, emb_output, stored.bm25_text],
+                rusqlite::params![dataset_id, name, stored.tool.description, params_json, metadata_json, fields_json, emb_name, emb_desc, emb_input, emb_output, stored.bm25_text],
             )?;
         }
         tx.commit()?;
         Ok(())
     }
 
-    fn load_tools_for_instance(&self, instance_id: &str) -> Result<Vec<(String, StoredTool)>> {
+    fn load_tools_for_dataset(&self, dataset_id: &str) -> Result<Vec<(String, StoredTool)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text FROM tools WHERE instance_id = ?1"
+            "SELECT name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text FROM tools WHERE dataset_id = ?1"
         )?;
-        let rows = stmt.query_map(rusqlite::params![instance_id], |row| {
+        let rows = stmt.query_map(rusqlite::params![dataset_id], |row| {
             let name: String = row.get(0)?;
             let description: String = row.get(1)?;
             let params_json: String = row.get(2)?;
@@ -274,75 +242,11 @@ impl Storage for SqliteStorage {
         Ok(result)
     }
 
-    fn save_instance(&self, instance: &Instance) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT OR REPLACE INTO instances (instance_id, dataset_id, created_at, last_heartbeat) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![instance.instance_id, instance.dataset_id, instance.created_at, instance.last_heartbeat],
-        )?;
-        Ok(())
-    }
-
-    fn get_instance(&self, instance_id: &str) -> Result<Option<Instance>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT instance_id, dataset_id, created_at, last_heartbeat FROM instances WHERE instance_id = ?1"
-        )?;
-        let mut rows = stmt.query(rusqlite::params![instance_id])?;
-        match rows.next()? {
-            Some(row) => Ok(Some(Instance {
-                instance_id: row.get(0)?,
-                dataset_id: row.get(1)?,
-                created_at: row.get(2)?,
-                last_heartbeat: row.get(3)?,
-            })),
-            None => Ok(None),
-        }
-    }
-
-    fn delete_instance(&self, instance_id: &str) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM tools WHERE instance_id = ?1", rusqlite::params![instance_id])?;
-        let affected = conn.execute(
-            "DELETE FROM instances WHERE instance_id = ?1",
-            rusqlite::params![instance_id],
-        )?;
-        Ok(affected > 0)
-    }
-
-    fn delete_tools_for_instance(&self, instance_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM tools WHERE instance_id = ?1", rusqlite::params![instance_id])?;
-        Ok(())
-    }
-
-    fn update_heartbeat(&self, instance_id: &str, heartbeat: &str) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
-        let affected = conn.execute(
-            "UPDATE instances SET last_heartbeat = ?1 WHERE instance_id = ?2",
-            rusqlite::params![heartbeat, instance_id],
-        )?;
-        Ok(affected > 0)
-    }
-
-    fn get_expired_instances(&self, cutoff: &str) -> Result<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT instance_id FROM instances WHERE last_heartbeat < ?1"
-        )?;
-        let rows = stmt.query_map(rusqlite::params![cutoff], |row| row.get(0))?;
-        let mut ids = Vec::new();
-        for row in rows {
-            ids.push(row?);
-        }
-        Ok(ids)
-    }
-
     fn append_messages(&self, dataset: &str, namespace: &str, session: &str, messages: &[MessageInput]) -> Result<(i64, i64)> {
         let conn = self.conn.lock().unwrap();
-        conn.execute_batch("BEGIN IMMEDIATE")?;
+        let tx = conn.unchecked_transaction()?;
 
-        let max_seq: i64 = conn.query_row(
+        let max_seq: i64 = tx.query_row(
             "SELECT COALESCE(MAX(seq), 0) FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3",
             rusqlite::params![dataset, namespace, session],
             |row| row.get(0),
@@ -355,14 +259,14 @@ impl Storage for SqliteStorage {
             let seq = first_seq + i as i64;
             let id = uuid::Uuid::new_v4().to_string();
             let tool_calls_json = msg.tool_calls.as_ref().map(|v| serde_json::to_string(v)).transpose()?;
-            conn.execute(
+            tx.execute(
                 "INSERT INTO messages (id, dataset_id, namespace_id, session_id, role, content, tool_call_id, tool_calls, created_at, seq)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 rusqlite::params![id, dataset, namespace, session, msg.role, msg.content, msg.tool_call_id, tool_calls_json, now, seq],
             )?;
         }
 
-        conn.execute_batch("COMMIT")?;
+        tx.commit()?;
         let last_seq = first_seq + messages.len() as i64 - 1;
         Ok((first_seq, last_seq))
     }
@@ -455,8 +359,8 @@ mod tests {
     #[test]
     fn noop_save_load_tools_returns_empty() {
         let s = NoopStorage;
-        s.save_tools("inst-1", &[]).unwrap();
-        assert!(s.load_tools_for_instance("inst-1").unwrap().is_empty());
+        s.save_tools("ds-1", &[]).unwrap();
+        assert!(s.load_tools_for_dataset("ds-1").unwrap().is_empty());
     }
 
     #[test]
@@ -500,8 +404,8 @@ mod tests {
     fn sqlite_roundtrip_tools() {
         let s = SqliteStorage::new(":memory:").unwrap();
         let tool = make_stored_tool("getThing", "Get a thing", true);
-        s.save_tools("inst-1", &[("getThing", &tool)]).unwrap();
-        let loaded = s.load_tools_for_instance("inst-1").unwrap();
+        s.save_tools("ds-1", &[("getThing", &tool)]).unwrap();
+        let loaded = s.load_tools_for_dataset("ds-1").unwrap();
         assert_eq!(loaded.len(), 1);
         let (name, st) = &loaded[0];
         assert_eq!(name, "getThing");
@@ -520,10 +424,10 @@ mod tests {
     fn sqlite_tool_upsert_replaces() {
         let s = SqliteStorage::new(":memory:").unwrap();
         let t1 = make_stored_tool("t", "v1", false);
-        s.save_tools("inst-1", &[("t", &t1)]).unwrap();
+        s.save_tools("ds-1", &[("t", &t1)]).unwrap();
         let t2 = make_stored_tool("t", "v2", false);
-        s.save_tools("inst-1", &[("t", &t2)]).unwrap();
-        let loaded = s.load_tools_for_instance("inst-1").unwrap();
+        s.save_tools("ds-1", &[("t", &t2)]).unwrap();
+        let loaded = s.load_tools_for_dataset("ds-1").unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].1.tool.description, "v2");
     }
@@ -536,8 +440,8 @@ mod tests {
         tool.tool.fields = None;
         tool.embeddings.input_schema = None;
         tool.embeddings.output_schema = None;
-        s.save_tools("inst-1", &[("t", &tool)]).unwrap();
-        let loaded = s.load_tools_for_instance("inst-1").unwrap();
+        s.save_tools("ds-1", &[("t", &tool)]).unwrap();
+        let loaded = s.load_tools_for_dataset("ds-1").unwrap();
         assert_eq!(loaded.len(), 1);
         assert!(loaded[0].1.tool.metadata.is_none());
         assert!(loaded[0].1.tool.fields.is_none());
@@ -573,29 +477,6 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].0, "hello");
         assert_eq!(loaded[0].1, vec![0.1, 0.2, 0.3]);
-    }
-
-    #[test]
-    fn sqlite_get_expired_instances() {
-        let s = SqliteStorage::new(":memory:").unwrap();
-        // Instance with old heartbeat (expired)
-        s.save_instance(&Instance {
-            instance_id: "old".into(),
-            dataset_id: "ds".into(),
-            created_at: "2026-01-01T00:00:00Z".into(),
-            last_heartbeat: "2026-01-01T00:00:00Z".into(),
-        }).unwrap();
-        // Instance with recent heartbeat (fresh)
-        s.save_instance(&Instance {
-            instance_id: "fresh".into(),
-            dataset_id: "ds".into(),
-            created_at: "2026-01-01T00:00:00Z".into(),
-            last_heartbeat: "2099-01-01T00:00:00Z".into(),
-        }).unwrap();
-
-        let cutoff = "2026-06-01T00:00:00Z";
-        let expired = s.get_expired_instances(cutoff).unwrap();
-        assert_eq!(expired, vec!["old"]);
     }
 
     #[test]

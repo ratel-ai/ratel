@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
 
-const mockCreateInstance = vi.fn();
-const mockHeartbeatInstance = vi.fn();
-const mockDeleteInstance = vi.fn();
 const mockRegister = vi.fn();
 const mockAsDiscoverTool = vi.fn();
 const mockAppendMessages = vi.fn();
@@ -12,9 +9,6 @@ const mockGetContext = vi.fn();
 
 vi.mock("@agentified/sdk", () => ({
   ApiClient: vi.fn(() => ({
-    createInstance: mockCreateInstance,
-    heartbeatInstance: mockHeartbeatInstance,
-    deleteInstance: mockDeleteInstance,
     register: mockRegister,
     asDiscoverTool: mockAsDiscoverTool,
     appendMessages: mockAppendMessages,
@@ -43,12 +37,12 @@ vi.mock("node:child_process", () => ({
   spawn: mockSpawn,
 }));
 
-vi.mock("./spawn-utils.js", () => ({
+vi.mock("../spawn-utils.js", () => ({
   resolveBinaryPath: mockResolveBinary,
   findFreePort: mockFindFreePort,
 }));
 
-import { Agentified, type AgentifiedTool } from "./agentified.js";
+import { Agentified, type AgentifiedTool } from "../agentified.js";
 
 describe("Agentified", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
@@ -156,8 +150,11 @@ describe("Agentified", () => {
 
       expect(mockSpawn).toHaveBeenCalledWith(
         "/path/to/agentified-core",
-        expect.arrayContaining(["--port", "9200"]),
-        expect.objectContaining({ stdio: ["ignore", "pipe", "pipe"] }),
+        [],
+        expect.objectContaining({
+          stdio: ["ignore", "pipe", "pipe"],
+          env: expect.objectContaining({ AGENTIFIED_PORT: "9200" }),
+        }),
       );
       expect(fetchSpy).toHaveBeenCalledWith("http://127.0.0.1:9200/health");
       expect(ag.sdk).not.toBeNull();
@@ -281,11 +278,11 @@ describe("Agentified", () => {
       const ag = new Agentified();
       await ag.connect();
 
-      // first crash → restart
+      // first crash -> restart
       fakeChild1.emit("exit", 1, null);
       await new Promise((r) => setTimeout(r, 10));
 
-      // second crash → no restart
+      // second crash -> no restart
       fakeChild2.emit("exit", 1, null);
       await new Promise((r) => setTimeout(r, 10));
 
@@ -320,59 +317,6 @@ describe("Agentified", () => {
       await ag.connect("http://localhost:9119");
       await ag.disconnect();
       await ag.disconnect(); // should not throw
-    });
-
-    it("deletes all tracked instances on disconnect", async () => {
-      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
-      mockDeleteInstance.mockResolvedValue(undefined);
-
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
-
-      // Simulate tracked instances (would normally be created via register)
-      (ag as any).activeInstances.add("inst-1");
-      (ag as any).activeInstances.add("inst-2");
-
-      await ag.disconnect();
-
-      expect(mockDeleteInstance).toHaveBeenCalledWith("inst-1");
-      expect(mockDeleteInstance).toHaveBeenCalledWith("inst-2");
-    });
-
-    it("clears heartbeat intervals on disconnect", async () => {
-      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
-      const clearSpy = vi.spyOn(globalThis, "clearInterval");
-
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
-
-      // Simulate a heartbeat interval
-      const interval = setInterval(() => {}, 30000);
-      (ag as any).heartbeatIntervals.set("inst-1", interval);
-      (ag as any).activeInstances.add("inst-1");
-      mockDeleteInstance.mockResolvedValue(undefined);
-
-      await ag.disconnect();
-
-      expect(clearSpy).toHaveBeenCalledWith(interval);
-      clearSpy.mockRestore();
-    });
-
-    it("continues cleanup even if instance deletion fails", async () => {
-      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
-      mockDeleteInstance
-        .mockRejectedValueOnce(new Error("network error"))
-        .mockResolvedValueOnce(undefined);
-
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
-
-      (ag as any).activeInstances.add("inst-1");
-      (ag as any).activeInstances.add("inst-2");
-
-      await ag.disconnect(); // should not throw
-
-      expect(mockDeleteInstance).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -415,9 +359,8 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("returns Instance with instanceId after registering tools (TC-003)", async () => {
+    it("returns Instance with datasetId after registering tools", async () => {
       const ag = await connectedAgentified();
-      mockCreateInstance.mockResolvedValue({ instanceId: "inst-abc" });
       mockRegister.mockResolvedValue({ registered: 1 });
 
       const tool: AgentifiedTool = {
@@ -429,16 +372,14 @@ describe("Agentified", () => {
 
       const instance = await ag.dataset("my-dataset").register({ tools: [tool] });
 
-      expect(instance.instanceId).toBe("inst-abc");
+      expect(instance.instanceId).toBe("my-dataset");
       expect(instance.datasetId).toBe("my-dataset");
-      expect(mockCreateInstance).toHaveBeenCalledWith("my-dataset");
 
       await ag.disconnect();
     });
 
-    it("uses 'default' dataset when called on Agentified directly (TC-004)", async () => {
+    it("uses 'default' dataset when called on Agentified directly", async () => {
       const ag = await connectedAgentified();
-      mockCreateInstance.mockResolvedValue({ instanceId: "inst-def" });
       mockRegister.mockResolvedValue({ registered: 1 });
 
       const tool: AgentifiedTool = {
@@ -450,101 +391,14 @@ describe("Agentified", () => {
 
       const instance = await ag.register({ tools: [tool] });
 
-      expect(instance.instanceId).toBe("inst-def");
+      expect(instance.instanceId).toBe("default");
       expect(instance.datasetId).toBe("default");
-      expect(mockCreateInstance).toHaveBeenCalledWith("default");
 
       await ag.disconnect();
-    });
-
-    it("starts 30s heartbeat interval after register", async () => {
-      const ag = await connectedAgentified();
-      mockCreateInstance.mockResolvedValue({ instanceId: "inst-hb" });
-      mockRegister.mockResolvedValue({ registered: 1 });
-      mockHeartbeatInstance.mockResolvedValue(undefined);
-
-      const tool: AgentifiedTool = {
-        name: "t",
-        description: "t",
-        parameters: {},
-        handler: async () => "ok",
-      };
-
-      await ag.register({ tools: [tool] });
-
-      // Heartbeat interval is tracked
-      expect((ag as any).heartbeatIntervals.has("inst-hb")).toBe(true);
-
-      // Disconnect clears the interval (and calls deleteInstance)
-      mockDeleteInstance.mockResolvedValue(undefined);
-      await ag.disconnect();
-      expect((ag as any).heartbeatIntervals.size).toBe(0);
-    });
-
-    it("tracks instance for cleanup on disconnect", async () => {
-      const ag = await connectedAgentified();
-      mockCreateInstance.mockResolvedValue({ instanceId: "inst-track" });
-      mockRegister.mockResolvedValue({ registered: 1 });
-      mockDeleteInstance.mockResolvedValue(undefined);
-
-      const tool: AgentifiedTool = {
-        name: "t",
-        description: "t",
-        parameters: {},
-        handler: async () => "ok",
-      };
-
-      await ag.register({ tools: [tool] });
-      expect((ag as any).activeInstances.has("inst-track")).toBe(true);
-
-      await ag.disconnect();
-      expect(mockDeleteInstance).toHaveBeenCalledWith("inst-track");
-    });
-
-    it("creates two separate instances for two register() calls (TC-014)", async () => {
-      const ag = await connectedAgentified();
-      mockCreateInstance
-        .mockResolvedValueOnce({ instanceId: "inst-1" })
-        .mockResolvedValueOnce({ instanceId: "inst-2" });
-      mockRegister.mockResolvedValue({ registered: 1 });
-
-      const tool: AgentifiedTool = {
-        name: "t",
-        description: "t",
-        parameters: {},
-        handler: async () => "ok",
-      };
-
-      const i1 = await ag.register({ tools: [tool] });
-      const i2 = await ag.register({ tools: [tool] });
-
-      expect(i1.instanceId).toBe("inst-1");
-      expect(i2.instanceId).toBe("inst-2");
-      expect(mockCreateInstance).toHaveBeenCalledTimes(2);
-
-      await ag.disconnect();
-    });
-
-    it("cleans up instance on registration failure", async () => {
-      const ag = await connectedAgentified();
-      mockCreateInstance.mockResolvedValue({ instanceId: "inst-fail" });
-      mockRegister.mockRejectedValue(new Error("registration error"));
-      mockDeleteInstance.mockResolvedValue(undefined);
-
-      const tool: AgentifiedTool = {
-        name: "t",
-        description: "t",
-        parameters: {},
-        handler: async () => "ok",
-      };
-
-      await expect(ag.register({ tools: [tool] })).rejects.toThrow("registration error");
-      expect(mockDeleteInstance).toHaveBeenCalledWith("inst-fail");
     });
 
     it("defaults type to 'backend' when handler present without type", async () => {
       const ag = await connectedAgentified();
-      mockCreateInstance.mockResolvedValue({ instanceId: "inst-type" });
       mockRegister.mockResolvedValue({ registered: 1 });
 
       const tool: AgentifiedTool = {
@@ -554,9 +408,9 @@ describe("Agentified", () => {
         handler: async () => "result",
       };
 
-      // Should not throw — handler present implies backend type
+      // Should not throw -- handler present implies backend type
       const instance = await ag.register({ tools: [tool] });
-      expect(instance.instanceId).toBe("inst-type");
+      expect(instance.instanceId).toBe("default");
 
       await ag.disconnect();
     });
@@ -580,7 +434,6 @@ describe("Agentified", () => {
     }
 
     async function registerInstance(ag: Agentified, tools: AgentifiedTool[] = [backendTool("myTool")]) {
-      mockCreateInstance.mockResolvedValue({ instanceId: "inst-1" });
       mockRegister.mockResolvedValue({ registered: tools.length });
       mockAsDiscoverTool.mockReturnValue({
         definition: {
@@ -598,7 +451,7 @@ describe("Agentified", () => {
       const instance = await registerInstance(ag);
 
       expect(instance.discoverTool).toBeDefined();
-      expect(mockAsDiscoverTool).toHaveBeenCalledWith("inst-1");
+      expect(mockAsDiscoverTool).toHaveBeenCalledWith("default");
       expect(mockCreateTool).toHaveBeenCalledWith(
         expect.objectContaining({
           id: "agentified_discover",
@@ -609,7 +462,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("session(id) returns Session with given id and default namespace (TC-005)", async () => {
+    it("session(id) returns Session with given id and default namespace", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag);
 
@@ -622,7 +475,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("prepareStep returns all registered tool names + agentified_discover when no discover results (TC-007)", async () => {
+    it("prepareStep returns all registered tool names + agentified_discover when no discover results", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA"), backendTool("toolB")]);
 
@@ -636,7 +489,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("prepareStep adds discovered tool names from prior steps (TC-007)", async () => {
+    it("prepareStep adds discovered tool names from prior steps", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
 
@@ -684,7 +537,6 @@ describe("Agentified", () => {
     }
 
     async function registerInstance(ag: Agentified, tools: AgentifiedTool[] = [backendTool("myTool")]) {
-      mockCreateInstance.mockResolvedValue({ instanceId: "inst-1" });
       mockRegister.mockResolvedValue({ registered: tools.length });
       mockAsDiscoverTool.mockReturnValue({
         definition: {
@@ -697,7 +549,7 @@ describe("Agentified", () => {
       return ag.register({ tools });
     }
 
-    it("prepareStep returns initial tools when no steps (TC-007)", async () => {
+    it("prepareStep returns initial tools when no steps", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA"), backendTool("toolB")]);
       const session = instance.session("chat-1");
@@ -713,7 +565,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("prepareStep extracts and persists assistant/tool messages from steps (TC-008)", async () => {
+    it("prepareStep extracts and persists assistant/tool messages from steps", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -747,7 +599,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("prepareStep is no-op when steps have no extractable messages (TC-008)", async () => {
+    it("prepareStep is no-op when steps have no extractable messages", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -762,7 +614,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("prepareStep adds discovered tool names from prior steps (TC-007)", async () => {
+    it("prepareStep adds discovered tool names from prior steps", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -795,12 +647,12 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("updateConversation persists all messages on empty session (TC-009)", async () => {
+    it("updateConversation persists all messages on empty session", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
 
-      // Empty session — getMessages returns no messages
+      // Empty session -- getMessages returns no messages
       mockGetMessages.mockResolvedValue({ messages: [], hasMore: false, maxSeq: 0 });
       mockAppendMessages.mockResolvedValue({ appended: 2, firstSeq: 1, lastSeq: 2 });
 
@@ -817,7 +669,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("updateConversation deduplicates tail and persists only new messages (TC-009)", async () => {
+    it("updateConversation deduplicates tail and persists only new messages", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -850,7 +702,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("context.messages().assemble() returns assembled context from server (TC-009c)", async () => {
+    it("context.messages().assemble() returns assembled context from server", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -916,7 +768,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("conversation.append() returns seq range (TC-010)", async () => {
+    it("conversation.append() returns seq range", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -937,7 +789,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("conversation.messages() returns stored messages (TC-011)", async () => {
+    it("conversation.messages() returns stored messages", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -956,7 +808,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("getMessages() returns context via sdk.getContext (TC-009c)", async () => {
+    it("getMessages() returns context via sdk.getContext", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -1019,7 +871,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("updateConversation is no-op when all messages are duplicates (TC-009b)", async () => {
+    it("updateConversation is no-op when all messages are duplicates", async () => {
       const ag = await connectedAgentified();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");

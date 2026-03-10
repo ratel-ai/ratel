@@ -116,6 +116,7 @@ export class Conversation {
 
 export class Session {
   private lastPersistedSeq = 0;
+  private lastProcessedStepIndex = 0;
 
   readonly conversation: Conversation;
 
@@ -156,9 +157,12 @@ export class Session {
   readonly prepareStep: PrepareStepFn = async ({ steps }) => {
     const activeTools = new Set([...this.toolNames, "agentified_discover"]);
 
-    // Extract messages from steps for persistence
+    // Only process steps we haven't seen yet
+    const newSteps = steps.slice(this.lastProcessedStepIndex);
+
+    // Extract messages from new steps for persistence
     const messages: Array<{ role: string; content: string; tool_calls?: unknown; tool_call_id?: string }> = [];
-    for (const step of steps) {
+    for (const step of newSteps) {
       if (step.text) {
         messages.push({ role: "assistant", content: step.text });
       }
@@ -182,7 +186,9 @@ export class Session {
       this.lastPersistedSeq = res.lastSeq;
     }
 
-    // Scan for discovered tools
+    this.lastProcessedStepIndex = steps.length;
+
+    // Scan ALL steps for discovered tools (need full history for active set)
     for (const step of steps) {
       if (step.toolResults) {
         for (const result of step.toolResults) {
@@ -205,14 +211,22 @@ export class Session {
     const stored = await this.sdk.getMessages(this.datasetId, this.namespaceId, this.id, { limit: messages.length });
     const tail = stored.messages;
 
-    // Find how many messages from start of incoming match stored (in order)
+    // Find longest suffix of stored tail that matches a contiguous slice of incoming.
+    // Stored tail represents the last N messages in DB. We compare it against
+    // the END of incoming to find overlap, avoiding duplicates when stored
+    // tail=[c,d,e] and incoming=[d,e,f].
     let overlap = 0;
-    for (let i = 0; i < Math.min(tail.length, messages.length); i++) {
-      const stored = tail[i]!;
-      const incoming = messages[i]!;
-      if (stored.role === incoming.role && stored.content === incoming.content) {
-        overlap++;
-      } else {
+    for (let tryLen = Math.min(tail.length, messages.length); tryLen > 0; tryLen--) {
+      const tailStart = tail.length - tryLen;
+      let match = true;
+      for (let i = 0; i < tryLen; i++) {
+        if (tail[tailStart + i]!.role !== messages[i]!.role || tail[tailStart + i]!.content !== messages[i]!.content) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        overlap = tryLen;
         break;
       }
     }
@@ -239,7 +253,7 @@ export class Instance {
     /** @internal */ private readonly sdk: ApiClient,
     /** @internal */ private readonly toolNames: string[],
   ) {
-    const discoverDef = sdk.asDiscoverTool(instanceId);
+    const discoverDef = sdk.asDiscoverTool(datasetId);
     this.discoverTool = createTool({
       id: "agentified_discover",
       description: discoverDef.definition.description,
@@ -299,32 +313,19 @@ export class DatasetRef {
     const sdk = this.agentified.sdk;
     if (!sdk) throw new Error("Not connected");
 
-    const { instanceId } = await sdk.createInstance(this.datasetName);
-
-    try {
-      const serverTools = input.tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      }));
-      const regSdk = new ApiClient({
-        serverUrl: this.agentified.serverUrl!,
-        tools: serverTools,
-      });
-      await regSdk.register(instanceId);
-    } catch (err) {
-      await sdk.deleteInstance(instanceId);
-      throw err;
-    }
-
-    const interval = setInterval(() => {
-      sdk.heartbeatInstance(instanceId).catch(() => {});
-    }, 30_000);
-    this.agentified.heartbeatIntervals.set(instanceId, interval);
-    this.agentified.activeInstances.add(instanceId);
+    const serverTools = input.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    }));
+    const regSdk = new ApiClient({
+      serverUrl: this.agentified.serverUrl!,
+      tools: serverTools,
+    });
+    await regSdk.register(this.datasetName);
 
     const toolNames = input.tools.map((t) => t.name);
-    return new Instance(instanceId, this.datasetName, sdk, toolNames);
+    return new Instance(this.datasetName, this.datasetName, sdk, toolNames);
   }
 }
 
@@ -333,8 +334,6 @@ export class Agentified {
   /** @internal */ serverUrl: string | null = null;
   private connected = false;
   private spawnedProcess: ChildProcess | null = null;
-  /** @internal */ activeInstances: Set<string> = new Set();
-  /** @internal */ heartbeatIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
   private cleanupHandlers: Array<[string, (...args: any[]) => void]> = [];
   private restartCount = 0;
   private lastRestartAt = 0;
@@ -390,9 +389,9 @@ export class Agentified {
   private spawnChild(): void {
     if (!this.spawnArgs) return;
     const { binaryPath, port } = this.spawnArgs;
-    const child = spawn(binaryPath, ["--port", String(port)], {
+    const child = spawn(binaryPath, [], {
       stdio: ["ignore", "pipe", "pipe"],
-      env: process.env,
+      env: { ...process.env, AGENTIFIED_PORT: String(port) },
     });
     this.spawnedProcess = child;
   }
@@ -462,22 +461,6 @@ export class Agentified {
 
   async disconnect(): Promise<void> {
     if (!this.connected) return;
-
-    for (const interval of this.heartbeatIntervals.values()) {
-      clearInterval(interval);
-    }
-    this.heartbeatIntervals.clear();
-
-    if (this.sdk) {
-      for (const instanceId of this.activeInstances) {
-        try {
-          await this.sdk.deleteInstance(instanceId);
-        } catch {
-          // best-effort cleanup
-        }
-      }
-    }
-    this.activeInstances.clear();
 
     if (this.spawnedProcess) {
       this.spawnedProcess.kill();

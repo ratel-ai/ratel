@@ -16,8 +16,8 @@ use tokio::sync::RwLock;
 
 use models::{
     AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
-    ContextRequest, ContextResponse, CreateInstanceResponse, DiscoverRequest, DiscoverResponse,
-    FieldEmbeddings, GetMessagesQuery, GetMessagesResponse, Instance, ListToolsResponse,
+    ContextRequest, ContextResponse, DiscoverRequest, DiscoverResponse,
+    FieldEmbeddings, GetMessagesQuery, GetMessagesResponse, ListToolsResponse,
     RankedTool, RecalledContext, RegisterToolsResponse, StoredTool, Tool, Turn,
 };
 use ranking::{bm25_scores, weighted_semantic_score};
@@ -67,17 +67,7 @@ impl AgentifiedCore {
         }
     }
 
-    pub async fn register_tools(&self, instance_id: &str, tools: Vec<Tool>) -> Result<RegisterToolsResponse, CoreError> {
-        // Verify instance exists
-        let storage = self.storage.clone();
-        let iid = instance_id.to_string();
-        let instance = tokio::task::spawn_blocking(move || storage.get_instance(&iid))
-            .await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-            .map_err(|e| CoreError::EmbeddingFailed(e))?;
-        if instance.is_none() {
-            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
-        }
-
+    pub async fn register_tools(&self, dataset_id: &str, tools: Vec<Tool>) -> Result<RegisterToolsResponse, CoreError> {
         let count = tools.len();
 
         struct ToolTexts {
@@ -167,22 +157,22 @@ impl AgentifiedCore {
         drop(cache);
 
         let mut tools_map = self.tools.write().await;
-        let instance_tools = tools_map.entry(instance_id.to_string()).or_default();
+        let dataset_tools = tools_map.entry(dataset_id.to_string()).or_default();
         for (tool, (embeddings, bm25_text)) in tools.into_iter().zip(tool_data) {
-            instance_tools.insert(tool.name.clone(), StoredTool { tool, embeddings, bm25_text });
+            dataset_tools.insert(tool.name.clone(), StoredTool { tool, embeddings, bm25_text });
         }
 
         // Write-through to storage
         {
             let storage = self.storage.clone();
-            let iid = instance_id.to_string();
-            let tool_pairs: Vec<(String, StoredTool)> = instance_tools.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let did = dataset_id.to_string();
+            let tool_pairs: Vec<(String, StoredTool)> = dataset_tools.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             let cache = self.embedding_cache.read().await;
             let emb_pairs: Vec<(String, Vec<f32>)> = cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             drop(cache);
             tokio::task::spawn_blocking(move || {
                 let refs: Vec<(&str, &StoredTool)> = tool_pairs.iter().map(|(k, v)| (k.as_str(), v)).collect();
-                if let Err(e) = storage.save_tools(&iid, &refs) {
+                if let Err(e) = storage.save_tools(&did, &refs) {
                     tracing::error!("storage save_tools failed: {e}");
                 }
                 let emb_refs: Vec<(&str, &[f32])> = emb_pairs.iter().map(|(k, v)| (k.as_str(), v.as_slice())).collect();
@@ -195,35 +185,15 @@ impl AgentifiedCore {
         Ok(RegisterToolsResponse { registered: count })
     }
 
-    pub async fn list_tools(&self, instance_id: &str) -> Result<ListToolsResponse, CoreError> {
-        // Verify instance exists
-        let storage = self.storage.clone();
-        let iid = instance_id.to_string();
-        let instance = tokio::task::spawn_blocking(move || storage.get_instance(&iid))
-            .await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-            .map_err(|e| CoreError::EmbeddingFailed(e))?;
-        if instance.is_none() {
-            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
-        }
-
+    pub async fn list_tools(&self, dataset_id: &str) -> Result<ListToolsResponse, CoreError> {
         let tools = self.tools.read().await;
-        let tool_list = tools.get(instance_id)
+        let tool_list = tools.get(dataset_id)
             .map(|m| m.values().map(|st| st.tool.clone()).collect())
             .unwrap_or_default();
         Ok(ListToolsResponse { tools: tool_list })
     }
 
-    pub async fn discover(&self, instance_id: &str, body: DiscoverRequest) -> Result<DiscoverResponse, CoreError> {
-        // Verify instance exists
-        let storage = self.storage.clone();
-        let iid = instance_id.to_string();
-        let instance = tokio::task::spawn_blocking(move || storage.get_instance(&iid))
-            .await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-            .map_err(|e| CoreError::EmbeddingFailed(e))?;
-        if instance.is_none() {
-            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
-        }
-
+    pub async fn discover(&self, dataset_id: &str, body: DiscoverRequest) -> Result<DiscoverResponse, CoreError> {
         let limit = body.limit.unwrap_or(5).min(100);
 
         let base_tool_names: Vec<String> = if let Some(ref turn_id) = body.turn_id {
@@ -239,16 +209,16 @@ impl AgentifiedCore {
         let query_embedding = self.embed_cached(&body.query).await.map_err(CoreError::EmbeddingFailed)?;
 
         let tools = self.tools.read().await;
-        let instance_tools = tools.get(instance_id);
+        let dataset_tools = tools.get(dataset_id);
         let empty = HashMap::new();
-        let instance_tools = instance_tools.unwrap_or(&empty);
+        let dataset_tools = dataset_tools.unwrap_or(&empty);
 
-        if instance_tools.is_empty() {
+        if dataset_tools.is_empty() {
             return Ok(DiscoverResponse { tools: vec![] });
         }
 
         let mut base_tools: Vec<RankedTool> = base_tool_names.iter()
-            .filter_map(|name| instance_tools.get(name))
+            .filter_map(|name| dataset_tools.get(name))
             .map(|st| RankedTool { tool: st.tool.clone(), score: 1.0, graph_expanded: None })
             .collect();
 
@@ -256,7 +226,7 @@ impl AgentifiedCore {
         let mut exclude = body.exclude.unwrap_or_default();
         exclude.extend(base_tool_names);
 
-        let stored: Vec<&StoredTool> = instance_tools
+        let stored: Vec<&StoredTool> = dataset_tools
             .values()
             .filter(|t| !exclude.contains(&t.tool.name))
             .collect();
@@ -294,7 +264,7 @@ impl AgentifiedCore {
         ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         ranked.truncate(limit);
 
-        let ranked = expand_with_providers(ranked, instance_tools, limit);
+        let ranked = expand_with_providers(ranked, dataset_tools, limit);
 
         base_tools.extend(ranked);
 
@@ -321,60 +291,6 @@ impl AgentifiedCore {
         }
 
         CaptureTurnResponse { turn_id }
-    }
-
-    pub async fn create_instance(&self, dataset: &str) -> Result<CreateInstanceResponse, CoreError> {
-        let instance_id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now().to_rfc3339();
-        let instance = Instance {
-            instance_id: instance_id.clone(),
-            dataset_id: dataset.to_string(),
-            created_at: now.clone(),
-            last_heartbeat: now,
-        };
-
-        let storage = self.storage.clone();
-        let inst = instance.clone();
-        tokio::task::spawn_blocking(move || {
-            if let Err(e) = storage.save_instance(&inst) {
-                tracing::error!("storage save_instance failed: {e}");
-            }
-        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?;
-
-        Ok(CreateInstanceResponse { instance_id })
-    }
-
-    pub async fn heartbeat_instance(&self, instance_id: &str) -> Result<(), CoreError> {
-        let now = chrono::Utc::now().to_rfc3339();
-        let storage = self.storage.clone();
-        let id = instance_id.to_string();
-        let updated = tokio::task::spawn_blocking(move || {
-            storage.update_heartbeat(&id, &now)
-        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-          .map_err(|e| CoreError::EmbeddingFailed(e))?;
-
-        if !updated {
-            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
-        }
-        Ok(())
-    }
-
-    pub async fn delete_instance(&self, instance_id: &str) -> Result<(), CoreError> {
-        let storage = self.storage.clone();
-        let id = instance_id.to_string();
-        let deleted = tokio::task::spawn_blocking(move || {
-            storage.delete_instance(&id)
-        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-          .map_err(|e| CoreError::EmbeddingFailed(e))?;
-
-        if !deleted {
-            return Err(CoreError::NotFound(format!("instance not found: {instance_id}")));
-        }
-
-        // Remove in-memory tools for this instance
-        self.tools.write().await.remove(instance_id);
-
-        Ok(())
     }
 
     pub async fn append_messages(&self, req: AppendMessagesRequest) -> Result<AppendMessagesResponse, CoreError> {
@@ -418,25 +334,16 @@ impl AgentifiedCore {
 
         let max_tokens = req.messages.max_tokens;
 
-        // Get total message count (limit=0 trick)
         let storage = self.storage.clone();
         let ds = req.dataset.clone();
         let ns = req.namespace.clone();
         let sess = req.session.clone();
-        let (_, _, total_messages) = tokio::task::spawn_blocking(move || {
-            storage.get_messages(&ds, &ns, &sess, 0, None, None)
-        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-          .map_err(|e| CoreError::EmbeddingFailed(e))?;
-
-        // Fetch all messages to apply token budgeting
-        let storage = self.storage.clone();
-        let ds = req.dataset.clone();
-        let ns = req.namespace.clone();
-        let sess = req.session.clone();
-        let (all_messages, _, _) = tokio::task::spawn_blocking(move || {
+        let (all_messages, _, max_seq) = tokio::task::spawn_blocking(move || {
             storage.get_messages(&ds, &ns, &sess, i64::MAX - 1, None, None)
         }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
           .map_err(|e| CoreError::EmbeddingFailed(e))?;
+
+        let total_messages = max_seq;
 
         let messages = match strategy.as_str() {
             "full" => {
@@ -508,29 +415,6 @@ impl AgentifiedCore {
         Ok(emb)
     }
 
-    pub async fn gc_instances(&self) -> Result<usize, CoreError> {
-        let cutoff = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();
-        let storage = self.storage.clone();
-        let cutoff_clone = cutoff.clone();
-        let expired = tokio::task::spawn_blocking(move || {
-            storage.get_expired_instances(&cutoff_clone)
-        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-          .map_err(|e| CoreError::EmbeddingFailed(e))?;
-
-        let count = expired.len();
-        for id in &expired {
-            let storage = self.storage.clone();
-            let id_clone = id.clone();
-            tokio::task::spawn_blocking(move || {
-                storage.delete_instance(&id_clone)
-            }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-              .map_err(|e| CoreError::EmbeddingFailed(e))?;
-
-            self.tools.write().await.remove(id);
-        }
-
-        Ok(count)
-    }
 }
 
 // Helpers
@@ -762,56 +646,4 @@ mod tests {
         assert_eq!(resp.included_messages, 3);
     }
 
-    #[tokio::test]
-    async fn gc_deletes_expired_keeps_fresh() {
-        let core = make_core();
-
-        // Create two instances
-        let expired = core.create_instance("ds").await.unwrap();
-        let fresh = core.create_instance("ds").await.unwrap();
-
-        // Register tools on both
-        let tool = models::Tool {
-            name: "t1".into(),
-            description: "d".into(),
-            parameters: serde_json::json!({}),
-            metadata: None,
-            fields: None,
-        };
-        core.register_tools(&expired.instance_id, vec![tool.clone()]).await.unwrap();
-        core.register_tools(&fresh.instance_id, vec![tool]).await.unwrap();
-
-        // Set expired instance heartbeat to the past
-        let old_heartbeat = "2020-01-01T00:00:00Z";
-        let storage = core.storage.clone();
-        let eid = expired.instance_id.clone();
-        tokio::task::spawn_blocking(move || {
-            storage.update_heartbeat(&eid, old_heartbeat).unwrap();
-        }).await.unwrap();
-
-        // Run GC
-        let deleted = core.gc_instances().await.unwrap();
-        assert_eq!(deleted, 1);
-
-        // Expired instance gone from storage
-        let storage = core.storage.clone();
-        let eid = expired.instance_id.clone();
-        let inst = tokio::task::spawn_blocking(move || {
-            storage.get_instance(&eid)
-        }).await.unwrap().unwrap();
-        assert!(inst.is_none());
-
-        // Fresh instance still exists
-        let storage = core.storage.clone();
-        let fid = fresh.instance_id.clone();
-        let inst = tokio::task::spawn_blocking(move || {
-            storage.get_instance(&fid)
-        }).await.unwrap().unwrap();
-        assert!(inst.is_some());
-
-        // In-memory tools cleaned for expired, kept for fresh
-        let tools = core.tools.read().await;
-        assert!(!tools.contains_key(&expired.instance_id));
-        assert!(tools.contains_key(&fresh.instance_id));
-    }
 }

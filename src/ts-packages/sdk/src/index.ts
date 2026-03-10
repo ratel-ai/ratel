@@ -1,4 +1,6 @@
 export { ApiClient } from "./agentified.js";
+/** @deprecated Use ApiClient instead */
+export { ApiClient as Agentified } from "./agentified.js";
 export { tool } from "./tool.js";
 export type {
   ApiClientConfig,

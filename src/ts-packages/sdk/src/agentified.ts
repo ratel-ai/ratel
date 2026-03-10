@@ -25,30 +25,8 @@ export class ApiClient {
     this.config = config;
   }
 
-  async createInstance(dataset: string): Promise<{ instanceId: string }> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/instances`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataset }),
-    });
-    const data = (await res.json()) as { instance_id: string };
-    return { instanceId: data.instance_id };
-  }
-
-  async heartbeatInstance(instanceId: string): Promise<void> {
-    await fetch(`${this.config.serverUrl}/api/v1/instances/${instanceId}/heartbeat`, {
-      method: "POST",
-    });
-  }
-
-  async deleteInstance(instanceId: string): Promise<void> {
-    await fetch(`${this.config.serverUrl}/api/v1/instances/${instanceId}`, {
-      method: "DELETE",
-    });
-  }
-
-  async register(instanceId: string): Promise<RegisterResponse> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/instances/${instanceId}/tools`, {
+  async register(datasetId: string): Promise<RegisterResponse> {
+    const res = await fetch(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/tools`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tools: this.config.tools }),
@@ -56,27 +34,36 @@ export class ApiClient {
     return res.json() as Promise<RegisterResponse>;
   }
 
-  async discover(instanceId: string, query: string, limit?: number, exclude?: string[], turnId?: string): Promise<RankedTool[]> {
+  async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string): Promise<RankedTool[]> {
     const body: Record<string, unknown> = { query };
     if (limit !== undefined) body.limit = limit;
     if (exclude !== undefined) body.exclude = exclude;
     if (turnId !== undefined) body.turn_id = turnId;
 
-    const res = await fetch(`${this.config.serverUrl}/api/v1/instances/${instanceId}/discover`, {
+    const res = await fetch(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/discover`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     const data = (await res.json()) as DiscoverResponse;
-    return data.tools ?? [];
+    const tools = data.tools ?? [];
+    if (this.config.tools.length > 0) {
+      const registered = new Set(this.config.tools.map((t) => t.name));
+      for (const tool of tools) {
+        if (!registered.has(tool.name)) {
+          throw new Error(`Discovered tool '${tool.name}' is not registered in the SDK. Register it before use.`);
+        }
+      }
+    }
+    return tools;
   }
 
-  async prefetch(instanceId: string, options: PrefetchOptions): Promise<RankedTool[]> {
+  async prefetch(datasetId: string, options: PrefetchOptions): Promise<RankedTool[]> {
     this.emit({ type: "agentified:prefetch:start", messages: options.messages });
     const start = performance.now();
 
     const query = options.messages.map((m) => m.content).join("\n");
-    const tools = await this.discover(instanceId, query, options.limit, options.exclude, options.turnId);
+    const tools = await this.discover(datasetId, query, options.limit, options.exclude, options.turnId);
 
     this.emit({
       type: "agentified:prefetch:complete",
@@ -86,8 +73,8 @@ export class ApiClient {
     return tools;
   }
 
-  async captureTurn(instanceId: string, namespace: string, session: string, options: CaptureTurnOptions): Promise<CaptureTurnResponse> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/instances/${instanceId}/turns`, {
+  async captureTurn(namespace: string, session: string, options: CaptureTurnOptions): Promise<CaptureTurnResponse> {
+    const res = await fetch(`${this.config.serverUrl}/api/v1/turns`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -120,8 +107,20 @@ export class ApiClient {
     const res = await fetch(`${this.config.serverUrl}/api/v1/messages?${params}`, {
       method: "GET",
     });
-    const data = (await res.json()) as { messages: unknown[]; has_more: boolean; max_seq: number };
-    return { messages: data.messages as GetMessagesResponse["messages"], hasMore: data.has_more, maxSeq: data.max_seq };
+    const data = (await res.json()) as { messages: any[]; has_more: boolean; max_seq: number };
+    return {
+      messages: data.messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        toolCallId: m.tool_call_id,
+        toolCalls: m.tool_calls,
+        createdAt: m.created_at,
+        seq: m.seq,
+      })),
+      hasMore: data.has_more,
+      maxSeq: data.max_seq,
+    };
   }
 
   async getContext(dataset: string, namespace: string, session: string, opts?: ContextOpts): Promise<ContextResponse> {
@@ -135,7 +134,7 @@ export class ApiClient {
       body: JSON.stringify({ dataset, namespace, session, messages: messagesConfig }),
     });
     const data = (await res.json()) as {
-      messages: ContextResponse["messages"];
+      messages: any[];
       strategy_used: string;
       total_messages: number;
       included_messages: number;
@@ -145,7 +144,15 @@ export class ApiClient {
       fallback: boolean;
     };
     return {
-      messages: data.messages,
+      messages: data.messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        toolCallId: m.tool_call_id,
+        toolCalls: m.tool_calls,
+        createdAt: m.created_at,
+        seq: m.seq,
+      })),
       strategyUsed: data.strategy_used,
       totalMessages: data.total_messages,
       includedMessages: data.included_messages,
@@ -164,7 +171,7 @@ export class ApiClient {
     return this.getFrontendTools().map((t) => t.name);
   }
 
-  asDiscoverTool(instanceId: string): DiscoverTool {
+  asDiscoverTool(datasetId: string): DiscoverTool {
     return {
       definition: {
         name: "agentified_discover",
@@ -182,7 +189,7 @@ export class ApiClient {
         this.emit({ type: "agentified:discover:start", query: input.query });
         const start = performance.now();
 
-        const tools = await this.discover(instanceId, input.query, input.limit);
+        const tools = await this.discover(datasetId, input.query, input.limit);
 
         this.emit({
           type: "agentified:discover:complete",

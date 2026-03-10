@@ -74,7 +74,7 @@ export interface RunOptions {
 export class AgentifiedMastra {
   private config: AgentifiedMastraConfig;
   private sdk: ApiClient;
-  private instanceId: string | null = null;
+  private datasetId: string | null = null;
   private lastPrefetchResult: { ranked: RankedTool[]; durationMs: number } | null = null;
 
   constructor(config: AgentifiedMastraConfig) {
@@ -136,16 +136,14 @@ export class AgentifiedMastra {
   }
 
   async register(): Promise<RegisterResponse> {
-    await this.ensureInstance();
-    return this.sdk.register(this.instanceId!);
+    return this.sdk.register(this.ensureDataset());
   }
 
-  private async ensureInstance(): Promise<string> {
-    if (!this.instanceId) {
-      const { instanceId } = await this.sdk.createInstance("default");
-      this.instanceId = instanceId;
+  private ensureDataset(): string {
+    if (!this.datasetId) {
+      this.datasetId = "default";
     }
-    return this.instanceId;
+    return this.datasetId;
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
@@ -160,8 +158,8 @@ export class AgentifiedMastra {
     };
 
     // 1. Prefetch (with turnId for session continuity)
-    const iid = await this.ensureInstance();
-    const ranked = await this.sdk.prefetch(iid, {
+    const dsId = this.ensureDataset();
+    const ranked = await this.sdk.prefetch(dsId, {
       messages: options.messages.map(m => ({ role: m.role, content: m.content })),
       turnId: options.turnId,
       ...(options.toolLimit !== undefined && { limit: options.toolLimit }),
@@ -178,7 +176,7 @@ export class AgentifiedMastra {
     const registryNames = new Set(Object.keys(allTools));
 
     // 3. Discover tool
-    const discoverDef = this.sdk.asDiscoverTool(iid);
+    const discoverDef = this.sdk.asDiscoverTool(dsId);
     const discoverTool = createTool({
       id: "agentified_discover",
       description: discoverDef.definition.description,
@@ -273,7 +271,7 @@ export class AgentifiedMastra {
     const toolsLoaded = [...activeSet].filter(n => n !== "agentified_discover");
     let turnId: string | undefined;
     try {
-      const capture = await this.sdk.captureTurn(iid, "default", "default", {
+      const capture = await this.sdk.captureTurn("default", "default", {
         toolsLoaded,
         message: options.messages[options.messages.length - 1]?.content ?? "",
       });
@@ -302,7 +300,7 @@ export class AgentifiedMastra {
   }
 
   async run(options: RunOptions): Promise<Observable<BaseEvent>> {
-    const iid = await this.ensureInstance();
+    const dsId = this.ensureDataset();
     const allFrontendNames = this.sdk.getFrontendToolNames();
     const available = new Set(options.frontendTools ?? []);
     const unavailable = allFrontendNames.filter((n) => !available.has(n));
@@ -317,7 +315,7 @@ export class AgentifiedMastra {
       prefetchSkipped = true;
     } else {
       const prefetchStart = performance.now();
-      ranked = await this.sdk.prefetch(iid, {
+      ranked = await this.sdk.prefetch(dsId, {
         messages: options.messages.map((m) => ({
           role: m.role,
           content: m.content,
@@ -330,7 +328,7 @@ export class AgentifiedMastra {
 
     const subject = new Subject<BaseEvent>();
     const mastraTools = this.buildMastraTools(ranked);
-    const discoverTool = this.createDiscoverMastraTool(subject, iid);
+    const discoverTool = this.createDiscoverMastraTool(subject, dsId);
 
     const frontendToolDefs = this.sdk
       .getFrontendTools()
@@ -423,8 +421,8 @@ export class AgentifiedMastra {
     return Object.fromEntries(Object.entries(all).filter(([n]) => names.has(n)));
   }
 
-  private createDiscoverMastraTool(subject: Subject<BaseEvent>, instanceId: string) {
-    const discoverTool = this.sdk.asDiscoverTool(instanceId);
+  private createDiscoverMastraTool(subject: Subject<BaseEvent>, datasetId: string) {
+    const discoverTool = this.sdk.asDiscoverTool(datasetId);
 
     return createTool({
       id: discoverTool.definition.name,

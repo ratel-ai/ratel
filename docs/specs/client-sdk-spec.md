@@ -2,22 +2,22 @@
 
 **Document type:** Implementation
 **Status:** Draft — post-adversarial review (round 4: self-review)
-**Scope:** New `Agentified` API for `@agentified/mastra`, Rust core refactor (library + server split, dataset/instance/namespace support), message/conversation persistence
+**Scope:** New `Agentified` API for `@agentified/mastra`, Rust core refactor (library + server split, dataset/namespace support), message/conversation persistence
 
 ---
 
 ## 1. Overview
 
-Replace the current `AgentifiedMastra` class with a chainable `Agentified` API that introduces four scoping levels: **dataset**, **instance**, **namespace**, **session**. Add conversation persistence to the Rust core. Split the Rust core into a library crate and a server binary.
+Replace the current `AgentifiedMastra` class with a chainable `Agentified` API that introduces three scoping levels: **dataset**, **namespace**, **session**. Add conversation persistence to the Rust core. Split the Rust core into a library crate and a server binary.
 
 ### Hierarchy
 
 ```
 Agentified
   └── .dataset(name?) → DatasetRef
-        └── .register({ tools, skills? }) → Instance  [async, creates new instance]
-              ├── .discoverTool                       [instance-scoped]
-              ├── .prepareStep                        [instance-scoped]
+        └── .register({ tools, skills? }) → DatasetRef  [async, registers tools per dataset]
+              ├── .discoverTool                       [dataset-scoped]
+              ├── .prepareStep                        [dataset-scoped]
               ├── .namespace(id) → Namespace
               │     ├── .tools                        [namespace-scoped]
               │     ├── .discoverTool                 [namespace-scoped]
@@ -31,42 +31,26 @@ Agentified
               └── .session(id) → Session              [default namespace]
 ```
 
-**Shorthand:** `instance.session(id)` is sugar for `instance.namespace("default").session(id)`.
-
-### Server-Side Hierarchy
-
-The full scoping hierarchy on the server is: **dataset → instance → namespace → session**.
-
-```
-dataset "agent-xyz"
-  ├── instance "abc123" (tools: [A, B, C])     ← deployed Monday
-  ├── instance "def456" (tools: [A, B, D])     ← deployed Tuesday
-  └── instance "ghi789" (tools: [A, D, E])     ← deployed Wednesday
-```
-
-Each `register()` call creates a **new instance** with a server-assigned `instance_id`. Prior instances remain alive as long as their client sends heartbeats. The core garbage-collects instances whose heartbeat has expired.
+**Shorthand:** `dataset.session(id)` is sugar for `dataset.namespace("default").session(id)`.
 
 ### Scoping Rules
 
 | Scope | What it isolates | Server mechanism |
 |-------|------------------|------------------|
-| Dataset | Logical grouping of instances | `dataset_id` on all tables |
-| Instance | Tool registrations, discovery index, agent-level learnings (Phase B) | `instance_id` on `tools`/`turns` tables; heartbeat + GC |
+| Dataset | Tool registrations, discovery index, agent-level learnings (Phase B) | `dataset_id` on all tables |
 | Namespace | User/tenant-level memories, preferences (Phase B); message isolation | `namespace_id` on `messages` table; parameter on all endpoints |
-| Session | Conversation messages, hydrated tools | `session_id` on `messages` table; cross-instance |
+| Session | Conversation messages, hydrated tools | `session_id` on `messages` table |
 
 **Cross-boundary rules:**
-- Tools registered in instance X are **not accessible** from instance Y, even within the same dataset.
-- Namespaces and sessions are **cross-instance** — they work across all instances within a dataset. Tools are the only entity scoped to a specific instance.
-- Session identity is the composite key `(dataset_id, namespace_id, session_id)` — **no instance_id**. This means the same session can be used with different instances (e.g., after a redeploy creates a new instance).
-- `instance.session("s1")` and `instance.namespace("default").session("s1")` return handles to the **same** session.
-- Messages and conversations are session-scoped (cross-instance). Tool discovery and turns are instance-scoped.
+- Tools are registered per-dataset. All sessions within a dataset share the same tool set.
+- Session identity is the composite key `(dataset_id, namespace_id, session_id)`.
+- `dataset.session("s1")` and `dataset.namespace("default").session("s1")` return handles to the **same** session.
 
 **Scoping for future context graph (Phase B):**
 
 | Scope level | What will live here | Example |
 |-------------|---------------------|---------|
-| Instance | Agent-level learnings, procedural memories, skills | "Users usually ask about pricing before features" |
+| Dataset | Agent-level learnings, procedural memories, skills | "Users usually ask about pricing before features" |
 | Namespace | User/tenant-level memories, preferences | "This user prefers dark mode" |
 | Session | Conversation-specific context | "We were discussing the billing API" |
 
@@ -76,31 +60,17 @@ The same tools are available at all scope levels — only the data they operate 
 
 Sessions are **lazy**. Calling `.session(id)` returns a handle without database side effects. The session is created on first write operation (`append()`, `prepareStep` persisting messages, or `captureTurn`). If the write fails, no session is created.
 
-### Instance Lifecycle & Heartbeat
-
-Each `register()` call:
-1. Registers tools (and skills) on the core → core creates a new instance row, returns `instance_id`
-2. Agentified starts a heartbeat interval (every 30s, `POST /api/v1/instances/{id}/heartbeat`)
-3. Agentified stores `instance_id` on the returned Instance object
-
-**Garbage collection:** The core runs a background task (every 60s) that deletes instances with `last_heartbeat < now - 5min` and their associated tools + embeddings. Messages and turns are **not** deleted (they belong to sessions, not instances). This means old sessions remain readable even after their originating instance is GC'd, but tool discovery for those sessions will no longer work.
-
-**Disconnect:** `disconnect()` stops all heartbeats and optionally sends `DELETE /api/v1/instances/{id}` for immediate cleanup.
-
 ### register() Semantics
 
-`register()` is async and **creates a new instance** on the core server. It does **not** replace or invalidate prior instances — multiple instances can coexist on the same dataset. Each call returns a fresh Instance bound to the newly registered tool set and skills.
+`register()` is async and **registers tools on the dataset**. Calling `register()` again on the same dataset replaces the prior tool set.
 
 **Tool type inference:** If a tool has a `handler` but no `type`, it defaults to `'backend'`. If a tool has no `handler` and no `type`, registration throws `AgentifiedError("Tool '{name}' has no type and no handler")`.
 
 **Skill validation:** Every tool referenced in `skills[].tools` must exist in the `tools` array. Missing references throw `AgentifiedError("Skill '{skill}' references unknown tool: {name}")`.
 
 **Internal flow (HTTP calls):**
-1. `POST /api/v1/instances` → `{ instance_id }`
-2. `POST /api/v1/instances/{id}/tools` → register tools (schema + type, handlers stay client-side)
-3. If skills provided: `POST /api/v1/instances/{id}/skills` → register skills
-
-If any step fails, the client calls `DELETE /api/v1/instances/{id}` to clean up the orphaned instance, then re-throws the original error.
+1. `POST /api/v1/datasets/{id}/tools` → register tools (schema + type, handlers stay client-side)
+2. If skills provided: `POST /api/v1/datasets/{id}/skills` → register skills
 
 ### toolHandlers Constraint
 
@@ -147,21 +117,15 @@ pub struct AgentifiedCore {
 impl AgentifiedCore {
     pub async fn new(config: CoreConfig) -> Result<Self>;
 
-    // Instances
-    pub async fn create_instance(&self, dataset: &str) -> Result<CreateInstanceResponse>;
-    pub async fn heartbeat_instance(&self, instance_id: &str) -> Result<()>;
-    pub async fn delete_instance(&self, instance_id: &str) -> Result<()>;
-    pub async fn gc_instances(&self) -> Result<GcResult>;  // called by background task
+    // Tools (scoped to dataset)
+    pub async fn register_tools(&self, dataset: &str, tools: Vec<Tool>) -> Result<RegisterResponse>;
+    pub async fn list_tools(&self, dataset: &str) -> Result<Vec<Tool>>;
+    pub async fn discover(&self, dataset: &str, req: DiscoverRequest) -> Result<Vec<RankedTool>>;
 
-    // Tools (scoped to instance)
-    pub async fn register_tools(&self, instance_id: &str, tools: Vec<Tool>) -> Result<RegisterResponse>;
-    pub async fn list_tools(&self, instance_id: &str) -> Result<Vec<Tool>>;
-    pub async fn discover(&self, instance_id: &str, req: DiscoverRequest) -> Result<Vec<RankedTool>>;
+    // Turns (scoped to dataset + namespace + session)
+    pub async fn capture_turn(&self, dataset: &str, namespace: &str, session: &str, req: CaptureTurnRequest) -> Result<CaptureTurnResponse>;
 
-    // Turns (scoped to instance + namespace + session)
-    pub async fn capture_turn(&self, instance_id: &str, namespace: &str, session: &str, req: CaptureTurnRequest) -> Result<CaptureTurnResponse>;
-
-    // Messages (scoped to dataset + namespace + session — survives instance GC)
+    // Messages (scoped to dataset + namespace + session)
     pub async fn append_messages(&self, dataset: &str, namespace: &str, session: &str, messages: Vec<Message>) -> Result<AppendMessagesResponse>;
     pub async fn get_messages(&self, dataset: &str, namespace: &str, session: &str, opts: GetMessagesOpts) -> Result<GetMessagesResponse>;
     pub async fn get_context(&self, dataset: &str, namespace: &str, session: &str, opts: ContextOpts) -> Result<ContextResponse>;
@@ -173,23 +137,12 @@ impl AgentifiedCore {
 **Storage changes (SQLite):**
 
 ```sql
--- instances table (NEW)
-CREATE TABLE instances (
-    instance_id TEXT PRIMARY KEY,
-    dataset_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,         -- ISO 8601
-    last_heartbeat TEXT NOT NULL      -- ISO 8601, updated by heartbeat endpoint
-);
-CREATE INDEX idx_instances_dataset ON instances(dataset_id);
-CREATE INDEX idx_instances_heartbeat ON instances(last_heartbeat);
-
--- tools table gains instance_id (replaces dataset_id for tool scoping)
-ALTER TABLE tools ADD COLUMN instance_id TEXT NOT NULL;
-CREATE INDEX idx_tools_instance ON tools(instance_id);
+-- tools table: PK is (dataset_id, name)
+-- Tools are scoped to dataset.
+CREATE UNIQUE INDEX idx_tools_dataset_name ON tools(dataset_id, name);
 
 -- messages table (NEW)
--- Messages are scoped to (dataset_id, namespace_id, session_id) — NOT to instance.
--- This means messages survive instance GC and can be read by future instances.
+-- Messages are scoped to (dataset_id, namespace_id, session_id).
 -- seq is auto-assigned by the server: MAX(seq)+1 within the (dataset, namespace, session).
 -- Concurrent appends are serialized via BEGIN IMMEDIATE (SQLite single-writer lock).
 CREATE TABLE messages (
@@ -206,8 +159,8 @@ CREATE TABLE messages (
 );
 CREATE INDEX idx_messages_session ON messages(dataset_id, namespace_id, session_id, seq);
 
--- turns table gains instance_id + namespace_id + session_id
-ALTER TABLE turns ADD COLUMN instance_id TEXT NOT NULL;
+-- turns table gains dataset_id + namespace_id + session_id
+ALTER TABLE turns ADD COLUMN dataset_id TEXT NOT NULL DEFAULT 'default';
 ALTER TABLE turns ADD COLUMN namespace_id TEXT NOT NULL DEFAULT 'default';
 ALTER TABLE turns ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default';
 ```
@@ -216,37 +169,16 @@ ALTER TABLE turns ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default';
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `POST /api/v1/instances` | POST | Create instance, returns `{ instance_id }` |
-| `POST /api/v1/instances/{id}/heartbeat` | POST | Update last_heartbeat |
-| `DELETE /api/v1/instances/{id}` | DELETE | Immediate instance cleanup |
-| `POST /api/v1/instances/{id}/tools` | POST | Register tools for instance |
-| `GET /api/v1/instances/{id}/tools` | GET | List tools for instance |
-| `POST /api/v1/instances/{id}/discover` | POST | Discover tools scoped to instance |
-| `POST /api/v1/instances/{id}/turns` | POST | Capture turn (+ namespace, session in body) |
+| `POST /api/v1/datasets/{id}/tools` | POST | Register tools for dataset |
+| `GET /api/v1/datasets/{id}/tools` | GET | List tools for dataset |
+| `POST /api/v1/datasets/{id}/discover` | POST | Discover tools scoped to dataset |
+| `POST /api/v1/datasets/{id}/turns` | POST | Capture turn (+ namespace, session in body) |
 | `POST /api/v1/messages` | POST | Append messages (dataset, namespace, session in body) |
 | `GET /api/v1/messages` | GET | Get messages (dataset, namespace, session as query params) |
 | `POST /api/v1/context` | POST | Get optimized context (dataset, namespace, session in body) |
 | `GET /health` | GET | Health check: `{ "status": "ok" }` |
 
-### 2.4 Instance Endpoints
-
-**POST /api/v1/instances**
-
-```json
-{ "dataset": "agent-xyz" }
-```
-
-Response: `{ "instance_id": "abc123" }`
-
-**POST /api/v1/instances/{id}/heartbeat**
-
-No body. Response: `204 No Content`.
-
-**DELETE /api/v1/instances/{id}**
-
-No body. Response: `204 No Content`. Non-existent instance → `404`.
-
-### 2.5 Message Persistence Endpoints
+### 2.4 Message Persistence Endpoints
 
 **POST /api/v1/messages**
 
@@ -334,7 +266,7 @@ Response (base — see context-layer-spec for extended version):
 
 ## 3. TypeScript SDK — @agentified/sdk Changes
 
-The low-level SDK gains instance/namespace/session awareness:
+The low-level SDK gains dataset/namespace/session awareness:
 
 ```typescript
 export interface ApiClientConfig {
@@ -345,17 +277,12 @@ export interface ApiClientConfig {
 }
 
 class ApiClient {
-  // Instance lifecycle
-  async createInstance(dataset: string): Promise<{ instanceId: string }>;
-  async heartbeatInstance(instanceId: string): Promise<void>;
-  async deleteInstance(instanceId: string): Promise<void>;
-
-  // Tools (scoped to instance)
-  async register(instanceId: string): Promise<RegisterResponse>;
-  async discover(instanceId: string, query: string, limit?: number, exclude?: string[], turnId?: string): Promise<RankedTool[]>;
+  // Tools (scoped to dataset)
+  async register(dataset: string): Promise<RegisterResponse>;
+  async discover(dataset: string, query: string, limit?: number, exclude?: string[], turnId?: string): Promise<RankedTool[]>;
 
   // Turns
-  async captureTurn(instanceId: string, namespace: string, session: string, opts: CaptureTurnOptions): Promise<CaptureTurnResponse>;
+  async captureTurn(dataset: string, namespace: string, session: string, opts: CaptureTurnOptions): Promise<CaptureTurnResponse>;
 
   // Messages (scoped to dataset + namespace + session)
   async appendMessages(dataset: string, namespace: string, session: string, messages: Message[]): Promise<AppendMessagesResponse>;
@@ -363,8 +290,8 @@ class ApiClient {
   async getContext(dataset: string, namespace: string, session: string, opts?: ContextOpts): Promise<ContextResponse>;
 
   // Existing
-  asDiscoverTool(instanceId: string): DiscoverTool;
-  prefetch(instanceId: string, options: PrefetchOptions): Promise<RankedTool[]>;
+  asDiscoverTool(dataset: string): DiscoverTool;
+  prefetch(dataset: string, options: PrefetchOptions): Promise<RankedTool[]>;
 }
 ```
 
@@ -468,38 +395,29 @@ export class Agentified {
   dataset(name: string): DatasetRef;
 
   /** Register on default dataset. Shorthand for dataset("default").register(...) */
-  async register(input: RegisterInput): Promise<Instance>;
+  async register(input: RegisterInput): Promise<DatasetRef>;
 
-  /** Graceful shutdown: stops heartbeats, deletes instances, stops local core if spawned */
+  /** Graceful shutdown: stops local core if spawned */
   async disconnect(): Promise<void>;
 }
 ```
 
 ### 4.3 DatasetRef
 
+The result of registering tools on a dataset. Provides dataset-scoped tools and factory methods for namespace/session.
+
 ```typescript
 export class DatasetRef {
-  constructor(agentified: Agentified, datasetName: string);
-
-  async register(input: RegisterInput): Promise<Instance>;
-}
-```
-
-Thin object — exists only to chain `.dataset("x").register(...)`.
-
-### 4.4 Instance
-
-The result of registering tools on a dataset. Holds a server-assigned `instanceId` and runs a heartbeat interval. Provides instance-scoped tools and factory methods for namespace/session.
-
-```typescript
-export class Instance {
-  readonly instanceId: string;
   readonly datasetId: string;
 
-  /** Instance-scoped discover tool — searches this instance's registered tools */
+  constructor(agentified: Agentified, datasetName: string);
+
+  async register(input: RegisterInput): Promise<DatasetRef>;
+
+  /** Dataset-scoped discover tool — searches this dataset's registered tools */
   readonly discoverTool: MastraTool;
 
-  /** Instance-scoped prepareStep — tool hydration only, no message persistence */
+  /** Dataset-scoped prepareStep — tool hydration only, no message persistence */
   readonly prepareStep: PrepareStepFn;
 
   /** Create a namespace scope */
@@ -518,13 +436,13 @@ export class Namespace {
 
   /**
    * Namespace-scoped tools.
-   * For v1: contains discoverTool (same tool set as instance, but discover
+   * For v1: contains discoverTool (same tool set as dataset, but discover
    * queries will include namespace context in Phase B when memories exist).
    * Phase B adds: recall, preferences.
    */
   readonly tools: Record<string, MastraTool>;
 
-  /** Namespace-scoped discover — delegates to instance discover for v1 */
+  /** Namespace-scoped discover — delegates to dataset discover for v1 */
   readonly discoverTool: MastraTool;
 
   /** Create a session within this namespace */
@@ -601,13 +519,13 @@ type PrepareStepFn = (params: {
 }) => Promise<{ activeTools: string[] }>;
 ```
 
-**PrepareStep is NOT user-provided.** It is a built-in function created by Session/Instance. The developer passes it to Mastra's agent config as-is.
+**PrepareStep is NOT user-provided.** It is a built-in function created by Session/DatasetRef. The developer passes it to Mastra's agent config as-is.
 
-**Instance.prepareStep (instance-scoped, readonly property):**
+**DatasetRef.prepareStep (dataset-scoped, readonly property):**
 - Initial activeTools = all registered tool names (from `tools` passed to `register()`) + `"agentified_discover"`
 - Scans prior steps for discover tool results → adds discovered tool names to activeTools set
 - No message persistence
-- Set once on Agent construction: `prepareStep: instance.prepareStep`
+- Set once on Agent construction: `prepareStep: dataset.prepareStep`
 
 **Session.prepareStep (session-scoped, readonly property):**
 
@@ -647,7 +565,7 @@ If no new messages (all duplicates), skip the append call.
 
 ### 4.9 ContextResult.tools Hydration
 
-`tools` in ContextResult is derived from the most recent turn's `tools_loaded` list for this session **scoped to the current instance** (from the `turns` table, filtered by `instance_id`). Each tool name is looked up in the Instance's `toolHandlers`. Tools not found in current handlers are silently skipped (they may have been removed between deploys). If no prior turn exists for the current instance, `tools` is empty — this is expected after a redeploy creates a new instance. Turns from GC'd instances are ignored.
+`tools` in ContextResult is derived from the most recent turn's `tools_loaded` list for this session **scoped to the current dataset** (from the `turns` table, filtered by `dataset_id`). Each tool name is looked up in the DatasetRef's `toolHandlers`. Tools not found in current handlers are silently skipped (they may have been removed between deploys). If no prior turn exists for the current dataset, `tools` is empty.
 
 ### 4.10 Local Core Auto-Spawn
 
@@ -683,15 +601,13 @@ Each contains a single prebuilt binary. `@agentified/mastra` has optional peer d
 
 | Don't | Do Instead | Why |
 |-------|-----------|-----|
-| Replace tools on register | Create a new instance per register() call | Multiple deploys can coexist; old sessions keep working |
 | Store messages client-side | Always persist via core server | Single source of truth |
-| Auto-create sessions on Instance construction | Sessions are created lazily on first write | Developer controls lifecycle |
+| Auto-create sessions on DatasetRef construction | Sessions are created lazily on first write | Developer controls lifecycle |
 | Make namespace mandatory | Default to `"default"` namespace | Lower friction for simple use cases |
 | Bundle all platform binaries in one package | Separate `@agentified/core-{platform}` packages | 50MB+ binary per platform, npm install bloat |
-| Keep dataset/instance state in TypeScript | Dataset/instance are core server concepts, TS is a thin client | Enables multi-client, multi-language |
+| Keep dataset state in TypeScript | Dataset is a core server concept, TS is a thin client | Enables multi-client, multi-language |
 | Block on `connect()` indefinitely | 5s timeout on health check, throw if core won't start | Developer gets clear error |
 | Use `__setTools` monkey-patching from AgentifiedMastra | Use Mastra's `prepareStep` + `activeTools` API | Clean, supported integration point |
-| Delete messages on instance GC | Messages belong to sessions, not instances | Old conversations remain readable |
 | Skip OPENAI_API_KEY check before spawn | Validate env before spawning core process | Clear error vs cryptic Rust panic |
 
 ---
@@ -704,10 +620,10 @@ Each contains a single prebuilt binary. `@agentified/mastra` has optional peer d
 |---------|-----------|-------|-----------------|------------|
 | TC-001 | Agentified.connect() | No args | Spawns local process, resolves when healthy | Port already in use → picks next port |
 | TC-002 | Agentified.connect(url) | Remote URL | Connects, health check passes | Unreachable URL → throws after timeout |
-| TC-003 | Agentified.dataset().register() | Tools + skills | Returns Instance with instanceId + searchTools | Empty tools array → Instance with searchTools only |
+| TC-003 | Agentified.dataset().register() | Tools + skills | Returns DatasetRef with searchTools | Empty tools array → DatasetRef with searchTools only |
 | TC-004 | Agentified.register() | Tools (no dataset) | Uses default dataset | Same as TC-003 behavior |
-| TC-005 | Instance.session(id) | Session ID | Returns Session with default namespace | |
-| TC-006 | Instance.namespace(id).session(id) | Both IDs | Returns Session with explicit namespace | |
+| TC-005 | DatasetRef.session(id) | Session ID | Returns Session with default namespace | |
+| TC-006 | DatasetRef.namespace(id).session(id) | Both IDs | Returns Session with explicit namespace | |
 | TC-007 | Session.prepareStep | Steps with discover results | Returns expanded activeTools | No discover results → returns initial tools |
 | TC-008 | Session.prepareStep | Steps with assistant/tool messages | Persists LLM-generated messages, updates lastPersistedSeq | No new messages → no-op |
 | TC-009 | Session.updateConversation() | Raw messages array | Deduplicates, persists only new messages | Empty session → persists all |
@@ -715,41 +631,32 @@ Each contains a single prebuilt binary. `@agentified/mastra` has optional peer d
 | TC-009c | Session.getMessages() | strategy='recent', maxTokens=2000 | Returns recent messages fitting token budget | Empty session → empty messages |
 | TC-010 | Conversation.append() | Array of messages | Returns `{ appended, firstSeq, lastSeq }` | Empty array → `{ appended: 0, firstSeq: 0, lastSeq: 0 }` |
 | TC-011 | Conversation.messages() | limit=10 | Returns last 10 messages | No messages → empty array |
-| TC-012 | Agentified.disconnect() | After connect() | Stops heartbeats, deletes instances, stops core | Already disconnected → no-op |
-| TC-013 | Instance heartbeat | 30s interval | Heartbeat sent to core | Core unreachable → log warning, continue |
-| TC-014 | register() twice | Same dataset | Two separate instances with different instanceIds | Both discoverable independently |
-| TC-015 | BackendTool missing handler | Tool with no type and no handler | Throws AgentifiedError | |
-| TC-016 | Skill references unknown tool | Skill lists tool not in tools array | Throws AgentifiedError | |
+| TC-012 | Agentified.disconnect() | After connect() | Stops core | Already disconnected → no-op |
+| TC-013 | BackendTool missing handler | Tool with no type and no handler | Throws AgentifiedError | |
+| TC-014 | Skill references unknown tool | Skill lists tool not in tools array | Throws AgentifiedError | |
 
 ### Unit Tests — Rust Core
 
 | Test ID | Component | Input | Expected Output | Edge Cases |
 |---------|-----------|-------|-----------------|------------|
-| TC-R01 | create_instance | dataset="a" | Returns instance_id | |
-| TC-R02 | register_tools | instance_id, tools=[...] | Tools stored under that instance | Same tool name, different instance → separate entries |
-| TC-R03 | discover | instance_id, query | Only returns tools from that instance | Query matches tools in other instance → excluded |
+| TC-R02 | register_tools | dataset, tools=[...] | Tools stored under that dataset | Same tool name, different dataset → separate entries |
+| TC-R03 | discover | dataset, query | Only returns tools from that dataset | Query matches tools in other dataset → excluded |
 | TC-R04 | append_messages | dataset+ns+session, messages | Messages stored with incrementing seq | Concurrent appends → seq is atomic |
 | TC-R05 | append_messages response | 3 messages appended | `{ appended: 3, first_seq: N, last_seq: N+2 }` | |
 | TC-R06 | get_messages | session with msgs, limit=5 (no after_seq) | Returns 5 most recent (ascending) | Session doesn't exist → empty array, max_seq=0 |
 | TC-R07 | get_context (recent) | 100 msgs, max_tokens=2000 | Returns recent msgs fitting in budget (char/4) | |
 | TC-R08 | get_context (full) | 10 msgs | Returns all messages | Exceeds max_tokens → truncates from oldest |
 | TC-R09 | get_context (summary, no key) | No OPENAI_API_KEY | Returns 422 with clear error message | |
-| TC-R10 | instance GC | Instance with expired heartbeat | Instance + tools deleted; messages preserved | |
-| TC-R11 | heartbeat | Valid instance_id | last_heartbeat updated | Non-existent instance → 404 |
-| TC-R12 | instance isolation | Register in inst-A, discover in inst-B | No cross-instance results | |
 
 ### Integration Tests
 
 | Test ID | Flow | Setup | Verification | Teardown |
 |---------|------|-------|--------------|----------|
 | IT-001 | Full client lifecycle | `connect → register → session → context → disconnect` | All steps complete, messages persisted | Core stopped |
-| IT-002 | Instance isolation | Two register() on same dataset | Discover in each returns only its own tools | |
 | IT-003 | Session message persistence | `updateConversation({ messages })` then `generate()` with prepareStep | `conversation.messages()` returns user input (from updateConversation) + LLM output (from prepareStep) with correct seq | |
-| IT-004 | Multi-session | Two sessions on same instance | Each has independent message history | |
+| IT-004 | Multi-session | Two sessions on same dataset | Each has independent message history | |
 | IT-005 | Remote connect | Start core manually, connect(url) | All operations work | Stop core |
-| IT-006 | Instance GC | Register, stop heartbeat, wait >5min | Instance tools gone, messages still readable | |
 | IT-007 | Namespace isolation | Two namespaces, same session ID | Different message histories | |
-| IT-008 | Cross-instance session | Register inst-A, write msgs to session S1, GC inst-A, register inst-B, read session S1 via inst-B | Messages readable, tools empty (no turns on inst-B) | |
 
 ---
 
@@ -769,9 +676,7 @@ Each contains a single prebuilt binary. `@agentified/mastra` has optional peer d
 | Context with no OPENAI_API_KEY | Core returns 422 on summary strategies | Throw `AgentifiedError("OPENAI_API_KEY required for summary strategy")` | None | ERROR |
 | Session not found on context() | Core returns empty messages | Return empty ContextResult | None | DEBUG |
 | Discover returns 0 tools | Empty array from core | Return empty array (not an error) | None | DEBUG |
-| Heartbeat fails | Non-2xx from core | Log warning, retry next interval | If 5 consecutive failures → log error | WARN |
 | Core process crashes | Child `exit` event (unexpected) | Auto-restart once (60s cooldown) | Throw if restart fails | ERROR + WARN |
-| Instance GC'd while in use | 404 on discover/tools endpoints | Throw `AgentifiedError("Instance expired. Call register() again.")` | None | ERROR |
 
 ---
 
