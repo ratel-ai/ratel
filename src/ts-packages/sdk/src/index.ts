@@ -1,13 +1,20 @@
-export { Agentified } from "./agentified.js";
+export { ApiClient } from "./agentified.js";
+/** @deprecated Use ApiClient instead */
+export { ApiClient as Agentified } from "./agentified.js";
 export { tool } from "./tool.js";
 export type {
-  AgentifiedConfig,
+  ApiClientConfig,
   AgentifiedEvent,
+  AppendMessagesResponse,
   CaptureTurnOptions,
   CaptureTurnResponse,
+  ContextOpts,
+  ContextResponse,
   DiscoverResponse,
   DiscoverTool,
   DiscoverToolInput,
+  GetMessagesOpts,
+  GetMessagesResponse,
   Message,
   PrefetchOptions,
   RankedTool,
@@ -15,6 +22,7 @@ export type {
   RegisterResponse,
   ServerTool,
   ServerToolFields,
+  StoredMessage,
   TokenUsage,
   ToolDefinition,
 } from "./types.js";

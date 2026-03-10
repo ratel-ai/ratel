@@ -134,3 +134,114 @@ pub struct RankedTool {
 pub struct ErrorResponse {
     pub error: String,
 }
+
+// Message types
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageInput {
+    pub role: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredMessage {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<serde_json::Value>,
+    pub created_at: String,
+    pub seq: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AppendMessagesRequest {
+    pub dataset: String,
+    pub namespace: String,
+    pub session: String,
+    pub messages: Vec<MessageInput>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AppendMessagesResponse {
+    pub appended: usize,
+    pub first_seq: i64,
+    pub last_seq: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetMessagesQuery {
+    pub dataset: String,
+    pub namespace: String,
+    pub session: String,
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub after_seq: Option<i64>,
+    #[serde(default)]
+    pub around_seq: Option<i64>,
+}
+
+fn default_limit() -> i64 { 50 }
+
+#[derive(Debug, Serialize)]
+pub struct GetMessagesResponse {
+    pub messages: Vec<StoredMessage>,
+    pub has_more: bool,
+    pub max_seq: i64,
+}
+
+// Context types
+
+#[derive(Debug, Deserialize)]
+pub struct ContextMessagesConfig {
+    #[serde(default = "default_context_strategy")]
+    pub strategy: String,
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: usize,
+}
+
+fn default_context_strategy() -> String { "recent".into() }
+fn default_max_tokens() -> usize { 4000 }
+
+impl Default for ContextMessagesConfig {
+    fn default() -> Self {
+        Self {
+            strategy: default_context_strategy(),
+            max_tokens: default_max_tokens(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ContextRequest {
+    pub dataset: String,
+    pub namespace: String,
+    pub session: String,
+    #[serde(default)]
+    pub messages: ContextMessagesConfig,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RecalledContext {
+    pub tools: Vec<serde_json::Value>,
+    pub memories: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ContextResponse {
+    pub messages: Vec<StoredMessage>,
+    pub strategy_used: String,
+    pub total_messages: i64,
+    pub included_messages: usize,
+    pub recalled: RecalledContext,
+    pub token_estimate: usize,
+    pub conversation_messages: usize,
+    pub fallback: bool,
+}

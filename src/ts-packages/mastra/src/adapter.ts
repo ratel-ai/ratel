@@ -1,7 +1,7 @@
 import type { BaseEvent, CustomEvent, Message } from "@ag-ui/client";
 import { createTool } from "@mastra/core/tools";
 import { MastraAgent } from "@ag-ui/mastra";
-import { Agentified } from "@agentified/sdk";
+import { ApiClient } from "@agentified/sdk";
 import type {
   DiscoverToolInput,
   RankedTool,
@@ -70,14 +70,16 @@ export interface RunOptions {
   frontendTools?: string[];
 }
 
+/** @deprecated Use the new `Agentified` class instead. This class will be removed in a future version. */
 export class AgentifiedMastra {
   private config: AgentifiedMastraConfig;
-  private sdk: Agentified;
+  private sdk: ApiClient;
+  private datasetId: string | null = null;
   private lastPrefetchResult: { ranked: RankedTool[]; durationMs: number } | null = null;
 
   constructor(config: AgentifiedMastraConfig) {
     this.config = config;
-    this.sdk = new Agentified({
+    this.sdk = new ApiClient({
       serverUrl: config.agentifiedUrl,
       tools: config.tools,
     });
@@ -134,7 +136,14 @@ export class AgentifiedMastra {
   }
 
   async register(): Promise<RegisterResponse> {
-    return this.sdk.register();
+    return this.sdk.register(this.ensureDataset());
+  }
+
+  private ensureDataset(): string {
+    if (!this.datasetId) {
+      this.datasetId = "default";
+    }
+    return this.datasetId;
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
@@ -149,7 +158,8 @@ export class AgentifiedMastra {
     };
 
     // 1. Prefetch (with turnId for session continuity)
-    const ranked = await this.sdk.prefetch({
+    const dsId = this.ensureDataset();
+    const ranked = await this.sdk.prefetch(dsId, {
       messages: options.messages.map(m => ({ role: m.role, content: m.content })),
       turnId: options.turnId,
       ...(options.toolLimit !== undefined && { limit: options.toolLimit }),
@@ -166,7 +176,7 @@ export class AgentifiedMastra {
     const registryNames = new Set(Object.keys(allTools));
 
     // 3. Discover tool
-    const discoverDef = this.sdk.asDiscoverTool();
+    const discoverDef = this.sdk.asDiscoverTool(dsId);
     const discoverTool = createTool({
       id: "agentified_discover",
       description: discoverDef.definition.description,
@@ -261,7 +271,7 @@ export class AgentifiedMastra {
     const toolsLoaded = [...activeSet].filter(n => n !== "agentified_discover");
     let turnId: string | undefined;
     try {
-      const capture = await this.sdk.captureTurn({
+      const capture = await this.sdk.captureTurn("default", "default", {
         toolsLoaded,
         message: options.messages[options.messages.length - 1]?.content ?? "",
       });
@@ -290,6 +300,7 @@ export class AgentifiedMastra {
   }
 
   async run(options: RunOptions): Promise<Observable<BaseEvent>> {
+    const dsId = this.ensureDataset();
     const allFrontendNames = this.sdk.getFrontendToolNames();
     const available = new Set(options.frontendTools ?? []);
     const unavailable = allFrontendNames.filter((n) => !available.has(n));
@@ -304,7 +315,7 @@ export class AgentifiedMastra {
       prefetchSkipped = true;
     } else {
       const prefetchStart = performance.now();
-      ranked = await this.sdk.prefetch({
+      ranked = await this.sdk.prefetch(dsId, {
         messages: options.messages.map((m) => ({
           role: m.role,
           content: m.content,
@@ -317,7 +328,7 @@ export class AgentifiedMastra {
 
     const subject = new Subject<BaseEvent>();
     const mastraTools = this.buildMastraTools(ranked);
-    const discoverTool = this.createDiscoverMastraTool(subject);
+    const discoverTool = this.createDiscoverMastraTool(subject, dsId);
 
     const frontendToolDefs = this.sdk
       .getFrontendTools()
@@ -410,8 +421,8 @@ export class AgentifiedMastra {
     return Object.fromEntries(Object.entries(all).filter(([n]) => names.has(n)));
   }
 
-  private createDiscoverMastraTool(subject: Subject<BaseEvent>) {
-    const discoverTool = this.sdk.asDiscoverTool();
+  private createDiscoverMastraTool(subject: Subject<BaseEvent>, datasetId: string) {
+    const discoverTool = this.sdk.asDiscoverTool(datasetId);
 
     return createTool({
       id: discoverTool.definition.name,

@@ -11,9 +11,9 @@ npm install @agentified/sdk
 ## Quick Start
 
 ```typescript
-import { Agentified, tool } from "@agentified/sdk";
+import { ApiClient, tool } from "@agentified/sdk";
 
-const agent = new Agentified({
+const agent = new ApiClient({
   serverUrl: "http://localhost:9119",
   tools: [
     tool({ name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
@@ -46,10 +46,10 @@ const t = tool({
 });
 ```
 
-### `new Agentified(config)`
+### `new ApiClient(config)`
 
 ```typescript
-interface AgentifiedConfig {
+interface ApiClientConfig {
   serverUrl: string;
   tools: ServerTool[];
   onEvent?: (event: AgentifiedEvent) => void;
@@ -128,7 +128,7 @@ const { definition, execute } = agent.asDiscoverTool();
 Subscribe to lifecycle events via `onEvent` in the config:
 
 ```typescript
-const agent = new Agentified({
+const agent = new ApiClient({
   serverUrl: "http://localhost:9119",
   tools: [...],
   onEvent: (event) => {

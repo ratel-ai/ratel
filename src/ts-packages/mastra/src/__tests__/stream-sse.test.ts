@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Subject } from "rxjs";
 import type { BaseEvent } from "@ag-ui/client";
-import { streamSSE } from "./stream-sse.js";
+import { streamSSE } from "../stream-sse.js";
 
 function mockResponse() {
   return {
