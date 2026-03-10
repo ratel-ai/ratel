@@ -137,3 +137,10 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - GetMessagesOptions/GetMessagesResult types exported
 - All classes + types exported from index.ts
 - All 91 tests pass (44 agentified + 31 adapter + 11 schema + 5 stream-sse)
+
+### Task 15: Deprecate AgentifiedMastra + export new API ✅
+- Added @deprecated JSDoc to AgentifiedMastra class pointing to new Agentified class
+- All new classes already exported from index.ts: Agentified, DatasetRef, Instance, Session, ContextBuilder, Conversation
+- All new types already exported: AgentifiedTool, BackendTool, ClientTool, McpTool, RegisterInput, PrepareStepFn, AssembledContext, GetMessagesOptions, GetMessagesResult
+- AgentifiedMastra still works unchanged (all 31 adapter tests pass)
+- All 91 mastra tests pass + 25 SDK tests pass
