@@ -23,6 +23,9 @@
 | Oracle | gpt-5 | 0.99 | 0.92 | 1.00 | 191,487 | 0.78 |
 | Agentified | gpt-5 | 0.88 | 0.84 | 0.99 | 487,051 | 0.98 |
 | Baseline | gpt-5 | 0.91 | 0.90 | 1.00 | 2,216,803 | 1.08 |
+| Oracle | gpt-5.4 | 0.98 | 0.88 | 1.00 | 75,202 | 0.31 |
+| Agentified | gpt-5.4 | 0.94 | 0.88 | 0.99 | 260,309 | 0.53 |
+| Baseline | gpt-5.4 | 0.95 | 0.93 | 1.00 | 1,602,262 | 0.72 |
 | Oracle | gpt-5-mini | 0.99 | 0.95 | 1.00 | 106,653 | 0.10 |
 | Agentified | gpt-5-mini | 0.89 | 0.84 | 0.99 | 406,282 | 0.14 |
 | Baseline | gpt-5-mini | 0.93 | 0.92 | 1.00 | 1,952,845 | 0.17 |
@@ -58,6 +61,13 @@
 - **Agentified uses ~78% fewer input tokens than Baseline** (487K vs 2.2M)
 - **Cost savings modest at ~9%** ($0.98 vs $1.08) — gpt-5 generates heavy reasoning tokens even with fewer tools, offsetting input savings
 - Oracle cost ($0.78) higher than expected due to reasoning overhead
+
+### Highlights (gpt-5.4)
+
+- **Agentified uses ~84% fewer input tokens than Baseline** (260K vs 1.6M)
+- **Cost drops ~26%** ($0.53 vs $0.72) — no reasoning tokens, so savings track input reduction better than gpt-5
+- **Highest Agentified F1 among OpenAI models** at 0.94
+- **Only model where Agentified solves `ambiguous`** (1.00 F1/TC across all agents)
 
 ### Highlights (gpt-5-mini)
 
@@ -131,6 +141,19 @@
 | cross-domain | 1.00 | 0.76 | 0.86 | 1.00 | 0.80 | 0.90 |
 | distractor | 1.00 | 1.00 | 0.87 | 1.00 | 1.00 | 1.00 |
 | scale-stress | 0.93 | 0.90 | 0.95 | 0.50 | 0.60 | 0.60 |
+
+### gpt-5.4
+
+| Category | Oracle F1 | Agentified F1 | Baseline F1 | Oracle TC | Agentified TC | Baseline TC |
+| --- | --- | --- | --- | --- | --- | --- |
+| retrieval | 1.00 | 1.00 | 0.94 | 1.00 | 1.00 | 1.00 |
+| action | 1.00 | 0.93 | 1.00 | 1.00 | 0.86 | 1.00 |
+| multi-turn | 0.98 | 0.85 | 0.82 | 0.66 | 0.65 | 0.72 |
+| negative | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| ambiguous | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| cross-domain | 0.96 | 0.83 | 0.91 | 0.98 | 0.90 | 0.98 |
+| distractor | 1.00 | 1.00 | 0.97 | 0.80 | 1.00 | 1.00 |
+| scale-stress | 0.93 | 0.93 | 1.00 | 0.60 | 0.70 | 0.79 |
 
 ### gpt-5-mini
 
