@@ -1,6 +1,8 @@
 # @agentified/react
 
-React bindings for [Agentified](../../README.md) — Provider, hooks, and a built-in Inspector debug panel.
+React hooks + Inspector debug panel for Agentified.
+
+Provider, hooks, and a built-in Inspector for [Agentified](../../../README.md). Register [frontend tools](../../../docs/concepts/frontend-tools.md) with `useAgentifiedTool`, debug with `<Inspector>`.
 
 ## Install
 
@@ -119,6 +121,9 @@ The Inspector is draggable and resizable.
 ## Links
 
 - [Root README](../../../README.md)
+- [Documentation](../../../docs/)
+- [Frontend Tools concept](../../../docs/concepts/frontend-tools.md)
+- [Mastra guide](../../../docs/guides/mastra.md) — Full-stack example
 - [Frontend Client](../fe-client/README.md) — underlying client library
 - [TypeScript SDK](../sdk/README.md)
 - [Mastra Adapter](../mastra/README.md)

@@ -1,6 +1,8 @@
 # @agentified/mastra
 
-[Mastra](https://mastra.ai) adapter for [Agentified](../../README.md) — wraps a Mastra agent with Agentified context resolution, dynamic tool hydration, and AG-UI streaming.
+Mastra agent + Agentified discovery in one call.
+
+[Mastra](https://mastra.ai) adapter for [Agentified](../../../README.md) — wraps a Mastra agent with Agentified context resolution, dynamic tool hydration, and AG-UI streaming. See the [Mastra guide](../../../docs/guides/mastra.md) for a full-stack walkthrough.
 
 ## Install
 
@@ -150,6 +152,9 @@ Supports: `string`, `number`, `integer`, `boolean`, `array`, `object`, `enum`.
 ## Links
 
 - [Root README](../../../README.md)
+- [Documentation](../../../docs/)
+- [Mastra guide](../../../docs/guides/mastra.md) — Full-stack walkthrough
+- [Architecture](../../../docs/architecture.md)
 - [TypeScript SDK](../sdk/README.md)
 - [Frontend Client](../fe-client/README.md)
 - [React Bindings](../react/README.md)

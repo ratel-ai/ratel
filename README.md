@@ -2,11 +2,10 @@
   <img src="https://agentified.dev/assets/logo-new-CNqV8zpW.png" alt="Agentified" height="100" />
 
   <h2>Agentified</h2>
-  <h4>The Engine that orchestrates your context and learns from it.</h4>
-  <p>Smart tool, skills and knowledge selection for your agent. Works with any framework, TypeScript & Python.</p>
+  <h4>Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones.</h4>
 
   <p>
-    <a href="https://agentified.dev/docs">Docs</a> •
+    <a href="./docs/">Docs</a> •
     <a href="https://agentified.dev/sandbox">Sandbox</a> •
     <a href="https://discord.gg/HTXmrjvsDy">Discord</a> •
     <a href="https://twitter.com/rstagi_">Twitter</a>
@@ -21,19 +20,13 @@
   </p>
 </div>
 
+> **86% cost reduction. Same task accuracy.** [Benchmarks →](https://agentified.dev/benchmarks)
+
 <br />
 
 ## What is Agentified?
 
-Your AI agent has hundreds of tools — but the LLM can only handle a few at a time. Agentified is a **context engine** that registers all your tools, then uses hybrid semantic + BM25 ranking to select exactly the right ones for each query.
-
-> **86% cost reduction. Same task accuracy.** [See benchmarks →](https://agentified.dev/benchmarks)
-
-Agentified is **not another agent framework**. It's a context layer that plugs into whatever you're already using — Mastra, LangGraph, or raw API calls.
-
-<br />
-
-## How it works
+A **context engine** that registers all your tools, then uses hybrid semantic + BM25 ranking to select exactly the right ones for each query. Not another agent framework — a context layer that plugs into whatever you're already using.
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌───────────────┐
@@ -64,17 +57,13 @@ import { ApiClient, tool } from "@agentified/sdk";
 const ag = new ApiClient({
   serverUrl: "http://localhost:9119",
   tools: [
-    tool({ name: "get_weather", description: "Get current weather for a city", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
+    tool({ name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
     tool({ name: "search_docs", description: "Search documentation", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } }),
   ],
 });
 
 await ag.register();
-
-// Discover relevant tools for a conversation
-const ranked = await ag.prefetch({
-  messages: [{ role: "user", content: "What's the weather in Rome?" }],
-});
+const ranked = await ag.prefetch({ messages: [{ role: "user", content: "What's the weather in Rome?" }] });
 // → [{ name: "get_weather", score: 0.92, ... }]
 ```
 
@@ -90,23 +79,18 @@ from agentified import Agentified, AgentifiedConfig, tool
 async with Agentified(AgentifiedConfig(
     server_url="http://localhost:9119",
     tools=[
-        tool(name="get_weather", description="Get current weather for a city", parameters={"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}),
+        tool(name="get_weather", description="Get current weather", parameters={"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}),
         tool(name="search_docs", description="Search documentation", parameters={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}),
     ],
 )) as agent:
     await agent.register()
-
-    ranked = await agent.prefetch(
-        messages=[{"role": "user", "content": "What's the weather in Rome?"}],
-    )
+    ranked = await agent.prefetch(messages=[{"role": "user", "content": "What's the weather in Rome?"}])
     # → [RankedTool(name="get_weather", score=0.92, ...)]
 ```
 
 <br />
 
 ## Works with your stack
-
-Agentified integrates with the frameworks you already use:
 
 | TypeScript | Python |
 |------------|--------|
@@ -129,41 +113,46 @@ Agentified integrates with the frameworks you already use:
 | **Framework switching** | Rebuild context layer | Plug and play |
 | **Context debugging** | Black box | Inspector with full visibility |
 
-[Read the full benchmarks →](https://agentified.dev/benchmarks)
-
 <br />
 
 ## Features
 
-🧠 **Hybrid Ranking**
-Combines semantic similarity (70%) with BM25 keyword matching (30%) across tool name, description, and schemas. [Learn more →](https://agentified.dev/docs/resolution)
+**[Hybrid Ranking](./docs/concepts/ranking.md)** — Semantic similarity (70%) + BM25 keyword matching (30%) across tool name, description, and schemas.
 
-🔌 **Framework Agnostic**
-Works with Mastra, LangGraph, AG-UI, or raw API calls. TypeScript and Python. [See integrations →](https://agentified.dev/docs/integrations)
+**[Session Continuity](./docs/concepts/session-continuity.md)** — Capture turns to track tool usage. Previously-used tools are prioritized automatically.
 
-💾 **Persistent Memory**
-SQLite built-in for zero-config persistence of tools, turns, and embedding cache. [Configure storage →](https://agentified.dev/docs/storage)
+**[Graph Expansion](./docs/concepts/graph-expansion.md)** — Tools declare `requires`/`provides` metadata. Dependencies are auto-injected.
 
-⚡ **Rust Core**
-Lightweight and fast. Embeds via OpenAI `text-embedding-3-small` with content-hash caching. Runs anywhere — local, Docker, serverless.
+**[Frontend Tools](./docs/concepts/frontend-tools.md)** — Tag tools with `metadata.location: "frontend"` to run them client-side. Built-in React Inspector for debugging.
 
-🖥️ **Frontend Tools & Inspector**
-Tag tools with `metadata.location: "frontend"` to run them client-side. Built-in React Inspector for debugging prefetch, discovery, and token usage.
+**[Storage](./docs/concepts/storage.md)** — In-memory default, SQLite WAL for persistence. Async write-through, zero-config.
 
-🔄 **Session Continuity**
-Capture turns to track which tools were used. Previously-used tools are prioritized automatically on the next query.
+**Framework Agnostic** — Works with Mastra, LangGraph, AG-UI, or raw API calls. TypeScript and Python.
+
+**Rust Core** — Axum HTTP server, RwLock concurrency, content-hash embedding cache. Runs anywhere — local, Docker, serverless.
+
+<br />
+
+## Documentation
+
+Full docs live in [`docs/`](./docs/):
+
+- **[Getting Started](./docs/getting-started.md)** — Install, run, register + discover
+- **[Architecture](./docs/architecture.md)** — System design, ranking algorithm, storage
+- **[Mastra Guide](./docs/guides/mastra.md)** — Full-stack TypeScript example
+- **[LangGraph Guide](./docs/guides/langgraph.md)** — Python + Gemini example
 
 <br />
 
 ## Try it now
 
-### 🎮 Sandbox
+### Sandbox
 
 See Agentified in action. Compare token usage with and without smart tool selection.
 
 [**Open the Sandbox →**](https://agentified.dev/sandbox)
 
-### 📚 Examples
+### Examples
 
 | Example | Framework | Language |
 |---------|-----------|----------|
@@ -173,8 +162,6 @@ See Agentified in action. Compare token usage with and without smart tool select
 <br />
 
 ## Benchmarks
-
-Tested on real-world agent tasks with production workloads:
 
 | Metric | Baseline | Agentified | Improvement |
 |--------|----------|------------|-------------|
@@ -189,12 +176,10 @@ Tested on real-world agent tasks with production workloads:
 
 ## Community
 
-We're building Agentified in the open. Join us:
-
-- 💬 [Discord](https://discord.gg/HTXmrjvsDy) — Questions, feedback, and show & tell
-- 🐦 [Twitter](https://twitter.com/rstagi_) — Updates and announcements
-- 📍 [AI Aperitivo](https://aiaperiti.vo) — Meet us IRL in Milan, Rome, and beyond
-- 🤝 [Contributing](./CONTRIBUTING.md) — We welcome PRs!
+- [Discord](https://discord.gg/HTXmrjvsDy) — Questions, feedback, and show & tell
+- [Twitter](https://twitter.com/rstagi_) — Updates and announcements
+- [AI Aperitivo](https://aiaperiti.vo) — Meet us IRL in Milan, Rome, and beyond
+- [Contributing](./CONTRIBUTING.md) — We welcome PRs!
 
 <br />
 
@@ -208,7 +193,7 @@ We're building Agentified in the open. Join us:
   <p>Built with ❤️ in Italy 🇮🇹</p>
   <p>
     <a href="https://agentified.dev">Website</a> •
-    <a href="https://agentified.dev/docs">Documentation</a> •
+    <a href="./docs/">Documentation</a> •
     <a href="https://github.com/agentified/agentified">GitHub</a>
   </p>
 </div>

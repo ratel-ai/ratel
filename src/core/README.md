@@ -1,6 +1,8 @@
 # agentified-core
 
-Rust HTTP server powering Agentified — tool registration, embedding computation, and hybrid semantic + BM25 context resolution.
+Rust server. Hybrid ranking. Sub-millisecond discovery.
+
+Registers tools, computes embeddings, and serves the most relevant subset for any query via a REST API. See [Architecture](../../docs/architecture.md) for the full system design.
 
 ## Quick Start
 
@@ -27,7 +29,11 @@ OPENAI_API_KEY=sk-... cargo run
 | `AGENTIFIED_STORAGE` | No | — | Set to `"sqlite"` for persistent storage |
 | `AGENTIFIED_DB_PATH` | No | `./agentified.db` | SQLite DB path (when storage=sqlite) |
 
+See [Storage docs](../../docs/concepts/storage.md) for persistence details.
+
 ## API Reference
+
+All tool endpoints are scoped to a dataset. The SDKs handle dataset IDs automatically.
 
 ### `GET /health`
 
@@ -37,7 +43,7 @@ Health check.
 { "status": "ok" }
 ```
 
-### `POST /api/v1/tools`
+### `POST /api/v1/datasets/{id}/tools`
 
 Register tools. Each tool is embedded (name, description, schemas) and stored for later discovery.
 
@@ -64,9 +70,9 @@ Register tools. Each tool is embedded (name, description, schemas) and stored fo
 
 Embeddings are computed in batch via OpenAI `text-embedding-3-small` and cached by content hash. Subsequent registrations of identical tools skip embedding.
 
-### `GET /api/v1/tools`
+### `GET /api/v1/datasets/{id}/tools`
 
-List all registered tools.
+List all registered tools in a dataset.
 
 **Response:**
 
@@ -78,9 +84,9 @@ List all registered tools.
 }
 ```
 
-### `POST /api/v1/discover`
+### `POST /api/v1/datasets/{id}/discover`
 
-Discover the most relevant tools for a query using hybrid ranking.
+Discover the most relevant tools for a query using hybrid ranking. See [Ranking docs](../../docs/concepts/ranking.md).
 
 **Request:**
 
@@ -104,7 +110,7 @@ Discover the most relevant tools for a query using hybrid ranking.
 | `query` | string | required | Natural language query |
 | `limit` | number | 5 | Max tools to return (max 100) |
 | `exclude` | string[] | [] | Tool names to exclude |
-| `turn_id` | string | — | Previous turn ID for session continuity |
+| `turn_id` | string | — | Previous turn ID for [session continuity](../../docs/concepts/session-continuity.md) |
 | `embedding_weights` | object | see below | Field weights for semantic scoring |
 
 **Default embedding weights:** name=0.1, description=0.5, input_schema=0.3, output_schema=0.1
@@ -116,6 +122,7 @@ Discover the most relevant tools for a query using hybrid ranking.
 4. Normalize BM25 to [0, 1]
 5. Final score = `0.7 × semantic + 0.3 × BM25`
 6. If `turn_id` provided, tools from that turn are prepended with score=1.0
+7. [Graph expansion](../../docs/concepts/graph-expansion.md) injects dependency tools
 
 **Response:**
 
@@ -129,7 +136,7 @@ Discover the most relevant tools for a query using hybrid ranking.
 
 ### `POST /api/v1/turns`
 
-Capture a turn for session continuity. Returns a `turn_id` to pass to subsequent `discover` calls.
+Capture a turn for [session continuity](../../docs/concepts/session-continuity.md). Returns a `turn_id` to pass to subsequent `discover` calls.
 
 **Request:**
 
@@ -146,16 +153,36 @@ Capture a turn for session continuity. Returns a `turn_id` to pass to subsequent
 { "turn_id": "550e8400-e29b-41d4-a716-446655440000" }
 ```
 
+### `POST /api/v1/messages`
+
+Append messages to a conversation session.
+
+**Request:**
+
+```json
+{
+  "dataset": "my-dataset",
+  "namespace": "default",
+  "session": "session-123",
+  "messages": [
+    { "role": "user", "content": "Hello" }
+  ]
+}
+```
+
+### `GET /api/v1/messages`
+
+Retrieve messages from a conversation session. Supports pagination via `after_seq` and `around_seq` query parameters.
+
+### `POST /api/v1/context`
+
+Get context for a session with a strategy (`recent` or `full`) and token budget.
+
 ## Storage
 
 By default, agentified-core runs fully in-memory. Set `AGENTIFIED_STORAGE=sqlite` for persistence across restarts.
 
-SQLite uses WAL mode and stores:
-- Tools (name, JSON blob)
-- Turns (id, JSON blob)
-- Embedding cache (text key → float32 blob)
-
-On startup, all data is loaded into memory. Writes are fire-and-forget (async write-through).
+SQLite uses WAL mode and stores: tools, turns, embedding cache, and messages. On startup, all data is loaded into memory. Writes are async (fire-and-forget). See [Storage docs](../../docs/concepts/storage.md).
 
 ## Docker
 
@@ -179,6 +206,7 @@ docker run -p 9119:9119 \
 ## Links
 
 - [Root README](../../README.md)
+- [Architecture](../../docs/architecture.md)
 - [TypeScript SDK](../ts-packages/sdk/README.md)
 - [Python SDK](../py-packages/sdk/README.md)
 - [QuickHR Example](../../examples/quickhr/)

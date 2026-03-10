@@ -1,6 +1,8 @@
 # agentified (Python SDK)
 
-Python SDK for [Agentified](../../README.md) — async and sync clients for tool registration, context-aware discovery, and session tracking.
+Register 200 tools. Get the 5 that matter. Python.
+
+Async and sync clients for [Agentified](../../../README.md) — tool registration, context-aware [discovery](../../../docs/concepts/ranking.md), and [session tracking](../../../docs/concepts/session-continuity.md). See the [LangGraph guide](../../../docs/guides/langgraph.md) for a full walkthrough.
 
 ## Install
 
@@ -195,6 +197,9 @@ class CaptureTurnResponse:
 ## Links
 
 - [Root README](../../../README.md)
+- [Documentation](../../../docs/)
+- [LangGraph guide](../../../docs/guides/langgraph.md) — Full Python walkthrough
+- [Architecture](../../../docs/architecture.md)
 - [agentified-core](../../core/README.md)
 - [TypeScript SDK](../../ts-packages/sdk/README.md)
 - [LangGraph Example](../../../examples/py-langgraph/)
