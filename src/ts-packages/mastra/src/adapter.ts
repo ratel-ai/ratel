@@ -70,6 +70,7 @@ export interface RunOptions {
   frontendTools?: string[];
 }
 
+/** @deprecated Use the new `Agentified` class instead. This class will be removed in a future version. */
 export class AgentifiedMastra {
   private config: AgentifiedMastraConfig;
   private sdk: ApiClient;
