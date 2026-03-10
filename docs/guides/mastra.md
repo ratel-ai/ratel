@@ -29,7 +29,7 @@ npm install agentified @agentified/mastra @mastra/core fastify @fastify/cors
 
 ```typescript
 // tools.ts
-import type { AgentifiedTool } from "@agentified/mastra";
+import type { AgentifiedTool } from "agentified";
 
 export const tools: AgentifiedTool[] = [
   {
@@ -57,10 +57,11 @@ export const tools: AgentifiedTool[] = [
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { Agent } from "@mastra/core/agent";
-import { Agentified } from "@agentified/mastra";
+import { Agentified } from "agentified";
+import { mastra } from "@agentified/mastra";
 import { tools } from "./tools.js";
 
-const ag = new Agentified();
+const ag = new Agentified().adaptTo(mastra());
 await ag.connect("http://localhost:9119");
 
 const dataset = await ag.dataset("hr-agent").register({ tools });
@@ -80,7 +81,7 @@ app.post("/api/chat", async (req, reply) => {
   const { messages } = req.body as any;
   const session = dataset.session(req.headers["x-session-id"] as string);
   await session.updateConversation({ messages });
-  const ctx = await session.context.messages({ strategy: "recent", maxTokens: 4000 }).build();
+  const ctx = await session.context.messages({ strategy: "recent", maxTokens: 4000 }).assemble();
   const response = await agent.generate(ctx.messages);
   return reply.send(response);
 });

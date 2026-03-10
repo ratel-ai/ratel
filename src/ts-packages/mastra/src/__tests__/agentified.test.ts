@@ -1,5 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { EventEmitter } from "node:events";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockCreateTool = vi.fn(({ id, execute }: any) => ({
   id,
@@ -11,235 +10,234 @@ vi.mock("@mastra/core/tools", () => ({
   createTool: (...args: any[]) => mockCreateTool(...args),
 }));
 
-const { mockSpawn, mockResolveBinary, mockFindFreePort } = vi.hoisted(() => ({
-  mockSpawn: vi.fn(),
-  mockResolveBinary: vi.fn(),
-  mockFindFreePort: vi.fn(),
-}));
+import { mastra, MastraAgentified, MastraInstance, MastraSession, MastraNamespace, MastraDatasetRef } from "../agentified.js";
+import type { Agentified, Instance, Session, Namespace, DatasetRef } from "agentified";
 
-vi.mock("node:child_process", () => ({
-  spawn: mockSpawn,
-}));
-
-// Mock spawn-utils at the agentified (SDK) level
-vi.mock("agentified", async (importOriginal) => {
-  const original = await importOriginal<typeof import("agentified")>();
-  return {
-    ...original,
-    resolveBinaryPath: mockResolveBinary,
-    findFreePort: mockFindFreePort,
-  };
-});
-
-import { Agentified, type AgentifiedTool } from "../agentified.js";
-
-describe("Agentified (Mastra)", () => {
-  let fetchSpy: ReturnType<typeof vi.fn>;
-  const originalFetch = globalThis.fetch;
-
+describe("mastra() adapter", () => {
   beforeEach(() => {
-    fetchSpy = vi.fn();
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
+  it("returns object with adapt method", () => {
+    const adapter = mastra();
+    expect(adapter).toHaveProperty("adapt");
+    expect(typeof adapter.adapt).toBe("function");
   });
 
-  // Helper: make fetch return JSON for register + discover calls
-  function mockFetchForRegister() {
-    fetchSpy.mockImplementation(async (url: string) => {
-      if (url.endsWith("/health")) return { ok: true, status: 200 };
-      if (url.includes("/tools")) return new Response(JSON.stringify({ registered: 1 }), { status: 200 });
-      if (url.includes("/discover")) return new Response(JSON.stringify({ tools: [] }), { status: 200 });
-      if (url.includes("/messages")) return new Response(JSON.stringify({ messages: [], has_more: false, max_seq: 0 }), { status: 200 });
-      if (url.includes("/context")) return new Response(JSON.stringify({
-        messages: [], strategy_used: "recent", total_messages: 0,
-        included_messages: 0, recalled: { tools: [], memories: [] },
-        token_estimate: 0, conversation_messages: 0, fallback: false,
-      }), { status: 200 });
-      return new Response("{}", { status: 200 });
-    });
+  it("adapt wraps Agentified into MastraAgentified", () => {
+    const fakeAg = {} as Agentified;
+    const result = mastra().adapt(fakeAg);
+    expect(result).toBeInstanceOf(MastraAgentified);
+  });
+});
+
+describe("MastraAgentified", () => {
+  function fakeAgentified() {
+    return {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      dataset: vi.fn(),
+      register: vi.fn(),
+    } as unknown as Agentified;
   }
 
-  describe("connect(url)", () => {
-    it("connects to remote server after health check passes", async () => {
-      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
-
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
-
-      expect(fetchSpy).toHaveBeenCalledWith(
-        "http://localhost:9119/health",
-        expect.objectContaining({ method: "GET" }),
-      );
-    });
-
-    it("throws when health check fails", async () => {
-      fetchSpy.mockRejectedValue(new Error("ECONNREFUSED"));
-
-      const ag = new Agentified();
-      await expect(ag.connect("http://localhost:9999")).rejects.toThrow();
-    });
+  it("delegates connect()", async () => {
+    const ag = fakeAgentified();
+    const m = new MastraAgentified(ag);
+    await m.connect("http://localhost:9119");
+    expect(ag.connect).toHaveBeenCalledWith("http://localhost:9119");
   });
 
-  describe("connect() local auto-spawn", () => {
-    const originalEnv = process.env;
-
-    beforeEach(() => {
-      process.env = { ...originalEnv };
-    });
-
-    afterEach(() => {
-      process.env = originalEnv;
-    });
-
-    it("throws if OPENAI_API_KEY is not set", async () => {
-      delete process.env.OPENAI_API_KEY;
-
-      const ag = new Agentified();
-      await expect(ag.connect()).rejects.toThrow(/OPENAI_API_KEY/);
-    });
-
-    it("throws if binary package is not installed", async () => {
-      process.env.OPENAI_API_KEY = "test-key";
-      mockResolveBinary.mockReturnValue(null);
-
-      const ag = new Agentified();
-      await expect(ag.connect()).rejects.toThrow(/agentified.*core/i);
-    });
-
-    // Local spawn behavior is tested in the SDK package
+  it("delegates disconnect()", async () => {
+    const ag = fakeAgentified();
+    const m = new MastraAgentified(ag);
+    await m.disconnect();
+    expect(ag.disconnect).toHaveBeenCalled();
   });
 
-  describe("dataset()", () => {
-    it("returns a Mastra DatasetRef", async () => {
-      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
+  it("dataset() returns MastraDatasetRef", () => {
+    const ag = fakeAgentified();
+    const fakeRef = {} as DatasetRef;
+    (ag.dataset as ReturnType<typeof vi.fn>).mockReturnValue(fakeRef);
 
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
-      const ref = ag.dataset("my-dataset");
-
-      expect(ref).toBeDefined();
-      expect(ref.constructor.name).toBe("DatasetRef");
-    });
+    const m = new MastraAgentified(ag);
+    const ref = m.dataset("test");
+    expect(ref).toBeInstanceOf(MastraDatasetRef);
+    expect(ag.dataset).toHaveBeenCalledWith("test");
   });
 
-  describe("register()", () => {
-    it("returns Mastra Instance with createTool-wrapped discoverTool", async () => {
-      mockFetchForRegister();
+  it("register() returns MastraInstance", async () => {
+    const ag = fakeAgentified();
+    const fakeInstance = {
+      instanceId: "default",
+      datasetId: "default",
+      discoverTool: {
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn(),
+      },
+      prepareStep: vi.fn(),
+      session: vi.fn(),
+      namespace: vi.fn(),
+    } as unknown as Instance;
+    (ag.register as ReturnType<typeof vi.fn>).mockResolvedValue(fakeInstance);
 
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
+    const m = new MastraAgentified(ag);
+    const inst = await m.register({ tools: [] });
+    expect(inst).toBeInstanceOf(MastraInstance);
+  });
+});
 
-      const tool: AgentifiedTool = {
-        name: "myTool", description: "does stuff",
-        parameters: { type: "object" }, handler: async () => "ok",
-      };
+describe("MastraInstance", () => {
+  function fakeInstance() {
+    return {
+      instanceId: "my-dataset",
+      datasetId: "my-dataset",
+      discoverTool: {
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn().mockResolvedValue([{ name: "tool1", score: 0.9 }]),
+      },
+      prepareStep: vi.fn().mockResolvedValue({ activeTools: ["t1"] }),
+      session: vi.fn(),
+      namespace: vi.fn(),
+    } as unknown as Instance;
+  }
 
-      const instance = await ag.register({ tools: [tool] });
+  it("wraps discoverTool with createTool", () => {
+    const inst = fakeInstance();
+    const m = new MastraInstance(inst);
 
-      expect(instance.instanceId).toBe("default");
-      expect(instance.discoverTool).toBeDefined();
-      expect(instance.discoverTool.__mastraTool).toBe(true);
-      expect(mockCreateTool).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "agentified_discover",
-        }),
-      );
-
-      await ag.disconnect();
-    });
-
-    it("session(id) returns Session with given id", async () => {
-      mockFetchForRegister();
-
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
-
-      const instance = await ag.register({
-        tools: [{ name: "myTool", description: "tool", parameters: {}, handler: async () => "ok" }],
-      });
-      const session = instance.session("chat-1");
-
-      expect(session.id).toBe("chat-1");
-      expect(session.namespaceId).toBe("default");
-
-      await ag.disconnect();
-    });
-
-    it("namespace(id) returns Namespace with tools stub", async () => {
-      mockFetchForRegister();
-
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
-
-      const instance = await ag.register({
-        tools: [{ name: "myTool", description: "tool", parameters: {}, handler: async () => "ok" }],
-      });
-      const ns = instance.namespace("user-123");
-
-      expect(ns.id).toBe("user-123");
-      expect(ns.tools).toEqual({});
-
-      await ag.disconnect();
-    });
+    expect(m.discoverTool.__mastraTool).toBe(true);
+    expect(mockCreateTool).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "agentified_discover" }),
+    );
   });
 
-  describe("Session", () => {
-    async function setup(tools: AgentifiedTool[] = [{ name: "toolA", description: "toolA", parameters: { type: "object" }, handler: async () => "ok" }]) {
-      mockFetchForRegister();
-      const ag = new Agentified();
-      await ag.connect("http://localhost:9119");
-      const instance = await ag.register({ tools });
-      return { ag, instance };
-    }
+  it("delegates prepareStep to SDK instance", async () => {
+    const inst = fakeInstance();
+    const m = new MastraInstance(inst);
 
-    it("context.messages().build() returns assembled context", async () => {
-      const { ag, instance } = await setup();
-      const session = instance.session("chat-1");
+    const result = await m.prepareStep({ stepNumber: 0, steps: [] } as any);
+    expect(result).toEqual({ activeTools: ["t1"] });
+  });
 
-      // Override fetch for context call
-      fetchSpy.mockImplementation(async (url: string) => {
-        if (url.includes("/context")) {
-          return new Response(JSON.stringify({
-            messages: [{ id: "m1", role: "user", content: "Hello", seq: 1, tool_call_id: null, tool_calls: null, created_at: "2026-01-01" }],
-            strategy_used: "recent", total_messages: 5, included_messages: 1,
-            recalled: { tools: [], memories: [] },
-            token_estimate: 10, conversation_messages: 5, fallback: false,
-          }), { status: 200 });
-        }
-        return new Response("{}", { status: 200 });
-      });
+  it("exposes instanceId and datasetId", () => {
+    const inst = fakeInstance();
+    const m = new MastraInstance(inst);
+    expect(m.instanceId).toBe("my-dataset");
+    expect(m.datasetId).toBe("my-dataset");
+  });
 
-      const ctx = await session.context
-        .messages({ strategy: "recent", maxTokens: 2000 })
-        .build();
+  it("session() returns MastraSession", () => {
+    const inst = fakeInstance();
+    const fakeSession = {
+      id: "chat-1",
+      namespaceId: "default",
+      discoverTool: {
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn(),
+      },
+      prepareStep: vi.fn(),
+      context: {},
+      conversation: {},
+      getMessages: vi.fn(),
+      updateConversation: vi.fn(),
+    } as unknown as Session;
+    (inst.session as ReturnType<typeof vi.fn>).mockReturnValue(fakeSession);
 
-      expect(ctx.messages).toHaveLength(1);
-      expect(ctx.strategyUsed).toBe("recent");
-      await ag.disconnect();
-    });
+    const m = new MastraInstance(inst);
+    const session = m.session("chat-1");
+    expect(session).toBeInstanceOf(MastraSession);
+    expect(inst.session).toHaveBeenCalledWith("chat-1");
+  });
 
-    it("conversation.append() posts messages", async () => {
-      const { ag, instance } = await setup();
-      const session = instance.session("chat-1");
+  it("namespace() returns MastraNamespace", () => {
+    const inst = fakeInstance();
+    const fakeNs = { id: "user-1", session: vi.fn() } as unknown as Namespace;
+    (inst.namespace as ReturnType<typeof vi.fn>).mockReturnValue(fakeNs);
 
-      fetchSpy.mockImplementation(async (url: string, opts: any) => {
-        if (url.includes("/messages") && opts?.method === "POST") {
-          return new Response(JSON.stringify({ appended: 2, first_seq: 1, last_seq: 2 }), { status: 200 });
-        }
-        return new Response("{}", { status: 200 });
-      });
+    const m = new MastraInstance(inst);
+    const ns = m.namespace("user-1");
+    expect(ns).toBeInstanceOf(MastraNamespace);
+    expect(inst.namespace).toHaveBeenCalledWith("user-1");
+  });
+});
 
-      const result = await session.conversation.append([
-        { role: "user", content: "Hello" },
-        { role: "assistant", content: "Hi" },
-      ]);
+describe("MastraSession", () => {
+  function fakeSession() {
+    return {
+      id: "chat-1",
+      namespaceId: "default",
+      discoverTool: {
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn(),
+      },
+      prepareStep: vi.fn(),
+      context: { messages: vi.fn().mockReturnThis(), recall: vi.fn().mockReturnThis(), assemble: vi.fn() },
+      conversation: { append: vi.fn() },
+      getMessages: vi.fn(),
+      updateConversation: vi.fn(),
+    } as unknown as Session;
+  }
 
-      expect(result).toEqual({ appended: 2, firstSeq: 1, lastSeq: 2 });
-      await ag.disconnect();
-    });
+  it("wraps discoverTool with createTool", () => {
+    const sess = fakeSession();
+    const m = new MastraSession(sess);
+    expect(m.discoverTool.__mastraTool).toBe(true);
+  });
+
+  it("delegates prepareStep", async () => {
+    const sess = fakeSession();
+    const m = new MastraSession(sess);
+    await m.prepareStep({ stepNumber: 0, steps: [] } as any);
+    expect(sess.prepareStep).toHaveBeenCalled();
+  });
+
+  it("exposes id, context, conversation", () => {
+    const sess = fakeSession();
+    const m = new MastraSession(sess);
+    expect(m.id).toBe("chat-1");
+    expect(m.context).toBe(sess.context);
+    expect(m.conversation).toBe(sess.conversation);
+  });
+
+  it("delegates getMessages", async () => {
+    const sess = fakeSession();
+    const m = new MastraSession(sess);
+    await m.getMessages({ strategy: "recent" });
+    expect(sess.getMessages).toHaveBeenCalledWith({ strategy: "recent" });
+  });
+
+  it("delegates updateConversation", async () => {
+    const sess = fakeSession();
+    const m = new MastraSession(sess);
+    const input = { messages: [{ role: "user", content: "hi" }] };
+    await m.updateConversation(input);
+    expect(sess.updateConversation).toHaveBeenCalledWith(input);
+  });
+});
+
+describe("MastraNamespace", () => {
+  it("exposes id and returns MastraSession from session()", () => {
+    const fakeSession = {
+      id: "chat-1",
+      discoverTool: {
+        definition: { name: "agentified_discover", description: "d", parameters: {} },
+        execute: vi.fn(),
+      },
+      prepareStep: vi.fn(),
+      context: {},
+      conversation: {},
+      getMessages: vi.fn(),
+      updateConversation: vi.fn(),
+    } as unknown as Session;
+    const fakeNs = {
+      id: "user-1",
+      session: vi.fn().mockReturnValue(fakeSession),
+    } as unknown as Namespace;
+
+    const m = new MastraNamespace(fakeNs);
+    expect(m.id).toBe("user-1");
+    const session = m.session("chat-1");
+    expect(session).toBeInstanceOf(MastraSession);
   });
 });

@@ -6,6 +6,7 @@ import type { GetMessagesOptions, GetMessagesResult, PrepareStepFn } from "./typ
 export class Session {
   private lastPersistedSeq = 0;
   private lastProcessedStepIndex = 0;
+  private readonly _discoverTool;
 
   readonly conversation: Conversation;
 
@@ -17,6 +18,7 @@ export class Session {
     /** @internal */ private readonly toolNames: string[],
   ) {
     this.conversation = new Conversation(sdk, datasetId, namespaceId, id);
+    this._discoverTool = sdk.asDiscoverTool(datasetId);
   }
 
   get context(): ContextBuilder {
@@ -24,7 +26,7 @@ export class Session {
   }
 
   get discoverTool() {
-    return this.sdk.asDiscoverTool(this.datasetId);
+    return this._discoverTool;
   }
 
   async getMessages(opts?: GetMessagesOptions): Promise<GetMessagesResult> {

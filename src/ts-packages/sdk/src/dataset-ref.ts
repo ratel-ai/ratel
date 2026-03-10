@@ -18,7 +18,7 @@ function validateTools(tools: AgentifiedTool[]): void {
 
 export class DatasetRef {
   constructor(
-    /** @internal */ readonly _agentified: { sdk: ApiClient | null; serverUrl: string | null },
+    /** @internal */ protected readonly _agentified: { sdk: ApiClient | null; serverUrl: string | null },
     readonly datasetName: string,
   ) {}
 
@@ -33,6 +33,8 @@ export class DatasetRef {
       description: t.description,
       parameters: t.parameters,
     }));
+    // Separate ApiClient for registration: it must carry the tool list,
+    // while the shared SDK instance is tool-agnostic.
     const regSdk = new ApiClient({
       serverUrl: this._agentified.serverUrl!,
       tools: serverTools,

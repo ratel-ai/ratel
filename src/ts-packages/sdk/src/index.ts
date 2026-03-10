@@ -7,7 +7,6 @@ export { Session } from "./session.js";
 export { ContextBuilder } from "./context-builder.js";
 export { Conversation } from "./conversation.js";
 export { tool } from "./tool.js";
-export { resolveBinaryPath, findFreePort } from "./spawn-utils.js";
 export type {
   AgentifiedTool,
   ApiClientConfig,

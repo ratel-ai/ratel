@@ -81,6 +81,17 @@ describe("Agentified", () => {
         /Health check failed/,
       );
     });
+
+    it("throws when called twice", async () => {
+      fetchSpy.mockResolvedValue({ ok: true, status: 200 });
+
+      const ag = new Agentified();
+      await ag.connect("http://localhost:9119");
+      await expect(ag.connect("http://localhost:9119")).rejects.toThrow(
+        /Already connected/,
+      );
+      await ag.disconnect();
+    });
   });
 
   describe("connect() local auto-spawn", () => {
@@ -141,6 +152,25 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
+    it("throws after exhausting health check attempts", async () => {
+      process.env.OPENAI_API_KEY = "test-key";
+      mockResolveBinary.mockReturnValue("/path/to/agentified-core");
+      mockFindFreePort.mockResolvedValue(9201);
+
+      const fakeChild = Object.assign(new EventEmitter(), {
+        pid: 1234, kill: vi.fn(), stdin: null,
+        stdout: new EventEmitter(), stderr: new EventEmitter(),
+      });
+      mockSpawn.mockReturnValue(fakeChild);
+      fetchSpy.mockRejectedValue(new Error("ECONNREFUSED"));
+
+      const ag = new Agentified();
+      ag.healthCheckDelayMs = 1;
+      ag.healthCheckMaxAttempts = 3;
+      await expect(ag.connect()).rejects.toThrow(/failed to start/);
+      expect(fakeChild.kill).toHaveBeenCalled();
+    });
+
     it("auto-restarts once on unexpected crash", async () => {
       process.env.OPENAI_API_KEY = "test-key";
       mockResolveBinary.mockReturnValue("/path/to/agentified-core");
@@ -166,6 +196,49 @@ describe("Agentified", () => {
       expect(mockSpawn).toHaveBeenCalledTimes(2);
 
       await ag.disconnect();
+    });
+
+    it("does not restart more than once", async () => {
+      process.env.OPENAI_API_KEY = "test-key";
+      mockResolveBinary.mockReturnValue("/path/to/agentified-core");
+      mockFindFreePort.mockResolvedValue(9204);
+
+      const children = Array.from({ length: 3 }, (_, i) =>
+        Object.assign(new EventEmitter(), {
+          pid: 3000 + i, kill: vi.fn(), stdin: null,
+          stdout: new EventEmitter(), stderr: new EventEmitter(),
+        }),
+      );
+      mockSpawn
+        .mockReturnValueOnce(children[0])
+        .mockReturnValueOnce(children[1])
+        .mockReturnValueOnce(children[2]);
+      fetchSpy.mockResolvedValue({ ok: true, status: 200 });
+
+      const ag = new Agentified();
+      await ag.connect();
+
+      // First crash → restart
+      children[0]!.emit("exit", 1, null);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+
+      // Second crash → no restart
+      children[1]!.emit("exit", 1, null);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+
+      await ag.disconnect();
+    });
+  });
+
+  describe("adaptTo()", () => {
+    it("delegates to adapter.adapt with self", () => {
+      const ag = new Agentified();
+      const adapted = ag.adaptTo({
+        adapt: (inner) => ({ wrapped: inner }),
+      });
+      expect(adapted.wrapped).toBe(ag);
     });
   });
 
@@ -434,7 +507,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("context.messages().build() returns assembled context", async () => {
+    it("context.messages().assemble() returns assembled context", async () => {
       const ag = await connectedAg();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -452,7 +525,7 @@ describe("Agentified", () => {
 
       const ctx = await session.context
         .messages({ strategy: "recent", maxTokens: 2000 })
-        .build();
+        .assemble();
 
       expect(mockGetContext).toHaveBeenCalledWith("default", "default", "chat-1", {
         strategy: "recent", maxTokens: 2000,
@@ -462,7 +535,7 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("context.messages().recall().build() works (recall is no-op stub)", async () => {
+    it("context.messages().recall().assemble() works (recall is no-op stub)", async () => {
       const ag = await connectedAg();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
       const session = instance.session("chat-1");
@@ -473,7 +546,7 @@ describe("Agentified", () => {
         tokenEstimate: 0, conversationMessages: 0, fallback: false,
       });
 
-      const ctx = await session.context.messages({ strategy: "recent" }).recall().build();
+      const ctx = await session.context.messages({ strategy: "recent" }).recall().assemble();
       expect(ctx.messages).toEqual([]);
       await ag.disconnect();
     });

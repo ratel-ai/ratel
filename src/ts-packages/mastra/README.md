@@ -1,8 +1,6 @@
 # @agentified/mastra
 
-Mastra agent + Agentified discovery in one call.
-
-[Mastra](https://mastra.ai) adapter for [Agentified](../../../README.md) — wraps a Mastra agent with Agentified context resolution, dynamic tool hydration, and AG-UI streaming. See the [Mastra guide](../../../docs/guides/mastra.md) for a full-stack walkthrough.
+Mastra adapter layer for [Agentified](../../../README.md) — wraps SDK classes with Mastra-typed shells via composition, plus AG-UI streaming. See the [Mastra guide](../../../docs/guides/mastra.md) for a full-stack walkthrough.
 
 ## Install
 
@@ -16,106 +14,72 @@ npm install @agentified/mastra agentified
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { AgentifiedMastra, streamSSE } from "@agentified/mastra";
-import { tool } from "agentified";
+import { Agentified } from "agentified";
+import { mastra } from "@agentified/mastra";
 
-const agent = new Agent({ name: "my-agent", model: google("gemini-3-flash-preview"), instructions: "You are a helpful assistant." });
+const ag = new Agentified().adaptTo(mastra());
+await ag.connect("http://localhost:9119");
 
-const agentified = new AgentifiedMastra({
-  agentifiedUrl: "http://localhost:9119",
+const dataset = await ag.dataset("my-agent").register({
   tools: [
-    tool({ name: "get_weather", description: "Get weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
+    { name: "get_weather", description: "Get weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] }, handler: async (args) => ({ temp: 22 }) },
   ],
-  toolHandlers: {
-    get_weather: async ({ city }) => ({ temp: 22, unit: "C", city }),
-  },
-  agent,
 });
 
-await agentified.register();
+const agent = new Agent({
+  name: "my-agent",
+  model: google("gemini-3-flash-preview"),
+  instructions: "You are a helpful assistant.",
+  tools: { discoverTool: dataset.discoverTool },  // Mastra createTool
+  prepareStep: dataset.prepareStep,
+});
 ```
+
+## Adapter Pattern
+
+The `mastra()` factory returns an adapter for `Agentified.adaptTo()`. This wraps SDK classes in Mastra-typed shells via composition (not inheritance):
+
+```
+Agentified.adaptTo(mastra()) → MastraAgentified
+  └─ .dataset(name) → MastraDatasetRef
+       └─ .register({ tools }) → MastraInstance
+            ├─ .discoverTool     — Mastra createTool
+            ├─ .prepareStep      — PrepareStepFn
+            ├─ .session(id)      → MastraSession
+            │    ├─ .discoverTool — Mastra createTool
+            │    ├─ .prepareStep
+            │    ├─ .context / .conversation (SDK passthrough)
+            │    └─ .getMessages / .updateConversation
+            └─ .namespace(id)    → MastraNamespace
+                 └─ .session(id) → MastraSession
+```
+
+Import SDK classes from `agentified`, Mastra-specific adapters from `@agentified/mastra`.
 
 ## API Reference
 
-### `new AgentifiedMastra(config)`
+### `mastra()`
+
+Returns an adapter object for `Agentified.adaptTo()`.
 
 ```typescript
-interface AgentifiedMastraConfig {
-  agentifiedUrl: string;
-  tools: ServerTool[];
-  toolHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
-  agent: { name: string; generate: (...args: any[]) => any; stream: (...args: any[]) => any };
-}
+import { Agentified } from "agentified";
+import { mastra } from "@agentified/mastra";
+
+const ag = new Agentified().adaptTo(mastra());
 ```
 
-The `agent` field accepts any object with `name`, `generate`, and `stream` — typically a `@mastra/core` `Agent` instance.
+### `MastraInstance`
 
-### `agentified.register()`
+Wraps SDK `Instance`. `discoverTool` is a Mastra `createTool` result instead of a raw `DiscoverTool`.
 
-Registers tools with the Agentified server.
+### `MastraSession`
 
-```typescript
-await agentified.register();
-```
+Wraps SDK `Session`. `discoverTool` is a Mastra `createTool` result. Delegates `context`, `conversation`, `getMessages`, `updateConversation` to the SDK session.
 
-### `agentified.generate(options)`
+### `AgentifiedMastra` (legacy)
 
-Runs a full generate cycle: prefetch → hydrate tools → agent.generate → capture turn.
-
-```typescript
-interface GenerateOptions {
-  messages: Message[];
-  maxSteps?: number;
-  turnId?: string;       // session continuity
-  toolLimit?: number;
-  seed?: number;
-  debug?: boolean;
-  onStepFinish?: (event: { usage: any; toolCalls: any[] }) => void;
-}
-
-const result = await agentified.generate({
-  messages: [{ role: "user", content: "What's the weather in Rome?" }],
-  maxSteps: 5,
-});
-
-// result:
-// {
-//   text: "The weather in Rome is 22°C.",
-//   toolCalls: [...],
-//   steps: [...],
-//   usage: { inputTokens, outputTokens, totalTokens },
-//   hydratedTools: ["get_weather"],
-//   turnId: "...",
-//   durationMs: 1234,
-// }
-```
-
-The `generate` flow:
-1. **Prefetch** — discovers relevant tools for the conversation
-2. **Hydrate** — converts ranked tools to Mastra tools (JSON Schema → Zod) and injects `agentified_discover` for runtime discovery
-3. **Generate** — calls `agent.generate()` with a `prepareStep` callback that dynamically expands tools when the agent discovers more
-4. **Capture turn** — stores the turn for session continuity
-
-### `agentified.run(options)`
-
-Returns a `Promise<Observable<BaseEvent>>` for AG-UI streaming — designed for use with the frontend client.
-
-```typescript
-interface RunOptions {
-  messages: Array<{
-    role: string;
-    content: string;
-    toolCallId?: string;
-    toolCalls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
-  }>;
-  frontendTools?: string[];  // frontend tool names to exclude from prefetch
-}
-
-const observable = await agentified.run({
-  messages: [{ role: "user", content: "Hello" }],
-  frontendTools: ["navigate_to_page"],
-});
-```
+The `AgentifiedMastra` class provides a standalone Mastra agent wrapper with prefetch, hydration, and AG-UI streaming. See the source for full API.
 
 ### `streamSSE(observable, res)`
 
@@ -123,31 +87,15 @@ Pipes an AG-UI Observable into an HTTP SSE response.
 
 ```typescript
 import { streamSSE } from "@agentified/mastra";
-import http from "http";
-
-http.createServer(async (req, res) => {
-  const observable = await agentified.run({ messages });
-  streamSSE(observable, res);
-}).listen(3003);
 ```
-
-SSE format: `data: <JSON>\n\n` per event, connection closes on stream completion.
 
 ### `jsonSchemaToZod(schema)`
 
-Converts a JSON Schema object to a Zod schema. Used internally to hydrate Mastra tools from Agentified's JSON Schema parameters.
+Converts a JSON Schema object to a Zod schema. Used internally to hydrate Mastra tools.
 
 ```typescript
 import { jsonSchemaToZod } from "@agentified/mastra";
-
-const zodSchema = jsonSchemaToZod({
-  type: "object",
-  properties: { city: { type: "string" } },
-  required: ["city"],
-});
 ```
-
-Supports: `string`, `number`, `integer`, `boolean`, `array`, `object`, `enum`.
 
 ## Links
 

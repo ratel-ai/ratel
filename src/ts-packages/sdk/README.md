@@ -35,6 +35,7 @@ const dataset = await ag.dataset("my-agent").register({
 
 ```
 Agentified
+  ├─ .adaptTo(adapter)   → T (framework-specific wrapper)
   └─ .dataset(name) → DatasetRef
        └─ .register({ tools }) → Instance
             ├─ .discoverTool     — DiscoverTool
@@ -42,7 +43,7 @@ Agentified
             ├─ .session(id)      → Session
             │    ├─ .discoverTool
             │    ├─ .prepareStep (persists messages)
-            │    ├─ .context.messages(opts).recall(opts).build()
+            │    ├─ .context.messages(opts).recall(opts).assemble()
             │    ├─ .updateConversation({ messages })
             │    ├─ .getMessages(opts)
             │    └─ .conversation → Conversation

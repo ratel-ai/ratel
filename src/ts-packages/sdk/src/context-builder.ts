@@ -20,7 +20,7 @@ export class ContextBuilder {
     return this;
   }
 
-  async build(): Promise<AssembledContext> {
+  async assemble(): Promise<AssembledContext> {
     const res = await this.sdk.getContext(this.datasetId, this.namespaceId, this.sessionId, {
       strategy: this.messageOpts.strategy,
       maxTokens: this.messageOpts.maxTokens,

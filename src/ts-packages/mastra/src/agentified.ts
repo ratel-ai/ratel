@@ -1,86 +1,99 @@
-import {
-  Agentified as SdkAgentified,
-  Instance as SdkInstance,
-  DatasetRef as SdkDatasetRef,
-  ApiClient,
-  type DiscoverToolInput,
-  type RegisterInput,
-} from "agentified";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-
-// Re-export SDK classes that need no Mastra extensions
-export {
+import type {
+  Agentified,
+  Instance,
+  DatasetRef,
   Session,
   Namespace,
-  ContextBuilder,
-  Conversation,
-} from "agentified";
-
-export type {
-  AgentifiedTool,
-  BackendTool,
-  ClientTool,
-  McpTool,
+  DiscoverTool,
+  DiscoverToolInput,
   RegisterInput,
   PrepareStepFn,
-  AssembledContext,
   GetMessagesOptions,
-  GetMessagesResult,
 } from "agentified";
 
-/**
- * Mastra-specific Instance: wraps discoverTool with createTool.
- */
-export class Instance extends SdkInstance {
+// --- Factory ---
+
+export function mastra() {
+  return { adapt: (ag: Agentified) => new MastraAgentified(ag) };
+}
+
+// --- Typed shells (composition, not inheritance) ---
+
+export class MastraAgentified {
+  constructor(private readonly ag: Agentified) {}
+
+  connect(url?: string) { return this.ag.connect(url); }
+  disconnect() { return this.ag.disconnect(); }
+
+  dataset(name: string) { return new MastraDatasetRef(this.ag.dataset(name)); }
+
+  async register(input: RegisterInput) {
+    return new MastraInstance(await this.ag.register(input));
+  }
+}
+
+export class MastraDatasetRef {
+  constructor(private readonly ref: DatasetRef) {}
+
+  async register(input: RegisterInput) {
+    return new MastraInstance(await this.ref.register(input));
+  }
+}
+
+export class MastraInstance {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  override readonly discoverTool: any;
+  readonly discoverTool: any;
+  readonly prepareStep: PrepareStepFn;
 
-  constructor(
-    instanceId: string,
-    datasetId: string,
-    /** @internal */ sdk: ApiClient,
-    /** @internal */ toolNames: string[],
-  ) {
-    super(instanceId, datasetId, sdk, toolNames);
-    const discoverDef = sdk.asDiscoverTool(datasetId);
-    this.discoverTool = createTool({
-      id: "agentified_discover",
-      description: discoverDef.definition.description,
-      inputSchema: z.object({ query: z.string(), limit: z.number().optional() }),
-      execute: async (input) => {
-        return discoverDef.execute(input as DiscoverToolInput);
-      },
-    });
+  get instanceId() { return this.inst.instanceId; }
+  get datasetId() { return this.inst.datasetId; }
+
+  constructor(private readonly inst: Instance) {
+    this.discoverTool = wrapDiscoverTool(inst.discoverTool);
+    this.prepareStep = inst.prepareStep;
+  }
+
+  session(id: string) { return new MastraSession(this.inst.session(id)); }
+  namespace(id: string) { return new MastraNamespace(this.inst.namespace(id)); }
+}
+
+export class MastraSession {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly discoverTool: any;
+  readonly prepareStep: PrepareStepFn;
+
+  get id() { return this.sess.id; }
+  get context() { return this.sess.context; }
+  get conversation() { return this.sess.conversation; }
+
+  constructor(private readonly sess: Session) {
+    this.discoverTool = wrapDiscoverTool(sess.discoverTool);
+    this.prepareStep = sess.prepareStep;
+  }
+
+  getMessages(opts?: GetMessagesOptions) { return this.sess.getMessages(opts); }
+  updateConversation(input: { messages: Array<{ role: string; content: string }> }) {
+    return this.sess.updateConversation(input);
   }
 }
 
-/**
- * Mastra-specific DatasetRef: returns Mastra Instance on register.
- */
-export class DatasetRef extends SdkDatasetRef {
-  override async register(input: RegisterInput): Promise<Instance> {
-    const sdkInstance = await super.register(input);
-    const sdk = this._agentified.sdk;
-    if (!sdk) throw new Error("Not connected");
-    return new Instance(
-      sdkInstance.instanceId,
-      sdkInstance.datasetId,
-      sdk,
-      input.tools.map((t) => t.name),
-    );
-  }
+export class MastraNamespace {
+  constructor(private readonly ns: Namespace) {}
+
+  get id() { return this.ns.id; }
+
+  session(id: string) { return new MastraSession(this.ns.session(id)); }
 }
 
-/**
- * Mastra-specific Agentified: returns Mastra DatasetRef/Instance.
- */
-export class Agentified extends SdkAgentified {
-  override dataset(name: string): DatasetRef {
-    return new DatasetRef(this, name);
-  }
+// --- Converter ---
 
-  override async register(input: RegisterInput): Promise<Instance> {
-    return this.dataset("default").register(input);
-  }
+function wrapDiscoverTool(dt: DiscoverTool) {
+  return createTool({
+    id: dt.definition.name,
+    description: dt.definition.description,
+    inputSchema: z.object({ query: z.string(), limit: z.number().optional() }),
+    execute: async (input: { query: string; limit?: number }) => dt.execute(input),
+  });
 }

@@ -3,12 +3,20 @@
  * ────────────────────────────────────────────────────────── */
 
 import { Agent } from 'mastra';
-import { Agentified } from '@agentified/mastra';
+import { Agentified } from 'agentified';
+import { mastra, convertToAgentifiedTools } from '@agentified/mastra';
 
-const ag = new Agentified();
+const ag = (new Agentified()).adaptTo(mastra());
 await ag.connect();
 
-const dataset = await ag.dataset("agent-xyz").register({ tools: [/* ... */] });
+const dataset = await ag
+  .dataset("agent-xyz")
+  .register({
+    tools: [
+      ...agentifiedLikeTools,  // rationale for not supporting mastraLikeTools directly: we don't want to have an integration nightmare also on the inputs side as well (how do we handle edge cases? Or things that don't map clearly from mastra to agentified?) 
+      ...convertToAgentifiedTools(mastraLikeTools), // this can serve as a convenience layer if the user has some mastra tools already, but it makes the type clearer and the developer would be more aware that some things would not be mapped 100%
+    ],
+  });
 
 const agent = new Agent({
   system: `You are a helpful agent`,
@@ -30,9 +38,10 @@ const agent = new Agent({
  * ────────────────────────────────────────────────────────── */
 
 import { Agent } from 'mastra';
-import { Agentified } from '@agentified/mastra';
+import { Agentified } from 'agentified';
+import { mastra } from '@agentified/mastra';
 
-const ag = new Agentified();
+const ag = (new Agentified()).adaptTo(mastra());
 await ag.connect();
 
 const dataset = await ag
@@ -78,7 +87,7 @@ app.post('/chat', async (req) => {
     .recall({
       ...recallOptions, // memories, older messages, etc
     })
-    .build();
+    .assemble();
 
   // 3. generate with optimized messages
   const response = await agent.generate(messages);
@@ -108,7 +117,7 @@ const context = await conversation.context
     strategy: 'recent+summary', // 'recent' | 'summary' | 'recent+summary' | 'full'
   })
   .recall({})
-  .build();
+  .assemble();
 
 // context.messages → CoreMessage[] ready for generate()
 

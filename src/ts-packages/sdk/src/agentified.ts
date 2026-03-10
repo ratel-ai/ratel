@@ -16,6 +16,7 @@ export class Agentified {
   private spawnArgs: { binaryPath: string; port: number } | null = null;
 
   async connect(serverUrl?: string): Promise<void> {
+    if (this.connected) throw new Error("Already connected");
     if (!serverUrl) {
       if (!process.env.OPENAI_API_KEY) {
         throw new Error("OPENAI_API_KEY environment variable is required for local spawn");
@@ -52,6 +53,10 @@ export class Agentified {
     this.serverUrl = serverUrl;
     this.sdk = new ApiClient({ serverUrl, tools: [] });
     this.connected = true;
+  }
+
+  adaptTo<T>(adapter: { adapt: (ag: Agentified) => T }): T {
+    return adapter.adapt(this);
   }
 
   dataset(name: string): DatasetRef {
