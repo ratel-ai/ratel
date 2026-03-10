@@ -118,3 +118,10 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - Session class stub: id + namespaceId (task 13 adds prepareStep/updateConversation)
 - PrepareStepFn type exported
 - All 78 tests pass (31 agentified + 31 adapter + 11 schema + 5 stream-sse)
+
+### Task 13: Session.prepareStep + updateConversation ✅
+- Session constructor: takes sdk, datasetId, toolNames internally (passed by Instance.session())
+- Session.prepareStep: session-scoped, extracts assistant/tool messages from steps, persists via appendMessages, tracks lastPersistedSeq, scans discover results
+- Session.updateConversation: fetches last N stored, diffs by role+content from start, persists only new messages, skips append if all duplicates
+- Message extraction: step.text → assistant, step.toolCalls → assistant w/ tool_calls, step.toolResults → tool messages
+- All 85 tests pass (38 agentified + 31 adapter + 11 schema + 5 stream-sse)
