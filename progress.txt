@@ -99,3 +99,14 @@ Started: Mon Mar  9 23:53:04 CET 2026
 - Internal state: sdk, connected flag, spawnedProcess, activeInstances Set, heartbeatIntervals Map
 - Exported from index.ts
 - All 58 tests pass (11 agentified + 31 adapter + 11 schema + 5 stream-sse)
+
+### Task 11: register() + DatasetRef + tool validation ✅
+- Types: AgentifiedTool (BackendTool | ClientTool | McpTool), RegisterInput
+- Tool validation: handler+no type → default 'backend'; no handler+no type → throw; client/mcp → throw "not yet supported"
+- DatasetRef.register(input): createInstance → register tools (via temp ApiClient) → start heartbeat (30s) → return Instance
+- Agentified.register(input): shorthand for dataset("default").register(input)
+- Instance class: instanceId, datasetId (minimal, task 12 adds discoverTool/prepareStep/session)
+- On registration failure: deleteInstance cleanup before re-throw
+- Agentified stores serverUrl for creating per-register ApiClient instances
+- All types + Instance exported from index.ts
+- All 74 tests pass (27 agentified + 31 adapter + 11 schema + 5 stream-sse)
