@@ -47,7 +47,7 @@ async function boot(): Promise<BootResult> {
 
   if (!endpoint) {
     console.error("[agentified] starting agentified-core container...");
-    const started = await new GenericContainer("agentified/agentified-core:latest")
+    const started = await new GenericContainer("agentified/agentified-core:0.2.0-beta.1")
       .withExposedPorts(9119)
       .withEnvironment({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",

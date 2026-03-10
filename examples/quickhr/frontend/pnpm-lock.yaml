@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@agentified/react':
-        specifier: ^0.0.3
-        version: 0.0.3(react@18.3.1)
+        specifier: 0.0.5-beta.0
+        version: 0.0.5-beta.0(react@18.3.1)
       react:
         specifier: ^18.3.0
         version: 18.3.1
@@ -51,11 +51,11 @@ packages:
   '@ag-ui/proto@0.0.45':
     resolution: {integrity: sha512-gj+XdbTOyNV1i5my77OaVZa7E2T/XTkoHlzpbd/O9C+BX6wxqMWORATKDJG1KZoanNsWr0Z7mtpwVuehs0GbBA==}
 
-  '@agentified/fe-client@0.0.3':
-    resolution: {integrity: sha512-+m9TTPsjvmiEFcQ4z42Lbh+Yhv8bhxkjsZAoy6cNE699e+euadXTojCpr0iwX0TjdGlBMy383PxCpxhnPjY6NQ==}
+  '@agentified/fe-client@0.0.5-beta.0':
+    resolution: {integrity: sha512-tNKF3eVF2mrG+ZpRJXrMneTt7mY9b6g6Oc+Y3qkWZdj6SXFY7SVgWGt0pYMClbjSqo6L6y59Dtqj3rS9y6mHAw==}
 
-  '@agentified/react@0.0.3':
-    resolution: {integrity: sha512-lQgk82Ev2wt29pFLd7t8t6RjYXxGhvYb/CPtlBSWdTabfy5BNt4fzGHYFVrWSsc4TscyYbdGDzdnHNFiO/YPWQ==}
+  '@agentified/react@0.0.5-beta.0':
+    resolution: {integrity: sha512-wVqVYCm4/6HapNhvxybAtG1JfPr2euCKzT5DPZZFm7X5UP1L9Q5MP9w2kCp0YheIhEV+sFuitu/M4zSwSVaHuQ==}
     peerDependencies:
       react: '>=18.0.0'
 
@@ -755,13 +755,13 @@ snapshots:
       '@bufbuild/protobuf': 2.11.0
       '@protobuf-ts/protoc': 2.11.1
 
-  '@agentified/fe-client@0.0.3':
+  '@agentified/fe-client@0.0.5-beta.0':
     dependencies:
       '@ag-ui/client': 0.0.45
 
-  '@agentified/react@0.0.3(react@18.3.1)':
+  '@agentified/react@0.0.5-beta.0(react@18.3.1)':
     dependencies:
-      '@agentified/fe-client': 0.0.3
+      '@agentified/fe-client': 0.0.5-beta.0
       react: 18.3.1
 
   '@babel/code-frame@7.29.0':
