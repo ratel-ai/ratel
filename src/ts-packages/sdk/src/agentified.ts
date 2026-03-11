@@ -1,208 +1,153 @@
-import type {
-  ApiClientConfig,
-  AgentifiedEvent,
-  AppendMessagesResponse,
-  CaptureTurnOptions,
-  CaptureTurnResponse,
-  ContextOpts,
-  ContextResponse,
-  DiscoverResponse,
-  DiscoverTool,
-  DiscoverToolInput,
-  GetMessagesOpts,
-  GetMessagesResponse,
-  Message,
-  PrefetchOptions,
-  RankedTool,
-  RegisterResponse,
-  ServerTool,
-} from "./types.js";
+import { ApiClient } from "./api-client.js";
+import { DatasetRef } from "./dataset-ref.js";
+import { Instance } from "./instance.js";
+import { resolveBinaryPath, findFreePort } from "./spawn-utils.js";
+import type { RegisterInput } from "./types.js";
+import { spawn, type ChildProcess } from "node:child_process";
 
-export class ApiClient {
-  private config: ApiClientConfig;
+export class Agentified {
+  /** @internal */ sdk: ApiClient | null = null;
+  /** @internal */ serverUrl: string | null = null;
+  private connected = false;
+  private spawnedProcess: ChildProcess | null = null;
+  private cleanupHandlers: Array<[string, (...args: any[]) => void]> = [];
+  private restartCount = 0;
+  private spawnArgs: { binaryPath: string; port: number } | null = null;
 
-  constructor(config: ApiClientConfig) {
-    this.config = config;
-  }
-
-  async register(datasetId: string): Promise<RegisterResponse> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/tools`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tools: this.config.tools }),
-    });
-    return res.json() as Promise<RegisterResponse>;
-  }
-
-  async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string): Promise<RankedTool[]> {
-    const body: Record<string, unknown> = { query };
-    if (limit !== undefined) body.limit = limit;
-    if (exclude !== undefined) body.exclude = exclude;
-    if (turnId !== undefined) body.turn_id = turnId;
-
-    const res = await fetch(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/discover`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = (await res.json()) as DiscoverResponse;
-    const tools = data.tools ?? [];
-    if (this.config.tools.length > 0) {
-      const registered = new Set(this.config.tools.map((t) => t.name));
-      for (const tool of tools) {
-        if (!registered.has(tool.name)) {
-          throw new Error(`Discovered tool '${tool.name}' is not registered in the SDK. Register it before use.`);
-        }
+  async connect(serverUrl?: string): Promise<void> {
+    if (this.connected) throw new Error("Already connected");
+    if (!serverUrl) {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error("OPENAI_API_KEY environment variable is required for local spawn");
       }
+      const binaryPath = resolveBinaryPath();
+      if (!binaryPath) {
+        throw new Error("Could not resolve agentified core binary. Install the platform-specific package.");
+      }
+
+      const port = await findFreePort();
+      this.spawnArgs = { binaryPath, port };
+      this.spawnChild();
+
+      const url = `http://127.0.0.1:${port}`;
+      await this.healthCheckLoop(url);
+
+      this.registerCleanupHandlers();
+      this.registerCrashHandler();
+
+      this.serverUrl = url;
+      this.sdk = new ApiClient({ serverUrl: url, tools: [] });
+      this.connected = true;
+      return;
     }
-    return tools;
-  }
 
-  async prefetch(datasetId: string, options: PrefetchOptions): Promise<RankedTool[]> {
-    this.emit({ type: "agentified:prefetch:start", messages: options.messages });
-    const start = performance.now();
-
-    const query = options.messages.map((m) => m.content).join("\n");
-    const tools = await this.discover(datasetId, query, options.limit, options.exclude, options.turnId);
-
-    this.emit({
-      type: "agentified:prefetch:complete",
-      tools,
-      durationMs: performance.now() - start,
-    });
-    return tools;
-  }
-
-  async captureTurn(namespace: string, session: string, options: CaptureTurnOptions): Promise<CaptureTurnResponse> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/turns`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        namespace_id: namespace,
-        session_id: session,
-        tools_loaded: options.toolsLoaded,
-        message: options.message,
-      }),
-    });
-    const data = (await res.json()) as { turn_id: string };
-    return { turnId: data.turn_id };
-  }
-
-  async appendMessages(dataset: string, namespace: string, session: string, messages: Message[]): Promise<AppendMessagesResponse> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataset, namespace, session, messages }),
-    });
-    const data = (await res.json()) as { appended: number; first_seq: number; last_seq: number };
-    return { appended: data.appended, firstSeq: data.first_seq, lastSeq: data.last_seq };
-  }
-
-  async getMessages(dataset: string, namespace: string, session: string, opts?: GetMessagesOpts): Promise<GetMessagesResponse> {
-    const params = new URLSearchParams({ dataset, namespace, session });
-    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
-    if (opts?.afterSeq !== undefined) params.set("after_seq", String(opts.afterSeq));
-    if (opts?.aroundSeq !== undefined) params.set("around_seq", String(opts.aroundSeq));
-
-    const res = await fetch(`${this.config.serverUrl}/api/v1/messages?${params}`, {
+    const res = await fetch(`${serverUrl}/health`, {
       method: "GET",
+      signal: AbortSignal.timeout(5000),
     });
-    const data = (await res.json()) as { messages: any[]; has_more: boolean; max_seq: number };
-    return {
-      messages: data.messages.map((m: any) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        toolCallId: m.tool_call_id,
-        toolCalls: m.tool_calls,
-        createdAt: m.created_at,
-        seq: m.seq,
-      })),
-      hasMore: data.has_more,
-      maxSeq: data.max_seq,
-    };
+    if (!res.ok) {
+      throw new Error(`Health check failed: ${res.status}`);
+    }
+
+    this.serverUrl = serverUrl;
+    this.sdk = new ApiClient({ serverUrl, tools: [] });
+    this.connected = true;
   }
 
-  async getContext(dataset: string, namespace: string, session: string, opts?: ContextOpts): Promise<ContextResponse> {
-    const messagesConfig: Record<string, unknown> = {};
-    if (opts?.strategy !== undefined) messagesConfig.strategy = opts.strategy;
-    if (opts?.maxTokens !== undefined) messagesConfig.max_tokens = opts.maxTokens;
+  adaptTo<T>(adapter: { adapt: (ag: Agentified) => T }): T {
+    return adapter.adapt(this);
+  }
 
-    const res = await fetch(`${this.config.serverUrl}/api/v1/context`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataset, namespace, session, messages: messagesConfig }),
+  dataset(name: string): DatasetRef {
+    return new DatasetRef(this, name);
+  }
+
+  async register(input: RegisterInput): Promise<Instance> {
+    return this.dataset("default").register(input);
+  }
+
+  private spawnChild(): void {
+    if (!this.spawnArgs) return;
+    const { binaryPath, port } = this.spawnArgs;
+    const child = spawn(binaryPath, [], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, AGENTIFIED_PORT: String(port) },
     });
-    const data = (await res.json()) as {
-      messages: any[];
-      strategy_used: string;
-      total_messages: number;
-      included_messages: number;
-      recalled: { tools: unknown[]; memories: unknown[] };
-      token_estimate: number;
-      conversation_messages: number;
-      fallback: boolean;
+    this.spawnedProcess = child;
+  }
+
+  private registerCrashHandler(): void {
+    if (!this.spawnedProcess) return;
+    this.spawnedProcess.on("exit", (_code, _signal) => {
+      if (!this.connected) return;
+      if (this.restartCount >= 1) return;
+      this.restartCount++;
+      this.spawnChild();
+      this.registerCrashHandler();
+    });
+  }
+
+  private registerCleanupHandlers(): void {
+    const cleanup = () => {
+      if (this.spawnedProcess) {
+        this.spawnedProcess.kill("SIGTERM");
+        const child = this.spawnedProcess;
+        setTimeout(() => {
+          try { child.kill("SIGKILL"); } catch { /* already dead */ }
+        }, 2000);
+        this.spawnedProcess = null;
+      }
     };
-    return {
-      messages: data.messages.map((m: any) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        toolCallId: m.tool_call_id,
-        toolCalls: m.tool_calls,
-        createdAt: m.created_at,
-        seq: m.seq,
-      })),
-      strategyUsed: data.strategy_used,
-      totalMessages: data.total_messages,
-      includedMessages: data.included_messages,
-      recalled: data.recalled,
-      tokenEstimate: data.token_estimate,
-      conversationMessages: data.conversation_messages,
-      fallback: data.fallback,
-    };
+
+    for (const sig of ["SIGINT", "SIGTERM"] as const) {
+      const handler = () => { cleanup(); process.exit(); };
+      process.on(sig, handler);
+      this.cleanupHandlers.push([sig, handler]);
+    }
+
+    const exitHandler = () => { cleanup(); };
+    process.on("exit", exitHandler);
+    this.cleanupHandlers.push(["exit", exitHandler]);
   }
 
-  getFrontendTools(): ServerTool[] {
-    return this.config.tools.filter((t) => t.metadata?.location === "frontend");
+  private removeCleanupHandlers(): void {
+    for (const [event, handler] of this.cleanupHandlers) {
+      process.removeListener(event, handler);
+    }
+    this.cleanupHandlers = [];
   }
 
-  getFrontendToolNames(): string[] {
-    return this.getFrontendTools().map((t) => t.name);
+  /** @internal */ healthCheckDelayMs = 200;
+  /** @internal */ healthCheckMaxAttempts = 25;
+
+  private async healthCheckLoop(url: string): Promise<void> {
+    for (let i = 0; i < this.healthCheckMaxAttempts; i++) {
+      try {
+        const res = await fetch(`${url}/health`);
+        if (res.ok) return;
+      } catch {
+        // server not ready yet
+      }
+      await new Promise((r) => setTimeout(r, this.healthCheckDelayMs));
+    }
+    if (this.spawnedProcess) {
+      this.spawnedProcess.kill();
+      this.spawnedProcess = null;
+    }
+    throw new Error("Local server failed to start within 5s");
   }
 
-  asDiscoverTool(datasetId: string): DiscoverTool {
-    return {
-      definition: {
-        name: "agentified_discover",
-        description: "Find tools relevant to the current task. Call this when you need capabilities you don't have.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: "Natural language description of what you need to do" },
-            limit: { type: "number", description: "Max number of tools to return" },
-          },
-          required: ["query"],
-        },
-      },
-      execute: async (input: DiscoverToolInput): Promise<RankedTool[]> => {
-        this.emit({ type: "agentified:discover:start", query: input.query });
-        const start = performance.now();
+  async disconnect(): Promise<void> {
+    if (!this.connected) return;
 
-        const tools = await this.discover(datasetId, input.query, input.limit);
+    if (this.spawnedProcess) {
+      this.spawnedProcess.kill();
+      this.spawnedProcess = null;
+    }
 
-        this.emit({
-          type: "agentified:discover:complete",
-          query: input.query,
-          tools,
-          durationMs: performance.now() - start,
-        });
-        return tools;
-      },
-    };
-  }
-
-  private emit(event: AgentifiedEvent): void {
-    this.config.onEvent?.(event);
+    this.removeCleanupHandlers();
+    this.sdk = null;
+    this.serverUrl = null;
+    this.connected = false;
   }
 }

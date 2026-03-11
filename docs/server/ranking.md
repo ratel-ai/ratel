@@ -88,6 +88,6 @@ The 70/30 split means semantic usually dominates. BM25 acts as a tiebreaker and 
 
 ## See Also
 
-- [Architecture](../architecture.md) — Full system design
+- [Architecture](./architecture.md) — Full system design
 - [Session Continuity](./session-continuity.md) — How previous turns affect scoring
 - [Graph Expansion](./graph-expansion.md) — Dependency-based tool injection

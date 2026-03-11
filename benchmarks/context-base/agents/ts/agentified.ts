@@ -4,7 +4,7 @@ config({ path: "../../.env" });
 
 import { resolve } from "node:path";
 import { Agent } from "@mastra/core/agent";
-import { tool } from "@agentified/sdk";
+import { tool } from "agentified";
 import { AgentifiedMastra } from "@agentified/mastra";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { z } from "zod";

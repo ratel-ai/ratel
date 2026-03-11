@@ -1,6 +1,6 @@
 {
   "name": "@agentified/react",
-  "version": "0.0.5-beta.0",
+  "version": "0.0.5-beta.4",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

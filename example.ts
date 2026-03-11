@@ -3,12 +3,20 @@
  * ────────────────────────────────────────────────────────── */
 
 import { Agent } from 'mastra';
-import { Agentified } from '@agentified/mastra';
+import { Agentified } from 'agentified';
+import { mastra, convertToAgentifiedTools } from '@agentified/mastra';
 
-const ag = new Agentified();
+const ag = (new Agentified()).adaptTo(mastra());
 await ag.connect();
 
-const dataset = await ag.register({ tools: [/* ... */] });
+const dataset = await ag
+  .dataset("agent-xyz")
+  .register({
+    tools: [
+      ...agentifiedLikeTools,  // rationale for not supporting mastraLikeTools directly: we don't want to have an integration nightmare also on the inputs side as well (how do we handle edge cases? Or things that don't map clearly from mastra to agentified?) 
+      ...convertToAgentifiedTools(mastraLikeTools), // this can serve as a convenience layer if the user has some mastra tools already, but it makes the type clearer and the developer would be more aware that some things would not be mapped 100%
+    ],
+  });
 
 const agent = new Agent({
   system: `You are a helpful agent`,
@@ -30,9 +38,10 @@ const agent = new Agent({
  * ────────────────────────────────────────────────────────── */
 
 import { Agent } from 'mastra';
-import { Agentified } from '@agentified/mastra';
+import { Agentified } from 'agentified';
+import { mastra } from '@agentified/mastra';
 
-const ag = new Agentified();
+const ag = (new Agentified()).adaptTo(mastra());
 await ag.connect();
 
 const dataset = await ag
@@ -70,10 +79,15 @@ app.post('/chat', async (req) => {
   await session.updateConversation({ messages: req.body.messages });
 
   // 2. retrieve optimized context (read)
-  const { messages } = await session.getMessages({
-    strategy: 'recent+summary',
-    maxTokens: 4000,
-  });
+  const { messages } = await session.context
+    .messages({
+      strategy: 'recent+summary',
+      maxTokens: 4000,
+    })
+    .recall({
+      ...recallOptions, // memories, older messages, etc
+    })
+    .assemble();
 
   // 3. generate with optimized messages
   const response = await agent.generate(messages);
@@ -97,10 +111,14 @@ await conversation.append([
   { role: 'system', content: 'User upgraded to pro plan' },
 ]);
 
-const context = await conversation.context({
-  maxTokens: 4000,
-  strategy: 'recent+summary', // 'recent' | 'summary' | 'recent+summary' | 'full'
-});
+const context = await conversation.context
+  .messages({
+    maxTokens: 4000,
+    strategy: 'recent+summary', // 'recent' | 'summary' | 'recent+summary' | 'full'
+  })
+  .recall({})
+  .assemble();
+
 // context.messages → CoreMessage[] ready for generate()
 
 /* ──────────────────────────────────────────────────────────

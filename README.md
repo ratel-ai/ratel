@@ -12,7 +12,7 @@
   </p>
 
   <p>
-    <a href="https://www.npmjs.com/package/@agentified/sdk"><img src="https://img.shields.io/npm/v/@agentified/sdk?label=npm&color=cb3837" alt="npm" /></a>
+    <a href="https://www.npmjs.com/package/agentified"><img src="https://img.shields.io/npm/v/agentified?label=npm&color=cb3837" alt="npm" /></a>
     <a href="https://pypi.org/project/agentified/"><img src="https://img.shields.io/pypi/v/agentified?label=pypi&color=3775A9" alt="pypi" /></a>
     <a href="https://github.com/agentified/agentified/stargazers"><img src="https://img.shields.io/github/stars/agentified/agentified?style=social" alt="stars" /></a>
     <a href="https://discord.gg/HTXmrjvsDy"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da" alt="discord" /></a>
@@ -48,23 +48,24 @@ A **context engine** that registers all your tools, then uses hybrid semantic + 
 ### TypeScript
 
 ```bash
-npm install @agentified/sdk
+pnpm add agentified
 ```
 
 ```typescript
-import { ApiClient, tool } from "@agentified/sdk";
+import { Agentified } from "agentified";
 
-const ag = new ApiClient({
-  serverUrl: "http://localhost:9119",
+const ag = new Agentified();
+await ag.connect("http://localhost:9119");
+
+const dataset = await ag.dataset("my-agent").register({
   tools: [
-    tool({ name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
-    tool({ name: "search_docs", description: "Search documentation", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } }),
+    { name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] }, handler: async (args) => ({ temp: 22 }) },
+    { name: "search_docs", description: "Search documentation", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }, handler: async (args) => ({ results: [] }) },
   ],
 });
 
-await ag.register();
-const ranked = await ag.prefetch({ messages: [{ role: "user", content: "What's the weather in Rome?" }] });
-// → [{ name: "get_weather", score: 0.92, ... }]
+// dataset.discoverTool — agent-callable tool discovery
+// dataset.session(id)  — session-scoped tools + conversation
 ```
 
 ### Python
@@ -117,15 +118,15 @@ async with Agentified(AgentifiedConfig(
 
 ## Features
 
-**[Hybrid Ranking](./docs/concepts/ranking.md)** — Semantic similarity (70%) + BM25 keyword matching (30%) across tool name, description, and schemas.
+**[Hybrid Ranking](./docs/server/ranking.md)** — Semantic similarity (70%) + BM25 keyword matching (30%) across tool name, description, and schemas.
 
-**[Session Continuity](./docs/concepts/session-continuity.md)** — Capture turns to track tool usage. Previously-used tools are prioritized automatically.
+**[Session Continuity](./docs/server/session-continuity.md)** — Capture turns to track tool usage. Previously-used tools are prioritized automatically.
 
-**[Graph Expansion](./docs/concepts/graph-expansion.md)** — Tools declare `requires`/`provides` metadata. Dependencies are auto-injected.
+**[Graph Expansion](./docs/server/graph-expansion.md)** — Tools declare `requires`/`provides` metadata. Dependencies are auto-injected.
 
-**[Frontend Tools](./docs/concepts/frontend-tools.md)** — Tag tools with `metadata.location: "frontend"` to run them client-side. Built-in React Inspector for debugging.
+**[Frontend Tools](./docs/typescript/frontend-tools.md)** — Tag tools with `metadata.location: "frontend"` to run them client-side. Built-in React Inspector for debugging.
 
-**[Storage](./docs/concepts/storage.md)** — In-memory default, SQLite WAL for persistence. Async write-through, zero-config.
+**[Storage](./docs/server/storage.md)** — In-memory default, SQLite WAL for persistence. Async write-through, zero-config.
 
 **Framework Agnostic** — Works with Mastra, LangGraph, AG-UI, or raw API calls. TypeScript and Python.
 
@@ -137,14 +138,26 @@ async with Agentified(AgentifiedConfig(
 
 Full docs live in [`docs/`](./docs/):
 
-- **[Getting Started](./docs/getting-started.md)** — Install, run, register + discover
-- **[Architecture](./docs/architecture.md)** — System design, ranking algorithm, storage
-- **[Mastra Guide](./docs/guides/mastra.md)** — Full-stack TypeScript example
-- **[LangGraph Guide](./docs/guides/langgraph.md)** — Python + Gemini example
+- **[Getting Started (TypeScript)](./docs/typescript/getting-started.md)** — Paste-and-run TS example
+- **[Getting Started (Python)](./docs/python/getting-started.md)** — Paste-and-run Python example
+- **[Architecture](./docs/server/architecture.md)** — System design, ranking algorithm, storage
+- **[Mastra Guide](./docs/typescript/integrations/mastra.md)** — Full-stack TypeScript example
+- **[LangGraph Guide](./docs/python/integrations/langgraph.md)** — Python + Gemini example
 
 <br />
 
 ## Try it now
+
+### Run locally
+
+```bash
+# Start the server
+docker run -p 9119:9119 -e OPENAI_API_KEY=sk-... agentified/agentified-core
+
+# Install and run (TypeScript)
+pnpm add agentified
+pnpm tsx index.ts  # see docs/typescript/getting-started.md for the code
+```
 
 ### Sandbox
 
@@ -154,10 +167,12 @@ See Agentified in action. Compare token usage with and without smart tool select
 
 ### Examples
 
-| Example | Framework | Language |
-|---------|-----------|----------|
-| [QuickHR](./examples/quickhr) | Mastra + React | TypeScript |
-| [LangGraph Agent](./examples/py-langgraph) | LangGraph + Gemini | Python |
+| Example | What it shows | Complexity |
+|---------|---------------|------------|
+| [sdk-smoke](./examples/sdk-smoke) | SDK basics — register, discover, sessions | Minimal |
+| [mastra-smoke](./examples/mastra-smoke) | Mastra + OpenAI — LLM tool calling, AG-UI | Minimal |
+| [QuickHR](./examples/quickhr) | Full-stack Mastra + React app | Full |
+| [LangGraph Agent](./examples/py-langgraph) | LangGraph + Gemini (Python) | Full |
 
 <br />
 

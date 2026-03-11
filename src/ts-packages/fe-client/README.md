@@ -2,7 +2,7 @@
 
 Run agent tools in the browser. Stream everything.
 
-Frontend client for [Agentified](../../../README.md) — connects to an AG-UI agent backend, handles streaming events, manages [frontend tool execution](../../../docs/concepts/frontend-tools.md), and exposes full inspector state.
+Frontend client for [Agentified](../../../README.md) — connects to an AG-UI agent backend, handles streaming events, manages [frontend tool execution](../../../docs/typescript/frontend-tools.md), and exposes full inspector state.
 
 ## Install
 
@@ -160,8 +160,8 @@ The client handles frontend tools automatically:
 
 - [Root README](../../../README.md)
 - [Documentation](../../../docs/)
-- [Frontend Tools concept](../../../docs/concepts/frontend-tools.md)
-- [Mastra guide](../../../docs/guides/mastra.md) — Full-stack example
+- [Frontend Tools concept](../../../docs/typescript/frontend-tools.md)
+- [Mastra guide](../../../docs/typescript/integrations/mastra.md) — Full-stack example
 - [React Bindings](../react/README.md) — React wrapper with Provider/hooks
 - [TypeScript SDK](../sdk/README.md)
 - [agentified-core](../../core/README.md)

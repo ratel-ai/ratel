@@ -2,26 +2,34 @@
 
 Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **86% cost reduction, same accuracy**.
 
-## Getting Started
+## TypeScript / JavaScript
 
-- **[Getting Started](./getting-started.md)** — Install, run the server, register + discover in TS/Python
+- **[Getting Started](./typescript/getting-started.md)** — Install, paste-and-run, see results in 2 minutes
+- **[Mastra Integration](./typescript/integrations/mastra.md)** — Full-stack Mastra + React + Inspector
+- **[Frontend Tools](./typescript/frontend-tools.md)** — Client-side tool execution, React hooks, iteration loop
 
-## Architecture
+## Python
 
-- **[Architecture](./architecture.md)** — System design, registration/discovery flows, ranking algorithm, storage
+- **[Getting Started](./python/getting-started.md)** — Install, paste-and-run, see results in 2 minutes
+- **[LangGraph Integration](./python/integrations/langgraph.md)** — LangGraph + Gemini multi-turn agent
 
-## Concepts
+## Agentified Server
 
-- **[Hybrid Ranking](./concepts/ranking.md)** — Semantic + BM25 scoring, field weights, worked examples
-- **[Session Continuity](./concepts/session-continuity.md)** — Turn capture, tool boosting, multi-turn patterns
-- **[Graph Expansion](./concepts/graph-expansion.md)** — requires/provides metadata, auto-injection
-- **[Frontend Tools](./concepts/frontend-tools.md)** — Client-side tool execution, React hooks, iteration loop
-- **[Storage](./concepts/storage.md)** — In-memory vs SQLite, WAL mode, persistence config
+- **[Architecture](./server/architecture.md)** — System design, registration/discovery flows, ranking algorithm
+- **[REST API](./server/api.md)** — Endpoint summary and configuration
+- **[Hybrid Ranking](./server/ranking.md)** — Semantic + BM25 scoring, field weights, worked examples
+- **[Session Continuity](./server/session-continuity.md)** — Turn capture, tool boosting, multi-turn patterns
+- **[Graph Expansion](./server/graph-expansion.md)** — requires/provides metadata, auto-injection
+- **[Storage](./server/storage.md)** — In-memory vs SQLite, WAL mode, persistence config
 
-## Guides
+## Examples
 
-- **[Mastra + React](./guides/mastra.md)** — Full-stack: Mastra agent + Agentified + React + Inspector
-- **[LangGraph + Python](./guides/langgraph.md)** — LangGraph + Python SDK + Gemini
+| Example | What it shows |
+|---------|---------------|
+| [sdk-smoke](../examples/sdk-smoke/) | SDK basics — register, discover, session continuity (no LLM) |
+| [mastra-smoke](../examples/mastra-smoke/) | Mastra adapter — LLM generation, tool calling, AG-UI streaming |
+| [QuickHR](../examples/quickhr/) | Full-stack Mastra + React app |
+| [LangGraph Agent](../examples/py-langgraph/) | Python + LangGraph + Gemini |
 
 ## Package READMEs
 
@@ -33,3 +41,7 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 | [@agentified/react](../src/ts-packages/react/README.md) | React hooks + Inspector debug panel |
 | [@agentified/mastra](../src/ts-packages/mastra/README.md) | Mastra adapter — agent + discovery in one call |
 | [agentified (Python)](../src/py-packages/sdk/README.md) | Python SDK — async/sync clients |
+
+## Specs
+
+See [`specs/`](./specs/) for protocol and format specifications.

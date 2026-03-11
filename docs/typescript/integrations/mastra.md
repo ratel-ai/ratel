@@ -22,35 +22,32 @@ graph LR
 ### Install
 
 ```bash
-npm install @agentified/sdk @agentified/mastra @mastra/core fastify @fastify/cors
+pnpm add agentified @agentified/mastra @mastra/core fastify @fastify/cors
 ```
 
 ### Define tools
 
 ```typescript
 // tools.ts
-import { tool } from "@agentified/sdk";
+import type { AgentifiedTool } from "agentified";
 
-export const sdkTools = [
-  tool({
+export const tools: AgentifiedTool[] = [
+  {
     name: "list_employees",
     description: "List all employees",
     parameters: { type: "object", properties: {} },
-  }),
-  tool({
+    handler: async () => {
+      const res = await fetch("http://localhost:3003/api/employees");
+      return res.json();
+    },
+  },
+  {
     name: "navigate_to_page",
     description: "Navigate to a page in the app",
     parameters: { type: "object", properties: { page: { type: "string", enum: ["dashboard", "employees", "timeoff"] } }, required: ["page"] },
-    metadata: { location: "frontend" },
-  }),
-];
-
-export const toolHandlers: Record<string, (args: any) => Promise<unknown>> = {
-  list_employees: async () => {
-    const res = await fetch("http://localhost:3003/api/employees");
-    return res.json();
+    type: "client",
   },
-};
+];
 ```
 
 ### Wire up the agent
@@ -60,46 +57,46 @@ export const toolHandlers: Record<string, (args: any) => Promise<unknown>> = {
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { Agent } from "@mastra/core/agent";
-import { AgentifiedMastra, streamSSE } from "@agentified/mastra";
-import { sdkTools, toolHandlers } from "./tools.js";
+import { Agentified } from "agentified";
+import { mastra } from "@agentified/mastra";
+import { tools } from "./tools.js";
+
+const ag = new Agentified().adaptTo(mastra());
+await ag.connect("http://localhost:9119");
+
+const dataset = await ag.dataset("hr-agent").register({ tools });
 
 const agent = new Agent({
   name: "my-agent",
   instructions: "You are a helpful HR assistant.",
   model: "google/gemini-3-flash-preview",
-});
-
-const agentified = new AgentifiedMastra({
-  agentifiedUrl: "http://localhost:9119",
-  tools: sdkTools,
-  toolHandlers,
-  agent,
+  tools: { discoverTool: dataset.discoverTool },
+  prepareStep: dataset.prepareStep,
 });
 
 const app = Fastify();
 await app.register(cors, { origin: "*" });
-await agentified.register();
 
 app.post("/api/chat", async (req, reply) => {
-  const { messages, forwardedProps } = req.body as any;
-  const observable = await agentified.run({
-    messages: messages ?? [],
-    frontendTools: forwardedProps?.availableFrontendTools,
-  });
-  return streamSSE(observable, reply.raw);
+  const { messages } = req.body as any;
+  const session = dataset.session(req.headers["x-session-id"] as string);
+  await session.updateConversation({ messages });
+  const ctx = await session.context.messages({ strategy: "recent", maxTokens: 4000 }).assemble();
+  const response = await agent.generate(ctx.messages);
+  return reply.send(response);
 });
 
 app.listen({ port: 3003 });
 ```
 
-The `run()` method handles the full cycle: prefetch → hydrate tools (JSON Schema → Zod) → agent.generate → AG-UI events → capture turn.
+The new API follows a `Agentified → dataset → instance → session` hierarchy with conversation persistence built in.
 
 ## 2. Frontend Setup
 
 ### Install
 
 ```bash
-npm install @agentified/react @agentified/fe-client react
+pnpm add @agentified/react @agentified/fe-client react
 ```
 
 ### App with Provider + Inspector
@@ -163,6 +160,6 @@ npx vite
 ## See Also
 
 - [QuickHR example source](../../examples/quickhr/) — Complete working example
-- [Frontend Tools](../concepts/frontend-tools.md) — How frontend tool interception works
+- [Frontend Tools](../frontend-tools.md) — How frontend tool interception works
 - [@agentified/mastra README](../../src/ts-packages/mastra/README.md) — Full API reference
 - [@agentified/react README](../../src/ts-packages/react/README.md) — Provider, hooks, Inspector API

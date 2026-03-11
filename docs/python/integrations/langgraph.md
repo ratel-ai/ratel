@@ -148,6 +148,6 @@ async with Agentified(AgentifiedConfig(
 ## See Also
 
 - [py-langgraph example source](../../examples/py-langgraph/) — Complete working example
-- [Session Continuity](../concepts/session-continuity.md) — Multi-turn patterns
+- [Session Continuity](../../server/session-continuity.md) — Multi-turn patterns
 - [Python SDK README](../../src/py-packages/sdk/README.md) — Full API reference
-- [Hybrid Ranking](../concepts/ranking.md) — How scores are computed
+- [Hybrid Ranking](../../server/ranking.md) — How scores are computed

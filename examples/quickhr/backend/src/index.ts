@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { Agent } from "@mastra/core/agent";
-import { tool } from "@agentified/sdk";
+import { tool } from "agentified";
 import { AgentifiedMastra, streamSSE } from "@agentified/mastra";
 import { TOOL_DEFINITIONS, toolHandlers } from "./tools/index.js";
 import { registerRoutes } from "./routes.js";

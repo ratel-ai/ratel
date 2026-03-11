@@ -105,5 +105,5 @@ CREATE TABLE messages (
 
 ## See Also
 
-- [Architecture](../architecture.md) — How storage fits in the system
+- [Architecture](./architecture.md) — How storage fits in the system
 - [agentified-core README](../../src/core/README.md) — Server configuration and Docker setup

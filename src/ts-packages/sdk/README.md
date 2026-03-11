@@ -1,34 +1,57 @@
-# @agentified/sdk
+# agentified
 
 Register 200 tools. Get the 5 that matter.
 
-TypeScript SDK for [Agentified](../../../README.md) — register tools, discover relevant ones via [hybrid ranking](../../../docs/concepts/ranking.md), and track [sessions](../../../docs/concepts/session-continuity.md) across turns.
+TypeScript SDK for [Agentified](../../../README.md) — register tools, discover relevant ones via [hybrid ranking](../../../docs/server/ranking.md), and track [sessions](../../../docs/server/session-continuity.md) across turns.
 
 ## Install
 
 ```bash
-npm install @agentified/sdk
+npm install agentified
 ```
 
 ## Quick Start
 
 ```typescript
-import { ApiClient, tool } from "@agentified/sdk";
+import { Agentified } from "agentified";
 
-const agent = new ApiClient({
-  serverUrl: "http://localhost:9119",
+const ag = new Agentified();
+await ag.connect("http://localhost:9119");
+
+const dataset = await ag.dataset("my-agent").register({
   tools: [
-    tool({ name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
-    tool({ name: "book_flight", description: "Book a flight", parameters: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] } }),
+    { name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] }, handler: async (args) => ({ temp: 22 }) },
+    { name: "book_flight", description: "Book a flight", parameters: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] }, handler: async (args) => ({ booked: true }) },
   ],
 });
 
-await agent.register();
+// dataset.discoverTool   — give to your agent for runtime tool discovery
+// dataset.prepareStep    — callback that expands active tools after discover
+// dataset.session(chatId) — session-scoped tools + conversation persistence
+// dataset.namespace(userId) — user-scoped memory (stub)
+```
 
-const ranked = await agent.prefetch({
-  messages: [{ role: "user", content: "What's the weather in Rome?" }],
-});
-// → [{ name: "get_weather", score: 0.92, ... }, ...]
+See [sdk-smoke](../../../examples/sdk-smoke/) for a runnable version of this.
+
+## Hierarchy
+
+```
+Agentified
+  ├─ .adaptTo(adapter)   → T (framework-specific wrapper)
+  └─ .dataset(name) → DatasetRef
+       └─ .register({ tools }) → Instance
+            ├─ .discoverTool     — DiscoverTool
+            ├─ .prepareStep      — PrepareStepFn
+            ├─ .session(id)      → Session
+            │    ├─ .discoverTool
+            │    ├─ .prepareStep (persists messages)
+            │    ├─ .context.messages(opts).recall(opts).assemble()
+            │    ├─ .updateConversation({ messages })
+            │    ├─ .getMessages(opts)
+            │    └─ .conversation → Conversation
+            └─ .namespace(id)    → Namespace
+                 ├─ .tools (stub)
+                 └─ .session(id) → Session
 ```
 
 ## API Reference
@@ -38,7 +61,7 @@ const ranked = await agent.prefetch({
 Creates a `ServerTool` with auto-populated `fields` for embedding.
 
 ```typescript
-import { tool } from "@agentified/sdk";
+import { tool } from "agentified";
 
 const t = tool({
   name: "search_docs",
@@ -178,12 +201,13 @@ interface TokenUsage {
 
 - [Root README](../../../README.md)
 - [Documentation](../../../docs/)
-- [Architecture](../../../docs/architecture.md)
+- [Architecture](../../../docs/server/architecture.md)
 - [agentified-core](../../core/README.md)
 - [Frontend Client](../fe-client/README.md)
 - [React Bindings](../react/README.md)
 - [Mastra Adapter](../mastra/README.md)
 - [Python SDK](../../py-packages/sdk/README.md)
+- [sdk-smoke example](../../../examples/sdk-smoke/) — runnable smoke test
 
 ## License
 
