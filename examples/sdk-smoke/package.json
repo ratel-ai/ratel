@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx index.ts"
+    "start": "node index.ts"
   },
   "dependencies": {
     "agentified": "0.0.5-beta.3"
