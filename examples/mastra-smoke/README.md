@@ -39,7 +39,7 @@ pnpm tsx index.ts
 
 ## Next steps
 
-- [Getting Started](../../docs/getting-started.md) — full walkthrough
+- [Getting Started](../../docs/typescript/getting-started.md) — full walkthrough
 - [sdk-smoke](../sdk-smoke/) — SDK-only version (no LLM)
-- [Mastra guide](../../docs/guides/mastra.md) — full-stack walkthrough
+- [Mastra guide](../../docs/typescript/integrations/mastra.md) — full-stack walkthrough
 - [Mastra adapter README](../../src/ts-packages/mastra/README.md) — API reference

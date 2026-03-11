@@ -39,6 +39,6 @@ pnpm tsx index.ts
 
 ## Next steps
 
-- [Getting Started](../../docs/getting-started.md) — full walkthrough
+- [Getting Started](../../docs/typescript/getting-started.md) — full walkthrough
 - [mastra-smoke](../mastra-smoke/) — same idea with an LLM agent
 - [SDK README](../../src/ts-packages/sdk/README.md) — full API reference

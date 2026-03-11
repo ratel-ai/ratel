@@ -1,6 +1,6 @@
 # @agentified/mastra
 
-Mastra adapter layer for [Agentified](../../../README.md) — wraps SDK classes with Mastra-typed shells via composition, plus AG-UI streaming. See the [Mastra guide](../../../docs/guides/mastra.md) for a full-stack walkthrough.
+Mastra adapter layer for [Agentified](../../../README.md) — wraps SDK classes with Mastra-typed shells via composition, plus AG-UI streaming. See the [Mastra guide](../../../docs/typescript/integrations/mastra.md) for a full-stack walkthrough.
 
 ## Install
 
@@ -155,8 +155,8 @@ import { jsonSchemaToZod } from "@agentified/mastra";
 
 - [Root README](../../../README.md)
 - [Documentation](../../../docs/)
-- [Mastra guide](../../../docs/guides/mastra.md) — Full-stack walkthrough
-- [Architecture](../../../docs/architecture.md)
+- [Mastra guide](../../../docs/typescript/integrations/mastra.md) — Full-stack walkthrough
+- [Architecture](../../../docs/server/architecture.md)
 - [TypeScript SDK](../sdk/README.md)
 - [Frontend Client](../fe-client/README.md)
 - [React Bindings](../react/README.md)

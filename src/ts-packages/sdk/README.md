@@ -2,7 +2,7 @@
 
 Register 200 tools. Get the 5 that matter.
 
-TypeScript SDK for [Agentified](../../../README.md) — register tools, discover relevant ones via [hybrid ranking](../../../docs/concepts/ranking.md), and track [sessions](../../../docs/concepts/session-continuity.md) across turns.
+TypeScript SDK for [Agentified](../../../README.md) — register tools, discover relevant ones via [hybrid ranking](../../../docs/server/ranking.md), and track [sessions](../../../docs/server/session-continuity.md) across turns.
 
 ## Install
 
@@ -201,7 +201,7 @@ interface TokenUsage {
 
 - [Root README](../../../README.md)
 - [Documentation](../../../docs/)
-- [Architecture](../../../docs/architecture.md)
+- [Architecture](../../../docs/server/architecture.md)
 - [agentified-core](../../core/README.md)
 - [Frontend Client](../fe-client/README.md)
 - [React Bindings](../react/README.md)

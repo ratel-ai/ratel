@@ -22,7 +22,7 @@ graph LR
 ### Install
 
 ```bash
-npm install agentified @agentified/mastra @mastra/core fastify @fastify/cors
+pnpm add agentified @agentified/mastra @mastra/core fastify @fastify/cors
 ```
 
 ### Define tools
@@ -96,7 +96,7 @@ The new API follows a `Agentified → dataset → instance → session` hierarch
 ### Install
 
 ```bash
-npm install @agentified/react @agentified/fe-client react
+pnpm add @agentified/react @agentified/fe-client react
 ```
 
 ### App with Provider + Inspector
@@ -160,6 +160,6 @@ npx vite
 ## See Also
 
 - [QuickHR example source](../../examples/quickhr/) — Complete working example
-- [Frontend Tools](../concepts/frontend-tools.md) — How frontend tool interception works
+- [Frontend Tools](../frontend-tools.md) — How frontend tool interception works
 - [@agentified/mastra README](../../src/ts-packages/mastra/README.md) — Full API reference
 - [@agentified/react README](../../src/ts-packages/react/README.md) — Provider, hooks, Inspector API

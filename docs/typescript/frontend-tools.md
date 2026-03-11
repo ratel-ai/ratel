@@ -114,4 +114,4 @@ import { Inspector } from "@agentified/react";
 
 - [@agentified/fe-client README](../../src/ts-packages/fe-client/README.md) — Full API reference
 - [@agentified/react README](../../src/ts-packages/react/README.md) — Provider, hooks, Inspector
-- [Mastra guide](../guides/mastra.md) — Full-stack example with frontend tools
+- [Mastra guide](./integrations/mastra.md) — Full-stack example with frontend tools

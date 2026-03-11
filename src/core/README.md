@@ -2,7 +2,7 @@
 
 Rust server. Hybrid ranking. Sub-millisecond discovery.
 
-Registers tools, computes embeddings, and serves the most relevant subset for any query via a REST API. See [Architecture](../../docs/architecture.md) for the full system design.
+Registers tools, computes embeddings, and serves the most relevant subset for any query via a REST API. See [Architecture](../../docs/server/architecture.md) for the full system design.
 
 ## Quick Start
 
@@ -29,7 +29,7 @@ OPENAI_API_KEY=sk-... cargo run
 | `AGENTIFIED_STORAGE` | No | — | Set to `"sqlite"` for persistent storage |
 | `AGENTIFIED_DB_PATH` | No | `./agentified.db` | SQLite DB path (when storage=sqlite) |
 
-See [Storage docs](../../docs/concepts/storage.md) for persistence details.
+See [Storage docs](../../docs/server/storage.md) for persistence details.
 
 ## API Reference
 
@@ -86,7 +86,7 @@ List all registered tools in a dataset.
 
 ### `POST /api/v1/datasets/{id}/discover`
 
-Discover the most relevant tools for a query using hybrid ranking. See [Ranking docs](../../docs/concepts/ranking.md).
+Discover the most relevant tools for a query using hybrid ranking. See [Ranking docs](../../docs/server/ranking.md).
 
 **Request:**
 
@@ -110,7 +110,7 @@ Discover the most relevant tools for a query using hybrid ranking. See [Ranking 
 | `query` | string | required | Natural language query |
 | `limit` | number | 5 | Max tools to return (max 100) |
 | `exclude` | string[] | [] | Tool names to exclude |
-| `turn_id` | string | — | Previous turn ID for [session continuity](../../docs/concepts/session-continuity.md) |
+| `turn_id` | string | — | Previous turn ID for [session continuity](../../docs/server/session-continuity.md) |
 | `embedding_weights` | object | see below | Field weights for semantic scoring |
 
 **Default embedding weights:** name=0.1, description=0.5, input_schema=0.3, output_schema=0.1
@@ -122,7 +122,7 @@ Discover the most relevant tools for a query using hybrid ranking. See [Ranking 
 4. Normalize BM25 to [0, 1]
 5. Final score = `0.7 × semantic + 0.3 × BM25`
 6. If `turn_id` provided, tools from that turn are prepended with score=1.0
-7. [Graph expansion](../../docs/concepts/graph-expansion.md) injects dependency tools
+7. [Graph expansion](../../docs/server/graph-expansion.md) injects dependency tools
 
 **Response:**
 
@@ -136,7 +136,7 @@ Discover the most relevant tools for a query using hybrid ranking. See [Ranking 
 
 ### `POST /api/v1/turns`
 
-Capture a turn for [session continuity](../../docs/concepts/session-continuity.md). Returns a `turn_id` to pass to subsequent `discover` calls.
+Capture a turn for [session continuity](../../docs/server/session-continuity.md). Returns a `turn_id` to pass to subsequent `discover` calls.
 
 **Request:**
 
@@ -182,7 +182,7 @@ Get context for a session with a strategy (`recent` or `full`) and token budget.
 
 By default, agentified-core runs fully in-memory. Set `AGENTIFIED_STORAGE=sqlite` for persistence across restarts.
 
-SQLite uses WAL mode and stores: tools, turns, embedding cache, and messages. On startup, all data is loaded into memory. Writes are async (fire-and-forget). See [Storage docs](../../docs/concepts/storage.md).
+SQLite uses WAL mode and stores: tools, turns, embedding cache, and messages. On startup, all data is loaded into memory. Writes are async (fire-and-forget). See [Storage docs](../../docs/server/storage.md).
 
 ## Docker
 
@@ -206,7 +206,7 @@ docker run -p 9119:9119 \
 ## Links
 
 - [Root README](../../README.md)
-- [Architecture](../../docs/architecture.md)
+- [Architecture](../../docs/server/architecture.md)
 - [TypeScript SDK](../ts-packages/sdk/README.md)
 - [Python SDK](../py-packages/sdk/README.md)
 - [QuickHR Example](../../examples/quickhr/)

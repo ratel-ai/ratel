@@ -71,5 +71,5 @@ Query: `"update salary to 95000"`
 
 ## See Also
 
-- [Architecture](../architecture.md) — Where graph expansion fits in the discovery flow
+- [Architecture](./architecture.md) — Where graph expansion fits in the discovery flow
 - [Hybrid Ranking](./ranking.md) — How base scores are computed

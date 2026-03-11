@@ -94,7 +94,7 @@ Standard BM25 with `k1=1.2`, `b=0.75` over concatenated tool text. Raw scores ar
 final_score = 0.7 × semantic_score + 0.3 × normalized_bm25
 ```
 
-See [Hybrid Ranking deep dive](./concepts/ranking.md) for worked examples.
+See [Hybrid Ranking deep dive](./ranking.md) for worked examples.
 
 ## Session Continuity
 
@@ -105,13 +105,13 @@ When a `turn_id` is provided to discover:
 3. Exclude them from the ranked results (no duplicates)
 4. Append freshly ranked tools after the base tools
 
-This ensures previously-used tools remain available across turns. See [Session Continuity](./concepts/session-continuity.md).
+This ensures previously-used tools remain available across turns. See [Session Continuity](./session-continuity.md).
 
 ## Graph Expansion
 
 After ranking, the server checks if any top-K tool has `metadata.requires` fields. If so, it scans all tools for ones with matching `metadata.provides` entries and injects them (up to 60% of `limit` extra tools, `graph_expanded: true`).
 
-See [Graph Expansion](./concepts/graph-expansion.md).
+See [Graph Expansion](./graph-expansion.md).
 
 ## Storage
 
@@ -129,7 +129,7 @@ SQLite stores:
 | `embedding_cache` | Text → embedding vector mappings |
 | `messages` | Conversation messages (dataset, namespace, session scoped) |
 
-See [Storage](./concepts/storage.md) for configuration details.
+See [Storage](./storage.md) for configuration details.
 
 ## Why Rust
 
@@ -152,4 +152,4 @@ See [Storage](./concepts/storage.md) for configuration details.
 | `GET` | `/api/v1/messages` | Get messages |
 | `POST` | `/api/v1/context` | Get context (messages + strategy) |
 
-Full API reference: [agentified-core README](../src/core/README.md).
+Full API reference: [agentified-core README](../../src/core/README.md).

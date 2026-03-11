@@ -106,6 +106,6 @@ Turns are stored in-memory (default) or SQLite (with `AGENTIFIED_STORAGE=sqlite`
 
 ## See Also
 
-- [Architecture](../architecture.md) — Full discovery flow
+- [Architecture](./architecture.md) — Full discovery flow
 - [Hybrid Ranking](./ranking.md) — How freshly ranked tools are scored
 - [Storage](./storage.md) — Persistence configuration
