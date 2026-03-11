@@ -33,19 +33,26 @@ Create `main.py`:
 
 ```python
 import asyncio
-from agentified import Agentified, AgentifiedConfig, tool
+from agentified import Agentified, BackendTool, RegisterInput
 
 async def main():
-    async with Agentified(AgentifiedConfig(
-        server_url="http://localhost:9119",
-        tools=[
-            tool(name="get_weather", description="Get current weather for a city", parameters={"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}),
-            tool(name="search_docs", description="Search documentation by keyword", parameters={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}),
-        ],
-    )) as agent:
-        await agent.register()
-        ranked = await agent.prefetch(messages=[{"role": "user", "content": "What's the weather in Rome?"}])
-        print("Discovered tools:", [(t.name, t.score) for t in ranked])
+    ag = Agentified()
+    await ag.connect("http://localhost:9119")
+
+    instance = await ag.register(RegisterInput(tools=[
+        BackendTool(name="get_weather", description="Get current weather for a city",
+                    parameters={"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+                    handler=lambda args: {"temp": 22, "city": args["city"]}),
+        BackendTool(name="search_docs", description="Search documentation by keyword",
+                    parameters={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+                    handler=lambda args: {"results": [f"Doc about {args['query']}"]}),
+    ]))
+
+    session = instance.session("my-session")
+    discovered = await session.discover_tool.execute({"query": "What's the weather in Rome?"})
+    print("Discovered tools:", [(t.name, t.score) for t in discovered])
+
+    await ag.disconnect()
 
 asyncio.run(main())
 ```
@@ -69,6 +76,7 @@ Read [Architecture](../server/architecture.md) for the full deep dive.
 
 ## Next steps
 
-- **[LangGraph Integration](./integrations/langgraph.md)** — Python + LangGraph + Gemini example
+- **[LangGraph Integration](./integrations/langgraph.md)** — Python + LangGraph + OpenAI example
 - **[SDK API Reference](../../src/py-packages/sdk/README.md)** — Full Python API
-- **[py-langgraph example](../../examples/py-langgraph/)** — Complete working example
+- **[py-sdk-smoke example](../../examples/py-sdk-smoke/)** — Minimal smoke test
+- **[py-langchain-sdk-smoke example](../../examples/py-langchain-sdk-smoke/)** — LangChain integration

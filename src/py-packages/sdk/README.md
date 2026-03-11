@@ -2,7 +2,7 @@
 
 Register 200 tools. Get the 5 that matter. Python.
 
-Async and sync clients for [Agentified](../../../README.md) — tool registration, context-aware [discovery](../../../docs/server/ranking.md), and [session tracking](../../../docs/server/session-continuity.md). See the [LangGraph guide](../../../docs/python/integrations/langgraph.md) for a full walkthrough.
+Async and sync clients for [Agentified](../../../README.md) — tool registration, context-aware [discovery](../../../docs/server/ranking.md), [session tracking](../../../docs/server/session-continuity.md), and message persistence. See the [LangGraph guide](../../../docs/python/integrations/langgraph.md) for a full walkthrough.
 
 ## Install
 
@@ -15,184 +15,189 @@ Requires Python >= 3.10.
 ## Quick Start
 
 ```python
-from agentified import Agentified, AgentifiedConfig, tool
+import asyncio
+from agentified import Agentified, BackendTool, RegisterInput
 
-async with Agentified(AgentifiedConfig(
-    server_url="http://localhost:9119",
-    tools=[
-        tool(name="get_weather", description="Get current weather", parameters={"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}),
-        tool(name="book_flight", description="Book a flight", parameters={"type": "object", "properties": {"from": {"type": "string"}, "to": {"type": "string"}}, "required": ["from", "to"]}),
-    ],
-)) as agent:
-    await agent.register()
-    ranked = await agent.prefetch(messages=[{"role": "user", "content": "What's the weather in Rome?"}])
+async def main():
+    ag = Agentified()
+    await ag.connect("http://localhost:9119")
+
+    instance = await ag.register(RegisterInput(tools=[
+        BackendTool(name="get_weather", description="Get current weather",
+                    parameters={"type": "object", "properties": {"city": {"type": "string"}}},
+                    handler=lambda args: {"temp": 22, "city": args["city"]}),
+    ]))
+    session = instance.session("my-session")
+
+    # Discover relevant tools
+    discovered = await session.discover_tool.execute({"query": "weather in Rome"})
     # [RankedTool(name='get_weather', score=0.92, ...)]
+
+    # Persist conversation
+    await session.update_conversation([
+        {"role": "user", "content": "What's the weather in Rome?"},
+        {"role": "assistant", "content": "It's 22°C in Rome."},
+    ])
+
+    # Assemble context
+    ctx = await session.context.messages(strategy="recent").assemble()
+
+    await ag.disconnect()
+
+asyncio.run(main())
 ```
 
-## API Reference
+## API Hierarchy
 
-### `tool()`
+```
+Agentified
+  ├── connect(server_url) → health check, store url
+  ├── disconnect() → cleanup
+  ├── dataset(name) → DatasetRef
+  │    └── register(RegisterInput) → Instance
+  └── register(RegisterInput) → Instance (default dataset)
 
-Creates a `ServerTool` with auto-populated fields for embedding.
+Instance
+  ├── discover_tool → DiscoverTool
+  ├── session(id) → Session (namespace="default")
+  └── namespace(id) → Namespace
+       └── session(id) → Session
 
-```python
-from agentified import tool
-
-t = tool(
-    name="search_docs",
-    description="Search documentation by keyword",
-    parameters={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
-    metadata={"category": "search"},  # optional
-)
+Session
+  ├── conversation → Conversation
+  │    ├── append(messages) → AppendMessagesResponse
+  │    └── messages(opts?) → list[StoredMessage]
+  ├── context → ContextBuilder (new each access)
+  │    ├── messages(strategy?, max_tokens?) → self (fluent)
+  │    ├── recall() → self (stub)
+  │    └── assemble() → AssembledContext
+  ├── discover_tool → DiscoverTool
+  ├── get_messages(opts?) → GetMessagesResult
+  └── update_conversation(messages) → None (with dedup)
 ```
 
-### `Agentified` (async)
+## `Agentified` (async)
 
 ```python
-from agentified import Agentified, AgentifiedConfig
-
-config = AgentifiedConfig(
-    server_url="http://localhost:9119",
-    tools=[...],
-    on_event=lambda e: print(e),  # optional
-)
-
-async with Agentified(config) as agent:
-    ...
+ag = Agentified()
+await ag.connect("http://localhost:9119")
+# ... use ag ...
+await ag.disconnect()
 ```
 
-#### `agent.register()`
+Or as context manager:
 
 ```python
-result = await agent.register()
-# RegisterResponse(registered=10)
+async with Agentified() as ag:
+    await ag.connect("http://localhost:9119")
+    # auto-disconnects on exit
 ```
 
-#### `agent.prefetch()`
+### `ag.register(input)`
 
 ```python
-tools = await agent.prefetch(
-    messages=[{"role": "user", "content": "Book a flight to Paris"}],
-    limit=10,               # default 5
-    exclude=["admin_tool"],  # optional
-    turn_id="prev-turn-id", # optional, for session continuity
-)
-# list[RankedTool]
+instance = await ag.register(RegisterInput(tools=[
+    BackendTool(name="t1", description="...", parameters={...}, handler=my_handler),
+]))
 ```
 
-#### `agent.capture_turn()`
+### `ag.dataset(name)`
 
 ```python
-result = await agent.capture_turn(
-    tools_loaded=["get_weather", "book_flight"],
-    message="What's the weather in Rome?",
-)
-# CaptureTurnResponse(turn_id="...")
+ref = ag.dataset("custom-dataset")
+instance = await ref.register(RegisterInput(tools=[...]))
 ```
 
-#### `agent.get_frontend_tools()` / `agent.get_frontend_tool_names()`
-
-Returns tools where `metadata.location == "frontend"`.
-
-#### `agent.as_discover_tool()`
-
-Returns a `DiscoverTool` with a `definition` and async `execute` callable.
+## `Session`
 
 ```python
-discover = agent.as_discover_tool()
-# discover.definition → ToolDefinition(name="agentified_discover", ...)
-# await discover.execute(DiscoverToolInput(query="weather", limit=5))
+session = instance.session("my-session")
 ```
 
-### `SyncAgentified`
+### `session.update_conversation(messages)`
 
-Synchronous wrapper — same API, uses `asyncio.run()` internally.
+Persists messages with deduplication (won't re-append already-stored messages):
 
 ```python
-from agentified import SyncAgentified, AgentifiedConfig, tool
+await session.update_conversation([
+    {"role": "user", "content": "hello"},
+    {"role": "assistant", "content": "hi"},
+])
+```
 
-agent = SyncAgentified(AgentifiedConfig(
-    server_url="http://localhost:9119",
-    tools=[tool(name="ping", description="Ping", parameters={"type": "object", "properties": {}})],
-))
-agent.register()
-ranked = agent.prefetch(messages=[{"role": "user", "content": "ping"}])
+### `session.get_messages(opts?)`
+
+```python
+result = await session.get_messages(GetMessagesOptions(strategy="recent", max_messages=10))
+# result.messages, result.total_messages, result.strategy_used
+```
+
+### `session.context` (ContextBuilder)
+
+Fluent API for assembling context:
+
+```python
+ctx = await session.context.messages(strategy="recent", max_tokens=4000).assemble()
+# ctx.messages, ctx.strategy_used, ctx.token_estimate, ctx.recalled
+```
+
+### `session.discover_tool`
+
+```python
+discovered = await session.discover_tool.execute({"query": "weather tools", "limit": 5})
+```
+
+## `SyncAgentified`
+
+Synchronous wrapper for `connect`/`disconnect`/`register`/`dataset`:
+
+```python
+from agentified import SyncAgentified, BackendTool, RegisterInput
+
+client = SyncAgentified()
+client.connect("http://localhost:9119")
+instance = client.register(RegisterInput(tools=[...]))
+# Instance, Session, etc. are async-only — use asyncio.run() for deeper layers
+client.disconnect()
 ```
 
 ## Events
 
-Subscribe via `on_event` in the config:
+Subscribe via `on_event` on `ApiClientConfig`:
 
 ```python
 def handle_event(event):
     match event.type:
-        case "agentified:prefetch:start":     # PrefetchStartEvent
-        case "agentified:prefetch:complete":  # PrefetchCompleteEvent
-        case "agentified:prefetch:skipped":   # PrefetchSkippedEvent
-        case "agentified:discover:start":     # DiscoverStartEvent
-        case "agentified:discover:complete":  # DiscoverCompleteEvent
-
-config = AgentifiedConfig(server_url="...", tools=[...], on_event=handle_event)
+        case "agentified:prefetch:start":     ...
+        case "agentified:prefetch:complete":  ...
+        case "agentified:discover:start":     ...
+        case "agentified:discover:complete":  ...
 ```
 
 ## LangGraph Example
 
 ```python
-from agentified import Agentified, AgentifiedConfig, tool
+from agentified import Agentified, BackendTool, RegisterInput
+from langchain_core.tools import StructuredTool
+from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-tools_list = [
-    tool(name="get_weather", description="Get weather", parameters={...}),
-    tool(name="search_docs", description="Search docs", parameters={...}),
-]
+ag = Agentified()
+await ag.connect("http://localhost:9119")
+instance = await ag.register(RegisterInput(tools=[...]))
+session = instance.session("my-session")
 
-async with Agentified(AgentifiedConfig(
-    server_url="http://localhost:9119",
-    tools=tools_list,
-)) as agent:
-    await agent.register()
+# Discover relevant tools
+discovered = await session.discover_tool.execute({"query": "weather"})
+lc_tools = [StructuredTool.from_function(func=handler, name=t.name, description=t.description) for t in discovered]
 
-    # Prefetch relevant tools
-    ranked = await agent.prefetch(messages=[{"role": "user", "content": "What's the weather?"}], limit=15)
-
-    # Build LangChain tools from ranked results
-    lc_tools = [build_langchain_tool(t) for t in ranked]
-
-    # Create and run LangGraph agent
-    llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview")
-    graph = create_react_agent(llm, lc_tools)
-    result = await graph.ainvoke({"messages": [{"role": "user", "content": "What's the weather?"}]})
+# Run LangGraph agent with filtered tools
+llm = ChatOpenAI(model="gpt-4o-mini")
+agent = create_react_agent(llm, lc_tools)
+result = await agent.ainvoke({"messages": [{"role": "user", "content": "What's the weather?"}]})
 ```
 
-See [examples/py-langgraph/](../../../examples/py-langgraph/) for a complete working example.
-
-## Types
-
-Core models are Pydantic v2 `BaseModel`s (`AgentifiedConfig` and `DiscoverTool` are dataclasses):
-
-```python
-class ServerTool:
-    name: str
-    description: str
-    parameters: dict
-    metadata: dict | None
-    fields: ServerToolFields | None
-
-class RankedTool(ServerTool):
-    score: float
-    graph_expanded: bool | None
-
-class Message:
-    role: str
-    content: str
-
-class RegisterResponse:
-    registered: int
-
-class CaptureTurnResponse:
-    turn_id: str
-```
+See [examples/py-langchain-sdk-smoke/](../../../examples/py-langchain-sdk-smoke/) for a complete working example.
 
 ## Links
 
@@ -202,7 +207,6 @@ class CaptureTurnResponse:
 - [Architecture](../../../docs/server/architecture.md)
 - [agentified-core](../../core/README.md)
 - [TypeScript SDK](../../ts-packages/sdk/README.md)
-- [LangGraph Example](../../../examples/py-langgraph/)
 
 ## License
 

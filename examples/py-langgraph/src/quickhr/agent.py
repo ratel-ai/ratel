@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from agentified import Agentified, AgentifiedConfig, ServerTool
+from agentified import Agentified, BackendTool, RegisterInput, ServerTool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 
@@ -32,12 +32,17 @@ PREFETCH_LIMIT = 15
 
 @dataclass
 class HRAgent:
-    _client: Agentified
+    _ag: Agentified
+    _instance: Any
     _llm: ChatGoogleGenerativeAI
 
     async def run_turn(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        ranked = await self._client.prefetch(messages=messages, limit=PREFETCH_LIMIT)
-        turn_tools = [TOOLS_BY_NAME[r.name] for r in ranked if r.name in TOOLS_BY_NAME]
+        session = self._instance.session("quickhr")
+        discovered = await session.discover_tool.execute({
+            "query": messages[-1]["content"] if messages else "",
+            "limit": PREFETCH_LIMIT,
+        })
+        turn_tools = [TOOLS_BY_NAME[r.name] for r in discovered if r.name in TOOLS_BY_NAME]
         graph = create_react_agent(self._llm, turn_tools, prompt=SYSTEM_PROMPT)
         return await graph.ainvoke({"messages": messages})
 
@@ -48,18 +53,20 @@ async def create_hr_agent(
     google_api_key: str | None = None,
     model: str = "gemini-3-flash-preview",
 ) -> HRAgent:
-    sdk_tools = [
-        ServerTool(
+    backend_tools = [
+        BackendTool(
             name=t.name,
             description=t.description,
             parameters=t.get_input_schema().model_json_schema(),
+            handler=lambda args, tool=t: tool.invoke(args),
         )
         for t in ALL_TOOLS
     ]
 
-    client = Agentified(AgentifiedConfig(server_url=agentified_url, tools=sdk_tools))
-    await client.register()
+    ag = Agentified()
+    await ag.connect(agentified_url)
+    instance = await ag.register(RegisterInput(tools=backend_tools))
 
     llm = ChatGoogleGenerativeAI(model=model, google_api_key=google_api_key)
 
-    return HRAgent(_client=client, _llm=llm)
+    return HRAgent(_ag=ag, _instance=instance, _llm=llm)

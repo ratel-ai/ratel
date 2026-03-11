@@ -1,94 +1,80 @@
 # Guide: LangGraph + Python SDK
 
-Build a Python agent with LangGraph, Agentified context resolution, and Gemini. Based on the [py-langgraph example](../../examples/py-langgraph/).
+Build a Python agent with LangGraph, Agentified context resolution, and OpenAI. Based on the [py-langchain-sdk-smoke example](../../examples/py-langchain-sdk-smoke/).
 
 ## Architecture
 
 ```mermaid
 graph LR
-    A[LangGraph Agent<br/>Python] -->|register + prefetch| B[agentified-core<br/>Rust]
+    A[LangGraph Agent<br/>Python] -->|register + discover| B[agentified-core<br/>Rust]
     B -->|embed| C[OpenAI]
-    A -->|generate| D[Gemini]
+    A -->|generate| D[OpenAI GPT]
 
     style B fill:#2563eb,color:#fff
 ```
 
 - **LangGraph** — ReAct agent with tool calling
-- **Agentified Python SDK** — register tools, prefetch relevant subset per turn
+- **Agentified Python SDK** — register tools, discover relevant subset per turn
 - **agentified-core** — tool registry + hybrid ranking
-- **Gemini** — LLM for agent reasoning
+- **OpenAI** — LLM for agent reasoning
 
 ## 1. Install
 
 ```bash
-pip install agentified langgraph langchain-google-genai
+pip install agentified langgraph langchain-openai
 ```
 
 ## 2. Define tools
 
-Define your LangChain tools as usual, then create matching Agentified `ServerTool` definitions for registration:
+Define your tools with handlers, then register with Agentified:
 
 ```python
-from langchain_core.tools import tool as lc_tool
-from agentified import ServerTool
+from agentified import Agentified, BackendTool, RegisterInput
 
-@lc_tool
-def get_employee(employee_id: str) -> dict:
-    """Get employee details by ID."""
-    return {"id": employee_id, "name": "Jane Doe", "department": "Engineering"}
+TOOL_HANDLERS = {
+    "get_employee": lambda args: {"id": args["employee_id"], "name": "Jane Doe"},
+    "list_employees": lambda args: [{"id": "1", "name": "Jane"}],
+    "approve_time_off": lambda args: {"id": args["request_id"], "status": "approved"},
+}
 
-@lc_tool
-def list_employees() -> list:
-    """List all employees."""
-    return [{"id": "1", "name": "Jane Doe"}, {"id": "2", "name": "John Smith"}]
+ag = Agentified()
+await ag.connect("http://localhost:9119")
 
-@lc_tool
-def approve_time_off(request_id: str) -> dict:
-    """Approve a time-off request."""
-    return {"id": request_id, "status": "approved"}
-
-# All LangChain tools
-ALL_TOOLS = [get_employee, list_employees, approve_time_off]
-TOOLS_BY_NAME = {t.name: t for t in ALL_TOOLS}
-
-# Agentified registrations
-SDK_TOOLS = [
-    ServerTool(
-        name=t.name,
-        description=t.description,
-        parameters=t.get_input_schema().model_json_schema(),
-    )
-    for t in ALL_TOOLS
-]
+instance = await ag.register(RegisterInput(tools=[
+    BackendTool(name=name, description=f"{name} tool",
+                parameters={"type": "object", "properties": {}},
+                handler=handler)
+    for name, handler in TOOL_HANDLERS.items()
+]))
 ```
 
 ## 3. Create the agent
 
 ```python
-from agentified import Agentified, AgentifiedConfig
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.tools import StructuredTool
+from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
-PREFETCH_LIMIT = 15
+session = instance.session("my-session")
 
-async def run_agent(messages: list[dict[str, str]]):
-    async with Agentified(AgentifiedConfig(
-        server_url="http://localhost:9119",
-        tools=SDK_TOOLS,
-    )) as client:
-        await client.register()
+# Discover relevant tools for the query
+discovered = await session.discover_tool.execute({"query": "Show me employee info"})
 
-        # Prefetch relevant tools
-        ranked = await client.prefetch(messages=messages, limit=PREFETCH_LIMIT)
+# Convert to LangChain tools
+lc_tools = []
+for rt in discovered:
+    handler = TOOL_HANDLERS.get(rt.name)
+    if handler:
+        lc_tools.append(StructuredTool.from_function(
+            func=lambda **kwargs, h=handler: h(kwargs),
+            name=rt.name,
+            description=rt.description,
+        ))
 
-        # Build LangChain tools from ranked results
-        turn_tools = [TOOLS_BY_NAME[r.name] for r in ranked if r.name in TOOLS_BY_NAME]
-
-        # Create LangGraph ReAct agent with only the relevant tools
-        llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview")
-        graph = create_react_agent(llm, turn_tools, prompt="You are an HR assistant.")
-
-        return await graph.ainvoke({"messages": messages})
+# Create and run agent with only relevant tools
+llm = ChatOpenAI(model="gpt-4o-mini")
+agent = create_react_agent(llm, lc_tools, prompt="You are an HR assistant.")
+result = await agent.ainvoke({"messages": [{"role": "user", "content": "Show me employee info"}]})
 ```
 
 ## 4. Run
@@ -98,56 +84,46 @@ async def run_agent(messages: list[dict[str, str]]):
 docker run -p 9119:9119 -e OPENAI_API_KEY=sk-... agentified/agentified-core
 
 # Terminal 2: Python agent
-GOOGLE_API_KEY=... python -c "
-import asyncio
-from agent import run_agent
-result = asyncio.run(run_agent([{'role': 'user', 'content': 'List all employees'}]))
-print(result)
-"
+OPENAI_API_KEY=sk-... python main.py
 ```
 
 ## Multi-Turn Pattern
 
-For multi-turn conversations, capture turns and pass `turn_id`:
+For multi-turn conversations, use session message persistence:
 
 ```python
-async with Agentified(AgentifiedConfig(
-    server_url="http://localhost:9119",
-    tools=SDK_TOOLS,
-)) as client:
-    await client.register()
+session = instance.session("multi-turn-session")
 
-    # Turn 1
-    ranked = await client.prefetch(
-        messages=[{"role": "user", "content": "Show me Jane's record"}],
-        limit=PREFETCH_LIMIT,
-    )
-    turn_tools = [TOOLS_BY_NAME[r.name] for r in ranked if r.name in TOOLS_BY_NAME]
-    # ... run agent ...
+# Turn 1: discover + run agent
+discovered = await session.discover_tool.execute({"query": "Show me Jane's record"})
+# ... run agent, get response ...
 
-    result = await client.capture_turn(
-        tools_loaded=[t.name for t in turn_tools],
-        message="Show me Jane's record",
-    )
+# Persist conversation
+await session.update_conversation([
+    {"role": "user", "content": "Show me Jane's record"},
+    {"role": "assistant", "content": "Jane Doe, Engineering dept..."},
+])
 
-    # Turn 2 — previous tools preserved with score=1.0
-    ranked = await client.prefetch(
-        messages=[{"role": "user", "content": "Approve her time-off request"}],
-        limit=PREFETCH_LIMIT,
-        turn_id=result.turn_id,
-    )
+# Turn 2: context carries forward
+discovered = await session.discover_tool.execute({"query": "Approve her time-off request"})
+# Context from previous turns informs discovery
+
+# Assemble full context
+ctx = await session.context.messages(strategy="recent").assemble()
 ```
 
 ## What Happens
 
 1. SDK registers all tools → agentified-core embeds and caches them
-2. `prefetch()` sends the user's message as query → core returns top-K tools ranked by hybrid score
+2. `discover_tool.execute()` sends the query → core returns top-K ranked tools
 3. Only those tools are passed to `create_react_agent()` → LLM sees 5 tools instead of 50+
-4. Result: **86% fewer tokens**, same task accuracy
+4. Session tracks conversation → context builds across turns
+5. Result: **86% fewer tokens**, same task accuracy
 
 ## See Also
 
-- [py-langgraph example source](../../examples/py-langgraph/) — Complete working example
+- [py-langchain-sdk-smoke example](../../examples/py-langchain-sdk-smoke/) — Minimal working example
+- [py-langgraph example](../../examples/py-langgraph/) — Full HR agent example
 - [Session Continuity](../../server/session-continuity.md) — Multi-turn patterns
 - [Python SDK README](../../src/py-packages/sdk/README.md) — Full API reference
 - [Hybrid Ranking](../../server/ranking.md) — How scores are computed

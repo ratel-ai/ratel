@@ -1,37 +1,25 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from .client import Agentified
-from .models import (
-    AgentifiedConfig,
-    CaptureTurnResponse,
-    DiscoverTool,
-    RankedTool,
-    RegisterResponse,
-    ServerTool,
-)
+from .dataset_ref import DatasetRef
+from .instance import Instance
+from .models import RegisterInput
 
 
 class SyncAgentified:
-    def __init__(self, config: AgentifiedConfig) -> None:
-        self._async = Agentified(config)
+    def __init__(self) -> None:
+        self._async = Agentified()
 
-    def register(self) -> RegisterResponse:
-        return asyncio.run(self._async.register())
+    def connect(self, server_url: str) -> None:
+        asyncio.run(self._async.connect(server_url))
 
-    def prefetch(self, **kwargs: Any) -> list[RankedTool]:
-        return asyncio.run(self._async.prefetch(**kwargs))
+    def disconnect(self) -> None:
+        asyncio.run(self._async.disconnect())
 
-    def capture_turn(self, **kwargs: Any) -> CaptureTurnResponse:
-        return asyncio.run(self._async.capture_turn(**kwargs))
+    def dataset(self, name: str) -> DatasetRef:
+        return self._async.dataset(name)
 
-    def get_frontend_tools(self) -> list[ServerTool]:
-        return self._async.get_frontend_tools()
-
-    def get_frontend_tool_names(self) -> list[str]:
-        return self._async.get_frontend_tool_names()
-
-    def as_discover_tool(self) -> DiscoverTool:
-        return self._async.as_discover_tool()
+    def register(self, input: RegisterInput) -> Instance:
+        return asyncio.run(self._async.register(input))

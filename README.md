@@ -75,18 +75,20 @@ pip install agentified
 ```
 
 ```python
-from agentified import Agentified, AgentifiedConfig, tool
+from agentified import Agentified, BackendTool, RegisterInput
 
-async with Agentified(AgentifiedConfig(
-    server_url="http://localhost:9119",
-    tools=[
-        tool(name="get_weather", description="Get current weather", parameters={"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}),
-        tool(name="search_docs", description="Search documentation", parameters={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}),
-    ],
-)) as agent:
-    await agent.register()
-    ranked = await agent.prefetch(messages=[{"role": "user", "content": "What's the weather in Rome?"}])
-    # → [RankedTool(name="get_weather", score=0.92, ...)]
+ag = Agentified()
+await ag.connect("http://localhost:9119")
+
+instance = await ag.register(RegisterInput(tools=[
+    BackendTool(name="get_weather", description="Get current weather",
+                parameters={"type": "object", "properties": {"city": {"type": "string"}}},
+                handler=lambda args: {"temp": 22, "city": args["city"]}),
+]))
+session = instance.session("my-session")
+discovered = await session.discover_tool.execute({"query": "weather in Rome"})
+# → [RankedTool(name="get_weather", score=0.92, ...)]
+await ag.disconnect()
 ```
 
 <br />
@@ -169,8 +171,10 @@ See Agentified in action. Compare token usage with and without smart tool select
 
 | Example | What it shows | Complexity |
 |---------|---------------|------------|
-| [sdk-smoke](./examples/sdk-smoke) | SDK basics — register, discover, sessions | Minimal |
-| [mastra-smoke](./examples/mastra-smoke) | Mastra + OpenAI — LLM tool calling, AG-UI | Minimal |
+| [ts-sdk-smoke](./examples/ts-sdk-smoke) | TS SDK basics — register, discover, sessions | Minimal |
+| [ts-mastra-smoke](./examples/ts-mastra-smoke) | Mastra + OpenAI — LLM tool calling, AG-UI | Minimal |
+| [py-sdk-smoke](./examples/py-sdk-smoke) | Python SDK basics — register, discover, sessions | Minimal |
+| [py-langchain-sdk-smoke](./examples/py-langchain-sdk-smoke) | LangChain + OpenAI — LLM tool calling | Minimal |
 | [QuickHR](./examples/quickhr) | Full-stack Mastra + React app | Full |
 | [LangGraph Agent](./examples/py-langgraph) | LangGraph + Gemini (Python) | Full |
 

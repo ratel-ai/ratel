@@ -2,71 +2,38 @@ import httpx
 import respx
 
 from agentified._sync import SyncAgentified
-from agentified.models import AgentifiedConfig, RankedTool, ServerTool
+from agentified.models import BackendTool, RegisterInput
 
 TEST_URL = "http://localhost:9119"
-
-TEST_TOOL = ServerTool(
-    name="get_weather",
-    description="Get weather for a city",
-    parameters={"type": "object", "properties": {"city": {"type": "string"}}},
-)
-
-RANKED_TOOL = RankedTool(**TEST_TOOL.model_dump(), score=0.95)
 
 
 class TestSyncAgentified:
     @respx.mock
-    def test_register_sync(self):
-        respx.post(f"{TEST_URL}/api/v1/tools").mock(
+    def test_connect_and_disconnect(self):
+        respx.get(f"{TEST_URL}/health").mock(return_value=httpx.Response(200))
+
+        client = SyncAgentified()
+        client.connect(TEST_URL)
+        assert client._async._connected
+        client.disconnect()
+        assert not client._async._connected
+
+    @respx.mock
+    def test_register(self):
+        respx.get(f"{TEST_URL}/health").mock(return_value=httpx.Response(200))
+        respx.post(f"{TEST_URL}/api/v1/datasets/default/tools").mock(
             return_value=httpx.Response(200, json={"registered": 1})
         )
 
-        client = SyncAgentified(
-            AgentifiedConfig(server_url=TEST_URL, tools=[TEST_TOOL])
-        )
-        result = client.register()
-        assert result.registered == 1
+        client = SyncAgentified()
+        client.connect(TEST_URL)
+        instance = client.register(RegisterInput(tools=[
+            BackendTool(name="t1", description="d", parameters={}, handler=lambda a: a),
+        ]))
+        assert instance.dataset_id == "default"
+        client.disconnect()
 
-    @respx.mock
-    def test_prefetch_sync(self):
-        respx.post(f"{TEST_URL}/api/v1/discover").mock(
-            return_value=httpx.Response(
-                200, json={"tools": [RANKED_TOOL.model_dump()]}
-            )
-        )
-
-        client = SyncAgentified(
-            AgentifiedConfig(server_url=TEST_URL, tools=[TEST_TOOL])
-        )
-        result = client.prefetch(
-            messages=[{"role": "user", "content": "weather"}]
-        )
-        assert len(result) == 1
-        assert result[0].score == 0.95
-
-    @respx.mock
-    def test_capture_turn_sync(self):
-        respx.post(f"{TEST_URL}/api/v1/turns").mock(
-            return_value=httpx.Response(201, json={"turn_id": "abc-123"})
-        )
-
-        client = SyncAgentified(
-            AgentifiedConfig(server_url=TEST_URL, tools=[TEST_TOOL])
-        )
-        result = client.capture_turn(
-            tools_loaded=["get_weather"], message="What is the weather?"
-        )
-        assert result.turn_id == "abc-123"
-
-    def test_get_frontend_tools_sync(self):
-        frontend_tool = ServerTool(
-            name="confirm",
-            description="Confirm",
-            parameters={},
-            metadata={"location": "frontend"},
-        )
-        client = SyncAgentified(
-            AgentifiedConfig(server_url=TEST_URL, tools=[frontend_tool, TEST_TOOL])
-        )
-        assert client.get_frontend_tool_names() == ["confirm"]
+    def test_dataset_returns_ref(self):
+        client = SyncAgentified()
+        ref = client.dataset("myds")
+        assert ref.dataset_name == "myds"

@@ -76,6 +76,98 @@ class TokenUsage(BaseModel):
     reasoning: int
 
 
+# Message persistence types
+
+class StoredMessage(BaseModel):
+    id: str
+    role: str
+    content: str
+    tool_call_id: str | None = None
+    tool_calls: Any | None = None
+    created_at: str
+    seq: int
+
+
+class AppendMessagesResponse(BaseModel):
+    appended: int
+    first_seq: int
+    last_seq: int
+
+
+class GetMessagesOpts(BaseModel):
+    limit: int | None = None
+    after_seq: int | None = None
+    around_seq: int | None = None
+
+
+class GetMessagesResponse(BaseModel):
+    messages: list[StoredMessage]
+    has_more: bool
+    max_seq: int
+
+
+# Context types
+
+ContextStrategy = Literal["recent", "full"]
+
+
+class ContextOpts(BaseModel):
+    strategy: ContextStrategy | None = None
+    max_tokens: int | None = None
+
+
+class ContextResponse(BaseModel):
+    messages: list[StoredMessage]
+    strategy_used: ContextStrategy
+    total_messages: int
+    included_messages: int
+    recalled: dict[str, Any]
+    token_estimate: int
+    conversation_messages: int
+    fallback: bool
+
+
+class AssembledContext(BaseModel):
+    messages: list[StoredMessage]
+    recalled: dict[str, Any]
+    strategy_used: ContextStrategy
+    fallback: bool
+    token_estimate: int
+    conversation_messages: int
+    total_messages: int
+    included_messages: int
+
+
+class GetMessagesOptions(BaseModel):
+    max_messages: int | None = None
+    max_tokens: int | None = None
+    strategy: ContextStrategy | None = None
+
+
+class GetMessagesResult(BaseModel):
+    messages: list[StoredMessage]
+    total_messages: int
+    included_messages: int
+    strategy_used: ContextStrategy
+    fallback: bool
+
+
+# High-level SDK types
+
+@dataclass
+class BackendTool:
+    name: str
+    description: str
+    parameters: dict[str, Any]
+    handler: Callable[[dict[str, Any]], Any]
+    type: str | None = None  # "backend" or None
+
+
+@dataclass
+class RegisterInput:
+    tools: list[BackendTool]
+
+
 # Event types
 
 class PrefetchStartEvent(BaseModel):
@@ -118,7 +210,7 @@ AgentifiedEvent = Union[
 ]
 
 
-# Non-serializable containers (use dataclasses for callables)
+# Non-serializable containers
 
 @dataclass
 class DiscoverTool:
@@ -127,7 +219,11 @@ class DiscoverTool:
 
 
 @dataclass
-class AgentifiedConfig:
+class ApiClientConfig:
     server_url: str
     tools: list[ServerTool]
     on_event: Callable[[AgentifiedEvent], None] | None = field(default=None)
+
+
+# Legacy alias — kept for backward compat during migration
+AgentifiedConfig = ApiClientConfig
