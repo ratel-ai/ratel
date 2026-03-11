@@ -121,15 +121,18 @@ async fn main() {
     let api_key = std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY required");
     let embedding: Arc<dyn EmbeddingService> = Arc::new(OpenAIEmbedding::new(api_key));
 
-    let storage_mode = std::env::var("AGENTIFIED_STORAGE").unwrap_or_else(|_| "memory".into());
+    let storage_mode = std::env::var("AGENTIFIED_STORAGE").unwrap_or_else(|_| "sqlite".into());
     let storage: Arc<dyn Storage> = match storage_mode.as_str() {
-        "sqlite" => {
+        "noop" => {
+            tracing::info!("using noop storage (messages will not persist)");
+            Arc::new(NoopStorage)
+        }
+        _ => {
             let path = std::env::var("AGENTIFIED_DB_PATH")
                 .unwrap_or_else(|_| "./agentified.db".into());
             tracing::info!("using SQLite storage at {path}");
             Arc::new(SqliteStorage::new(&path).expect("failed to open SQLite"))
         }
-        _ => Arc::new(NoopStorage),
     };
 
     let core = Arc::new(AgentifiedCore::new(embedding, storage));
