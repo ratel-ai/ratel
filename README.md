@@ -147,6 +147,17 @@ Full docs live in [`docs/`](./docs/):
 
 ## Try it now
 
+### Run locally
+
+```bash
+# Start the server
+docker run -p 9119:9119 -e OPENAI_API_KEY=sk-... agentified/agentified-core
+
+# Run the SDK smoke test (no LLM needed)
+git clone https://github.com/agentified/agentified.git
+cd agentified/examples/sdk-smoke && pnpm install && pnpm tsx index.ts
+```
+
 ### Sandbox
 
 See Agentified in action. Compare token usage with and without smart tool selection.
@@ -155,10 +166,12 @@ See Agentified in action. Compare token usage with and without smart tool select
 
 ### Examples
 
-| Example | Framework | Language |
-|---------|-----------|----------|
-| [QuickHR](./examples/quickhr) | Mastra + React | TypeScript |
-| [LangGraph Agent](./examples/py-langgraph) | LangGraph + Gemini | Python |
+| Example | What it shows | Complexity |
+|---------|---------------|------------|
+| [sdk-smoke](./examples/sdk-smoke) | SDK basics — register, discover, sessions | Minimal |
+| [mastra-smoke](./examples/mastra-smoke) | Mastra + OpenAI — LLM tool calling, AG-UI | Minimal |
+| [QuickHR](./examples/quickhr) | Full-stack Mastra + React app | Full |
+| [LangGraph Agent](./examples/py-langgraph) | LangGraph + Gemini (Python) | Full |
 
 <br />
 

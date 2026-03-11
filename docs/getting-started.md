@@ -7,6 +7,7 @@ Register 200 tools. Get the 5 that matter. **86% fewer tokens, same accuracy.**
 - **Docker** (recommended) or Rust toolchain
 - **OpenAI API key** — used for `text-embedding-3-small` embeddings
 - **Node.js 18+** (TypeScript) or **Python 3.10+** (Python)
+- **pnpm** (for running examples)
 
 ## 1. Start the server
 
@@ -21,12 +22,40 @@ curl http://localhost:9119/health
 # {"status":"ok"}
 ```
 
-## 2. Register & discover tools
+## 2. Run an example
+
+The fastest way to see Agentified in action — clone the repo and run a smoke test.
+
+### SDK only (no LLM needed)
+
+```bash
+git clone https://github.com/agentified/agentified.git
+cd agentified/examples/sdk-smoke
+pnpm install
+pnpm tsx index.ts
+```
+
+Registers two tools, persists a conversation, discovers tools by query, and verifies session continuity. See [sdk-smoke README](../examples/sdk-smoke/README.md) for expected output.
+
+### With an LLM agent (Mastra + OpenAI)
+
+```bash
+cd agentified/examples/mastra-smoke
+pnpm install
+export OPENAI_API_KEY=sk-...   # needed for both embeddings and gpt-4o-mini
+pnpm tsx index.ts
+```
+
+Registers tools, runs LLM generation with tool calling, streams AG-UI events, and tests session continuity across turns. See [mastra-smoke README](../examples/mastra-smoke/README.md) for the 7 checkpoints.
+
+## 3. How it works
+
+Here's what the smoke tests do under the hood.
 
 ### TypeScript
 
 ```bash
-npm install agentified
+pnpm install agentified
 ```
 
 ```typescript
@@ -69,7 +98,7 @@ async with Agentified(AgentifiedConfig(
     # → [RankedTool(name="get_weather", score=0.92, ...)]
 ```
 
-## 3. See what happened
+## 4. What the server did
 
 Each ranked tool includes a `score` (0–1) representing relevance. The server:
 
@@ -82,6 +111,8 @@ Read [Architecture](./architecture.md) for the full deep dive, or [Hybrid Rankin
 
 ## Next steps
 
+- **[sdk-smoke](../examples/sdk-smoke/)** — SDK smoke test (no LLM)
+- **[mastra-smoke](../examples/mastra-smoke/)** — Mastra + OpenAI smoke test
 - **[Architecture](./architecture.md)** — System diagram, registration/discovery flows
 - **[Session Continuity](./concepts/session-continuity.md)** — Multi-turn context with turn tracking
 - **[Mastra guide](./guides/mastra.md)** — Full-stack TypeScript example

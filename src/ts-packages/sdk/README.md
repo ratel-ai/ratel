@@ -31,6 +31,8 @@ const dataset = await ag.dataset("my-agent").register({
 // dataset.namespace(userId) — user-scoped memory (stub)
 ```
 
+See [sdk-smoke](../../../examples/sdk-smoke/) for a runnable version of this.
+
 ## Hierarchy
 
 ```
@@ -205,6 +207,7 @@ interface TokenUsage {
 - [React Bindings](../react/README.md)
 - [Mastra Adapter](../mastra/README.md)
 - [Python SDK](../../py-packages/sdk/README.md)
+- [sdk-smoke example](../../../examples/sdk-smoke/) — runnable smoke test
 
 ## License
 

@@ -23,6 +23,15 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 - **[Mastra + React](./guides/mastra.md)** — Full-stack: Mastra agent + Agentified + React + Inspector
 - **[LangGraph + Python](./guides/langgraph.md)** — LangGraph + Python SDK + Gemini
 
+## Examples
+
+| Example | What it shows |
+|---------|---------------|
+| [sdk-smoke](../examples/sdk-smoke/) | SDK basics — register, discover, session continuity (no LLM) |
+| [mastra-smoke](../examples/mastra-smoke/) | Mastra adapter — LLM generation, tool calling, AG-UI streaming |
+| [QuickHR](../examples/quickhr/) | Full-stack Mastra + React app |
+| [LangGraph Agent](../examples/py-langgraph/) | Python + LangGraph + Gemini |
+
 ## Package READMEs
 
 | Package | Description |
