@@ -447,42 +447,6 @@ describe("ApiClient", () => {
     });
   });
 
-  describe("unknown tool validation", () => {
-    it("throws when discover returns a tool not registered in SDK", async () => {
-      const unknownTool: RankedTool = { name: "unknown_tool", description: "Not registered", parameters: {}, score: 0.9 };
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ tools: [unknownTool] }), { status: 200 }),
-      );
-
-      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
-
-      await expect(agent.discover("ds-abc", "something")).rejects.toThrow(
-        /Discovered tool 'unknown_tool' is not registered in the SDK/,
-      );
-    });
-
-    it("does not throw when all discovered tools are registered", async () => {
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
-      );
-
-      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
-      const result = await agent.discover("ds-abc", "weather");
-      expect(result).toEqual([rankedTool]);
-    });
-
-    it("skips validation when SDK has no tools configured", async () => {
-      const unknownTool: RankedTool = { name: "unknown_tool", description: "Not registered", parameters: {}, score: 0.9 };
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(JSON.stringify({ tools: [unknownTool] }), { status: 200 }),
-      );
-
-      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [] });
-      const result = await agent.discover("ds-abc", "something");
-      expect(result).toEqual([unknownTool]);
-    });
-  });
-
   describe("instance methods removed", () => {
     it("does not have createInstance, heartbeatInstance, deleteInstance", () => {
       const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });

@@ -12,7 +12,6 @@ export class Agentified {
   private spawnedProcess: ChildProcess | null = null;
   private cleanupHandlers: Array<[string, (...args: any[]) => void]> = [];
   private restartCount = 0;
-  private lastRestartAt = 0;
   private spawnArgs: { binaryPath: string; port: number } | null = null;
 
   async connect(serverUrl?: string): Promise<void> {
@@ -81,10 +80,8 @@ export class Agentified {
     if (!this.spawnedProcess) return;
     this.spawnedProcess.on("exit", (_code, _signal) => {
       if (!this.connected) return;
-      const now = Date.now();
-      if (this.restartCount >= 1 || now - this.lastRestartAt < 60_000) return;
+      if (this.restartCount >= 1) return;
       this.restartCount++;
-      this.lastRestartAt = now;
       this.spawnChild();
       this.registerCrashHandler();
     });

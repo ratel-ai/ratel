@@ -26,13 +26,21 @@ export class ApiClient {
     this.config = config;
   }
 
+  private async fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+    const res = await fetch(url, init);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Agentified API error ${res.status}: ${body}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
   async register(datasetId: string): Promise<RegisterResponse> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/tools`, {
+    return this.fetchJson<RegisterResponse>(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/tools`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tools: this.config.tools }),
     });
-    return res.json() as Promise<RegisterResponse>;
   }
 
   async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string): Promise<RankedTool[]> {
@@ -41,22 +49,12 @@ export class ApiClient {
     if (exclude !== undefined) body.exclude = exclude;
     if (turnId !== undefined) body.turn_id = turnId;
 
-    const res = await fetch(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/discover`, {
+    const data = await this.fetchJson<DiscoverResponse>(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/discover`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = (await res.json()) as DiscoverResponse;
-    const tools = data.tools ?? [];
-    if (this.config.tools.length > 0) {
-      const registered = new Set(this.config.tools.map((t) => t.name));
-      for (const tool of tools) {
-        if (!registered.has(tool.name)) {
-          throw new Error(`Discovered tool '${tool.name}' is not registered in the SDK. Register it before use.`);
-        }
-      }
-    }
-    return tools;
+    return data.tools ?? [];
   }
 
   async prefetch(datasetId: string, options: PrefetchOptions): Promise<RankedTool[]> {
@@ -75,7 +73,7 @@ export class ApiClient {
   }
 
   async captureTurn(namespace: string, session: string, options: CaptureTurnOptions): Promise<CaptureTurnResponse> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/turns`, {
+    const data = await this.fetchJson<{ turn_id: string }>(`${this.config.serverUrl}/api/v1/turns`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -85,17 +83,15 @@ export class ApiClient {
         message: options.message,
       }),
     });
-    const data = (await res.json()) as { turn_id: string };
     return { turnId: data.turn_id };
   }
 
   async appendMessages(dataset: string, namespace: string, session: string, messages: Message[]): Promise<AppendMessagesResponse> {
-    const res = await fetch(`${this.config.serverUrl}/api/v1/messages`, {
+    const data = await this.fetchJson<{ appended: number; first_seq: number; last_seq: number }>(`${this.config.serverUrl}/api/v1/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dataset, namespace, session, messages }),
     });
-    const data = (await res.json()) as { appended: number; first_seq: number; last_seq: number };
     return { appended: data.appended, firstSeq: data.first_seq, lastSeq: data.last_seq };
   }
 
@@ -105,10 +101,9 @@ export class ApiClient {
     if (opts?.afterSeq !== undefined) params.set("after_seq", String(opts.afterSeq));
     if (opts?.aroundSeq !== undefined) params.set("around_seq", String(opts.aroundSeq));
 
-    const res = await fetch(`${this.config.serverUrl}/api/v1/messages?${params}`, {
+    const data = await this.fetchJson<{ messages: any[]; has_more: boolean; max_seq: number }>(`${this.config.serverUrl}/api/v1/messages?${params}`, {
       method: "GET",
     });
-    const data = (await res.json()) as { messages: any[]; has_more: boolean; max_seq: number };
     return {
       messages: data.messages.map((m: any) => ({
         id: m.id,
@@ -129,12 +124,7 @@ export class ApiClient {
     if (opts?.strategy !== undefined) messagesConfig.strategy = opts.strategy;
     if (opts?.maxTokens !== undefined) messagesConfig.max_tokens = opts.maxTokens;
 
-    const res = await fetch(`${this.config.serverUrl}/api/v1/context`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataset, namespace, session, messages: messagesConfig }),
-    });
-    const data = (await res.json()) as {
+    const data = await this.fetchJson<{
       messages: any[];
       strategy_used: string;
       total_messages: number;
@@ -143,7 +133,11 @@ export class ApiClient {
       token_estimate: number;
       conversation_messages: number;
       fallback: boolean;
-    };
+    }>(`${this.config.serverUrl}/api/v1/context`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataset, namespace, session, messages: messagesConfig }),
+    });
     return {
       messages: data.messages.map((m: any) => ({
         id: m.id,
