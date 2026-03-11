@@ -72,6 +72,10 @@ export interface DiscoverTool {
   execute: (input: DiscoverToolInput) => Promise<RankedTool[]>;
 }
 
+// Context strategy
+
+export type ContextStrategy = "recent" | "full";
+
 // Message persistence types
 
 export interface StoredMessage {
@@ -103,13 +107,13 @@ export interface GetMessagesResponse {
 }
 
 export interface ContextOpts {
-  strategy?: string;
+  strategy?: ContextStrategy;
   maxTokens?: number;
 }
 
 export interface ContextResponse {
   messages: StoredMessage[];
-  strategyUsed: string;
+  strategyUsed: ContextStrategy;
   totalMessages: number;
   includedMessages: number;
   recalled: { tools: unknown[]; memories: unknown[] };
@@ -192,7 +196,7 @@ export type PrepareStepFn = (params: {
 export interface AssembledContext {
   messages: StoredMessage[];
   recalled: { tools: unknown[]; memories: unknown[] };
-  strategyUsed: string;
+  strategyUsed: ContextStrategy;
   fallback: boolean;
   tokenEstimate: number;
   conversationMessages: number;
@@ -203,14 +207,14 @@ export interface AssembledContext {
 export interface GetMessagesOptions {
   maxMessages?: number;
   maxTokens?: number;
-  strategy?: string;
+  strategy?: ContextStrategy;
 }
 
 export interface GetMessagesResult {
   messages: StoredMessage[];
   totalMessages: number;
   includedMessages: number;
-  strategyUsed: string;
+  strategyUsed: ContextStrategy;
   fallback: boolean;
 }
 

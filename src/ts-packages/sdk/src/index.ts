@@ -18,6 +18,7 @@ export type {
   CaptureTurnResponse,
   ClientTool,
   ContextOpts,
+  ContextStrategy,
   ContextResponse,
   DiscoverResponse,
   DiscoverTool,

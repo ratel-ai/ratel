@@ -1,8 +1,8 @@
 import type { ApiClient } from "./api-client.js";
-import type { AssembledContext } from "./types.js";
+import type { AssembledContext, ContextStrategy } from "./types.js";
 
 export class ContextBuilder {
-  private messageOpts: { strategy?: string; maxTokens?: number } = {};
+  private messageOpts: { strategy?: ContextStrategy; maxTokens?: number } = {};
 
   constructor(
     private readonly sdk: ApiClient,
@@ -11,7 +11,7 @@ export class ContextBuilder {
     private readonly sessionId: string,
   ) {}
 
-  messages(opts: { strategy?: string; maxTokens?: number }): this {
+  messages(opts: { strategy?: ContextStrategy; maxTokens?: number }): this {
     this.messageOpts = opts;
     return this;
   }
