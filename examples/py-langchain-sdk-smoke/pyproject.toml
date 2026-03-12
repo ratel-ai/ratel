@@ -11,5 +11,5 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-agentified = { path = "../../src/py-packages/sdk" }
-agentified-langchain = { path = "../../src/py-packages/langchain" }
+agentified = { path = "../../src/py-packages/sdk", editable = true }
+agentified-langchain = { path = "../../src/py-packages/langchain", editable = true }
