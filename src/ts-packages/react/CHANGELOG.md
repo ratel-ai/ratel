@@ -1,5 +1,13 @@
 # @agentified/react
 
+## 0.0.5-beta.7
+
+### Patch Changes
+
+- 181d70d: Review interface
+- Updated dependencies [181d70d]
+  - @agentified/fe-client@0.0.5-beta.7
+
 ## 0.0.5-beta.0
 
 ### Patch Changes
