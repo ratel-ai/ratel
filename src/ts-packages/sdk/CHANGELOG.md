@@ -1,5 +1,12 @@
 # @agentified/sdk
 
+## 0.0.5
+
+### Patch Changes
+
+- a2ec18c: persistent conversations: dataset-scoped tools, message persistence, context retrieval, session management
+- 181d70d: Review interface
+
 ## 0.0.5-beta.7
 
 ### Patch Changes

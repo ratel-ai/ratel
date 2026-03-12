@@ -1,5 +1,15 @@
 # @agentified/react
 
+## 0.0.5
+
+### Patch Changes
+
+- a2ec18c: persistent conversations: dataset-scoped tools, message persistence, context retrieval, session management
+- 181d70d: Review interface
+- Updated dependencies [a2ec18c]
+- Updated dependencies [181d70d]
+  - @agentified/fe-client@0.0.5
+
 ## 0.0.5-beta.7
 
 ### Patch Changes
