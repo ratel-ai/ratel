@@ -1,5 +1,11 @@
 # @agentified/fe-client
 
+## 0.0.5-beta.7
+
+### Patch Changes
+
+- 181d70d: Review interface
+
 ## 0.0.5-beta.0
 
 ### Patch Changes
