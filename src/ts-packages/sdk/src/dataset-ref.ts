@@ -41,7 +41,6 @@ export class DatasetRef {
     });
     await regSdk.register(this.datasetName);
 
-    const toolNames = input.tools.map((t) => t.name);
-    return new Instance(this.datasetName, this.datasetName, sdk, toolNames);
+    return new Instance(this.datasetName, this.datasetName, sdk, input.tools);
   }
 }

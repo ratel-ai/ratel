@@ -10,12 +10,82 @@ import type {
   BackendTool,
   RegisterInput,
   GetMessagesOptions,
+  ContextBuilder,
+  AssembledContext,
+  ContextStrategy,
+  AgentifiedTool,
 } from "agentified";
 import { jsonSchemaToZod } from "./schema.js";
 
 // --- Types ---
 
 type MastraTool = ReturnType<typeof createTool>;
+
+// --- MastraAssembledContext ---
+
+export class MastraAssembledContext {
+  constructor(
+    private readonly sdkCtx: AssembledContext,
+    readonly tools: Record<string, MastraTool>,
+    private readonly sdkPrepareStep: Session["prepareStep"],
+  ) {}
+
+  get messages() { return this.sdkCtx.messages; }
+  get recalled() { return this.sdkCtx.recalled; }
+  get strategyUsed() { return this.sdkCtx.strategyUsed; }
+  get fallback() { return this.sdkCtx.fallback; }
+  get tokenEstimate() { return this.sdkCtx.tokenEstimate; }
+  get conversationMessages() { return this.sdkCtx.conversationMessages; }
+  get totalMessages() { return this.sdkCtx.totalMessages; }
+  get includedMessages() { return this.sdkCtx.includedMessages; }
+
+  readonly prepareStep = async (params: { stepNumber: number; steps: any[] }) => {
+    await this.sdkPrepareStep(params);
+    return { tools: this.tools };
+  };
+}
+
+// --- MastraContextBuilder ---
+
+export class MastraContextBuilder {
+  private explicitTools: Record<string, MastraTool> = {};
+
+  constructor(
+    private readonly sdkBuilder: ContextBuilder,
+    private readonly sdkPrepareStep: Session["prepareStep"],
+    private readonly discoverMastraTool: MastraTool,
+    private readonly discoveredNames: Set<string>,
+    private readonly mastraToolCache: Record<string, MastraTool>,
+  ) {}
+
+  tools(tools: Record<string, MastraTool>): this {
+    Object.assign(this.explicitTools, tools);
+    return this;
+  }
+
+  messages(opts: { strategy?: ContextStrategy; maxTokens?: number }): this {
+    this.sdkBuilder.messages(opts);
+    return this;
+  }
+
+  recall(opts?: unknown): this {
+    this.sdkBuilder.recall(opts);
+    return this;
+  }
+
+  async assemble(): Promise<MastraAssembledContext> {
+    const sdkCtx = await this.sdkBuilder.assemble();
+
+    const resolvedTools: Record<string, MastraTool> = { ...this.explicitTools };
+    for (const name of this.discoveredNames) {
+      if (!resolvedTools[name] && this.mastraToolCache[name]) {
+        resolvedTools[name] = this.mastraToolCache[name];
+      }
+    }
+
+    return new MastraAssembledContext(sdkCtx, resolvedTools, this.sdkPrepareStep);
+  }
+}
 
 // --- Factory ---
 
@@ -64,19 +134,16 @@ export class MastraInstance {
     this.mastraToolCache = buildMastraToolMap(backendTools);
   }
 
-  prepareStep(opts?: { tools: Record<string, MastraTool> }) {
-    const baseTools: Record<string, MastraTool> = opts?.tools ?? { agentified_discover: this.discoverTool };
-    return async (params: { stepNumber: number; steps: any[] }) => {
-      await this.inst.prepareStep(params);
-      const tools: Record<string, MastraTool> = { ...baseTools };
-      for (const name of this.inst.discoverTool.discoveredNames) {
-        if (!tools[name] && this.mastraToolCache[name]) {
-          tools[name] = this.mastraToolCache[name];
-        }
+  readonly prepareStep = async (params: { stepNumber: number; steps: any[] }) => {
+    await this.inst.prepareStep(params);
+    const tools: Record<string, MastraTool> = { agentified_discover: this.discoverTool };
+    for (const name of this.inst.discoverTool.discoveredNames) {
+      if (!tools[name] && this.mastraToolCache[name]) {
+        tools[name] = this.mastraToolCache[name];
       }
-      return { tools };
-    };
-  }
+    }
+    return { tools };
+  };
 
   session(id: string) { return new MastraSession(this.inst.session(id), this.backendTools); }
   namespace(id: string) { return new MastraNamespace(this.inst.namespace(id), this.backendTools); }
@@ -88,7 +155,6 @@ export class MastraSession {
   private readonly mastraToolCache: Record<string, MastraTool>;
 
   get id() { return this.sess.id; }
-  get context() { return this.sess.context; }
   get conversation() { return this.sess.conversation; }
 
   constructor(
@@ -99,19 +165,26 @@ export class MastraSession {
     this.mastraToolCache = buildMastraToolMap(backendTools);
   }
 
-  prepareStep(opts?: { tools: Record<string, MastraTool> }) {
-    const baseTools: Record<string, MastraTool> = opts?.tools ?? { agentified_discover: this.discoverTool };
-    return async (params: { stepNumber: number; steps: any[] }) => {
-      await this.sess.prepareStep(params);
-      const tools: Record<string, MastraTool> = { ...baseTools };
-      for (const name of this.sess.discoverTool.discoveredNames) {
-        if (!tools[name] && this.mastraToolCache[name]) {
-          tools[name] = this.mastraToolCache[name];
-        }
-      }
-      return { tools };
-    };
+  get context(): MastraContextBuilder {
+    return new MastraContextBuilder(
+      this.sess.context,
+      this.sess.prepareStep,
+      this.discoverTool,
+      this.sess.discoverTool.discoveredNames,
+      this.mastraToolCache,
+    );
   }
+
+  readonly prepareStep = async (params: { stepNumber: number; steps: any[] }) => {
+    await this.sess.prepareStep(params);
+    const tools: Record<string, MastraTool> = { agentified_discover: this.discoverTool };
+    for (const name of this.sess.discoverTool.discoveredNames) {
+      if (!tools[name] && this.mastraToolCache[name]) {
+        tools[name] = this.mastraToolCache[name];
+      }
+    }
+    return { tools };
+  };
 
   getMessages(opts?: GetMessagesOptions) { return this.sess.getMessages(opts); }
   updateConversation(input: { messages: Array<{ role: string; content: string }> }) {

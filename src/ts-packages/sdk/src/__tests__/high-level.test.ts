@@ -46,6 +46,7 @@ describe("Agentified", () => {
     mockAsDiscoverTool.mockReturnValue({
       definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
       execute: vi.fn().mockResolvedValue([]),
+      discoveredNames: new Set<string>(),
     });
   });
 
@@ -384,33 +385,31 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("prepareStep returns all registered tool names + agentified_discover", async () => {
+    it("prepareStep returns only agentified_discover before any discovery", async () => {
       const ag = await connectedAg();
       const instance = await registerInstance(ag, [backendTool("toolA"), backendTool("toolB")]);
 
       const result = await instance.prepareStep({ stepNumber: 0, steps: [] });
-      expect(result.activeTools).toContain("toolA");
-      expect(result.activeTools).toContain("toolB");
-      expect(result.activeTools).toContain("agentified_discover");
-      expect(result.activeTools).toHaveLength(3);
+      expect(result.activeTools).toEqual(["agentified_discover"]);
       await ag.disconnect();
     });
 
-    it("prepareStep adds discovered tool names from prior steps", async () => {
+    it("prepareStep includes tools tracked by discoverTool.discoveredNames", async () => {
+      const discovered = new Set(["discoveredTool1", "discoveredTool2"]);
+      mockAsDiscoverTool.mockReturnValue({
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn().mockResolvedValue([]),
+        discoveredNames: discovered,
+      });
+
       const ag = await connectedAg();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
 
-      const steps = [{
-        toolResults: [{
-          toolName: "agentified_discover",
-          result: [{ name: "discoveredTool1", score: 0.9 }, { name: "discoveredTool2", score: 0.8 }],
-        }],
-      }];
-
-      const result = await instance.prepareStep({ stepNumber: 1, steps });
+      const result = await instance.prepareStep({ stepNumber: 1, steps: [] });
+      expect(result.activeTools).toContain("agentified_discover");
       expect(result.activeTools).toContain("discoveredTool1");
       expect(result.activeTools).toContain("discoveredTool2");
-      expect(result.activeTools).toHaveLength(4);
+      expect(result.activeTools).toHaveLength(3);
       await ag.disconnect();
     });
   });
@@ -457,7 +456,7 @@ describe("Agentified", () => {
           expect.objectContaining({ role: "tool", content: JSON.stringify({ answer: 42 }), tool_call_id: "call-1" }),
         ]),
       );
-      expect(result.activeTools).toContain("toolA");
+      expect(result.activeTools).toEqual(["agentified_discover"]);
       await ag.disconnect();
     });
 
@@ -575,6 +574,87 @@ describe("Agentified", () => {
       expect(session.discoverTool).toBeDefined();
       expect(session.discoverTool.definition.name).toBe("agentified_discover");
       await ag.disconnect();
+    });
+
+    it("context.tools() is chainable and assembled result includes explicit tools", async () => {
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockGetContext.mockResolvedValue({
+        messages: [], strategyUsed: "recent", totalMessages: 0,
+        includedMessages: 0, recalled: { tools: [], memories: [] },
+        tokenEstimate: 0, conversationMessages: 0, fallback: false,
+      });
+
+      const explicitTool = backendTool("my_custom");
+      const ctx = await session.context
+        .tools({ my_custom: explicitTool })
+        .assemble();
+
+      expect(ctx.tools["my_custom"]).toBe(explicitTool);
+    });
+
+    it("assemble() auto-resolves registered tools from discoveredNames", async () => {
+      const discovered = new Set(["toolA"]);
+      mockAsDiscoverTool.mockReturnValue({
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn().mockResolvedValue([]),
+        discoveredNames: discovered,
+      });
+
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag, [backendTool("toolA"), backendTool("toolB")]);
+      const session = instance.session("chat-1");
+
+      mockGetContext.mockResolvedValue({
+        messages: [], strategyUsed: "recent", totalMessages: 0,
+        includedMessages: 0, recalled: { tools: [], memories: [] },
+        tokenEstimate: 0, conversationMessages: 0, fallback: false,
+      });
+
+      const ctx = await session.context.assemble();
+      expect(ctx.tools["toolA"]).toBeDefined();
+      expect(ctx.tools["toolA"]!.name).toBe("toolA");
+      expect(ctx.tools["toolB"]).toBeUndefined();
+    });
+
+    it("explicit tools win over auto-resolved on conflict", async () => {
+      const discovered = new Set(["toolA"]);
+      mockAsDiscoverTool.mockReturnValue({
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn().mockResolvedValue([]),
+        discoveredNames: discovered,
+      });
+
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockGetContext.mockResolvedValue({
+        messages: [], strategyUsed: "recent", totalMessages: 0,
+        includedMessages: 0, recalled: { tools: [], memories: [] },
+        tokenEstimate: 0, conversationMessages: 0, fallback: false,
+      });
+
+      const customToolA = { ...backendTool("toolA"), description: "custom override" };
+      const ctx = await session.context.tools({ toolA: customToolA }).assemble();
+      expect(ctx.tools["toolA"]!.description).toBe("custom override");
+    });
+
+    it("assemble() returns empty tools when nothing discovered and none explicit", async () => {
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockGetContext.mockResolvedValue({
+        messages: [], strategyUsed: "recent", totalMessages: 0,
+        includedMessages: 0, recalled: { tools: [], memories: [] },
+        tokenEstimate: 0, conversationMessages: 0, fallback: false,
+      });
+
+      const ctx = await session.context.assemble();
+      expect(ctx.tools).toEqual({});
     });
   });
 });

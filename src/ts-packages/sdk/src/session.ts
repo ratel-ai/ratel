@@ -1,7 +1,7 @@
 import type { ApiClient } from "./api-client.js";
 import { ContextBuilder } from "./context-builder.js";
 import { Conversation } from "./conversation.js";
-import type { GetMessagesOptions, GetMessagesResult, PrepareStepFn } from "./types.js";
+import type { AgentifiedTool, GetMessagesOptions, GetMessagesResult, PrepareStepFn } from "./types.js";
 
 export class Session {
   private lastPersistedSeq = 0;
@@ -15,14 +15,18 @@ export class Session {
     readonly namespaceId: string,
     /** @internal */ private readonly sdk: ApiClient,
     /** @internal */ private readonly datasetId: string,
-    /** @internal */ private readonly toolNames: string[],
+    /** @internal */ private readonly registeredTools: AgentifiedTool[],
   ) {
     this.conversation = new Conversation(sdk, datasetId, namespaceId, id);
     this._discoverTool = sdk.asDiscoverTool(datasetId);
   }
 
   get context(): ContextBuilder {
-    return new ContextBuilder(this.sdk, this.datasetId, this.namespaceId, this.id);
+    return new ContextBuilder(
+      this.sdk, this.datasetId, this.namespaceId, this.id,
+      this.registeredTools,
+      this._discoverTool.discoveredNames,
+    );
   }
 
   get discoverTool() {
@@ -50,7 +54,7 @@ export class Session {
   }
 
   readonly prepareStep: PrepareStepFn = async ({ steps }) => {
-    const activeTools = new Set([...this.toolNames, "agentified_discover"]);
+    const activeTools = new Set(["agentified_discover"]);
 
     const newSteps = steps.slice(this.lastProcessedStepIndex);
 
@@ -64,11 +68,9 @@ export class Session {
       }
       if (step.toolResults) {
         for (const result of step.toolResults) {
-          messages.push({
-            role: "tool",
-            content: typeof result.result === "string" ? result.result : JSON.stringify(result.result),
-            tool_call_id: result.toolCallId,
-          });
+          const raw = result.result;
+          const content = typeof raw === "string" ? raw : JSON.stringify(raw) ?? "";
+          messages.push({ role: "tool", content, tool_call_id: result.toolCallId });
         }
       }
     }
@@ -80,17 +82,7 @@ export class Session {
 
     this.lastProcessedStepIndex = steps.length;
 
-    for (const step of steps) {
-      if (step.toolResults) {
-        for (const result of step.toolResults) {
-          if (result.toolName === "agentified_discover" && Array.isArray(result.result)) {
-            for (const tool of result.result) {
-              if (tool.name) activeTools.add(tool.name);
-            }
-          }
-        }
-      }
-    }
+    for (const name of this._discoverTool.discoveredNames) activeTools.add(name);
 
     return { activeTools: [...activeTools] };
   };

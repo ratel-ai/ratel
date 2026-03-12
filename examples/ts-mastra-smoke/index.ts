@@ -59,34 +59,37 @@ async function main() {
   console.log(`[1] register: instance=${instance.instanceId}`);
   assert(!!instance.instanceId, "expected instanceId");
 
-  // 2. Generate — simple text response
+  // 2. Generate — simple text response (prepareStep as property)
   const session2 = instance.session("smoke-text");
   const r1 = await agent.generate(
     [{ role: "user" as const, content: "Say hello in one sentence." }],
-    { prepareStep: session2.prepareStep({ tools: { agentified_discover: session2.discoverTool } }), maxSteps: 10 },
+    { prepareStep: session2.prepareStep, maxSteps: 10 },
   );
   console.log(`[2] generate (text): "${r1.text.slice(0, 80)}..."`);
   assert(r1.text.length > 0, "expected non-empty text");
 
-  // 3. Generate — discover + tool call (get_weather)
+  // 3. Generate — discover + tool call (prepareStep as property)
   const session3 = instance.session("smoke-weather");
   const r2 = await agent.generate(
     [{ role: "user" as const, content: "What's the weather in Rome?" }],
-    { prepareStep: session3.prepareStep({ tools: { agentified_discover: session3.discoverTool } }), maxSteps: 10 },
+    { prepareStep: session3.prepareStep, maxSteps: 10 },
   );
   const weatherCalls = r2.toolCalls.filter((tc) => tc.payload.toolName === "get_weather");
   console.log(`[3] generate (tool): ${r2.toolCalls.length} tool calls, weather=${weatherCalls.length}`);
   console.log(`    text: "${r2.text.slice(0, 100)}..."`);
   assert(weatherCalls.length > 0, "expected get_weather tool call");
 
-  // 4. Generate — discover-only (no tools pre-set on agent)
+  // 4. Generate — context chain with explicit tools
   const session4 = instance.session("smoke-discover");
+  const ctx = await session4.context
+    .tools({ agentified_discover: session4.discoverTool })
+    .assemble();
   const r3 = await agent.generate(
     [{ role: "user" as const, content: "Search for documentation about React hooks." }],
-    { prepareStep: session4.prepareStep(), maxSteps: 10 },
+    { prepareStep: ctx.prepareStep, maxSteps: 10 },
   );
   const searchCalls = r3.toolCalls.filter((tc) => tc.payload.toolName === "search_docs");
-  console.log(`[4] generate (discover): ${searchCalls.length} search_docs calls, text="${r3.text.slice(0, 80)}..."`);
+  console.log(`[4] generate (context chain): ${searchCalls.length} search_docs calls, text="${r3.text.slice(0, 80)}..."`);
   assert(searchCalls.length > 0, "expected search_docs tool call");
 
   await ag.disconnect();

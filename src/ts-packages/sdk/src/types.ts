@@ -70,6 +70,8 @@ export interface DiscoverToolInput {
 export interface DiscoverTool {
   definition: ToolDefinition;
   execute: (input: DiscoverToolInput) => Promise<RankedTool[]>;
+  /** Tool names found so far — populated by execute() */
+  readonly discoveredNames: Set<string>;
 }
 
 // Context strategy
@@ -193,7 +195,7 @@ export type PrepareStepFn = (params: {
   steps: any[];
 }) => Promise<{ activeTools: string[] }>;
 
-export interface AssembledContext {
+export interface AssembledContext<T = AgentifiedTool> {
   messages: StoredMessage[];
   recalled: { tools: unknown[]; memories: unknown[] };
   strategyUsed: ContextStrategy;
@@ -202,6 +204,7 @@ export interface AssembledContext {
   conversationMessages: number;
   totalMessages: number;
   includedMessages: number;
+  tools: Record<string, T>;
 }
 
 export interface GetMessagesOptions {

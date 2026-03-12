@@ -33,8 +33,21 @@ const agent = new Agent({
   model: openai("gpt-4o-mini"),
   instructions: "Use agentified_discover to find tools, then call them.",
 });
+
+// Simple — prepareStep is a property, includes discover by default
 const result = await agent.generate(messages, {
-  prepareStep: session.prepareStep({ tools: { agentified_discover: session.discoverTool } }),
+  prepareStep: session.prepareStep,
+  maxSteps: 10,
+});
+
+// With explicit tools via context chain
+const ctx = await session.context
+  .tools({ agentified_discover: session.discoverTool })
+  .assemble();
+// ctx.tools → { agentified_discover, ...discoveredTools }
+// ctx.prepareStep → returns { tools } for Mastra injection
+const result2 = await agent.generate(messages, {
+  prepareStep: ctx.prepareStep,
   maxSteps: 10,
 });
 ```
@@ -50,11 +63,17 @@ Agentified.adaptTo(mastra()) → MastraAgentified
   └─ .dataset(name) → MastraDatasetRef
        └─ .register({ tools }) → MastraInstance
             ├─ .discoverTool     — Mastra createTool
-            ├─ .prepareStep(opts?) — returns step function that injects tools
+            ├─ .prepareStep      — property, returns { tools } for injection
             ├─ .session(id)      → MastraSession
             │    ├─ .discoverTool — Mastra createTool
-            │    ├─ .prepareStep(opts?)
-            │    ├─ .context / .conversation (SDK passthrough)
+            │    ├─ .prepareStep  — property, returns { tools }
+            │    ├─ .context      → MastraContextBuilder
+            │    │    ├─ .tools(Record<string, MastraTool>) — chainable
+            │    │    ├─ .messages() / .recall()
+            │    │    └─ .assemble() → MastraAssembledContext
+            │    │         ├─ .tools — explicit + discovered
+            │    │         └─ .prepareStep — returns { tools }
+            │    ├─ .conversation (SDK passthrough)
             │    └─ .getMessages / .updateConversation
             └─ .namespace(id)    → MastraNamespace
                  └─ .session(id) → MastraSession

@@ -1,15 +1,23 @@
 import type { ApiClient } from "./api-client.js";
-import type { AssembledContext, ContextStrategy } from "./types.js";
+import type { AgentifiedTool, AssembledContext, ContextStrategy } from "./types.js";
 
-export class ContextBuilder {
+export class ContextBuilder<T = AgentifiedTool> {
   private messageOpts: { strategy?: ContextStrategy; maxTokens?: number } = {};
+  private explicitTools: Record<string, T> = {};
 
   constructor(
     private readonly sdk: ApiClient,
     private readonly datasetId: string,
     private readonly namespaceId: string,
     private readonly sessionId: string,
+    private readonly registeredTools: T[] = [],
+    private readonly discoveredNames: Set<string> = new Set(),
   ) {}
+
+  tools(tools: Record<string, T>): this {
+    Object.assign(this.explicitTools, tools);
+    return this;
+  }
 
   messages(opts: { strategy?: ContextStrategy; maxTokens?: number }): this {
     this.messageOpts = opts;
@@ -20,11 +28,20 @@ export class ContextBuilder {
     return this;
   }
 
-  async assemble(): Promise<AssembledContext> {
+  async assemble(): Promise<AssembledContext<T>> {
     const res = await this.sdk.getContext(this.datasetId, this.namespaceId, this.sessionId, {
       strategy: this.messageOpts.strategy,
       maxTokens: this.messageOpts.maxTokens,
     });
+
+    const resolvedTools: Record<string, T> = { ...this.explicitTools };
+    for (const tool of this.registeredTools) {
+      const name = (tool as { name: string }).name;
+      if (this.discoveredNames.has(name) && !resolvedTools[name]) {
+        resolvedTools[name] = tool;
+      }
+    }
+
     return {
       messages: res.messages,
       recalled: res.recalled,
@@ -34,6 +51,7 @@ export class ContextBuilder {
       conversationMessages: res.conversationMessages,
       totalMessages: res.totalMessages,
       includedMessages: res.includedMessages,
+      tools: resolvedTools,
     };
   }
 }
