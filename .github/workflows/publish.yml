@@ -129,6 +129,63 @@ jobs:
 
       - uses: pypa/gh-action-pypi-publish@release/v1
 
+  # ── PyPI langchain (trusted publishing — no API token) ──────────────
+  pypi-build-langchain:
+    runs-on: ubuntu-latest
+    outputs:
+      should-publish: ${{ steps.check.outputs.should-publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - id: check
+        name: Check if version already on PyPI
+        working-directory: src/py-packages/langchain
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VERSION"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/agentified-langchain/${VERSION}/json")
+          if [ "$STATUS" = "200" ]; then
+            echo "Version $VERSION already on PyPI, skipping"
+            echo "should-publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $VERSION not on PyPI, will publish"
+            echo "should-publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.should-publish == 'true'
+        run: pip install --upgrade hatchling build
+
+      - if: steps.check.outputs.should-publish == 'true'
+        run: python -m build
+        working-directory: src/py-packages/langchain
+
+      - if: steps.check.outputs.should-publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-dist-langchain
+          path: src/py-packages/langchain/dist/*
+
+  pypi-publish-langchain:
+    needs: [pypi-build-langchain, pypi-publish]
+    if: needs.pypi-build-langchain.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/agentified-langchain/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: py-dist-langchain
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
   # ── Docker Hub (native multi-arch build) ─────────────────────────────
   docker-build:
     runs-on: ${{ matrix.runner }}

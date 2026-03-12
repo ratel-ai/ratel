@@ -1,5 +1,5 @@
 ---
-"@agentified/sdk": patch
+"agentified": patch
 "@agentified/mastra": patch
 "@agentified/fe-client": patch
 "@agentified/react": patch
