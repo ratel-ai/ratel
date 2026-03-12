@@ -21,18 +21,21 @@ import { openai } from "@ai-sdk/openai";
 const ag = new Agentified().adaptTo(mastra());
 await ag.connect("http://localhost:9119");
 
-const dataset = await ag.dataset("my-agent").register({
+const instance = await ag.dataset("my-agent").register({
   tools: [
     { name: "get_weather", description: "Get weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] }, handler: async (args) => ({ temp: 22 }) },
   ],
 });
 
+const session = instance.session("chat-1");
 const agent = new Agent({
   name: "my-agent",
   model: openai("gpt-4o-mini"),
-  instructions: "You are a helpful assistant.",
-  tools: { discoverTool: dataset.discoverTool },  // Mastra createTool
-  prepareStep: dataset.prepareStep,
+  instructions: "Use agentified_discover to find tools, then call them.",
+});
+const result = await agent.generate(messages, {
+  prepareStep: session.prepareStep({ tools: { agentified_discover: session.discoverTool } }),
+  maxSteps: 10,
 });
 ```
 
@@ -47,10 +50,10 @@ Agentified.adaptTo(mastra()) → MastraAgentified
   └─ .dataset(name) → MastraDatasetRef
        └─ .register({ tools }) → MastraInstance
             ├─ .discoverTool     — Mastra createTool
-            ├─ .prepareStep      — PrepareStepFn
+            ├─ .prepareStep(opts?) — returns step function that injects tools
             ├─ .session(id)      → MastraSession
             │    ├─ .discoverTool — Mastra createTool
-            │    ├─ .prepareStep
+            │    ├─ .prepareStep(opts?)
             │    ├─ .context / .conversation (SDK passthrough)
             │    └─ .getMessages / .updateConversation
             └─ .namespace(id)    → MastraNamespace
@@ -79,61 +82,6 @@ Wraps SDK `Instance`. `discoverTool` is a Mastra `createTool` result instead of 
 ### `MastraSession`
 
 Wraps SDK `Session`. `discoverTool` is a Mastra `createTool` result. Delegates `context`, `conversation`, `getMessages`, `updateConversation` to the SDK session.
-
-### `AgentifiedMastra`
-
-Standalone Mastra agent wrapper with prefetch, tool hydration, and AG-UI streaming.
-
-```typescript
-import { tool } from "agentified";
-import type { ServerTool } from "agentified";
-import { AgentifiedMastra } from "@agentified/mastra";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-
-const tools: ServerTool[] = [
-  tool({ name: "get_weather", description: "Get weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }),
-];
-
-const toolHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
-  get_weather: async (args) => ({ temp: 22, city: args.city }),
-};
-
-const agent = new Agent({
-  name: "my-agent",
-  instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
-});
-
-const ag = new AgentifiedMastra({
-  agentifiedUrl: "http://localhost:9119",
-  tools,
-  toolHandlers,
-  agent,
-});
-
-// Register tools with agentified-core
-await ag.register();
-
-// Generate — prefetches relevant tools, hydrates them, calls LLM
-const result = await ag.generate({
-  messages: [{ role: "user", content: "What's the weather in Rome?" }],
-});
-// result.text, result.toolCalls, result.turnId, result.hydratedTools
-
-// Generate with session continuity — pass turnId from previous call
-const next = await ag.generate({
-  messages: [{ role: "user", content: "And in Paris?" }],
-  turnId: result.turnId,
-});
-
-// Stream AG-UI events via Observable
-const observable = await ag.run({
-  messages: [{ role: "user", content: "What's the weather in Berlin?" }],
-});
-```
-
-See [mastra-smoke](../../../examples/mastra-smoke/) for a runnable version.
 
 ### `streamSSE(observable, res)`
 

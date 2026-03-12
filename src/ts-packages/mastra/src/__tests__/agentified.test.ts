@@ -95,6 +95,7 @@ describe("MastraInstance", () => {
       discoverTool: {
         definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
         execute: vi.fn().mockResolvedValue([{ name: "tool1", score: 0.9 }]),
+        discoveredNames: new Set<string>(),
       },
       prepareStep: vi.fn().mockResolvedValue({ activeTools: ["t1"] }),
       session: vi.fn(),
@@ -104,7 +105,7 @@ describe("MastraInstance", () => {
 
   it("wraps discoverTool with createTool", () => {
     const inst = fakeInstance();
-    const m = new MastraInstance(inst);
+    const m = new MastraInstance(inst, []);
 
     expect(m.discoverTool.__mastraTool).toBe(true);
     expect(mockCreateTool).toHaveBeenCalledWith(
@@ -112,17 +113,65 @@ describe("MastraInstance", () => {
     );
   });
 
-  it("delegates prepareStep to SDK instance", async () => {
+  it("prepareStep() with no args returns function that includes discover tool", async () => {
     const inst = fakeInstance();
-    const m = new MastraInstance(inst);
+    const m = new MastraInstance(inst, []);
 
-    const result = await m.prepareStep({ stepNumber: 0, steps: [] } as any);
-    expect(result).toEqual({ activeTools: ["t1"] });
+    const fn = m.prepareStep();
+    expect(typeof fn).toBe("function");
+
+    const result = await fn({ stepNumber: 0, steps: [] });
+    expect(result.tools).toBeDefined();
+    expect(result.tools["agentified_discover"]).toBe(m.discoverTool);
+  });
+
+  it("prepareStep({ tools }) returns function with provided tools", async () => {
+    const inst = fakeInstance();
+    const m = new MastraInstance(inst, []);
+
+    const customTool = { id: "my_tool", __mastraTool: true } as any;
+    const fn = m.prepareStep({ tools: { my_tool: customTool } });
+    const result = await fn({ stepNumber: 0, steps: [] });
+    expect(result.tools["my_tool"]).toBe(customTool);
+    expect(result.tools["agentified_discover"]).toBeUndefined();
+  });
+
+  it("prepareStep delegates to SDK instance prepareStep", async () => {
+    const inst = fakeInstance();
+    const m = new MastraInstance(inst, []);
+    const fn = m.prepareStep();
+    await fn({ stepNumber: 1, steps: [{ text: "hi" }] });
+    expect(inst.prepareStep).toHaveBeenCalledWith({ stepNumber: 1, steps: [{ text: "hi" }] });
+  });
+
+  it("merges discovered backend tools into prepareStep result", async () => {
+    const backendTools = [{
+      name: "get_weather",
+      description: "Get weather",
+      parameters: { type: "object", properties: {} },
+      handler: vi.fn(),
+    }];
+    const inst = fakeInstance();
+    inst.discoverTool.discoveredNames.add("get_weather");
+
+    const m = new MastraInstance(inst, backendTools);
+    const fn = m.prepareStep({ tools: { agentified_discover: m.discoverTool } });
+    const result = await fn({ stepNumber: 0, steps: [] });
+
+    expect(result.tools["agentified_discover"]).toBe(m.discoverTool);
+    expect(result.tools["get_weather"]).toBeDefined();
+    expect(result.tools["get_weather"].id).toBe("get_weather");
+  });
+
+  it("does not expose a tools property", () => {
+    const inst = fakeInstance();
+    const m = new MastraInstance(inst, []);
+    expect((m as any).tools).toBeUndefined();
   });
 
   it("exposes instanceId and datasetId", () => {
     const inst = fakeInstance();
-    const m = new MastraInstance(inst);
+    const m = new MastraInstance(inst, []);
     expect(m.instanceId).toBe("my-dataset");
     expect(m.datasetId).toBe("my-dataset");
   });
@@ -144,7 +193,7 @@ describe("MastraInstance", () => {
     } as unknown as Session;
     (inst.session as ReturnType<typeof vi.fn>).mockReturnValue(fakeSession);
 
-    const m = new MastraInstance(inst);
+    const m = new MastraInstance(inst, []);
     const session = m.session("chat-1");
     expect(session).toBeInstanceOf(MastraSession);
     expect(inst.session).toHaveBeenCalledWith("chat-1");
@@ -155,7 +204,7 @@ describe("MastraInstance", () => {
     const fakeNs = { id: "user-1", session: vi.fn() } as unknown as Namespace;
     (inst.namespace as ReturnType<typeof vi.fn>).mockReturnValue(fakeNs);
 
-    const m = new MastraInstance(inst);
+    const m = new MastraInstance(inst, []);
     const ns = m.namespace("user-1");
     expect(ns).toBeInstanceOf(MastraNamespace);
     expect(inst.namespace).toHaveBeenCalledWith("user-1");
@@ -170,6 +219,7 @@ describe("MastraSession", () => {
       discoverTool: {
         definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
         execute: vi.fn(),
+        discoveredNames: new Set<string>(),
       },
       prepareStep: vi.fn(),
       context: { messages: vi.fn().mockReturnThis(), recall: vi.fn().mockReturnThis(), assemble: vi.fn() },
@@ -181,20 +231,40 @@ describe("MastraSession", () => {
 
   it("wraps discoverTool with createTool", () => {
     const sess = fakeSession();
-    const m = new MastraSession(sess);
+    const m = new MastraSession(sess, []);
     expect(m.discoverTool.__mastraTool).toBe(true);
   });
 
-  it("delegates prepareStep", async () => {
+  it("prepareStep() returns function that delegates to SDK session", async () => {
     const sess = fakeSession();
-    const m = new MastraSession(sess);
-    await m.prepareStep({ stepNumber: 0, steps: [] } as any);
-    expect(sess.prepareStep).toHaveBeenCalled();
+    const m = new MastraSession(sess, []);
+    const fn = m.prepareStep();
+    await fn({ stepNumber: 0, steps: [] });
+    expect(sess.prepareStep).toHaveBeenCalledWith({ stepNumber: 0, steps: [] });
+  });
+
+  it("prepareStep merges discovered backend tools", async () => {
+    const backendTools = [{
+      name: "search_docs",
+      description: "Search docs",
+      parameters: { type: "object", properties: {} },
+      handler: vi.fn(),
+    }];
+    const sess = fakeSession();
+    sess.discoverTool.discoveredNames.add("search_docs");
+
+    const m = new MastraSession(sess, backendTools);
+    const fn = m.prepareStep();
+    const result = await fn({ stepNumber: 0, steps: [] });
+
+    expect(result.tools["agentified_discover"]).toBe(m.discoverTool);
+    expect(result.tools["search_docs"]).toBeDefined();
+    expect(result.tools["search_docs"].id).toBe("search_docs");
   });
 
   it("exposes id, context, conversation", () => {
     const sess = fakeSession();
-    const m = new MastraSession(sess);
+    const m = new MastraSession(sess, []);
     expect(m.id).toBe("chat-1");
     expect(m.context).toBe(sess.context);
     expect(m.conversation).toBe(sess.conversation);
@@ -202,14 +272,14 @@ describe("MastraSession", () => {
 
   it("delegates getMessages", async () => {
     const sess = fakeSession();
-    const m = new MastraSession(sess);
+    const m = new MastraSession(sess, []);
     await m.getMessages({ strategy: "recent" });
     expect(sess.getMessages).toHaveBeenCalledWith({ strategy: "recent" });
   });
 
   it("delegates updateConversation", async () => {
     const sess = fakeSession();
-    const m = new MastraSession(sess);
+    const m = new MastraSession(sess, []);
     const input = { messages: [{ role: "user", content: "hi" }] };
     await m.updateConversation(input);
     expect(sess.updateConversation).toHaveBeenCalledWith(input);
@@ -235,7 +305,7 @@ describe("MastraNamespace", () => {
       session: vi.fn().mockReturnValue(fakeSession),
     } as unknown as Namespace;
 
-    const m = new MastraNamespace(fakeNs);
+    const m = new MastraNamespace(fakeNs, []);
     expect(m.id).toBe("user-1");
     const session = m.session("chat-1");
     expect(session).toBeInstanceOf(MastraSession);
