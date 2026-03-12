@@ -15,8 +15,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.1(a94ebd487568d2cc4cc9a846bf537325)
       '@agentified/mastra':
-        specifier: 0.0.5-beta.4
-        version: 0.0.5-beta.4(@ag-ui/client@0.0.45)(@ag-ui/mastra@1.0.1(a94ebd487568d2cc4cc9a846bf537325))(@mastra/core@1.11.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@3.25.76))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@3.25.76))(agentified@0.0.5-beta.4)(zod@3.25.76)
+        specifier: link:../../src/ts-packages/mastra
+        version: link:../../src/ts-packages/mastra
       '@ai-sdk/openai':
         specifier: ^3.0.0
         version: 3.0.41(zod@3.25.76)
@@ -24,8 +24,8 @@ importers:
         specifier: ^1.6.0
         version: 1.11.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@3.25.76))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@3.25.76)
       agentified:
-        specifier: 0.0.5-beta.4
-        version: 0.0.5-beta.4
+        specifier: link:../../src/ts-packages/sdk
+        version: link:../../src/ts-packages/sdk
       dotenv:
         specifier: ^16.4.0
         version: 16.6.1
@@ -84,15 +84,6 @@ packages:
 
   '@ag-ui/proto@0.0.46':
     resolution: {integrity: sha512-+FfVhB1OP5A1+5BrEccQnwfODTbfBRWT3+NVnbW4RDFUDVmO9EUA+XPuO1ZxWcDfziTvQriwm0vNyaXGidSIhw==}
-
-  '@agentified/mastra@0.0.5-beta.4':
-    resolution: {integrity: sha512-pZOBjnXxEV4NzCbdoPxWESXBxvQ0VWiPFBEltwfufRA6NpLnHSykkdYbNObMxfe9yRPQ42QguRsZxvVwkPjqZA==}
-    peerDependencies:
-      '@ag-ui/client': '>=0.0.45'
-      '@ag-ui/mastra': '>=1.0.0'
-      '@mastra/core': '>=1.0.0'
-      agentified: 0.0.5-beta.4
-      zod: '>=3.0.0'
 
   '@ai-sdk/anthropic@2.0.70':
     resolution: {integrity: sha512-W3WjQlb0Ho+CVAQUvb8Rtk3hGS3Jlgy79ihY2H0yj2k4yU8XuxpQw0Oz+7JQsB47j+jlHhk7nUXtxhAeRg3S3Q==}
@@ -745,9 +736,6 @@ packages:
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
     engines: {node: '>= 0.6'}
-
-  agentified@0.0.5-beta.4:
-    resolution: {integrity: sha512-yxcAN88biFyy4r6hkFCDG6ioKLCnehAgGdZzy9jcGM3nOSmv4kwPuDqoojnwmZMyz1F7S7KrglIblk9zn9nnAg==}
 
   ai@5.0.153:
     resolution: {integrity: sha512-QNsPqqrca/03b+YBOKWmaF82HnxcA92EHw3C2U0r5kHz3TqgHb/TI0yJlHhEsqKIMgh/0X3WBcGJ6tf6Fcc8zQ==}
@@ -1845,15 +1833,6 @@ snapshots:
       '@bufbuild/protobuf': 2.11.0
       '@protobuf-ts/protoc': 2.11.1
 
-  '@agentified/mastra@0.0.5-beta.4(@ag-ui/client@0.0.45)(@ag-ui/mastra@1.0.1(a94ebd487568d2cc4cc9a846bf537325))(@mastra/core@1.11.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@3.25.76))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@3.25.76))(agentified@0.0.5-beta.4)(zod@3.25.76)':
-    dependencies:
-      '@ag-ui/client': 0.0.45
-      '@ag-ui/mastra': 1.0.1(a94ebd487568d2cc4cc9a846bf537325)
-      '@mastra/core': 1.11.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@3.25.76))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@3.25.76)
-      agentified: 0.0.5-beta.4
-      rxjs: 7.8.2
-      zod: 3.25.76
-
   '@ai-sdk/anthropic@2.0.70(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
@@ -2528,8 +2507,6 @@ snapshots:
     dependencies:
       mime-types: 3.0.2
       negotiator: 1.0.0
-
-  agentified@0.0.5-beta.4: {}
 
   ai@5.0.153(zod@3.25.76):
     dependencies:

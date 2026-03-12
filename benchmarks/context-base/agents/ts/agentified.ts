@@ -4,8 +4,10 @@ config({ path: "../../.env" });
 
 import { resolve } from "node:path";
 import { Agent } from "@mastra/core/agent";
-import { tool } from "agentified";
-import { AgentifiedMastra } from "@agentified/mastra";
+import { createTool } from "@mastra/core/tools";
+import { Agentified } from "agentified";
+import type { BackendTool } from "agentified";
+import { mastra, jsonSchemaToZod, type MastraInstance } from "@agentified/mastra";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { z } from "zod";
 import { startAgent, executeTool } from "../../scaffolding/ts/index.js";
@@ -18,28 +20,27 @@ import type { SendMessageBody, SendMessageResponse } from "../../lib/protocol.js
 const TOOL_LIMIT = process.env.FORCE_DISCOVERY === "1" ? 0 : 15;
 
 interface BootResult {
-  agentified: AgentifiedMastra;
+  ag: Agentified;
+  instance: MastraInstance;
+  mastraAgent: Agent;
+  mastraTools: Record<string, ReturnType<typeof createTool>>;
   container?: StartedTestContainer;
 }
 
 async function boot(): Promise<BootResult> {
   const scriptsDir = resolve(import.meta.dirname, "../../tools/scripts");
 
-  // Build SDK tools + handlers from registry
-  const sdkTools = Object.entries(toolRegistry).map(([name, t]) =>
-    tool({
+  // Build BackendTool[] for registration
+  const backendTools: BackendTool[] = Object.entries(toolRegistry).map(([name, t]) => {
+    const script = resolve(scriptsDir, `${name}.sh`);
+    return {
       name,
       description: (t as any).description ?? "",
       parameters: z.toJSONSchema((t as any).inputSchema) as Record<string, unknown>,
+      handler: (args: Record<string, unknown>) => executeTool(script, args),
       ...(TOOL_DEPENDENCIES[name] && { metadata: TOOL_DEPENDENCIES[name] }),
-    }),
-  );
-
-  const toolHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {};
-  for (const name of Object.keys(toolRegistry)) {
-    const script = resolve(scriptsDir, `${name}.sh`);
-    toolHandlers[name] = (args) => executeTool(script, args);
-  }
+    };
+  });
 
   // Resolve agentified-core endpoint (external or container)
   let endpoint = process.env.AGENTIFIED_ENDPOINT;
@@ -47,7 +48,7 @@ async function boot(): Promise<BootResult> {
 
   if (!endpoint) {
     console.error("[agentified] starting agentified-core container...");
-    const started = await new GenericContainer("agentified/agentified-core:0.2.0-beta.1")
+    const started = await new GenericContainer("agentified/agentified-core:0.5.0-beta.6")
       .withExposedPorts(9119)
       .withEnvironment({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
@@ -81,73 +82,79 @@ async function boot(): Promise<BootResult> {
     model: toMastraModel(model),
   });
 
-  const agentified = new AgentifiedMastra({
-    agentifiedUrl: endpoint,
-    tools: sdkTools,
-    toolHandlers,
-    agent: mastraAgent as any,
-  });
+  const ag = new Agentified();
+  ag.connect(endpoint);
+  const mag = ag.adaptTo(mastra());
+  const instance = await mag.register({ tools: backendTools });
+  console.error(`[agentified] registered ${backendTools.length} tools`);
 
-  await agentified.register();
-  console.error(`[agentified] registered ${sdkTools.length} tools`);
+  // Build Mastra-compatible tools from definitions
+  const mastraTools: Record<string, ReturnType<typeof createTool>> = {};
+  for (const t of backendTools) {
+    mastraTools[t.name] = createTool({
+      id: t.name,
+      description: t.description,
+      inputSchema: jsonSchemaToZod(t.parameters),
+      execute: async (input) => t.handler(input as Record<string, unknown>),
+    });
+  }
 
-  return { agentified, container };
+  return { ag, instance, mastraAgent, mastraTools, container };
 }
 
 if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("agentified.js")) {
-  // Start boot immediately — sendMessage awaits the promise
   const bootPromise = boot();
 
-  // Graceful shutdown
   process.on("SIGTERM", async () => {
-    const { container } = await bootPromise.catch(() => ({ container: undefined }));
-    if (container) {
+    const result = await bootPromise.catch(() => ({ ag: undefined, container: undefined }) as any);
+    if (result.ag) await result.ag.disconnect().catch(() => { });
+    if (result.container) {
       console.error("[agentified] stopping container...");
-      await container.stop().catch(() => {});
+      await result.container.stop().catch(() => { });
     }
     process.exit(0);
   });
 
   startAgent({
-    setup: async () => {},
+    setup: async () => { },
 
     sendMessage: async (body: SendMessageBody): Promise<SendMessageResponse> => {
-      const { agentified } = await bootPromise;
+      const { instance, mastraAgent, mastraTools } = await bootPromise;
 
-      const result = await agentified.generate({
-        messages: body.history.map((m) => ({ role: m.role, content: m.content })),
-        maxSteps: MAX_STEPS,
-        turnId: body.turnId,
-        toolLimit: TOOL_LIMIT,
-        seed: body.seed,
-        debug: !!process.env.DEBUG,
-      });
+      const sessionId = body.turnId ?? `turn-${Date.now()}`;
+      const session = instance.session(sessionId);
+
+      mastraAgent.__setTools({ ...mastraTools, agentified_discover: session.discoverTool });
+
+      const result = await mastraAgent.generate(
+        body.history.map((m) => ({ role: m.role, content: m.content })) as any,
+        { prepareStep: session.prepareStep, maxSteps: MAX_STEPS },
+      );
 
       const toolCalls = result.toolCalls.map((tc) => ({
-        toolCallId: tc.toolCallId,
-        toolName: tc.toolName,
-        args: tc.args,
+        toolCallId: tc.payload.toolCallId,
+        toolName: tc.payload.toolName,
+        args: tc.payload.args ?? {},
       }));
+
+      const hydratedTools = toolCalls.map((tc) => tc.toolName);
 
       return {
         content: result.text,
         toolCalls,
         usage: {
-          totalTokens: result.usage.totalTokens,
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-          cachedInputTokens: result.usage.cachedInputTokens,
-          outputReasoningTokens: result.usage.reasoningTokens,
+          totalTokens: result.usage.totalTokens ?? 0,
+          inputTokens: result.usage.inputTokens ?? 0,
+          outputTokens: result.usage.outputTokens ?? 0,
         },
-        durationMs: result.durationMs,
-        hydratedTools: result.hydratedTools,
-        turnId: result.turnId,
+        durationMs: 0,
+        hydratedTools,
+        turnId: sessionId,
         debug: {
           systemPrompt: SYSTEM_PROMPT,
-          toolNames: result.hydratedTools ?? [],
+          toolNames: hydratedTools,
           modelResponse: result.text,
           toolCallsMade: toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
-          ...(result.debugLog && { agentifiedLog: result.debugLog }),
         },
       };
     },

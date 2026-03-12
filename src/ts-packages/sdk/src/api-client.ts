@@ -167,6 +167,7 @@ export class ApiClient {
   }
 
   asDiscoverTool(datasetId: string): DiscoverTool {
+    const discoveredNames = new Set<string>();
     return {
       definition: {
         name: "agentified_discover",
@@ -180,11 +181,13 @@ export class ApiClient {
           required: ["query"],
         },
       },
+      discoveredNames,
       execute: async (input: DiscoverToolInput): Promise<RankedTool[]> => {
         this.emit({ type: "agentified:discover:start", query: input.query });
         const start = performance.now();
 
         const tools = await this.discover(datasetId, input.query, input.limit);
+        for (const t of tools) discoveredNames.add(t.name);
 
         this.emit({
           type: "agentified:discover:complete",
