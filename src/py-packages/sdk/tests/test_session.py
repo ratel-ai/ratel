@@ -5,10 +5,11 @@ import respx
 
 from agentified.api_client import ApiClient
 from agentified.session import Session
-from agentified.models import ApiClientConfig, GetMessagesOptions
+from agentified.models import ApiClientConfig, BackendTool, GetMessagesOptions
 
 TEST_URL = "http://localhost:9119"
 DATASET = "ds"
+TOOLS = [BackendTool(name="get_weather", description="Weather", parameters={}, handler=lambda a: a)]
 
 STORED_MSG = lambda seq, role="user", content="hi": {
     "id": f"m{seq}", "role": role, "content": content,
@@ -35,7 +36,7 @@ class TestSessionGetMessages:
             return_value=httpx.Response(200, json=CONTEXT_RESPONSE([STORED_MSG(1)]))
         )
         sdk = ApiClient(ApiClientConfig(server_url=TEST_URL, tools=[]))
-        session = Session("s1", "default", sdk, DATASET, ["get_weather"])
+        session = Session("s1", "default", sdk, DATASET, TOOLS)
         result = await session.get_messages(GetMessagesOptions(strategy="recent"))
 
         assert len(result.messages) == 1
@@ -129,7 +130,7 @@ class TestUpdateConversation:
 class TestSessionProperties:
     def test_context_returns_new_builder(self):
         sdk = ApiClient(ApiClientConfig(server_url=TEST_URL, tools=[]))
-        session = Session("s1", "default", sdk, DATASET, [])
+        session = Session("s1", "default", sdk, DATASET, TOOLS)
         ctx1 = session.context
         ctx2 = session.context
         assert ctx1 is not ctx2
@@ -138,3 +139,16 @@ class TestSessionProperties:
         sdk = ApiClient(ApiClientConfig(server_url=TEST_URL, tools=[]))
         session = Session("s1", "default", sdk, DATASET, [])
         assert session.discover_tool.definition.name == "agentified_discover"
+
+    def test_context_receives_registered_tools(self):
+        sdk = ApiClient(ApiClientConfig(server_url=TEST_URL, tools=[]))
+        session = Session("s1", "default", sdk, DATASET, TOOLS)
+        ctx = session.context
+        assert ctx._registered_tools is TOOLS
+
+    def test_context_shares_discovered_names(self):
+        sdk = ApiClient(ApiClientConfig(server_url=TEST_URL, tools=[]))
+        session = Session("s1", "default", sdk, DATASET, TOOLS)
+        session._discover_tool.discovered_names.add("get_weather")
+        ctx = session.context
+        assert "get_weather" in ctx._discovered_names

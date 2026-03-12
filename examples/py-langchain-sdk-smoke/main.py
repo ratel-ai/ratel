@@ -7,8 +7,7 @@ import asyncio
 import os
 import time
 
-from agentified import Agentified, BackendTool, RegisterInput
-from langchain_core.tools import StructuredTool
+from agentified_langchain import LangchainAgentified, BackendTool, RegisterInput
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
@@ -17,8 +16,8 @@ SERVER = os.environ.get("AGENTIFIED_URL", "http://localhost:9119")
 SESSION_ID = f"lc-smoke-{int(time.time() * 1000)}"
 
 TOOL_HANDLERS = {
-    "get_weather": lambda city: {"temp": 22, "city": city, "unit": "C"},
-    "search_docs": lambda query: {"results": [f"Doc about {query}"]},
+    "get_weather": lambda args: {"temp": 22, "city": args.get("city", ""), "unit": "C"},
+    "search_docs": lambda args: {"results": [f"Doc about {args.get('query', '')}"]},
 }
 
 
@@ -27,32 +26,12 @@ def check(condition: bool, msg: str) -> None:
         raise AssertionError(f"FAIL: {msg}")
 
 
-def ranked_to_langchain(ranked_tools: list) -> list[StructuredTool]:
-    lc_tools = []
-    for rt in ranked_tools:
-        handler = TOOL_HANDLERS.get(rt.name)
-        if handler is None:
-            continue
-        props = rt.parameters.get("properties", {})
-        first_param = next(iter(props), None)
-        if first_param:
-            fn = (lambda h=handler, p=first_param: lambda **kwargs: h(kwargs.get(p, "")))()
-        else:
-            fn = lambda **kwargs: handler()
-        lc_tools.append(StructuredTool.from_function(
-            func=fn,
-            name=rt.name,
-            description=rt.description,
-        ))
-    return lc_tools
-
-
 async def main() -> None:
-    ag = Agentified()
-    await ag.connect(SERVER)
+    lc = LangchainAgentified()
+    await lc.connect(SERVER)
     print(f"[1] Connected to {SERVER}")
 
-    instance = await ag.register(RegisterInput(tools=[
+    instance = await lc.register(RegisterInput(tools=[
         BackendTool(
             name="get_weather",
             description="Get current weather for a city",
@@ -61,7 +40,7 @@ async def main() -> None:
                 "properties": {"city": {"type": "string"}},
                 "required": ["city"],
             },
-            handler=lambda args: TOOL_HANDLERS["get_weather"](args["city"]),
+            handler=TOOL_HANDLERS["get_weather"],
         ),
         BackendTool(
             name="search_docs",
@@ -71,7 +50,7 @@ async def main() -> None:
                 "properties": {"query": {"type": "string"}},
                 "required": ["query"],
             },
-            handler=lambda args: TOOL_HANDLERS["search_docs"](args["query"]),
+            handler=TOOL_HANDLERS["search_docs"],
         ),
     ]))
     print("[2] Registered tools")
@@ -81,20 +60,20 @@ async def main() -> None:
 
     # --- Discover tools ---
     try:
-        discovered = await session.discover_tool.execute({"query": "weather forecast for a city"})
-        print(f"[4] Discovered {len(discovered)} tools")
-        check(len(discovered) > 0, "expected at least 1 discovered tool")
+        result = await session.discover_tool.ainvoke({"query": "weather forecast for a city"})
+        print(f"[4] Discovered {len(result)} tools")
+        check(len(result) > 0, "expected at least 1 discovered tool")
     except Exception as e:
         print(f"[4] Discovery SKIPPED ({str(e)[:80]})")
         print("    Skipping LLM tests (requires valid OPENAI_API_KEY for both core and agent)")
-        await ag.disconnect()
+        await lc.disconnect()
         print("\n✓ Partial checks passed (discovery unavailable)")
         return
 
-    # --- Convert to LangChain tools ---
-    lc_tools = ranked_to_langchain(discovered)
-    print(f"[5] Converted {len(lc_tools)} tools to LangChain format")
-    check(len(lc_tools) > 0, "expected at least 1 LangChain tool")
+    # --- Get tools via adapter ---
+    lc_tools = session.get_tools()
+    print(f"[5] Got {len(lc_tools)} LangChain tools via adapter")
+    check(len(lc_tools) >= 1, "expected at least discover tool")
 
     # --- Create ReAct agent and run ---
     if not os.environ.get("OPENAI_API_KEY"):
@@ -108,7 +87,7 @@ async def main() -> None:
         stored = await session.conversation.messages()
         print(f"    {len(stored)} messages stored")
         check(len(stored) == 2, f"expected 2 stored, got {len(stored)}")
-        await ag.disconnect()
+        await lc.disconnect()
         print("\n✓ Partial checks passed (OPENAI_API_KEY not set for agent)")
         return
 
@@ -136,7 +115,7 @@ async def main() -> None:
     print(f"[8] Session continuity: {len(stored)} messages stored")
     check(len(stored) == 2, f"expected 2 stored, got {len(stored)}")
 
-    await ag.disconnect()
+    await lc.disconnect()
     print("\n✓ All checks passed!")
 
 

@@ -136,6 +136,7 @@ class AssembledContext(BaseModel):
     conversation_messages: int
     total_messages: int
     included_messages: int
+    tools: dict[str, Any] = {}
 
 
 class GetMessagesOptions(BaseModel):
@@ -216,6 +217,7 @@ AgentifiedEvent = Union[
 class DiscoverTool:
     definition: ToolDefinition
     execute: Callable[[DiscoverToolInput], Awaitable[list[RankedTool]]]
+    discovered_names: set[str] = field(default_factory=set)
 
 
 @dataclass

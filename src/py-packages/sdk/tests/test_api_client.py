@@ -221,6 +221,39 @@ class TestAsDiscoverTool:
         assert events[1].type == "agentified:discover:complete"
 
 
+    @respx.mock
+    async def test_populates_discovered_names(self):
+        respx.post(f"{TEST_URL}/api/v1/datasets/{DATASET}/discover").mock(
+            return_value=httpx.Response(200, json={"tools": [RANKED_TOOL.model_dump()]})
+        )
+        client = ApiClient(ApiClientConfig(server_url=TEST_URL, tools=[]))
+        dt = client.as_discover_tool(DATASET)
+        assert len(dt.discovered_names) == 0
+
+        await dt.execute({"query": "weather"})
+        assert "get_weather" in dt.discovered_names
+
+    @respx.mock
+    async def test_discovered_names_accumulate(self):
+        tool2 = RankedTool(name="search", description="Search", parameters={}, score=0.8)
+        call_count = 0
+
+        def mock_response(request):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(200, json={"tools": [RANKED_TOOL.model_dump()]})
+            return httpx.Response(200, json={"tools": [tool2.model_dump()]})
+
+        respx.post(f"{TEST_URL}/api/v1/datasets/{DATASET}/discover").mock(side_effect=mock_response)
+        client = ApiClient(ApiClientConfig(server_url=TEST_URL, tools=[]))
+        dt = client.as_discover_tool(DATASET)
+
+        await dt.execute({"query": "weather"})
+        await dt.execute({"query": "search"})
+        assert dt.discovered_names == {"get_weather", "search"}
+
+
 class TestFrontendTools:
     def test_filters_frontend_tools(self):
         ft = ServerTool(name="confirm", description="c", parameters={}, metadata={"location": "frontend"})

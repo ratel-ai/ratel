@@ -33,8 +33,7 @@ class DatasetRef:
         )
         await reg_sdk.register(self.dataset_name)
 
-        tool_names = [t.name for t in input.tools]
-        return Instance(self.dataset_name, self.dataset_name, sdk, tool_names)
+        return Instance(self.dataset_name, self.dataset_name, sdk, input.tools)
 
 
 def _validate_tools(tools: list[BackendTool]) -> None:

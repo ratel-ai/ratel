@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from .context_builder import ContextBuilder
 from .conversation import Conversation
-from .models import DiscoverTool, GetMessagesOptions, GetMessagesResult
+from .models import BackendTool, DiscoverTool, GetMessagesOptions, GetMessagesResult
 
 if TYPE_CHECKING:
     from .api_client import ApiClient
@@ -17,19 +17,23 @@ class Session:
         namespace_id: str,
         sdk: ApiClient,
         dataset_id: str,
-        tool_names: list[str],
+        registered_tools: list[BackendTool],
     ) -> None:
         self.id = id
         self.namespace_id = namespace_id
         self._sdk = sdk
         self._dataset_id = dataset_id
-        self._tool_names = tool_names
+        self._registered_tools = registered_tools
         self.conversation = Conversation(sdk, dataset_id, namespace_id, id)
         self._discover_tool = sdk.as_discover_tool(dataset_id)
 
     @property
     def context(self) -> ContextBuilder:
-        return ContextBuilder(self._sdk, self._dataset_id, self.namespace_id, self.id)
+        return ContextBuilder(
+            self._sdk, self._dataset_id, self.namespace_id, self.id,
+            registered_tools=self._registered_tools,
+            discovered_names=self._discover_tool.discovered_names,
+        )
 
     @property
     def discover_tool(self) -> DiscoverTool:

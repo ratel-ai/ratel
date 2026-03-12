@@ -206,6 +206,8 @@ class ApiClient:
         return [t.name for t in self.get_frontend_tools()]
 
     def as_discover_tool(self, dataset_id: str) -> DiscoverTool:
+        discovered_names: set[str] = set()
+
         async def execute(inp: dict[str, Any] | DiscoverToolInput) -> list[RankedTool]:
             if isinstance(inp, dict):
                 inp = DiscoverToolInput(**inp)
@@ -214,6 +216,8 @@ class ApiClient:
             tools = await self.discover(dataset_id, inp.query, inp.limit)
             duration_ms = (time.perf_counter() - start) * 1000
             self._emit(DiscoverCompleteEvent(query=inp.query, tools=tools, duration_ms=duration_ms))
+            for t in tools:
+                discovered_names.add(t.name)
             return tools
 
         return DiscoverTool(
@@ -230,6 +234,7 @@ class ApiClient:
                 },
             ),
             execute=execute,
+            discovered_names=discovered_names,
         )
 
     # -- private --
