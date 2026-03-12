@@ -37,7 +37,7 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 | Package | Description |
 |---------|-------------|
 | [agentified-core](../src/core/README.md) | Rust server — hybrid ranking, sub-ms discovery |
-| [@agentified/sdk](../src/ts-packages/sdk/README.md) | TypeScript SDK — register, assemble context, track sessions |
+| [agentified](../src/ts-packages/sdk/README.md) | TypeScript SDK — register, assemble context, track sessions |
 | [@agentified/fe-client](../src/ts-packages/fe-client/README.md) | Frontend client — browser tool execution, streaming |
 | [@agentified/react](../src/ts-packages/react/README.md) | React hooks + Inspector debug panel |
 | [@agentified/mastra](../src/ts-packages/mastra/README.md) | Mastra adapter — agent + context assembly in one call |
