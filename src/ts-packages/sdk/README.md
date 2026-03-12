@@ -1,6 +1,6 @@
 # agentified
 
-Register 200 tools. Get the 5 that matter.
+Context intelligence for AI agents. Register tools, assemble the right context per turn.
 
 TypeScript SDK for [Agentified](../../../README.md) — register tools, discover relevant ones via [hybrid ranking](../../../docs/server/ranking.md), and track [sessions](../../../docs/server/session-continuity.md) across turns.
 
@@ -25,13 +25,18 @@ const dataset = await ag.dataset("my-agent").register({
   ],
 });
 
-// dataset.discoverTool   — give to your agent for runtime tool discovery
-// dataset.prepareStep    — callback that expands active tools after discover
-// dataset.session(chatId) — session-scoped tools + conversation persistence
-// dataset.namespace(userId) — user-scoped memory (stub)
+const session = dataset.session("chat-1");
+
+// Assemble context — tools + messages for this turn
+const ctx = await session.context
+  .messages({ strategy: "recent", maxTokens: 4000 })
+  .assemble();
+// ctx.tools     → { get_weather, book_flight } (ranked by relevance)
+// ctx.messages  → conversation history
+// ctx.tokenEstimate → estimated token count
 ```
 
-See [sdk-smoke](../../../examples/sdk-smoke/) for a runnable version of this.
+See [ts-sdk-smoke](../../../examples/ts-sdk-smoke/) for a runnable version of this.
 
 ## Hierarchy
 
@@ -56,97 +61,45 @@ Agentified
 
 ## API Reference
 
-### `tool(definition)`
+## ContextBuilder
 
-Creates a `ServerTool` with auto-populated `fields` for embedding.
+Fluent API for assembling context per agent turn. Access via `session.context`:
 
 ```typescript
-import { tool } from "agentified";
-
-const t = tool({
-  name: "search_docs",
-  description: "Search documentation by keyword",
-  parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
-  metadata: { category: "search" }, // optional
-});
+const ctx = await session.context
+  .tools({ custom_tool: myTool })     // inject explicit tools
+  .messages({ strategy: "recent", maxTokens: 4000 })  // include conversation history
+  .recall()                            // recall from memory (stub)
+  .assemble();                         // → AssembledContext
 ```
 
-### `new ApiClient(config)`
+### `AssembledContext<T>`
 
 ```typescript
-interface ApiClientConfig {
-  serverUrl: string;
-  tools: ServerTool[];
-  onEvent?: (event: AgentifiedEvent) => void;
+interface AssembledContext<T> {
+  tools: Record<string, T>;       // explicit + discovered tools
+  messages: StoredMessage[];       // conversation messages
+  recalled: unknown[];             // recalled memories (stub)
+  strategyUsed: string;           // message strategy applied
+  fallback: boolean;              // whether fallback was used
+  tokenEstimate: number;          // estimated token count
+  conversationMessages: number;   // total in conversation
+  totalMessages: number;          // total messages stored
+  includedMessages: number;       // messages included in context
 }
 ```
 
-### `agent.register()`
+### `session.discoverTool`
 
-Registers all tools with the server. Embeddings are computed and cached server-side.
+Agent-callable tool for runtime discovery. The agent can call this to find relevant tools on-the-fly.
 
-```typescript
-const result = await agent.register();
-// { registered: 10 }
-```
+### `session.updateConversation({ messages })`
 
-### `agent.prefetch(options)`
+Persist messages with deduplication for multi-turn context.
 
-Discovers relevant tools for a conversation. Joins all message contents (newline-separated) as the discovery query.
+### `session.getMessages(opts)`
 
-```typescript
-interface PrefetchOptions {
-  messages: Message[];
-  limit?: number;       // default 5
-  exclude?: string[];
-  turnId?: string;      // for session continuity
-}
-
-const tools = await agent.prefetch({
-  messages: [{ role: "user", content: "Book me a flight to Paris" }],
-  limit: 10,
-  exclude: ["admin_tool"],
-  turnId: "prev-turn-id",
-});
-```
-
-### `agent.captureTurn(options)`
-
-Captures a turn for session continuity. The returned `turnId` can be passed to subsequent `prefetch`/`discover` calls.
-
-```typescript
-const { turnId } = await agent.captureTurn({
-  toolsLoaded: ["get_weather", "book_flight"],
-  message: "What's the weather in Rome?",
-});
-```
-
-### `agent.getFrontendTools()`
-
-Returns tools with `metadata.location === "frontend"`.
-
-```typescript
-const frontendTools = agent.getFrontendTools();
-```
-
-### `agent.getFrontendToolNames()`
-
-Returns names of frontend tools.
-
-```typescript
-const names = agent.getFrontendToolNames();
-// ["navigate_to_page", "open_modal"]
-```
-
-### `agent.asDiscoverTool()`
-
-Returns a tool definition + execute function for `agentified_discover` — useful for giving the agent a tool that can discover more tools at runtime.
-
-```typescript
-const { definition, execute } = agent.asDiscoverTool();
-// definition: { name: "agentified_discover", description: "...", parameters: { ... } }
-// execute({ query: "...", limit: 5 }) → Promise<RankedTool[]>
-```
+Retrieve conversation history with strategy-based filtering.
 
 ## Events
 
@@ -207,7 +160,7 @@ interface TokenUsage {
 - [React Bindings](../react/README.md)
 - [Mastra Adapter](../mastra/README.md)
 - [Python SDK](../../py-packages/sdk/README.md)
-- [sdk-smoke example](../../../examples/sdk-smoke/) — runnable smoke test
+- [ts-sdk-smoke example](../../../examples/ts-sdk-smoke/) — runnable smoke test
 
 ## License
 

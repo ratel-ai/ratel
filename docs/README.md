@@ -26,21 +26,23 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 
 | Example | What it shows |
 |---------|---------------|
-| [sdk-smoke](../examples/sdk-smoke/) | SDK basics — register, discover, session continuity (no LLM) |
-| [mastra-smoke](../examples/mastra-smoke/) | Mastra adapter — LLM generation, tool calling, AG-UI streaming |
+| [ts-sdk-smoke](../examples/ts-sdk-smoke/) | SDK basics — register, discover, context assembly (no LLM) |
+| [ts-mastra-smoke](../examples/ts-mastra-smoke/) | Mastra adapter — LLM generation, tool calling, AG-UI streaming |
 | [QuickHR](../examples/quickhr/) | Full-stack Mastra + React app |
-| [LangGraph Agent](../examples/py-langgraph/) | Python + LangGraph + Gemini |
+| [py-sdk-smoke](../examples/py-sdk-smoke/) | Python SDK basics — register, discover, context assembly |
+| [py-langchain-sdk-smoke](../examples/py-langchain-sdk-smoke/) | LangChain adapter — LLM tool calling |
 
 ## Package READMEs
 
 | Package | Description |
 |---------|-------------|
 | [agentified-core](../src/core/README.md) | Rust server — hybrid ranking, sub-ms discovery |
-| [@agentified/sdk](../src/ts-packages/sdk/README.md) | TypeScript SDK — register, discover, track sessions |
+| [@agentified/sdk](../src/ts-packages/sdk/README.md) | TypeScript SDK — register, assemble context, track sessions |
 | [@agentified/fe-client](../src/ts-packages/fe-client/README.md) | Frontend client — browser tool execution, streaming |
 | [@agentified/react](../src/ts-packages/react/README.md) | React hooks + Inspector debug panel |
-| [@agentified/mastra](../src/ts-packages/mastra/README.md) | Mastra adapter — agent + discovery in one call |
-| [agentified (Python)](../src/py-packages/sdk/README.md) | Python SDK — async/sync clients |
+| [@agentified/mastra](../src/ts-packages/mastra/README.md) | Mastra adapter — agent + context assembly in one call |
+| [agentified (Python)](../src/py-packages/sdk/README.md) | Python SDK — async/sync clients, context assembly |
+| [agentified-langchain](../src/py-packages/langchain/README.md) | LangChain adapter — native StructuredTool injection |
 
 ## Specs
 

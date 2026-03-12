@@ -49,8 +49,11 @@ async def main():
     ]))
 
     session = instance.session("my-session")
-    discovered = await session.discover_tool.execute({"query": "What's the weather in Rome?"})
-    print("Discovered tools:", [(t.name, t.score) for t in discovered])
+
+    # Assemble context — messages + metadata for this turn
+    ctx = await session.context.messages(strategy="recent").assemble()
+    print("Context messages:", len(ctx.messages))
+    print("Token estimate:", ctx.token_estimate)
 
     await ag.disconnect()
 

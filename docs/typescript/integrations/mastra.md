@@ -152,7 +152,7 @@ npx vite
 
 1. Backend registers all tools with agentified-core (embeddings computed + cached)
 2. User sends "Show employees" via React chat
-3. Backend calls `agentified.run()` → prefetch discovers `list_employees` + `navigate_to_page`
+3. Backend calls `session.context.assemble()` → discovers + assembles relevant tools
 4. Mastra agent generates with hydrated tools, calls `list_employees` (backend) and `navigate_to_page` (frontend)
 5. Frontend client intercepts `navigate_to_page`, runs handler, injects result back
 6. Inspector shows prefetch results, tool calls, timing, token usage

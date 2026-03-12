@@ -2,7 +2,7 @@
   <img src="https://agentified.dev/assets/logo-new-CNqV8zpW.png" alt="Agentified" height="100" />
 
   <h2>Agentified</h2>
-  <h4>Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones.</h4>
+  <h4>Your agent has 200 tools. Each turn gets exactly the right ones — assembled automatically.</h4>
 
   <p>
     <a href="./docs/">Docs</a> •
@@ -26,20 +26,38 @@
 
 ## What is Agentified?
 
-A **context engine** that registers all your tools, then uses hybrid semantic + BM25 ranking to select exactly the right ones for each query. Not another agent framework — a context layer that plugs into whatever you're already using.
+A **context intelligence layer** that registers all your tools, then assembles the right context — tools, messages, and memory — for each agent turn. Not another agent framework — a context layer that plugs into whatever you're already using.
 
 ```
-┌─────────────┐     ┌──────────────────┐     ┌───────────────┐
-│  Your Agent  │ ──▶ │  agentified-core │ ──▶ │    OpenAI     │
-│  (TS / Py)   │     │  (Rust server)   │     │  Embeddings   │
-└─────────────┘     └────────┬─────────┘     └───────────────┘
-                             │
-                    Embeds, ranks & caches
+┌─────────────────────────────────────────────────────┐
+│                    Your Agent                        │
+│         (Mastra / LangGraph / any framework)         │
+└──────────────────────┬──────────────────────────────┘
+                       │
+          session.context.assemble()
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│                 Agentified SDK                       │
+│              (TypeScript / Python)                    │
+│                                                      │
+│   .tools(...)  .messages(...)  .recall(...)           │
+│            → AssembledContext                         │
+│         { tools, messages, tokenEstimate }            │
+└──────────────────────┬──────────────────────────────┘
+                       │
+              register + discover
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│               agentified-core                        │
+│                (Rust server)                          │
+│                                                      │
+│   Hybrid ranking · Session continuity · Embeddings   │
+└─────────────────────────────────────────────────────┘
 ```
 
-1. **Register** your tools with name, description, and JSON schema
-2. **Discover** with natural language — get the top-K tools ranked by relevance
-3. **Execute** only what matters — the rest stays out of the context window
+1. **Register** your tools — agentified-core embeds and indexes them
+2. **Assemble** context — `session.context.messages(...).assemble()` returns the right tools + messages for each turn
+3. **Execute** — pass assembled context to your agent framework
 
 <br />
 
@@ -64,8 +82,12 @@ const dataset = await ag.dataset("my-agent").register({
   ],
 });
 
-// dataset.discoverTool — agent-callable tool discovery
-// dataset.session(id)  — session-scoped tools + conversation
+const session = dataset.session("chat-1");
+const ctx = await session.context
+  .messages({ strategy: "recent" })
+  .assemble();
+// ctx.tools     → { get_weather, search_docs } (ranked by relevance)
+// ctx.messages  → conversation history
 ```
 
 ### Python
@@ -85,10 +107,11 @@ instance = await ag.register(RegisterInput(tools=[
                 parameters={"type": "object", "properties": {"city": {"type": "string"}}},
                 handler=lambda args: {"temp": 22, "city": args["city"]}),
 ]))
-session = instance.session("my-session")
-discovered = await session.discover_tool.execute({"query": "weather in Rome"})
-# → [RankedTool(name="get_weather", score=0.92, ...)]
-await ag.disconnect()
+
+session = instance.session("chat-1")
+ctx = await session.context.messages(strategy="recent").assemble()
+# ctx.tools     → discovered tools ranked by relevance
+# ctx.messages  → conversation history
 ```
 
 <br />
@@ -110,6 +133,7 @@ await ag.disconnect()
 
 | Problem | Without Agentified | With Agentified |
 |---------|-------------------|-----------------|
+| **Context assembly** | Hand-wire tools + messages per turn | `session.context.assemble()` — one call |
 | **Tool selection** | Dump all tools in prompt | Hybrid-ranked selection based on intent |
 | **Token costs** | Pay for irrelevant tools | Only load what's needed |
 | **Multi-turn context** | No memory across turns | Session continuity via turn tracking |
@@ -119,6 +143,8 @@ await ag.disconnect()
 <br />
 
 ## Features
+
+**[Context Assembly](./docs/)** — `session.context.tools(...).messages(...).assemble()` — one fluent call assembles the right tools, messages, and memory for each agent turn. Returns an `AssembledContext` you pass straight to your framework.
 
 **[Hybrid Ranking](./docs/server/ranking.md)** — Semantic similarity (70%) + BM25 keyword matching (30%) across tool name, description, and schemas.
 

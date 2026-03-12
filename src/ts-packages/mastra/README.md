@@ -127,7 +127,7 @@ import { jsonSchemaToZod } from "@agentified/mastra";
 - [TypeScript SDK](../sdk/README.md)
 - [Frontend Client](../fe-client/README.md)
 - [React Bindings](../react/README.md)
-- [mastra-smoke example](../../../examples/mastra-smoke/) — runnable smoke test
+- [ts-mastra-smoke example](../../../examples/ts-mastra-smoke/) — runnable smoke test
 - [QuickHR Example](../../../examples/quickhr/) — full Mastra + React app
 
 ## License

@@ -1,6 +1,6 @@
 # agentified (Python SDK)
 
-Register 200 tools. Get the 5 that matter. Python.
+Context intelligence for AI agents. Register tools, assemble the right context per turn. Python.
 
 Async and sync clients for [Agentified](../../../README.md) — tool registration, context-aware [discovery](../../../docs/server/ranking.md), [session tracking](../../../docs/server/session-continuity.md), and message persistence. See the [LangGraph guide](../../../docs/python/integrations/langgraph.md) for a full walkthrough.
 
@@ -27,20 +27,14 @@ async def main():
                     parameters={"type": "object", "properties": {"city": {"type": "string"}}},
                     handler=lambda args: {"temp": 22, "city": args["city"]}),
     ]))
-    session = instance.session("my-session")
 
-    # Discover relevant tools
-    discovered = await session.discover_tool.execute({"query": "weather in Rome"})
-    # [RankedTool(name='get_weather', score=0.92, ...)]
+    session = instance.session("chat-1")
 
-    # Persist conversation
-    await session.update_conversation([
-        {"role": "user", "content": "What's the weather in Rome?"},
-        {"role": "assistant", "content": "It's 22°C in Rome."},
-    ])
-
-    # Assemble context
+    # Assemble context — tools + messages for this turn
     ctx = await session.context.messages(strategy="recent").assemble()
+    # ctx.tools       → discovered tools ranked by relevance
+    # ctx.messages    → conversation history
+    # ctx.token_estimate → estimated token count
 
     await ag.disconnect()
 
@@ -174,30 +168,29 @@ def handle_event(event):
         case "agentified:discover:complete":  ...
 ```
 
-## LangGraph Example
+## LangChain / LangGraph Integration
+
+Use the `agentified-langchain` adapter for native LangChain tool injection:
 
 ```python
-from agentified import Agentified, BackendTool, RegisterInput
-from langchain_core.tools import StructuredTool
+from agentified_langchain import LangchainAgentified, BackendTool, RegisterInput
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
-ag = Agentified()
+ag = LangchainAgentified()
 await ag.connect("http://localhost:9119")
 instance = await ag.register(RegisterInput(tools=[...]))
 session = instance.session("my-session")
 
-# Discover relevant tools
-discovered = await session.discover_tool.execute({"query": "weather"})
-lc_tools = [StructuredTool.from_function(func=handler, name=t.name, description=t.description) for t in discovered]
+# Assemble context — tools are already LangChain StructuredTools
+ctx = await session.context.messages(strategy="recent").assemble()
 
-# Run LangGraph agent with filtered tools
 llm = ChatOpenAI(model="gpt-4o-mini")
-agent = create_react_agent(llm, lc_tools)
-result = await agent.ainvoke({"messages": [{"role": "user", "content": "What's the weather?"}]})
+agent = create_react_agent(llm, list(ctx.tools.values()))
+result = await agent.ainvoke({"messages": ctx.messages})
 ```
 
-See [examples/py-langchain-sdk-smoke/](../../../examples/py-langchain-sdk-smoke/) for a complete working example.
+See [agentified-langchain README](../../py-packages/langchain/README.md) for full docs, or [py-langchain-sdk-smoke](../../../examples/py-langchain-sdk-smoke/) for a working example.
 
 ## Links
 

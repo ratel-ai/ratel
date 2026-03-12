@@ -55,8 +55,13 @@ const dataset = await ag.dataset("my-agent").register({
 });
 
 const session = dataset.session("demo");
-const ranked = await session.discoverTool.handler({ query: "What's the weather in Rome?" });
-console.log("Discovered tools:", ranked);
+
+// Assemble context — tools + messages for this turn
+const ctx = await session.context
+  .messages({ strategy: "recent" })
+  .assemble();
+console.log("Assembled tools:", Object.keys(ctx.tools));
+console.log("Token estimate:", ctx.tokenEstimate);
 ```
 
 Run:
@@ -81,5 +86,5 @@ Read [Architecture](../server/architecture.md) for the full deep dive.
 - **[Mastra Integration](./integrations/mastra.md)** — Full-stack Mastra + React example
 - **[Frontend Tools](./frontend-tools.md)** — Run tools in the browser
 - **[SDK API Reference](../../src/ts-packages/sdk/README.md)** — Full TypeScript API
-- **[sdk-smoke example](../../examples/sdk-smoke/)** — Runnable smoke test
-- **[mastra-smoke example](../../examples/mastra-smoke/)** — Mastra + OpenAI smoke test
+- **[ts-sdk-smoke example](../../examples/ts-sdk-smoke/)** — Runnable smoke test
+- **[ts-mastra-smoke example](../../examples/ts-mastra-smoke/)** — Mastra + OpenAI smoke test
