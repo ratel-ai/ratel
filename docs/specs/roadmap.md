@@ -7,7 +7,7 @@
 
 ## Iteration 1 — Raft: Persistent Conversations
 
-**Value:** Agent conversations survive across requests. New Agentified API established.
+**Value:** Agent conversations survive across requests — so `assemble()` can draw from full conversation history, not just the current message. New Agentified API established.
 
 ### Developer experience
 
@@ -49,7 +49,7 @@ Namespaces, memories, knowledge, artifacts, graph, summaries, recall, MCP tools,
 
 ## Iteration 2 — Rowing Boat: Memory + Namespaces
 
-**Value:** Agent remembers across conversations. Multi-user isolation.
+**Value:** Agent remembers across conversations — so `assemble()` can recall relevant memories that inform which tools and context to surface. Multi-user isolation via namespaces.
 
 ### Developer experience
 
@@ -98,7 +98,7 @@ Knowledge, artifacts, graph, summaries, MCP tools, client tools, skills.
 
 ## Iteration 3 — Canoe: Summaries + Full Context Assembly
 
-**Value:** Long conversations handled gracefully. The context builder is complete.
+**Value:** Long conversations handled gracefully — so `assemble()` can reason over full conversation history, not just recent messages. The context builder is complete.
 
 ### Developer experience
 
@@ -133,7 +133,7 @@ Graph, MCP tools, client tools, skills.
 
 ## Iteration 4 — Sailboat: MCP + Frontend Tools + Skills
 
-**Value:** The unified tool model is complete. Skills follow agentskills.io.
+**Value:** The unified tool model is complete — so `assemble()` can rank and route across backend, frontend, and MCP tools in a single call. Skills follow agentskills.io.
 
 ### Developer experience
 
@@ -187,7 +187,7 @@ Graph, auto-inference, knowledge, artifacts.
 
 ## Iteration 5 — Motorboat: Graph + Intelligence
 
-**Value:** The system builds a knowledge graph and gets smarter automatically.
+**Value:** The system builds a knowledge graph — so `assemble()` can follow entity relationships, not just semantic similarity, making recall and tool discovery structurally aware.
 
 ### Developer experience
 
@@ -229,13 +229,13 @@ const { messages } = await session.context
 
 ## Summary
 
-| # | Name | Core value | New capabilities |
-|---|------|-----------|------------------|
-| 1 | **Raft** | Conversations persist | Messages, basic Agentified API, searchTools |
-| 2 | **Rowing Boat** | Agent has memory, multi-user | Memories, namespaces, remember, recall, getMessages |
-| 3 | **Canoe** | Long conversations, summaries | Summary strategies, full context assembly |
-| 4 | **Sailboat** | MCP, frontend tools, skills | Unified tool model, agentskills.io skills |
-| 5 | **Motorboat** | Graph intelligence | Entities, relationships, traverseGraph, auto-inference |
+| # | Name | Core value | How it makes `assemble()` smarter |
+|---|------|-----------|-----------------------------------|
+| 1 | **Raft** | Conversations persist | Draws from full conversation history, not just current message |
+| 2 | **Rowing Boat** | Memory + multi-user | Recalls memories that inform tool and context selection |
+| 3 | **Canoe** | Summaries + full assembly | Reasons over entire conversation via summaries, not just recent window |
+| 4 | **Sailboat** | Unified tool model + skills | Ranks and routes across backend, frontend, MCP tools + skills in one call |
+| 5 | **Motorboat** | Graph intelligence | Follows entity relationships for structurally-aware recall and discovery |
 
 ### Agent tools per iteration
 

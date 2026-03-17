@@ -1,8 +1,8 @@
 # Agentified
 
-> Context intelligence layer for AI agents. Registers all your tools, then assembles the right context — tools, messages, and memory — for each agent turn via hybrid ranking. Framework-agnostic (Mastra, LangGraph, LangChain, raw SDKs). 86% token cost reduction with same task accuracy.
+> Context intelligence layer for AI agents. Assembles the right tools, messages, and memory for each agent turn — as one interconnected system, not separate features. Framework and language agnostic (Mastra, LangGraph, LangChain, raw SDKs — TypeScript and Python). 86% token cost reduction with same task accuracy.
 
-Agentified is not another agent framework. It's a context layer that sits between your agent and its tools, selecting only what's relevant per turn instead of dumping everything into the prompt.
+Agentified is not another agent framework. It's a context layer that sits between your agent and its tools, assembling only what's relevant per turn instead of dumping everything into the prompt. Every primitive it stores — tools, messages, memories, relationships — exists because it makes the next `assemble()` call smarter. They cross-reference each other: memories inform tool ranking, tool usage creates memories, session history shapes context. It works with any framework and any language.
 
 ```
 ┌─────────────────────────────────────────────┐

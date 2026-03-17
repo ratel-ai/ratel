@@ -6,39 +6,43 @@ AI agents are getting more capable. They connect to databases, call APIs, manage
 
 But here's the catch: **every tool you give to an LLM costs tokens**. Tool definitions — names, descriptions, parameter schemas — get serialized into the prompt. More tools means more tokens, higher latency, higher cost, and paradoxically, worse accuracy. The LLM gets overwhelmed and starts picking the wrong tools or hallucinating parameters.
 
-Most teams solve this by manually curating tool subsets per agent, per use case, per turn. It works until it doesn't — and it never scales.
+And context is more than just tools. Messages, memories, user preferences, entity relationships — agents need all of it assembled correctly for each turn. Most frameworks treat these as separate features. You wire up memory over here, tool selection over there, conversation history somewhere else. They don't talk to each other.
+
+Most teams solve this by manually curating tool subsets and stitching context together per agent, per use case, per turn. It works until it doesn't — and it never scales.
 
 ## What Agentified Does
 
-Agentified is a **context intelligence layer**. It sits between your agent and its tools, and for each turn of conversation, it figures out which tools the agent actually needs — then delivers exactly those.
+Agentified is a **context intelligence layer**. It assembles the right tools, messages, and memory for each agent turn — as one interconnected system, not separate features.
 
-You register all your tools once. On every turn, you call `session.context.assemble()`. Agentified returns a small, ranked set of relevant tools plus conversation history, ready to pass to your LLM. That's it.
+You register all your tools once. On every turn, you call `session.context.assemble()`. Agentified returns exactly what your agent needs: a ranked set of relevant tools, conversation history, and recalled context — in a single call.
 
-It's not an agent framework. It doesn't replace Mastra, LangGraph, LangChain, or whatever you're using. It plugs into them.
+Every primitive Agentified stores exists because it makes the next `assemble()` call smarter. Memories inform which tools surface. Tool usage creates memories. Session history shapes ranking. As the system grows, entity relationships and knowledge graphs feed back into assembly too. One call gets progressively more intelligent.
+
+It's not an agent framework. It doesn't replace Mastra, LangGraph, LangChain, or whatever you're using. It plugs into all of them — in TypeScript and Python alike.
 
 ## How It Works
 
 ```
-Your Agent (any framework)
-        │
-        │  session.context.assemble()
-        ▼
+Your Agent (any framework, any language)
+        |
+        |  session.context.assemble()
+        v
   Agentified SDK (TypeScript / Python)
-        │
-        │  register + discover
-        ▼
+        |
+        |  register + discover + recall
+        v
   agentified-core (Rust server)
-        │
-        │  embed + rank + expand
-        ▼
-  Only the right tools, every turn
+        |
+        |  rank + expand + assemble
+        v
+  Only the right context, every turn
 ```
 
 Three steps:
 
 1. **Register** — You give Agentified your full tool catalog. The server computes embeddings for each tool's name, description, and schemas, then indexes them for fast retrieval.
 
-2. **Assemble** — On each agent turn, Agentified takes the user's message (or conversation context) and runs a hybrid ranking algorithm — combining semantic similarity with keyword matching — to score every tool against the current intent. It returns the top matches.
+2. **Assemble** — On each agent turn, Agentified takes the conversation context and runs a hybrid ranking algorithm — combining semantic similarity with keyword matching — to score every tool against the current intent. It cross-references memories and session history to refine results. It returns the top matches along with relevant conversation and recalled context.
 
 3. **Execute** — You pass the assembled context (tools + messages) to your agent framework. Your framework calls the tools as usual. Agentified tracks which tools were used so it can prioritize them in subsequent turns.
 
@@ -71,6 +75,16 @@ We benchmarked Agentified against a baseline of dumping all tools into the promp
 
 The savings compound: fewer tokens means cheaper API calls, faster responses, and more headroom before hitting context limits.
 
+## Why Not Just Use Your Framework's Memory?
+
+Most agent frameworks have memory, tool use, and RAG — but as **separate, independent features**. Your memory system doesn't know about your tools. Your tool selection doesn't know about your conversation history. You wire them together manually, and they never cross-reference.
+
+Agentified is different in two ways:
+
+**Interconnected, not co-located.** Every primitive feeds into `assemble()`. Memories influence which tools surface. Tool usage patterns inform future recall. Session history shapes ranking. The graph connects entities across all of them. It's one system that gets smarter as a whole, not a bag of features that happen to live in the same library.
+
+**Framework and language agnostic.** Agentified works with Mastra, LangGraph, LangChain, the raw OpenAI SDK, or anything else — in TypeScript and Python. You get the same context intelligence regardless of your stack. No lock-in to a single framework or language.
+
 ## What You Get
 
 **SDKs for TypeScript and Python** — Fluent API that wraps the server. Register tools, create sessions, assemble context in one call. Async-first, with a sync Python wrapper available.
@@ -87,11 +101,10 @@ The savings compound: fewer tokens means cheaper API calls, faster responses, an
 
 ## Who It's For
 
-**If you're building agents with more than a handful of tools**, Agentified saves you money and makes your agents faster without sacrificing accuracy.
-
-- **Developers** building multi-tool agents who don't want to manually curate tool subsets per conversation turn.
+- **Developers** building multi-tool agents who don't want to manually curate tool subsets and stitch context together per conversation turn.
 - **Teams** running agents in production where token costs and latency matter.
 - **Platform builders** offering agent capabilities to end users, where tool catalogs grow unpredictably.
+- **Multi-framework / multi-language teams** that need consistent context intelligence across TypeScript and Python agents without locking into a single stack.
 
 If your agent has 5 tools, you probably don't need this. If it has 50+, you probably do.
 

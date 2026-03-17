@@ -8,9 +8,11 @@
 
 ## 1. Vision
 
-Agentified is the **persistence and orchestration layer** for everything an AI agent interacts with. We call this **context at large** — not just chat history, but memories, tools, skills, and the relationships between them.
+Agentified is a **context intelligence layer** that assembles the right tools, messages, and memory for each agent turn — as one interconnected system, not separate features.
 
-The agent gets a small set of tools to read/write context. The system handles orchestration: scoping, visibility, retrieval, and (in later phases) automatic inference.
+Every primitive exists because it makes the next `assemble()` call smarter. Memories influence which tools surface. Tool usage creates memories. Session history shapes ranking. Entity relationships connect context across all primitives. The result is a system that gets progressively more intelligent, not a bag of independent features.
+
+The agent gets a small set of tools to read/write context. The system handles orchestration: scoping, visibility, retrieval, cross-referencing between primitives, and (in later phases) automatic inference. It works with any agent framework and any language.
 
 ---
 
