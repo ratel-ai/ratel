@@ -13,6 +13,7 @@ import type {
   ContextBuilder,
   AssembledContext,
   ContextStrategy,
+  RecallConfig,
   AgentifiedTool,
 } from "agentified";
 import { jsonSchemaToZod } from "./schema.js";
@@ -38,6 +39,7 @@ export class MastraAssembledContext {
   get conversationMessages() { return this.sdkCtx.conversationMessages; }
   get totalMessages() { return this.sdkCtx.totalMessages; }
   get includedMessages() { return this.sdkCtx.includedMessages; }
+  get summary() { return this.sdkCtx.summary; }
 
   readonly prepareStep = async (params: { stepNumber: number; steps: any[] }) => {
     await this.sdkPrepareStep(params);
@@ -68,8 +70,13 @@ export class MastraContextBuilder {
     return this;
   }
 
-  recall(opts?: unknown): this {
+  recall(opts?: RecallConfig): this {
     this.sdkBuilder.recall(opts);
+    return this;
+  }
+
+  limitTokens(budget: number): this {
+    this.sdkBuilder.limitTokens(budget);
     return this;
   }
 

@@ -1,8 +1,10 @@
 import type { ApiClient } from "./api-client.js";
-import type { AgentifiedTool, AssembledContext, ContextStrategy } from "./types.js";
+import type { AgentifiedTool, AssembledContext, ContextStrategy, RecallConfig } from "./types.js";
 
 export class ContextBuilder<T = AgentifiedTool> {
   private messageOpts: { strategy?: ContextStrategy; maxTokens?: number } = {};
+  private recallOpts?: RecallConfig;
+  private tokenLimit?: number;
   private explicitTools: Record<string, T> = {};
 
   constructor(
@@ -24,7 +26,13 @@ export class ContextBuilder<T = AgentifiedTool> {
     return this;
   }
 
-  recall(_opts?: unknown): this {
+  recall(opts?: RecallConfig): this {
+    this.recallOpts = opts ?? { tools: true };
+    return this;
+  }
+
+  limitTokens(budget: number): this {
+    this.tokenLimit = budget;
     return this;
   }
 
@@ -32,6 +40,8 @@ export class ContextBuilder<T = AgentifiedTool> {
     const res = await this.sdk.getContext(this.datasetId, this.namespaceId, this.sessionId, {
       strategy: this.messageOpts.strategy,
       maxTokens: this.messageOpts.maxTokens,
+      recall: this.recallOpts,
+      limitTokens: this.tokenLimit,
     });
 
     const resolvedTools: Record<string, T> = { ...this.explicitTools };
@@ -52,6 +62,7 @@ export class ContextBuilder<T = AgentifiedTool> {
       totalMessages: res.totalMessages,
       includedMessages: res.includedMessages,
       tools: resolvedTools,
+      summary: res.summary,
     };
   }
 }

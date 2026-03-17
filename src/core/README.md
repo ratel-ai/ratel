@@ -176,7 +176,17 @@ Retrieve messages from a conversation session. Supports pagination via `after_se
 
 ### `POST /api/v1/context`
 
-Get context for a session with a strategy (`recent` or `full`) and token budget.
+Get context for a session with strategy, token budget, and optional tool recall.
+
+**Strategies:** `recent`, `full`, `summary`, `recent+summary`
+
+- `summary` — LLM-summarizes entire conversation into a single system message
+- `recent+summary` — recent messages (60% budget) + LLM summary of older messages (40% budget)
+- Summary strategies fall back to `recent` if LLM fails (`fallback: true`)
+
+**Recall:** Pass `"recall": {"tools": true}` or `{"tools": {"limit": 5, "min_similarity": 0.7}}` to auto-discover tools based on the last user message. Recalled tools persist across calls within the same session.
+
+**Token budget:** `limit_tokens` caps total assembly (tools + messages). Tool token cost is subtracted from the message budget.
 
 ## Storage
 

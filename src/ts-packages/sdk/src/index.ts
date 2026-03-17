@@ -32,6 +32,8 @@ export type {
   PrefetchOptions,
   PrepareStepFn,
   RankedTool,
+  RecallConfig,
+  RecallToolsConfig,
   RegisterInput,
   RegisterRequest,
   RegisterResponse,

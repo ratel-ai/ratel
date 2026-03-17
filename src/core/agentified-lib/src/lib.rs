@@ -3,11 +3,11 @@ pub mod models;
 pub mod ranking;
 pub mod storage;
 
-pub use embedding::{EmbeddingService, OpenAIEmbedding};
+pub use embedding::{EmbeddingService, LlmService, OpenAIEmbedding, OpenAILlm};
 pub use storage::{NoopStorage, SqliteStorage, Storage};
 
 #[cfg(any(test, feature = "test-utils"))]
-pub use embedding::{FakeEmbedding, FailingEmbedding};
+pub use embedding::{FakeEmbedding, FailingEmbedding, FakeLlm, FailingLlm};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use models::{
     AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
     ContextRequest, ContextResponse, DiscoverRequest, DiscoverResponse,
     FieldEmbeddings, GetMessagesQuery, GetMessagesResponse, ListToolsResponse,
-    RankedTool, RecalledContext, RegisterToolsResponse, StoredTool, Tool, Turn,
+    RankedTool, RecalledContext, RegisterToolsResponse, StoredMessage, StoredTool, Tool, Turn,
 };
 use ranking::{bm25_scores, weighted_semantic_score};
 
@@ -51,6 +51,7 @@ pub struct AgentifiedCore {
     embedding_cache: RwLock<HashMap<String, Vec<f32>>>,
     embedding: Arc<dyn EmbeddingService>,
     storage: Arc<dyn Storage>,
+    llm: Option<Arc<dyn embedding::LlmService>>,
 }
 
 impl AgentifiedCore {
@@ -64,6 +65,21 @@ impl AgentifiedCore {
             embedding_cache: RwLock::new(cache_map),
             embedding,
             storage,
+            llm: None,
+        }
+    }
+
+    pub fn new_with_llm(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>, llm: Arc<dyn embedding::LlmService>) -> Self {
+        let turns_map = storage.load_all_turns().unwrap_or_default().into_iter().collect();
+        let cache_map = storage.load_all_embeddings().unwrap_or_default().into_iter().collect();
+
+        Self {
+            tools: RwLock::new(HashMap::new()),
+            turns: RwLock::new(turns_map),
+            embedding_cache: RwLock::new(cache_map),
+            embedding,
+            storage,
+            llm: Some(llm),
         }
     }
 
@@ -323,16 +339,16 @@ impl AgentifiedCore {
 
     pub async fn get_context(&self, req: ContextRequest) -> Result<ContextResponse, CoreError> {
         let strategy = &req.messages.strategy;
-        if strategy == "summary" || strategy == "recent+summary" {
+        let is_summary = strategy == "summary" || strategy == "recent+summary";
+
+        if is_summary && self.llm.is_none() {
             return Err(CoreError::UnsupportedStrategy(
-                "Summary strategies available in a future version".into(),
+                "Summary strategies require LLM configuration".into(),
             ));
         }
-        if strategy != "recent" && strategy != "full" {
+        if !is_summary && strategy != "recent" && strategy != "full" {
             return Err(CoreError::BadRequest(format!("unknown strategy: {strategy}")));
         }
-
-        let max_tokens = req.messages.max_tokens;
 
         let storage = self.storage.clone();
         let ds = req.dataset.clone();
@@ -345,51 +361,300 @@ impl AgentifiedCore {
 
         let total_messages = max_seq;
 
-        let messages = match strategy.as_str() {
-            "full" => {
-                // Take from oldest until budget exceeded
-                let mut selected = Vec::new();
-                let mut tokens_used = 0usize;
-                for msg in &all_messages {
-                    let msg_tokens = msg.content.len() / 4;
-                    if tokens_used + msg_tokens > max_tokens && !selected.is_empty() {
-                        break;
-                    }
-                    tokens_used += msg_tokens;
-                    selected.push(msg.clone());
-                }
-                selected
+        // Tool recall
+        let recalled_tools = self.recall_tools(&req.dataset, &req.namespace, &req.session, &all_messages, &req.recall).await?;
+
+        // Compute effective message budget
+        let tool_tokens: usize = recalled_tools.iter().map(|t| {
+            let params_str = serde_json::to_string(&t.tool.parameters).unwrap_or_default();
+            (t.tool.name.len() + t.tool.description.len() + params_str.len()) / 4
+        }).sum();
+        let max_tokens = match req.limit_tokens {
+            Some(limit) => {
+                let remaining = limit.saturating_sub(tool_tokens);
+                remaining.min(req.messages.max_tokens)
             }
-            "recent" | _ => {
-                // Take from newest, then reverse to ascending order
-                let mut selected = Vec::new();
-                let mut tokens_used = 0usize;
-                for msg in all_messages.iter().rev() {
-                    let msg_tokens = msg.content.len() / 4;
-                    if tokens_used + msg_tokens > max_tokens && !selected.is_empty() {
-                        break;
+            None => req.messages.max_tokens,
+        };
+
+        if all_messages.is_empty() {
+            return Ok(ContextResponse {
+                messages: vec![],
+                strategy_used: strategy.clone(),
+                total_messages: 0,
+                included_messages: 0,
+                recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                token_estimate: 0,
+                conversation_messages: 0,
+                fallback: false,
+                summary: None,
+            });
+        }
+
+        match strategy.as_str() {
+            "summary" => self.get_context_summary(&all_messages, max_tokens, total_messages, recalled_tools).await,
+            "recent+summary" => self.get_context_recent_summary(&all_messages, max_tokens, total_messages, recalled_tools).await,
+            _ => {
+                let messages = select_messages(&all_messages, strategy, max_tokens);
+                let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
+                let included = messages.len();
+                Ok(ContextResponse {
+                    messages,
+                    strategy_used: strategy.clone(),
+                    total_messages,
+                    included_messages: included,
+                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                    token_estimate,
+                    conversation_messages: included,
+                    fallback: false,
+                    summary: None,
+                })
+            }
+        }
+    }
+
+    async fn get_context_summary(
+        &self,
+        all_messages: &[StoredMessage],
+        max_tokens: usize,
+        total_messages: i64,
+        recalled_tools: Vec<RankedTool>,
+    ) -> Result<ContextResponse, CoreError> {
+        let llm = self.llm.as_ref().unwrap(); // safe: checked in get_context
+
+        let conversation_text = format_conversation(all_messages);
+        let system_prompt = "Summarize this conversation concisely. Focus on key decisions, facts, and action items.";
+
+        match llm.chat(system_prompt, &conversation_text, max_tokens).await {
+            Ok(summary_text) => {
+                let summary_msg = StoredMessage {
+                    id: String::new(),
+                    role: "system".into(),
+                    content: summary_text.clone(),
+                    tool_call_id: None,
+                    tool_calls: None,
+                    created_at: String::new(),
+                    seq: -1,
+                };
+                let token_estimate = summary_text.len() / 4;
+                Ok(ContextResponse {
+                    messages: vec![summary_msg],
+                    strategy_used: "summary".into(),
+                    total_messages,
+                    included_messages: 1,
+                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                    token_estimate,
+                    conversation_messages: all_messages.len(),
+                    fallback: false,
+                    summary: Some(summary_text),
+                })
+            }
+            Err(_) => {
+                // Fallback to recent
+                let messages = select_messages(all_messages, "recent", max_tokens);
+                let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
+                let included = messages.len();
+                Ok(ContextResponse {
+                    messages,
+                    strategy_used: "summary".into(),
+                    total_messages,
+                    included_messages: included,
+                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                    token_estimate,
+                    conversation_messages: included,
+                    fallback: true,
+                    summary: None,
+                })
+            }
+        }
+    }
+
+    async fn get_context_recent_summary(
+        &self,
+        all_messages: &[StoredMessage],
+        max_tokens: usize,
+        total_messages: i64,
+        recalled_tools: Vec<RankedTool>,
+    ) -> Result<ContextResponse, CoreError> {
+        let llm = self.llm.as_ref().unwrap();
+
+        // 60% budget for recent, 40% for summary
+        let recent_budget = (max_tokens as f64 * 0.6) as usize;
+        let summary_budget = max_tokens.saturating_sub(recent_budget);
+
+        // Select recent messages
+        let recent_messages = select_messages(all_messages, "recent", recent_budget);
+        let recent_min_seq = recent_messages.first().map(|m| m.seq).unwrap_or(i64::MAX);
+
+        // Older messages to summarize
+        let older: Vec<&StoredMessage> = all_messages.iter().filter(|m| m.seq < recent_min_seq).collect();
+
+        if older.is_empty() {
+            // All messages fit in recent budget
+            let token_estimate: usize = recent_messages.iter().map(|m| m.content.len() / 4).sum();
+            let included = recent_messages.len();
+            return Ok(ContextResponse {
+                messages: recent_messages,
+                strategy_used: "recent+summary".into(),
+                total_messages,
+                included_messages: included,
+                recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                token_estimate,
+                conversation_messages: included,
+                fallback: false,
+                summary: None,
+            });
+        }
+
+        let conversation_text = format_conversation_refs(&older);
+        let system_prompt = "Summarize this conversation concisely. Focus on key decisions, facts, and action items.";
+
+        match llm.chat(system_prompt, &conversation_text, summary_budget).await {
+            Ok(summary_text) => {
+                let summary_msg = StoredMessage {
+                    id: String::new(),
+                    role: "system".into(),
+                    content: summary_text.clone(),
+                    tool_call_id: None,
+                    tool_calls: None,
+                    created_at: String::new(),
+                    seq: -1,
+                };
+
+                let mut messages = vec![summary_msg];
+                messages.extend(recent_messages);
+                let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
+                let included = messages.len();
+                Ok(ContextResponse {
+                    messages,
+                    strategy_used: "recent+summary".into(),
+                    total_messages,
+                    included_messages: included,
+                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                    token_estimate,
+                    conversation_messages: all_messages.len(),
+                    fallback: false,
+                    summary: Some(summary_text),
+                })
+            }
+            Err(_) => {
+                // Fallback to recent with full budget
+                let messages = select_messages(all_messages, "recent", max_tokens);
+                let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
+                let included = messages.len();
+                Ok(ContextResponse {
+                    messages,
+                    strategy_used: "recent+summary".into(),
+                    total_messages,
+                    included_messages: included,
+                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                    token_estimate,
+                    conversation_messages: included,
+                    fallback: true,
+                    summary: None,
+                })
+            }
+        }
+    }
+
+    async fn recall_tools(
+        &self,
+        dataset_id: &str,
+        namespace_id: &str,
+        session_id: &str,
+        messages: &[StoredMessage],
+        recall: &Option<models::RecallConfig>,
+    ) -> Result<Vec<RankedTool>, CoreError> {
+        let recall = match recall {
+            Some(r) => r,
+            None => return Ok(vec![]),
+        };
+
+        let (limit, min_similarity) = match &recall.tools {
+            Some(models::RecallToolsOption::Bool(true)) => (5usize, None),
+            Some(models::RecallToolsOption::Config(c)) => (c.limit, c.min_similarity),
+            Some(models::RecallToolsOption::Bool(false)) | None => return Ok(vec![]),
+        };
+
+        // Load previous session tools for continuity
+        let prev_tool_names = {
+            let storage = self.storage.clone();
+            let ds = dataset_id.to_string();
+            let ns = namespace_id.to_string();
+            let sess = session_id.to_string();
+            tokio::task::spawn_blocking(move || storage.load_session_tools(&ds, &ns, &sess))
+                .await
+                .map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+                .map_err(CoreError::EmbeddingFailed)?
+        };
+
+        // Build base tools from previous session (score 1.0)
+        let mut base_tools: Vec<RankedTool> = Vec::new();
+        {
+            let tools_map = self.tools.read().await;
+            if let Some(dataset_tools) = tools_map.get(dataset_id) {
+                for name in &prev_tool_names {
+                    if let Some(st) = dataset_tools.get(name) {
+                        base_tools.push(RankedTool {
+                            tool: st.tool.clone(),
+                            score: 1.0,
+                            graph_expanded: None,
+                        });
                     }
-                    tokens_used += msg_tokens;
-                    selected.push(msg.clone());
                 }
-                selected.reverse();
-                selected
+            }
+        }
+
+        // Find last user message as query
+        let query: String = match messages.iter().rev().find(|m| m.role == "user") {
+            Some(m) if !m.content.is_empty() => m.content.clone(),
+            _ => {
+                // No query but we have previous tools — return those
+                if !base_tools.is_empty() {
+                    self.save_session_tools_async(dataset_id, namespace_id, session_id, &base_tools);
+                }
+                return Ok(base_tools);
             }
         };
 
-        let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
-        let included = messages.len();
+        // Exclude previous session tools from discovery (they're already in base)
+        let exclude: Vec<String> = prev_tool_names.clone();
 
-        Ok(ContextResponse {
-            messages,
-            strategy_used: strategy.clone(),
-            total_messages,
-            included_messages: included,
-            recalled: RecalledContext { tools: vec![], memories: vec![] },
-            token_estimate,
-            conversation_messages: included,
-            fallback: false,
-        })
+        let discover_resp = self.discover(dataset_id, DiscoverRequest {
+            query,
+            limit: Some(limit),
+            embedding_weights: None,
+            exclude: if exclude.is_empty() { None } else { Some(exclude) },
+            turn_id: None,
+        }).await?;
+
+        let mut new_tools = discover_resp.tools;
+        if let Some(min_sim) = min_similarity {
+            new_tools.retain(|t| t.score >= min_sim);
+        }
+
+        // Merge: base tools first, then new discoveries
+        let mut all_tools = base_tools;
+        all_tools.extend(new_tools);
+
+        // Save merged tool names for next turn
+        self.save_session_tools_async(dataset_id, namespace_id, session_id, &all_tools);
+
+        Ok(all_tools)
+    }
+
+    fn save_session_tools_async(&self, dataset_id: &str, namespace_id: &str, session_id: &str, tools: &[RankedTool]) {
+        let storage = self.storage.clone();
+        let ds = dataset_id.to_string();
+        let ns = namespace_id.to_string();
+        let sess = session_id.to_string();
+        let names: Vec<String> = tools.iter().map(|t| t.tool.name.clone()).collect();
+        tokio::task::spawn_blocking(move || {
+            let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+            if let Err(e) = storage.save_session_tools(&ds, &ns, &sess, &name_refs) {
+                tracing::error!("storage save_session_tools failed: {e}");
+            }
+        });
     }
 
     async fn embed_cached(&self, text: &str) -> anyhow::Result<Vec<f32>> {
@@ -418,6 +683,46 @@ impl AgentifiedCore {
 }
 
 // Helpers
+
+fn format_conversation(messages: &[StoredMessage]) -> String {
+    messages.iter().map(|m| format!("{}: {}", m.role, m.content)).collect::<Vec<_>>().join("\n")
+}
+
+fn format_conversation_refs(messages: &[&StoredMessage]) -> String {
+    messages.iter().map(|m| format!("{}: {}", m.role, m.content)).collect::<Vec<_>>().join("\n")
+}
+
+fn select_messages(all_messages: &[StoredMessage], strategy: &str, max_tokens: usize) -> Vec<StoredMessage> {
+    match strategy {
+        "full" => {
+            let mut selected = Vec::new();
+            let mut tokens_used = 0usize;
+            for msg in all_messages {
+                let msg_tokens = msg.content.len() / 4;
+                if tokens_used + msg_tokens > max_tokens && !selected.is_empty() {
+                    break;
+                }
+                tokens_used += msg_tokens;
+                selected.push(msg.clone());
+            }
+            selected
+        }
+        _ => {
+            let mut selected = Vec::new();
+            let mut tokens_used = 0usize;
+            for msg in all_messages.iter().rev() {
+                let msg_tokens = msg.content.len() / 4;
+                if tokens_used + msg_tokens > max_tokens && !selected.is_empty() {
+                    break;
+                }
+                tokens_used += msg_tokens;
+                selected.push(msg.clone());
+            }
+            selected.reverse();
+            selected
+        }
+    }
+}
 
 fn get_string_array(metadata: &serde_json::Value, key: &str) -> Vec<String> {
     metadata.get(key)
@@ -517,6 +822,8 @@ mod tests {
                 strategy: "recent".into(),
                 max_tokens: 60,
             },
+            recall: None,
+            limit_tokens: None,
         }).await.unwrap();
 
         assert_eq!(resp.strategy_used, "recent");
@@ -545,10 +852,12 @@ mod tests {
                     strategy: strategy.to_string(),
                     max_tokens: 4000,
                 },
+                recall: None,
+                limit_tokens: None,
             }).await.unwrap_err();
             match err {
                 CoreError::UnsupportedStrategy(msg) => {
-                    assert!(msg.contains("Summary strategies"));
+                    assert!(msg.contains("LLM configuration") || msg.contains("Summary strategies"));
                 }
                 _ => panic!("expected UnsupportedStrategy, got {err:?}"),
             }
@@ -566,6 +875,8 @@ mod tests {
                 strategy: "recent".into(),
                 max_tokens: 4000,
             },
+            recall: None,
+            limit_tokens: None,
         }).await.unwrap();
 
         assert_eq!(resp.messages.len(), 0);
@@ -603,6 +914,8 @@ mod tests {
                 strategy: "full".into(),
                 max_tokens: 60,
             },
+            recall: None,
+            limit_tokens: None,
         }).await.unwrap();
 
         assert_eq!(resp.strategy_used, "full");
@@ -639,11 +952,405 @@ mod tests {
                 strategy: "full".into(),
                 max_tokens: 4000,
             },
+            recall: None,
+            limit_tokens: None,
         }).await.unwrap();
 
         assert_eq!(resp.messages.len(), 3);
         assert_eq!(resp.total_messages, 3);
         assert_eq!(resp.included_messages, 3);
+    }
+
+    #[tokio::test]
+    async fn recall_tools_true_populates_recalled_tools() {
+        let core = make_core();
+
+        // Register some tools
+        core.register_tools("ds", vec![
+            models::Tool {
+                name: "get_weather".into(),
+                description: "Get weather forecast for a location".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+            },
+            models::Tool {
+                name: "get_stock".into(),
+                description: "Get stock price for a ticker symbol".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+            },
+        ]).await.unwrap();
+
+        // Append a user message about weather
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: vec![models::MessageInput {
+                role: "user".into(),
+                content: "What's the weather like in Paris?".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            }],
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "recent".into(),
+                max_tokens: 4000,
+            },
+            recall: Some(models::RecallConfig {
+                tools: Some(models::RecallToolsOption::Bool(true)),
+            }),
+            limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(!resp.recalled.tools.is_empty(), "recalled tools should not be empty");
+        // Verify tools have names from our registered set
+        let tool_names: Vec<&str> = resp.recalled.tools.iter().map(|t| t.tool.name.as_str()).collect();
+        assert!(tool_names.contains(&"get_weather") || tool_names.contains(&"get_stock"));
+    }
+
+    #[tokio::test]
+    async fn recall_tools_config_limits_results() {
+        let core = make_core();
+
+        // Register 3 tools
+        core.register_tools("ds", vec![
+            models::Tool { name: "tool_a".into(), description: "Alpha tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "tool_b".into(), description: "Beta tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "tool_c".into(), description: "Gamma tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+        ]).await.unwrap();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![models::MessageInput { role: "user".into(), content: "alpha beta gamma".into(), tool_call_id: None, tool_calls: None }],
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            recall: Some(models::RecallConfig {
+                tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
+            }),
+            limit_tokens: None,
+        }).await.unwrap();
+
+        assert_eq!(resp.recalled.tools.len(), 1, "should limit to 1 tool");
+    }
+
+    #[tokio::test]
+    async fn recall_tools_no_user_message_returns_empty() {
+        let core = make_core();
+
+        core.register_tools("ds", vec![
+            models::Tool { name: "tool_a".into(), description: "Alpha".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+        ]).await.unwrap();
+
+        // Only assistant messages, no user messages
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![models::MessageInput { role: "assistant".into(), content: "Hello!".into(), tool_call_id: None, tool_calls: None }],
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
+            limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(resp.recalled.tools.is_empty(), "no user message → no recalled tools");
+    }
+
+    #[tokio::test]
+    async fn limit_tokens_reduces_message_budget_when_tools_recalled() {
+        let core = make_core();
+
+        core.register_tools("ds", vec![
+            models::Tool {
+                name: "my_tool".into(),
+                description: "A tool with a description".into(),
+                parameters: serde_json::json!({"type": "object"}),
+                metadata: None,
+                fields: None,
+            },
+        ]).await.unwrap();
+
+        // 5 messages, 100 chars each = 25 tokens each
+        let content = "x".repeat(100);
+        let mut msgs: Vec<models::MessageInput> = (0..4).map(|_| models::MessageInput {
+            role: "assistant".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
+        }).collect();
+        msgs.push(models::MessageInput { role: "user".into(), content: "find my tool".into(), tool_call_id: None, tool_calls: None });
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Without limit_tokens, maxTokens=4000 → all 5 messages fit
+        let resp_unlimited = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
+            limit_tokens: None,
+        }).await.unwrap();
+
+        // With tight limit_tokens, tools eat into the budget → fewer messages
+        let resp_limited = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
+            limit_tokens: Some(60), // tight budget
+        }).await.unwrap();
+
+        assert!(resp_limited.included_messages < resp_unlimited.included_messages,
+            "limited={} should be less than unlimited={}",
+            resp_limited.included_messages, resp_unlimited.included_messages);
+    }
+
+    #[tokio::test]
+    async fn limit_tokens_without_recall_uses_full_budget() {
+        let core = make_core();
+
+        let content = "x".repeat(100); // 25 tokens each
+        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
+            role: "user".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // limit_tokens=60, no recall → no tool tokens subtracted → same as max_tokens=60
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            recall: None,
+            limit_tokens: Some(60),
+        }).await.unwrap();
+
+        // 60 tokens fits 2 messages (25 tokens each)
+        assert_eq!(resp.included_messages, 2);
+    }
+
+    #[tokio::test]
+    async fn session_tools_persist_across_context_calls() {
+        let core = make_core();
+
+        // Register 3 tools with distinct descriptions
+        core.register_tools("ds", vec![
+            models::Tool { name: "get_weather".into(), description: "Get weather forecast for a location".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "get_stock".into(), description: "Get stock price for a ticker".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "send_email".into(), description: "Send an email message".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+        ]).await.unwrap();
+
+        // First turn: user asks about weather, limit=1 so only weather tool is recalled
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![models::MessageInput { role: "user".into(), content: "What is the weather forecast?".into(), tool_call_id: None, tool_calls: None }],
+        }).await.unwrap();
+
+        let resp1 = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            recall: Some(models::RecallConfig {
+                tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
+            }),
+            limit_tokens: None,
+        }).await.unwrap();
+        let first_tool_names: Vec<String> = resp1.recalled.tools.iter().map(|t| t.tool.name.clone()).collect();
+        assert_eq!(first_tool_names.len(), 1, "first turn should recall 1 tool");
+
+        // Second turn: user asks about something different, limit=1
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![models::MessageInput { role: "user".into(), content: "Send an email now".into(), tool_call_id: None, tool_calls: None }],
+        }).await.unwrap();
+
+        let resp2 = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            recall: Some(models::RecallConfig {
+                tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
+            }),
+            limit_tokens: None,
+        }).await.unwrap();
+        let second_tool_names: Vec<String> = resp2.recalled.tools.iter().map(|t| t.tool.name.clone()).collect();
+
+        // Session continuity: first turn's tool should persist + second turn's new discovery
+        assert!(second_tool_names.len() > 1,
+            "second turn should have tools from first turn + new discovery, got {:?}", second_tool_names);
+        for name in &first_tool_names {
+            assert!(second_tool_names.contains(name),
+                "tool '{}' from first turn should persist. second={:?}", name, second_tool_names);
+        }
+    }
+
+    fn make_core_with_llm() -> AgentifiedCore {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        let embedding: Arc<dyn EmbeddingService> = Arc::new(FakeEmbedding {
+            call_count: Default::default(),
+            batch_call_count: Default::default(),
+        });
+        let llm: Arc<dyn embedding::LlmService> = Arc::new(FakeLlm);
+        AgentifiedCore::new_with_llm(embedding, storage, llm)
+    }
+
+    #[tokio::test]
+    async fn summary_strategy_returns_summarized_message() {
+        let core = make_core_with_llm();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![
+                models::MessageInput { role: "user".into(), content: "Hello".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "assistant".into(), content: "Hi there!".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "user".into(), content: "How are you?".into(), tool_call_id: None, tool_calls: None },
+            ],
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000 },
+            recall: None,
+            limit_tokens: None,
+        }).await.unwrap();
+
+        assert_eq!(resp.strategy_used, "summary");
+        assert_eq!(resp.messages.len(), 1);
+        assert_eq!(resp.messages[0].role, "system");
+        assert!(resp.summary.is_some());
+        assert!(!resp.fallback);
+    }
+
+    #[tokio::test]
+    async fn summary_strategy_empty_session_returns_empty() {
+        let core = make_core_with_llm();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "empty".into(),
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000 },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert_eq!(resp.messages.len(), 0);
+        assert_eq!(resp.total_messages, 0);
+    }
+
+    #[tokio::test]
+    async fn summary_strategy_falls_back_on_llm_failure() {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        let embedding: Arc<dyn EmbeddingService> = Arc::new(FakeEmbedding {
+            call_count: Default::default(),
+            batch_call_count: Default::default(),
+        });
+        let llm: Arc<dyn embedding::LlmService> = Arc::new(FailingLlm);
+        let core = AgentifiedCore::new_with_llm(embedding, storage, llm);
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![
+                models::MessageInput { role: "user".into(), content: "Hello".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "assistant".into(), content: "Hi!".into(), tool_call_id: None, tool_calls: None },
+            ],
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000 },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(resp.fallback, "should fall back on LLM failure");
+        assert!(resp.summary.is_none());
+        assert!(!resp.messages.is_empty(), "should return recent messages as fallback");
+    }
+
+    #[tokio::test]
+    async fn summary_without_llm_returns_unsupported() {
+        let core = make_core(); // no LLM
+
+        let err = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000 },
+            recall: None, limit_tokens: None,
+        }).await.unwrap_err();
+
+        match err {
+            CoreError::UnsupportedStrategy(_) => {}
+            _ => panic!("expected UnsupportedStrategy, got {err:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn recent_summary_returns_summary_plus_recent() {
+        let core = make_core_with_llm();
+
+        // Add enough messages that not all fit in 60% budget
+        let content = "x".repeat(100); // 25 tokens each
+        let mut msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
+            role: "assistant".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
+        }).collect();
+        msgs.push(models::MessageInput { role: "user".into(), content: "summary please".into(), tool_call_id: None, tool_calls: None });
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Budget = 100 tokens. Recent 60% = 60 tokens → 2 messages. Summary 40% = 40 tokens.
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100 },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert_eq!(resp.strategy_used, "recent+summary");
+        assert!(!resp.fallback);
+        assert!(resp.summary.is_some());
+        // First message should be the summary (role=system)
+        assert_eq!(resp.messages[0].role, "system");
+        // Remaining messages should be recent
+        assert!(resp.messages.len() > 1);
+    }
+
+    #[tokio::test]
+    async fn recent_summary_falls_back_on_llm_failure() {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        let embedding: Arc<dyn EmbeddingService> = Arc::new(FakeEmbedding {
+            call_count: Default::default(),
+            batch_call_count: Default::default(),
+        });
+        let llm: Arc<dyn embedding::LlmService> = Arc::new(FailingLlm);
+        let core = AgentifiedCore::new_with_llm(embedding, storage, llm);
+
+        let content = "x".repeat(100);
+        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
+            role: "user".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100 },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(resp.fallback, "should fall back on LLM failure");
+        assert!(resp.summary.is_none());
+        assert!(!resp.messages.is_empty());
     }
 
 }

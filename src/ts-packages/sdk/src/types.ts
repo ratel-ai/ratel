@@ -76,7 +76,18 @@ export interface DiscoverTool {
 
 // Context strategy
 
-export type ContextStrategy = "recent" | "full";
+export type ContextStrategy = "recent" | "full" | "summary" | "recent+summary";
+
+// Recall types
+
+export interface RecallToolsConfig {
+  limit?: number;
+  minSimilarity?: number;
+}
+
+export interface RecallConfig {
+  tools?: boolean | RecallToolsConfig;
+}
 
 // Message persistence types
 
@@ -111,6 +122,8 @@ export interface GetMessagesResponse {
 export interface ContextOpts {
   strategy?: ContextStrategy;
   maxTokens?: number;
+  recall?: RecallConfig;
+  limitTokens?: number;
 }
 
 export interface ContextResponse {
@@ -118,10 +131,11 @@ export interface ContextResponse {
   strategyUsed: ContextStrategy;
   totalMessages: number;
   includedMessages: number;
-  recalled: { tools: unknown[]; memories: unknown[] };
+  recalled: { tools: RankedTool[]; memories: unknown[] };
   tokenEstimate: number;
   conversationMessages: number;
   fallback: boolean;
+  summary?: string;
 }
 
 // Event types
@@ -198,7 +212,7 @@ export type PrepareStepFn = (params: {
 
 export interface AssembledContext<T = AgentifiedTool> {
   messages: StoredMessage[];
-  recalled: { tools: unknown[]; memories: unknown[] };
+  recalled: { tools: RankedTool[]; memories: unknown[] };
   strategyUsed: ContextStrategy;
   fallback: boolean;
   tokenEstimate: number;
@@ -206,6 +220,7 @@ export interface AssembledContext<T = AgentifiedTool> {
   totalMessages: number;
   includedMessages: number;
   tools: Record<string, T>;
+  summary?: string;
 }
 
 export interface GetMessagesOptions {

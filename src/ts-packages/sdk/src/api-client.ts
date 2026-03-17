@@ -127,19 +127,37 @@ export class ApiClient {
     if (opts?.strategy !== undefined) messagesConfig.strategy = opts.strategy;
     if (opts?.maxTokens !== undefined) messagesConfig.max_tokens = opts.maxTokens;
 
+    const body: Record<string, unknown> = { dataset, namespace, session, messages: messagesConfig };
+    if (opts?.recall) {
+      const recall: Record<string, unknown> = {};
+      if (opts.recall.tools !== undefined) {
+        if (typeof opts.recall.tools === "boolean") {
+          recall.tools = opts.recall.tools;
+        } else {
+          const toolsConfig: Record<string, unknown> = {};
+          if (opts.recall.tools.limit !== undefined) toolsConfig.limit = opts.recall.tools.limit;
+          if (opts.recall.tools.minSimilarity !== undefined) toolsConfig.min_similarity = opts.recall.tools.minSimilarity;
+          recall.tools = toolsConfig;
+        }
+      }
+      body.recall = recall;
+    }
+    if (opts?.limitTokens !== undefined) body.limit_tokens = opts.limitTokens;
+
     const data = await this.fetchJson<{
       messages: any[];
       strategy_used: string;
       total_messages: number;
       included_messages: number;
-      recalled: { tools: unknown[]; memories: unknown[] };
+      recalled: { tools: any[]; memories: unknown[] };
       token_estimate: number;
       conversation_messages: number;
       fallback: boolean;
+      summary?: string;
     }>(`${this.config.serverUrl}/api/v1/context`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataset, namespace, session, messages: messagesConfig }),
+      body: JSON.stringify(body),
     });
     return {
       messages: data.messages.map((m: any) => ({
@@ -158,6 +176,7 @@ export class ApiClient {
       tokenEstimate: data.token_estimate,
       conversationMessages: data.conversation_messages,
       fallback: data.fallback,
+      summary: data.summary,
     };
   }
 
