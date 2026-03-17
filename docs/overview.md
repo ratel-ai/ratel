@@ -107,4 +107,4 @@ Or jump straight to a framework integration:
 - **[Mastra (TypeScript)](./typescript/integrations/mastra.md)**
 - **[LangGraph (Python)](./python/integrations/langgraph.md)**
 
-Want to see it in action first? **[Open the Sandbox](https://agentified.dev/sandbox)** — compare token usage with and without Agentified, side by side.
+Want to see it in action first? **[Open the Demo](https://demo.agentified.dev)** — compare token usage with and without Agentified, side by side.

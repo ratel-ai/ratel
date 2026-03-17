@@ -6,7 +6,7 @@
 
   <p>
     <a href="./docs/">Docs</a> •
-    <a href="https://agentified.dev/sandbox">Sandbox</a> •
+    <a href="https://demo.agentified.dev">Demo</a> •
     <a href="https://discord.gg/HTXmrjvsDy">Discord</a> •
     <a href="https://twitter.com/rstagi_">Twitter</a>
   </p>
@@ -187,11 +187,11 @@ pnpm add agentified
 pnpm tsx index.ts  # see docs/typescript/getting-started.md for the code
 ```
 
-### Sandbox
+### Demo
 
 See Agentified in action. Compare token usage with and without smart tool selection.
 
-[**Open the Sandbox →**](https://agentified.dev/sandbox)
+[**Open the Demo →**](https://demo.agentified.dev)
 
 ### Examples
 

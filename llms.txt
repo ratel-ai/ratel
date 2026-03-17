@@ -232,7 +232,7 @@ agentified/
 ### Links
 
 - Website: https://agentified.dev
-- Sandbox: https://agentified.dev/sandbox
+- Demo: https://demo.agentified.dev
 - GitHub: https://github.com/agentified/agentified
 - Discord: https://discord.gg/HTXmrjvsDy
 - npm: https://www.npmjs.com/package/agentified
