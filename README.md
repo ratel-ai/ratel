@@ -223,7 +223,7 @@ See Agentified in action. Compare token usage with and without smart tool select
 
 - [Discord](https://discord.gg/HTXmrjvsDy) — Questions, feedback, and show & tell
 - [Twitter](https://twitter.com/rstagi_) — Updates and announcements
-- [AI Aperitivo](https://aiaperiti.vo) — Meet us IRL in Milan, Rome, and beyond
+- [AI Aperitivo](https://lu.ma/aimi) — Meet us IRL in Milan, Rome, and beyond
 - [Contributing](./CONTRIBUTING.md) — We welcome PRs!
 
 <br />
