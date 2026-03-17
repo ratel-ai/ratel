@@ -1,5 +1,13 @@
 # @agentified/mastra
 
+## 0.0.6
+
+### Patch Changes
+
+- Add custom headers support to connect() for authenticated servers
+- Updated dependencies
+  - agentified@0.0.6
+
 ## 0.0.5
 
 ### Patch Changes

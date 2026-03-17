@@ -1,5 +1,13 @@
 # @agentified/react
 
+## 0.0.6
+
+### Patch Changes
+
+- Add custom headers support to connect() for authenticated servers
+- Updated dependencies
+  - @agentified/fe-client@0.0.6
+
 ## 0.0.5
 
 ### Patch Changes

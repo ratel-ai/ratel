@@ -1,5 +1,11 @@
 # @agentified/sdk
 
+## 0.0.6
+
+### Patch Changes
+
+- Add custom headers support to connect() for authenticated servers
+
 ## 0.0.5
 
 ### Patch Changes
