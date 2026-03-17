@@ -160,6 +160,7 @@ export type AgentifiedEvent =
 export interface ApiClientConfig {
   serverUrl: string;
   tools: ServerTool[];
+  headers?: Record<string, string>;
   onEvent?: (event: AgentifiedEvent) => void;
 }
 

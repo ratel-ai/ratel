@@ -41,11 +41,21 @@ async def main():
 asyncio.run(main())
 ```
 
+## Authentication
+
+Pass custom headers (e.g. for Cloud Run IAM, API gateways) via `connect()`:
+
+```python
+await ag.connect("https://my-service.run.app", headers={"Authorization": f"Bearer {identity_token}"})
+```
+
+Headers are sent on every request, including the initial health check.
+
 ## API Hierarchy
 
 ```
 Agentified
-  ├── connect(server_url) → health check, store url
+  ├── connect(server_url, *, headers?) → health check, store url
   ├── disconnect() → cleanup
   ├── dataset(name) → DatasetRef
   │    └── register(RegisterInput) → Instance
@@ -77,6 +87,9 @@ ag = Agentified()
 await ag.connect("http://localhost:9119")
 # ... use ag ...
 await ag.disconnect()
+
+# With auth headers:
+await ag.connect("https://my-service.run.app", headers={"Authorization": "Bearer ..."})
 ```
 
 Or as context manager:
@@ -149,7 +162,7 @@ Synchronous wrapper for `connect`/`disconnect`/`register`/`dataset`:
 from agentified import SyncAgentified, BackendTool, RegisterInput
 
 client = SyncAgentified()
-client.connect("http://localhost:9119")
+client.connect("http://localhost:9119")  # or: client.connect(url, headers={...})
 instance = client.register(RegisterInput(tools=[...]))
 # Instance, Session, etc. are async-only — use asyncio.run() for deeper layers
 client.disconnect()

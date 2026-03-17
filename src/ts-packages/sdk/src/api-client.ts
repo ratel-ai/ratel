@@ -27,7 +27,10 @@ export class ApiClient {
   }
 
   private async fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(url, init);
+    const headers = this.config.headers
+      ? { ...this.config.headers, ...init?.headers }
+      : init?.headers;
+    const res = await fetch(url, { ...init, ...(headers ? { headers } : {}) });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`Agentified API error ${res.status}: ${body}`);

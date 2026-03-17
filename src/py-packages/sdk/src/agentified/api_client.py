@@ -242,7 +242,7 @@ class ApiClient:
     @property
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient()
+            self._client = httpx.AsyncClient(headers=self._config.headers or {})
         return self._client
 
     def _emit(self, event: AgentifiedEvent) -> None:

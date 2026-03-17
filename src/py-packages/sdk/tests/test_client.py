@@ -40,6 +40,43 @@ class TestConnect:
         await ag.disconnect()
 
 
+class TestConnectWithHeaders:
+    @respx.mock
+    async def test_passes_headers_to_health_check(self):
+        route = respx.get(f"{TEST_URL}/health").mock(return_value=httpx.Response(200))
+
+        ag = Agentified()
+        await ag.connect(TEST_URL, headers={"Authorization": "Bearer tok-123"})
+
+        assert route.called
+        req = route.calls[0].request
+        assert req.headers["authorization"] == "Bearer tok-123"
+        await ag.disconnect()
+
+    @respx.mock
+    async def test_passes_headers_to_api_client(self):
+        respx.get(f"{TEST_URL}/health").mock(return_value=httpx.Response(200))
+
+        ag = Agentified()
+        await ag.connect(TEST_URL, headers={"Authorization": "Bearer tok-123"})
+
+        assert ag._sdk is not None
+        assert ag._sdk._config.headers == {"Authorization": "Bearer tok-123"}
+        await ag.disconnect()
+
+    @respx.mock
+    async def test_backward_compat_without_headers(self):
+        respx.get(f"{TEST_URL}/health").mock(return_value=httpx.Response(200))
+
+        ag = Agentified()
+        await ag.connect(TEST_URL)
+
+        assert ag._connected
+        assert ag._sdk is not None
+        assert ag._sdk._config.headers is None
+        await ag.disconnect()
+
+
 class TestRegister:
     @respx.mock
     async def test_register_delegates_to_default_dataset(self):

@@ -70,6 +70,13 @@ Run:
 pnpm tsx index.ts
 ```
 
+> **Authenticated servers** (Cloud Run IAM, API gateways): pass headers to `connect()`:
+> ```typescript
+> await ag.connect("https://my-service.run.app", {
+>   headers: { Authorization: `Bearer ${token}` },
+> });
+> ```
+
 ## 4. What happened
 
 The server:

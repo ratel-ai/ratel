@@ -83,6 +83,31 @@ describe("Agentified", () => {
       );
     });
 
+    it("passes headers to health check and ApiClient", async () => {
+      fetchSpy.mockResolvedValueOnce({ ok: true, status: 200 });
+
+      const ag = new Agentified();
+      await ag.connect("http://localhost:9119", {
+        headers: { Authorization: "Bearer tok-123" },
+      });
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "http://localhost:9119/health",
+        expect.objectContaining({
+          method: "GET",
+          headers: { Authorization: "Bearer tok-123" },
+        }),
+      );
+
+      const { ApiClient } = await import("../api-client.js");
+      expect(ApiClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: { Authorization: "Bearer tok-123" },
+        }),
+      );
+      await ag.disconnect();
+    });
+
     it("throws when called twice", async () => {
       fetchSpy.mockResolvedValue({ ok: true, status: 200 });
 

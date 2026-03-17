@@ -98,7 +98,7 @@ export function mastra() {
 export class MastraAgentified {
   constructor(private readonly ag: Agentified) {}
 
-  connect(url?: string) { return this.ag.connect(url); }
+  connect(url?: string, options?: { headers?: Record<string, string> }) { return this.ag.connect(url, options); }
   disconnect() { return this.ag.disconnect(); }
 
   dataset(name: string) { return new MastraDatasetRef(this.ag.dataset(name)); }

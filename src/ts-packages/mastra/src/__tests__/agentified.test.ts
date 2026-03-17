@@ -45,7 +45,7 @@ describe("MastraAgentified", () => {
     const ag = fakeAgentified();
     const m = new MastraAgentified(ag);
     await m.connect("http://localhost:9119");
-    expect(ag.connect).toHaveBeenCalledWith("http://localhost:9119");
+    expect(ag.connect).toHaveBeenCalledWith("http://localhost:9119", undefined);
   });
 
   it("delegates disconnect()", async () => {

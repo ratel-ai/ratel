@@ -13,9 +13,11 @@ export class Agentified {
   private cleanupHandlers: Array<[string, (...args: any[]) => void]> = [];
   private restartCount = 0;
   private spawnArgs: { binaryPath: string; port: number } | null = null;
+  private headers?: Record<string, string>;
 
-  async connect(serverUrl?: string): Promise<void> {
+  async connect(serverUrl?: string, options?: { headers?: Record<string, string> }): Promise<void> {
     if (this.connected) throw new Error("Already connected");
+    this.headers = options?.headers;
     if (!serverUrl) {
       if (!process.env.OPENAI_API_KEY) {
         throw new Error("OPENAI_API_KEY environment variable is required for local spawn");
@@ -36,7 +38,7 @@ export class Agentified {
       this.registerCrashHandler();
 
       this.serverUrl = url;
-      this.sdk = new ApiClient({ serverUrl: url, tools: [] });
+      this.sdk = new ApiClient({ serverUrl: url, tools: [], headers: this.headers });
       this.connected = true;
       return;
     }
@@ -44,13 +46,14 @@ export class Agentified {
     const res = await fetch(`${serverUrl}/health`, {
       method: "GET",
       signal: AbortSignal.timeout(5000),
+      ...(this.headers ? { headers: this.headers } : {}),
     });
     if (!res.ok) {
       throw new Error(`Health check failed: ${res.status}`);
     }
 
     this.serverUrl = serverUrl;
-    this.sdk = new ApiClient({ serverUrl, tools: [] });
+    this.sdk = new ApiClient({ serverUrl, tools: [], headers: this.headers });
     this.connected = true;
   }
 
@@ -123,7 +126,9 @@ export class Agentified {
   private async healthCheckLoop(url: string): Promise<void> {
     for (let i = 0; i < this.healthCheckMaxAttempts; i++) {
       try {
-        const res = await fetch(`${url}/health`);
+        const res = this.headers
+          ? await fetch(`${url}/health`, { headers: this.headers })
+          : await fetch(`${url}/health`);
         if (res.ok) return;
       } catch {
         // server not ready yet

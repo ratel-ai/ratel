@@ -225,6 +225,7 @@ class ApiClientConfig:
     server_url: str
     tools: list[ServerTool]
     on_event: Callable[[AgentifiedEvent], None] | None = field(default=None)
+    headers: dict[str, str] | None = field(default=None)
 
 
 # Legacy alias — kept for backward compat during migration

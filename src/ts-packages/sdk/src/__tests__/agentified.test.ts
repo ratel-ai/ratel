@@ -447,6 +447,62 @@ describe("ApiClient", () => {
     });
   });
 
+  describe("custom headers", () => {
+    it("merges config headers into every request", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ registered: 1 }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({
+        serverUrl: TEST_URL,
+        tools: [testTool],
+        headers: { Authorization: "Bearer tok-123" },
+      });
+
+      await agent.register("ds-abc");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/tools`, {
+        method: "POST",
+        headers: { Authorization: "Bearer tok-123", "Content-Type": "application/json" },
+        body: JSON.stringify({ tools: [testTool] }),
+      });
+    });
+
+    it("includes config headers on GET requests", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ messages: [], has_more: false, max_seq: 0 }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({
+        serverUrl: TEST_URL,
+        tools: [testTool],
+        headers: { Authorization: "Bearer tok-123" },
+      });
+
+      await agent.getMessages("ds", "ns", "sess");
+
+      expect(fetch).toHaveBeenCalledWith(
+        `${TEST_URL}/api/v1/messages?dataset=ds&namespace=ns&session=sess`,
+        { method: "GET", headers: { Authorization: "Bearer tok-123" } },
+      );
+    });
+
+    it("works without config headers (backward compat)", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ registered: 1 }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.register("ds-abc");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/tools`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tools: [testTool] }),
+      });
+    });
+  });
+
   describe("instance methods removed", () => {
     it("does not have createInstance, heartbeatInstance, deleteInstance", () => {
       const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });

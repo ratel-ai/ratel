@@ -242,8 +242,8 @@ class LangchainAgentified:
     def __init__(self, ag: Agentified | None = None) -> None:
         self._ag = ag or Agentified()
 
-    async def connect(self, server_url: str) -> None:
-        await self._ag.connect(server_url)
+    async def connect(self, server_url: str, *, headers: dict[str, str] | None = None) -> None:
+        await self._ag.connect(server_url, headers=headers)
 
     async def disconnect(self) -> None:
         await self._ag.disconnect()

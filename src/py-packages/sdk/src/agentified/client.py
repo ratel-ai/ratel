@@ -17,17 +17,17 @@ class Agentified:
         self._connected = False
         self._http_client: httpx.AsyncClient | None = None
 
-    async def connect(self, server_url: str) -> None:
+    async def connect(self, server_url: str, *, headers: dict[str, str] | None = None) -> None:
         if self._connected:
             raise RuntimeError("Already connected")
 
-        self._http_client = httpx.AsyncClient()
+        self._http_client = httpx.AsyncClient(headers=headers or {})
         resp = await self._http_client.get(f"{server_url}/health", timeout=5.0)
         if resp.status_code != 200:
             raise RuntimeError(f"Health check failed: {resp.status_code}")
 
         self._server_url = server_url
-        self._sdk = ApiClient(ApiClientConfig(server_url=server_url, tools=[]))
+        self._sdk = ApiClient(ApiClientConfig(server_url=server_url, tools=[], headers=headers))
         self._connected = True
 
     async def disconnect(self) -> None:

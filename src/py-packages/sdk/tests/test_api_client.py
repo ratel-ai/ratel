@@ -254,6 +254,57 @@ class TestAsDiscoverTool:
         assert dt.discovered_names == {"get_weather", "search"}
 
 
+class TestCustomHeaders:
+    @respx.mock
+    async def test_config_headers_sent_on_post_requests(self):
+        route = respx.post(f"{TEST_URL}/api/v1/datasets/{DATASET}/tools").mock(
+            return_value=httpx.Response(200, json={"registered": 1})
+        )
+        client = ApiClient(
+            ApiClientConfig(
+                server_url=TEST_URL,
+                tools=[TEST_TOOL],
+                headers={"Authorization": "Bearer tok-123"},
+            )
+        )
+        await client.register(DATASET)
+
+        assert route.called
+        req = route.calls[0].request
+        assert req.headers["authorization"] == "Bearer tok-123"
+
+    @respx.mock
+    async def test_config_headers_sent_on_get_requests(self):
+        route = respx.get(url__startswith=f"{TEST_URL}/api/v1/messages").mock(
+            return_value=httpx.Response(200, json={
+                "messages": [],
+                "has_more": False,
+                "max_seq": 0,
+            })
+        )
+        client = ApiClient(
+            ApiClientConfig(
+                server_url=TEST_URL,
+                tools=[],
+                headers={"Authorization": "Bearer tok-123"},
+            )
+        )
+        await client.get_messages(DATASET, "ns", "sess")
+
+        assert route.called
+        req = route.calls[0].request
+        assert req.headers["authorization"] == "Bearer tok-123"
+
+    @respx.mock
+    async def test_works_without_headers(self):
+        route = respx.post(f"{TEST_URL}/api/v1/datasets/{DATASET}/tools").mock(
+            return_value=httpx.Response(200, json={"registered": 1})
+        )
+        client = ApiClient(ApiClientConfig(server_url=TEST_URL, tools=[TEST_TOOL]))
+        await client.register(DATASET)
+        assert route.called
+
+
 class TestFrontendTools:
     def test_filters_frontend_tools(self):
         ft = ServerTool(name="confirm", description="c", parameters={}, metadata={"location": "frontend"})

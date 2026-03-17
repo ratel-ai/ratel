@@ -38,10 +38,23 @@ const ctx = await session.context
 
 See [ts-sdk-smoke](../../../examples/ts-sdk-smoke/) for a runnable version of this.
 
+## Authentication
+
+Pass custom headers (e.g. for Cloud Run IAM, API gateways) via `connect()`:
+
+```typescript
+await ag.connect("https://my-service.run.app", {
+  headers: { Authorization: `Bearer ${identityToken}` },
+});
+```
+
+Headers are sent on every request, including the initial health check.
+
 ## Hierarchy
 
 ```
 Agentified
+  ├─ .connect(serverUrl?, options?)  → void
   ├─ .adaptTo(adapter)   → T (framework-specific wrapper)
   └─ .dataset(name) → DatasetRef
        └─ .register({ tools }) → Instance
