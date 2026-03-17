@@ -2,6 +2,8 @@
 
 Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **86% cost reduction, same accuracy**.
 
+**[Overview](./overview.md)** — What Agentified is, why it's needed, how it works, and who it's for.
+
 ## TypeScript / JavaScript
 
 - **[Getting Started](./typescript/getting-started.md)** — Install, paste-and-run, see results in 2 minutes
