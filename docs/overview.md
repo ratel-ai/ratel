@@ -61,18 +61,17 @@ Three steps:
 
 ## A real example
 
-Benchmarked on a 200-tool HR agent, against loading all tools into the prompt:
+Benchmarked on a 200-tool HR agent, against loading all tools into the prompt (Claude Opus 4.6):
 
+Same accuracy — and massively fewer resources:
 
-|                     | All tools in prompt | With Agentified |
-| ------------------- | ------------------- | --------------- |
-| Task correctness    | 98%                 | 98%             |
-| Tokens per request  | 45,000              | 6,200           |
-| Cost per 1K queries | $21.53              | $2.95           |
-| Latency (p50)       | 2.1s                | 1.4s            |
+| Metric | All tools in prompt | With Agentified |
+|--------|---------------------|-----------------|
+| Input tokens | 3.8M | 563K |
+| Cost | $19.88 | $3.32 |
+| Latency (p50) | 2.1s | 1.4s |
 
-
-**86% fewer tokens. 86% lower cost. 33% faster. Same accuracy.**
+**85% fewer tokens. 83% lower cost. 33% faster.**
 
 ## Why we win against your framework's existing memory?
 
@@ -84,7 +83,7 @@ Benchmarked on a 200-tool HR agent, against loading all tools into the prompt:
 
 - *SDKs for TypeScript and Python*: Fluent API that wraps the server. Register tools, create sessions, assemble context in one call. Async-first, with a sync Python wrapper available.
 
-- *Framework adapters*: Native integrations for Mastra (TypeScript) and LangChain/LangGraph (Python). Assembled tools come back as framework-native objects — no conversion needed.
+- *Framework adapters*: Native integrations for Mastra (TypeScript) and LangChain/LangGraph (Python). Assembled tools come back as framework-native objects — no conversion needed. More framework adapters coming soon.
 
 - *React components*: Provider, hooks, and a visual Inspector panel for debugging tool selection in real-time. See which tools were picked, their scores, and token estimates.
 
@@ -92,7 +91,7 @@ Benchmarked on a 200-tool HR agent, against loading all tools into the prompt:
 
 - *Runtime tool discovery*: An agent-callable tool that lets the LLM itself search for additional tools mid-conversation. Useful for open-ended workflows where the needed tools aren't predictable upfront.
 
-- *A fast Rust core*: The server is built with Axum, uses read-write locks for concurrent access, caches embeddings by content hash, and runs ranking in sub-milliseconds for hundreds of tools. Storage is in-memory by default, with optional SQLite persistence.
+- *A fast Rust core*: The server is built with Axum, uses read-write locks for concurrent access, caches embeddings by content hash, and runs ranking in sub-milliseconds for hundreds of tools. Storage is in-memory by default, with optional SQLite persistence and more storage backends coming soon.
 
 ## Who It's For
 
