@@ -69,11 +69,11 @@ Same accuracy — and massively fewer resources:
 |--------|---------------------|-----------------|
 | Input tokens | 3.8M | 563K |
 | Cost | $19.88 | $3.32 |
-| Latency (p50) | 2.1s | 1.4s |
+| Latency | 614s | 549s |
 
-**85% fewer tokens. 83% lower cost. 33% faster.**
+**85% fewer tokens. 83% lower cost. 10% faster.**
 
-## Why we win against your framework's existing memory?
+## Why do we win against your framework's existing memory?
 
 **Interconnected, not co-located.** Every primitive feeds into `assemble()`. Memories influence which tools surface. Tool usage patterns inform future recall. Session history shapes ranking. The graph connects entities across all of them. **It's one system that gets smarter as a whole, not a bag of features that happen to live in the same library**.
 
@@ -81,7 +81,7 @@ Same accuracy — and massively fewer resources:
 
 ## What You Get
 
-- *SDKs for TypeScript and Python*: Fluent API that wraps the server. Register tools, create sessions, assemble context in one call. Async-first, with a sync Python wrapper available.
+- *SDKs for TypeScript and Python*: Fluent API that wraps the server. Register tools, create sessions, and assemble context in one call. Async-first, with a sync Python wrapper available.
 
 - *Framework adapters*: Native integrations for Mastra (TypeScript) and LangChain/LangGraph (Python). Assembled tools come back as framework-native objects — no conversion needed. More framework adapters coming soon.
 
