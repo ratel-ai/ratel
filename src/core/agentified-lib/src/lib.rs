@@ -56,20 +56,14 @@ pub struct AgentifiedCore {
 
 impl AgentifiedCore {
     pub fn new(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>) -> Self {
-        let turns_map = storage.load_all_turns().unwrap_or_default().into_iter().collect();
-        let cache_map = storage.load_all_embeddings().unwrap_or_default().into_iter().collect();
-
-        Self {
-            tools: RwLock::new(HashMap::new()),
-            turns: RwLock::new(turns_map),
-            embedding_cache: RwLock::new(cache_map),
-            embedding,
-            storage,
-            llm: None,
-        }
+        Self::build(embedding, storage, None)
     }
 
     pub fn new_with_llm(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>, llm: Arc<dyn embedding::LlmService>) -> Self {
+        Self::build(embedding, storage, Some(llm))
+    }
+
+    fn build(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>, llm: Option<Arc<dyn embedding::LlmService>>) -> Self {
         let turns_map = storage.load_all_turns().unwrap_or_default().into_iter().collect();
         let cache_map = storage.load_all_embeddings().unwrap_or_default().into_iter().collect();
 
@@ -79,7 +73,7 @@ impl AgentifiedCore {
             embedding_cache: RwLock::new(cache_map),
             embedding,
             storage,
-            llm: Some(llm),
+            llm,
         }
     }
 
@@ -361,6 +355,20 @@ impl AgentifiedCore {
 
         let total_messages = max_seq;
 
+        if all_messages.is_empty() {
+            return Ok(ContextResponse {
+                messages: vec![],
+                strategy_used: strategy.clone(),
+                total_messages: 0,
+                included_messages: 0,
+                recalled: RecalledContext { tools: vec![], memories: vec![] },
+                token_estimate: 0,
+                conversation_messages: 0,
+                fallback: false,
+                summary: None,
+            });
+        }
+
         // Tool recall
         let recalled_tools = self.recall_tools(&req.dataset, &req.namespace, &req.session, &all_messages, &req.recall).await?;
 
@@ -376,19 +384,8 @@ impl AgentifiedCore {
             }
             None => req.messages.max_tokens,
         };
-
-        if all_messages.is_empty() {
-            return Ok(ContextResponse {
-                messages: vec![],
-                strategy_used: strategy.clone(),
-                total_messages: 0,
-                included_messages: 0,
-                recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
-                token_estimate: 0,
-                conversation_messages: 0,
-                fallback: false,
-                summary: None,
-            });
+        if max_tokens == 0 {
+            tracing::warn!("effective message token budget is 0 — tools consumed entire limit_tokens budget");
         }
 
         match strategy.as_str() {
@@ -420,7 +417,8 @@ impl AgentifiedCore {
         total_messages: i64,
         recalled_tools: Vec<RankedTool>,
     ) -> Result<ContextResponse, CoreError> {
-        let llm = self.llm.as_ref().unwrap(); // safe: checked in get_context
+        let llm = self.llm.as_ref()
+            .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
 
         let conversation_text = format_conversation(all_messages);
         let system_prompt = "Summarize this conversation concisely. Focus on key decisions, facts, and action items.";
@@ -449,7 +447,8 @@ impl AgentifiedCore {
                     summary: Some(summary_text),
                 })
             }
-            Err(_) => {
+            Err(e) => {
+                tracing::warn!("LLM summary failed, falling back to recent: {e}");
                 // Fallback to recent
                 let messages = select_messages(all_messages, "recent", max_tokens);
                 let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
@@ -476,7 +475,8 @@ impl AgentifiedCore {
         total_messages: i64,
         recalled_tools: Vec<RankedTool>,
     ) -> Result<ContextResponse, CoreError> {
-        let llm = self.llm.as_ref().unwrap();
+        let llm = self.llm.as_ref()
+            .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
 
         // 60% budget for recent, 40% for summary
         let recent_budget = (max_tokens as f64 * 0.6) as usize;
@@ -506,7 +506,8 @@ impl AgentifiedCore {
             });
         }
 
-        let conversation_text = format_conversation_refs(&older);
+        let older_owned: Vec<StoredMessage> = older.into_iter().cloned().collect();
+        let conversation_text = format_conversation(&older_owned);
         let system_prompt = "Summarize this conversation concisely. Focus on key decisions, facts, and action items.";
 
         match llm.chat(system_prompt, &conversation_text, summary_budget).await {
@@ -537,7 +538,8 @@ impl AgentifiedCore {
                     summary: Some(summary_text),
                 })
             }
-            Err(_) => {
+            Err(e) => {
+                tracing::warn!("LLM summary failed, falling back to recent: {e}");
                 // Fallback to recent with full budget
                 let messages = select_messages(all_messages, "recent", max_tokens);
                 let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
@@ -685,10 +687,6 @@ impl AgentifiedCore {
 // Helpers
 
 fn format_conversation(messages: &[StoredMessage]) -> String {
-    messages.iter().map(|m| format!("{}: {}", m.role, m.content)).collect::<Vec<_>>().join("\n")
-}
-
-fn format_conversation_refs(messages: &[&StoredMessage]) -> String {
     messages.iter().map(|m| format!("{}: {}", m.role, m.content)).collect::<Vec<_>>().join("\n")
 }
 
