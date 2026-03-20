@@ -62,6 +62,14 @@ const ctx = await session.context
   .assemble();
 console.log("Assembled tools:", Object.keys(ctx.tools));
 console.log("Token estimate:", ctx.tokenEstimate);
+
+// With tool recall: auto-discovers relevant tools based on last user message
+const ctxWithRecall = await session.context
+  .messages({ strategy: "recent+summary", maxTokens: 4000 })
+  .recall({ tools: { limit: 10 } })
+  .limitTokens(8000)
+  .assemble();
+// ctxWithRecall.recalled.tools → auto-discovered tools with similarity scores
 ```
 
 Run:
@@ -85,6 +93,8 @@ The server:
 2. **Scored** tools via weighted cosine similarity across name, description, and schemas
 3. **Combined** with BM25 keyword matching: `final = 0.7 × semantic + 0.3 × BM25`
 4. **Returned** the top-K tools sorted by relevance
+
+When using `.recall()`, the server also auto-discovers tools based on the last user message and returns them with similarity scores. The `summary` and `recent+summary` strategies use LLM summarization for older messages (falling back to `recent` if the LLM call fails).
 
 Read [Architecture](../server/architecture.md) for the full deep dive.
 

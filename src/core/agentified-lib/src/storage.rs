@@ -13,6 +13,8 @@ pub trait Storage: Send + Sync {
     fn load_all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>>;
     fn append_messages(&self, dataset: &str, namespace: &str, session: &str, messages: &[MessageInput]) -> Result<(i64, i64)>;
     fn get_messages(&self, dataset: &str, namespace: &str, session: &str, limit: i64, after_seq: Option<i64>, around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)>;
+    fn save_session_tools(&self, dataset: &str, namespace: &str, session: &str, tool_names: &[&str]) -> Result<()>;
+    fn load_session_tools(&self, dataset: &str, namespace: &str, session: &str) -> Result<Vec<String>>;
 }
 
 // Blob helpers
@@ -55,6 +57,12 @@ impl Storage for NoopStorage {
     }
     fn get_messages(&self, _dataset: &str, _namespace: &str, _session: &str, _limit: i64, _after_seq: Option<i64>, _around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)> {
         Ok((vec![], false, 0))
+    }
+    fn save_session_tools(&self, _dataset: &str, _namespace: &str, _session: &str, _tool_names: &[&str]) -> Result<()> {
+        Ok(())
+    }
+    fn load_session_tools(&self, _dataset: &str, _namespace: &str, _session: &str) -> Result<Vec<String>> {
+        Ok(vec![])
     }
 }
 
@@ -108,7 +116,14 @@ impl SqliteStorage {
                 created_at TEXT NOT NULL,
                 seq INTEGER NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(dataset_id, namespace_id, session_id, seq);"
+            CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(dataset_id, namespace_id, session_id, seq);
+            CREATE TABLE IF NOT EXISTS session_tools (
+                dataset_id TEXT NOT NULL,
+                namespace_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                PRIMARY KEY (dataset_id, namespace_id, session_id, tool_name)
+            );"
         )?;
         Ok(Self { conn: std::sync::Mutex::new(conn) })
     }
@@ -339,6 +354,34 @@ impl Storage for SqliteStorage {
 
         Ok((messages, has_more, max_seq))
     }
+
+    fn save_session_tools(&self, dataset: &str, namespace: &str, session: &str, tool_names: &[&str]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM session_tools WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3",
+            rusqlite::params![dataset, namespace, session],
+        )?;
+        for name in tool_names {
+            tx.execute(
+                "INSERT INTO session_tools (dataset_id, namespace_id, session_id, tool_name) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![dataset, namespace, session, name],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn load_session_tools(&self, dataset: &str, namespace: &str, session: &str) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT tool_name FROM session_tools WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3"
+        )?;
+        let names: Vec<String> = stmt.query_map(rusqlite::params![dataset, namespace, session], |row| {
+            row.get(0)
+        })?.filter_map(|r| r.ok()).collect();
+        Ok(names)
+    }
 }
 
 #[cfg(test)]
@@ -487,5 +530,30 @@ mod tests {
         let loaded = s.load_all_embeddings().unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].1, vec![3.0, 4.0]);
+    }
+
+    #[test]
+    fn sqlite_session_tools_roundtrip() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        s.save_session_tools("ds", "ns", "s1", &["tool_a", "tool_b"]).unwrap();
+        let loaded = s.load_session_tools("ds", "ns", "s1").unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert!(loaded.contains(&"tool_a".to_string()));
+        assert!(loaded.contains(&"tool_b".to_string()));
+    }
+
+    #[test]
+    fn sqlite_session_tools_scoped() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        s.save_session_tools("ds", "ns", "s1", &["tool_a"]).unwrap();
+        s.save_session_tools("ds", "ns", "s2", &["tool_b"]).unwrap();
+        assert_eq!(s.load_session_tools("ds", "ns", "s1").unwrap(), vec!["tool_a"]);
+        assert_eq!(s.load_session_tools("ds", "ns", "s2").unwrap(), vec!["tool_b"]);
+    }
+
+    #[test]
+    fn noop_session_tools_returns_empty() {
+        let s = NoopStorage;
+        assert!(s.load_session_tools("ds", "ns", "s1").unwrap().is_empty());
     }
 }

@@ -121,6 +121,96 @@ impl EmbeddingService for OpenAIEmbedding {
     }
 }
 
+// LLM service trait (for summary generation)
+
+#[async_trait]
+pub trait LlmService: Send + Sync {
+    async fn chat(&self, system: &str, user: &str, max_tokens: usize) -> anyhow::Result<String>;
+}
+
+pub struct OpenAILlm {
+    client: reqwest::Client,
+    api_key: String,
+}
+
+impl OpenAILlm {
+    pub fn new(api_key: String) -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("failed to build HTTP client"),
+            api_key,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ChatRequest<'a> {
+    model: &'a str,
+    messages: Vec<ChatMessage<'a>>,
+    max_tokens: usize,
+}
+
+#[derive(Serialize)]
+struct ChatMessage<'a> {
+    role: &'a str,
+    content: &'a str,
+}
+
+#[derive(Deserialize)]
+struct ChatResponse {
+    choices: Vec<ChatChoice>,
+}
+
+#[derive(Deserialize)]
+struct ChatChoice {
+    message: ChatChoiceMessage,
+}
+
+#[derive(Deserialize)]
+struct ChatChoiceMessage {
+    content: String,
+}
+
+#[async_trait]
+impl LlmService for OpenAILlm {
+    async fn chat(&self, system: &str, user: &str, max_tokens: usize) -> anyhow::Result<String> {
+        let response = self
+            .client
+            .post("https://api.openai.com/v1/chat/completions")
+            .bearer_auth(&self.api_key)
+            .json(&ChatRequest {
+                model: "gpt-5-mini",
+                messages: vec![
+                    ChatMessage { role: "system", content: system },
+                    ChatMessage { role: "user", content: user },
+                ],
+                max_tokens,
+            })
+            .send()
+            .await
+            .context("failed to call OpenAI chat API")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("OpenAI API error {status}: {body}");
+        }
+
+        let body: ChatResponse = response
+            .json()
+            .await
+            .context("failed to parse OpenAI chat response")?;
+
+        body.choices
+            .into_iter()
+            .next()
+            .map(|c| c.message.content)
+            .context("no chat completion returned")
+    }
+}
+
 // Test utilities (available via `test-utils` feature or in tests)
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -171,6 +261,29 @@ impl EmbeddingService for FakeEmbedding {
         // Normalize to unit vector
         let norm: f64 = vec.iter().map(|x| x * x).sum::<f64>().sqrt();
         Ok(vec.into_iter().map(|x| (x / norm) as f32).collect())
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+pub struct FakeLlm;
+
+#[cfg(any(test, feature = "test-utils"))]
+#[async_trait]
+impl LlmService for FakeLlm {
+    async fn chat(&self, _system: &str, user: &str, _max_tokens: usize) -> anyhow::Result<String> {
+        let truncated: String = user.chars().take(100).collect();
+        Ok(format!("Summary: {truncated}"))
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+pub struct FailingLlm;
+
+#[cfg(any(test, feature = "test-utils"))]
+#[async_trait]
+impl LlmService for FailingLlm {
+    async fn chat(&self, _system: &str, _user: &str, _max_tokens: usize) -> anyhow::Result<String> {
+        anyhow::bail!("LLM service unavailable")
     }
 }
 
@@ -253,6 +366,20 @@ mod tests {
             let individual = fake.embed(text).await.unwrap();
             assert_eq!(batch_results[i], individual, "mismatch at index {i}");
         }
+    }
+
+    #[tokio::test]
+    async fn fake_llm_returns_deterministic_output() {
+        let llm = super::FakeLlm;
+        let result = llm.chat("system prompt", "user input", 100).await.unwrap();
+        assert!(result.contains("user input"));
+    }
+
+    #[tokio::test]
+    async fn failing_llm_returns_error() {
+        let llm = super::FailingLlm;
+        let result = llm.chat("system", "user", 100).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]

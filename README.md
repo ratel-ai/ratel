@@ -144,7 +144,7 @@ ctx = await session.context.messages(strategy="recent").assemble()
 
 ## Features
 
-**[Context Assembly](./docs/)** — `session.context.tools(...).messages(...).assemble()` — one fluent call assembles the right tools, messages, and memory for each agent turn. Returns an `AssembledContext` you pass straight to your framework.
+**[Context Assembly](./docs/)** — `session.context.tools(...).messages(...).recall(...).limitTokens(n).assemble()` — one fluent call assembles the right tools, messages, and memory for each agent turn. Supports `recent`, `full`, `summary`, and `recent+summary` strategies. Tool recall auto-discovers relevant tools based on the last user message. Returns an `AssembledContext` you pass straight to your framework.
 
 **[Hybrid Ranking](./docs/server/ranking.md)** — Semantic similarity (70%) + BM25 keyword matching (30%) across tool name, description, and schemas.
 

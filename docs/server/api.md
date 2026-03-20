@@ -13,7 +13,7 @@ agentified-core exposes a REST API for tool registration, discovery, session tra
 | `POST` | `/api/v1/turns` | Capture a turn for session continuity |
 | `POST` | `/api/v1/messages` | Append messages to a conversation |
 | `GET` | `/api/v1/messages` | Retrieve conversation messages |
-| `POST` | `/api/v1/context` | Get context with strategy (`recent` / `full`) |
+| `POST` | `/api/v1/context` | Get context with strategy, token budget, and optional tool recall |
 
 Full request/response schemas and examples: [agentified-core README](../../src/core/README.md#api-reference).
 

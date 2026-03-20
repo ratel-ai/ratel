@@ -121,7 +121,7 @@ pub struct DiscoverResponse {
     pub tools: Vec<RankedTool>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankedTool {
     #[serde(flatten)]
     pub tool: Tool,
@@ -197,6 +197,31 @@ pub struct GetMessagesResponse {
     pub max_seq: i64,
 }
 
+// Recall types
+
+fn default_recall_limit() -> usize { 5 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RecallToolsConfig {
+    #[serde(default = "default_recall_limit")]
+    pub limit: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_similarity: Option<f32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum RecallToolsOption {
+    Bool(bool),
+    Config(RecallToolsConfig),
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct RecallConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<RecallToolsOption>,
+}
+
 // Context types
 
 #[derive(Debug, Deserialize)]
@@ -226,11 +251,15 @@ pub struct ContextRequest {
     pub session: String,
     #[serde(default)]
     pub messages: ContextMessagesConfig,
+    #[serde(default)]
+    pub recall: Option<RecallConfig>,
+    #[serde(default)]
+    pub limit_tokens: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct RecalledContext {
-    pub tools: Vec<serde_json::Value>,
+    pub tools: Vec<RankedTool>,
     pub memories: Vec<serde_json::Value>,
 }
 
@@ -244,4 +273,80 @@ pub struct ContextResponse {
     pub token_estimate: usize,
     pub conversation_messages: usize,
     pub fallback: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recall_tools_option_deserializes_from_bool_true() {
+        let json = r#"{"tools": true}"#;
+        let config: RecallConfig = serde_json::from_str(json).unwrap();
+        match config.tools {
+            Some(RecallToolsOption::Bool(true)) => {}
+            other => panic!("expected Bool(true), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn recall_tools_option_deserializes_from_config_object() {
+        let json = r#"{"tools": {"limit": 3, "min_similarity": 0.5}}"#;
+        let config: RecallConfig = serde_json::from_str(json).unwrap();
+        match config.tools {
+            Some(RecallToolsOption::Config(c)) => {
+                assert_eq!(c.limit, 3);
+                assert_eq!(c.min_similarity, Some(0.5));
+            }
+            other => panic!("expected Config, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn recall_config_defaults_to_none_when_absent() {
+        let json = r#"{}"#;
+        let config: RecallConfig = serde_json::from_str(json).unwrap();
+        assert!(config.tools.is_none());
+    }
+
+    #[test]
+    fn context_request_accepts_recall_and_limit_tokens() {
+        let json = r#"{
+            "dataset": "ds",
+            "namespace": "ns",
+            "session": "s1",
+            "recall": {"tools": true},
+            "limit_tokens": 8000
+        }"#;
+        let req: ContextRequest = serde_json::from_str(json).unwrap();
+        assert!(req.recall.is_some());
+        assert_eq!(req.limit_tokens, Some(8000));
+    }
+
+    #[test]
+    fn context_request_recall_and_limit_tokens_default_to_none() {
+        let json = r#"{
+            "dataset": "ds",
+            "namespace": "ns",
+            "session": "s1"
+        }"#;
+        let req: ContextRequest = serde_json::from_str(json).unwrap();
+        assert!(req.recall.is_none());
+        assert!(req.limit_tokens.is_none());
+    }
+
+    #[test]
+    fn recall_tools_config_uses_default_limit() {
+        let json = r#"{"tools": {}}"#;
+        let config: RecallConfig = serde_json::from_str(json).unwrap();
+        match config.tools {
+            Some(RecallToolsOption::Config(c)) => {
+                assert_eq!(c.limit, 5);
+                assert!(c.min_similarity.is_none());
+            }
+            other => panic!("expected Config with defaults, got {other:?}"),
+        }
+    }
 }

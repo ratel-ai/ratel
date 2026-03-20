@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use agentified_lib::{
-    AgentifiedCore, CoreError, EmbeddingService, NoopStorage, OpenAIEmbedding,
+    AgentifiedCore, CoreError, EmbeddingService, LlmService, NoopStorage, OpenAIEmbedding, OpenAILlm,
     SqliteStorage, Storage,
     models::{
         AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
@@ -119,7 +119,8 @@ async fn main() {
     let addr = format!("0.0.0.0:{port}");
 
     let api_key = std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY required");
-    let embedding: Arc<dyn EmbeddingService> = Arc::new(OpenAIEmbedding::new(api_key));
+    let embedding: Arc<dyn EmbeddingService> = Arc::new(OpenAIEmbedding::new(api_key.clone()));
+    let llm: Arc<dyn LlmService> = Arc::new(OpenAILlm::new(api_key));
 
     let storage_mode = std::env::var("AGENTIFIED_STORAGE").unwrap_or_else(|_| "sqlite".into());
     let storage: Arc<dyn Storage> = match storage_mode.as_str() {
@@ -135,7 +136,7 @@ async fn main() {
         }
     };
 
-    let core = Arc::new(AgentifiedCore::new(embedding, storage));
+    let core = Arc::new(AgentifiedCore::new_with_llm(embedding, storage, llm));
 
     tracing::info!("agentified-core listening on {addr}");
 

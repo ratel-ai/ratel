@@ -79,12 +79,29 @@ Agentified
 Fluent API for assembling context per agent turn. Access via `session.context`:
 
 ```typescript
+// Basic: messages only
 const ctx = await session.context
-  .tools({ custom_tool: myTool })     // inject explicit tools
-  .messages({ strategy: "recent", maxTokens: 4000 })  // include conversation history
-  .recall()                            // recall from memory (stub)
-  .assemble();                         // → AssembledContext
+  .messages({ strategy: "recent", maxTokens: 4000 })
+  .assemble();
+
+// With tool recall: auto-discovers tools based on last user message
+const ctx = await session.context
+  .tools({ custom_tool: myTool })
+  .messages({ strategy: "recent+summary", maxTokens: 4000 })
+  .recall({ tools: { limit: 10 } })
+  .limitTokens(8000)
+  .assemble();
 ```
+
+**Strategies:** `recent`, `full`, `summary`, `recent+summary`
+
+- `summary` — LLM-summarizes conversation into a single system message
+- `recent+summary` — recent messages (60% budget) + summary of older messages (40%)
+- Falls back to `recent` if LLM fails (`fallback: true` in response)
+
+**Recall:** `.recall()` with no args defaults to `{ tools: true }`. Pass `{ tools: { limit, minSimilarity } }` for fine-grained control. Recalled tools persist within the session (session continuity).
+
+**Token budget:** `.limitTokens(n)` caps total output (tools + messages). Tool token cost is subtracted from the message budget.
 
 ### `AssembledContext<T>`
 
@@ -92,13 +109,17 @@ const ctx = await session.context
 interface AssembledContext<T> {
   tools: Record<string, T>;       // explicit + discovered tools
   messages: StoredMessage[];       // conversation messages
-  recalled: unknown[];             // recalled memories (stub)
-  strategyUsed: string;           // message strategy applied
-  fallback: boolean;              // whether fallback was used
-  tokenEstimate: number;          // estimated token count
-  conversationMessages: number;   // total in conversation
-  totalMessages: number;          // total messages stored
-  includedMessages: number;       // messages included in context
+  recalled: {                      // recalled context
+    tools: RankedTool[];           // auto-discovered tools with scores
+    memories: unknown[];           // reserved for future memory recall
+  };
+  strategyUsed: ContextStrategy;   // strategy applied
+  fallback: boolean;               // true if LLM summary failed
+  summary?: string;                // summary text (when using summary strategies)
+  tokenEstimate: number;           // estimated token count
+  conversationMessages: number;    // total in conversation
+  totalMessages: number;           // total messages stored
+  includedMessages: number;        // messages included in context
 }
 ```
 
