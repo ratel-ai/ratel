@@ -30,28 +30,28 @@ A **context intelligence layer** that registers all your tools, then assembles t
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    Your Agent                        │
-│         (Mastra / LangGraph / any framework)         │
+│                    Your Agent                       │
+│         (Mastra / LangGraph / any framework)        │
 └──────────────────────┬──────────────────────────────┘
                        │
           session.context.assemble()
                        │
 ┌──────────────────────▼──────────────────────────────┐
-│                 Agentified SDK                       │
-│              (TypeScript / Python)                    │
-│                                                      │
-│   .tools(...)  .messages(...)  .recall(...)           │
-│            → AssembledContext                         │
-│         { tools, messages, tokenEstimate }            │
+│                 Agentified SDK                      │
+│              (TypeScript / Python)                  │
+│                                                     │
+│   .tools(...)  .messages(...)  .recall(...)         │
+│            → AssembledContext                       │
+│         { tools, messages, tokenEstimate }          │
 └──────────────────────┬──────────────────────────────┘
                        │
               register + discover
                        │
 ┌──────────────────────▼──────────────────────────────┐
-│               agentified-core                        │
-│                (Rust server)                          │
-│                                                      │
-│   Hybrid ranking · Session continuity · Embeddings   │
+│               agentified-core                       │
+│                (Rust server)                        │
+│                                                     │
+│   Hybrid ranking · Session continuity · Embeddings  │
 └─────────────────────────────────────────────────────┘
 ```
 
