@@ -27,6 +27,8 @@ export type {
   GetMessagesOpts,
   GetMessagesResponse,
   GetMessagesResult,
+  GetMessagesTool,
+  GetMessagesToolInput,
   McpTool,
   Message,
   PrefetchOptions,

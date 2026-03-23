@@ -12,6 +12,8 @@ import type {
   DiscoverToolInput,
   GetMessagesOpts,
   GetMessagesResponse,
+  GetMessagesTool,
+  GetMessagesToolInput,
   Message,
   PrefetchOptions,
   RankedTool,
@@ -188,6 +190,30 @@ export class ApiClient {
 
   getFrontendToolNames(): string[] {
     return this.getFrontendTools().map((t) => t.name);
+  }
+
+  asGetMessagesTool(dataset: string, namespace: string, session: string): GetMessagesTool {
+    return {
+      definition: {
+        name: "agentified_get_messages",
+        description: "Retrieve conversation messages by sequence number. Use this to read messages that were summarized or excluded from your current context. Returns messages in chronological order.",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: { type: "number", description: "Max messages to return (default: 20)" },
+            afterSeq: { type: "number", description: "Return messages after this sequence number (paginate forward)" },
+            aroundSeq: { type: "number", description: "Return messages around this sequence number (centered window)" },
+          },
+        },
+      },
+      execute: async (input: GetMessagesToolInput) => {
+        return this.getMessages(dataset, namespace, session, {
+          limit: input.limit ?? 20,
+          afterSeq: input.afterSeq,
+          aroundSeq: input.aroundSeq,
+        });
+      },
+    };
   }
 
   asDiscoverTool(datasetId: string): DiscoverTool {

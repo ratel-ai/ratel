@@ -6,11 +6,13 @@ const mockAsDiscoverTool = vi.fn();
 const mockAppendMessages = vi.fn();
 const mockGetMessages = vi.fn();
 const mockGetContext = vi.fn();
+const mockAsGetMessagesTool = vi.fn();
 
 vi.mock("../api-client.js", () => ({
   ApiClient: vi.fn(() => ({
     register: mockRegister,
     asDiscoverTool: mockAsDiscoverTool,
+    asGetMessagesTool: mockAsGetMessagesTool,
     appendMessages: mockAppendMessages,
     getMessages: mockGetMessages,
     getContext: mockGetContext,
@@ -47,6 +49,10 @@ describe("Agentified", () => {
       definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
       execute: vi.fn().mockResolvedValue([]),
       discoveredNames: new Set<string>(),
+    });
+    mockAsGetMessagesTool.mockReturnValue({
+      definition: { name: "agentified_get_messages", description: "Get messages", parameters: {} },
+      execute: vi.fn().mockResolvedValue({ messages: [], hasMore: false, maxSeq: 0 }),
     });
   });
 
@@ -481,7 +487,8 @@ describe("Agentified", () => {
           expect.objectContaining({ role: "tool", content: JSON.stringify({ answer: 42 }), tool_call_id: "call-1" }),
         ]),
       );
-      expect(result.activeTools).toEqual(["agentified_discover"]);
+      expect(result.activeTools).toContain("agentified_discover");
+      expect(result.activeTools).toContain("agentified_get_messages");
       await ag.disconnect();
     });
 
@@ -624,6 +631,29 @@ describe("Agentified", () => {
 
       expect(session.discoverTool).toBeDefined();
       expect(session.discoverTool.definition.name).toBe("agentified_discover");
+      await ag.disconnect();
+    });
+
+    it("getMessagesTool is available on session", async () => {
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag);
+      const session = instance.session("chat-1");
+
+      expect(session.getMessagesTool).toBeDefined();
+      expect(session.getMessagesTool.definition.name).toBe("agentified_get_messages");
+      await ag.disconnect();
+    });
+
+    it("prepareStep includes agentified_get_messages in activeTools", async () => {
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag, [backendTool("toolA")]);
+      const session = instance.session("chat-1");
+
+      mockAppendMessages.mockResolvedValue({ appended: 0, firstSeq: 0, lastSeq: 0 });
+
+      const result = await session.prepareStep({ stepNumber: 0, steps: [] });
+      expect(result.activeTools).toContain("agentified_get_messages");
+      expect(result.activeTools).toContain("agentified_discover");
       await ag.disconnect();
     });
 
