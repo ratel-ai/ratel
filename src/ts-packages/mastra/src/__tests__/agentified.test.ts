@@ -171,6 +171,10 @@ describe("MastraInstance", () => {
         definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
         execute: vi.fn(),
       },
+      getMessagesTool: {
+        definition: { name: "agentified_get_messages", description: "Get messages", parameters: {} },
+        execute: vi.fn().mockResolvedValue({ messages: [], hasMore: false, maxSeq: 0 }),
+      },
       prepareStep: vi.fn(),
       context: {},
       conversation: {},
@@ -206,6 +210,10 @@ describe("MastraSession", () => {
         definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
         execute: vi.fn(),
         discoveredNames: new Set<string>(),
+      },
+      getMessagesTool: {
+        definition: { name: "agentified_get_messages", description: "Get messages", parameters: {} },
+        execute: vi.fn().mockResolvedValue({ messages: [], hasMore: false, maxSeq: 0 }),
       },
       prepareStep: vi.fn(),
       context: { messages: vi.fn().mockReturnThis(), recall: vi.fn().mockReturnThis(), assemble: vi.fn() },
@@ -261,6 +269,22 @@ describe("MastraSession", () => {
     expect(sess.getMessages).toHaveBeenCalledWith({ strategy: "recent" });
   });
 
+  it("wraps getMessagesTool with createTool", () => {
+    const sess = fakeSession();
+    const m = new MastraSession(sess, []);
+    expect(m.getMessagesTool.__mastraTool).toBe(true);
+    expect(mockCreateTool).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "agentified_get_messages" }),
+    );
+  });
+
+  it("prepareStep includes getMessagesTool in tools", async () => {
+    const sess = fakeSession();
+    const m = new MastraSession(sess, []);
+    const result = await m.prepareStep({ stepNumber: 0, steps: [] });
+    expect(result.tools["agentified_get_messages"]).toBe(m.getMessagesTool);
+  });
+
   it("delegates updateConversation", async () => {
     const sess = fakeSession();
     const m = new MastraSession(sess, []);
@@ -277,6 +301,10 @@ describe("MastraNamespace", () => {
       discoverTool: {
         definition: { name: "agentified_discover", description: "d", parameters: {} },
         execute: vi.fn(),
+      },
+      getMessagesTool: {
+        definition: { name: "agentified_get_messages", description: "Get messages", parameters: {} },
+        execute: vi.fn().mockResolvedValue({ messages: [], hasMore: false, maxSeq: 0 }),
       },
       prepareStep: vi.fn(),
       context: {},
@@ -406,6 +434,10 @@ describe("MastraSession.context", () => {
         definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
         execute: vi.fn(),
         discoveredNames: new Set<string>(),
+      },
+      getMessagesTool: {
+        definition: { name: "agentified_get_messages", description: "Get messages", parameters: {} },
+        execute: vi.fn().mockResolvedValue({ messages: [], hasMore: false, maxSeq: 0 }),
       },
       prepareStep: vi.fn(),
       context: {

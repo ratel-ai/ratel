@@ -7,6 +7,7 @@ import type {
   Session,
   Namespace,
   DiscoverTool,
+  GetMessagesTool,
   BackendTool,
   RegisterInput,
   GetMessagesOptions,
@@ -159,6 +160,8 @@ export class MastraInstance {
 export class MastraSession {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly discoverTool: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly getMessagesTool: any;
   private readonly mastraToolCache: Record<string, MastraTool>;
 
   get id() { return this.sess.id; }
@@ -169,6 +172,7 @@ export class MastraSession {
     private readonly backendTools: BackendTool[],
   ) {
     this.discoverTool = wrapDiscoverTool(sess.discoverTool);
+    this.getMessagesTool = wrapGetMessagesTool(sess.getMessagesTool);
     this.mastraToolCache = buildMastraToolMap(backendTools);
   }
 
@@ -184,7 +188,10 @@ export class MastraSession {
 
   readonly prepareStep = async (params: { stepNumber: number; steps: any[] }) => {
     await this.sess.prepareStep(params);
-    const tools: Record<string, MastraTool> = { agentified_discover: this.discoverTool };
+    const tools: Record<string, MastraTool> = {
+      agentified_discover: this.discoverTool,
+      agentified_get_messages: this.getMessagesTool,
+    };
     for (const name of this.sess.discoverTool.discoveredNames) {
       if (!tools[name] && this.mastraToolCache[name]) {
         tools[name] = this.mastraToolCache[name];
@@ -216,6 +223,19 @@ function extractBackendTools(tools: RegisterInput["tools"]): BackendTool[] {
   return tools.filter(
     (t): t is BackendTool => !("type" in t) || t.type === "backend",
   );
+}
+
+function wrapGetMessagesTool(gmt: GetMessagesTool) {
+  return createTool({
+    id: gmt.definition.name,
+    description: gmt.definition.description,
+    inputSchema: z.object({
+      limit: z.number().optional(),
+      afterSeq: z.number().optional(),
+      aroundSeq: z.number().optional(),
+    }),
+    execute: async (input: { limit?: number; afterSeq?: number; aroundSeq?: number }) => gmt.execute(input),
+  });
 }
 
 function wrapDiscoverTool(dt: DiscoverTool) {
