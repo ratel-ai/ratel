@@ -15,6 +15,8 @@ agentified-core exposes a REST API for tool registration, discovery, session tra
 | `GET` | `/api/v1/messages` | Retrieve conversation messages |
 | `POST` | `/api/v1/context` | Get context with strategy, token budget, and optional tool recall |
 
+The context endpoint (`POST /api/v1/context`) accepts `keep_first` and `annotate_summary` in its `messages` config. See [agentified-core README](../../src/core/README.md#post-apiv1context) for details.
+
 Full request/response schemas and examples: [agentified-core README](../../src/core/README.md#api-reference).
 
 ## Configuration
