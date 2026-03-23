@@ -389,9 +389,10 @@ impl AgentifiedCore {
         }
 
         let keep_first = req.messages.keep_first;
+        let annotate_summary = req.messages.annotate_summary;
         match strategy.as_str() {
-            "summary" => self.get_context_summary(&all_messages, max_tokens, total_messages, recalled_tools, keep_first).await,
-            "recent+summary" => self.get_context_recent_summary(&all_messages, max_tokens, total_messages, recalled_tools, keep_first).await,
+            "summary" => self.get_context_summary(&all_messages, max_tokens, total_messages, recalled_tools, keep_first, annotate_summary).await,
+            "recent+summary" => self.get_context_recent_summary(&all_messages, max_tokens, total_messages, recalled_tools, keep_first, annotate_summary).await,
             _ => {
                 let messages = select_messages(&all_messages, strategy, max_tokens, keep_first);
                 let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
@@ -418,6 +419,7 @@ impl AgentifiedCore {
         total_messages: i64,
         recalled_tools: Vec<RankedTool>,
         _keep_first: bool,
+        annotate_summary: bool,
     ) -> Result<ContextResponse, CoreError> {
         let llm = self.llm.as_ref()
             .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
@@ -427,10 +429,18 @@ impl AgentifiedCore {
 
         match llm.chat(system_prompt, &conversation_text, max_tokens).await {
             Ok(summary_text) => {
+                let summary_content = if annotate_summary {
+                    let first_seq = all_messages.first().map(|m| m.seq).unwrap_or(0);
+                    let last_seq = all_messages.last().map(|m| m.seq).unwrap_or(0);
+                    let count = all_messages.len();
+                    format!("[Summary of messages {}\u{2013}{} ({} messages compacted)]\n{}", first_seq, last_seq, count, summary_text)
+                } else {
+                    summary_text.clone()
+                };
                 let summary_msg = StoredMessage {
                     id: String::new(),
                     role: "system".into(),
-                    content: summary_text.clone(),
+                    content: summary_content,
                     tool_call_id: None,
                     tool_calls: None,
                     created_at: String::new(),
@@ -477,6 +487,7 @@ impl AgentifiedCore {
         total_messages: i64,
         recalled_tools: Vec<RankedTool>,
         keep_first: bool,
+        annotate_summary: bool,
     ) -> Result<ContextResponse, CoreError> {
         let llm = self.llm.as_ref()
             .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
@@ -515,10 +526,18 @@ impl AgentifiedCore {
 
         match llm.chat(system_prompt, &conversation_text, summary_budget).await {
             Ok(summary_text) => {
+                let summary_content = if annotate_summary {
+                    let first_seq = older_owned.first().map(|m| m.seq).unwrap_or(0);
+                    let last_seq = older_owned.last().map(|m| m.seq).unwrap_or(0);
+                    let count = older_owned.len();
+                    format!("[Summary of messages {}\u{2013}{} ({} messages compacted)]\n{}", first_seq, last_seq, count, summary_text)
+                } else {
+                    summary_text.clone()
+                };
                 let summary_msg = StoredMessage {
                     id: String::new(),
                     role: "system".into(),
-                    content: summary_text.clone(),
+                    content: summary_content,
                     tool_call_id: None,
                     tool_calls: None,
                     created_at: String::new(),
@@ -1016,6 +1035,7 @@ mod tests {
                 strategy: "recent".into(),
                 max_tokens: 60,
                 keep_first: true,
+                ..Default::default()
             },
             recall: None,
             limit_tokens: None,
@@ -1047,6 +1067,7 @@ mod tests {
                 strategy: "recent".into(),
                 max_tokens: 4000,
                 keep_first: true,
+                ..Default::default()
             },
             recall: None, limit_tokens: None,
         }).await.unwrap();
@@ -1081,6 +1102,7 @@ mod tests {
                 strategy: "recent".into(),
                 max_tokens: 60,
                 keep_first: true,
+                ..Default::default()
             },
             recall: None, limit_tokens: None,
         }).await.unwrap();
@@ -1110,6 +1132,7 @@ mod tests {
                 strategy: "full".into(),
                 max_tokens: 60,
                 keep_first: true,
+                ..Default::default()
             },
             recall: None, limit_tokens: None,
         }).await.unwrap();
@@ -1511,6 +1534,98 @@ mod tests {
         assert!(resp.fallback, "should fall back on LLM failure");
         assert!(resp.summary.is_none());
         assert!(!resp.messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn summary_annotate_summary_wraps_message_content() {
+        let core = make_core_with_llm();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![
+                models::MessageInput { role: "user".into(), content: "Hello".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "assistant".into(), content: "Hi there!".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "user".into(), content: "How are you?".into(), tool_call_id: None, tool_calls: None },
+            ],
+        }).await.unwrap();
+
+        // annotate_summary defaults to true
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        // Message content should have annotation prefix
+        let content = &resp.messages[0].content;
+        assert!(content.starts_with("[Summary of messages 1\u{2013}3 (3 messages compacted)]\n"),
+            "expected annotation prefix, got: {content}");
+        // Raw summary field should NOT have annotation
+        let summary = resp.summary.as_ref().unwrap();
+        assert!(!summary.starts_with("[Summary of messages"), "raw summary should not be annotated");
+    }
+
+    #[tokio::test]
+    async fn summary_annotate_summary_false_skips_annotation() {
+        let core = make_core_with_llm();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![
+                models::MessageInput { role: "user".into(), content: "Hello".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "assistant".into(), content: "Hi!".into(), tool_call_id: None, tool_calls: None },
+            ],
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "summary".into(),
+                max_tokens: 4000,
+                annotate_summary: false,
+                ..Default::default()
+            },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        let content = &resp.messages[0].content;
+        assert!(!content.starts_with("[Summary of messages"), "should not annotate when disabled");
+        // content should equal the raw summary
+        assert_eq!(content, resp.summary.as_ref().unwrap());
+    }
+
+    #[tokio::test]
+    async fn recent_summary_annotate_summary_wraps_older_messages() {
+        let core = make_core_with_llm();
+
+        let content = "x".repeat(100); // 25 tokens each
+        let msgs: Vec<models::MessageInput> = (0..6).map(|i| models::MessageInput {
+            role: if i % 2 == 0 { "user" } else { "assistant" }.into(),
+            content: content.clone(),
+            tool_call_id: None, tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Budget 100 → recent 60% = 60 (fits 2 msgs), summary 40% = 40
+        // Older messages: seq 1-4, recent: seq 5-6
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(!resp.fallback);
+        let summary_msg = &resp.messages[0];
+        assert_eq!(summary_msg.role, "system");
+        assert!(summary_msg.content.starts_with("[Summary of messages 1\u{2013}4 (4 messages compacted)]\n"),
+            "expected annotation, got: {}", summary_msg.content);
+        // Raw summary should not be annotated
+        let raw = resp.summary.as_ref().unwrap();
+        assert!(!raw.starts_with("[Summary of messages"));
     }
 
 }
