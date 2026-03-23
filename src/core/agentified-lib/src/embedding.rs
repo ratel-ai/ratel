@@ -149,7 +149,7 @@ impl OpenAILlm {
 struct ChatRequest<'a> {
     model: &'a str,
     messages: Vec<ChatMessage<'a>>,
-    max_tokens: usize,
+    max_completion_tokens: usize,
 }
 
 #[derive(Serialize)]
@@ -186,7 +186,7 @@ impl LlmService for OpenAILlm {
                     ChatMessage { role: "system", content: system },
                     ChatMessage { role: "user", content: user },
                 ],
-                max_tokens,
+                max_completion_tokens: max_tokens,
             })
             .send()
             .await

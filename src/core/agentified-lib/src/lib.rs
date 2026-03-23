@@ -498,10 +498,24 @@ impl AgentifiedCore {
 
         // Select recent messages
         let recent_messages = select_messages(all_messages, "recent", recent_budget, keep_first);
-        let recent_min_seq = recent_messages.first().map(|m| m.seq).unwrap_or(i64::MAX);
 
-        // Older messages to summarize
-        let older: Vec<&StoredMessage> = all_messages.iter().filter(|m| m.seq < recent_min_seq).collect();
+        // Find the min seq of the "recent" portion (excluding the keep_first message)
+        // so that the summary covers messages between keep_first and the recent window.
+        let first_user_seq = if keep_first {
+            all_messages.iter().find(|m| m.role == "user").map(|m| m.seq)
+        } else {
+            None
+        };
+        let recent_min_seq = recent_messages.iter()
+            .filter(|m| Some(m.seq) != first_user_seq)
+            .map(|m| m.seq)
+            .min()
+            .unwrap_or(i64::MAX);
+
+        // Older messages to summarize (between keep_first and recent window)
+        let older: Vec<&StoredMessage> = all_messages.iter()
+            .filter(|m| m.seq < recent_min_seq && Some(m.seq) != first_user_seq)
+            .collect();
 
         if older.is_empty() {
             // All messages fit in recent budget
