@@ -124,6 +124,7 @@ export interface ContextOpts {
   maxTokens?: number;
   recall?: RecallConfig;
   limitTokens?: number;
+  keepFirst?: boolean;
 }
 
 export interface ContextResponse {

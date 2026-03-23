@@ -406,6 +406,36 @@ describe("ApiClient", () => {
       });
     });
 
+    it("passes keepFirst as keep_first in messages config", async () => {
+      const contextRes = {
+        messages: [],
+        strategy_used: "recent",
+        total_messages: 0,
+        included_messages: 0,
+        recalled: { tools: [], memories: [] },
+        token_estimate: 0,
+        conversation_messages: 0,
+        fallback: false,
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(contextRes), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.getContext("ds", "ns", "sess", { strategy: "recent", maxTokens: 4000, keepFirst: true });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: "ds",
+          namespace: "ns",
+          session: "sess",
+          messages: { strategy: "recent", max_tokens: 4000, keep_first: true },
+        }),
+      });
+    });
+
     it("passes strategy and maxTokens in messages sub-object", async () => {
       const contextRes = {
         messages: [],
