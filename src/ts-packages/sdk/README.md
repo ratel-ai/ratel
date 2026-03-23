@@ -62,6 +62,7 @@ Agentified
             ├─ .prepareStep      — PrepareStepFn
             ├─ .session(id)      → Session
             │    ├─ .discoverTool
+            │    ├─ .getMessagesTool — agent-callable tool for navigating conversation history
             │    ├─ .prepareStep (persists messages)
             │    ├─ .context.messages(opts).recall(opts).assemble()
             │    ├─ .updateConversation({ messages })
@@ -91,6 +92,13 @@ const ctx = await session.context
   .recall({ tools: { limit: 10 } })
   .limitTokens(8000)
   .assemble();
+
+// Preserve the first user message + annotate summaries
+const ctx = await session.context
+  .messages({ strategy: "recent+summary", maxTokens: 4000, keepFirst: true, annotateSummary: true })
+  .assemble();
+// ctx.messages[0] → first user message (original prompt)
+// Summary message content starts with "[Summary of messages 1–85 (85 messages compacted)]"
 ```
 
 **Strategies:** `recent`, `full`, `summary`, `recent+summary`
@@ -98,6 +106,15 @@ const ctx = await session.context
 - `summary` — LLM-summarizes conversation into a single system message
 - `recent+summary` — recent messages (60% budget) + summary of older messages (40%)
 - Falls back to `recent` if LLM fails (`fallback: true` in response)
+
+**Message options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `strategy` | `ContextStrategy` | `"recent"` | Message selection strategy |
+| `maxTokens` | `number` | `4000` | Token budget for messages |
+| `keepFirst` | `boolean` | `false` | Always include the first user message |
+| `annotateSummary` | `boolean` | `true` | Wrap summaries with seq range metadata |
 
 **Recall:** `.recall()` with no args defaults to `{ tools: true }`. Pass `{ tools: { limit, minSimilarity } }` for fine-grained control. Recalled tools persist within the session (session continuity).
 
@@ -126,6 +143,18 @@ interface AssembledContext<T> {
 ### `session.discoverTool`
 
 Agent-callable tool for runtime discovery. The agent can call this to find relevant tools on-the-fly.
+
+### `session.getMessagesTool`
+
+Agent-callable tool for navigating conversation history. The agent can call this to retrieve messages that were summarized or excluded from the current context window.
+
+```typescript
+// Exposed as "agentified_get_messages" in prepareStep activeTools
+// Parameters: { limit?: number, afterSeq?: number, aroundSeq?: number }
+// Returns: { messages: StoredMessage[], hasMore: boolean, maxSeq: number }
+```
+
+Works with summary annotation — when the agent sees `[Summary of messages 1–85 (85 messages compacted)]`, it can call `getMessagesTool` with `afterSeq: 0, limit: 20` to read the compacted messages.
 
 ### `session.updateConversation({ messages })`
 

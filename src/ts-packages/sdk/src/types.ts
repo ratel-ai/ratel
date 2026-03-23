@@ -74,6 +74,17 @@ export interface DiscoverTool {
   readonly discoveredNames: Set<string>;
 }
 
+export interface GetMessagesToolInput {
+  limit?: number;
+  afterSeq?: number;
+  aroundSeq?: number;
+}
+
+export interface GetMessagesTool {
+  definition: ToolDefinition;
+  execute: (input: GetMessagesToolInput) => Promise<GetMessagesResponse>;
+}
+
 // Context strategy
 
 export type ContextStrategy = "recent" | "full" | "summary" | "recent+summary";
@@ -124,6 +135,8 @@ export interface ContextOpts {
   maxTokens?: number;
   recall?: RecallConfig;
   limitTokens?: number;
+  keepFirst?: boolean;
+  annotateSummary?: boolean;
 }
 
 export interface ContextResponse {

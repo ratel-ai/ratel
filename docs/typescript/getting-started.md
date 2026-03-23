@@ -96,6 +96,26 @@ The server:
 
 When using `.recall()`, the server also auto-discovers tools based on the last user message and returns them with similarity scores. The `summary` and `recent+summary` strategies use LLM summarization for older messages (falling back to `recent` if the LLM call fails).
 
+### Advanced context options
+
+```typescript
+// Preserve the first user message in long conversations
+const ctx = await session.context
+  .messages({ strategy: "recent", maxTokens: 4000, keepFirst: true })
+  .assemble();
+// ctx.messages[0] → always the first user message (original prompt)
+
+// Summary annotation (enabled by default) tells the agent messages were compacted
+const ctx = await session.context
+  .messages({ strategy: "recent+summary", maxTokens: 4000, annotateSummary: true })
+  .assemble();
+// Summary message: "[Summary of messages 1–85 (85 messages compacted)]\n<summary>"
+
+// The agent can navigate compacted messages via getMessagesTool
+const tool = session.getMessagesTool;
+// tool.execute({ afterSeq: 0, limit: 20 }) → retrieves messages 1–20
+```
+
 Read [Architecture](../server/architecture.md) for the full deep dive.
 
 ## Next steps

@@ -1,12 +1,13 @@
 import type { ApiClient } from "./api-client.js";
 import { ContextBuilder } from "./context-builder.js";
 import { Conversation } from "./conversation.js";
-import type { AgentifiedTool, GetMessagesOptions, GetMessagesResult, PrepareStepFn } from "./types.js";
+import type { AgentifiedTool, GetMessagesTool, GetMessagesOptions, GetMessagesResult, PrepareStepFn } from "./types.js";
 
 export class Session {
   private lastPersistedSeq = 0;
   private lastProcessedStepIndex = 0;
   private readonly _discoverTool;
+  private _getMessagesTool?: GetMessagesTool;
 
   readonly conversation: Conversation;
 
@@ -33,6 +34,13 @@ export class Session {
     return this._discoverTool;
   }
 
+  get getMessagesTool(): GetMessagesTool {
+    if (!this._getMessagesTool) {
+      this._getMessagesTool = this.sdk.asGetMessagesTool(this.datasetId, this.namespaceId, this.id);
+    }
+    return this._getMessagesTool;
+  }
+
   async getMessages(opts?: GetMessagesOptions): Promise<GetMessagesResult> {
     const res = await this.sdk.getContext(this.datasetId, this.namespaceId, this.id, {
       strategy: opts?.strategy,
@@ -54,7 +62,7 @@ export class Session {
   }
 
   readonly prepareStep: PrepareStepFn = async ({ steps }) => {
-    const activeTools = new Set(["agentified_discover"]);
+    const activeTools = new Set(["agentified_discover", "agentified_get_messages"]);
 
     const newSteps = steps.slice(this.lastProcessedStepIndex);
 

@@ -65,7 +65,8 @@ Agentified.adaptTo(mastra()) → MastraAgentified
             ├─ .discoverTool     — Mastra createTool
             ├─ .prepareStep      — property, returns { tools } for injection
             ├─ .session(id)      → MastraSession
-            │    ├─ .discoverTool — Mastra createTool
+            │    ├─ .discoverTool      — Mastra createTool
+            │    ├─ .getMessagesTool  — Mastra createTool (conversation navigation)
             │    ├─ .prepareStep  — property, returns { tools }
             │    ├─ .context      → MastraContextBuilder
             │    │    ├─ .tools(Record<string, MastraTool>) — chainable
@@ -100,7 +101,7 @@ Wraps SDK `Instance`. `discoverTool` is a Mastra `createTool` result instead of 
 
 ### `MastraSession`
 
-Wraps SDK `Session`. `discoverTool` is a Mastra `createTool` result. Delegates `context`, `conversation`, `getMessages`, `updateConversation` to the SDK session.
+Wraps SDK `Session`. `discoverTool` and `getMessagesTool` are Mastra `createTool` results. Delegates `context`, `conversation`, `getMessages`, `updateConversation` to the SDK session. `prepareStep` includes both `agentified_discover` and `agentified_get_messages` in the returned tools.
 
 ### `streamSSE(observable, res)`
 

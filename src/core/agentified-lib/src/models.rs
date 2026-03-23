@@ -230,16 +230,23 @@ pub struct ContextMessagesConfig {
     pub strategy: String,
     #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
+    #[serde(default)]
+    pub keep_first: bool,
+    #[serde(default = "default_annotate_summary")]
+    pub annotate_summary: bool,
 }
 
 fn default_context_strategy() -> String { "recent".into() }
 fn default_max_tokens() -> usize { 4000 }
+fn default_annotate_summary() -> bool { true }
 
 impl Default for ContextMessagesConfig {
     fn default() -> Self {
         Self {
             strategy: default_context_strategy(),
             max_tokens: default_max_tokens(),
+            keep_first: false,
+            annotate_summary: default_annotate_summary(),
         }
     }
 }

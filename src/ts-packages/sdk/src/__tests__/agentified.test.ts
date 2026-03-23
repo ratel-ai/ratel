@@ -406,6 +406,66 @@ describe("ApiClient", () => {
       });
     });
 
+    it("passes keepFirst as keep_first in messages config", async () => {
+      const contextRes = {
+        messages: [],
+        strategy_used: "recent",
+        total_messages: 0,
+        included_messages: 0,
+        recalled: { tools: [], memories: [] },
+        token_estimate: 0,
+        conversation_messages: 0,
+        fallback: false,
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(contextRes), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.getContext("ds", "ns", "sess", { strategy: "recent", maxTokens: 4000, keepFirst: true });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: "ds",
+          namespace: "ns",
+          session: "sess",
+          messages: { strategy: "recent", max_tokens: 4000, keep_first: true },
+        }),
+      });
+    });
+
+    it("passes annotateSummary as annotate_summary in messages config", async () => {
+      const contextRes = {
+        messages: [],
+        strategy_used: "recent+summary",
+        total_messages: 0,
+        included_messages: 0,
+        recalled: { tools: [], memories: [] },
+        token_estimate: 0,
+        conversation_messages: 0,
+        fallback: false,
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(contextRes), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.getContext("ds", "ns", "sess", { strategy: "recent+summary", annotateSummary: false });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: "ds",
+          namespace: "ns",
+          session: "sess",
+          messages: { strategy: "recent+summary", annotate_summary: false },
+        }),
+      });
+    });
+
     it("passes strategy and maxTokens in messages sub-object", async () => {
       const contextRes = {
         messages: [],
@@ -527,6 +587,45 @@ describe("ApiClient", () => {
       await expect(
         agent.asDiscoverTool("ds-abc").execute({ query: "test" }),
       ).resolves.toEqual([rankedTool]);
+    });
+  });
+
+  describe("asGetMessagesTool", () => {
+    it("returns tool with correct name and description", () => {
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const tool = agent.asGetMessagesTool("ds", "ns", "sess");
+
+      expect(tool.definition.name).toBe("agentified_get_messages");
+      expect(tool.definition.description).toContain("conversation messages");
+      expect(tool.definition.parameters).toHaveProperty("properties.limit");
+      expect(tool.definition.parameters).toHaveProperty("properties.afterSeq");
+      expect(tool.definition.parameters).toHaveProperty("properties.aroundSeq");
+    });
+
+    it("execute delegates to getMessages with correct params", async () => {
+      const messagesRes = {
+        messages: [{ id: "m1", role: "user", content: "hello", created_at: "2026-01-01", seq: 5 }],
+        has_more: true,
+        max_seq: 100,
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(messagesRes), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const tool = agent.asGetMessagesTool("ds", "ns", "sess");
+      const result = await tool.execute({ afterSeq: 4, limit: 10 });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.hasMore).toBe(true);
+      expect(result.maxSeq).toBe(100);
+
+      const url = (fetch as any).mock.calls[0][0] as string;
+      expect(url).toContain("dataset=ds");
+      expect(url).toContain("namespace=ns");
+      expect(url).toContain("session=sess");
+      expect(url).toContain("after_seq=4");
+      expect(url).toContain("limit=10");
     });
   });
 });

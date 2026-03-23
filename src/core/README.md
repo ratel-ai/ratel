@@ -184,6 +184,19 @@ Get context for a session with strategy, token budget, and optional tool recall.
 - `recent+summary` — recent messages (60% budget) + LLM summary of older messages (40% budget)
 - Summary strategies fall back to `recent` if LLM fails (`fallback: true`)
 
+**Message options** (inside `messages` config object):
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `strategy` | string | `"recent"` | Message selection strategy |
+| `max_tokens` | number | 4000 | Token budget for messages |
+| `keep_first` | bool | `false` | Always include the first user message in the result |
+| `annotate_summary` | bool | `true` | Wrap summary content with `[Summary of messages N–M (X messages compacted)]` prefix |
+
+**`keep_first`:** When enabled, the first `role: "user"` message is always included, regardless of the token budget. Its tokens are deducted before selecting recent messages. Useful for preserving the original prompt/intent in long conversations. Has no effect on `full` strategy (which already starts from the beginning).
+
+**`annotate_summary`:** When enabled (default), summary messages include a prefix indicating the seq range and count of compacted messages. This helps the agent understand that older messages exist and can be retrieved via `GET /api/v1/messages`. The raw summary text (without annotation) is returned in the `summary` response field.
+
 **Recall:** Pass `"recall": {"tools": true}` or `{"tools": {"limit": 5, "min_similarity": 0.7}}` to auto-discover tools based on the last user message. Recalled tools persist across calls within the same session.
 
 **Token budget:** `limit_tokens` caps total assembly (tools + messages). Tool token cost is subtracted from the message budget.

@@ -17,6 +17,7 @@ The core server exposes a REST API. SDKs (TypeScript, Python) wrap it. The serve
 
 - **Tool registration** — store definitions + compute embeddings
 - **Discovery** — hybrid-rank tools against a natural language query
+- **Context assembly** — message strategies (recent, full, summary, recent+summary) with first-message preservation and summary annotation
 - **Session continuity** — track which tools were used per turn
 - **Graph expansion** — auto-inject dependency tools via requires/provides
 
@@ -106,6 +107,15 @@ When a `turn_id` is provided to discover:
 4. Append freshly ranked tools after the base tools
 
 This ensures previously-used tools remain available across turns. See [Session Continuity](./session-continuity.md).
+
+## Context Assembly Options
+
+The `POST /api/v1/context` endpoint supports additional options in the `messages` config:
+
+- **`keep_first`** (default: `false`) — Always include the first user message in the assembled context, regardless of token budget. Useful for preserving the original prompt/intent in long conversations.
+- **`annotate_summary`** (default: `true`) — When using `summary` or `recent+summary` strategies, the summary message content is prefixed with `[Summary of messages N–M (X messages compacted)]`. This signals to the agent that older messages exist and can be retrieved via `GET /api/v1/messages`.
+
+The TypeScript SDK exposes a `getMessagesTool` on sessions — an agent-callable tool wrapping `GET /api/v1/messages` so the LLM can navigate conversation history that was summarized or excluded from context.
 
 ## Graph Expansion
 

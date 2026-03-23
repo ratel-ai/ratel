@@ -182,9 +182,9 @@ Replaces the flat `getMessages()` from the client SDK spec. Builder pattern that
 ### API
 
 ```typescript
-// Full control
+// Full control (with first-message preservation and summary annotation)
 const ctx = await session.context
-  .messages({ strategy: 'recent+summary', maxTokens: 4000 })
+  .messages({ strategy: 'recent+summary', maxTokens: 4000, keepFirst: true, annotateSummary: true })
   .recall({
     tools: { limit: 10, minSimilarity: 0.7 },
     memories: { kinds: ['fact', 'preference'], limit: 20 },
@@ -217,6 +217,15 @@ const response = await agent.generate(ctx.messages, {
 | `.assemble()` | Execute: single HTTP call to core, returns assembled context | Yes (terminal) |
 
 `.messages()` and `.recall()` are configuration-only (synchronous). `.assemble()` is the only async step — it sends one `POST /api/v1/context` with the full config and gets back the assembled result.
+
+**`.messages()` options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `strategy` | `ContextStrategy` | `'recent'` | Message selection strategy |
+| `maxTokens` | `number` | `4000` | Token budget for messages |
+| `keepFirst` | `boolean` | `false` | Always include the first user message in assembled context |
+| `annotateSummary` | `boolean` | `true` | Prefix summary content with seq range and count metadata |
 
 ### Recall Configuration
 

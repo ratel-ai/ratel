@@ -262,6 +262,18 @@ Response (base — see context-layer-spec for extended version):
 
 **OPENAI_API_KEY validation:** If a `summary` or `recent+summary` request arrives and `OPENAI_API_KEY` is not configured, the core returns 422 with `{ "error": "OPENAI_API_KEY required for summary strategy" }`.
 
+### 2.7 First-Message Preservation
+
+`keep_first` (default: `false`) in the messages config. When enabled, `select_messages` always includes the first `role: "user"` message, deducting its tokens before selecting recent messages. No effect on `full` strategy. If no user messages exist, behaves like `keep_first: false`.
+
+### 2.8 Summary Annotation
+
+`annotate_summary` (default: `true`) in the messages config. When enabled, summary message content is prefixed with `[Summary of messages {first_seq}–{last_seq} ({count} messages compacted)]`. The raw summary text (without annotation) is returned in the `summary` response field. Not applied on fallback (no summary to annotate).
+
+### 2.9 getMessagesTool
+
+Session-scoped agent tool wrapping `GET /api/v1/messages`. Exposed as `agentified_get_messages` in `prepareStep` activeTools. Parameters: `{ limit?: number, afterSeq?: number, aroundSeq?: number }`. Returns `GetMessagesResponse`. Not available at instance/dataset level (requires session context).
+
 ---
 
 ## 3. TypeScript SDK — @agentified/sdk Changes

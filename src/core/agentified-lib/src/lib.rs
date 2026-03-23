@@ -388,11 +388,13 @@ impl AgentifiedCore {
             tracing::warn!("effective message token budget is 0 — tools consumed entire limit_tokens budget");
         }
 
+        let keep_first = req.messages.keep_first;
+        let annotate_summary = req.messages.annotate_summary;
         match strategy.as_str() {
-            "summary" => self.get_context_summary(&all_messages, max_tokens, total_messages, recalled_tools).await,
-            "recent+summary" => self.get_context_recent_summary(&all_messages, max_tokens, total_messages, recalled_tools).await,
+            "summary" => self.get_context_summary(&all_messages, max_tokens, total_messages, recalled_tools, keep_first, annotate_summary).await,
+            "recent+summary" => self.get_context_recent_summary(&all_messages, max_tokens, total_messages, recalled_tools, keep_first, annotate_summary).await,
             _ => {
-                let messages = select_messages(&all_messages, strategy, max_tokens);
+                let messages = select_messages(&all_messages, strategy, max_tokens, keep_first);
                 let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
                 let included = messages.len();
                 Ok(ContextResponse {
@@ -416,6 +418,8 @@ impl AgentifiedCore {
         max_tokens: usize,
         total_messages: i64,
         recalled_tools: Vec<RankedTool>,
+        _keep_first: bool,
+        annotate_summary: bool,
     ) -> Result<ContextResponse, CoreError> {
         let llm = self.llm.as_ref()
             .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
@@ -425,10 +429,18 @@ impl AgentifiedCore {
 
         match llm.chat(system_prompt, &conversation_text, max_tokens).await {
             Ok(summary_text) => {
+                let summary_content = if annotate_summary {
+                    let first_seq = all_messages.first().map(|m| m.seq).unwrap_or(0);
+                    let last_seq = all_messages.last().map(|m| m.seq).unwrap_or(0);
+                    let count = all_messages.len();
+                    format!("[Summary of messages {}\u{2013}{} ({} messages compacted)]\n{}", first_seq, last_seq, count, summary_text)
+                } else {
+                    summary_text.clone()
+                };
                 let summary_msg = StoredMessage {
                     id: String::new(),
                     role: "system".into(),
-                    content: summary_text.clone(),
+                    content: summary_content,
                     tool_call_id: None,
                     tool_calls: None,
                     created_at: String::new(),
@@ -450,7 +462,7 @@ impl AgentifiedCore {
             Err(e) => {
                 tracing::warn!("LLM summary failed, falling back to recent: {e}");
                 // Fallback to recent
-                let messages = select_messages(all_messages, "recent", max_tokens);
+                let messages = select_messages(all_messages, "recent", max_tokens, false);
                 let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
                 let included = messages.len();
                 Ok(ContextResponse {
@@ -474,6 +486,8 @@ impl AgentifiedCore {
         max_tokens: usize,
         total_messages: i64,
         recalled_tools: Vec<RankedTool>,
+        keep_first: bool,
+        annotate_summary: bool,
     ) -> Result<ContextResponse, CoreError> {
         let llm = self.llm.as_ref()
             .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
@@ -483,7 +497,7 @@ impl AgentifiedCore {
         let summary_budget = max_tokens.saturating_sub(recent_budget);
 
         // Select recent messages
-        let recent_messages = select_messages(all_messages, "recent", recent_budget);
+        let recent_messages = select_messages(all_messages, "recent", recent_budget, keep_first);
         let recent_min_seq = recent_messages.first().map(|m| m.seq).unwrap_or(i64::MAX);
 
         // Older messages to summarize
@@ -512,10 +526,18 @@ impl AgentifiedCore {
 
         match llm.chat(system_prompt, &conversation_text, summary_budget).await {
             Ok(summary_text) => {
+                let summary_content = if annotate_summary {
+                    let first_seq = older_owned.first().map(|m| m.seq).unwrap_or(0);
+                    let last_seq = older_owned.last().map(|m| m.seq).unwrap_or(0);
+                    let count = older_owned.len();
+                    format!("[Summary of messages {}\u{2013}{} ({} messages compacted)]\n{}", first_seq, last_seq, count, summary_text)
+                } else {
+                    summary_text.clone()
+                };
                 let summary_msg = StoredMessage {
                     id: String::new(),
                     role: "system".into(),
-                    content: summary_text.clone(),
+                    content: summary_content,
                     tool_call_id: None,
                     tool_calls: None,
                     created_at: String::new(),
@@ -541,7 +563,7 @@ impl AgentifiedCore {
             Err(e) => {
                 tracing::warn!("LLM summary failed, falling back to recent: {e}");
                 // Fallback to recent with full budget
-                let messages = select_messages(all_messages, "recent", max_tokens);
+                let messages = select_messages(all_messages, "recent", max_tokens, false);
                 let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
                 let included = messages.len();
                 Ok(ContextResponse {
@@ -690,7 +712,7 @@ fn format_conversation(messages: &[StoredMessage]) -> String {
     messages.iter().map(|m| format!("{}: {}", m.role, m.content)).collect::<Vec<_>>().join("\n")
 }
 
-fn select_messages(all_messages: &[StoredMessage], strategy: &str, max_tokens: usize) -> Vec<StoredMessage> {
+fn select_messages(all_messages: &[StoredMessage], strategy: &str, max_tokens: usize, keep_first: bool) -> Vec<StoredMessage> {
     match strategy {
         "full" => {
             let mut selected = Vec::new();
@@ -706,17 +728,35 @@ fn select_messages(all_messages: &[StoredMessage], strategy: &str, max_tokens: u
             selected
         }
         _ => {
-            let mut selected = Vec::new();
+            let first_user_msg = if keep_first {
+                all_messages.iter().find(|m| m.role == "user")
+            } else {
+                None
+            };
+
             let mut tokens_used = 0usize;
+            if let Some(first) = first_user_msg {
+                tokens_used += first.content.len() / 4;
+            }
+
+            let first_user_seq = first_user_msg.map(|m| m.seq);
+            let mut recent = Vec::new();
             for msg in all_messages.iter().rev() {
+                if Some(msg.seq) == first_user_seq { continue; }
                 let msg_tokens = msg.content.len() / 4;
-                if tokens_used + msg_tokens > max_tokens && !selected.is_empty() {
+                if tokens_used + msg_tokens > max_tokens && !recent.is_empty() {
                     break;
                 }
                 tokens_used += msg_tokens;
-                selected.push(msg.clone());
+                recent.push(msg.clone());
             }
-            selected.reverse();
+            recent.reverse();
+
+            let mut selected = Vec::new();
+            if let Some(first) = first_user_msg {
+                selected.push(first.clone());
+            }
+            selected.extend(recent);
             selected
         }
     }
@@ -819,6 +859,7 @@ mod tests {
             messages: models::ContextMessagesConfig {
                 strategy: "recent".into(),
                 max_tokens: 60,
+                ..Default::default()
             },
             recall: None,
             limit_tokens: None,
@@ -849,6 +890,7 @@ mod tests {
                 messages: models::ContextMessagesConfig {
                     strategy: strategy.to_string(),
                     max_tokens: 4000,
+                    ..Default::default()
                 },
                 recall: None,
                 limit_tokens: None,
@@ -872,6 +914,7 @@ mod tests {
             messages: models::ContextMessagesConfig {
                 strategy: "recent".into(),
                 max_tokens: 4000,
+                ..Default::default()
             },
             recall: None,
             limit_tokens: None,
@@ -911,6 +954,7 @@ mod tests {
             messages: models::ContextMessagesConfig {
                 strategy: "full".into(),
                 max_tokens: 60,
+                ..Default::default()
             },
             recall: None,
             limit_tokens: None,
@@ -949,6 +993,7 @@ mod tests {
             messages: models::ContextMessagesConfig {
                 strategy: "full".into(),
                 max_tokens: 4000,
+                ..Default::default()
             },
             recall: None,
             limit_tokens: None,
@@ -957,6 +1002,145 @@ mod tests {
         assert_eq!(resp.messages.len(), 3);
         assert_eq!(resp.total_messages, 3);
         assert_eq!(resp.included_messages, 3);
+    }
+
+    #[tokio::test]
+    async fn context_recent_keep_first_preserves_first_user_message() {
+        let core = make_core();
+
+        // 5 messages: user, assistant, user, assistant, user — each 100 chars (25 tokens)
+        let content = "x".repeat(100);
+        let roles = ["user", "assistant", "user", "assistant", "user"];
+        let msgs: Vec<models::MessageInput> = roles.iter().map(|r| models::MessageInput {
+            role: r.to_string(),
+            content: content.clone(),
+            tool_call_id: None,
+            tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Budget = 60 tokens → fits 2 messages (25 each).
+        // With keep_first=true: first user msg (seq 1) + most recent (seq 5)
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "recent".into(),
+                max_tokens: 60,
+                keep_first: true,
+                ..Default::default()
+            },
+            recall: None,
+            limit_tokens: None,
+        }).await.unwrap();
+
+        assert_eq!(resp.messages.len(), 2);
+        assert_eq!(resp.messages[0].seq, 1); // first user message preserved
+        assert_eq!(resp.messages[1].seq, 5); // most recent message
+    }
+
+    #[tokio::test]
+    async fn context_recent_keep_first_no_duplication_when_in_window() {
+        let core = make_core();
+
+        // 3 short messages — all fit in budget
+        let msgs: Vec<models::MessageInput> = vec![
+            models::MessageInput { role: "user".into(), content: "hello".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "assistant".into(), content: "hi".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "user".into(), content: "bye".into(), tool_call_id: None, tool_calls: None },
+        ];
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(), messages: msgs,
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "recent".into(),
+                max_tokens: 4000,
+                keep_first: true,
+                ..Default::default()
+            },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        // All 3 fit, first user msg (seq 1) already in window — no duplication
+        assert_eq!(resp.messages.len(), 3);
+        assert_eq!(resp.messages[0].seq, 1);
+        assert_eq!(resp.messages[1].seq, 2);
+        assert_eq!(resp.messages[2].seq, 3);
+    }
+
+    #[tokio::test]
+    async fn context_recent_keep_first_no_user_messages() {
+        let core = make_core();
+
+        // Only system/assistant messages, no user
+        let msgs: Vec<models::MessageInput> = vec![
+            models::MessageInput { role: "system".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "system".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+        ];
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(), messages: msgs,
+        }).await.unwrap();
+
+        // Budget fits 2. keep_first=true but no user msgs → same as keep_first=false
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "recent".into(),
+                max_tokens: 60,
+                keep_first: true,
+                ..Default::default()
+            },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert_eq!(resp.messages.len(), 2);
+        assert_eq!(resp.messages[0].seq, 3);
+        assert_eq!(resp.messages[1].seq, 4);
+    }
+
+    #[tokio::test]
+    async fn context_full_keep_first_unchanged() {
+        let core = make_core();
+
+        let content = "x".repeat(100);
+        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
+            role: "user".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(), messages: msgs,
+        }).await.unwrap();
+
+        // full strategy with keep_first=true — should behave same as keep_first=false
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "full".into(),
+                max_tokens: 60,
+                keep_first: true,
+                ..Default::default()
+            },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert_eq!(resp.strategy_used, "full");
+        assert_eq!(resp.messages.len(), 2);
+        assert_eq!(resp.messages[0].seq, 1);
+        assert_eq!(resp.messages[1].seq, 2);
     }
 
     #[tokio::test]
@@ -1001,6 +1185,7 @@ mod tests {
             messages: models::ContextMessagesConfig {
                 strategy: "recent".into(),
                 max_tokens: 4000,
+                ..Default::default()
             },
             recall: Some(models::RecallConfig {
                 tools: Some(models::RecallToolsOption::Bool(true)),
@@ -1032,7 +1217,7 @@ mod tests {
 
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
             recall: Some(models::RecallConfig {
                 tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
             }),
@@ -1058,7 +1243,7 @@ mod tests {
 
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
             recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
             limit_tokens: None,
         }).await.unwrap();
@@ -1095,7 +1280,7 @@ mod tests {
         // Without limit_tokens, maxTokens=4000 → all 5 messages fit
         let resp_unlimited = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
             recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
             limit_tokens: None,
         }).await.unwrap();
@@ -1103,7 +1288,7 @@ mod tests {
         // With tight limit_tokens, tools eat into the budget → fewer messages
         let resp_limited = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
             recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
             limit_tokens: Some(60), // tight budget
         }).await.unwrap();
@@ -1130,7 +1315,7 @@ mod tests {
         // limit_tokens=60, no recall → no tool tokens subtracted → same as max_tokens=60
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
             recall: None,
             limit_tokens: Some(60),
         }).await.unwrap();
@@ -1158,7 +1343,7 @@ mod tests {
 
         let resp1 = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
             recall: Some(models::RecallConfig {
                 tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
             }),
@@ -1175,7 +1360,7 @@ mod tests {
 
         let resp2 = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
             recall: Some(models::RecallConfig {
                 tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
             }),
@@ -1217,7 +1402,7 @@ mod tests {
 
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
             recall: None,
             limit_tokens: None,
         }).await.unwrap();
@@ -1235,7 +1420,7 @@ mod tests {
 
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "empty".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap();
 
@@ -1263,7 +1448,7 @@ mod tests {
 
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap();
 
@@ -1278,7 +1463,7 @@ mod tests {
 
         let err = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000 },
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap_err();
 
@@ -1307,7 +1492,7 @@ mod tests {
         // Budget = 100 tokens. Recent 60% = 60 tokens → 2 messages. Summary 40% = 40 tokens.
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100 },
+            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap();
 
@@ -1342,13 +1527,105 @@ mod tests {
 
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100 },
+            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap();
 
         assert!(resp.fallback, "should fall back on LLM failure");
         assert!(resp.summary.is_none());
         assert!(!resp.messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn summary_annotate_summary_wraps_message_content() {
+        let core = make_core_with_llm();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![
+                models::MessageInput { role: "user".into(), content: "Hello".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "assistant".into(), content: "Hi there!".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "user".into(), content: "How are you?".into(), tool_call_id: None, tool_calls: None },
+            ],
+        }).await.unwrap();
+
+        // annotate_summary defaults to true
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        // Message content should have annotation prefix
+        let content = &resp.messages[0].content;
+        assert!(content.starts_with("[Summary of messages 1\u{2013}3 (3 messages compacted)]\n"),
+            "expected annotation prefix, got: {content}");
+        // Raw summary field should NOT have annotation
+        let summary = resp.summary.as_ref().unwrap();
+        assert!(!summary.starts_with("[Summary of messages"), "raw summary should not be annotated");
+    }
+
+    #[tokio::test]
+    async fn summary_annotate_summary_false_skips_annotation() {
+        let core = make_core_with_llm();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: vec![
+                models::MessageInput { role: "user".into(), content: "Hello".into(), tool_call_id: None, tool_calls: None },
+                models::MessageInput { role: "assistant".into(), content: "Hi!".into(), tool_call_id: None, tool_calls: None },
+            ],
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "summary".into(),
+                max_tokens: 4000,
+                annotate_summary: false,
+                ..Default::default()
+            },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        let content = &resp.messages[0].content;
+        assert!(!content.starts_with("[Summary of messages"), "should not annotate when disabled");
+        // content should equal the raw summary
+        assert_eq!(content, resp.summary.as_ref().unwrap());
+    }
+
+    #[tokio::test]
+    async fn recent_summary_annotate_summary_wraps_older_messages() {
+        let core = make_core_with_llm();
+
+        let content = "x".repeat(100); // 25 tokens each
+        let msgs: Vec<models::MessageInput> = (0..6).map(|i| models::MessageInput {
+            role: if i % 2 == 0 { "user" } else { "assistant" }.into(),
+            content: content.clone(),
+            tool_call_id: None, tool_calls: None,
+        }).collect();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Budget 100 → recent 60% = 60 (fits 2 msgs), summary 40% = 40
+        // Older messages: seq 1-4, recent: seq 5-6
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(!resp.fallback);
+        let summary_msg = &resp.messages[0];
+        assert_eq!(summary_msg.role, "system");
+        assert!(summary_msg.content.starts_with("[Summary of messages 1\u{2013}4 (4 messages compacted)]\n"),
+            "expected annotation, got: {}", summary_msg.content);
+        // Raw summary should not be annotated
+        let raw = resp.summary.as_ref().unwrap();
+        assert!(!raw.starts_with("[Summary of messages"));
     }
 
 }
