@@ -1,5 +1,13 @@
 # @agentified/react
 
+## 0.0.8
+
+### Patch Changes
+
+- ca6c11b: feat: add getMessages agent tool, summary annotation, first-message preservation
+- Updated dependencies [ca6c11b]
+  - @agentified/fe-client@0.0.8
+
 ## 0.0.7
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @agentified/sdk
 
+## 0.0.8
+
+### Patch Changes
+
+- ca6c11b: feat: add getMessages agent tool, summary annotation, first-message preservation
+
 ## 0.0.7
 
 ### Patch Changes
