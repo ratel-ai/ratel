@@ -127,6 +127,7 @@ export class ApiClient {
     if (opts?.strategy !== undefined) messagesConfig.strategy = opts.strategy;
     if (opts?.maxTokens !== undefined) messagesConfig.max_tokens = opts.maxTokens;
     if (opts?.keepFirst !== undefined) messagesConfig.keep_first = opts.keepFirst;
+    if (opts?.annotateSummary !== undefined) messagesConfig.annotate_summary = opts.annotateSummary;
 
     const body: Record<string, unknown> = { dataset, namespace, session, messages: messagesConfig };
     if (opts?.recall) {

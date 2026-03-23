@@ -436,6 +436,36 @@ describe("ApiClient", () => {
       });
     });
 
+    it("passes annotateSummary as annotate_summary in messages config", async () => {
+      const contextRes = {
+        messages: [],
+        strategy_used: "recent+summary",
+        total_messages: 0,
+        included_messages: 0,
+        recalled: { tools: [], memories: [] },
+        token_estimate: 0,
+        conversation_messages: 0,
+        fallback: false,
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(contextRes), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.getContext("ds", "ns", "sess", { strategy: "recent+summary", annotateSummary: false });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: "ds",
+          namespace: "ns",
+          session: "sess",
+          messages: { strategy: "recent+summary", annotate_summary: false },
+        }),
+      });
+    });
+
     it("passes strategy and maxTokens in messages sub-object", async () => {
       const contextRes = {
         messages: [],

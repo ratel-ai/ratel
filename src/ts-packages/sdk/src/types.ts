@@ -125,6 +125,7 @@ export interface ContextOpts {
   recall?: RecallConfig;
   limitTokens?: number;
   keepFirst?: boolean;
+  annotateSummary?: boolean;
 }
 
 export interface ContextResponse {

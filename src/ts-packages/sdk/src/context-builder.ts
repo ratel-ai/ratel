@@ -2,7 +2,7 @@ import type { ApiClient } from "./api-client.js";
 import type { AgentifiedTool, AssembledContext, ContextStrategy, RecallConfig } from "./types.js";
 
 export class ContextBuilder<T = AgentifiedTool> {
-  private messageOpts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean } = {};
+  private messageOpts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean; annotateSummary?: boolean } = {};
   private recallOpts?: RecallConfig;
   private tokenLimit?: number;
   private explicitTools: Record<string, T> = {};
@@ -21,7 +21,7 @@ export class ContextBuilder<T = AgentifiedTool> {
     return this;
   }
 
-  messages(opts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean }): this {
+  messages(opts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean; annotateSummary?: boolean }): this {
     this.messageOpts = opts;
     return this;
   }
@@ -41,6 +41,7 @@ export class ContextBuilder<T = AgentifiedTool> {
       strategy: this.messageOpts.strategy,
       maxTokens: this.messageOpts.maxTokens,
       keepFirst: this.messageOpts.keepFirst,
+      annotateSummary: this.messageOpts.annotateSummary,
       recall: this.recallOpts,
       limitTokens: this.tokenLimit,
     });
