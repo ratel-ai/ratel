@@ -428,6 +428,7 @@ impl AgentifiedCore {
 
         match llm.chat(system_prompt, &conversation_text, max_tokens).await {
             Ok(summary_text) => {
+                tracing::debug!("LLM summary generated: {} chars", summary_text.len());
                 let first_seq = all_messages.first().map(|m| m.seq).unwrap_or(0);
                 let last_seq = all_messages.last().map(|m| m.seq).unwrap_or(0);
                 let token_estimate = summary_text.len() / 4;
@@ -527,6 +528,7 @@ impl AgentifiedCore {
 
         match llm.chat(system_prompt, &conversation_text, summary_budget).await {
             Ok(summary_text) => {
+                tracing::debug!("LLM summary generated: {} chars", summary_text.len());
                 let first_seq = older_owned.first().map(|m| m.seq).unwrap_or(0);
                 let last_seq = older_owned.last().map(|m| m.seq).unwrap_or(0);
                 let count = older_owned.len();

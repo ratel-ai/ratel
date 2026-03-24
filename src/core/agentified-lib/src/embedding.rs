@@ -170,7 +170,7 @@ struct ChatChoice {
 
 #[derive(Deserialize)]
 struct ChatChoiceMessage {
-    content: String,
+    content: Option<String>,
 }
 
 #[async_trait]
@@ -198,16 +198,16 @@ impl LlmService for OpenAILlm {
             anyhow::bail!("OpenAI API error {status}: {body}");
         }
 
-        let body: ChatResponse = response
-            .json()
-            .await
+        let raw = response.text().await.context("failed to read chat response body")?;
+        tracing::debug!("OpenAI chat response: {}", &raw[..raw.len().min(500)]);
+        let body: ChatResponse = serde_json::from_str(&raw)
             .context("failed to parse OpenAI chat response")?;
 
         body.choices
             .into_iter()
             .next()
-            .map(|c| c.message.content)
-            .context("no chat completion returned")
+            .and_then(|c| c.message.content.filter(|s| !s.trim().is_empty()))
+            .context("no chat completion content returned")
     }
 }
 
