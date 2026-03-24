@@ -58,8 +58,8 @@ export class ContextBuilder<T = AgentifiedTool> {
       };
       // Place after keepFirst message (first user msg at position 0) if present
       const firstUserIdx = finalMessages.findIndex(m => m.role === "user");
-      if (firstUserIdx === 0) {
-        finalMessages = [finalMessages[0], summaryMsg, ...finalMessages.slice(1)];
+      if (firstUserIdx === 0 && finalMessages.length > 0) {
+        finalMessages = [finalMessages[0]!, summaryMsg, ...finalMessages.slice(1)];
       } else {
         finalMessages = [summaryMsg, ...finalMessages];
       }
