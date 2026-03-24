@@ -93,18 +93,18 @@ const ctx = await session.context
   .limitTokens(8000)
   .assemble();
 
-// Preserve the first user message + annotate summaries
+// Preserve the first user message + summarize older messages
 const ctx = await session.context
-  .messages({ strategy: "recent+summary", maxTokens: 4000, keepFirst: true, annotateSummary: true })
+  .messages({ strategy: "recent+summary", maxTokens: 4000, keepFirst: true })
   .assemble();
-// ctx.messages[0] → first user message (original prompt)
-// Summary message content starts with "[Summary of messages 1–85 (85 messages compacted)]"
+// ctx.messages: [first user msg, annotated summary, ...recent messages]
+// Summary is auto-constructed with seq range annotation
 ```
 
 **Strategies:** `recent`, `full`, `summary`, `recent+summary`
 
-- `summary` — LLM-summarizes conversation into a single system message
-- `recent+summary` — recent messages (60% budget) + summary of older messages (40%)
+- `summary` — LLM-summarizes entire conversation; SDK injects annotated assistant message
+- `recent+summary` — recent messages (60% budget) + LLM summary of older messages (40% budget)
 - Falls back to `recent` if LLM fails (`fallback: true` in response)
 
 **Message options:**
@@ -114,7 +114,8 @@ const ctx = await session.context
 | `strategy` | `ContextStrategy` | `"recent"` | Message selection strategy |
 | `maxTokens` | `number` | `4000` | Token budget for messages |
 | `keepFirst` | `boolean` | `false` | Always include the first user message |
-| `annotateSummary` | `boolean` | `true` | Wrap summaries with seq range metadata |
+
+See [Chat Management](../../../docs/server/chat-management.md) for the full guide.
 
 **Recall:** `.recall()` with no args defaults to `{ tools: true }`. Pass `{ tools: { limit, minSimilarity } }` for fine-grained control. Recalled tools persist within the session (session continuity).
 

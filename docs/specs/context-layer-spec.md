@@ -184,7 +184,7 @@ Replaces the flat `getMessages()` from the client SDK spec. Builder pattern that
 ```typescript
 // Full control (with first-message preservation and summary annotation)
 const ctx = await session.context
-  .messages({ strategy: 'recent+summary', maxTokens: 4000, keepFirst: true, annotateSummary: true })
+  .messages({ strategy: 'recent+summary', maxTokens: 4000, keepFirst: true })
   .recall({
     tools: { limit: 10, minSimilarity: 0.7 },
     memories: { kinds: ['fact', 'preference'], limit: 20 },
@@ -225,7 +225,8 @@ const response = await agent.generate(ctx.messages, {
 | `strategy` | `ContextStrategy` | `'recent'` | Message selection strategy |
 | `maxTokens` | `number` | `4000` | Token budget for messages |
 | `keepFirst` | `boolean` | `false` | Always include the first user message in assembled context |
-| `annotateSummary` | `boolean` | `true` | Prefix summary content with seq range and count metadata |
+
+Summary annotation is automatic — when the core returns `summary` + `summaryRange`, the SDK constructs an annotated assistant message and injects it. See [Chat Management](../../docs/server/chat-management.md).
 
 ### Recall Configuration
 

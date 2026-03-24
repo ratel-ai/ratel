@@ -108,14 +108,11 @@ When a `turn_id` is provided to discover:
 
 This ensures previously-used tools remain available across turns. See [Session Continuity](./session-continuity.md).
 
-## Context Assembly Options
+## Context Assembly
 
-The `POST /api/v1/context` endpoint supports additional options in the `messages` config:
+The `POST /api/v1/context` endpoint assembles conversation history using configurable strategies (`recent`, `full`, `summary`, `recent+summary`), with optional first-message preservation (`keep_first`) and token budgeting. The SDK constructs summary messages from the core's raw output and injects them into the messages array.
 
-- **`keep_first`** (default: `false`) — Always include the first user message in the assembled context, regardless of token budget. Useful for preserving the original prompt/intent in long conversations.
-- **`annotate_summary`** (default: `true`) — When using `summary` or `recent+summary` strategies, the summary message content is prefixed with `[Summary of messages N–M (X messages compacted)]`. This signals to the agent that older messages exist and can be retrieved via `GET /api/v1/messages`.
-
-The TypeScript SDK exposes a `getMessagesTool` on sessions — an agent-callable tool wrapping `GET /api/v1/messages` so the LLM can navigate conversation history that was summarized or excluded from context.
+See [Chat Management](./chat-management.md) for the full guide.
 
 ## Graph Expansion
 

@@ -232,13 +232,10 @@ pub struct ContextMessagesConfig {
     pub max_tokens: usize,
     #[serde(default)]
     pub keep_first: bool,
-    #[serde(default = "default_annotate_summary")]
-    pub annotate_summary: bool,
 }
 
 fn default_context_strategy() -> String { "recent".into() }
 fn default_max_tokens() -> usize { 4000 }
-fn default_annotate_summary() -> bool { true }
 
 impl Default for ContextMessagesConfig {
     fn default() -> Self {
@@ -246,7 +243,6 @@ impl Default for ContextMessagesConfig {
             strategy: default_context_strategy(),
             max_tokens: default_max_tokens(),
             keep_first: false,
-            annotate_summary: default_annotate_summary(),
         }
     }
 }
@@ -270,6 +266,13 @@ pub struct RecalledContext {
     pub memories: Vec<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct SummaryRange {
+    pub first_seq: i64,
+    pub last_seq: i64,
+    pub count: usize,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ContextResponse {
     pub messages: Vec<StoredMessage>,
@@ -282,6 +285,8 @@ pub struct ContextResponse {
     pub fallback: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_range: Option<SummaryRange>,
 }
 
 #[cfg(test)]

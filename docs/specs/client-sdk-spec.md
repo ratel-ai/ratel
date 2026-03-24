@@ -266,9 +266,9 @@ Response (base — see context-layer-spec for extended version):
 
 `keep_first` (default: `false`) in the messages config. When enabled, `select_messages` always includes the first `role: "user"` message, deducting its tokens before selecting recent messages. No effect on `full` strategy. If no user messages exist, behaves like `keep_first: false`.
 
-### 2.8 Summary Annotation
+### 2.8 Summary Construction
 
-`annotate_summary` (default: `true`) in the messages config. When enabled, summary message content is prefixed with `[Summary of messages {first_seq}–{last_seq} ({count} messages compacted)]`. The raw summary text (without annotation) is returned in the `summary` response field. Not applied on fallback (no summary to annotate).
+When summary strategies produce a summary, the core returns raw `summary` text and `summary_range` (firstSeq, lastSeq, count) in the response. The SDK's `ContextBuilder.assemble()` constructs an annotated assistant message (`[Summary of messages N–M (X messages compacted)]`) and injects it into the messages array at the appropriate position (after keepFirst message if present, otherwise at the start).
 
 ### 2.9 getMessagesTool
 

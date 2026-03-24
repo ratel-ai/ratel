@@ -99,24 +99,19 @@ When using `.recall()`, the server also auto-discovers tools based on the last u
 ### Advanced context options
 
 ```typescript
-// Preserve the first user message in long conversations
+// Preserve the first user message + summarize older messages
 const ctx = await session.context
-  .messages({ strategy: "recent", maxTokens: 4000, keepFirst: true })
+  .messages({ strategy: "recent+summary", maxTokens: 4000, keepFirst: true })
   .assemble();
-// ctx.messages[0] → always the first user message (original prompt)
-
-// Summary annotation (enabled by default) tells the agent messages were compacted
-const ctx = await session.context
-  .messages({ strategy: "recent+summary", maxTokens: 4000, annotateSummary: true })
-  .assemble();
-// Summary message: "[Summary of messages 1–85 (85 messages compacted)]\n<summary>"
+// ctx.messages: [first user msg, summary, ...recent messages]
+// Summary is auto-annotated: "[Summary of messages 2–85 (84 messages compacted)]"
 
 // The agent can navigate compacted messages via getMessagesTool
-const tool = session.getMessagesTool;
-// tool.execute({ afterSeq: 0, limit: 20 }) → retrieves messages 1–20
+// (included in prepareStep automatically)
+session.getMessagesTool.execute({ afterSeq: 0, limit: 20 });
 ```
 
-Read [Architecture](../server/architecture.md) for the full deep dive.
+Read [Chat Management](../server/chat-management.md) for strategies, summarization, and token budgeting.
 
 ## Next steps
 

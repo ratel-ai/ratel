@@ -129,7 +129,6 @@ export class ApiClient {
     if (opts?.strategy !== undefined) messagesConfig.strategy = opts.strategy;
     if (opts?.maxTokens !== undefined) messagesConfig.max_tokens = opts.maxTokens;
     if (opts?.keepFirst !== undefined) messagesConfig.keep_first = opts.keepFirst;
-    if (opts?.annotateSummary !== undefined) messagesConfig.annotate_summary = opts.annotateSummary;
 
     const body: Record<string, unknown> = { dataset, namespace, session, messages: messagesConfig };
     if (opts?.recall) {
@@ -158,6 +157,7 @@ export class ApiClient {
       conversation_messages: number;
       fallback: boolean;
       summary?: string;
+      summary_range?: { first_seq: number; last_seq: number; count: number };
     }>(`${this.config.serverUrl}/api/v1/context`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -181,6 +181,9 @@ export class ApiClient {
       conversationMessages: data.conversation_messages,
       fallback: data.fallback,
       summary: data.summary,
+      summaryRange: data.summary_range
+        ? { firstSeq: data.summary_range.first_seq, lastSeq: data.summary_range.last_seq, count: data.summary_range.count }
+        : undefined,
     };
   }
 

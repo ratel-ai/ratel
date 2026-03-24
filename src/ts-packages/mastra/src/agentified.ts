@@ -66,7 +66,7 @@ export class MastraContextBuilder {
     return this;
   }
 
-  messages(opts: { strategy?: ContextStrategy; maxTokens?: number }): this {
+  messages(opts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean }): this {
     this.sdkBuilder.messages(opts);
     return this;
   }

@@ -136,7 +136,12 @@ export interface ContextOpts {
   recall?: RecallConfig;
   limitTokens?: number;
   keepFirst?: boolean;
-  annotateSummary?: boolean;
+}
+
+export interface SummaryRange {
+  firstSeq: number;
+  lastSeq: number;
+  count: number;
 }
 
 export interface ContextResponse {
@@ -149,6 +154,7 @@ export interface ContextResponse {
   conversationMessages: number;
   fallback: boolean;
   summary?: string;
+  summaryRange?: SummaryRange;
 }
 
 // Event types
@@ -234,6 +240,7 @@ export interface AssembledContext<T = AgentifiedTool> {
   includedMessages: number;
   tools: Record<string, T>;
   summary?: string;
+  summaryRange?: SummaryRange;
 }
 
 export interface GetMessagesOptions {

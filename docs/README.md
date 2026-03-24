@@ -20,6 +20,7 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 - **[Architecture](./server/architecture.md)** — System design, registration/discovery flows, ranking algorithm
 - **[REST API](./server/api.md)** — Endpoint summary and configuration
 - **[Hybrid Ranking](./server/ranking.md)** — Semantic + BM25 scoring, field weights, worked examples
+- **[Chat Management](./server/chat-management.md)** — Message strategies, summarization, token budgets, history navigation
 - **[Session Continuity](./server/session-continuity.md)** — Turn capture, tool boosting, multi-turn patterns
 - **[Graph Expansion](./server/graph-expansion.md)** — requires/provides metadata, auto-injection
 - **[Storage](./server/storage.md)** — In-memory vs SQLite, WAL mode, persistence config

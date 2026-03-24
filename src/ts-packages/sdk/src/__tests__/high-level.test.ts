@@ -566,32 +566,6 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("context.messages({ annotateSummary }) passes through to getContext", async () => {
-      const ag = await connectedAg();
-      const instance = await registerInstance(ag, [backendTool("toolA")]);
-      const session = instance.session("chat-1");
-
-      mockGetContext.mockResolvedValue({
-        messages: [],
-        strategyUsed: "recent+summary",
-        totalMessages: 0,
-        includedMessages: 0,
-        recalled: { tools: [], memories: [] },
-        tokenEstimate: 0,
-        conversationMessages: 0,
-        fallback: false,
-      });
-
-      await session.context
-        .messages({ strategy: "recent+summary", annotateSummary: false })
-        .assemble();
-
-      expect(mockGetContext).toHaveBeenCalledWith("default", "default", "chat-1", {
-        strategy: "recent+summary", annotateSummary: false,
-      });
-      await ag.disconnect();
-    });
-
     it("context.messages().recall().assemble() works (recall is no-op stub)", async () => {
       const ag = await connectedAg();
       const instance = await registerInstance(ag, [backendTool("toolA")]);
