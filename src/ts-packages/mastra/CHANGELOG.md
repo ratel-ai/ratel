@@ -1,5 +1,13 @@
 # @agentified/mastra
 
+## 0.0.9
+
+### Patch Changes
+
+- 6b28862: refactor: move summary message construction from core to SDK, add summaryRange, remove annotateSummary
+- Updated dependencies [6b28862]
+  - agentified@0.0.9
+
 ## 0.0.8
 
 ### Patch Changes
