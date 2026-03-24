@@ -181,7 +181,7 @@ impl LlmService for OpenAILlm {
             .post("https://api.openai.com/v1/chat/completions")
             .bearer_auth(&self.api_key)
             .json(&ChatRequest {
-                model: "gpt-5-mini",
+                model: "gpt-4o-mini",
                 messages: vec![
                     ChatMessage { role: "system", content: system },
                     ChatMessage { role: "user", content: user },
