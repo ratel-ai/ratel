@@ -9,6 +9,7 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 - **[Getting Started](./typescript/getting-started.md)** — Install, paste-and-run, see results in 2 minutes
 - **[Mastra Integration](./typescript/integrations/mastra.md)** — Full-stack Mastra + React + Inspector
 - **[Frontend Tools](./typescript/frontend-tools.md)** — Client-side tool execution, React hooks, iteration loop
+- **[Tool Recall](./typescript/tool-recall.md)** — Auto-discover relevant tools each turn
 
 ## Python
 
@@ -22,6 +23,7 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 - **[Hybrid Ranking](./server/ranking.md)** — Semantic + BM25 scoring, field weights, worked examples
 - **[Chat Management](./server/chat-management.md)** — Message strategies, summarization, token budgets, history navigation
 - **[Session Continuity](./server/session-continuity.md)** — Turn capture, tool boosting, multi-turn patterns
+- **[Tool Recall](./server/tool-recall.md)** — Automatic tool discovery, session stickiness, token budgeting
 - **[Graph Expansion](./server/graph-expansion.md)** — requires/provides metadata, auto-injection
 - **[Storage](./server/storage.md)** — In-memory vs SQLite, WAL mode, persistence config
 

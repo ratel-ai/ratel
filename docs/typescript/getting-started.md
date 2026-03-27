@@ -65,7 +65,7 @@ console.log("Token estimate:", ctx.tokenEstimate);
 
 // With tool recall: auto-discovers relevant tools based on last user message
 const ctxWithRecall = await session.context
-  .messages({ strategy: "recent+summary", maxTokens: 4000 })
+  .messages({ strategy: "compacted", maxTokens: 4000 })
   .recall({ tools: { limit: 10 } })
   .limitTokens(8000)
   .assemble();
@@ -94,14 +94,14 @@ The server:
 3. **Combined** with BM25 keyword matching: `final = 0.7 × semantic + 0.3 × BM25`
 4. **Returned** the top-K tools sorted by relevance
 
-When using `.recall()`, the server also auto-discovers tools based on the last user message and returns them with similarity scores. The `summary` and `recent+summary` strategies use LLM summarization for older messages (falling back to `recent` if the LLM call fails).
+When using `.recall()`, the server also auto-discovers tools based on the last user message and returns them with similarity scores. The `compacted` strategy uses LLM summarization for older messages (falling back to `recent` if the LLM call fails). Long tool results (>500 chars by default) are pruned with `[pruned]` before summarization. Read [Tool Recall](./tool-recall.md) for configuration, type references, and multi-turn examples.
 
 ### Advanced context options
 
 ```typescript
 // Preserve the first user message + summarize older messages
 const ctx = await session.context
-  .messages({ strategy: "recent+summary", maxTokens: 4000, keepFirst: true })
+  .messages({ strategy: "compacted", maxTokens: 4000, keepFirst: true })
   .assemble();
 // ctx.messages: [first user msg, summary, ...recent messages]
 // Summary is auto-annotated: "[Summary of messages 2–85 (84 messages compacted)]"
