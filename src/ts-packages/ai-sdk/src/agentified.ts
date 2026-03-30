@@ -1,4 +1,4 @@
-import { tool } from "ai";
+import { tool, type Tool } from "ai";
 import { z } from "zod";
 import type {
   Agentified,
@@ -21,7 +21,7 @@ import { jsonSchemaToZod } from "./schema.js";
 
 // --- Types ---
 
-type AiSdkTool = ReturnType<typeof tool>;
+type AiSdkTool = Tool;
 
 // --- AiSdkAssembledContext ---
 
