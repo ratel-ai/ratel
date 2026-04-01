@@ -1,5 +1,12 @@
 # @agentified/mastra
 
+## 1.0.0
+
+### Patch Changes
+
+- Updated dependencies [de0eb19]
+  - agentified@0.1.0
+
 ## 0.0.9
 
 ### Patch Changes

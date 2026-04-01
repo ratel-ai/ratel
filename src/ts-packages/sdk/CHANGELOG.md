@@ -1,5 +1,11 @@
 # @agentified/sdk
 
+## 0.1.0
+
+### Minor Changes
+
+- de0eb19: Replace `summary` and `recent+summary` strategies with unified `compacted` strategy. Add `pruneThreshold` option to prune long tool results before summarization. Add `compactionStrategy` callback for client-side custom summarization.
+
 ## 0.0.9
 
 ### Patch Changes
