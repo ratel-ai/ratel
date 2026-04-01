@@ -78,6 +78,25 @@ impl AgentifiedCore {
     }
 
     pub async fn register_tools(&self, dataset_id: &str, tools: Vec<Tool>) -> Result<RegisterToolsResponse, CoreError> {
+        for tool in &tools {
+            match tool.tool_type {
+                models::ToolType::Mcp => {
+                    if tool.server_uri.is_none() {
+                        return Err(CoreError::BadRequest(format!(
+                            "tool '{}': mcp tools require server_uri", tool.name
+                        )));
+                    }
+                }
+                _ => {
+                    if tool.server_uri.is_some() {
+                        return Err(CoreError::BadRequest(format!(
+                            "tool '{}': server_uri is only valid for mcp tools", tool.name
+                        )));
+                    }
+                }
+            }
+        }
+
         let count = tools.len();
 
         struct ToolTexts {
@@ -1113,6 +1132,8 @@ mod tests {
                 parameters: serde_json::json!({}),
                 metadata: None,
                 fields: None,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
             },
             models::Tool {
                 name: "get_stock".into(),
@@ -1120,6 +1141,8 @@ mod tests {
                 parameters: serde_json::json!({}),
                 metadata: None,
                 fields: None,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
             },
         ]).await.unwrap();
 
@@ -1163,9 +1186,9 @@ mod tests {
 
         // Register 3 tools
         core.register_tools("ds", vec![
-            models::Tool { name: "tool_a".into(), description: "Alpha tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            models::Tool { name: "tool_b".into(), description: "Beta tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            models::Tool { name: "tool_c".into(), description: "Gamma tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "tool_a".into(), description: "Alpha tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, tool_type: models::ToolType::default(), server_uri: None },
+            models::Tool { name: "tool_b".into(), description: "Beta tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, tool_type: models::ToolType::default(), server_uri: None },
+            models::Tool { name: "tool_c".into(), description: "Gamma tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, tool_type: models::ToolType::default(), server_uri: None },
         ]).await.unwrap();
 
         core.append_messages(models::AppendMessagesRequest {
@@ -1190,7 +1213,7 @@ mod tests {
         let core = make_core();
 
         core.register_tools("ds", vec![
-            models::Tool { name: "tool_a".into(), description: "Alpha".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "tool_a".into(), description: "Alpha".into(), parameters: serde_json::json!({}), metadata: None, fields: None, tool_type: models::ToolType::default(), server_uri: None },
         ]).await.unwrap();
 
         // Only assistant messages, no user messages
@@ -1220,6 +1243,8 @@ mod tests {
                 parameters: serde_json::json!({"type": "object"}),
                 metadata: None,
                 fields: None,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
             },
         ]).await.unwrap();
 
@@ -1288,9 +1313,9 @@ mod tests {
 
         // Register 3 tools with distinct descriptions
         core.register_tools("ds", vec![
-            models::Tool { name: "get_weather".into(), description: "Get weather forecast for a location".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            models::Tool { name: "get_stock".into(), description: "Get stock price for a ticker".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            models::Tool { name: "send_email".into(), description: "Send an email message".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "get_weather".into(), description: "Get weather forecast for a location".into(), parameters: serde_json::json!({}), metadata: None, fields: None, tool_type: models::ToolType::default(), server_uri: None },
+            models::Tool { name: "get_stock".into(), description: "Get stock price for a ticker".into(), parameters: serde_json::json!({}), metadata: None, fields: None, tool_type: models::ToolType::default(), server_uri: None },
+            models::Tool { name: "send_email".into(), description: "Send an email message".into(), parameters: serde_json::json!({}), metadata: None, fields: None, tool_type: models::ToolType::default(), server_uri: None },
         ]).await.unwrap();
 
         // First turn: user asks about weather, limit=1 so only weather tool is recalled
@@ -1552,6 +1577,109 @@ mod tests {
         assert!(resp.summary.is_some());
         let summary = resp.summary.unwrap();
         assert!(summary.contains("[pruned]"), "tool content >100 chars should be pruned with custom threshold");
+    }
+
+    #[tokio::test]
+    async fn mcp_tool_appears_in_list_with_type_and_server_uri() {
+        let core = make_core();
+        core.register_tools("ds", vec![
+            models::Tool {
+                name: "mcp_search".into(),
+                description: "Search via MCP".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                tool_type: models::ToolType::Mcp,
+                server_uri: Some("http://localhost:3001/mcp".into()),
+            },
+            models::Tool {
+                name: "backend_tool".into(),
+                description: "A backend tool".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
+            },
+        ]).await.unwrap();
+
+        let resp = core.list_tools("ds").await.unwrap();
+        assert_eq!(resp.tools.len(), 2);
+        let mcp = resp.tools.iter().find(|t| t.name == "mcp_search").unwrap();
+        assert_eq!(mcp.tool_type, models::ToolType::Mcp);
+        assert_eq!(mcp.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+        let backend = resp.tools.iter().find(|t| t.name == "backend_tool").unwrap();
+        assert_eq!(backend.tool_type, models::ToolType::Backend);
+        assert!(backend.server_uri.is_none());
+    }
+
+    #[tokio::test]
+    async fn mcp_tool_appears_in_discover_with_type_and_server_uri() {
+        let core = make_core();
+        core.register_tools("ds", vec![
+            models::Tool {
+                name: "mcp_search".into(),
+                description: "Search via MCP server".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                tool_type: models::ToolType::Mcp,
+                server_uri: Some("http://localhost:3001/mcp".into()),
+            },
+        ]).await.unwrap();
+
+        let resp = core.discover("ds", models::DiscoverRequest {
+            query: "search".into(),
+            limit: Some(5),
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+        }).await.unwrap();
+
+        assert!(!resp.tools.is_empty());
+        let tool = &resp.tools[0];
+        assert_eq!(tool.tool.tool_type, models::ToolType::Mcp);
+        assert_eq!(tool.tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+    }
+
+    #[tokio::test]
+    async fn register_mcp_tool_without_server_uri_returns_bad_request() {
+        let core = make_core();
+        let err = core.register_tools("ds", vec![
+            models::Tool {
+                name: "mcp_tool".into(),
+                description: "An MCP tool".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                tool_type: models::ToolType::Mcp,
+                server_uri: None,
+            },
+        ]).await.unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => assert!(msg.contains("server_uri"), "error should mention server_uri: {msg}"),
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn register_backend_tool_with_server_uri_returns_bad_request() {
+        let core = make_core();
+        let err = core.register_tools("ds", vec![
+            models::Tool {
+                name: "backend_tool".into(),
+                description: "A backend tool".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                tool_type: models::ToolType::Backend,
+                server_uri: Some("http://localhost/mcp".into()),
+            },
+        ]).await.unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => assert!(msg.contains("server_uri"), "error should mention server_uri: {msg}"),
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
     }
 
 }

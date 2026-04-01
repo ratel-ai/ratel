@@ -92,6 +92,8 @@ impl SqliteStorage {
                 emb_input_schema BLOB,
                 emb_output_schema BLOB,
                 bm25_text TEXT NOT NULL,
+                type TEXT NOT NULL DEFAULT 'backend',
+                server_uri TEXT,
                 PRIMARY KEY (dataset_id, name)
             );
             CREATE INDEX IF NOT EXISTS idx_tools_dataset ON tools(dataset_id);
@@ -125,6 +127,16 @@ impl SqliteStorage {
                 PRIMARY KEY (dataset_id, namespace_id, session_id, tool_name)
             );"
         )?;
+        // Migration: add type and server_uri columns if missing (existing databases)
+        let has_type_col: bool = conn
+            .prepare("SELECT type FROM tools LIMIT 0")
+            .is_ok();
+        if !has_type_col {
+            conn.execute_batch(
+                "ALTER TABLE tools ADD COLUMN type TEXT NOT NULL DEFAULT 'backend';
+                 ALTER TABLE tools ADD COLUMN server_uri TEXT;"
+            )?;
+        }
         Ok(Self { conn: std::sync::Mutex::new(conn) })
     }
 }
@@ -141,10 +153,14 @@ impl Storage for SqliteStorage {
             let emb_desc = vec_f32_to_blob(&stored.embeddings.description);
             let emb_input = stored.embeddings.input_schema.as_ref().map(|v| vec_f32_to_blob(v));
             let emb_output = stored.embeddings.output_schema.as_ref().map(|v| vec_f32_to_blob(v));
+            let type_str = serde_json::to_value(&stored.tool.tool_type)
+                .ok()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| "backend".to_string());
             tx.execute(
-                "INSERT OR REPLACE INTO tools (dataset_id, name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                rusqlite::params![dataset_id, name, stored.tool.description, params_json, metadata_json, fields_json, emb_name, emb_desc, emb_input, emb_output, stored.bm25_text],
+                "INSERT OR REPLACE INTO tools (dataset_id, name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text, type, server_uri)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                rusqlite::params![dataset_id, name, stored.tool.description, params_json, metadata_json, fields_json, emb_name, emb_desc, emb_input, emb_output, stored.bm25_text, type_str, stored.tool.server_uri],
             )?;
         }
         tx.commit()?;
@@ -154,7 +170,7 @@ impl Storage for SqliteStorage {
     fn load_tools_for_dataset(&self, dataset_id: &str) -> Result<Vec<(String, StoredTool)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text FROM tools WHERE dataset_id = ?1"
+            "SELECT name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text, type, server_uri FROM tools WHERE dataset_id = ?1"
         )?;
         let rows = stmt.query_map(rusqlite::params![dataset_id], |row| {
             let name: String = row.get(0)?;
@@ -167,15 +183,18 @@ impl Storage for SqliteStorage {
             let emb_input_blob: Option<Vec<u8>> = row.get(7)?;
             let emb_output_blob: Option<Vec<u8>> = row.get(8)?;
             let bm25_text: String = row.get(9)?;
-            Ok((name, description, params_json, metadata_json, fields_json, emb_name_blob, emb_desc_blob, emb_input_blob, emb_output_blob, bm25_text))
+            let type_str: String = row.get(10)?;
+            let server_uri: Option<String> = row.get(11)?;
+            Ok((name, description, params_json, metadata_json, fields_json, emb_name_blob, emb_desc_blob, emb_input_blob, emb_output_blob, bm25_text, type_str, server_uri))
         })?;
 
         let mut result = Vec::new();
         for row in rows {
-            let (name, description, params_json, metadata_json, fields_json, emb_name_blob, emb_desc_blob, emb_input_blob, emb_output_blob, bm25_text) = row?;
+            let (name, description, params_json, metadata_json, fields_json, emb_name_blob, emb_desc_blob, emb_input_blob, emb_output_blob, bm25_text, type_str, server_uri) = row?;
             let parameters: serde_json::Value = serde_json::from_str(&params_json)?;
             let metadata: Option<serde_json::Value> = metadata_json.map(|s| serde_json::from_str(&s)).transpose()?;
             let fields: Option<crate::models::ToolFields> = fields_json.map(|s| serde_json::from_str(&s)).transpose()?;
+            let tool_type: crate::models::ToolType = serde_json::from_value(serde_json::Value::String(type_str)).unwrap_or_default();
 
             result.push((name.clone(), StoredTool {
                 tool: crate::models::Tool {
@@ -184,6 +203,8 @@ impl Storage for SqliteStorage {
                     parameters,
                     metadata,
                     fields,
+                    tool_type,
+                    server_uri,
                 },
                 embeddings: crate::models::FieldEmbeddings {
                     name: blob_to_vec_f32(&emb_name_blob),
@@ -432,6 +453,8 @@ mod tests {
                 } else {
                     None
                 },
+                tool_type: crate::models::ToolType::default(),
+                server_uri: None,
             },
             embeddings: FieldEmbeddings {
                 name: vec![1.0; 4],
@@ -549,6 +572,29 @@ mod tests {
         s.save_session_tools("ds", "ns", "s2", &["tool_b"]).unwrap();
         assert_eq!(s.load_session_tools("ds", "ns", "s1").unwrap(), vec!["tool_a"]);
         assert_eq!(s.load_session_tools("ds", "ns", "s2").unwrap(), vec!["tool_b"]);
+    }
+
+    #[test]
+    fn sqlite_roundtrip_tool_type_and_server_uri() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        let mut tool = make_stored_tool("mcp_tool", "An MCP tool", false);
+        tool.tool.tool_type = crate::models::ToolType::Mcp;
+        tool.tool.server_uri = Some("http://localhost:3001/mcp".into());
+        s.save_tools("ds-1", &[("mcp_tool", &tool)]).unwrap();
+        let loaded = s.load_tools_for_dataset("ds-1").unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].1.tool.tool_type, crate::models::ToolType::Mcp);
+        assert_eq!(loaded[0].1.tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+    }
+
+    #[test]
+    fn sqlite_roundtrip_default_tool_type() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        let tool = make_stored_tool("basic", "A basic tool", false);
+        s.save_tools("ds-1", &[("basic", &tool)]).unwrap();
+        let loaded = s.load_tools_for_dataset("ds-1").unwrap();
+        assert_eq!(loaded[0].1.tool.tool_type, crate::models::ToolType::Backend);
+        assert!(loaded[0].1.tool.server_uri.is_none());
     }
 
     #[test]

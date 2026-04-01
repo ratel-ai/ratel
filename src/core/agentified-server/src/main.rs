@@ -387,6 +387,8 @@ mod tests {
                 parameters: serde_json::Value::Null,
                 metadata: None,
                 fields: None,
+                tool_type: agentified_lib::models::ToolType::default(),
+                server_uri: None,
             },
             embeddings: FieldEmbeddings {
                 name: name_emb,
