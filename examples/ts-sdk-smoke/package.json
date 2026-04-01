@@ -6,7 +6,7 @@
     "start": "node index.ts"
   },
   "dependencies": {
-    "agentified": "0.0.5-beta.3"
+    "agentified": "link:../../src/ts-packages/sdk"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

@@ -1519,7 +1519,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn context_summary_returns_422() {
+    async fn compacted_without_llm_returns_422() {
+        let app = test_app_with_storage();
+
+        let ctx_body = serde_json::json!({
+            "dataset": "ds", "namespace": "ns", "session": "s1",
+            "messages": { "strategy": "compacted" }
+        });
+        let resp = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/v1/context")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&ctx_body).unwrap())).unwrap(),
+        ).await.unwrap();
+
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(json["error"].as_str().unwrap().contains("Compacted strategy"));
+    }
+
+    #[tokio::test]
+    async fn removed_strategies_return_400() {
         let app = test_app_with_storage();
 
         for strategy in &["summary", "recent+summary"] {
@@ -1533,10 +1553,7 @@ mod tests {
                     .body(Body::from(serde_json::to_string(&ctx_body).unwrap())).unwrap(),
             ).await.unwrap();
 
-            assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-            let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-            let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-            assert!(json["error"].as_str().unwrap().contains("Summary strategies"));
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
         }
     }
 

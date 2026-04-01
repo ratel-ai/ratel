@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       agentified:
-        specifier: 0.0.5-beta.3
-        version: 0.0.5-beta.3
+        specifier: link:../../src/ts-packages/sdk
+        version: link:../../src/ts-packages/sdk
     devDependencies:
       tsx:
         specifier: ^4.19.0
@@ -174,9 +174,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  agentified@0.0.5-beta.3:
-    resolution: {integrity: sha512-yHq8HtxlxHiSGLqZCgZaniEiaaAso/lIJOGabwRpQM5AnquVBmLVA8N2rkMN1j+o2guAwJN+KWRPOJn+HXbnGQ==}
-
   esbuild@0.27.3:
     resolution: {integrity: sha512-8VwMnyGCONIs6cWue2IdpHxHnAjzxnw2Zr7MkVxB2vjmQ2ivqGFb4LEG3SMnv0Gb2F/G/2yA8zUaiL1gywDCCg==}
     engines: {node: '>=18'}
@@ -277,8 +274,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.3':
     optional: true
-
-  agentified@0.0.5-beta.3: {}
 
   esbuild@0.27.3:
     optionalDependencies:

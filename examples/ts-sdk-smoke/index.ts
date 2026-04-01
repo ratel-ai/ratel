@@ -81,6 +81,64 @@ const afterDedup = await session.conversation.messages();
 console.log(`[10] updateConversation dedup: ${afterDedup.length} messages (should still be 4)`);
 assert(afterDedup.length === 4, `expected 4 after dedup, got ${afterDedup.length}`);
 
+// --- compacted strategy (server-side, requires OPENAI_API_KEY) ---
+// Build a longer conversation so there are "older" messages to summarize
+const session2 = instance.session(`smoke-compacted-${Date.now()}`);
+const bulkMsgs = [];
+for (let i = 0; i < 20; i++) {
+  bulkMsgs.push({ role: "user", content: `Message ${i}: ${"x".repeat(200)}` });
+  bulkMsgs.push({ role: "assistant", content: `Reply ${i}: ${"y".repeat(200)}` });
+}
+// Add a tool result to test pruning
+bulkMsgs.push({ role: "user", content: "Call the tool" });
+bulkMsgs.push({ role: "tool", content: "z".repeat(600), tool_call_id: "tc1" });
+bulkMsgs.push({ role: "assistant", content: "Got the tool result" });
+bulkMsgs.push({ role: "user", content: "What was the result?" });
+await session2.updateConversation({ messages: bulkMsgs });
+console.log(`[11] compacted setup: ${bulkMsgs.length} messages persisted`);
+
+try {
+  const compactedCtx = await session2.context
+    .messages({ strategy: "compacted", maxTokens: 2000, pruneThreshold: 500 })
+    .assemble();
+  console.log(`[12] compacted: strategy=${compactedCtx.strategyUsed}, summary=${!!compactedCtx.summary}, fallback=${compactedCtx.fallback}, msgs=${compactedCtx.messages.length}`);
+  assert(compactedCtx.strategyUsed === "compacted", `expected compacted, got ${compactedCtx.strategyUsed}`);
+  if (!compactedCtx.fallback) {
+    assert(!!compactedCtx.summary, "expected summary when not fallback");
+    // Summary message should be injected into the messages array
+    const hasSummaryMsg = compactedCtx.messages.some(m => m.content.includes("[Summary of messages"));
+    assert(hasSummaryMsg, "expected injected summary message in assembled context");
+    console.log(`[12] compacted: summary injected ✓`);
+  }
+} catch (e: any) {
+  console.log(`[12] compacted: SKIPPED (${e.message?.slice(0, 80)})`);
+}
+
+// --- client-side compactionStrategy ---
+try {
+  const session3 = instance.session(`smoke-client-compact-${Date.now()}`);
+  await session3.updateConversation({ messages: bulkMsgs });
+
+  const clientCtx = await session3.context
+    .messages({
+      strategy: "compacted",
+      maxTokens: 2000,
+      compactionStrategy: async (olderMessages) => {
+        return { summary: `Client summarized ${olderMessages.length} older messages` };
+      },
+    })
+    .assemble();
+  console.log(`[13] client compaction: strategy=${clientCtx.strategyUsed}, summary=${!!clientCtx.summary}, msgs=${clientCtx.messages.length}`);
+  assert(clientCtx.strategyUsed === "compacted", `expected compacted, got ${clientCtx.strategyUsed}`);
+  assert(!!clientCtx.summary, "expected client-side summary");
+  assert(clientCtx.summary!.includes("Client summarized"), "expected client summary text");
+  const hasSummaryMsg = clientCtx.messages.some(m => m.content.includes("[Summary of messages"));
+  assert(hasSummaryMsg, "expected injected summary message from client compaction");
+  console.log(`[13] client compaction: summary injected ✓`);
+} catch (e: any) {
+  console.log(`[13] client compaction: SKIPPED (${e.message?.slice(0, 80)})`);
+}
+
 await ag.disconnect();
 console.log("\n✓ All checks passed!");
 

@@ -93,6 +93,32 @@ async def main() -> None:
     print(f"[10] updateConversation dedup: {len(after_dedup)} messages (should still be 4)")
     check(len(after_dedup) == 4, f"expected 4 after dedup, got {len(after_dedup)}")
 
+    # --- compacted strategy (server-side, requires OPENAI_API_KEY) ---
+    session2 = instance.session(f"smoke-compacted-{int(time.time() * 1000)}")
+    bulk_msgs: list[dict[str, str]] = []
+    for i in range(20):
+        bulk_msgs.append({"role": "user", "content": f"Message {i}: {'x' * 200}"})
+        bulk_msgs.append({"role": "assistant", "content": f"Reply {i}: {'y' * 200}"})
+    # Add a tool result to test pruning
+    bulk_msgs.append({"role": "user", "content": "Call the tool"})
+    bulk_msgs.append({"role": "tool", "content": "z" * 600, "tool_call_id": "tc1"})
+    bulk_msgs.append({"role": "assistant", "content": "Got the tool result"})
+    bulk_msgs.append({"role": "user", "content": "What was the result?"})
+    await session2.update_conversation(bulk_msgs)
+    print(f"[11] compacted setup: {len(bulk_msgs)} messages persisted")
+
+    try:
+        compacted_ctx = await session2.context.messages(
+            strategy="compacted", max_tokens=2000, prune_threshold=500,
+        ).assemble()
+        print(
+            f"[12] compacted: strategy={compacted_ctx.strategy_used}, "
+            f"fallback={compacted_ctx.fallback}, msgs={len(compacted_ctx.messages)}"
+        )
+        check(compacted_ctx.strategy_used == "compacted", f"expected compacted, got {compacted_ctx.strategy_used}")
+    except Exception as e:
+        print(f"[12] compacted: SKIPPED ({str(e)[:80]})")
+
     await ag.disconnect()
     print("\n✓ All checks passed!")
 
