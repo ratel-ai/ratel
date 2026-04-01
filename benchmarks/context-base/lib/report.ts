@@ -79,8 +79,14 @@ function fmtCost(n: number): string {
   return n.toFixed(4);
 }
 
+function fmtLatency(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+}
+
 const SCORE_COLS = ["Tool F1", "Tool Precision", "Tool Recall", "Task Correctness", "Negative Correctness", "Hydration Recall"];
-const METRIC_COLS = ["Input Tokens", "Cached In", "Output Tokens", "Reasoning Tokens", "Duration (ms)", "Cost ($)"];
+const METRIC_COLS = ["Input Tokens", "Cached In", "Output Tokens", "Reasoning Tokens", "Latency", "Cost ($)"];
 
 function renderSummaryRow(agent: string, summary: CategorySummary): string {
   const vals = [
@@ -90,7 +96,7 @@ function renderSummaryRow(agent: string, summary: CategorySummary): string {
     fmtInt(summary.totalCachedInputTokens),
     fmtInt(summary.totalOutputTokens),
     fmtInt(summary.totalOutputReasoningTokens),
-    fmtInt(summary.totalDurationMs),
+    fmtLatency(summary.totalDurationMs),
     fmtCost(summary.totalCost),
   ];
   return `| ${vals.join(" | ")} |`;

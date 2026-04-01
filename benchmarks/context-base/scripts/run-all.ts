@@ -89,6 +89,7 @@ interface AgentProgress {
   tcAvg: number;
   hrAvg: number;
   timeAvg: number;
+  latencySum: number;
   costSum: number;
   isComplete: boolean;
 }
@@ -114,7 +115,7 @@ function pollProgress(totalScenarios: number): Record<string, AgentProgress> {
     const n = results.length;
 
     if (n === 0) {
-      progress[name] = { completed: 0, f1Avg: 0, tcAvg: 0, hrAvg: 0, timeAvg: 0, costSum: 0, isComplete: false };
+      progress[name] = { completed: 0, f1Avg: 0, tcAvg: 0, hrAvg: 0, timeAvg: 0, latencySum: 0, costSum: 0, isComplete: false };
       continue;
     }
 
@@ -127,7 +128,7 @@ function pollProgress(totalScenarios: number): Record<string, AgentProgress> {
       costSum += r.cost;
     }
 
-    progress[name] = { completed: n, f1Avg: f1Sum / n, tcAvg: tcSum / n, hrAvg: hrSum / n, timeAvg: timeSum / n, costSum, isComplete: n >= totalScenarios };
+    progress[name] = { completed: n, f1Avg: f1Sum / n, tcAvg: tcSum / n, hrAvg: hrSum / n, timeAvg: timeSum / n, latencySum: timeSum, costSum, isComplete: n >= totalScenarios };
   }
   return progress;
 }
@@ -152,7 +153,7 @@ function renderDashboard(startMs: number): void {
     const completedScenarios = p?.completed ?? 0;
     const count = `${String(completedScenarios).padStart(2)}/${totalScenarios}`;
     const line = p && completedScenarios > 0
-      ? `  ${padded}  ${count} | F1 ${p.f1Avg.toFixed(2)} | TC ${p.tcAvg.toFixed(2)} | HR ${p.hrAvg.toFixed(2)} | $${p.costSum.toFixed(2).padStart(5)} | Avg time: ${formatElapsed(p.timeAvg)} | ${p.completed >= totalScenarios ? `${formatElapsed(p.completed * p.timeAvg)} ✅` : formatElapsed(elapsedMs)}`
+      ? `  ${padded}  ${count} | F1 ${p.f1Avg.toFixed(2)} | TC ${p.tcAvg.toFixed(2)} | HR ${p.hrAvg.toFixed(2)} | $${p.costSum.toFixed(2).padStart(5)} | latency: ${formatElapsed(p.latencySum)} | ${p.completed >= totalScenarios ? "✅" : formatElapsed(elapsedMs)}`
       : `  ${padded}  ${count} | waiting... | ${formatElapsed(elapsedMs)}`;
     process.stdout.write(`\x1b[2K${line}\n`);
   }
