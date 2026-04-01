@@ -28,7 +28,9 @@ function jsonSchemaFieldToZod(prop: Record<string, unknown>): ZodTypeAny {
   if (prop.enum) {
     const values = prop.enum as string[];
     field = z.enum(values as [string, ...string[]]);
-  } else if (type === "number" || type === "integer") {
+  } else if (type === "integer") {
+    field = z.number().int();
+  } else if (type === "number") {
     field = z.number();
   } else if (type === "boolean") {
     field = z.boolean();
@@ -41,8 +43,10 @@ function jsonSchemaFieldToZod(prop: Record<string, unknown>): ZodTypeAny {
     } else {
       field = z.record(z.unknown());
     }
-  } else {
+  } else if (type === "string") {
     field = z.string();
+  } else {
+    field = z.unknown();
   }
 
   if (desc) field = field.describe(desc);

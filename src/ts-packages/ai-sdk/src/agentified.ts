@@ -131,6 +131,7 @@ export class AiSdkDatasetRef {
 
 export class AiSdkInstance {
   readonly discoverTool: AiSdkTool;
+  readonly tools: Record<string, AiSdkTool>;
   private readonly aiSdkToolCache: Record<string, AiSdkTool>;
 
   get instanceId() { return this.inst.instanceId; }
@@ -142,12 +143,9 @@ export class AiSdkInstance {
   ) {
     this.discoverTool = wrapDiscoverTool(inst.discoverTool);
     this.aiSdkToolCache = buildAiSdkToolMap(backendTools);
-  }
-
-  get tools(): Record<string, AiSdkTool> {
-    return {
-      agentified_discover: this.discoverTool,
+    this.tools = {
       ...this.aiSdkToolCache,
+      agentified_discover: this.discoverTool,
     };
   }
 
@@ -163,6 +161,7 @@ export class AiSdkInstance {
 export class AiSdkSession {
   readonly discoverTool: AiSdkTool;
   readonly getMessagesTool: AiSdkTool;
+  readonly tools: Record<string, AiSdkTool>;
   private readonly aiSdkToolCache: Record<string, AiSdkTool>;
 
   get id() { return this.sess.id; }
@@ -175,13 +174,10 @@ export class AiSdkSession {
     this.discoverTool = wrapDiscoverTool(sess.discoverTool);
     this.getMessagesTool = wrapGetMessagesTool(sess.getMessagesTool);
     this.aiSdkToolCache = buildAiSdkToolMap(backendTools);
-  }
-
-  get tools(): Record<string, AiSdkTool> {
-    return {
+    this.tools = {
+      ...this.aiSdkToolCache,
       agentified_discover: this.discoverTool,
       agentified_get_messages: this.getMessagesTool,
-      ...this.aiSdkToolCache,
     };
   }
 
