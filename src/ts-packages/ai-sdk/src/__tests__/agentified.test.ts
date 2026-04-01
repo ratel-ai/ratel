@@ -137,6 +137,31 @@ describe("AiSdkInstance", () => {
     expect(m.tools["get_weather"].__aiSdkTool).toBe(true);
   });
 
+  it("exposes MCP tools in .tools alongside backend tools via register()", async () => {
+    const ag = {
+      connect: vi.fn(), disconnect: vi.fn(), dataset: vi.fn(),
+      register: vi.fn().mockResolvedValue({
+        instanceId: "default", datasetId: "default",
+        discoverTool: {
+          definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+          execute: vi.fn(), discoveredNames: new Set<string>(),
+        },
+        prepareStep: vi.fn(), session: vi.fn(), namespace: vi.fn(),
+      }),
+    } as unknown as Agentified;
+
+    const m = new AiSdkAgentified(ag);
+    const inst = await m.register({
+      tools: [
+        { name: "get_weather", description: "Get weather", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+        { name: "mcp_search", description: "Search via MCP", parameters: { type: "object", properties: {} }, type: "mcp" as const, server: "http://localhost:3001/mcp", handler: vi.fn() },
+      ],
+    });
+
+    expect(inst.tools["get_weather"].__aiSdkTool).toBe(true);
+    expect(inst.tools["mcp_search"].__aiSdkTool).toBe(true);
+  });
+
   it("prepareStep returns { activeTools } (not { tools })", async () => {
     const inst = fakeInstance();
     const m = new AiSdkInstance(inst, []);

@@ -9,6 +9,7 @@ import type {
   DiscoverTool,
   GetMessagesTool,
   BackendTool,
+  McpTool,
   RegisterInput,
   GetMessagesOptions,
   ContextBuilder,
@@ -113,7 +114,7 @@ export class MastraAgentified {
   dataset(name: string) { return new MastraDatasetRef(this.ag.dataset(name)); }
 
   async register(input: RegisterInput) {
-    const backendTools = extractBackendTools(input.tools);
+    const backendTools = extractExecutableTools(input.tools);
     return new MastraInstance(await this.ag.register(input), backendTools);
   }
 }
@@ -122,7 +123,7 @@ export class MastraDatasetRef {
   constructor(private readonly ref: DatasetRef) {}
 
   async register(input: RegisterInput) {
-    const backendTools = extractBackendTools(input.tools);
+    const backendTools = extractExecutableTools(input.tools);
     return new MastraInstance(await this.ref.register(input), backendTools);
   }
 }
@@ -137,7 +138,7 @@ export class MastraInstance {
 
   constructor(
     private readonly inst: Instance,
-    private readonly backendTools: BackendTool[],
+    private readonly backendTools: (BackendTool | McpTool)[],
   ) {
     this.discoverTool = wrapDiscoverTool(inst.discoverTool);
     this.mastraToolCache = buildMastraToolMap(backendTools);
@@ -170,7 +171,7 @@ export class MastraSession {
 
   constructor(
     private readonly sess: Session,
-    private readonly backendTools: BackendTool[],
+    private readonly backendTools: (BackendTool | McpTool)[],
   ) {
     this.discoverTool = wrapDiscoverTool(sess.discoverTool);
     this.getMessagesTool = wrapGetMessagesTool(sess.getMessagesTool);
@@ -210,7 +211,7 @@ export class MastraSession {
 export class MastraNamespace {
   constructor(
     private readonly ns: Namespace,
-    private readonly backendTools: BackendTool[],
+    private readonly backendTools: (BackendTool | McpTool)[],
   ) {}
 
   get id() { return this.ns.id; }
@@ -220,9 +221,9 @@ export class MastraNamespace {
 
 // --- Helpers ---
 
-function extractBackendTools(tools: RegisterInput["tools"]): BackendTool[] {
+function extractExecutableTools(tools: RegisterInput["tools"]): (BackendTool | McpTool)[] {
   return tools.filter(
-    (t): t is BackendTool => !("type" in t) || t.type === "backend",
+    (t): t is BackendTool | McpTool => !("type" in t) || t.type === "backend" || t.type === "mcp",
   );
 }
 
@@ -248,7 +249,7 @@ function wrapDiscoverTool(dt: DiscoverTool) {
   });
 }
 
-function buildMastraToolMap(backendTools: BackendTool[]): Record<string, MastraTool> {
+function buildMastraToolMap(backendTools: (BackendTool | McpTool)[]): Record<string, MastraTool> {
   const tools: Record<string, MastraTool> = {};
   for (const t of backendTools) {
     tools[t.name] = createTool({
