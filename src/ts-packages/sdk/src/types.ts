@@ -1,3 +1,7 @@
+// Search strategy
+
+export type SearchStrategy = "bm25" | "semantic" | "hybrid";
+
 // Server types (mirror Rust models)
 
 export interface ServerToolFields {
@@ -51,6 +55,7 @@ export interface PrefetchOptions {
   limit?: number;
   exclude?: string[];
   turnId?: string;
+  strategy?: SearchStrategy;
 }
 
 export interface CaptureTurnOptions {
@@ -65,6 +70,7 @@ export interface CaptureTurnResponse {
 export interface DiscoverToolInput {
   query: string;
   limit?: number;
+  strategy?: SearchStrategy;
 }
 
 export interface DiscoverTool {
@@ -199,6 +205,7 @@ export interface ApiClientConfig {
   tools: ServerTool[];
   headers?: Record<string, string>;
   onEvent?: (event: AgentifiedEvent) => void;
+  strategy?: SearchStrategy;
 }
 
 // High-level SDK types

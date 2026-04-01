@@ -18,6 +18,7 @@ import type {
   PrefetchOptions,
   RankedTool,
   RegisterResponse,
+  SearchStrategy,
   ServerTool,
 } from "./types.js";
 
@@ -48,11 +49,13 @@ export class ApiClient {
     });
   }
 
-  async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string): Promise<RankedTool[]> {
+  async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string, strategy?: SearchStrategy): Promise<RankedTool[]> {
     const body: Record<string, unknown> = { query };
     if (limit !== undefined) body.limit = limit;
     if (exclude !== undefined) body.exclude = exclude;
     if (turnId !== undefined) body.turn_id = turnId;
+    const effectiveStrategy = strategy ?? this.config.strategy;
+    if (effectiveStrategy !== undefined) body.strategy = effectiveStrategy;
 
     const data = await this.fetchJson<DiscoverResponse>(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/discover`, {
       method: "POST",
@@ -67,7 +70,7 @@ export class ApiClient {
     const start = performance.now();
 
     const query = options.messages.map((m) => m.content).join("\n");
-    const tools = await this.discover(datasetId, query, options.limit, options.exclude, options.turnId);
+    const tools = await this.discover(datasetId, query, options.limit, options.exclude, options.turnId, options.strategy);
 
     this.emit({
       type: "agentified:prefetch:complete",
@@ -240,7 +243,7 @@ export class ApiClient {
         this.emit({ type: "agentified:discover:start", query: input.query });
         const start = performance.now();
 
-        const tools = await this.discover(datasetId, input.query, input.limit);
+        const tools = await this.discover(datasetId, input.query, input.limit, undefined, undefined, input.strategy);
         for (const t of tools) discoveredNames.add(t.name);
 
         this.emit({

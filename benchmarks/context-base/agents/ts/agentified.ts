@@ -5,7 +5,7 @@ config({ path: "../../.env" });
 import { resolve } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { Agentified } from "agentified";
-import type { BackendTool, DiscoverTool } from "agentified";
+import type { BackendTool, DiscoverTool, SearchStrategy } from "agentified";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { z } from "zod";
 import { runAgenticLoop, toAnthropicTools, type AnthropicTool } from "../../lib/anthropic-agent.js";
@@ -84,8 +84,10 @@ async function boot(): Promise<BootResult> {
     console.error(`[agentified] using external endpoint: ${endpoint}`);
   }
 
+  const strategy = (process.env.SEARCH_STRATEGY as SearchStrategy | undefined) ?? "bm25";
   const ag = new Agentified();
-  await ag.connect(endpoint);
+  await ag.connect(endpoint, { strategy });
+  console.error(`[agentified] using search strategy: ${strategy}`);
   const instance = await ag.register({ tools: backendTools });
   console.error(`[agentified] registered ${backendTools.length} tools`);
 

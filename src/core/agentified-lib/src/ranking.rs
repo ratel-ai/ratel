@@ -87,6 +87,16 @@ pub fn bm25_scores(query: &str, documents: &[String]) -> Vec<f32> {
         .collect()
 }
 
+pub fn normalize_min_max(scores: &[f32]) -> Vec<f32> {
+    if scores.is_empty() {
+        return vec![];
+    }
+    let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let min = scores.iter().cloned().fold(f32::INFINITY, f32::min);
+    let range = max - min;
+    scores.iter().map(|s| if range > 0.0 { (s - min) / range } else { 0.0 }).collect()
+}
+
 fn tokenize(text: &str) -> Vec<String> {
     text.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
@@ -172,6 +182,34 @@ mod tests {
         let score2 = weighted_semantic_score(&query, &field_embs, &weights2);
         // Expected: (0.1 * 1.0 + 0.9 * 0.0) / (0.1 + 0.9) = 0.1
         assert!((score2 - 0.1).abs() < 1e-6, "expected ~0.1, got {score2}");
+    }
+
+    #[test]
+    fn normalize_min_max_basic() {
+        let scores = vec![1.0, 3.0, 5.0];
+        let norm = normalize_min_max(&scores);
+        assert!((norm[0] - 0.0).abs() < 1e-6);
+        assert!((norm[1] - 0.5).abs() < 1e-6);
+        assert!((norm[2] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn normalize_min_max_all_equal() {
+        let scores = vec![2.0, 2.0, 2.0];
+        let norm = normalize_min_max(&scores);
+        assert!(norm.iter().all(|s| *s == 0.0));
+    }
+
+    #[test]
+    fn normalize_min_max_empty() {
+        let norm = normalize_min_max(&[]);
+        assert!(norm.is_empty());
+    }
+
+    #[test]
+    fn normalize_min_max_single() {
+        let norm = normalize_min_max(&[5.0]);
+        assert!((norm[0] - 0.0).abs() < 1e-6);
     }
 
     #[test]

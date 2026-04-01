@@ -48,6 +48,20 @@ impl Default for EmbeddingFieldWeights {
     }
 }
 
+// Search strategy
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchStrategy {
+    Bm25,
+    Semantic,
+    Hybrid,
+}
+
+impl Default for SearchStrategy {
+    fn default() -> Self { SearchStrategy::Bm25 }
+}
+
 // API types
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,7 +79,7 @@ pub struct Tool {
 #[derive(Debug, Clone)]
 pub struct StoredTool {
     pub tool: Tool,
-    pub embeddings: FieldEmbeddings,
+    pub embeddings: Option<FieldEmbeddings>,
     pub bm25_text: String,
 }
 
@@ -89,6 +103,8 @@ pub struct DiscoverRequest {
     pub query: String,
     #[serde(default)]
     pub limit: Option<usize>,
+    #[serde(default)]
+    pub strategy: SearchStrategy,
     #[serde(default)]
     pub embedding_weights: Option<EmbeddingFieldWeights>,
     #[serde(default)]

@@ -20,7 +20,8 @@ use models::{
     FieldEmbeddings, GetMessagesQuery, GetMessagesResponse, ListToolsResponse,
     RankedTool, RecalledContext, RegisterToolsResponse, StoredMessage, StoredTool, Tool, Turn,
 };
-use ranking::{bm25_scores, weighted_semantic_score};
+use models::SearchStrategy;
+use ranking::{bm25_scores, normalize_min_max, weighted_semantic_score};
 
 // Error types
 
@@ -49,21 +50,25 @@ pub struct AgentifiedCore {
     tools: RwLock<HashMap<String, HashMap<String, StoredTool>>>,
     turns: RwLock<HashMap<String, Turn>>,
     embedding_cache: RwLock<HashMap<String, Vec<f32>>>,
-    embedding: Arc<dyn EmbeddingService>,
+    embedding: Option<Arc<dyn EmbeddingService>>,
     storage: Arc<dyn Storage>,
     llm: Option<Arc<dyn embedding::LlmService>>,
 }
 
 impl AgentifiedCore {
     pub fn new(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>) -> Self {
-        Self::build(embedding, storage, None)
+        Self::build(Some(embedding), storage, None)
     }
 
     pub fn new_with_llm(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>, llm: Arc<dyn embedding::LlmService>) -> Self {
-        Self::build(embedding, storage, Some(llm))
+        Self::build(Some(embedding), storage, Some(llm))
     }
 
-    fn build(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>, llm: Option<Arc<dyn embedding::LlmService>>) -> Self {
+    pub fn new_bm25_only(storage: Arc<dyn Storage>) -> Self {
+        Self::build(None, storage, None)
+    }
+
+    fn build(embedding: Option<Arc<dyn EmbeddingService>>, storage: Arc<dyn Storage>, llm: Option<Arc<dyn embedding::LlmService>>) -> Self {
         let turns_map = storage.load_all_turns().unwrap_or_default().into_iter().collect();
         let cache_map = storage.load_all_embeddings().unwrap_or_default().into_iter().collect();
 
@@ -88,61 +93,54 @@ impl AgentifiedCore {
         }
 
         let mut all_tool_texts = Vec::with_capacity(count);
-        let mut unique_texts = Vec::new();
 
-        {
-            let cache = self.embedding_cache.read().await;
-            for tool in &tools {
-                let texts = if let Some(ref fields) = tool.fields {
-                    ToolTexts {
-                        name: fields.name.clone(),
-                        description: fields.description.clone(),
-                        input_schema: fields.input_schema.clone(),
-                        output_schema: fields.output_schema.clone(),
-                    }
-                } else {
-                    ToolTexts {
-                        name: tool.name.clone(),
-                        description: tool.description.clone(),
-                        input_schema: None,
-                        output_schema: None,
-                    }
-                };
+        for tool in &tools {
+            let texts = if let Some(ref fields) = tool.fields {
+                ToolTexts {
+                    name: fields.name.clone(),
+                    description: fields.description.clone(),
+                    input_schema: fields.input_schema.clone(),
+                    output_schema: fields.output_schema.clone(),
+                }
+            } else {
+                ToolTexts {
+                    name: tool.name.clone(),
+                    description: tool.description.clone(),
+                    input_schema: None,
+                    output_schema: None,
+                }
+            };
+            all_tool_texts.push(texts);
+        }
 
-                for text in [Some(&texts.name), Some(&texts.description), texts.input_schema.as_ref(), texts.output_schema.as_ref()].into_iter().flatten() {
-                    if !cache.contains_key(text) && !unique_texts.contains(text) {
-                        unique_texts.push(text.clone());
+        // Compute embeddings only if embedding service is available
+        let has_embeddings = if let Some(ref embedding_svc) = self.embedding {
+            let mut unique_texts = Vec::new();
+            {
+                let cache = self.embedding_cache.read().await;
+                for texts in &all_tool_texts {
+                    for text in [Some(&texts.name), Some(&texts.description), texts.input_schema.as_ref(), texts.output_schema.as_ref()].into_iter().flatten() {
+                        if !cache.contains_key(text) && !unique_texts.contains(text) {
+                            unique_texts.push(text.clone());
+                        }
                     }
                 }
-
-                all_tool_texts.push(texts);
             }
-        }
 
-        if !unique_texts.is_empty() {
-            let embeddings = self.embedding.embed_batch(&unique_texts).await.map_err(CoreError::EmbeddingFailed)?;
-            let mut cache = self.embedding_cache.write().await;
-            for (text, emb) in unique_texts.into_iter().zip(embeddings) {
-                cache.insert(text, emb);
+            if !unique_texts.is_empty() {
+                let embeddings = embedding_svc.embed_batch(&unique_texts).await.map_err(CoreError::EmbeddingFailed)?;
+                let mut cache = self.embedding_cache.write().await;
+                for (text, emb) in unique_texts.into_iter().zip(embeddings) {
+                    cache.insert(text, emb);
+                }
             }
-        }
+            true
+        } else {
+            false
+        };
 
-        let cache = self.embedding_cache.read().await;
-        let mut tool_data = Vec::with_capacity(count);
+        let mut tool_data: Vec<(Option<FieldEmbeddings>, String)> = Vec::with_capacity(count);
         for texts in &all_tool_texts {
-            let name_emb = cache.get(&texts.name).cloned()
-                .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for name")))?;
-            let desc_emb = cache.get(&texts.description).cloned()
-                .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for description")))?;
-            let input_emb = texts.input_schema.as_ref().map(|t| {
-                cache.get(t).cloned()
-                    .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for input_schema")))
-            }).transpose()?;
-            let output_emb = texts.output_schema.as_ref().map(|t| {
-                cache.get(t).cloned()
-                    .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for output_schema")))
-            }).transpose()?;
-
             let bm25_text = [
                 Some(texts.name.clone()),
                 Some(texts.description.clone()),
@@ -154,17 +152,32 @@ impl AgentifiedCore {
             .collect::<Vec<_>>()
             .join(" ");
 
-            tool_data.push((
-                FieldEmbeddings {
+            let embeddings = if has_embeddings {
+                let cache = self.embedding_cache.read().await;
+                let name_emb = cache.get(&texts.name).cloned()
+                    .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for name")))?;
+                let desc_emb = cache.get(&texts.description).cloned()
+                    .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for description")))?;
+                let input_emb = texts.input_schema.as_ref().map(|t| {
+                    cache.get(t).cloned()
+                        .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for input_schema")))
+                }).transpose()?;
+                let output_emb = texts.output_schema.as_ref().map(|t| {
+                    cache.get(t).cloned()
+                        .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for output_schema")))
+                }).transpose()?;
+                Some(FieldEmbeddings {
                     name: name_emb,
                     description: desc_emb,
                     input_schema: input_emb,
                     output_schema: output_emb,
-                },
-                bm25_text,
-            ));
+                })
+            } else {
+                None
+            };
+
+            tool_data.push((embeddings, bm25_text));
         }
-        drop(cache);
 
         let mut tools_map = self.tools.write().await;
         let dataset_tools = tools_map.entry(dataset_id.to_string()).or_default();
@@ -177,17 +190,23 @@ impl AgentifiedCore {
             let storage = self.storage.clone();
             let did = dataset_id.to_string();
             let tool_pairs: Vec<(String, StoredTool)> = dataset_tools.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            let cache = self.embedding_cache.read().await;
-            let emb_pairs: Vec<(String, Vec<f32>)> = cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            drop(cache);
+            let has_emb = has_embeddings;
+            let emb_pairs: Vec<(String, Vec<f32>)> = if has_emb {
+                let cache = self.embedding_cache.read().await;
+                cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+            } else {
+                vec![]
+            };
             tokio::task::spawn_blocking(move || {
                 let refs: Vec<(&str, &StoredTool)> = tool_pairs.iter().map(|(k, v)| (k.as_str(), v)).collect();
                 if let Err(e) = storage.save_tools(&did, &refs) {
                     tracing::error!("storage save_tools failed: {e}");
                 }
-                let emb_refs: Vec<(&str, &[f32])> = emb_pairs.iter().map(|(k, v)| (k.as_str(), v.as_slice())).collect();
-                if let Err(e) = storage.save_embeddings(&emb_refs) {
-                    tracing::error!("storage save_embeddings failed: {e}");
+                if has_emb {
+                    let emb_refs: Vec<(&str, &[f32])> = emb_pairs.iter().map(|(k, v)| (k.as_str(), v.as_slice())).collect();
+                    if let Err(e) = storage.save_embeddings(&emb_refs) {
+                        tracing::error!("storage save_embeddings failed: {e}");
+                    }
                 }
             });
         }
@@ -216,8 +235,6 @@ impl AgentifiedCore {
             vec![]
         };
 
-        let query_embedding = self.embed_cached(&body.query).await.map_err(CoreError::EmbeddingFailed)?;
-
         let tools = self.tools.read().await;
         let dataset_tools = tools.get(dataset_id);
         let empty = HashMap::new();
@@ -245,31 +262,59 @@ impl AgentifiedCore {
             return Ok(DiscoverResponse { tools: base_tools });
         }
 
-        let semantic_scores: Vec<f32> = stored
-            .iter()
-            .map(|t| weighted_semantic_score(&query_embedding, &t.embeddings, &weights))
-            .collect();
+        // Determine effective strategy — fallback to BM25 if embeddings unavailable
+        let effective_strategy = match body.strategy {
+            SearchStrategy::Bm25 => SearchStrategy::Bm25,
+            SearchStrategy::Semantic | SearchStrategy::Hybrid => {
+                if self.can_use_embeddings(&stored) {
+                    body.strategy
+                } else {
+                    tracing::warn!(
+                        "requested {:?} strategy but embeddings unavailable, falling back to bm25",
+                        body.strategy
+                    );
+                    SearchStrategy::Bm25
+                }
+            }
+        };
 
-        let documents: Vec<String> = stored.iter().map(|t| t.bm25_text.clone()).collect();
-        let raw_bm25 = bm25_scores(&body.query, &documents);
-
-        let bm25_max = raw_bm25.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-        let bm25_min = raw_bm25.iter().cloned().fold(f32::INFINITY, f32::min);
-        let bm25_range = bm25_max - bm25_min;
-        let norm_bm25: Vec<f32> = raw_bm25
-            .iter()
-            .map(|s| if bm25_range > 0.0 { (s - bm25_min) / bm25_range } else { 0.0 })
-            .collect();
-
-        let mut ranked: Vec<RankedTool> = stored
-            .iter()
-            .enumerate()
-            .map(|(i, t)| RankedTool {
-                tool: t.tool.clone(),
-                score: 0.7 * semantic_scores[i] + 0.3 * norm_bm25[i],
-                graph_expanded: None,
-            })
-            .collect();
+        let mut ranked: Vec<RankedTool> = match effective_strategy {
+            SearchStrategy::Bm25 => {
+                let documents: Vec<String> = stored.iter().map(|t| t.bm25_text.clone()).collect();
+                let raw_bm25 = bm25_scores(&body.query, &documents);
+                let norm_bm25 = normalize_min_max(&raw_bm25);
+                stored.iter().enumerate().map(|(i, t)| RankedTool {
+                    tool: t.tool.clone(),
+                    score: norm_bm25[i],
+                    graph_expanded: None,
+                }).collect()
+            }
+            SearchStrategy::Semantic => {
+                let query_embedding = self.embed_cached(&body.query).await.map_err(CoreError::EmbeddingFailed)?;
+                stored.iter().map(|t| {
+                    let emb = t.embeddings.as_ref().unwrap();
+                    RankedTool {
+                        tool: t.tool.clone(),
+                        score: weighted_semantic_score(&query_embedding, emb, &weights),
+                        graph_expanded: None,
+                    }
+                }).collect()
+            }
+            SearchStrategy::Hybrid => {
+                let query_embedding = self.embed_cached(&body.query).await.map_err(CoreError::EmbeddingFailed)?;
+                let semantic_scores: Vec<f32> = stored.iter()
+                    .map(|t| weighted_semantic_score(&query_embedding, t.embeddings.as_ref().unwrap(), &weights))
+                    .collect();
+                let documents: Vec<String> = stored.iter().map(|t| t.bm25_text.clone()).collect();
+                let raw_bm25 = bm25_scores(&body.query, &documents);
+                let norm_bm25 = normalize_min_max(&raw_bm25);
+                stored.iter().enumerate().map(|(i, t)| RankedTool {
+                    tool: t.tool.clone(),
+                    score: 0.7 * semantic_scores[i] + 0.3 * norm_bm25[i],
+                    graph_expanded: None,
+                }).collect()
+            }
+        };
 
         ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         ranked.truncate(limit);
@@ -588,6 +633,7 @@ impl AgentifiedCore {
         let discover_resp = self.discover(dataset_id, DiscoverRequest {
             query,
             limit: Some(limit),
+            strategy: SearchStrategy::default(),
             embedding_weights: None,
             exclude: if exclude.is_empty() { None } else { Some(exclude) },
             turn_id: None,
@@ -622,12 +668,18 @@ impl AgentifiedCore {
         });
     }
 
+    fn can_use_embeddings(&self, tools: &[&StoredTool]) -> bool {
+        self.embedding.is_some() && tools.iter().all(|t| t.embeddings.is_some())
+    }
+
     async fn embed_cached(&self, text: &str) -> anyhow::Result<Vec<f32>> {
         let cached = { self.embedding_cache.read().await.get(text).cloned() };
         if let Some(emb) = cached {
             return Ok(emb);
         }
-        let emb = self.embedding.embed(text).await?;
+        let embedding_svc = self.embedding.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("embedding service not configured"))?;
+        let emb = embedding_svc.embed(text).await?;
         self.embedding_cache.write().await.insert(text.to_string(), emb.clone());
 
         // Write-through to storage
@@ -1552,6 +1604,138 @@ mod tests {
         assert!(resp.summary.is_some());
         let summary = resp.summary.unwrap();
         assert!(summary.contains("[pruned]"), "tool content >100 chars should be pruned with custom threshold");
+    }
+
+    // Strategy tests
+
+    fn make_bm25_core() -> AgentifiedCore {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        AgentifiedCore::new_bm25_only(storage)
+    }
+
+    #[tokio::test]
+    async fn register_tools_without_embedding_service() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+        ];
+        let resp = core.register_tools("ds", tools).await.unwrap();
+        assert_eq!(resp.registered, 1);
+
+        let listed = core.list_tools("ds").await.unwrap();
+        assert_eq!(listed.tools.len(), 1);
+
+        // Verify the stored tool has no embeddings but has bm25_text
+        let tools_map = core.tools.read().await;
+        let stored = tools_map.get("ds").unwrap().get("refund").unwrap();
+        assert!(stored.embeddings.is_none());
+        assert!(!stored.bm25_text.is_empty());
+    }
+
+    #[tokio::test]
+    async fn discover_bm25_without_embedding_service() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool { name: "refund".into(), description: "Process a refund for invoice".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            Tool { name: "getUser".into(), description: "Get user account details".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        let resp = core.discover("ds", DiscoverRequest {
+            query: "refund".into(),
+            limit: Some(5),
+            strategy: SearchStrategy::Bm25,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+        }).await.unwrap();
+
+        assert!(!resp.tools.is_empty());
+        assert_eq!(resp.tools[0].tool.name, "refund");
+    }
+
+    #[tokio::test]
+    async fn discover_semantic_falls_back_to_bm25_without_embeddings() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        // Request semantic but no embedding service → should fallback to BM25
+        let resp = core.discover("ds", DiscoverRequest {
+            query: "refund".into(),
+            limit: Some(5),
+            strategy: SearchStrategy::Semantic,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+        }).await.unwrap();
+
+        assert!(!resp.tools.is_empty());
+        assert_eq!(resp.tools[0].tool.name, "refund");
+    }
+
+    #[tokio::test]
+    async fn discover_bm25_skips_embedding_call() {
+        let fake = Arc::new(FakeEmbedding::new());
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        let core = AgentifiedCore::new(fake.clone() as Arc<dyn EmbeddingService>, storage);
+
+        let tools = vec![
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        let batch_before = fake.batch_call_count.load(std::sync::atomic::Ordering::Relaxed);
+        let call_before = fake.call_count.load(std::sync::atomic::Ordering::Relaxed);
+
+        let _resp = core.discover("ds", DiscoverRequest {
+            query: "refund".into(),
+            limit: Some(5),
+            strategy: SearchStrategy::Bm25,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+        }).await.unwrap();
+
+        // No new embedding calls should have been made for the query
+        let batch_after = fake.batch_call_count.load(std::sync::atomic::Ordering::Relaxed);
+        let call_after = fake.call_count.load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(batch_before, batch_after, "BM25 strategy should not call embed_batch");
+        assert_eq!(call_before, call_after, "BM25 strategy should not call embed");
+    }
+
+    #[tokio::test]
+    async fn discover_hybrid_blends_semantic_and_bm25() {
+        let core = make_core();
+        let tools = vec![
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            Tool { name: "getUser".into(), description: "Get user details".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        let resp = core.discover("ds", DiscoverRequest {
+            query: "refund".into(),
+            limit: Some(5),
+            strategy: SearchStrategy::Hybrid,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+        }).await.unwrap();
+
+        assert!(!resp.tools.is_empty());
+        // Scores should be in [0, 1] range (blend of semantic + bm25)
+        for tool in &resp.tools {
+            assert!(tool.score >= 0.0 && tool.score <= 1.0, "score out of range: {}", tool.score);
+        }
+    }
+
+    #[tokio::test]
+    async fn discover_default_strategy_is_bm25() {
+        // Default DiscoverRequest (no strategy field) should use BM25
+        let req: DiscoverRequest = serde_json::from_str(r#"{"query": "test"}"#).unwrap();
+        assert_eq!(req.strategy, SearchStrategy::Bm25);
     }
 
 }
