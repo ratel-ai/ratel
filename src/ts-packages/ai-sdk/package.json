@@ -27,7 +27,7 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "agentified": "workspace:*",
+    "agentified": ">=0.0.9",
     "ai": ">=4.0.0",
     "zod": ">=3.0.0"
   },
