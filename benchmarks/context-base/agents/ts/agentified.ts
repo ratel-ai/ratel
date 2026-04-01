@@ -49,7 +49,7 @@ async function boot(): Promise<BootResult> {
 
   if (!endpoint) {
     console.error("[agentified] starting agentified-core container...");
-    const started = await new GenericContainer("agentified/agentified-core:0.0.5-beta.6")
+    const started = await new GenericContainer("agentified/agentified-core:0.2.5")
       .withExposedPorts(9119)
       .withEnvironment({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
@@ -84,7 +84,7 @@ async function boot(): Promise<BootResult> {
   });
 
   const ag = new Agentified();
-  ag.connect(endpoint);
+  await ag.connect(endpoint);
   const mag = ag.adaptTo(mastra());
   const instance = await mag.register({ tools: backendTools });
   console.error(`[agentified] registered ${backendTools.length} tools`);
