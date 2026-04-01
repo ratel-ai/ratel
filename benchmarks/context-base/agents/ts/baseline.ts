@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
-import { jsonSchemaToZod } from "@agentified/mastra";
+import { jsonSchemaToZod } from "../../lib/json-schema-to-zod.js";
 import { toMastraModel } from "../../lib/model.js";
 import { startAgent, type ExecutableTool } from "../../scaffolding/ts/index.js";
 import type { SetupBody, SendMessageBody, SendMessageResponse } from "../../lib/protocol.js";
