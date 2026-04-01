@@ -66,6 +66,11 @@ function discoverAgents(): AgentEntry[] {
     }
   }
 
+  // claude-tool-search agent only works with Claude models
+  if (!model.startsWith("claude-")) {
+    return entries.filter((e) => !e.name.includes("claude-tool-search"));
+  }
+
   return entries;
 }
 
