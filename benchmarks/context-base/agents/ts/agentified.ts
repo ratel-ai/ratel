@@ -3,34 +3,45 @@ config();
 config({ path: "../../.env" });
 
 import { resolve } from "node:path";
-import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
+import Anthropic from "@anthropic-ai/sdk";
 import { Agentified } from "agentified";
-import type { BackendTool } from "agentified";
-import { mastra, jsonSchemaToZod, type MastraInstance } from "@agentified/mastra";
+import type { BackendTool, DiscoverTool } from "agentified";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { z } from "zod";
+import { runAgenticLoop, toAnthropicTools, type AnthropicTool } from "../../lib/anthropic-agent.js";
 import { startAgent, executeTool } from "../../scaffolding/ts/index.js";
 import { toolRegistry } from "../../tools/registry.js";
 import { TOOL_DEPENDENCIES } from "../../tools/dependencies.js";
-import { toMastraModel } from "../../lib/model.js";
 import { MODEL, SYSTEM_PROMPT, MAX_STEPS } from "../../lib/constants.js";
 import type { SendMessageBody, SendMessageResponse } from "../../lib/protocol.js";
 
 const TOOL_LIMIT = process.env.FORCE_DISCOVERY === "1" ? 0 : 15;
 
+const DISCOVER_TOOL_DEF: AnthropicTool = {
+  name: "agentified_discover",
+  description: "Search for available tools by describing what you need. Returns relevant tools you can use.",
+  input_schema: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Description of what tools you need" },
+      limit: { type: "number", description: "Max number of tools to return" },
+    },
+    required: ["query"],
+  },
+};
+
 interface BootResult {
   ag: Agentified;
-  instance: MastraInstance;
-  mastraAgent: Agent;
-  mastraTools: Record<string, ReturnType<typeof createTool>>;
+  client: Anthropic;
+  allTools: AnthropicTool[];
+  executors: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
+  discoverTool: DiscoverTool;
   container?: StartedTestContainer;
 }
 
 async function boot(): Promise<BootResult> {
   const scriptsDir = resolve(import.meta.dirname, "../../tools/scripts");
 
-  // Build BackendTool[] for registration
   const backendTools: BackendTool[] = Object.entries(toolRegistry).map(([name, t]) => {
     const script = resolve(scriptsDir, `${name}.sh`);
     return {
@@ -42,13 +53,12 @@ async function boot(): Promise<BootResult> {
     };
   });
 
-  // Resolve agentified-core endpoint (external or container)
   let endpoint = process.env.AGENTIFIED_ENDPOINT;
   let container: StartedTestContainer | undefined;
 
   if (!endpoint) {
     console.error("[agentified] starting agentified-core container...");
-    const started = await new GenericContainer("agentified/agentified-core:0.5.0-beta.6")
+    const started = await new GenericContainer("agentified/agentified-core:0.2.5")
       .withExposedPorts(9119)
       .withEnvironment({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
@@ -74,32 +84,27 @@ async function boot(): Promise<BootResult> {
     console.error(`[agentified] using external endpoint: ${endpoint}`);
   }
 
-  const model = process.env.MODEL ?? MODEL;
-  const mastraAgent = new Agent({
-    id: "benchmark-agentified",
-    name: "benchmark-agentified",
-    instructions: SYSTEM_PROMPT,
-    model: toMastraModel(model),
-  });
-
   const ag = new Agentified();
-  ag.connect(endpoint);
-  const mag = ag.adaptTo(mastra());
-  const instance = await mag.register({ tools: backendTools });
+  await ag.connect(endpoint);
+  const instance = await ag.register({ tools: backendTools });
   console.error(`[agentified] registered ${backendTools.length} tools`);
 
-  // Build Mastra-compatible tools from definitions
-  const mastraTools: Record<string, ReturnType<typeof createTool>> = {};
-  for (const t of backendTools) {
-    mastraTools[t.name] = createTool({
-      id: t.name,
-      description: t.description,
-      inputSchema: jsonSchemaToZod(t.parameters),
-      execute: async (input) => t.handler(input as Record<string, unknown>),
-    });
-  }
+  const discoverTool = instance.discoverTool;
 
-  return { ag, instance, mastraAgent, mastraTools, container };
+  // Build Anthropic-format tools and executors
+  const allTools = toAnthropicTools(backendTools);
+  const executors: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {};
+  for (const t of backendTools) executors[t.name] = t.handler;
+
+  // Add discover tool executor
+  executors["agentified_discover"] = async (args) => {
+    const result = await discoverTool.execute(args as any);
+    return result.map((t) => ({ name: t.name, description: t.description, score: t.score }));
+  };
+
+  const client = new Anthropic();
+
+  return { ag, client, allTools, executors, discoverTool, container };
 }
 
 if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("agentified.js")) {
@@ -107,56 +112,66 @@ if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("age
 
   process.on("SIGTERM", async () => {
     const result = await bootPromise.catch(() => ({ ag: undefined, container: undefined }) as any);
-    if (result.ag) await result.ag.disconnect().catch(() => { });
+    if (result.ag) await result.ag.disconnect().catch(() => {});
     if (result.container) {
       console.error("[agentified] stopping container...");
-      await result.container.stop().catch(() => { });
+      await result.container.stop().catch(() => {});
     }
     process.exit(0);
   });
 
   startAgent({
-    setup: async () => { },
+    setup: async () => {},
 
     sendMessage: async (body: SendMessageBody): Promise<SendMessageResponse> => {
-      const { instance, mastraAgent, mastraTools } = await bootPromise;
+      const { client, allTools, executors, discoverTool } = await bootPromise;
+      const start = performance.now();
+      const model = process.env.MODEL ?? MODEL;
 
-      const sessionId = body.turnId ?? `turn-${Date.now()}`;
-      const session = instance.session(sessionId);
+      // Start with discover tool + any previously discovered tools
+      const discoveredNames = discoverTool.discoveredNames;
 
-      mastraAgent.__setTools({ ...mastraTools, agentified_discover: session.discoverTool });
-
-      const result = await mastraAgent.generate(
-        body.history.map((m) => ({ role: m.role, content: m.content })) as any,
-        { prepareStep: session.prepareStep, maxSteps: MAX_STEPS },
-      );
-
-      const toolCalls = result.toolCalls.map((tc) => ({
-        toolCallId: tc.payload.toolCallId,
-        toolName: tc.payload.toolName,
-        args: tc.payload.args ?? {},
-      }));
-
-      const hydratedTools = toolCalls.map((tc) => tc.toolName);
+      const result = await runAgenticLoop({
+        client,
+        model,
+        system: SYSTEM_PROMPT,
+        tools: buildActiveTools(allTools, discoveredNames),
+        messages: body.history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        maxSteps: MAX_STEPS,
+        executors,
+        beforeStep: async (step) => {
+          // After first step, update tools based on what was discovered
+          if (step > 0) {
+            return { tools: buildActiveTools(allTools, discoveredNames) };
+          }
+        },
+        filterReportedCalls: (calls) => calls.filter((tc) => tc.toolName !== "agentified_discover"),
+      });
 
       return {
-        content: result.text,
-        toolCalls,
+        content: result.content,
+        toolCalls: result.toolCalls,
         usage: {
-          totalTokens: result.usage.totalTokens ?? 0,
-          inputTokens: result.usage.inputTokens ?? 0,
-          outputTokens: result.usage.outputTokens ?? 0,
+          totalTokens: result.usage.inputTokens + result.usage.outputTokens,
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          cachedInputTokens: result.usage.cachedInputTokens,
         },
-        durationMs: 0,
-        hydratedTools,
-        turnId: sessionId,
+        durationMs: performance.now() - start,
+        hydratedTools: [...discoveredNames],
+        turnId: body.turnId,
         debug: {
           systemPrompt: SYSTEM_PROMPT,
-          toolNames: hydratedTools,
-          modelResponse: result.text,
-          toolCallsMade: toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
+          toolNames: [...discoveredNames],
+          modelResponse: result.content,
+          toolCallsMade: result.toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
         },
       };
     },
   });
+}
+
+function buildActiveTools(allTools: AnthropicTool[], discoveredNames: Set<string>): AnthropicTool[] {
+  const active = allTools.filter((t) => discoveredNames.has(t.name));
+  return [DISCOVER_TOOL_DEF, ...active] as any;
 }

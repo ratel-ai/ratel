@@ -80,7 +80,7 @@ describe("Context Base Benchmark", () => {
       };
       await sendSetup(agentPort, setupBody);
     }
-  }, 60_000);
+  }, 120_000);
 
   afterAll(async () => {
     if (collectedResults.length > 0) {
@@ -169,6 +169,6 @@ describe("Context Base Benchmark", () => {
         const neg = results.find((r) => r.name === "Negative Correctness");
         expect(neg?.score, "Should call no tools for out-of-scope queries").toBe(1);
       }
-    }, 300_000);
+    }, 600_000);
   }
 });
