@@ -88,12 +88,11 @@ export class AiSdkContextBuilder {
   async assemble(): Promise<AiSdkAssembledContext> {
     const sdkCtx = await this.sdkBuilder.assemble();
 
-    const resolvedTools: Record<string, AiSdkTool> = { ...this.explicitTools };
-    for (const name of this.discoveredNames) {
-      if (!resolvedTools[name] && this.aiSdkToolCache[name]) {
-        resolvedTools[name] = this.aiSdkToolCache[name];
-      }
-    }
+    // AI SDK requires all tools upfront; prepareStep controls visibility via activeTools
+    const resolvedTools: Record<string, AiSdkTool> = {
+      ...this.aiSdkToolCache,
+      ...this.explicitTools,
+    };
 
     return new AiSdkAssembledContext(sdkCtx, resolvedTools, this.sdkPrepareStep);
   }
@@ -233,7 +232,7 @@ function extractBackendTools(tools: RegisterInput["tools"]): BackendTool[] {
 function wrapGetMessagesTool(gmt: GetMessagesTool): AiSdkTool {
   return tool({
     description: gmt.definition.description,
-    parameters: z.object({
+    inputSchema: z.object({
       limit: z.number().optional(),
       afterSeq: z.number().optional(),
       aroundSeq: z.number().optional(),
@@ -245,7 +244,7 @@ function wrapGetMessagesTool(gmt: GetMessagesTool): AiSdkTool {
 function wrapDiscoverTool(dt: DiscoverTool): AiSdkTool {
   return tool({
     description: dt.definition.description,
-    parameters: z.object({ query: z.string(), limit: z.number().optional() }),
+    inputSchema: z.object({ query: z.string(), limit: z.number().optional() }),
     execute: async (input: { query: string; limit?: number }) => dt.execute(input),
   });
 }
@@ -255,7 +254,7 @@ function buildAiSdkToolMap(backendTools: BackendTool[]): Record<string, AiSdkToo
   for (const t of backendTools) {
     tools[t.name] = tool({
       description: t.description,
-      parameters: jsonSchemaToZod(t.parameters),
+      inputSchema: jsonSchemaToZod(t.parameters),
       execute: async (inputData) => t.handler(inputData as Record<string, unknown>),
     });
   }

@@ -8,7 +8,7 @@ Vercel AI SDK adapter for [Agentified](../../../README.md) — wraps SDK classes
 npm install @agentified/ai-sdk agentified
 ```
 
-**Peer dependencies:** `ai >= 4.0.0`, `zod >= 3.0.0`
+**Peer dependencies:** `ai >= 6.0.0`, `zod >= 3.0.0`
 
 ## Quick Start
 

@@ -28,12 +28,12 @@
   },
   "peerDependencies": {
     "agentified": ">=0.0.9",
-    "ai": ">=4.0.0",
+    "ai": ">=6.0.0",
     "zod": ">=3.0.0"
   },
   "devDependencies": {
     "agentified": "workspace:*",
-    "ai": "^4.0.0",
+    "ai": "^6.0.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.9.0",
     "vitest": "^2.1.0",

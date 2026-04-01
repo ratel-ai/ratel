@@ -8,6 +8,7 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 
 - **[Getting Started](./typescript/getting-started.md)** — Install, paste-and-run, see results in 2 minutes
 - **[Mastra Integration](./typescript/integrations/mastra.md)** — Full-stack Mastra + React + Inspector
+- **[AI SDK Integration](./typescript/integrations/ai-sdk.md)** — Vercel AI SDK adapter with `generateText`/`streamText`
 - **[Frontend Tools](./typescript/frontend-tools.md)** — Client-side tool execution, React hooks, iteration loop
 - **[Tool Recall](./typescript/tool-recall.md)** — Auto-discover relevant tools each turn
 
@@ -33,6 +34,7 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 |---------|---------------|
 | [ts-sdk-smoke](../examples/ts-sdk-smoke/) | SDK basics — register, discover, context assembly (no LLM) |
 | [ts-mastra-smoke](../examples/ts-mastra-smoke/) | Mastra adapter — LLM generation, tool calling, AG-UI streaming |
+| [ts-ai-sdk-smoke](../examples/ts-ai-sdk-smoke/) | AI SDK adapter — `generateText`, tool calling, context discovery |
 | [QuickHR](../examples/quickhr/) | Full-stack Mastra + React app |
 | [py-sdk-smoke](../examples/py-sdk-smoke/) | Python SDK basics — register, discover, context assembly |
 | [py-langchain-sdk-smoke](../examples/py-langchain-sdk-smoke/) | LangChain adapter — LLM tool calling |
@@ -46,6 +48,7 @@ Your agent has 200 tools. The LLM sees 5. Agentified picks the right ones — **
 | [@agentified/fe-client](../src/ts-packages/fe-client/README.md) | Frontend client — browser tool execution, streaming |
 | [@agentified/react](../src/ts-packages/react/README.md) | React hooks + Inspector debug panel |
 | [@agentified/mastra](../src/ts-packages/mastra/README.md) | Mastra adapter — agent + context assembly in one call |
+| [@agentified/ai-sdk](../src/ts-packages/ai-sdk/README.md) | AI SDK adapter — tools as `tool()` objects for `generateText`/`streamText` |
 | [agentified (Python)](../src/py-packages/sdk/README.md) | Python SDK — async/sync clients, context assembly |
 | [agentified-langchain](../src/py-packages/langchain/README.md) | LangChain adapter — native StructuredTool injection |
 
