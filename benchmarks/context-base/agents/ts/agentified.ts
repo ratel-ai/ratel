@@ -7,7 +7,8 @@ import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { Agentified } from "agentified";
 import type { BackendTool } from "agentified";
-import { mastra, jsonSchemaToZod, type MastraInstance } from "@agentified/mastra";
+import { mastra, type MastraInstance } from "@agentified/mastra";
+import { jsonSchemaToZod } from "../../lib/json-schema-to-zod.js";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { z } from "zod";
 import { startAgent, executeTool } from "../../scaffolding/ts/index.js";
@@ -48,7 +49,7 @@ async function boot(): Promise<BootResult> {
 
   if (!endpoint) {
     console.error("[agentified] starting agentified-core container...");
-    const started = await new GenericContainer("agentified/agentified-core:0.5.0-beta.6")
+    const started = await new GenericContainer("agentified/agentified-core:0.0.5-beta.6")
       .withExposedPorts(9119)
       .withEnvironment({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
