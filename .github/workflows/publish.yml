@@ -91,7 +91,8 @@ jobs:
           - \`agentified@${VERSION}\`
           - \`@agentified/fe-client@${VERSION}\`
           - \`@agentified/react@${VERSION}\`
-          - \`@agentified/mastra@${VERSION}\`"
+          - \`@agentified/mastra@${VERSION}\`
+          - \`@agentified/ai-sdk@${VERSION}\`"
 
   # ── PyPI (trusted publishing — no API token) ─────────────────────────
   pypi-build:
