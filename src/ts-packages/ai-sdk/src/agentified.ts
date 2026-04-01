@@ -13,8 +13,6 @@ import type {
   GetMessagesOptions,
   ContextBuilder,
   AssembledContext,
-  CompactionStrategy,
-  ContextStrategy,
   RecallConfig,
 } from "agentified";
 import { jsonSchemaToZod } from "./schema.js";
@@ -70,7 +68,7 @@ export class AiSdkContextBuilder {
     return this;
   }
 
-  messages(opts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean; pruneThreshold?: number; compactionStrategy?: CompactionStrategy }): this {
+  messages(opts: Parameters<ContextBuilder["messages"]>[0]): this {
     this.sdkBuilder.messages(opts);
     return this;
   }
