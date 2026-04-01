@@ -7,9 +7,6 @@ function validateTools(tools: AgentifiedTool[]): void {
     if ("type" in tool && tool.type === "client") {
       throw new Error("Client tools are not yet supported");
     }
-    if ("type" in tool && tool.type === "mcp") {
-      throw new Error("MCP tools are not yet supported");
-    }
     if (!("handler" in tool)) {
       throw new Error(`Tool '${(tool as { name: string }).name}' has no type and no handler`);
     }
@@ -32,6 +29,7 @@ export class DatasetRef {
       name: t.name,
       description: t.description,
       parameters: t.parameters,
+      ...("type" in t && t.type === "mcp" ? { type: "mcp", server_uri: t.server } : {}),
     }));
     // Separate ApiClient for registration: it must carry the tool list,
     // while the shared SDK instance is tool-agnostic.
