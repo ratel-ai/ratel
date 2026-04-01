@@ -43,7 +43,7 @@ const response = await agent.generate(messages, { prepareStep: session.prepareSt
 
 ### What we skip
 
-Namespaces, memories, knowledge, artifacts, graph, summaries, recall, MCP tools, client tools, skills.
+Namespaces, memories, knowledge, artifacts, graph, compaction/summaries, recall, MCP tools, client tools, skills.
 
 ---
 
@@ -92,11 +92,11 @@ const { messages } = await session.context
 
 ### What we skip
 
-Knowledge, artifacts, graph, summaries, MCP tools, client tools, skills.
+Knowledge, artifacts, graph, compaction/summaries, MCP tools, client tools, skills.
 
 ---
 
-## Iteration 3 — Canoe: Summaries + Full Context Assembly
+## Iteration 3 — Canoe: Compaction + Full Context Assembly
 
 **Value:** Long conversations handled gracefully — so `assemble()` can reason over full conversation history, not just recent messages. The context builder is complete.
 
@@ -104,7 +104,7 @@ Knowledge, artifacts, graph, summaries, MCP tools, client tools, skills.
 
 ```typescript
 const { messages } = await session.context
-  .messages({ strategy: 'recent+summary', maxTokens: 4000 })
+  .messages({ strategy: 'compacted', maxTokens: 4000 })
   .recall({ tools: true, memories: true })
   .assemble();
 // ctx includes: strategyUsed, summary, fallback fields
@@ -114,8 +114,8 @@ const { messages } = await session.context
 
 | Layer | Work |
 |-------|------|
-| Rust core | `summary` + `recent+summary` context strategies (LLM integration via OpenAI). Summary cache keyed by `(dataset_id, namespace_id, session_id, max_seq)`. Fallback chain: LLM fail after 2 retries/15s -> fall back to `recent`, response includes `fallback: true`. OPENAI_API_KEY validation: 422 if missing for summary strategies. |
-| @agentified/mastra | Full context builder with all strategies + all recall types. AssembledContext response with strategyUsed, summary, fallback fields. |
+| Rust core | `compacted` context strategy (LLM integration via OpenAI). Long tool results pruned (>`pruneThreshold`, default 500 chars) before summarization. Summary cache keyed by `(dataset_id, namespace_id, session_id, max_seq)`. Fallback chain: LLM fail after 2 retries/15s -> fall back to `recent`, response includes `fallback: true`. OPENAI_API_KEY validation: 422 if missing for compacted strategy. |
+| @agentified/mastra | Full context builder with all strategies (`recent`, `full`, `compacted`) + all recall types. AssembledContext response with strategyUsed, summary, fallback fields. `pruneThreshold` and `compactionStrategy` options. |
 
 ### Agent tools
 
@@ -123,7 +123,7 @@ Same as iteration 2 (searchTools, remember, recall, getMessages).
 
 ### Why separate
 
-Summary generation is the first feature requiring **LLM-in-the-loop on the server side**. It introduces caching, fallback chains, and a new external dependency path. Isolating it lets us validate the simpler memory features without this complexity.
+Compaction/summarization is the first feature requiring **LLM-in-the-loop on the server side**. It introduces caching, fallback chains, and a new external dependency path. Isolating it lets us validate the simpler memory features without this complexity.
 
 ### What we skip
 
@@ -203,7 +203,7 @@ const agent = new Agent({
 
 // recall() is now graph-aware — better results
 const { messages } = await session.context
-  .messages({ strategy: 'recent+summary', maxTokens: 4000 })
+  .messages({ strategy: 'compacted', maxTokens: 4000 })
   .recall()  // uses graph traversal under the hood
   .assemble();
 ```
@@ -233,7 +233,7 @@ const { messages } = await session.context
 |---|------|-----------|-----------------------------------|
 | 1 | **Raft** | Conversations persist | Draws from full conversation history, not just current message |
 | 2 | **Rowing Boat** | Memory + multi-user | Recalls memories that inform tool and context selection |
-| 3 | **Canoe** | Summaries + full assembly | Reasons over entire conversation via summaries, not just recent window |
+| 3 | **Canoe** | Compaction + full assembly | Reasons over entire conversation via compaction/summaries, not just recent window |
 | 4 | **Sailboat** | Unified tool model + skills | Ranks and routes across backend, frontend, MCP tools + skills in one call |
 | 5 | **Motorboat** | Graph intelligence | Follows entity relationships for structurally-aware recall and discovery |
 

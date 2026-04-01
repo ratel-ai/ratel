@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, Awaitable, Callable, TYPE_CHECKING
 
-from .models import AssembledContext, BackendTool, ContextStrategy
+from .models import AssembledContext, BackendTool, ContextStrategy, StoredMessage
 
 if TYPE_CHECKING:
     from .api_client import ApiClient
+
+CompactionStrategy = Callable[[list[StoredMessage]], Awaitable[dict[str, str]]]
 
 
 class ContextBuilder:
@@ -26,15 +28,21 @@ class ContextBuilder:
         self._discovered_names = discovered_names or set()
         self._strategy: ContextStrategy | None = None
         self._max_tokens: int | None = None
+        self._prune_threshold: int | None = None
+        self._compaction_strategy: CompactionStrategy | None = None
         self._explicit_tools: dict[str, Any] = {}
 
     def messages(
         self,
         strategy: ContextStrategy | None = None,
         max_tokens: int | None = None,
+        prune_threshold: int | None = None,
+        compaction_strategy: CompactionStrategy | None = None,
     ) -> ContextBuilder:
         self._strategy = strategy
         self._max_tokens = max_tokens
+        self._prune_threshold = prune_threshold
+        self._compaction_strategy = compaction_strategy
         return self
 
     def tools(self, tools: dict[str, Any]) -> ContextBuilder:
@@ -48,6 +56,7 @@ class ContextBuilder:
         res = await self._sdk.get_context(
             self._dataset_id, self._namespace_id, self._session_id,
             strategy=self._strategy, max_tokens=self._max_tokens,
+            prune_threshold=self._prune_threshold,
         )
 
         resolved: dict[str, Any] = {**self._explicit_tools}

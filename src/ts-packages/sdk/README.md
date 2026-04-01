@@ -88,23 +88,34 @@ const ctx = await session.context
 // With tool recall: auto-discovers tools based on last user message
 const ctx = await session.context
   .tools({ custom_tool: myTool })
-  .messages({ strategy: "recent+summary", maxTokens: 4000 })
+  .messages({ strategy: "compacted", maxTokens: 4000 })
   .recall({ tools: { limit: 10 } })
   .limitTokens(8000)
   .assemble();
 
 // Preserve the first user message + summarize older messages
 const ctx = await session.context
-  .messages({ strategy: "recent+summary", maxTokens: 4000, keepFirst: true })
+  .messages({ strategy: "compacted", maxTokens: 4000, keepFirst: true })
   .assemble();
 // ctx.messages: [first user msg, annotated summary, ...recent messages]
 // Summary is auto-constructed with seq range annotation
+
+// Custom compaction strategy (client-side)
+const ctx = await session.context
+  .messages({
+    strategy: "compacted",
+    maxTokens: 4000,
+    compactionStrategy: async (olderMessages) => {
+      const summary = await myCustomSummarizer(olderMessages);
+      return { summary };
+    },
+  })
+  .assemble();
 ```
 
-**Strategies:** `recent`, `full`, `summary`, `recent+summary`
+**Strategies:** `recent`, `full`, `compacted`
 
-- `summary` — LLM-summarizes entire conversation; SDK injects annotated assistant message
-- `recent+summary` — recent messages (60% budget) + LLM summary of older messages (40% budget)
+- `compacted` — recent messages (60% budget) + LLM summary of older messages (40% budget). Long tool results are pruned before summarization.
 - Falls back to `recent` if LLM fails (`fallback: true` in response)
 
 **Message options:**
@@ -114,6 +125,8 @@ const ctx = await session.context
 | `strategy` | `ContextStrategy` | `"recent"` | Message selection strategy |
 | `maxTokens` | `number` | `4000` | Token budget for messages |
 | `keepFirst` | `boolean` | `false` | Always include the first user message |
+| `pruneThreshold` | `number` | `500` | Char threshold for pruning tool results before summarization |
+| `compactionStrategy` | `CompactionStrategy` | — | Custom client-side compaction function |
 
 See [Chat Management](../../../docs/server/chat-management.md) for the full guide.
 

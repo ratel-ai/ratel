@@ -17,7 +17,7 @@ The core server exposes a REST API. SDKs (TypeScript, Python) wrap it. The serve
 
 - **Tool registration** — store definitions + compute embeddings
 - **Discovery** — hybrid-rank tools against a natural language query
-- **Context assembly** — message strategies (recent, full, summary, recent+summary) with first-message preservation and summary annotation
+- **Context assembly** — message strategies (`recent`, `full`, `compacted`) with first-message preservation, summary annotation, and tool result pruning
 - **Session continuity** — track which tools were used per turn
 - **Graph expansion** — auto-inject dependency tools via requires/provides
 
@@ -110,7 +110,7 @@ This ensures previously-used tools remain available across turns. See [Session C
 
 ## Context Assembly
 
-The `POST /api/v1/context` endpoint assembles conversation history using configurable strategies (`recent`, `full`, `summary`, `recent+summary`), with optional first-message preservation (`keep_first`) and token budgeting. The SDK constructs summary messages from the core's raw output and injects them into the messages array.
+The `POST /api/v1/context` endpoint assembles conversation history using configurable strategies (`recent`, `full`, `compacted`), with optional first-message preservation (`keep_first`), token budgeting, and tool result pruning (`pruneThreshold`). The SDK constructs summary messages from the core's raw output and injects them into the messages array.
 
 See [Chat Management](./chat-management.md) for the full guide.
 

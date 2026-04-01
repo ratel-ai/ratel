@@ -232,10 +232,13 @@ pub struct ContextMessagesConfig {
     pub max_tokens: usize,
     #[serde(default)]
     pub keep_first: bool,
+    #[serde(default = "default_prune_threshold")]
+    pub prune_threshold: usize,
 }
 
 fn default_context_strategy() -> String { "recent".into() }
 fn default_max_tokens() -> usize { 4000 }
+fn default_prune_threshold() -> usize { 500 }
 
 impl Default for ContextMessagesConfig {
     fn default() -> Self {
@@ -243,6 +246,7 @@ impl Default for ContextMessagesConfig {
             strategy: default_context_strategy(),
             max_tokens: default_max_tokens(),
             keep_first: false,
+            prune_threshold: default_prune_threshold(),
         }
     }
 }
@@ -347,6 +351,20 @@ mod tests {
         let req: ContextRequest = serde_json::from_str(json).unwrap();
         assert!(req.recall.is_none());
         assert!(req.limit_tokens.is_none());
+    }
+
+    #[test]
+    fn context_messages_config_prune_threshold_defaults_to_500() {
+        let json = r#"{"strategy": "compacted"}"#;
+        let config: ContextMessagesConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.prune_threshold, 500);
+    }
+
+    #[test]
+    fn context_messages_config_custom_prune_threshold() {
+        let json = r#"{"strategy": "compacted", "prune_threshold": 1000}"#;
+        let config: ContextMessagesConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.prune_threshold, 1000);
     }
 
     #[test]

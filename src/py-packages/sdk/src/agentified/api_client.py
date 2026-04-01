@@ -163,12 +163,15 @@ class ApiClient:
         session: str,
         strategy: ContextStrategy | None = None,
         max_tokens: int | None = None,
+        prune_threshold: int | None = None,
     ) -> ContextResponse:
         messages_config: dict[str, Any] = {}
         if strategy is not None:
             messages_config["strategy"] = strategy
         if max_tokens is not None:
             messages_config["max_tokens"] = max_tokens
+        if prune_threshold is not None:
+            messages_config["prune_threshold"] = prune_threshold
 
         resp = await self._http.post(
             f"{self._config.server_url}/api/v1/context",

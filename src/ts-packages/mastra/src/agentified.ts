@@ -13,6 +13,7 @@ import type {
   GetMessagesOptions,
   ContextBuilder,
   AssembledContext,
+  CompactionStrategy,
   ContextStrategy,
   RecallConfig,
   AgentifiedTool,
@@ -66,7 +67,7 @@ export class MastraContextBuilder {
     return this;
   }
 
-  messages(opts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean }): this {
+  messages(opts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean; pruneThreshold?: number; compactionStrategy?: CompactionStrategy }): this {
     this.sdkBuilder.messages(opts);
     return this;
   }

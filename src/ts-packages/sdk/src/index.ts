@@ -17,6 +17,7 @@ export type {
   CaptureTurnOptions,
   CaptureTurnResponse,
   ClientTool,
+  CompactionStrategy,
   ContextOpts,
   ContextStrategy,
   ContextResponse,

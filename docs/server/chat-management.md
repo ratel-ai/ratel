@@ -14,22 +14,22 @@ Control how conversation history is assembled via `.messages({ strategy })`:
 |----------|----------|--------------|
 | `recent` (default) | Most recent messages fitting in token budget | No |
 | `full` | All messages from oldest, up to token budget | No |
-| `recent+summary` | LLM summary of older messages (40% budget) + recent messages (60% budget) | Yes |
-| `summary` | LLM-generated summary of entire conversation | Yes |
+| `compacted` | LLM summary of older messages (40% budget) + recent messages (60% budget). Long tool results (>`pruneThreshold` chars, default 500) are replaced with `[pruned]` before summarization. | Yes |
 
 ```typescript
 const ctx = await session.context
-  .messages({ strategy: "recent+summary", maxTokens: 4000 })
+  .messages({ strategy: "compacted", maxTokens: 4000 })
   .assemble();
 ```
 
-### How `recent+summary` Works
+### How `compacted` Works
 
 1. Budget is split: 60% for recent messages, 40% for summary
 2. Recent messages are selected from newest, fitting within the recent budget
-3. Older messages (before the recent window) are sent to the LLM for summarization
-4. The SDK constructs a summary message and injects it into the messages array
-5. Result: `[keepFirst?, summary, ...recentMessages]`
+3. Long tool results (>`pruneThreshold` chars, default 500) in older messages are replaced with `[pruned]`
+4. Pruned older messages (before the recent window) are sent to the LLM for summarization
+5. The SDK constructs a summary message and injects it into the messages array
+6. Result: `[keepFirst?, summary, ...recentMessages]`
 
 ### Summary Message Construction
 
@@ -65,7 +65,7 @@ const ctx = await session.context
 
 Useful for preserving the user's original intent in long conversations. Only looks for `role: "user"` messages. No effect on `full` strategy (which already starts from the beginning). If no user messages exist, behaves like `keepFirst: false`.
 
-When combined with `recent+summary`, the first user message appears before the summary:
+When combined with `compacted`, the first user message appears before the summary:
 ```
 [first user message] → [summary of messages 2–85] → [recent messages 86–100]
 ```
@@ -113,11 +113,11 @@ const ctx = await session.context
 const response = await llm.chat(ctx.messages);
 ```
 
-### Long Conversation: Summary + keepFirst
+### Long Conversation: Compacted + keepFirst
 
 ```typescript
 const ctx = await session.context
-  .messages({ strategy: "recent+summary", maxTokens: 4000, keepFirst: true })
+  .messages({ strategy: "compacted", maxTokens: 4000, keepFirst: true })
   .assemble();
 
 // ctx.messages:
@@ -135,7 +135,7 @@ if (ctx.fallback) {
 ```typescript
 const ctx = await session.context
   .tools({ agentified_discover: session.discoverTool })
-  .messages({ strategy: "recent+summary", maxTokens: 4000, keepFirst: true })
+  .messages({ strategy: "compacted", maxTokens: 4000, keepFirst: true })
   .assemble();
 
 const result = await agent.generate(ctx.messages, {

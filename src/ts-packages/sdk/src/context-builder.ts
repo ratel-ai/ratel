@@ -1,8 +1,8 @@
 import type { ApiClient } from "./api-client.js";
-import type { AgentifiedTool, AssembledContext, ContextStrategy, RecallConfig, StoredMessage } from "./types.js";
+import type { AgentifiedTool, AssembledContext, CompactionStrategy, ContextStrategy, RecallConfig, StoredMessage } from "./types.js";
 
 export class ContextBuilder<T = AgentifiedTool> {
-  private messageOpts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean } = {};
+  private messageOpts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean; pruneThreshold?: number; compactionStrategy?: CompactionStrategy } = {};
   private recallOpts?: RecallConfig;
   private tokenLimit?: number;
   private explicitTools: Record<string, T> = {};
@@ -21,7 +21,7 @@ export class ContextBuilder<T = AgentifiedTool> {
     return this;
   }
 
-  messages(opts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean }): this {
+  messages(opts: { strategy?: ContextStrategy; maxTokens?: number; keepFirst?: boolean; pruneThreshold?: number; compactionStrategy?: CompactionStrategy }): this {
     this.messageOpts = opts;
     return this;
   }
@@ -37,13 +37,33 @@ export class ContextBuilder<T = AgentifiedTool> {
   }
 
   async assemble(): Promise<AssembledContext<T>> {
+    const { compactionStrategy } = this.messageOpts;
+    const isClientCompaction = compactionStrategy && this.messageOpts.strategy === "compacted";
+
     const res = await this.sdk.getContext(this.datasetId, this.namespaceId, this.sessionId, {
-      strategy: this.messageOpts.strategy,
+      strategy: isClientCompaction ? "recent" : this.messageOpts.strategy,
       maxTokens: this.messageOpts.maxTokens,
       keepFirst: this.messageOpts.keepFirst,
+      pruneThreshold: this.messageOpts.pruneThreshold,
       recall: this.recallOpts,
       limitTokens: this.tokenLimit,
     });
+
+    // Client-side compaction: fetch all messages, find older ones, call user's compactionStrategy
+    if (isClientCompaction) {
+      const allMsgs = await this.sdk.getMessages(this.datasetId, this.namespaceId, this.sessionId, {});
+      const recentSeqs = new Set(res.messages.map(m => m.seq));
+      const olderMessages = allMsgs.messages.filter(m => !recentSeqs.has(m.seq));
+
+      if (olderMessages.length > 0) {
+        const { summary } = await compactionStrategy(olderMessages);
+        const firstSeq = olderMessages[0]!.seq;
+        const lastSeq = olderMessages[olderMessages.length - 1]!.seq;
+        res.summary = summary;
+        res.summaryRange = { firstSeq, lastSeq, count: olderMessages.length };
+        res.strategyUsed = "compacted";
+      }
+    }
 
     // Construct summary message and inject into messages array
     let finalMessages: StoredMessage[] = res.messages;

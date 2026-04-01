@@ -184,7 +184,7 @@ Replaces the flat `getMessages()` from the client SDK spec. Builder pattern that
 ```typescript
 // Full control (with first-message preservation and summary annotation)
 const ctx = await session.context
-  .messages({ strategy: 'recent+summary', maxTokens: 4000, keepFirst: true })
+  .messages({ strategy: 'compacted', maxTokens: 4000, keepFirst: true })
   .recall({
     tools: { limit: 10, minSimilarity: 0.7 },
     memories: { kinds: ['fact', 'preference'], limit: 20 },
@@ -222,11 +222,13 @@ const response = await agent.generate(ctx.messages, {
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `strategy` | `ContextStrategy` | `'recent'` | Message selection strategy |
+| `strategy` | `ContextStrategy` | `'recent'` | Message selection strategy (`'recent'` \| `'full'` \| `'compacted'`) |
 | `maxTokens` | `number` | `4000` | Token budget for messages |
 | `keepFirst` | `boolean` | `false` | Always include the first user message in assembled context |
+| `pruneThreshold` | `number` | `500` | Tool results longer than this (chars) are replaced with `[pruned]` before summarization |
+| `compactionStrategy` | `CompactionStrategy` | — | Client-side compaction configuration |
 
-Summary annotation is automatic — when the core returns `summary` + `summaryRange`, the SDK constructs an annotated assistant message and injects it. See [Chat Management](../../docs/server/chat-management.md).
+Summary annotation is automatic — when the core returns `summary` + `summaryRange`, the SDK constructs an annotated assistant message and injects it. Long tool results are pruned before summarization (configurable via `pruneThreshold`). See [Chat Management](../../docs/server/chat-management.md).
 
 ### Recall Configuration
 
@@ -275,7 +277,7 @@ interface AssembledContext {
 
   // Message strategy metadata (from client-sdk-spec, preserved here)
   strategyUsed: string;
-  summary?: string;           // present when strategy is summary or recent+summary
+  summary?: string;           // present when strategy is compacted
   fallback?: boolean;         // true if LLM summary failed, fell back to recent
 
   // Counts + estimates
@@ -294,11 +296,11 @@ The client SDK spec's `session.getMessages()` becomes:
 
 ```typescript
 // Before (client-sdk-spec)
-const { messages } = await session.getMessages({ strategy: 'recent+summary', maxTokens: 4000 });
+const { messages } = await session.getMessages({ strategy: 'compacted', maxTokens: 4000 });
 
 // After (context builder)
 const { messages } = await session.context
-  .messages({ strategy: 'recent+summary', maxTokens: 4000 })
+  .messages({ strategy: 'compacted', maxTokens: 4000 })
   .assemble();
 ```
 
@@ -373,7 +375,7 @@ Skills are stored alongside tools and returned by the discover/searchTools endpo
   "namespace": "user-123",
   "session": "session-abc",
   "messages": {
-    "strategy": "recent+summary",
+    "strategy": "compacted",
     "max_tokens": 4000
   },
   "recall": {
@@ -396,7 +398,7 @@ Response:
     "tools": [{ "name": "billing_lookup", "score": 0.92 }],
     "memories": [{ "id": "...", "kind": "preference", "content": "User prefers dark mode" }]
   },
-  "strategy_used": "recent+summary",
+  "strategy_used": "compacted",
   "summary": "User is building an e-commerce app...",
   "fallback": false,
   "token_estimate": 1842,
@@ -522,7 +524,7 @@ See [roadmap.md](./roadmap.md) for the iteration-level breakdown. High-level pha
 - Context builder API (messages + recall)
 - Unified tool model (backend, client, mcp) + skills (agentskills.io)
 - Basic `recall` (vector similarity search)
-- Summary + recent+summary context strategies
+- Compacted context strategy (LLM summary of older messages + recent messages)
 
 ### Phase B (Iteration 5 + beyond)
 

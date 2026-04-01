@@ -108,12 +108,13 @@ class GetMessagesResponse(BaseModel):
 
 # Context types
 
-ContextStrategy = Literal["recent", "full"]
+ContextStrategy = Literal["recent", "full", "compacted"]
 
 
 class ContextOpts(BaseModel):
     strategy: ContextStrategy | None = None
     max_tokens: int | None = None
+    prune_threshold: int | None = None
 
 
 class ContextResponse(BaseModel):

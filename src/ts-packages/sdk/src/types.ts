@@ -87,7 +87,9 @@ export interface GetMessagesTool {
 
 // Context strategy
 
-export type ContextStrategy = "recent" | "full" | "summary" | "recent+summary";
+export type ContextStrategy = "recent" | "full" | "compacted";
+
+export type CompactionStrategy = (messages: StoredMessage[]) => Promise<{ summary: string }>;
 
 // Recall types
 
@@ -136,6 +138,8 @@ export interface ContextOpts {
   recall?: RecallConfig;
   limitTokens?: number;
   keepFirst?: boolean;
+  pruneThreshold?: number;
+  compactionStrategy?: CompactionStrategy;
 }
 
 export interface SummaryRange {

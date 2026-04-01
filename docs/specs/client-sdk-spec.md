@@ -227,7 +227,7 @@ Response:
   "namespace": "user-123",
   "session": "session-abc",
   "max_tokens": 4000,
-  "strategy": "recent+summary"
+  "strategy": "compacted"
 }
 ```
 
@@ -235,7 +235,7 @@ Response (base — see context-layer-spec for extended version):
 ```json
 {
   "messages": [...],
-  "strategy_used": "recent+summary",
+  "strategy_used": "compacted",
   "total_messages": 142,
   "included_messages": 28,
   "summary": "User is building an e-commerce app...",
@@ -249,18 +249,17 @@ Response (base — see context-layer-spec for extended version):
 |----------|----------|--------------|
 | `full` | Return all messages (up to max_tokens) | No |
 | `recent` | Return N most recent messages fitting in max_tokens | No |
-| `summary` | Return LLM-generated summary only | Yes |
-| `recent+summary` | Summary of older messages + recent messages verbatim | Yes |
+| `compacted` | Summary of older messages + recent messages verbatim. Long tool results (>500 chars) pruned before summarization. | Yes |
 
 **Defaults:** strategy = `recent`, max_tokens = `4000`.
 
 **Token counting:** Character/4 heuristic for v1. The `included_messages` count in the response lets the client verify and adjust. A future version may accept a `tokenizer` parameter.
 
-**LLM integration:** `summary` and `recent+summary` use the same OpenAI key configured for embeddings. The **full summary text** is cached per session, cache key: `(dataset_id, namespace_id, session_id, max_seq)` where `max_seq` is the highest seq at generation time. Invalidated when new messages arrive (higher seq). The `max_tokens` parameter controls how the cached summary is truncated/included in the response — it does not affect cache identity.
+**LLM integration:** `compacted` uses the same OpenAI key configured for embeddings. The **full summary text** is cached per session, cache key: `(dataset_id, namespace_id, session_id, max_seq)` where `max_seq` is the highest seq at generation time. Invalidated when new messages arrive (higher seq). The `max_tokens` parameter controls how the cached summary is truncated/included in the response — it does not affect cache identity.
 
 **Fallback chain:** If the LLM call fails (timeout, API error, invalid response) after 2 retries over 15s total, the server falls back to `recent` strategy. Response includes `"fallback": true` and `"strategy_used": "recent"`. If `recent` also fails (DB error), return 503.
 
-**OPENAI_API_KEY validation:** If a `summary` or `recent+summary` request arrives and `OPENAI_API_KEY` is not configured, the core returns 422 with `{ "error": "OPENAI_API_KEY required for summary strategy" }`.
+**OPENAI_API_KEY validation:** If a `compacted` request arrives and `OPENAI_API_KEY` is not configured, the core returns 422 with `{ "error": "OPENAI_API_KEY required for compacted strategy" }`.
 
 ### 2.7 First-Message Preservation
 
@@ -268,7 +267,7 @@ Response (base — see context-layer-spec for extended version):
 
 ### 2.8 Summary Construction
 
-When summary strategies produce a summary, the core returns raw `summary` text and `summary_range` (firstSeq, lastSeq, count) in the response. The SDK's `ContextBuilder.assemble()` constructs an annotated assistant message (`[Summary of messages N–M (X messages compacted)]`) and injects it into the messages array at the appropriate position (after keepFirst message if present, otherwise at the start).
+When the `compacted` strategy produces a summary, the core returns raw `summary` text and `summary_range` (firstSeq, lastSeq, count) in the response. The SDK's `ContextBuilder.assemble()` constructs an annotated assistant message (`[Summary of messages N–M (X messages compacted)]`) and injects it into the messages array at the appropriate position (after keepFirst message if present, otherwise at the start).
 
 ### 2.9 getMessagesTool
 
@@ -375,7 +374,7 @@ export interface UpdateConversationInput {
 export interface GetMessagesOptions {
   maxMessages?: number;     // default: no limit (return all that fit strategy)
   maxTokens?: number;       // default: 4000
-  strategy?: 'full' | 'recent' | 'summary' | 'recent+summary';  // default: 'recent'
+  strategy?: 'full' | 'recent' | 'compacted';  // default: 'recent'
 }
 
 export interface GetMessagesResult {
@@ -496,7 +495,7 @@ export class Session {
    * Preferred usage:
    *   await session.updateConversation({ messages: req.body.messages });
    *   const { messages } = await session.context
-   *     .messages({ strategy: 'recent+summary', maxTokens: 4000 })
+   *     .messages({ strategy: 'compacted', maxTokens: 4000 })
    *     .recall()
    *     .assemble();
    *   const response = await agent.generate(messages, { prepareStep: session.prepareStep });
@@ -658,7 +657,7 @@ Each contains a single prebuilt binary. `@agentified/mastra` has optional peer d
 | TC-R06 | get_messages | session with msgs, limit=5 (no after_seq) | Returns 5 most recent (ascending) | Session doesn't exist → empty array, max_seq=0 |
 | TC-R07 | get_context (recent) | 100 msgs, max_tokens=2000 | Returns recent msgs fitting in budget (char/4) | |
 | TC-R08 | get_context (full) | 10 msgs | Returns all messages | Exceeds max_tokens → truncates from oldest |
-| TC-R09 | get_context (summary, no key) | No OPENAI_API_KEY | Returns 422 with clear error message | |
+| TC-R09 | get_context (compacted, no key) | No OPENAI_API_KEY | Returns 422 with clear error message | |
 
 ### Integration Tests
 
@@ -684,8 +683,8 @@ Each contains a single prebuilt binary. `@agentified/mastra` has optional peer d
 | Tool with no type and no handler | Type inference fails | Throw `AgentifiedError("Tool '{name}' has no type and no handler")` | None | ERROR |
 | Skill references unknown tool | Tool name not in tools array | Throw `AgentifiedError("Skill '{skill}' references unknown tool: {name}")` | None | ERROR |
 | Message append fails | Non-2xx from core | Throw, do not silently drop | None | ERROR |
-| Context generation fails (LLM) | Core returns 500 on summary/recent+summary | Core auto-falls back to `recent` (response: `"fallback": true`) | If DB also fails → 503 | WARN |
-| Context with no OPENAI_API_KEY | Core returns 422 on summary strategies | Throw `AgentifiedError("OPENAI_API_KEY required for summary strategy")` | None | ERROR |
+| Context generation fails (LLM) | Core returns 500 on compacted | Core auto-falls back to `recent` (response: `"fallback": true`) | If DB also fails → 503 | WARN |
+| Context with no OPENAI_API_KEY | Core returns 422 on compacted strategy | Throw `AgentifiedError("OPENAI_API_KEY required for compacted strategy")` | None | ERROR |
 | Session not found on context() | Core returns empty messages | Return empty ContextResult | None | DEBUG |
 | Discover returns 0 tools | Empty array from core | Return empty array (not an error) | None | DEBUG |
 | Core process crashes | Child `exit` event (unexpected) | Auto-restart once (60s cooldown) | Throw if restart fails | ERROR + WARN |

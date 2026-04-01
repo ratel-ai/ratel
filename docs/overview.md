@@ -44,7 +44,7 @@ Your Agent (any framework, any language)
 Three steps:
 
 1. **Register** (*once*): You give Agentified your full tool catalog. The server computes embeddings for each tool's name, description, and schemas, then indexes them for fast retrieval.
-2. **Assemble**: Agentified takes the conversation context and runs a **hybrid ranking algorithm** to score every tool against the current intent while **cross-referencing memories and session history** to refine results. With **tool recall**, the system auto-discovers relevant tools based on the last user message. **Message strategies** (`recent`, `full`, `summary`, `recent+summary`) control how conversation history is assembled — summary strategies use LLM summarization for older messages. **Token budgets** via `.limitTokens()` cap total assembly output.
+2. **Assemble**: Agentified takes the conversation context and runs a **hybrid ranking algorithm** to score every tool against the current intent while **cross-referencing memories and session history** to refine results. With **tool recall**, the system auto-discovers relevant tools based on the last user message. **Message strategies** (`recent`, `full`, `compacted`) control how conversation history is assembled — the `compacted` strategy uses LLM summarization for older messages, with long tool results pruned before summarization. **Token budgets** via `.limitTokens()` cap total assembly output.
 3. **Execute**: Agentified passes the assembled context (tools + messages) to your agent framework. Your framework calls the tools as usual. Agentified **tracks which tools were used so it can prioritize them in subsequent turns**.
 
 ## What Makes the Ranking Smart

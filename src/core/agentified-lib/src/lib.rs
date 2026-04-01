@@ -333,14 +333,14 @@ impl AgentifiedCore {
 
     pub async fn get_context(&self, req: ContextRequest) -> Result<ContextResponse, CoreError> {
         let strategy = &req.messages.strategy;
-        let is_summary = strategy == "summary" || strategy == "recent+summary";
+        let is_compacted = strategy == "compacted";
 
-        if is_summary && self.llm.is_none() {
+        if is_compacted && self.llm.is_none() {
             return Err(CoreError::UnsupportedStrategy(
-                "Summary strategies require LLM configuration".into(),
+                "Compacted strategy requires LLM configuration".into(),
             ));
         }
-        if !is_summary && strategy != "recent" && strategy != "full" {
+        if !is_compacted && strategy != "recent" && strategy != "full" {
             return Err(CoreError::BadRequest(format!("unknown strategy: {strategy}")));
         }
 
@@ -390,9 +390,9 @@ impl AgentifiedCore {
         }
 
         let keep_first = req.messages.keep_first;
+        let prune_threshold = req.messages.prune_threshold;
         match strategy.as_str() {
-            "summary" => self.get_context_summary(&all_messages, max_tokens, total_messages, recalled_tools).await,
-            "recent+summary" => self.get_context_recent_summary(&all_messages, max_tokens, total_messages, recalled_tools, keep_first).await,
+            "compacted" => self.get_context_compacted(&all_messages, max_tokens, total_messages, recalled_tools, keep_first, prune_threshold).await,
             _ => {
                 let messages = select_messages(&all_messages, strategy, max_tokens, keep_first);
                 let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
@@ -413,70 +413,14 @@ impl AgentifiedCore {
         }
     }
 
-    async fn get_context_summary(
-        &self,
-        all_messages: &[StoredMessage],
-        max_tokens: usize,
-        total_messages: i64,
-        recalled_tools: Vec<RankedTool>,
-    ) -> Result<ContextResponse, CoreError> {
-        let llm = self.llm.as_ref()
-            .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
-
-        let conversation_text = format_conversation(all_messages);
-        let system_prompt = "Summarize this conversation concisely. Focus on key decisions, facts, and action items.";
-
-        match llm.chat(system_prompt, &conversation_text, max_tokens).await {
-            Ok(summary_text) => {
-                tracing::debug!("LLM summary generated: {} chars", summary_text.len());
-                let first_seq = all_messages.first().map(|m| m.seq).unwrap_or(0);
-                let last_seq = all_messages.last().map(|m| m.seq).unwrap_or(0);
-                let token_estimate = summary_text.len() / 4;
-                Ok(ContextResponse {
-                    messages: vec![],
-                    strategy_used: "summary".into(),
-                    total_messages,
-                    included_messages: 0,
-                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
-                    token_estimate,
-                    conversation_messages: all_messages.len(),
-                    fallback: false,
-                    summary: Some(summary_text),
-                    summary_range: Some(models::SummaryRange {
-                        first_seq,
-                        last_seq,
-                        count: all_messages.len(),
-                    }),
-                })
-            }
-            Err(e) => {
-                tracing::warn!("LLM summary failed, falling back to recent: {e}");
-                let messages = select_messages(all_messages, "recent", max_tokens, false);
-                let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
-                let included = messages.len();
-                Ok(ContextResponse {
-                    messages,
-                    strategy_used: "summary".into(),
-                    total_messages,
-                    included_messages: included,
-                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
-                    token_estimate,
-                    conversation_messages: included,
-                    fallback: true,
-                    summary: None,
-                    summary_range: None,
-                })
-            }
-        }
-    }
-
-    async fn get_context_recent_summary(
+    async fn get_context_compacted(
         &self,
         all_messages: &[StoredMessage],
         max_tokens: usize,
         total_messages: i64,
         recalled_tools: Vec<RankedTool>,
         keep_first: bool,
+        prune_threshold: usize,
     ) -> Result<ContextResponse, CoreError> {
         let llm = self.llm.as_ref()
             .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
@@ -510,7 +454,7 @@ impl AgentifiedCore {
             let included = recent_messages.len();
             return Ok(ContextResponse {
                 messages: recent_messages,
-                strategy_used: "recent+summary".into(),
+                strategy_used: "compacted".into(),
                 total_messages,
                 included_messages: included,
                 recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
@@ -523,7 +467,15 @@ impl AgentifiedCore {
         }
 
         let older_owned: Vec<StoredMessage> = older.into_iter().cloned().collect();
-        let conversation_text = format_conversation(&older_owned);
+        // Phase 1: Prune long tool results before summarization
+        let pruned: Vec<StoredMessage> = older_owned.iter().map(|m| {
+            if m.role == "tool" && m.content.len() > prune_threshold {
+                StoredMessage { content: "[pruned]".into(), ..m.clone() }
+            } else {
+                m.clone()
+            }
+        }).collect();
+        let conversation_text = format_conversation(&pruned);
         let system_prompt = "Summarize this conversation concisely. Focus on key decisions, facts, and action items.";
 
         match llm.chat(system_prompt, &conversation_text, summary_budget).await {
@@ -538,7 +490,7 @@ impl AgentifiedCore {
                 let included = recent_messages.len();
                 Ok(ContextResponse {
                     messages: recent_messages,
-                    strategy_used: "recent+summary".into(),
+                    strategy_used: "compacted".into(),
                     total_messages,
                     included_messages: included,
                     recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
@@ -556,7 +508,7 @@ impl AgentifiedCore {
                 let included = messages.len();
                 Ok(ContextResponse {
                     messages,
-                    strategy_used: "recent+summary".into(),
+                    strategy_used: "compacted".into(),
                     total_messages,
                     included_messages: included,
                     recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
@@ -869,27 +821,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn context_summary_returns_unsupported() {
-        let core = make_core();
-        for strategy in &["summary", "recent+summary"] {
-            let err = core.get_context(models::ContextRequest {
-                dataset: "ds".into(),
-                namespace: "ns".into(),
-                session: "s1".into(),
-                messages: models::ContextMessagesConfig {
-                    strategy: strategy.to_string(),
-                    max_tokens: 4000,
-                    ..Default::default()
-                },
-                recall: None,
-                limit_tokens: None,
-            }).await.unwrap_err();
-            match err {
-                CoreError::UnsupportedStrategy(msg) => {
-                    assert!(msg.contains("LLM configuration") || msg.contains("Summary strategies"));
-                }
-                _ => panic!("expected UnsupportedStrategy, got {err:?}"),
-            }
+    async fn compacted_without_llm_returns_unsupported() {
+        let core = make_core(); // no LLM
+        let err = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 4000, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap_err();
+        match err {
+            CoreError::UnsupportedStrategy(_) => {}
+            _ => panic!("expected UnsupportedStrategy, got {err:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn summary_strategy_returns_bad_request() {
+        let core = make_core_with_llm();
+        let err = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => assert!(msg.contains("unknown strategy")),
+            _ => panic!("expected BadRequest, got {err:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn recent_summary_strategy_returns_bad_request() {
+        let core = make_core_with_llm();
+        let err = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 4000, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => assert!(msg.contains("unknown strategy")),
+            _ => panic!("expected BadRequest, got {err:?}"),
         }
     }
 
@@ -1377,42 +1346,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn summary_strategy_returns_summarized_message() {
-        let core = make_core_with_llm();
-
-        core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: vec![
-                models::MessageInput { role: "user".into(), content: "Hello".into(), tool_call_id: None, tool_calls: None },
-                models::MessageInput { role: "assistant".into(), content: "Hi there!".into(), tool_call_id: None, tool_calls: None },
-                models::MessageInput { role: "user".into(), content: "How are you?".into(), tool_call_id: None, tool_calls: None },
-            ],
-        }).await.unwrap();
-
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
-            recall: None,
-            limit_tokens: None,
-        }).await.unwrap();
-
-        assert_eq!(resp.strategy_used, "summary");
-        assert_eq!(resp.messages.len(), 0);
-        assert!(resp.summary.is_some());
-        assert!(!resp.fallback);
-        let range = resp.summary_range.unwrap();
-        assert_eq!(range.first_seq, 1);
-        assert_eq!(range.last_seq, 3);
-        assert_eq!(range.count, 3);
-    }
-
-    #[tokio::test]
-    async fn summary_strategy_empty_session_returns_empty() {
+    async fn compacted_empty_session_returns_empty() {
         let core = make_core_with_llm();
 
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "empty".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
+            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 4000, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap();
 
@@ -1421,52 +1360,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn summary_strategy_falls_back_on_llm_failure() {
-        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
-        let embedding: Arc<dyn EmbeddingService> = Arc::new(FakeEmbedding {
-            call_count: Default::default(),
-            batch_call_count: Default::default(),
-        });
-        let llm: Arc<dyn embedding::LlmService> = Arc::new(FailingLlm);
-        let core = AgentifiedCore::new_with_llm(embedding, storage, llm);
-
-        core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: vec![
-                models::MessageInput { role: "user".into(), content: "Hello".into(), tool_call_id: None, tool_calls: None },
-                models::MessageInput { role: "assistant".into(), content: "Hi!".into(), tool_call_id: None, tool_calls: None },
-            ],
-        }).await.unwrap();
-
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
-
-        assert!(resp.fallback, "should fall back on LLM failure");
-        assert!(resp.summary.is_none());
-        assert!(!resp.messages.is_empty(), "should return recent messages as fallback");
-    }
-
-    #[tokio::test]
-    async fn summary_without_llm_returns_unsupported() {
-        let core = make_core(); // no LLM
-
-        let err = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap_err();
-
-        match err {
-            CoreError::UnsupportedStrategy(_) => {}
-            _ => panic!("expected UnsupportedStrategy, got {err:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn recent_summary_returns_summary_plus_recent() {
+    async fn compacted_strategy_returns_summary_plus_recent() {
         let core = make_core_with_llm();
 
         // Add enough messages that not all fit in 60% budget
@@ -1484,21 +1378,20 @@ mod tests {
         // Budget = 100 tokens. Recent 60% = 60 tokens → 2 messages. Summary 40% = 40 tokens.
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100, ..Default::default() },
+            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap();
 
-        assert_eq!(resp.strategy_used, "recent+summary");
+        assert_eq!(resp.strategy_used, "compacted");
         assert!(!resp.fallback);
         assert!(resp.summary.is_some());
         assert!(resp.summary_range.is_some());
-        // Messages should be only real messages (no fake summary message)
         assert!(!resp.messages.is_empty());
-        assert!(resp.messages.iter().all(|m| m.seq > 0), "no seq=-1 fake messages");
+        assert!(resp.messages.iter().all(|m| m.seq > 0));
     }
 
     #[tokio::test]
-    async fn recent_summary_falls_back_on_llm_failure() {
+    async fn compacted_falls_back_on_llm_failure() {
         let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
         let embedding: Arc<dyn EmbeddingService> = Arc::new(FakeEmbedding {
             call_count: Default::default(),
@@ -1519,17 +1412,17 @@ mod tests {
 
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100, ..Default::default() },
+            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap();
 
-        assert!(resp.fallback, "should fall back on LLM failure");
+        assert!(resp.fallback);
         assert!(resp.summary.is_none());
         assert!(!resp.messages.is_empty());
     }
 
     #[tokio::test]
-    async fn recent_summary_returns_summary_range_for_older_messages() {
+    async fn compacted_returns_summary_range_for_older_messages() {
         let core = make_core_with_llm();
 
         let content = "x".repeat(100); // 25 tokens each
@@ -1544,23 +1437,121 @@ mod tests {
             messages: msgs,
         }).await.unwrap();
 
-        // Budget 100 → recent 60% = 60 (fits 2 msgs), summary 40% = 40
-        // Older messages: seq 1-4, recent: seq 5-6
         let resp = core.get_context(models::ContextRequest {
             dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 100, ..Default::default() },
+            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
             recall: None, limit_tokens: None,
         }).await.unwrap();
 
         assert!(!resp.fallback);
         assert!(resp.summary.is_some());
-        // Messages are only real messages
         assert!(resp.messages.iter().all(|m| m.seq > 0));
-        // summary_range covers the older (summarized) messages
         let range = resp.summary_range.unwrap();
         assert_eq!(range.first_seq, 1);
         assert_eq!(range.last_seq, 4);
         assert_eq!(range.count, 4);
+    }
+
+    #[tokio::test]
+    async fn compacted_prunes_long_tool_results() {
+        let core = make_core_with_llm();
+
+        // Create messages: old tool msg with long content (>500 chars), then recent user msg
+        let long_tool_content = "x".repeat(600); // > default prune_threshold of 500
+        let msgs = vec![
+            models::MessageInput { role: "user".into(), content: "call tool".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "tool".into(), content: long_tool_content.clone(), tool_call_id: Some("tc1".into()), tool_calls: None },
+            models::MessageInput { role: "assistant".into(), content: "got it".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "user".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "user".into(), content: "summarize".into(), tool_call_id: None, tool_calls: None },
+        ];
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Budget 100 → recent gets last ~2 msgs, older msgs (including tool) get summarized
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(resp.summary.is_some());
+        // FakeLlm echoes first 100 chars of input. The tool content should be [pruned], not the 600-char original.
+        let summary = resp.summary.unwrap();
+        assert!(!summary.contains(&long_tool_content), "long tool content should have been pruned before summarization");
+        assert!(summary.contains("[pruned]"), "summary should contain [pruned] marker from pruned tool result");
+    }
+
+    #[tokio::test]
+    async fn compacted_preserves_short_tool_results() {
+        let core = make_core_with_llm();
+
+        let short_tool_content = "result: 42"; // < 500 chars
+        // Need enough bulk so recent window doesn't fit everything → older msgs get summarized
+        let mut msgs = vec![
+            models::MessageInput { role: "user".into(), content: "call tool".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "tool".into(), content: short_tool_content.into(), tool_call_id: Some("tc1".into()), tool_calls: None },
+            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+        ];
+        for _ in 0..4 {
+            msgs.push(models::MessageInput { role: "user".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None });
+            msgs.push(models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None });
+        }
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(resp.summary.is_some());
+        let summary = resp.summary.unwrap();
+        assert!(!summary.contains("[pruned]"), "short tool content should not be pruned");
+    }
+
+    #[tokio::test]
+    async fn compacted_custom_prune_threshold() {
+        let core = make_core_with_llm();
+
+        let tool_content = "x".repeat(200); // > custom threshold of 100, but < default 500
+        let msgs = vec![
+            models::MessageInput { role: "user".into(), content: "call tool".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "tool".into(), content: tool_content.clone(), tool_call_id: Some("tc1".into()), tool_calls: None },
+            models::MessageInput { role: "assistant".into(), content: "got it".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "user".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput { role: "user".into(), content: "summarize".into(), tool_call_id: None, tool_calls: None },
+        ];
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: msgs,
+        }).await.unwrap();
+
+        // Custom prune_threshold = 100 → 200-char tool content should be pruned
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "compacted".into(),
+                max_tokens: 100,
+                prune_threshold: 100,
+                ..Default::default()
+            },
+            recall: None, limit_tokens: None,
+        }).await.unwrap();
+
+        assert!(resp.summary.is_some());
+        let summary = resp.summary.unwrap();
+        assert!(summary.contains("[pruned]"), "tool content >100 chars should be pruned with custom threshold");
     }
 
 }
