@@ -1,14 +1,14 @@
-import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
-import { jsonSchemaToZod } from "../../lib/json-schema-to-zod.js";
-import { toMastraModel } from "../../lib/model.js";
+import Anthropic from "@anthropic-ai/sdk";
+import { runAgenticLoop, toAnthropicTools, stripAgentifiedLine, type AnthropicTool } from "../../lib/anthropic-agent.js";
 import { startAgent, type ExecutableTool } from "../../scaffolding/ts/index.js";
 import type { SetupBody, SendMessageBody, SendMessageResponse } from "../../lib/protocol.js";
 
 interface State {
-  agent: Agent;
-  tools: Record<string, any>;
+  client: Anthropic;
+  tools: AnthropicTool[];
+  executors: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
   config: SetupBody["config"];
+  systemPrompt: string;
 }
 
 export function createCallbacks() {
@@ -16,70 +16,48 @@ export function createCallbacks() {
 
   return {
     setup: async (tools: ExecutableTool[], config: SetupBody["config"]) => {
-      const mastraTools: Record<string, any> = {};
-      for (const t of tools) {
-        mastraTools[t.name] = createTool({
-          id: t.name,
-          description: t.description,
-          inputSchema: jsonSchemaToZod(t.parameters),
-          execute: async (input) => t.execute(input as Record<string, unknown>),
-        });
-      }
+      const client = new Anthropic();
+      const executors: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {};
+      for (const t of tools) executors[t.name] = t.execute;
 
-      const agent = new Agent({
-        id: "benchmark-baseline",
-        name: "benchmark-baseline",
-        instructions: config.systemPrompt,
-        model: toMastraModel(config.model),
-      });
-
-      state = { agent, tools: mastraTools, config };
+      state = {
+        client,
+        tools: toAnthropicTools(tools),
+        executors,
+        config,
+        systemPrompt: stripAgentifiedLine(config.systemPrompt),
+      };
     },
 
     sendMessage: async (body: SendMessageBody): Promise<SendMessageResponse> => {
       if (!state) throw new Error("Agent not set up");
       const start = performance.now();
 
-      const messages: Array<{ role: "user" | "assistant"; content: string }> = body.history.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
-
-      const result = await state.agent.generate(messages as any, {
-        toolsets: { all: state.tools },
+      const result = await runAgenticLoop({
+        client: state.client,
+        model: state.config.model,
+        system: state.systemPrompt,
+        tools: state.tools as any,
+        messages: body.history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         maxSteps: state.config.maxSteps,
-        ...(body.seed !== undefined && { seed: body.seed }),
+        executors: state.executors,
       });
 
-      const toolCalls = (result.steps ?? []).flatMap((step) =>
-        (step.toolCalls ?? []).map((tc: any) => {
-          const name = tc.toolName ?? tc.payload?.toolName;
-          const id = tc.toolCallId ?? tc.payload?.toolCallId;
-          const args = tc.args ?? tc.payload?.args ?? {};
-          return { toolCallId: id, toolName: name, args };
-        }),
-      );
-
-      const usage: any = result.usage ?? {};
-      const inputTokens = usage.inputTokens ?? usage.promptTokens ?? 0;
-      const outputTokens = usage.outputTokens ?? usage.completionTokens ?? 0;
-
       return {
-        content: result.text,
-        toolCalls,
+        content: result.content,
+        toolCalls: result.toolCalls,
         usage: {
-          totalTokens: inputTokens + outputTokens,
-          inputTokens,
-          outputTokens,
-          cachedInputTokens: usage.cachedInputTokens ?? undefined,
-          outputReasoningTokens: usage.reasoningTokens ?? undefined,
+          totalTokens: result.usage.inputTokens + result.usage.outputTokens,
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          cachedInputTokens: result.usage.cachedInputTokens,
         },
         durationMs: performance.now() - start,
         debug: {
-          systemPrompt: state.config.systemPrompt,
-          toolNames: Object.keys(state.tools),
-          modelResponse: result.text,
-          toolCallsMade: toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
+          systemPrompt: state.systemPrompt,
+          toolNames: state.tools.map((t) => t.name),
+          modelResponse: result.content,
+          toolCallsMade: result.toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
         },
       };
     },
@@ -92,4 +70,3 @@ if (fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const cbs = createCallbacks();
   startAgent({ setup: cbs.setup, sendMessage: cbs.sendMessage });
 }
-

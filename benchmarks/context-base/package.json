@@ -12,13 +12,9 @@
     "benchmark:all": "tsx scripts/run-all.ts"
   },
   "dependencies": {
-    "@agentified/mastra": "file:../../src/ts-packages/mastra",
     "agentified": "file:../../src/ts-packages/sdk",
     "@anthropic-ai/sdk": "^0.81.0",
-    "@ai-sdk/anthropic": "^3.0.35",
     "@ai-sdk/google": "^3.0.29",
-    "@ai-sdk/openai": "^3.0.25",
-    "@mastra/core": "^1.6.0",
     "ai": "^6.0.73",
     "dotenv": "^16.5.0",
     "zod": "^4.1.12"
