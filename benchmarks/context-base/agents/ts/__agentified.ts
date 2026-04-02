@@ -113,7 +113,9 @@ function inferStrategy(): SearchStrategy {
   return "bm25";
 }
 
-if (/agentified(?:-(?:bm25|hybrid))?\.(?:ts|js)$/.test(process.argv[1] ?? "")) {
+const USE_RECALL = !(process.argv[1] ?? "").includes("norecall");
+
+if (/agentified(?:-[\w-]+)?\.(?:ts|js)$/.test(process.argv[1] ?? "")) {
   const bootPromise = boot();
 
   process.on("SIGTERM", async () => {
@@ -138,17 +140,19 @@ if (/agentified(?:-(?:bm25|hybrid))?\.(?:ts|js)$/.test(process.argv[1] ?? "")) {
       const session = instance.session(sessionId);
       const discoveredNames = session.discoverTool.discoveredNames;
 
-      // Persist the user message, then recall relevant tools via context assembly
-      await session.updateConversation({
-        messages: body.history.map((m) => ({ role: m.role, content: m.content })),
-      });
-      const ctx = await session.context
-        .recall({ tools: { limit: 10 } })
-        .messages({ strategy: "recent", maxTokens: 4000 })
-        .assemble();
+      // Optionally recall relevant tools via context assembly
+      if (USE_RECALL) {
+        await session.updateConversation({
+          messages: body.history.map((m) => ({ role: m.role, content: m.content })),
+        });
+        const ctx = await session.context
+          .recall({ tools: { limit: 10 } })
+          .messages({ strategy: "recent", maxTokens: 4000 })
+          .assemble();
+        console.error(`[agentified] recalled=${ctx.recalled.tools.length} activeTools=${discoveredNames.size + 1}`);
+      }
 
       const activeTools = buildActiveTools(allTools, discoveredNames);
-      console.error(`[agentified] recalled=${ctx.recalled.tools.length} activeTools=${activeTools.length}`);
 
       const result = await runAgenticLoop({
         client,
