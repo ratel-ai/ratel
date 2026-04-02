@@ -5,7 +5,7 @@ config({ path: "../../.env" });
 import { resolve } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { Agentified } from "agentified";
-import type { BackendTool, DiscoverTool, SearchStrategy } from "agentified";
+import type { BackendTool, SearchStrategy } from "agentified";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { z } from "zod";
 import { runAgenticLoop, toAnthropicTools, type AnthropicTool } from "../../lib/anthropic-agent.js";
@@ -14,20 +14,6 @@ import { toolRegistry } from "../../tools/registry.js";
 import { TOOL_DEPENDENCIES } from "../../tools/dependencies.js";
 import { MODEL, SYSTEM_PROMPT, MAX_STEPS } from "../../lib/constants.js";
 import type { SendMessageBody, SendMessageResponse } from "../../lib/protocol.js";
-
-const TOOL_LIMIT = process.env.FORCE_DISCOVERY === "1" ? 0 : 15;
-
-const DEFERRED_SYSTEM_PROMPT = `You are an HR assistant with access to tools.
-
-**Important: You must discover tools before using them.**
-You start with NO tools loaded except \`agentified_discover\`. Before performing any action, call \`agentified_discover\` with a description of what you need to find the right tools.
-
-**Tool usage rules:**
-- ALWAYS call agentified_discover first to find relevant tools — you cannot use tools you haven't discovered.
-- Use tools to answer factual questions — never guess from memory.
-- If a request is outside your capabilities or no relevant tools exist, say so.
-- If a tool requires an input you don't have (e.g. employeeId), use agentified_discover to find how to obtain it from information in the user's request.
-- You can call agentified_discover multiple times with different queries if needed.`;
 
 const DISCOVER_TOOL_DEF: AnthropicTool = {
   name: "agentified_discover",
@@ -47,7 +33,7 @@ interface BootResult {
   client: Anthropic;
   allTools: AnthropicTool[];
   executors: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
-  discoverTool: DiscoverTool;
+  instance: Instance;
   container?: StartedTestContainer;
 }
 
@@ -96,7 +82,7 @@ async function boot(): Promise<BootResult> {
     console.error(`[agentified] using external endpoint: ${endpoint}`);
   }
 
-  const strategy = (process.env.SEARCH_STRATEGY as SearchStrategy | undefined) ?? "bm25";
+  const strategy = (process.env.SEARCH_STRATEGY as SearchStrategy | undefined) ?? inferStrategy();
   const ag = new Agentified();
   await ag.connect(endpoint, { strategy });
   console.error(`[agentified] using search strategy: ${strategy}`);
@@ -118,10 +104,16 @@ async function boot(): Promise<BootResult> {
 
   const client = new Anthropic();
 
-  return { ag, client, allTools, executors, discoverTool, container };
+  return { ag, client, allTools, executors, instance, container };
 }
 
-if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("agentified.js")) {
+function inferStrategy(): SearchStrategy {
+  const arg1 = process.argv[1] ?? "";
+  if (arg1.includes("agentified-hybrid")) return "hybrid";
+  return "bm25";
+}
+
+if (/agentified(?:-(?:bm25|hybrid))?\.(?:ts|js)$/.test(process.argv[1] ?? "")) {
   const bootPromise = boot();
 
   process.on("SIGTERM", async () => {
@@ -138,25 +130,34 @@ if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("age
     setup: async () => {},
 
     sendMessage: async (body: SendMessageBody): Promise<SendMessageResponse> => {
-      const { client, allTools, executors, discoverTool } = await bootPromise;
+      const { client, allTools, executors, instance } = await bootPromise;
       const start = performance.now();
       const model = process.env.MODEL ?? MODEL;
 
-      // Start with discover tool + any previously discovered tools
-      // When FORCE_DISCOVERY=1, discoveredNames starts empty (all tools deferred)
-      const discoveredNames = discoverTool.discoveredNames;
-      const systemPrompt = TOOL_LIMIT === 0 ? DEFERRED_SYSTEM_PROMPT : SYSTEM_PROMPT;
+      const session = instance.session(body.turnId ?? "default");
+      const discoveredNames = session.discoverTool.discoveredNames;
+
+      // Persist the user message, then recall relevant tools via context assembly
+      await session.updateConversation({
+        messages: body.history.map((m) => ({ role: m.role, content: m.content })),
+      });
+      const ctx = await session.context
+        .recall({ tools: { limit: 10 } })
+        .messages({ strategy: "recent", maxTokens: 4000 })
+        .assemble();
+
+      console.error(`[agentified] recalled ${ctx.recalled.tools.length} tools: ${ctx.recalled.tools.map((t) => t.name).join(", ")}`);
 
       const result = await runAgenticLoop({
         client,
         model,
-        system: systemPrompt,
+        system: SYSTEM_PROMPT,
         tools: buildActiveTools(allTools, discoveredNames),
         messages: body.history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         maxSteps: MAX_STEPS,
         executors,
         beforeStep: async (step) => {
-          // After first step, update tools based on what was discovered
+          // Update tools based on what was discovered (recall + agentified_discover)
           if (step > 0) {
             return { tools: buildActiveTools(allTools, discoveredNames) };
           }
@@ -177,7 +178,7 @@ if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("age
         hydratedTools: [...discoveredNames],
         turnId: body.turnId,
         debug: {
-          systemPrompt,
+          systemPrompt: SYSTEM_PROMPT,
           toolNames: [...discoveredNames],
           modelResponse: result.content,
           toolCallsMade: result.toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
