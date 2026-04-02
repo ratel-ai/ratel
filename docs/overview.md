@@ -91,6 +91,8 @@ Same accuracy — and massively fewer resources:
 
 - *Runtime tool discovery*: An agent-callable tool that lets the LLM itself search for additional tools mid-conversation. Useful for open-ended workflows where the needed tools aren't predictable upfront.
 
+- *Deferred tool loading*: Register hundreds of tools but only surface them when needed. Mark critical tools with `alwaysInclude` to keep them always available; all other tools are discovered on demand via ranking or agent-initiated search. Discovered tools persist within the session for cross-turn continuity.
+
 - *A fast Rust core*: The server is built with Axum, uses read-write locks for concurrent access, caches embeddings by content hash, and runs ranking in sub-milliseconds for hundreds of tools. Storage is in-memory by default, with optional SQLite persistence and more storage backends coming soon.
 
 ## Who It's For

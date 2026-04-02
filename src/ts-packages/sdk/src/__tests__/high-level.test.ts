@@ -451,6 +451,51 @@ describe("Agentified", () => {
       expect(result.activeTools).toHaveLength(3);
       await ag.disconnect();
     });
+
+    it("prepareStep accumulates discovered tools across multiple steps within a turn", async () => {
+      const discovered = new Set<string>();
+      mockAsDiscoverTool.mockReturnValue({
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn().mockResolvedValue([]),
+        discoveredNames: discovered,
+      });
+
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag, [
+        backendTool("toolD"), backendTool("toolE"),
+        backendTool("toolF"), backendTool("toolG"),
+      ]);
+
+      // Step 1: no discoveries yet
+      const step1 = await instance.prepareStep({ stepNumber: 0, steps: [] });
+      expect(step1.activeTools).toEqual(["agentified_discover"]);
+
+      // Simulate discover returning D, E at step 1
+      discovered.add("toolD");
+      discovered.add("toolE");
+
+      // Step 2: D, E are now included
+      const step2 = await instance.prepareStep({ stepNumber: 1, steps: [] });
+      expect(step2.activeTools).toContain("agentified_discover");
+      expect(step2.activeTools).toContain("toolD");
+      expect(step2.activeTools).toContain("toolE");
+      expect(step2.activeTools).toHaveLength(3);
+
+      // Simulate discover returning F, G at step 2
+      discovered.add("toolF");
+      discovered.add("toolG");
+
+      // Step 3: D, E, F, G all included (accumulated)
+      const step3 = await instance.prepareStep({ stepNumber: 2, steps: [] });
+      expect(step3.activeTools).toContain("agentified_discover");
+      expect(step3.activeTools).toContain("toolD");
+      expect(step3.activeTools).toContain("toolE");
+      expect(step3.activeTools).toContain("toolF");
+      expect(step3.activeTools).toContain("toolG");
+      expect(step3.activeTools).toHaveLength(5);
+
+      await ag.disconnect();
+    });
   });
 
   describe("Session", () => {
@@ -497,6 +542,52 @@ describe("Agentified", () => {
       );
       expect(result.activeTools).toContain("agentified_discover");
       expect(result.activeTools).toContain("agentified_get_messages");
+      await ag.disconnect();
+    });
+
+    it("session prepareStep accumulates discovered tools across multiple steps within a turn", async () => {
+      const discovered = new Set<string>();
+      mockAsDiscoverTool.mockReturnValue({
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn().mockResolvedValue([]),
+        discoveredNames: discovered,
+      });
+
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag, [
+        backendTool("toolD"), backendTool("toolE"),
+        backendTool("toolF"), backendTool("toolG"),
+      ]);
+      const session = instance.session("chat-1");
+
+      // Step 1: no discoveries yet — only discover + getMessages
+      const step1 = await session.prepareStep({ stepNumber: 0, steps: [] });
+      expect(step1.activeTools).toContain("agentified_discover");
+      expect(step1.activeTools).toContain("agentified_get_messages");
+      expect(step1.activeTools).toHaveLength(2);
+
+      // Simulate discover returning D, E at step 1
+      discovered.add("toolD");
+      discovered.add("toolE");
+
+      // Step 2: D, E now included alongside discover + getMessages
+      const step2 = await session.prepareStep({ stepNumber: 1, steps: [] });
+      expect(step2.activeTools).toContain("toolD");
+      expect(step2.activeTools).toContain("toolE");
+      expect(step2.activeTools).toHaveLength(4);
+
+      // Simulate discover returning F, G at step 2
+      discovered.add("toolF");
+      discovered.add("toolG");
+
+      // Step 3: D, E, F, G all included (accumulated)
+      const step3 = await session.prepareStep({ stepNumber: 2, steps: [] });
+      expect(step3.activeTools).toContain("toolD");
+      expect(step3.activeTools).toContain("toolE");
+      expect(step3.activeTools).toContain("toolF");
+      expect(step3.activeTools).toContain("toolG");
+      expect(step3.activeTools).toHaveLength(6);
+
       await ag.disconnect();
     });
 
@@ -718,6 +809,27 @@ describe("Agentified", () => {
 
       const ctx = await session.context.assemble();
       expect(ctx.tools).toEqual({});
+    });
+
+    it("assemble() populates discoveredNames from recalled tools for cross-turn accumulation", async () => {
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag, [backendTool("toolA"), backendTool("toolB")]);
+      const session = instance.session("chat-1");
+
+      // Simulate recall returning toolA from a previous turn
+      mockGetContext.mockResolvedValue({
+        messages: [], strategyUsed: "recent", totalMessages: 0,
+        includedMessages: 0,
+        recalled: { tools: [{ name: "toolA", score: 1.0 }], memories: [] },
+        tokenEstimate: 0, conversationMessages: 0, fallback: false,
+      });
+
+      const ctx = await session.context.recall({ tools: true }).assemble();
+      // toolA should be resolved from recalled tools
+      expect(ctx.tools["toolA"]).toBeDefined();
+      expect(ctx.tools["toolA"]!.name).toBe("toolA");
+      // discoveredNames should now include toolA
+      expect(session.discoverTool.discoveredNames.has("toolA")).toBe(true);
     });
   });
 });

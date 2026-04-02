@@ -42,20 +42,30 @@ export class ApiClient {
   }
 
   async register(datasetId: string): Promise<RegisterResponse> {
+    const tools = this.config.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+      ...(t.metadata ? { metadata: t.metadata } : {}),
+      ...(t.fields ? { fields: t.fields } : {}),
+      ...(t.alwaysInclude !== undefined ? { always_include: t.alwaysInclude } : {}),
+    }));
     return this.fetchJson<RegisterResponse>(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/tools`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tools: this.config.tools }),
+      body: JSON.stringify({ tools }),
     });
   }
 
-  async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string, strategy?: SearchStrategy): Promise<RankedTool[]> {
+  async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string, strategy?: SearchStrategy, namespace?: string, session?: string): Promise<RankedTool[]> {
     const body: Record<string, unknown> = { query };
     if (limit !== undefined) body.limit = limit;
     if (exclude !== undefined) body.exclude = exclude;
     if (turnId !== undefined) body.turn_id = turnId;
-    const effectiveStrategy = strategy ?? this.config.strategy;
-    if (effectiveStrategy !== undefined) body.strategy = effectiveStrategy;
+    if (namespace !== undefined) body.namespace = namespace;
+    if (session !== undefined) body.session = session;
+    const resolvedStrategy = strategy ?? this.config.strategy;
+    if (resolvedStrategy) body.strategy = resolvedStrategy;
 
     const data = await this.fetchJson<DiscoverResponse>(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/discover`, {
       method: "POST",
@@ -129,7 +139,8 @@ export class ApiClient {
 
   async getContext(dataset: string, namespace: string, session: string, opts?: ContextOpts): Promise<ContextResponse> {
     const messagesConfig: Record<string, unknown> = {};
-    if (opts?.strategy !== undefined) messagesConfig.strategy = opts.strategy;
+    const ctxStrategy = opts?.strategy ?? this.config.strategy;
+    if (ctxStrategy) messagesConfig.strategy = ctxStrategy;
     if (opts?.maxTokens !== undefined) messagesConfig.max_tokens = opts.maxTokens;
     if (opts?.keepFirst !== undefined) messagesConfig.keep_first = opts.keepFirst;
     if (opts?.pruneThreshold !== undefined) messagesConfig.prune_threshold = opts.pruneThreshold;
@@ -223,7 +234,7 @@ export class ApiClient {
     };
   }
 
-  asDiscoverTool(datasetId: string): DiscoverTool {
+  asDiscoverTool(datasetId: string, namespace?: string, session?: string): DiscoverTool {
     const discoveredNames = new Set<string>();
     return {
       definition: {
@@ -243,7 +254,7 @@ export class ApiClient {
         this.emit({ type: "agentified:discover:start", query: input.query });
         const start = performance.now();
 
-        const tools = await this.discover(datasetId, input.query, input.limit, undefined, undefined, input.strategy);
+        const tools = await this.discover(datasetId, input.query, input.limit, undefined, undefined, input.strategy, namespace, session);
         for (const t of tools) discoveredNames.add(t.name);
 
         this.emit({

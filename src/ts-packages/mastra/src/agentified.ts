@@ -61,6 +61,7 @@ export class MastraContextBuilder {
     private readonly discoverMastraTool: MastraTool,
     private readonly discoveredNames: Set<string>,
     private readonly mastraToolCache: Record<string, MastraTool>,
+    private readonly alwaysIncludeNames: Set<string> = new Set(),
   ) {}
 
   tools(tools: Record<string, MastraTool>): this {
@@ -87,6 +88,11 @@ export class MastraContextBuilder {
     const sdkCtx = await this.sdkBuilder.assemble();
 
     const resolvedTools: Record<string, MastraTool> = { ...this.explicitTools };
+    for (const name of this.alwaysIncludeNames) {
+      if (!resolvedTools[name] && this.mastraToolCache[name]) {
+        resolvedTools[name] = this.mastraToolCache[name];
+      }
+    }
     for (const name of this.discoveredNames) {
       if (!resolvedTools[name] && this.mastraToolCache[name]) {
         resolvedTools[name] = this.mastraToolCache[name];
@@ -136,17 +142,25 @@ export class MastraInstance {
   get instanceId() { return this.inst.instanceId; }
   get datasetId() { return this.inst.datasetId; }
 
+  private readonly alwaysIncludeNames: Set<string>;
+
   constructor(
     private readonly inst: Instance,
     private readonly backendTools: (BackendTool | McpTool)[],
   ) {
     this.discoverTool = wrapDiscoverTool(inst.discoverTool);
     this.mastraToolCache = buildMastraToolMap(backendTools);
+    this.alwaysIncludeNames = extractAlwaysIncludeNames(backendTools);
   }
 
   readonly prepareStep = async (params: { stepNumber: number; steps: any[] }) => {
     await this.inst.prepareStep(params);
     const tools: Record<string, MastraTool> = { agentified_discover: this.discoverTool };
+    for (const name of this.alwaysIncludeNames) {
+      if (this.mastraToolCache[name]) {
+        tools[name] = this.mastraToolCache[name];
+      }
+    }
     for (const name of this.inst.discoverTool.discoveredNames) {
       if (!tools[name] && this.mastraToolCache[name]) {
         tools[name] = this.mastraToolCache[name];
@@ -169,6 +183,8 @@ export class MastraSession {
   get id() { return this.sess.id; }
   get conversation() { return this.sess.conversation; }
 
+  private readonly alwaysIncludeNames: Set<string>;
+
   constructor(
     private readonly sess: Session,
     private readonly backendTools: (BackendTool | McpTool)[],
@@ -176,6 +192,7 @@ export class MastraSession {
     this.discoverTool = wrapDiscoverTool(sess.discoverTool);
     this.getMessagesTool = wrapGetMessagesTool(sess.getMessagesTool);
     this.mastraToolCache = buildMastraToolMap(backendTools);
+    this.alwaysIncludeNames = extractAlwaysIncludeNames(backendTools);
   }
 
   get context(): MastraContextBuilder {
@@ -185,6 +202,7 @@ export class MastraSession {
       this.discoverTool,
       this.sess.discoverTool.discoveredNames,
       this.mastraToolCache,
+      this.alwaysIncludeNames,
     );
   }
 
@@ -194,6 +212,11 @@ export class MastraSession {
       agentified_discover: this.discoverTool,
       agentified_get_messages: this.getMessagesTool,
     };
+    for (const name of this.alwaysIncludeNames) {
+      if (this.mastraToolCache[name]) {
+        tools[name] = this.mastraToolCache[name];
+      }
+    }
     for (const name of this.sess.discoverTool.discoveredNames) {
       if (!tools[name] && this.mastraToolCache[name]) {
         tools[name] = this.mastraToolCache[name];
@@ -247,6 +270,14 @@ function wrapDiscoverTool(dt: DiscoverTool) {
     inputSchema: z.object({ query: z.string(), limit: z.number().optional() }),
     execute: async (input: { query: string; limit?: number }) => dt.execute(input),
   });
+}
+
+function extractAlwaysIncludeNames(backendTools: (BackendTool | McpTool)[]): Set<string> {
+  const names = new Set<string>();
+  for (const t of backendTools) {
+    if ("alwaysInclude" in t && t.alwaysInclude) names.add(t.name);
+  }
+  return names;
 }
 
 function buildMastraToolMap(backendTools: (BackendTool | McpTool)[]): Record<string, MastraTool> {

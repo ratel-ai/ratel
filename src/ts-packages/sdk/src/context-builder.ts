@@ -85,6 +85,13 @@ export class ContextBuilder<T = AgentifiedTool> {
       }
     }
 
+    // Populate discoveredNames from recalled tools for cross-turn accumulation
+    if (res.recalled?.tools) {
+      for (const t of res.recalled.tools) {
+        this.discoveredNames.add(t.name);
+      }
+    }
+
     const resolvedTools: Record<string, T> = { ...this.explicitTools };
     for (const tool of this.registeredTools) {
       const name = (tool as { name: string }).name;

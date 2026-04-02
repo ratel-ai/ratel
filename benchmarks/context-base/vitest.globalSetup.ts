@@ -6,7 +6,7 @@ import { GenericContainer, Wait } from "testcontainers";
 let container: any;
 
 export async function setup() {
-  container = await new GenericContainer("agentified/agentified-core:0.2.0-beta.1")
+  container = await new GenericContainer("agentified/agentified-core:0.2.1-beta.1")
     .withExposedPorts(9119)
     .withEnvironment({
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",

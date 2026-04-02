@@ -178,6 +178,23 @@ Persist messages with deduplication for multi-turn context.
 
 Retrieve conversation history with strategy-based filtering.
 
+## Deferred Tool Loading
+
+By default, all registered tools are candidates for discovery. Mark critical tools with `alwaysInclude` to ensure they're always present in the agent's tool set, regardless of discovery:
+
+```typescript
+const instance = await ag.register({
+  tools: [
+    { name: "escalate", description: "Escalate to human agent", parameters: {}, alwaysInclude: true, handler: escalateHandler },
+    { name: "get_weather", description: "Get weather forecast", parameters: { ... }, handler: weatherHandler },
+  ],
+});
+```
+
+- Tools with `alwaysInclude: true` are injected by `prepareStep` on every turn and excluded from `discover()` results (they don't need to be ranked).
+- All other tools are deferred — they only appear after being found via `discoverTool` or `.recall()`.
+- Discovered tool names persist within the session, so they're automatically available in subsequent turns.
+
 ## Events
 
 Subscribe to lifecycle events via `onEvent` in the config:
@@ -207,6 +224,13 @@ interface ServerTool {
   parameters: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   fields?: { name: string; description: string; inputSchema?: string; outputSchema?: string };
+  alwaysInclude?: boolean;  // bypass discovery — always present in the agent's tool set
+}
+
+interface BackendTool extends ServerTool {
+  type?: "backend";
+  alwaysInclude?: boolean;
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
 interface RankedTool extends ServerTool {

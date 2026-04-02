@@ -56,7 +56,7 @@ export async function spawnAgent(cmd: string, port: number): Promise<AgentProces
     if (process.env.DEBUG) process.stderr.write(`[agent:${port}] ${data}`);
   });
 
-  await waitForHealth(`http://localhost:${port}/health`, 30_000);
+  await waitForHealth(`http://localhost:${port}/health`, 180_000);
   return { child, port };
 }
 

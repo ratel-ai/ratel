@@ -179,6 +179,108 @@ describe("MastraInstance", () => {
     expect(result.tools["get_weather"].id).toBe("get_weather");
   });
 
+  it("prepareStep includes alwaysInclude tools", async () => {
+    const backendTools = [
+      { name: "escalate", description: "Escalate", parameters: { type: "object", properties: {} }, handler: vi.fn(), alwaysInclude: true },
+      { name: "get_weather", description: "Get weather", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+    ];
+    const inst = fakeInstance();
+    const m = new MastraInstance(inst, backendTools);
+    const result = await m.prepareStep({ stepNumber: 0, steps: [] });
+
+    expect(result.tools["agentified_discover"]).toBe(m.discoverTool);
+    expect(result.tools["escalate"]).toBeDefined();
+    expect(result.tools["escalate"].id).toBe("escalate");
+    expect(result.tools["get_weather"]).toBeUndefined();
+  });
+
+  it("prepareStep presents only alwaysInclude + discover + discovered tools", async () => {
+    const backendTools = [
+      { name: "escalate", description: "Escalate", parameters: { type: "object", properties: {} }, handler: vi.fn(), alwaysInclude: true },
+      { name: "log_call", description: "Log call", parameters: { type: "object", properties: {} }, handler: vi.fn(), alwaysInclude: true },
+      { name: "get_weather", description: "Get weather", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+      { name: "search_docs", description: "Search docs", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+    ];
+    const inst = fakeInstance();
+    inst.discoverTool.discoveredNames.add("search_docs");
+
+    const m = new MastraInstance(inst, backendTools);
+    const result = await m.prepareStep({ stepNumber: 0, steps: [] });
+
+    const names = Object.keys(result.tools);
+    expect(names).toHaveLength(4); // discover + 2 alwaysInclude + 1 discovered
+    expect(names).toContain("agentified_discover");
+    expect(names).toContain("escalate");
+    expect(names).toContain("log_call");
+    expect(names).toContain("search_docs");
+    expect(names).not.toContain("get_weather");
+  });
+
+  it("prepareStep accumulates tools across multiple discover calls within a turn", async () => {
+    const backendTools = [
+      { name: "toolD", description: "Tool D", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+      { name: "toolE", description: "Tool E", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+      { name: "toolF", description: "Tool F", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+      { name: "toolG", description: "Tool G", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+    ];
+    const inst = fakeInstance();
+    const m = new MastraInstance(inst, backendTools);
+
+    // Step 1: nothing discovered yet
+    const step1 = await m.prepareStep({ stepNumber: 0, steps: [] });
+    expect(Object.keys(step1.tools)).toEqual(["agentified_discover"]);
+
+    // Simulate discover returning D, E
+    inst.discoverTool.discoveredNames.add("toolD");
+    inst.discoverTool.discoveredNames.add("toolE");
+
+    // Step 2: D, E included
+    const step2 = await m.prepareStep({ stepNumber: 1, steps: [] });
+    expect(Object.keys(step2.tools)).toHaveLength(3); // discover + D + E
+    expect(step2.tools["toolD"]).toBeDefined();
+    expect(step2.tools["toolE"]).toBeDefined();
+
+    // Simulate discover returning F, G
+    inst.discoverTool.discoveredNames.add("toolF");
+    inst.discoverTool.discoveredNames.add("toolG");
+
+    // Step 3: D, E, F, G all included (accumulated)
+    const step3 = await m.prepareStep({ stepNumber: 2, steps: [] });
+    expect(Object.keys(step3.tools)).toHaveLength(5); // discover + D + E + F + G
+    expect(step3.tools["toolD"]).toBeDefined();
+    expect(step3.tools["toolE"]).toBeDefined();
+    expect(step3.tools["toolF"]).toBeDefined();
+    expect(step3.tools["toolG"]).toBeDefined();
+  });
+
+  it("prepareStep discovered tools have full parameter schemas", async () => {
+    const backendTools = [{
+      name: "get_employee",
+      description: "Get employee info",
+      parameters: {
+        type: "object",
+        properties: {
+          employee_id: { type: "string", description: "The employee's unique identifier" },
+          include_salary: { type: "boolean", description: "Whether to include salary" },
+        },
+        required: ["employee_id"],
+      },
+      handler: vi.fn(),
+    }];
+    const inst = fakeInstance();
+    inst.discoverTool.discoveredNames.add("get_employee");
+
+    const m = new MastraInstance(inst, backendTools);
+    const result = await m.prepareStep({ stepNumber: 0, steps: [] });
+
+    const tool = result.tools["get_employee"];
+    expect(tool).toBeDefined();
+    // Verify the tool was created with full schema via createTool (which received the full parameters)
+    expect(mockCreateTool).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "get_employee", description: "Get employee info" }),
+    );
+  });
+
   it("does not expose a tools property", () => {
     const inst = fakeInstance();
     const m = new MastraInstance(inst, []);
@@ -285,6 +387,22 @@ describe("MastraSession", () => {
     expect(result.tools["search_docs"].id).toBe("search_docs");
   });
 
+  it("prepareStep includes alwaysInclude tools", async () => {
+    const backendTools = [
+      { name: "escalate", description: "Escalate", parameters: { type: "object", properties: {} }, handler: vi.fn(), alwaysInclude: true },
+      { name: "get_weather", description: "Get weather", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+    ];
+    const sess = fakeSession();
+    const m = new MastraSession(sess, backendTools);
+    const result = await m.prepareStep({ stepNumber: 0, steps: [] });
+
+    expect(result.tools["agentified_discover"]).toBe(m.discoverTool);
+    expect(result.tools["agentified_get_messages"]).toBe(m.getMessagesTool);
+    expect(result.tools["escalate"]).toBeDefined();
+    expect(result.tools["escalate"].id).toBe("escalate");
+    expect(result.tools["get_weather"]).toBeUndefined();
+  });
+
   it("exposes id, conversation", () => {
     const sess = fakeSession();
     const m = new MastraSession(sess, []);
@@ -313,6 +431,43 @@ describe("MastraSession", () => {
     const m = new MastraSession(sess, []);
     const result = await m.prepareStep({ stepNumber: 0, steps: [] });
     expect(result.tools["agentified_get_messages"]).toBe(m.getMessagesTool);
+  });
+
+  it("prepareStep accumulates tools across multiple discover calls within a turn", async () => {
+    const backendTools = [
+      { name: "toolD", description: "Tool D", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+      { name: "toolE", description: "Tool E", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+      { name: "toolF", description: "Tool F", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+      { name: "toolG", description: "Tool G", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+    ];
+    const sess = fakeSession();
+    const m = new MastraSession(sess, backendTools);
+
+    // Step 1: nothing discovered yet — only discover + getMessages
+    const step1 = await m.prepareStep({ stepNumber: 0, steps: [] });
+    expect(Object.keys(step1.tools)).toHaveLength(2); // discover + getMessages
+
+    // Simulate discover returning D, E
+    sess.discoverTool.discoveredNames.add("toolD");
+    sess.discoverTool.discoveredNames.add("toolE");
+
+    // Step 2: D, E included
+    const step2 = await m.prepareStep({ stepNumber: 1, steps: [] });
+    expect(Object.keys(step2.tools)).toHaveLength(4); // discover + getMessages + D + E
+    expect(step2.tools["toolD"]).toBeDefined();
+    expect(step2.tools["toolE"]).toBeDefined();
+
+    // Simulate discover returning F, G
+    sess.discoverTool.discoveredNames.add("toolF");
+    sess.discoverTool.discoveredNames.add("toolG");
+
+    // Step 3: D, E, F, G all included (accumulated)
+    const step3 = await m.prepareStep({ stepNumber: 2, steps: [] });
+    expect(Object.keys(step3.tools)).toHaveLength(6); // discover + getMessages + D + E + F + G
+    expect(step3.tools["toolD"]).toBeDefined();
+    expect(step3.tools["toolE"]).toBeDefined();
+    expect(step3.tools["toolF"]).toBeDefined();
+    expect(step3.tools["toolG"]).toBeDefined();
   });
 
   it("delegates updateConversation", async () => {
@@ -396,6 +551,23 @@ describe("MastraContextBuilder", () => {
     );
     builder.recall();
     expect(sdkBuilder.recall).toHaveBeenCalled();
+  });
+
+  it("assemble() includes alwaysInclude tools", async () => {
+    const sdkBuilder = fakeContextBuilder();
+    const escalateTool = { id: "escalate", __mastraTool: true } as any;
+    const normalTool = { id: "normal_tool", __mastraTool: true } as any;
+    const discoverTool = { id: "agentified_discover", __mastraTool: true } as any;
+    const mastraToolCache = { escalate: escalateTool, normal_tool: normalTool };
+    const alwaysIncludeNames = new Set(["escalate"]);
+
+    const builder = new MastraContextBuilder(
+      sdkBuilder, vi.fn(), discoverTool, new Set(), mastraToolCache, alwaysIncludeNames,
+    );
+
+    const ctx = await builder.assemble();
+    expect(ctx.tools["escalate"]).toBe(escalateTool);
+    expect(ctx.tools["normal_tool"]).toBeUndefined();
   });
 
   it("assemble() returns MastraAssembledContext with explicit + discovered tools", async () => {

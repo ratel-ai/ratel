@@ -5,7 +5,7 @@ config({ path: "../../.env" });
 import { resolve } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { Agentified } from "agentified";
-import type { BackendTool, DiscoverTool, SearchStrategy } from "agentified";
+import type { BackendTool, SearchStrategy } from "agentified";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { z } from "zod";
 import { runAgenticLoop, toAnthropicTools, type AnthropicTool } from "../../lib/anthropic-agent.js";
@@ -14,8 +14,6 @@ import { toolRegistry } from "../../tools/registry.js";
 import { TOOL_DEPENDENCIES } from "../../tools/dependencies.js";
 import { MODEL, SYSTEM_PROMPT, MAX_STEPS } from "../../lib/constants.js";
 import type { SendMessageBody, SendMessageResponse } from "../../lib/protocol.js";
-
-const TOOL_LIMIT = process.env.FORCE_DISCOVERY === "1" ? 0 : 15;
 
 const DISCOVER_TOOL_DEF: AnthropicTool = {
   name: "agentified_discover",
@@ -35,7 +33,7 @@ interface BootResult {
   client: Anthropic;
   allTools: AnthropicTool[];
   executors: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
-  discoverTool: DiscoverTool;
+  instance: Instance;
   container?: StartedTestContainer;
 }
 
@@ -58,7 +56,7 @@ async function boot(): Promise<BootResult> {
 
   if (!endpoint) {
     console.error("[agentified] starting agentified-core container...");
-    const started = await new GenericContainer("agentified/agentified-core:latest")
+    const started = await new GenericContainer("agentified/agentified-core:0.2.1-beta.1")
       .withExposedPorts(9119)
       .withEnvironment({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
@@ -84,7 +82,7 @@ async function boot(): Promise<BootResult> {
     console.error(`[agentified] using external endpoint: ${endpoint}`);
   }
 
-  const strategy = (process.env.SEARCH_STRATEGY as SearchStrategy | undefined) ?? "bm25";
+  const strategy = (process.env.SEARCH_STRATEGY as SearchStrategy | undefined) ?? inferStrategy();
   const ag = new Agentified();
   await ag.connect(endpoint, { strategy });
   console.error(`[agentified] using search strategy: ${strategy}`);
@@ -106,10 +104,18 @@ async function boot(): Promise<BootResult> {
 
   const client = new Anthropic();
 
-  return { ag, client, allTools, executors, discoverTool, container };
+  return { ag, client, allTools, executors, instance, container };
 }
 
-if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("agentified.js")) {
+function inferStrategy(): SearchStrategy {
+  const arg1 = process.argv[1] ?? "";
+  if (arg1.includes("agentified-hybrid")) return "hybrid";
+  return "bm25";
+}
+
+const USE_RECALL = !(process.argv[1] ?? "").includes("norecall");
+
+if (/agentified(?:-[\w-]+)?\.(?:ts|js)$/.test(process.argv[1] ?? "")) {
   const bootPromise = boot();
 
   process.on("SIGTERM", async () => {
@@ -126,23 +132,38 @@ if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("age
     setup: async () => {},
 
     sendMessage: async (body: SendMessageBody): Promise<SendMessageResponse> => {
-      const { client, allTools, executors, discoverTool } = await bootPromise;
+      const { client, allTools, executors, instance } = await bootPromise;
       const start = performance.now();
       const model = process.env.MODEL ?? MODEL;
 
-      // Start with discover tool + any previously discovered tools
-      const discoveredNames = discoverTool.discoveredNames;
+      const sessionId = body.turnId ?? `scenario-${Date.now()}`;
+      const session = instance.session(sessionId);
+      const discoveredNames = session.discoverTool.discoveredNames;
+
+      // Optionally recall relevant tools via context assembly
+      if (USE_RECALL) {
+        await session.updateConversation({
+          messages: body.history.map((m) => ({ role: m.role, content: m.content })),
+        });
+        const ctx = await session.context
+          .recall({ tools: { limit: 10 } })
+          .messages({ strategy: "recent", maxTokens: 4000 })
+          .assemble();
+        console.error(`[agentified] recalled=${ctx.recalled.tools.length} activeTools=${discoveredNames.size + 1}`);
+      }
+
+      const activeTools = buildActiveTools(allTools, discoveredNames);
 
       const result = await runAgenticLoop({
         client,
         model,
         system: SYSTEM_PROMPT,
-        tools: buildActiveTools(allTools, discoveredNames),
+        tools: activeTools,
         messages: body.history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         maxSteps: MAX_STEPS,
         executors,
         beforeStep: async (step) => {
-          // After first step, update tools based on what was discovered
+          // Update tools based on what was discovered (recall + agentified_discover)
           if (step > 0) {
             return { tools: buildActiveTools(allTools, discoveredNames) };
           }

@@ -19,7 +19,7 @@ export class Session {
     /** @internal */ private readonly registeredTools: AgentifiedTool[],
   ) {
     this.conversation = new Conversation(sdk, datasetId, namespaceId, id);
-    this._discoverTool = sdk.asDiscoverTool(datasetId);
+    this._discoverTool = sdk.asDiscoverTool(datasetId, namespaceId, id);
   }
 
   get context(): ContextBuilder {

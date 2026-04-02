@@ -17,6 +17,7 @@ export interface ServerTool {
   parameters: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   fields?: ServerToolFields;
+  alwaysInclude?: boolean;
 }
 
 export interface RankedTool extends ServerTool {
@@ -215,6 +216,7 @@ export interface BackendTool {
   description: string;
   parameters: Record<string, unknown>;
   type?: "backend";
+  alwaysInclude?: boolean;
   handler: (args: Record<string, unknown>) => Promise<unknown>;
 }
 

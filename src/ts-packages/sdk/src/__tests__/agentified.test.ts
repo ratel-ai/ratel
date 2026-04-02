@@ -37,6 +37,44 @@ describe("ApiClient", () => {
       });
       expect(result).toEqual({ registered: 1 });
     });
+
+    it("converts alwaysInclude to always_include on the wire", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ registered: 1 }), { status: 200 }),
+      );
+
+      const toolWithAlwaysInclude: ServerTool = {
+        ...testTool,
+        alwaysInclude: true,
+      };
+
+      const agent = new ApiClient({
+        serverUrl: TEST_URL,
+        tools: [toolWithAlwaysInclude],
+      });
+
+      await agent.register("ds-abc");
+
+      const callBody = JSON.parse((fetch as any).mock.calls[0][1].body);
+      expect(callBody.tools[0].always_include).toBe(true);
+      expect(callBody.tools[0].alwaysInclude).toBeUndefined();
+    });
+
+    it("omits always_include when alwaysInclude is not set", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ registered: 1 }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({
+        serverUrl: TEST_URL,
+        tools: [testTool],
+      });
+
+      await agent.register("ds-abc");
+
+      const callBody = JSON.parse((fetch as any).mock.calls[0][1].body);
+      expect(callBody.tools[0].always_include).toBeUndefined();
+    });
   });
 
   describe("discover", () => {
@@ -51,7 +89,7 @@ describe("ApiClient", () => {
       expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "weather tools", limit: 5 }),
+        body: JSON.stringify({ query: "weather tools", limit: 5, strategy: "bm25" }),
       });
       expect(result).toEqual([rankedTool]);
     });
@@ -67,7 +105,7 @@ describe("ApiClient", () => {
       expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "test", exclude: ["excluded"], turn_id: "turn-1" }),
+        body: JSON.stringify({ query: "test", exclude: ["excluded"], turn_id: "turn-1", strategy: "bm25" }),
       });
     });
 
@@ -82,7 +120,37 @@ describe("ApiClient", () => {
       expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "test" }),
+        body: JSON.stringify({ query: "test", strategy: "bm25" }),
+      });
+    });
+
+    it("uses explicit strategy when provided instead of bm25 default", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.discover("ds-abc", "test", undefined, undefined, undefined, "semantic");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test", strategy: "semantic" }),
+      });
+    });
+
+    it("uses config-level strategy over bm25 default", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool], strategy: "hybrid" });
+      await agent.discover("ds-abc", "test");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test", strategy: "hybrid" }),
       });
     });
   });
@@ -102,7 +170,7 @@ describe("ApiClient", () => {
       expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "What is the weather in Paris?", limit: 5 }),
+        body: JSON.stringify({ query: "What is the weather in Paris?", limit: 5, strategy: "bm25" }),
       });
       expect(result).toEqual([rankedTool]);
     });
@@ -145,7 +213,7 @@ describe("ApiClient", () => {
       expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "test", exclude: ["frontendTool"] }),
+        body: JSON.stringify({ query: "test", exclude: ["frontendTool"], strategy: "bm25" }),
       });
     });
 
@@ -164,7 +232,7 @@ describe("ApiClient", () => {
       expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "test", limit: 5, turn_id: "turn-xyz" }),
+        body: JSON.stringify({ query: "test", limit: 5, turn_id: "turn-xyz", strategy: "bm25" }),
       });
     });
   });
@@ -196,7 +264,7 @@ describe("ApiClient", () => {
       expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "weather tools", limit: 3 }),
+        body: JSON.stringify({ query: "weather tools", limit: 3, strategy: "bm25" }),
       });
       expect(result).toEqual([rankedTool]);
     });
@@ -221,6 +289,66 @@ describe("ApiClient", () => {
       expect(
         (events[1] as Extract<AgentifiedEvent, { type: "agentified:discover:complete" }>).durationMs,
       ).toBeGreaterThanOrEqual(0);
+    });
+
+    it("passes namespace and session to discover when provided", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const discoverTool = agent.asDiscoverTool("ds-abc", "ns-1", "sess-1");
+
+      await discoverTool.execute({ query: "weather tools" });
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "weather tools", namespace: "ns-1", session: "sess-1", strategy: "bm25" }),
+      });
+    });
+
+    it("omits namespace and session when not provided", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [rankedTool] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const discoverTool = agent.asDiscoverTool("ds-abc");
+
+      await discoverTool.execute({ query: "weather tools" });
+
+      const body = JSON.parse((fetch as any).mock.calls[0][1].body);
+      expect(body).not.toHaveProperty("namespace");
+      expect(body).not.toHaveProperty("session");
+    });
+
+    it("accumulates discoveredNames across multiple execute() calls within a turn", async () => {
+      const toolD = { ...testTool, name: "toolD", score: 0.9 };
+      const toolE = { ...testTool, name: "toolE", score: 0.8 };
+      const toolF = { ...testTool, name: "toolF", score: 0.85 };
+      const toolG = { ...testTool, name: "toolG", score: 0.7 };
+
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      // First discover call returns D, E
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ tools: [toolD, toolE] }), { status: 200 }),
+      );
+      // Second discover call returns F, G
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ tools: [toolF, toolG] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const discoverTool = agent.asDiscoverTool("ds-abc");
+
+      // Step 1: discover D, E
+      await discoverTool.execute({ query: "first query" });
+      expect(discoverTool.discoveredNames).toEqual(new Set(["toolD", "toolE"]));
+
+      // Step 2: discover F, G — previous names preserved
+      await discoverTool.execute({ query: "second query" });
+      expect(discoverTool.discoveredNames).toEqual(new Set(["toolD", "toolE", "toolF", "toolG"]));
     });
   });
 
@@ -473,6 +601,36 @@ describe("ApiClient", () => {
         tokenEstimate: 500,
         conversationMessages: 10,
         fallback: false,
+      });
+    });
+
+    it("defaults to bm25 strategy when no strategy specified", async () => {
+      const contextRes = {
+        messages: [],
+        strategy_used: "bm25",
+        total_messages: 0,
+        included_messages: 0,
+        recalled: { tools: [], memories: [] },
+        token_estimate: 0,
+        conversation_messages: 0,
+        fallback: false,
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify(contextRes), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.getContext("ds", "ns", "sess");
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dataset: "ds",
+          namespace: "ns",
+          session: "sess",
+          messages: { strategy: "bm25" },
+        }),
       });
     });
   });

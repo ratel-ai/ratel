@@ -19,6 +19,21 @@ The context endpoint (`POST /api/v1/context`) accepts `keep_first` in its `messa
 
 Full request/response schemas and examples: [agentified-core README](../../src/core/README.md#api-reference).
 
+## Tool Registration
+
+Each tool in the `POST /api/v1/datasets/{id}/tools` request body accepts:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `string` | — | Tool name (required) |
+| `description` | `string` | — | Tool description (required) |
+| `parameters` | `object` | `{}` | JSON Schema for tool input |
+| `metadata` | `object` | — | Arbitrary metadata (e.g. dependency declarations) |
+| `fields` | `object` | — | Multi-field embedding config |
+| `always_include` | `boolean` | `false` | When `true`, the tool is excluded from `discover()` results and meant to be unconditionally present in the agent's tool set |
+| `type` | `string` | `"backend"` | Tool type: `"backend"`, `"client"`, or `"mcp"` |
+| `server_uri` | `string` | — | MCP server URI (required when `type` is `"mcp"`) |
+
 ## Configuration
 
 | Variable | Required | Default | Description |
