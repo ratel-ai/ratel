@@ -74,6 +74,8 @@ pub struct Tool {
     pub metadata: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fields: Option<ToolFields>,
+    #[serde(default)]
+    pub always_include: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +113,10 @@ pub struct DiscoverRequest {
     pub exclude: Option<Vec<String>>,
     #[serde(default)]
     pub turn_id: Option<String>,
+    #[serde(default)]
+    pub namespace: Option<String>,
+    #[serde(default)]
+    pub session: Option<String>,
 }
 
 // Session/turn tracking
@@ -394,5 +400,33 @@ mod tests {
             }
             other => panic!("expected Config with defaults, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn tool_always_include_defaults_to_false() {
+        let json = r#"{"name": "t", "description": "d", "parameters": {}}"#;
+        let tool: Tool = serde_json::from_str(json).unwrap();
+        assert!(!tool.always_include);
+    }
+
+    #[test]
+    fn tool_always_include_deserializes_true() {
+        let json = r#"{"name": "t", "description": "d", "parameters": {}, "always_include": true}"#;
+        let tool: Tool = serde_json::from_str(json).unwrap();
+        assert!(tool.always_include);
+    }
+
+    #[test]
+    fn tool_always_include_serializes() {
+        let tool = Tool {
+            name: "t".into(),
+            description: "d".into(),
+            parameters: serde_json::json!({}),
+            metadata: None,
+            fields: None,
+            always_include: true,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""always_include":true"#));
     }
 }

@@ -12,6 +12,23 @@ pub use embedding::{FakeEmbedding, FailingEmbedding, FakeLlm, FailingLlm};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Extract argument names and descriptions from a JSON Schema `parameters` object.
+/// Parses the `properties` field to get property keys (arg names) and their `description` values.
+/// Returns a space-separated string like: "employee_id The employee's unique identifier salary Annual salary amount"
+fn extract_arg_text(parameters: &serde_json::Value) -> String {
+    let Some(properties) = parameters.get("properties").and_then(|p| p.as_object()) else {
+        return String::new();
+    };
+    let mut parts = Vec::new();
+    for (key, value) in properties {
+        parts.push(key.as_str());
+        if let Some(desc) = value.get("description").and_then(|d| d.as_str()) {
+            parts.push(desc);
+        }
+    }
+    parts.join(" ")
+}
+
 use tokio::sync::RwLock;
 
 use models::{
@@ -140,17 +157,13 @@ impl AgentifiedCore {
         };
 
         let mut tool_data: Vec<(Option<FieldEmbeddings>, String)> = Vec::with_capacity(count);
-        for texts in &all_tool_texts {
-            let bm25_text = [
-                Some(texts.name.clone()),
-                Some(texts.description.clone()),
-                texts.input_schema.clone(),
-                texts.output_schema.clone(),
-            ]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" ");
+        for (idx, texts) in all_tool_texts.iter().enumerate() {
+            let arg_text = extract_arg_text(&tools[idx].parameters);
+            let bm25_text = if arg_text.is_empty() {
+                format!("{} {}", texts.name, texts.description)
+            } else {
+                format!("{} {} {}", texts.name, texts.description, arg_text)
+            };
 
             let embeddings = if has_embeddings {
                 let cache = self.embedding_cache.read().await;
@@ -235,6 +248,21 @@ impl AgentifiedCore {
             vec![]
         };
 
+        // Load previously discovered tools from session for cross-turn accumulation
+        let session_tool_names: Vec<String> = match (&body.namespace, &body.session) {
+            (Some(ns), Some(sess)) => {
+                let storage = self.storage.clone();
+                let ds = dataset_id.to_string();
+                let ns = ns.clone();
+                let sess = sess.clone();
+                tokio::task::spawn_blocking(move || storage.load_session_tools(&ds, &ns, &sess))
+                    .await
+                    .map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+                    .map_err(CoreError::EmbeddingFailed)?
+            }
+            _ => vec![],
+        };
+
         let tools = self.tools.read().await;
         let dataset_tools = tools.get(dataset_id);
         let empty = HashMap::new();
@@ -252,10 +280,12 @@ impl AgentifiedCore {
         let weights = body.embedding_weights.unwrap_or_default();
         let mut exclude = body.exclude.unwrap_or_default();
         exclude.extend(base_tool_names);
+        // Exclude session-persisted tools from search (they're already in context)
+        exclude.extend(session_tool_names.clone());
 
         let stored: Vec<&StoredTool> = dataset_tools
             .values()
-            .filter(|t| !exclude.contains(&t.tool.name))
+            .filter(|t| !exclude.contains(&t.tool.name) && !t.tool.always_include)
             .collect();
 
         if stored.is_empty() && !base_tools.is_empty() {
@@ -322,6 +352,22 @@ impl AgentifiedCore {
         let ranked = expand_with_providers(ranked, dataset_tools, limit);
 
         base_tools.extend(ranked);
+
+        // Persist discovered tool names to session for cross-turn accumulation
+        if let (Some(ns), Some(sess)) = (&body.namespace, &body.session) {
+            let new_names: Vec<String> = base_tools.iter().map(|t| t.tool.name.clone()).collect();
+            let mut all_names = session_tool_names;
+            for name in &new_names {
+                if !all_names.contains(name) {
+                    all_names.push(name.clone());
+                }
+            }
+            self.save_session_tools_async(dataset_id, ns, sess, &all_names.iter().map(|n| RankedTool {
+                tool: models::Tool { name: n.clone(), description: String::new(), parameters: serde_json::Value::Null, metadata: None, fields: None, always_include: false },
+                score: 1.0,
+                graph_expanded: None,
+            }).collect::<Vec<_>>());
+        }
 
         Ok(DiscoverResponse { tools: base_tools })
     }
@@ -605,11 +651,13 @@ impl AgentifiedCore {
             if let Some(dataset_tools) = tools_map.get(dataset_id) {
                 for name in &prev_tool_names {
                     if let Some(st) = dataset_tools.get(name) {
-                        base_tools.push(RankedTool {
-                            tool: st.tool.clone(),
-                            score: 1.0,
-                            graph_expanded: None,
-                        });
+                        if !st.tool.always_include {
+                            base_tools.push(RankedTool {
+                                tool: st.tool.clone(),
+                                score: 1.0,
+                                graph_expanded: None,
+                            });
+                        }
                     }
                 }
             }
@@ -637,6 +685,8 @@ impl AgentifiedCore {
             embedding_weights: None,
             exclude: if exclude.is_empty() { None } else { Some(exclude) },
             turn_id: None,
+            namespace: None,
+            session: None,
         }).await?;
 
         let mut new_tools = discover_resp.tools;
@@ -1165,6 +1215,7 @@ mod tests {
                 parameters: serde_json::json!({}),
                 metadata: None,
                 fields: None,
+                always_include: false,
             },
             models::Tool {
                 name: "get_stock".into(),
@@ -1172,6 +1223,7 @@ mod tests {
                 parameters: serde_json::json!({}),
                 metadata: None,
                 fields: None,
+                always_include: false,
             },
         ]).await.unwrap();
 
@@ -1215,9 +1267,9 @@ mod tests {
 
         // Register 3 tools
         core.register_tools("ds", vec![
-            models::Tool { name: "tool_a".into(), description: "Alpha tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            models::Tool { name: "tool_b".into(), description: "Beta tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            models::Tool { name: "tool_c".into(), description: "Gamma tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "tool_a".into(), description: "Alpha tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            models::Tool { name: "tool_b".into(), description: "Beta tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            models::Tool { name: "tool_c".into(), description: "Gamma tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
         ]).await.unwrap();
 
         core.append_messages(models::AppendMessagesRequest {
@@ -1242,7 +1294,7 @@ mod tests {
         let core = make_core();
 
         core.register_tools("ds", vec![
-            models::Tool { name: "tool_a".into(), description: "Alpha".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "tool_a".into(), description: "Alpha".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
         ]).await.unwrap();
 
         // Only assistant messages, no user messages
@@ -1272,6 +1324,7 @@ mod tests {
                 parameters: serde_json::json!({"type": "object"}),
                 metadata: None,
                 fields: None,
+                always_include: false,
             },
         ]).await.unwrap();
 
@@ -1340,9 +1393,9 @@ mod tests {
 
         // Register 3 tools with distinct descriptions
         core.register_tools("ds", vec![
-            models::Tool { name: "get_weather".into(), description: "Get weather forecast for a location".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            models::Tool { name: "get_stock".into(), description: "Get stock price for a ticker".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            models::Tool { name: "send_email".into(), description: "Send an email message".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            models::Tool { name: "get_weather".into(), description: "Get weather forecast for a location".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            models::Tool { name: "get_stock".into(), description: "Get stock price for a ticker".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            models::Tool { name: "send_email".into(), description: "Send an email message".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
         ]).await.unwrap();
 
         // First turn: user asks about weather, limit=1 so only weather tool is recalled
@@ -1617,7 +1670,7 @@ mod tests {
     async fn register_tools_without_embedding_service() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
         ];
         let resp = core.register_tools("ds", tools).await.unwrap();
         assert_eq!(resp.registered, 1);
@@ -1636,8 +1689,8 @@ mod tests {
     async fn discover_bm25_without_embedding_service() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund for invoice".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            Tool { name: "getUser".into(), description: "Get user account details".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            Tool { name: "refund".into(), description: "Process a refund for invoice".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "getUser".into(), description: "Get user account details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1648,6 +1701,8 @@ mod tests {
             embedding_weights: None,
             exclude: None,
             turn_id: None,
+            namespace: None,
+            session: None,
         }).await.unwrap();
 
         assert!(!resp.tools.is_empty());
@@ -1658,7 +1713,7 @@ mod tests {
     async fn discover_semantic_falls_back_to_bm25_without_embeddings() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1670,6 +1725,8 @@ mod tests {
             embedding_weights: None,
             exclude: None,
             turn_id: None,
+            namespace: None,
+            session: None,
         }).await.unwrap();
 
         assert!(!resp.tools.is_empty());
@@ -1683,7 +1740,7 @@ mod tests {
         let core = AgentifiedCore::new(fake.clone() as Arc<dyn EmbeddingService>, storage);
 
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1697,6 +1754,8 @@ mod tests {
             embedding_weights: None,
             exclude: None,
             turn_id: None,
+            namespace: None,
+            session: None,
         }).await.unwrap();
 
         // No new embedding calls should have been made for the query
@@ -1710,8 +1769,8 @@ mod tests {
     async fn discover_hybrid_blends_semantic_and_bm25() {
         let core = make_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
-            Tool { name: "getUser".into(), description: "Get user details".into(), parameters: serde_json::json!({}), metadata: None, fields: None },
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "getUser".into(), description: "Get user details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1722,6 +1781,8 @@ mod tests {
             embedding_weights: None,
             exclude: None,
             turn_id: None,
+            namespace: None,
+            session: None,
         }).await.unwrap();
 
         assert!(!resp.tools.is_empty());
@@ -1736,6 +1797,282 @@ mod tests {
         // Default DiscoverRequest (no strategy field) should use BM25
         let req: DiscoverRequest = serde_json::from_str(r#"{"query": "test"}"#).unwrap();
         assert_eq!(req.strategy, SearchStrategy::Bm25);
+    }
+
+    #[tokio::test]
+    async fn discover_excludes_always_include_tools() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool { name: "escalate".into(), description: "Escalate to human agent".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: true },
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        let resp = core.discover("ds", DiscoverRequest {
+            query: "employee".into(),
+            limit: Some(10),
+            strategy: SearchStrategy::Bm25,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+            namespace: None,
+            session: None,
+        }).await.unwrap();
+
+        let names: Vec<&str> = resp.tools.iter().map(|t| t.tool.name.as_str()).collect();
+        assert!(!names.contains(&"escalate"), "alwaysInclude tool should be excluded from discover results");
+        assert!(names.contains(&"get_employee"));
+        assert!(names.contains(&"update_employee"));
+    }
+
+    #[tokio::test]
+    async fn discover_with_session_persists_tools_across_calls() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "delete_employee".into(), description: "Delete employee from system".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        // Turn 1: discover with session — should find get_employee
+        let resp1 = core.discover("ds", DiscoverRequest {
+            query: "get employee".into(),
+            limit: Some(1),
+            strategy: SearchStrategy::Bm25,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+            namespace: Some("ns".into()),
+            session: Some("sess1".into()),
+        }).await.unwrap();
+        assert_eq!(resp1.tools.len(), 1);
+        assert_eq!(resp1.tools[0].tool.name, "get_employee");
+
+        // Turn 2: discover with same session — get_employee should be excluded (already persisted)
+        let resp2 = core.discover("ds", DiscoverRequest {
+            query: "employee".into(),
+            limit: Some(5),
+            strategy: SearchStrategy::Bm25,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+            namespace: Some("ns".into()),
+            session: Some("sess1".into()),
+        }).await.unwrap();
+        let names: Vec<&str> = resp2.tools.iter().map(|t| t.tool.name.as_str()).collect();
+        assert!(!names.contains(&"get_employee"), "previously discovered tool should be excluded");
+        assert!(names.contains(&"update_employee") || names.contains(&"delete_employee"));
+    }
+
+    #[tokio::test]
+    async fn discover_without_session_does_not_persist() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        // Discover without session
+        core.discover("ds", DiscoverRequest {
+            query: "get employee".into(),
+            limit: Some(1),
+            strategy: SearchStrategy::Bm25,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+            namespace: None,
+            session: None,
+        }).await.unwrap();
+
+        // Second discover without session — should still return get_employee (not persisted)
+        let resp2 = core.discover("ds", DiscoverRequest {
+            query: "get employee".into(),
+            limit: Some(1),
+            strategy: SearchStrategy::Bm25,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+            namespace: None,
+            session: None,
+        }).await.unwrap();
+        assert_eq!(resp2.tools[0].tool.name, "get_employee");
+    }
+
+    #[tokio::test]
+    async fn discover_session_tools_loaded_via_recall() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        // Discover with session to persist get_employee
+        core.discover("ds", DiscoverRequest {
+            query: "get employee".into(),
+            limit: Some(1),
+            strategy: SearchStrategy::Bm25,
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+            namespace: Some("ns".into()),
+            session: Some("sess1".into()),
+        }).await.unwrap();
+
+        // Wait briefly for async session save
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Now add a user message and call getContext with recall — should load get_employee at score 1.0
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "sess1".into(),
+            messages: vec![models::MessageInput {
+                role: "user".into(),
+                content: "update employee salary".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            }],
+        }).await.unwrap();
+
+        let ctx = core.get_context(models::ContextRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "sess1".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "recent".into(),
+                max_tokens: 4000,
+                ..Default::default()
+            },
+            recall: Some(models::RecallConfig {
+                tools: Some(models::RecallToolsOption::Bool(true)),
+            }),
+            limit_tokens: None,
+        }).await.unwrap();
+
+        let recalled_names: Vec<&str> = ctx.recalled.tools.iter().map(|t| t.tool.name.as_str()).collect();
+        assert!(recalled_names.contains(&"get_employee"), "previously discovered tool should be recalled at score 1.0");
+    }
+
+    #[tokio::test]
+    async fn recall_excludes_always_include_tools() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool { name: "escalate".into(), description: "Escalate to human agent".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: true },
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        core.append_messages(models::AppendMessagesRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "sess".into(),
+            messages: vec![models::MessageInput {
+                role: "user".into(),
+                content: "Tell me about employee escalation".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            }],
+        }).await.unwrap();
+
+        let resp = core.get_context(models::ContextRequest {
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "sess".into(),
+            messages: models::ContextMessagesConfig {
+                strategy: "recent".into(),
+                max_tokens: 4000,
+                ..Default::default()
+            },
+            recall: Some(models::RecallConfig {
+                tools: Some(models::RecallToolsOption::Bool(true)),
+            }),
+            limit_tokens: None,
+        }).await.unwrap();
+
+        let tool_names: Vec<&str> = resp.recalled.tools.iter().map(|t| t.tool.name.as_str()).collect();
+        assert!(!tool_names.contains(&"escalate"), "alwaysInclude tool should be excluded from recall results");
+    }
+
+    #[test]
+    fn extract_arg_text_from_schema_properties() {
+        let params = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "employee_id": {
+                    "type": "string",
+                    "description": "The employee's unique identifier"
+                },
+                "salary": {
+                    "type": "number",
+                    "description": "Annual salary amount"
+                }
+            }
+        });
+        let text = extract_arg_text(&params);
+        assert!(text.contains("employee_id"));
+        assert!(text.contains("The employee's unique identifier"));
+        assert!(text.contains("salary"));
+        assert!(text.contains("Annual salary amount"));
+        // Should NOT contain JSON structural tokens
+        assert!(!text.contains("{"));
+        assert!(!text.contains("}"));
+        assert!(!text.contains("\"type\""));
+        assert!(!text.contains("\"object\""));
+    }
+
+    #[test]
+    fn extract_arg_text_no_properties() {
+        let params = serde_json::json!({});
+        let text = extract_arg_text(&params);
+        assert!(text.is_empty());
+    }
+
+    #[test]
+    fn extract_arg_text_property_without_description() {
+        let params = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "id": { "type": "string" }
+            }
+        });
+        let text = extract_arg_text(&params);
+        assert_eq!(text, "id");
+    }
+
+    #[tokio::test]
+    async fn bm25_text_uses_arg_names_not_raw_json() {
+        let core = make_bm25_core();
+        let tools = vec![
+            Tool {
+                name: "get_employee".into(),
+                description: "Retrieve employee details".into(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "employee_id": {
+                            "type": "string",
+                            "description": "The employee's unique identifier"
+                        }
+                    }
+                }),
+                metadata: None,
+                fields: None,
+                always_include: false,
+            },
+        ];
+        core.register_tools("ds", tools).await.unwrap();
+
+        let tools_map = core.tools.read().await;
+        let stored = tools_map.get("ds").unwrap().get("get_employee").unwrap();
+        assert!(stored.bm25_text.contains("employee_id"));
+        assert!(stored.bm25_text.contains("The employee's unique identifier"));
+        assert!(!stored.bm25_text.contains("{"));
+        assert!(!stored.bm25_text.contains("\"type\""));
     }
 
 }

@@ -43,8 +43,8 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 }
 
 pub fn bm25_scores(query: &str, documents: &[String]) -> Vec<f32> {
-    const K1: f32 = 1.2;
-    const B: f32 = 0.75;
+    const K1: f32 = 0.9;
+    const B: f32 = 0.4;
 
     let n = documents.len();
     if n == 0 {
