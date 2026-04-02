@@ -9,6 +9,7 @@ import type {
   DiscoverTool,
   GetMessagesTool,
   BackendTool,
+  McpTool,
   RegisterInput,
   GetMessagesOptions,
   ContextBuilder,
@@ -113,7 +114,7 @@ export class AiSdkAgentified {
   dataset(name: string) { return new AiSdkDatasetRef(this.ag.dataset(name)); }
 
   async register(input: RegisterInput) {
-    const backendTools = extractBackendTools(input.tools);
+    const backendTools = extractExecutableTools(input.tools);
     return new AiSdkInstance(await this.ag.register(input), backendTools);
   }
 }
@@ -122,7 +123,7 @@ export class AiSdkDatasetRef {
   constructor(private readonly ref: DatasetRef) {}
 
   async register(input: RegisterInput) {
-    const backendTools = extractBackendTools(input.tools);
+    const backendTools = extractExecutableTools(input.tools);
     return new AiSdkInstance(await this.ref.register(input), backendTools);
   }
 }
@@ -137,7 +138,7 @@ export class AiSdkInstance {
 
   constructor(
     private readonly inst: Instance,
-    private readonly backendTools: BackendTool[],
+    private readonly backendTools: (BackendTool | McpTool)[],
   ) {
     this.discoverTool = wrapDiscoverTool(inst.discoverTool);
     this.aiSdkToolCache = buildAiSdkToolMap(backendTools);
@@ -167,7 +168,7 @@ export class AiSdkSession {
 
   constructor(
     private readonly sess: Session,
-    private readonly backendTools: BackendTool[],
+    private readonly backendTools: (BackendTool | McpTool)[],
   ) {
     this.discoverTool = wrapDiscoverTool(sess.discoverTool);
     this.getMessagesTool = wrapGetMessagesTool(sess.getMessagesTool);
@@ -207,7 +208,7 @@ export class AiSdkSession {
 export class AiSdkNamespace {
   constructor(
     private readonly ns: Namespace,
-    private readonly backendTools: BackendTool[],
+    private readonly backendTools: (BackendTool | McpTool)[],
   ) {}
 
   get id() { return this.ns.id; }
@@ -217,9 +218,9 @@ export class AiSdkNamespace {
 
 // --- Helpers ---
 
-function extractBackendTools(tools: RegisterInput["tools"]): BackendTool[] {
+function extractExecutableTools(tools: RegisterInput["tools"]): (BackendTool | McpTool)[] {
   return tools.filter(
-    (t): t is BackendTool => !("type" in t) || t.type === "backend",
+    (t): t is BackendTool | McpTool => !("type" in t) || t.type === "backend" || t.type === "mcp",
   );
 }
 
@@ -243,7 +244,7 @@ function wrapDiscoverTool(dt: DiscoverTool): AiSdkTool {
   });
 }
 
-function buildAiSdkToolMap(backendTools: BackendTool[]): Record<string, AiSdkTool> {
+function buildAiSdkToolMap(backendTools: (BackendTool | McpTool)[]): Record<string, AiSdkTool> {
   const tools: Record<string, AiSdkTool> = {};
   for (const t of backendTools) {
     tools[t.name] = tool({

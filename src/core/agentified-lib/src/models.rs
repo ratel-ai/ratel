@@ -1,5 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolType {
+    Backend,
+    Client,
+    Mcp,
+}
+
+impl Default for ToolType {
+    fn default() -> Self {
+        Self::Backend
+    }
+}
+
 // Tool fields for multi-field embeddings
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +88,10 @@ pub struct Tool {
     pub metadata: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fields: Option<ToolFields>,
+    #[serde(rename = "type", default)]
+    pub tool_type: ToolType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_uri: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -381,6 +399,57 @@ mod tests {
         let json = r#"{"strategy": "compacted", "prune_threshold": 1000}"#;
         let config: ContextMessagesConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.prune_threshold, 1000);
+    }
+
+    #[test]
+    fn tool_type_deserializes_all_variants() {
+        assert_eq!(serde_json::from_str::<ToolType>(r#""backend""#).unwrap(), ToolType::Backend);
+        assert_eq!(serde_json::from_str::<ToolType>(r#""client""#).unwrap(), ToolType::Client);
+        assert_eq!(serde_json::from_str::<ToolType>(r#""mcp""#).unwrap(), ToolType::Mcp);
+    }
+
+    #[test]
+    fn tool_type_serializes_lowercase() {
+        assert_eq!(serde_json::to_string(&ToolType::Backend).unwrap(), r#""backend""#);
+        assert_eq!(serde_json::to_string(&ToolType::Client).unwrap(), r#""client""#);
+        assert_eq!(serde_json::to_string(&ToolType::Mcp).unwrap(), r#""mcp""#);
+    }
+
+    #[test]
+    fn tool_type_defaults_to_backend() {
+        assert_eq!(ToolType::default(), ToolType::Backend);
+    }
+
+    #[test]
+    fn tool_without_type_defaults_to_backend() {
+        let json = r#"{"name": "t", "description": "d"}"#;
+        let tool: Tool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.tool_type, ToolType::Backend);
+        assert!(tool.server_uri.is_none());
+    }
+
+    #[test]
+    fn tool_with_mcp_type_and_server_uri() {
+        let json = r#"{"name": "t", "description": "d", "type": "mcp", "server_uri": "http://localhost:3001/mcp"}"#;
+        let tool: Tool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.tool_type, ToolType::Mcp);
+        assert_eq!(tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+    }
+
+    #[test]
+    fn tool_serializes_type_field() {
+        let tool = Tool {
+            name: "t".into(),
+            description: "d".into(),
+            parameters: serde_json::json!({}),
+            metadata: None,
+            fields: None,
+            tool_type: ToolType::Mcp,
+            server_uri: Some("http://localhost/mcp".into()),
+        };
+        let json = serde_json::to_value(&tool).unwrap();
+        assert_eq!(json["type"], "mcp");
+        assert_eq!(json["server_uri"], "http://localhost/mcp");
     }
 
     #[test]

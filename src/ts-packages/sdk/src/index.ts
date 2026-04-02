@@ -7,6 +7,8 @@ export { Session } from "./session.js";
 export { ContextBuilder } from "./context-builder.js";
 export { Conversation } from "./conversation.js";
 export { tool } from "./tool.js";
+export { mcpTools } from "./mcp-tools.js";
+export type { McpToolsOptions } from "./mcp-tools.js";
 export type {
   AgentifiedTool,
   ApiClientConfig,
