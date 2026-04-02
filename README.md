@@ -2,7 +2,7 @@
   <img src="https://agentified.dev/assets/logo-new-CNqV8zpW.png" alt="Agentified" height="100" />
 
   <h2>Agentified</h2>
-  <h4>Your agent has 200 tools. Each turn gets exactly the right ones — assembled automatically.</h4>
+  <h4>Assemble the perfect context for every agent turn — tools, messages, and memory in one call.</h4>
 
   <p>
     <a href="./docs/">Docs</a> •
