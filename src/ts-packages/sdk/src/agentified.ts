@@ -2,7 +2,7 @@ import { ApiClient } from "./api-client.js";
 import { DatasetRef } from "./dataset-ref.js";
 import { Instance } from "./instance.js";
 import { resolveBinaryPath, findFreePort } from "./spawn-utils.js";
-import type { RegisterInput } from "./types.js";
+import type { RegisterInput, SearchStrategy } from "./types.js";
 import { spawn, type ChildProcess } from "node:child_process";
 
 export class Agentified {
@@ -14,10 +14,12 @@ export class Agentified {
   private restartCount = 0;
   private spawnArgs: { binaryPath: string; port: number } | null = null;
   private headers?: Record<string, string>;
+  private strategy?: SearchStrategy;
 
-  async connect(serverUrl?: string, options?: { headers?: Record<string, string> }): Promise<void> {
+  async connect(serverUrl?: string, options?: { headers?: Record<string, string>; strategy?: SearchStrategy }): Promise<void> {
     if (this.connected) throw new Error("Already connected");
     this.headers = options?.headers;
+    this.strategy = options?.strategy;
     if (!serverUrl) {
       if (!process.env.OPENAI_API_KEY) {
         throw new Error("OPENAI_API_KEY environment variable is required for local spawn");
@@ -38,7 +40,7 @@ export class Agentified {
       this.registerCrashHandler();
 
       this.serverUrl = url;
-      this.sdk = new ApiClient({ serverUrl: url, tools: [], headers: this.headers });
+      this.sdk = new ApiClient({ serverUrl: url, tools: [], headers: this.headers, strategy: this.strategy });
       this.connected = true;
       return;
     }
@@ -53,7 +55,7 @@ export class Agentified {
     }
 
     this.serverUrl = serverUrl;
-    this.sdk = new ApiClient({ serverUrl, tools: [], headers: this.headers });
+    this.sdk = new ApiClient({ serverUrl, tools: [], headers: this.headers, strategy: this.strategy });
     this.connected = true;
   }
 

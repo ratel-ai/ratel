@@ -1,12 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { runAgenticLoop, toAnthropicTools, stripAgentifiedLine, type AnthropicTool } from "../../lib/anthropic-agent.js";
+import { runAgenticLoop, toAnthropicTools, stripAgentifiedLine } from "../../lib/anthropic-agent.js";
 import { startAgent, type ExecutableTool } from "../../scaffolding/ts/index.js";
-import { flattenSlots } from "../../lib/tool-slots.js";
 import type { SetupBody, SendMessageBody, SendMessageResponse } from "../../lib/protocol.js";
 
 interface State {
   client: Anthropic;
-  tools: AnthropicTool[];
+  tools: Anthropic.Messages.Tool[];
   executors: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
   config: SetupBody["config"];
   systemPrompt: string;
@@ -17,13 +16,25 @@ export function createCallbacks() {
 
   return {
     setup: async (tools: ExecutableTool[], config: SetupBody["config"]) => {
+      if (!config.model.startsWith("claude-")) {
+        throw new Error(`claude-tool-search agent requires a Claude model, got: ${config.model}`);
+      }
+
       const client = new Anthropic();
       const executors: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {};
       for (const t of tools) executors[t.name] = t.execute;
 
+      const deferredTools: Anthropic.Messages.Tool[] = toAnthropicTools(tools).map((t) => ({
+        ...t,
+        defer_loading: true,
+      })) as any;
+
       state = {
         client,
-        tools: toAnthropicTools(tools),
+        tools: [
+          { type: "tool_search_tool_bm25_20251119", name: "tool_search_tool_bm25" } as any,
+          ...deferredTools,
+        ],
         executors,
         config,
         systemPrompt: stripAgentifiedLine(config.systemPrompt),
@@ -34,20 +45,15 @@ export function createCallbacks() {
       if (!state) throw new Error("Agent not set up");
       const start = performance.now();
 
-      // Filter tools to only expected ones (oracle knowledge)
-      const flatExpected = body.expectedTools ? flattenSlots(body.expectedTools) : undefined;
-      const activeTools = flatExpected
-        ? state.tools.filter((t) => flatExpected.includes(t.name))
-        : state.tools;
-
       const result = await runAgenticLoop({
         client: state.client,
         model: state.config.model,
         system: state.systemPrompt,
-        tools: activeTools as any,
+        tools: state.tools,
         messages: body.history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         maxSteps: state.config.maxSteps,
         executors: state.executors,
+        filterReportedCalls: (calls) => calls.filter((tc) => tc.toolName !== "tool_search_tool_bm25"),
       });
 
       return {
@@ -60,10 +66,10 @@ export function createCallbacks() {
           cachedInputTokens: result.usage.cachedInputTokens,
         },
         durationMs: performance.now() - start,
-        hydratedTools: activeTools.map((t) => t.name),
+        hydratedTools: result.hydratedTools,
         debug: {
           systemPrompt: state.systemPrompt,
-          toolNames: activeTools.map((t) => t.name),
+          toolNames: state.tools.filter((t: any) => t.name !== "tool_search_tool_bm25").map((t: any) => t.name),
           modelResponse: result.content,
           toolCallsMade: result.toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
         },

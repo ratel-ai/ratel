@@ -42,6 +42,7 @@ export type {
   RegisterInput,
   RegisterRequest,
   RegisterResponse,
+  SearchStrategy,
   ServerTool,
   ServerToolFields,
   StoredMessage,

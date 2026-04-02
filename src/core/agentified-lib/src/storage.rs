@@ -87,8 +87,8 @@ impl SqliteStorage {
                 parameters TEXT NOT NULL,
                 metadata TEXT,
                 fields TEXT,
-                emb_name BLOB NOT NULL,
-                emb_description BLOB NOT NULL,
+                emb_name BLOB,
+                emb_description BLOB,
                 emb_input_schema BLOB,
                 emb_output_schema BLOB,
                 bm25_text TEXT NOT NULL,
@@ -149,10 +149,15 @@ impl Storage for SqliteStorage {
             let params_json = serde_json::to_string(&stored.tool.parameters)?;
             let metadata_json = stored.tool.metadata.as_ref().map(|m| serde_json::to_string(m)).transpose()?;
             let fields_json = stored.tool.fields.as_ref().map(|f| serde_json::to_string(f)).transpose()?;
-            let emb_name = vec_f32_to_blob(&stored.embeddings.name);
-            let emb_desc = vec_f32_to_blob(&stored.embeddings.description);
-            let emb_input = stored.embeddings.input_schema.as_ref().map(|v| vec_f32_to_blob(v));
-            let emb_output = stored.embeddings.output_schema.as_ref().map(|v| vec_f32_to_blob(v));
+            let (emb_name, emb_desc, emb_input, emb_output) = match &stored.embeddings {
+                Some(emb) => (
+                    Some(vec_f32_to_blob(&emb.name)),
+                    Some(vec_f32_to_blob(&emb.description)),
+                    emb.input_schema.as_ref().map(|v| vec_f32_to_blob(v)),
+                    emb.output_schema.as_ref().map(|v| vec_f32_to_blob(v)),
+                ),
+                None => (None, None, None, None),
+            };
             let type_str = serde_json::to_value(&stored.tool.tool_type)
                 .ok()
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
@@ -178,8 +183,8 @@ impl Storage for SqliteStorage {
             let params_json: String = row.get(2)?;
             let metadata_json: Option<String> = row.get(3)?;
             let fields_json: Option<String> = row.get(4)?;
-            let emb_name_blob: Vec<u8> = row.get(5)?;
-            let emb_desc_blob: Vec<u8> = row.get(6)?;
+            let emb_name_blob: Option<Vec<u8>> = row.get(5)?;
+            let emb_desc_blob: Option<Vec<u8>> = row.get(6)?;
             let emb_input_blob: Option<Vec<u8>> = row.get(7)?;
             let emb_output_blob: Option<Vec<u8>> = row.get(8)?;
             let bm25_text: String = row.get(9)?;
@@ -196,6 +201,16 @@ impl Storage for SqliteStorage {
             let fields: Option<crate::models::ToolFields> = fields_json.map(|s| serde_json::from_str(&s)).transpose()?;
             let tool_type: crate::models::ToolType = serde_json::from_value(serde_json::Value::String(type_str)).unwrap_or_default();
 
+            let embeddings = match (emb_name_blob, emb_desc_blob) {
+                (Some(name_b), Some(desc_b)) => Some(crate::models::FieldEmbeddings {
+                    name: blob_to_vec_f32(&name_b),
+                    description: blob_to_vec_f32(&desc_b),
+                    input_schema: emb_input_blob.map(|b| blob_to_vec_f32(&b)),
+                    output_schema: emb_output_blob.map(|b| blob_to_vec_f32(&b)),
+                }),
+                _ => None,
+            };
+
             result.push((name.clone(), StoredTool {
                 tool: crate::models::Tool {
                     name,
@@ -206,12 +221,7 @@ impl Storage for SqliteStorage {
                     tool_type,
                     server_uri,
                 },
-                embeddings: crate::models::FieldEmbeddings {
-                    name: blob_to_vec_f32(&emb_name_blob),
-                    description: blob_to_vec_f32(&emb_desc_blob),
-                    input_schema: emb_input_blob.map(|b| blob_to_vec_f32(&b)),
-                    output_schema: emb_output_blob.map(|b| blob_to_vec_f32(&b)),
-                },
+                embeddings,
                 bm25_text,
             }));
         }
@@ -408,7 +418,7 @@ impl Storage for SqliteStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{FieldEmbeddings, Tool, ToolFields};
+    use crate::models::{FieldEmbeddings, Tool, ToolFields, ToolType};
 
     // Phase 1: blob helpers + NoopStorage
 
@@ -456,12 +466,12 @@ mod tests {
                 tool_type: crate::models::ToolType::default(),
                 server_uri: None,
             },
-            embeddings: FieldEmbeddings {
+            embeddings: Some(FieldEmbeddings {
                 name: vec![1.0; 4],
                 description: vec![2.0; 4],
                 input_schema: if with_fields { Some(vec![3.0; 4]) } else { None },
                 output_schema: if with_fields { Some(vec![4.0; 4]) } else { None },
-            },
+            }),
             bm25_text: format!("{name} {desc}"),
         }
     }
@@ -477,10 +487,11 @@ mod tests {
         assert_eq!(name, "getThing");
         assert_eq!(st.tool.name, "getThing");
         assert_eq!(st.tool.description, "Get a thing");
-        assert_eq!(st.embeddings.name, vec![1.0; 4]);
-        assert_eq!(st.embeddings.description, vec![2.0; 4]);
-        assert_eq!(st.embeddings.input_schema.as_ref().unwrap(), &vec![3.0; 4]);
-        assert_eq!(st.embeddings.output_schema.as_ref().unwrap(), &vec![4.0; 4]);
+        let emb = st.embeddings.as_ref().unwrap();
+        assert_eq!(emb.name, vec![1.0; 4]);
+        assert_eq!(emb.description, vec![2.0; 4]);
+        assert_eq!(emb.input_schema.as_ref().unwrap(), &vec![3.0; 4]);
+        assert_eq!(emb.output_schema.as_ref().unwrap(), &vec![4.0; 4]);
         assert_eq!(st.bm25_text, "getThing Get a thing");
         assert!(st.tool.fields.is_some());
         assert!(st.tool.metadata.is_some());
@@ -504,15 +515,39 @@ mod tests {
         let mut tool = make_stored_tool("t", "d", false);
         tool.tool.metadata = None;
         tool.tool.fields = None;
-        tool.embeddings.input_schema = None;
-        tool.embeddings.output_schema = None;
+        tool.embeddings.as_mut().unwrap().input_schema = None;
+        tool.embeddings.as_mut().unwrap().output_schema = None;
         s.save_tools("ds-1", &[("t", &tool)]).unwrap();
         let loaded = s.load_tools_for_dataset("ds-1").unwrap();
         assert_eq!(loaded.len(), 1);
         assert!(loaded[0].1.tool.metadata.is_none());
         assert!(loaded[0].1.tool.fields.is_none());
-        assert!(loaded[0].1.embeddings.input_schema.is_none());
-        assert!(loaded[0].1.embeddings.output_schema.is_none());
+        let emb = loaded[0].1.embeddings.as_ref().unwrap();
+        assert!(emb.input_schema.is_none());
+        assert!(emb.output_schema.is_none());
+    }
+
+    #[test]
+    fn sqlite_roundtrip_tool_without_embeddings() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        let tool = StoredTool {
+            tool: Tool {
+                name: "bm25only".into(),
+                description: "A BM25-only tool".into(),
+                parameters: serde_json::json!({"type": "object"}),
+                metadata: None,
+                fields: None,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            embeddings: None,
+            bm25_text: "bm25only A BM25-only tool".into(),
+        };
+        s.save_tools("ds-1", &[("bm25only", &tool)]).unwrap();
+        let loaded = s.load_tools_for_dataset("ds-1").unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert!(loaded[0].1.embeddings.is_none());
+        assert_eq!(loaded[0].1.bm25_text, "bm25only A BM25-only tool");
     }
 
     #[test]
