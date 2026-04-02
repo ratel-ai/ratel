@@ -9,7 +9,7 @@ pub use storage::{NoopStorage, SqliteStorage, Storage};
 #[cfg(any(test, feature = "test-utils"))]
 pub use embedding::{FakeEmbedding, FailingEmbedding, FakeLlm, FailingLlm};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Extract argument names and descriptions from a JSON Schema `parameters` object.
@@ -312,6 +312,9 @@ impl AgentifiedCore {
         // Exclude session-persisted tools from search (they're already in context)
         exclude.extend(session_tool_names.clone());
 
+        // always_include tools are excluded from ranked discover results — they are
+        // meant to be unconditionally present in the agent's tool set (injected by the
+        // SDK via prepareStep), so ranking them here would be redundant.
         let stored: Vec<&StoredTool> = dataset_tools
             .values()
             .filter(|t| !exclude.contains(&t.tool.name) && !t.tool.always_include)
@@ -384,18 +387,14 @@ impl AgentifiedCore {
 
         // Persist discovered tool names to session for cross-turn accumulation
         if let (Some(ns), Some(sess)) = (&body.namespace, &body.session) {
-            let new_names: Vec<String> = base_tools.iter().map(|t| t.tool.name.clone()).collect();
+            let mut seen: HashSet<String> = session_tool_names.iter().cloned().collect();
             let mut all_names = session_tool_names;
-            for name in &new_names {
-                if !all_names.contains(name) {
-                    all_names.push(name.clone());
+            for t in &base_tools {
+                if seen.insert(t.tool.name.clone()) {
+                    all_names.push(t.tool.name.clone());
                 }
             }
-            self.save_session_tools_async(dataset_id, ns, sess, &all_names.iter().map(|n| RankedTool {
-                tool: models::Tool { name: n.clone(), description: String::new(), parameters: serde_json::Value::Null, metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
-                score: 1.0,
-                graph_expanded: None,
-            }).collect::<Vec<_>>());
+            self.save_session_tools(dataset_id, ns, sess, &all_names).await;
         }
 
         Ok(DiscoverResponse { tools: base_tools })
@@ -698,7 +697,8 @@ impl AgentifiedCore {
             _ => {
                 // No query but we have previous tools — return those
                 if !base_tools.is_empty() {
-                    self.save_session_tools_async(dataset_id, namespace_id, session_id, &base_tools);
+                    let names: Vec<String> = base_tools.iter().map(|t| t.tool.name.clone()).collect();
+                    self.save_session_tools(dataset_id, namespace_id, session_id, &names).await;
                 }
                 return Ok(base_tools);
             }
@@ -728,23 +728,24 @@ impl AgentifiedCore {
         all_tools.extend(new_tools);
 
         // Save merged tool names for next turn
-        self.save_session_tools_async(dataset_id, namespace_id, session_id, &all_tools);
+        let names: Vec<String> = all_tools.iter().map(|t| t.tool.name.clone()).collect();
+        self.save_session_tools(dataset_id, namespace_id, session_id, &names).await;
 
         Ok(all_tools)
     }
 
-    fn save_session_tools_async(&self, dataset_id: &str, namespace_id: &str, session_id: &str, tools: &[RankedTool]) {
+    async fn save_session_tools(&self, dataset_id: &str, namespace_id: &str, session_id: &str, names: &[String]) {
         let storage = self.storage.clone();
         let ds = dataset_id.to_string();
         let ns = namespace_id.to_string();
         let sess = session_id.to_string();
-        let names: Vec<String> = tools.iter().map(|t| t.tool.name.clone()).collect();
-        tokio::task::spawn_blocking(move || {
+        let names = names.to_vec();
+        let _ = tokio::task::spawn_blocking(move || {
             let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
             if let Err(e) = storage.save_session_tools(&ds, &ns, &sess, &name_refs) {
                 tracing::error!("storage save_session_tools failed: {e}");
             }
-        });
+        }).await;
     }
 
     fn can_use_embeddings(&self, tools: &[&StoredTool]) -> bool {
@@ -2068,9 +2069,6 @@ mod tests {
             namespace: Some("ns".into()),
             session: Some("sess1".into()),
         }).await.unwrap();
-
-        // Wait briefly for async session save
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         // Now add a user message and call getContext with recall — should load get_employee at score 1.0
         core.append_messages(models::AppendMessagesRequest {

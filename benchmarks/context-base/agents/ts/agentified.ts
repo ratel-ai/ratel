@@ -17,6 +17,18 @@ import type { SendMessageBody, SendMessageResponse } from "../../lib/protocol.js
 
 const TOOL_LIMIT = process.env.FORCE_DISCOVERY === "1" ? 0 : 15;
 
+const DEFERRED_SYSTEM_PROMPT = `You are an HR assistant with access to tools.
+
+**Important: You must discover tools before using them.**
+You start with NO tools loaded except \`agentified_discover\`. Before performing any action, call \`agentified_discover\` with a description of what you need to find the right tools.
+
+**Tool usage rules:**
+- ALWAYS call agentified_discover first to find relevant tools — you cannot use tools you haven't discovered.
+- Use tools to answer factual questions — never guess from memory.
+- If a request is outside your capabilities or no relevant tools exist, say so.
+- If a tool requires an input you don't have (e.g. employeeId), use agentified_discover to find how to obtain it from information in the user's request.
+- You can call agentified_discover multiple times with different queries if needed.`;
+
 const DISCOVER_TOOL_DEF: AnthropicTool = {
   name: "agentified_discover",
   description: "Search for available tools by describing what you need. Returns relevant tools you can use.",
@@ -58,7 +70,7 @@ async function boot(): Promise<BootResult> {
 
   if (!endpoint) {
     console.error("[agentified] starting agentified-core container...");
-    const started = await new GenericContainer("agentified/agentified-core:latest")
+    const started = await new GenericContainer("agentified/agentified-core:0.2.1-beta.1")
       .withExposedPorts(9119)
       .withEnvironment({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
@@ -131,12 +143,14 @@ if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("age
       const model = process.env.MODEL ?? MODEL;
 
       // Start with discover tool + any previously discovered tools
+      // When FORCE_DISCOVERY=1, discoveredNames starts empty (all tools deferred)
       const discoveredNames = discoverTool.discoveredNames;
+      const systemPrompt = TOOL_LIMIT === 0 ? DEFERRED_SYSTEM_PROMPT : SYSTEM_PROMPT;
 
       const result = await runAgenticLoop({
         client,
         model,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         tools: buildActiveTools(allTools, discoveredNames),
         messages: body.history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         maxSteps: MAX_STEPS,
@@ -163,7 +177,7 @@ if (process.argv[1]?.endsWith("agentified.ts") || process.argv[1]?.endsWith("age
         hydratedTools: [...discoveredNames],
         turnId: body.turnId,
         debug: {
-          systemPrompt: SYSTEM_PROMPT,
+          systemPrompt,
           toolNames: [...discoveredNames],
           modelResponse: result.content,
           toolCallsMade: result.toolCalls.map((tc) => ({ name: tc.toolName, args: tc.args })),
