@@ -1,4 +1,4 @@
-import { handlers } from "./executor.js";
+import { handlers } from "./executor.ts";
 
 const toolName = process.argv[2];
 
