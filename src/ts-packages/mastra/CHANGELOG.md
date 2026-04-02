@@ -1,5 +1,17 @@
 # @agentified/mastra
 
+## 2.0.0
+
+### Minor Changes
+
+- 1971ee8: Add deferred tool loading with `alwaysInclude` flag, MCP tool type support, and strategy delegation to server
+
+### Patch Changes
+
+- Updated dependencies [1971ee8]
+- Updated dependencies [57e0744]
+  - agentified@0.2.0
+
 ## 1.0.0
 
 ### Patch Changes

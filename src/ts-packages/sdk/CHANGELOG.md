@@ -1,5 +1,15 @@
 # @agentified/sdk
 
+## 0.2.0
+
+### Minor Changes
+
+- 1971ee8: Add deferred tool loading with `alwaysInclude` flag, MCP tool type support, and strategy delegation to server
+
+### Patch Changes
+
+- 57e0744: Fix default search strategy to bm25 in SDK api-client discover and getContext methods
+
 ## 0.1.0
 
 ### Minor Changes
