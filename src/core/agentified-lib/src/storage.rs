@@ -129,8 +129,12 @@ impl SqliteStorage {
         )?;
         // Migration: add type and server_uri columns if missing (existing databases)
         let has_type_col: bool = conn
-            .prepare("SELECT type FROM tools LIMIT 0")
-            .is_ok();
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('tools') WHERE name='type'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(0) > 0;
         if !has_type_col {
             conn.execute_batch(
                 "ALTER TABLE tools ADD COLUMN type TEXT NOT NULL DEFAULT 'backend';
@@ -158,10 +162,11 @@ impl Storage for SqliteStorage {
                 ),
                 None => (None, None, None, None),
             };
-            let type_str = serde_json::to_value(&stored.tool.tool_type)
-                .ok()
-                .and_then(|v| v.as_str().map(|s| s.to_string()))
-                .unwrap_or_else(|| "backend".to_string());
+            let type_str = match stored.tool.tool_type {
+                crate::models::ToolType::Backend => "backend",
+                crate::models::ToolType::Client  => "client",
+                crate::models::ToolType::Mcp     => "mcp",
+            };
             tx.execute(
                 "INSERT OR REPLACE INTO tools (dataset_id, name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text, type, server_uri)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
@@ -199,7 +204,11 @@ impl Storage for SqliteStorage {
             let parameters: serde_json::Value = serde_json::from_str(&params_json)?;
             let metadata: Option<serde_json::Value> = metadata_json.map(|s| serde_json::from_str(&s)).transpose()?;
             let fields: Option<crate::models::ToolFields> = fields_json.map(|s| serde_json::from_str(&s)).transpose()?;
-            let tool_type: crate::models::ToolType = serde_json::from_value(serde_json::Value::String(type_str)).unwrap_or_default();
+            let tool_type = match type_str.as_str() {
+                "mcp" => crate::models::ToolType::Mcp,
+                "client" => crate::models::ToolType::Client,
+                _ => crate::models::ToolType::Backend,
+            };
 
             let embeddings = match (emb_name_blob, emb_desc_blob) {
                 (Some(name_b), Some(desc_b)) => Some(crate::models::FieldEmbeddings {

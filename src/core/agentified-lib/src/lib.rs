@@ -86,12 +86,22 @@ impl AgentifiedCore {
         for tool in &tools {
             match tool.tool_type {
                 models::ToolType::Mcp => {
-                    if tool.server_uri.is_none() {
-                        return Err(CoreError::BadRequest(format!(
-                            "tool '{}': mcp tools require server_uri", tool.name
-                        )));
+                    match &tool.server_uri {
+                        None => {
+                            return Err(CoreError::BadRequest(format!(
+                                "tool '{}': mcp tools require server_uri", tool.name
+                            )));
+                        }
+                        Some(uri) if !uri.starts_with("http://") && !uri.starts_with("https://") => {
+                            return Err(CoreError::BadRequest(format!(
+                                "tool '{}': server_uri must be an http:// or https:// URL", tool.name
+                            )));
+                        }
+                        _ => {}
                     }
                 }
+                // Client tools are UI-side only — no server proxy needed, no server_uri allowed.
+                // Backend tools likewise have no server_uri.
                 _ => {
                     if tool.server_uri.is_some() {
                         return Err(CoreError::BadRequest(format!(
@@ -1690,10 +1700,10 @@ mod tests {
             turn_id: None,
         }).await.unwrap();
 
-        assert!(!resp.tools.is_empty());
-        let tool = &resp.tools[0];
-        assert_eq!(tool.tool.tool_type, models::ToolType::Mcp);
-        assert_eq!(tool.tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+        assert_eq!(resp.tools.len(), 1);
+        assert_eq!(resp.tools[0].tool.name, "mcp_search");
+        assert_eq!(resp.tools[0].tool.tool_type, models::ToolType::Mcp);
+        assert_eq!(resp.tools[0].tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
     }
 
     #[tokio::test]

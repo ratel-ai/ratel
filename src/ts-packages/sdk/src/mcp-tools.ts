@@ -25,6 +25,7 @@ export async function mcpTools(options: McpToolsOptions): Promise<McpTool[]> {
     cursor = page.nextCursor;
   } while (cursor);
 
+  const resolvedClient = client;
   return allTools.map((t) => ({
     name: t.name,
     description: t.description ?? "",
@@ -33,8 +34,9 @@ export async function mcpTools(options: McpToolsOptions): Promise<McpTool[]> {
     server,
     handler: async (args: Record<string, unknown>) => {
       try {
-        return await client!.callTool({ name: t.name, arguments: args });
+        return await resolvedClient.callTool({ name: t.name, arguments: args });
       } catch (err) {
+        clientCache.delete(server); // evict stale client so next mcpTools() call reconnects
         const message = err instanceof Error ? err.message : String(err);
         return {
           isError: true,
