@@ -64,8 +64,7 @@ export class ApiClient {
     if (turnId !== undefined) body.turn_id = turnId;
     if (namespace !== undefined) body.namespace = namespace;
     if (session !== undefined) body.session = session;
-    const resolvedStrategy = strategy ?? this.config.strategy;
-    if (resolvedStrategy) body.strategy = resolvedStrategy;
+    body.strategy = strategy ?? this.config.strategy ?? "bm25";
 
     const data = await this.fetchJson<DiscoverResponse>(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/discover`, {
       method: "POST",
@@ -139,8 +138,7 @@ export class ApiClient {
 
   async getContext(dataset: string, namespace: string, session: string, opts?: ContextOpts): Promise<ContextResponse> {
     const messagesConfig: Record<string, unknown> = {};
-    const ctxStrategy = opts?.strategy ?? this.config.strategy;
-    if (ctxStrategy) messagesConfig.strategy = ctxStrategy;
+    messagesConfig.strategy = opts?.strategy ?? this.config.strategy ?? "bm25";
     if (opts?.maxTokens !== undefined) messagesConfig.max_tokens = opts.maxTokens;
     if (opts?.keepFirst !== undefined) messagesConfig.keep_first = opts.keepFirst;
     if (opts?.pruneThreshold !== undefined) messagesConfig.prune_threshold = opts.pruneThreshold;
