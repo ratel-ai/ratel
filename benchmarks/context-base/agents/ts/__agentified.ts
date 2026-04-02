@@ -134,7 +134,8 @@ if (/agentified(?:-(?:bm25|hybrid))?\.(?:ts|js)$/.test(process.argv[1] ?? "")) {
       const start = performance.now();
       const model = process.env.MODEL ?? MODEL;
 
-      const session = instance.session(body.turnId ?? "default");
+      const sessionId = body.turnId ?? `scenario-${Date.now()}`;
+      const session = instance.session(sessionId);
       const discoveredNames = session.discoverTool.discoveredNames;
 
       // Persist the user message, then recall relevant tools via context assembly
@@ -146,13 +147,14 @@ if (/agentified(?:-(?:bm25|hybrid))?\.(?:ts|js)$/.test(process.argv[1] ?? "")) {
         .messages({ strategy: "recent", maxTokens: 4000 })
         .assemble();
 
-      console.error(`[agentified] recalled ${ctx.recalled.tools.length} tools: ${ctx.recalled.tools.map((t) => t.name).join(", ")}`);
+      const activeTools = buildActiveTools(allTools, discoveredNames);
+      console.error(`[agentified] recalled=${ctx.recalled.tools.length} activeTools=${activeTools.length}`);
 
       const result = await runAgenticLoop({
         client,
         model,
         system: SYSTEM_PROMPT,
-        tools: buildActiveTools(allTools, discoveredNames),
+        tools: activeTools,
         messages: body.history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         maxSteps: MAX_STEPS,
         executors,
