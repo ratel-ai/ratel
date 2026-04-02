@@ -100,6 +100,35 @@ impl AgentifiedCore {
     }
 
     pub async fn register_tools(&self, dataset_id: &str, tools: Vec<Tool>) -> Result<RegisterToolsResponse, CoreError> {
+        for tool in &tools {
+            match tool.tool_type {
+                models::ToolType::Mcp => {
+                    match &tool.server_uri {
+                        None => {
+                            return Err(CoreError::BadRequest(format!(
+                                "tool '{}': mcp tools require server_uri", tool.name
+                            )));
+                        }
+                        Some(uri) if !uri.starts_with("http://") && !uri.starts_with("https://") => {
+                            return Err(CoreError::BadRequest(format!(
+                                "tool '{}': server_uri must be an http:// or https:// URL", tool.name
+                            )));
+                        }
+                        _ => {}
+                    }
+                }
+                // Client tools are UI-side only — no server proxy needed, no server_uri allowed.
+                // Backend tools likewise have no server_uri.
+                _ => {
+                    if tool.server_uri.is_some() {
+                        return Err(CoreError::BadRequest(format!(
+                            "tool '{}': server_uri is only valid for mcp tools", tool.name
+                        )));
+                    }
+                }
+            }
+        }
+
         let count = tools.len();
 
         struct ToolTexts {
@@ -363,7 +392,7 @@ impl AgentifiedCore {
                 }
             }
             self.save_session_tools_async(dataset_id, ns, sess, &all_names.iter().map(|n| RankedTool {
-                tool: models::Tool { name: n.clone(), description: String::new(), parameters: serde_json::Value::Null, metadata: None, fields: None, always_include: false },
+                tool: models::Tool { name: n.clone(), description: String::new(), parameters: serde_json::Value::Null, metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
                 score: 1.0,
                 graph_expanded: None,
             }).collect::<Vec<_>>());
@@ -863,6 +892,7 @@ fn expand_with_providers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use models::{ToolType, SearchStrategy};
     use std::sync::Arc;
 
     fn make_core() -> AgentifiedCore {
@@ -1216,6 +1246,8 @@ mod tests {
                 metadata: None,
                 fields: None,
                 always_include: false,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
             },
             models::Tool {
                 name: "get_stock".into(),
@@ -1224,6 +1256,8 @@ mod tests {
                 metadata: None,
                 fields: None,
                 always_include: false,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
             },
         ]).await.unwrap();
 
@@ -1267,9 +1301,9 @@ mod tests {
 
         // Register 3 tools
         core.register_tools("ds", vec![
-            models::Tool { name: "tool_a".into(), description: "Alpha tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            models::Tool { name: "tool_b".into(), description: "Beta tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            models::Tool { name: "tool_c".into(), description: "Gamma tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            models::Tool { name: "tool_a".into(), description: "Alpha tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
+            models::Tool { name: "tool_b".into(), description: "Beta tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
+            models::Tool { name: "tool_c".into(), description: "Gamma tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
         ]).await.unwrap();
 
         core.append_messages(models::AppendMessagesRequest {
@@ -1294,7 +1328,7 @@ mod tests {
         let core = make_core();
 
         core.register_tools("ds", vec![
-            models::Tool { name: "tool_a".into(), description: "Alpha".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            models::Tool { name: "tool_a".into(), description: "Alpha".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
         ]).await.unwrap();
 
         // Only assistant messages, no user messages
@@ -1325,6 +1359,8 @@ mod tests {
                 metadata: None,
                 fields: None,
                 always_include: false,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
             },
         ]).await.unwrap();
 
@@ -1393,9 +1429,9 @@ mod tests {
 
         // Register 3 tools with distinct descriptions
         core.register_tools("ds", vec![
-            models::Tool { name: "get_weather".into(), description: "Get weather forecast for a location".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            models::Tool { name: "get_stock".into(), description: "Get stock price for a ticker".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            models::Tool { name: "send_email".into(), description: "Send an email message".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            models::Tool { name: "get_weather".into(), description: "Get weather forecast for a location".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
+            models::Tool { name: "get_stock".into(), description: "Get stock price for a ticker".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
+            models::Tool { name: "send_email".into(), description: "Send an email message".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
         ]).await.unwrap();
 
         // First turn: user asks about weather, limit=1 so only weather tool is recalled
@@ -1659,6 +1695,96 @@ mod tests {
         assert!(summary.contains("[pruned]"), "tool content >100 chars should be pruned with custom threshold");
     }
 
+    #[tokio::test]
+    async fn mcp_tool_appears_in_list_with_type_and_server_uri() {
+        let core = make_core();
+        core.register_tools("ds", vec![
+            models::Tool {
+                name: "mcp_search".into(),
+                description: "Search via MCP".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: models::ToolType::Mcp,
+                server_uri: Some("http://localhost:3001/mcp".into()),
+            },
+            models::Tool {
+                name: "backend_tool".into(),
+                description: "A backend tool".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
+            },
+        ]).await.unwrap();
+
+        let resp = core.list_tools("ds").await.unwrap();
+        assert_eq!(resp.tools.len(), 2);
+        let mcp = resp.tools.iter().find(|t| t.name == "mcp_search").unwrap();
+        assert_eq!(mcp.tool_type, models::ToolType::Mcp);
+        assert_eq!(mcp.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+        let backend = resp.tools.iter().find(|t| t.name == "backend_tool").unwrap();
+        assert_eq!(backend.tool_type, models::ToolType::Backend);
+        assert!(backend.server_uri.is_none());
+    }
+
+    #[tokio::test]
+    async fn mcp_tool_appears_in_discover_with_type_and_server_uri() {
+        let core = make_core();
+        core.register_tools("ds", vec![
+            models::Tool {
+                name: "mcp_search".into(),
+                description: "Search via MCP server".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: models::ToolType::Mcp,
+                server_uri: Some("http://localhost:3001/mcp".into()),
+            },
+        ]).await.unwrap();
+
+        let resp = core.discover("ds", models::DiscoverRequest {
+            query: "search".into(),
+            limit: Some(5),
+            strategy: SearchStrategy::default(),
+            embedding_weights: None,
+            exclude: None,
+            turn_id: None,
+            namespace: None,
+            session: None,
+        }).await.unwrap();
+
+        assert_eq!(resp.tools.len(), 1);
+        assert_eq!(resp.tools[0].tool.name, "mcp_search");
+        assert_eq!(resp.tools[0].tool.tool_type, models::ToolType::Mcp);
+        assert_eq!(resp.tools[0].tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+    }
+
+    #[tokio::test]
+    async fn register_mcp_tool_without_server_uri_returns_bad_request() {
+        let core = make_core();
+        let err = core.register_tools("ds", vec![
+            models::Tool {
+                name: "mcp_tool".into(),
+                description: "An MCP tool".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: models::ToolType::Mcp,
+                server_uri: None,
+            },
+        ]).await.unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => assert!(msg.contains("server_uri"), "error should mention server_uri: {msg}"),
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
     // Strategy tests
 
     fn make_bm25_core() -> AgentifiedCore {
@@ -1670,7 +1796,7 @@ mod tests {
     async fn register_tools_without_embedding_service() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         let resp = core.register_tools("ds", tools).await.unwrap();
         assert_eq!(resp.registered, 1);
@@ -1689,8 +1815,8 @@ mod tests {
     async fn discover_bm25_without_embedding_service() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund for invoice".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            Tool { name: "getUser".into(), description: "Get user account details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "refund".into(), description: "Process a refund for invoice".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "getUser".into(), description: "Get user account details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1713,7 +1839,7 @@ mod tests {
     async fn discover_semantic_falls_back_to_bm25_without_embeddings() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1740,7 +1866,7 @@ mod tests {
         let core = AgentifiedCore::new(fake.clone() as Arc<dyn EmbeddingService>, storage);
 
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1769,8 +1895,8 @@ mod tests {
     async fn discover_hybrid_blends_semantic_and_bm25() {
         let core = make_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            Tool { name: "getUser".into(), description: "Get user details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "getUser".into(), description: "Get user details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1793,6 +1919,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn register_backend_tool_with_server_uri_returns_bad_request() {
+        let core = make_core();
+        let err = core.register_tools("ds", vec![
+            models::Tool {
+                name: "backend_tool".into(),
+                description: "A backend tool".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: models::ToolType::Backend,
+                server_uri: Some("http://localhost/mcp".into()),
+            },
+        ]).await.unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => assert!(msg.contains("server_uri"), "error should mention server_uri: {msg}"),
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn discover_default_strategy_is_bm25() {
         // Default DiscoverRequest (no strategy field) should use BM25
         let req: DiscoverRequest = serde_json::from_str(r#"{"query": "test"}"#).unwrap();
@@ -1803,9 +1950,9 @@ mod tests {
     async fn discover_excludes_always_include_tools() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "escalate".into(), description: "Escalate to human agent".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: true },
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "escalate".into(), description: "Escalate to human agent".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: true, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1830,9 +1977,9 @@ mod tests {
     async fn discover_with_session_persists_tools_across_calls() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            Tool { name: "delete_employee".into(), description: "Delete employee from system".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "delete_employee".into(), description: "Delete employee from system".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1870,8 +2017,8 @@ mod tests {
     async fn discover_without_session_does_not_persist() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1905,8 +2052,8 @@ mod tests {
     async fn discover_session_tools_loaded_via_recall() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -1961,9 +2108,9 @@ mod tests {
     async fn recall_excludes_always_include_tools() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "escalate".into(), description: "Escalate to human agent".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: true },
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false },
+            Tool { name: "escalate".into(), description: "Escalate to human agent".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: true, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -2063,6 +2210,8 @@ mod tests {
                 metadata: None,
                 fields: None,
                 always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
             },
         ];
         core.register_tools("ds", tools).await.unwrap();

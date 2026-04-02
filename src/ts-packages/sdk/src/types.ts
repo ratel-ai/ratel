@@ -233,6 +233,7 @@ export interface McpTool {
   parameters: Record<string, unknown>;
   type: "mcp";
   server: string;
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
 export type AgentifiedTool = BackendTool | ClientTool | McpTool;

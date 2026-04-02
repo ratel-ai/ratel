@@ -323,9 +323,17 @@ describe("Agentified", () => {
       await ag.disconnect();
     });
 
-    it("throws when tool has type 'mcp'", async () => {
+    it("accepts MCP tools with handler and sends type + server_uri", async () => {
       const ag = await connectedAg();
-      await expect(ag.register({ tools: [{ name: "m", description: "mcp", parameters: {}, type: "mcp" as const, server: "http://mcp" }] })).rejects.toThrow(/MCP tools/);
+      mockRegister.mockResolvedValue({ registered: 1 });
+
+      const mcpTool: AgentifiedTool = {
+        name: "read_file", description: "Read file", parameters: {},
+        type: "mcp" as const, server: "http://mcp",
+        handler: async () => "ok",
+      };
+      const instance = await ag.register({ tools: [mcpTool] });
+      expect(instance.instanceId).toBe("default");
       await ag.disconnect();
     });
 

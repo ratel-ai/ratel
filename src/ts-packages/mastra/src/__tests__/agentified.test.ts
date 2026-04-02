@@ -85,6 +85,36 @@ describe("MastraAgentified", () => {
     const inst = await m.register({ tools: [] });
     expect(inst).toBeInstanceOf(MastraInstance);
   });
+
+  it("register() includes MCP tools in prepareStep alongside backend tools", async () => {
+    const ag = fakeAgentified();
+    const fakeInst = {
+      instanceId: "default",
+      datasetId: "default",
+      discoverTool: {
+        definition: { name: "agentified_discover", description: "Find tools", parameters: {} },
+        execute: vi.fn(),
+        discoveredNames: new Set(["get_weather", "mcp_search"]),
+      },
+      prepareStep: vi.fn().mockResolvedValue({ activeTools: ["get_weather", "mcp_search"] }),
+      session: vi.fn(),
+      namespace: vi.fn(),
+    } as unknown as Instance;
+    (ag.register as ReturnType<typeof vi.fn>).mockResolvedValue(fakeInst);
+
+    const m = new MastraAgentified(ag);
+    const inst = await m.register({
+      tools: [
+        { name: "get_weather", description: "Get weather", parameters: { type: "object", properties: {} }, handler: vi.fn() },
+        { name: "mcp_search", description: "Search via MCP", parameters: { type: "object", properties: {} }, type: "mcp" as const, server: "http://localhost:3001/mcp", handler: vi.fn() },
+      ],
+    });
+
+    const result = await inst.prepareStep({ stepNumber: 0, steps: [] });
+    expect(result.tools["get_weather"]).toBeDefined();
+    expect(result.tools["mcp_search"]).toBeDefined();
+    expect(result.tools["mcp_search"].id).toBe("mcp_search");
+  });
 });
 
 describe("MastraInstance", () => {
