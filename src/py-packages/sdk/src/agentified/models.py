@@ -6,6 +6,11 @@ from typing import Any, Awaitable, Callable, Literal, Union
 from pydantic import BaseModel
 
 
+# Search strategy
+
+SearchStrategy = Literal["bm25", "semantic", "hybrid"]
+
+
 # Wire-format models (match Rust server snake_case JSON)
 
 class ServerToolFields(BaseModel):
@@ -21,6 +26,9 @@ class ServerTool(BaseModel):
     parameters: dict[str, Any]
     metadata: dict[str, Any] | None = None
     fields: ServerToolFields | None = None
+    always_include: bool | None = None
+    type: str | None = None
+    server_uri: str | None = None
 
 
 class RankedTool(ServerTool):
@@ -53,6 +61,7 @@ class PrefetchOptions(BaseModel):
     limit: int | None = None
     exclude: list[str] | None = None
     turn_id: str | None = None
+    strategy: SearchStrategy | None = None
 
 
 class CaptureTurnOptions(BaseModel):
@@ -67,6 +76,7 @@ class CaptureTurnResponse(BaseModel):
 class DiscoverToolInput(BaseModel):
     query: str
     limit: int | None = None
+    strategy: SearchStrategy | None = None
 
 
 class TokenUsage(BaseModel):
@@ -111,10 +121,28 @@ class GetMessagesResponse(BaseModel):
 ContextStrategy = Literal["recent", "full", "compacted"]
 
 
+# Recall types
+
+class RecallToolsConfig(BaseModel):
+    limit: int | None = None
+    min_similarity: float | None = None
+
+
+class RecallConfig(BaseModel):
+    tools: bool | RecallToolsConfig | None = None
+
+
 class ContextOpts(BaseModel):
     strategy: ContextStrategy | None = None
     max_tokens: int | None = None
     prune_threshold: int | None = None
+    keep_first: bool | None = None
+
+
+class SummaryRange(BaseModel):
+    first_seq: int
+    last_seq: int
+    count: int
 
 
 class ContextResponse(BaseModel):
@@ -126,6 +154,8 @@ class ContextResponse(BaseModel):
     token_estimate: int
     conversation_messages: int
     fallback: bool
+    summary: str | None = None
+    summary_range: SummaryRange | None = None
 
 
 class AssembledContext(BaseModel):
@@ -138,6 +168,8 @@ class AssembledContext(BaseModel):
     total_messages: int
     included_messages: int
     tools: dict[str, Any] = {}
+    summary: str | None = None
+    summary_range: SummaryRange | None = None
 
 
 class GetMessagesOptions(BaseModel):
@@ -163,11 +195,33 @@ class BackendTool:
     parameters: dict[str, Any]
     handler: Callable[[dict[str, Any]], Any]
     type: str | None = None  # "backend" or None
+    always_include: bool | None = None
+
+
+@dataclass
+class ClientTool:
+    name: str
+    description: str
+    parameters: dict[str, Any]
+    type: Literal["client"] = "client"
+
+
+@dataclass
+class McpTool:
+    name: str
+    description: str
+    parameters: dict[str, Any]
+    server: str
+    handler: Callable[[dict[str, Any]], Any]
+    type: Literal["mcp"] = "mcp"
+
+
+AgentifiedTool = Union[BackendTool, ClientTool, McpTool]
 
 
 @dataclass
 class RegisterInput:
-    tools: list[BackendTool]
+    tools: list[AgentifiedTool]
 
 
 # Event types
@@ -221,12 +275,25 @@ class DiscoverTool:
     discovered_names: set[str] = field(default_factory=set)
 
 
+class GetMessagesToolInput(BaseModel):
+    limit: int | None = None
+    after_seq: int | None = None
+    around_seq: int | None = None
+
+
+@dataclass
+class GetMessagesTool:
+    definition: ToolDefinition
+    execute: Callable[[GetMessagesToolInput], Awaitable[GetMessagesResponse]]
+
+
 @dataclass
 class ApiClientConfig:
     server_url: str
     tools: list[ServerTool]
     on_event: Callable[[AgentifiedEvent], None] | None = field(default=None)
     headers: dict[str, str] | None = field(default=None)
+    strategy: SearchStrategy | None = field(default=None)
 
 
 # Legacy alias — kept for backward compat during migration

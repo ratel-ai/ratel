@@ -8,7 +8,7 @@ LangChain adapter for [Agentified](../../../README.md) — wraps SDK classes so 
 pip install agentified-langchain
 ```
 
-Requires Python >= 3.10. Peer dependencies: `agentified >= 0.0.5`, `langchain-core >= 0.3`.
+Requires Python >= 3.10. Peer dependencies: `agentified >= 0.2.0`, `langchain-core >= 0.3`.
 
 ## Quick Start
 
@@ -37,33 +37,43 @@ agent = create_react_agent(llm, list(ctx.tools.values()))
 result = await agent.ainvoke({"messages": [{"role": "user", "content": "What's the weather?"}]})
 ```
 
+## Search Strategy
+
+Pass a search strategy when connecting:
+
+```python
+await ag.connect("http://localhost:9119", strategy="hybrid")
+```
+
 ## API Hierarchy
 
 ```
 LangchainAgentified
-  ├── connect(server_url)
+  ├── connect(server_url, *, headers?, strategy?)
   ├── disconnect()
-  ├── dataset(name) → LangchainDatasetRef
-  │    └── register(RegisterInput) → LangchainInstance
-  └── register(RegisterInput) → LangchainInstance
+  ├── dataset(name) -> LangchainDatasetRef
+  │    └── register(RegisterInput) -> LangchainInstance
+  └── register(RegisterInput) -> LangchainInstance
 
 LangchainInstance
-  ├── discover_tool → StructuredTool (agentified_discover)
-  ├── get_tools() → list[StructuredTool]
-  ├── session(id) → LangchainSession
-  └── namespace(id) → LangchainNamespace
-       └── session(id) → LangchainSession
+  ├── discover_tool -> StructuredTool (agentified_discover)
+  ├── get_tools() -> list[StructuredTool]
+  ├── session(id) -> LangchainSession
+  └── namespace(id) -> LangchainNamespace
+       └── session(id) -> LangchainSession
 
 LangchainSession
-  ├── discover_tool → StructuredTool
-  ├── context → LangchainContextBuilder
-  │    ├── .tools(dict[str, StructuredTool]) → self
-  │    ├── .messages(strategy?, max_tokens?) → self
-  │    ├── .recall() → self
-  │    └── .assemble() → LangchainAssembledContext
-  ├── get_tools() → list[StructuredTool]
-  ├── conversation → Conversation
-  ├── get_messages(opts?) → GetMessagesResult
+  ├── discover_tool -> StructuredTool
+  ├── get_messages_tool -> StructuredTool (agentified_get_messages)
+  ├── context -> LangchainContextBuilder
+  │    ├── .tools(dict[str, StructuredTool]) -> self
+  │    ├── .messages(strategy?, max_tokens?, keep_first?, prune_threshold?) -> self
+  │    ├── .recall(config?) -> self
+  │    ├── .limit_tokens(budget) -> self
+  │    └── .assemble() -> LangchainAssembledContext
+  ├── get_tools() -> list[StructuredTool]
+  ├── conversation -> Conversation
+  ├── get_messages(opts?) -> GetMessagesResult
   └── update_conversation(messages)
 ```
 
@@ -78,17 +88,23 @@ ctx.tools              # dict[str, StructuredTool] — explicit + discovered
 ctx.messages           # list[StoredMessage]
 ctx.token_estimate     # int
 ctx.strategy_used      # str
-ctx.recalled           # list (stub)
+ctx.recalled           # dict
+ctx.summary            # str | None (compacted strategy only)
+ctx.summary_range      # SummaryRange | None
 ```
 
 ## `LangchainContextBuilder`
 
-Fluent API — chain `.tools()`, `.messages()`, `.recall()`, then `.assemble()`:
+Fluent API — chain `.tools()`, `.messages()`, `.recall()`, `.limit_tokens()`, then `.assemble()`:
 
 ```python
+from agentified import RecallConfig
+
 ctx = await session.context \
     .tools({"custom": my_structured_tool}) \
     .messages(strategy="recent", max_tokens=4000) \
+    .recall(RecallConfig(tools=True)) \
+    .limit_tokens(8000) \
     .assemble()
 ```
 
@@ -101,6 +117,15 @@ Returns `discover_tool` + any tools discovered so far as `StructuredTool` instan
 ```python
 tools = session.get_tools()
 # [StructuredTool(agentified_discover), StructuredTool(get_weather), ...]
+```
+
+## `LangchainSession.get_messages_tool`
+
+Agent-callable tool for navigating message history:
+
+```python
+tool = session.get_messages_tool
+# StructuredTool wrapping agentified_get_messages
 ```
 
 ## Links

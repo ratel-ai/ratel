@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from .context_builder import ContextBuilder
 from .conversation import Conversation
-from .models import BackendTool, DiscoverTool, GetMessagesOptions, GetMessagesResult
+from .models import (
+    AgentifiedTool,
+    DiscoverTool,
+    GetMessagesOptions,
+    GetMessagesResult,
+    GetMessagesTool,
+)
 
 if TYPE_CHECKING:
     from .api_client import ApiClient
@@ -17,7 +23,7 @@ class Session:
         namespace_id: str,
         sdk: ApiClient,
         dataset_id: str,
-        registered_tools: list[BackendTool],
+        registered_tools: list[AgentifiedTool],
     ) -> None:
         self.id = id
         self.namespace_id = namespace_id
@@ -25,7 +31,8 @@ class Session:
         self._dataset_id = dataset_id
         self._registered_tools = registered_tools
         self.conversation = Conversation(sdk, dataset_id, namespace_id, id)
-        self._discover_tool = sdk.as_discover_tool(dataset_id)
+        self._discover_tool = sdk.as_discover_tool(dataset_id, namespace_id, id)
+        self._get_messages_tool: GetMessagesTool | None = None
 
     @property
     def context(self) -> ContextBuilder:
@@ -38,6 +45,14 @@ class Session:
     @property
     def discover_tool(self) -> DiscoverTool:
         return self._discover_tool
+
+    @property
+    def get_messages_tool(self) -> GetMessagesTool:
+        if self._get_messages_tool is None:
+            self._get_messages_tool = self._sdk.as_get_messages_tool(
+                self._dataset_id, self.namespace_id, self.id,
+            )
+        return self._get_messages_tool
 
     async def get_messages(self, opts: GetMessagesOptions | None = None) -> GetMessagesResult:
         strategy = opts.strategy if opts else None

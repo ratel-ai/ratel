@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .models import BackendTool, DiscoverTool
+from .models import AgentifiedTool, DiscoverTool
 from .namespace import Namespace
 from .session import Session
 
@@ -16,7 +16,7 @@ class Instance:
         instance_id: str,
         dataset_id: str,
         sdk: ApiClient,
-        registered_tools: list[BackendTool],
+        registered_tools: list[AgentifiedTool],
     ) -> None:
         self.instance_id = instance_id
         self.dataset_id = dataset_id

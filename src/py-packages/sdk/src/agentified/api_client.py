@@ -18,14 +18,20 @@ from .models import (
     DiscoverTool,
     DiscoverToolInput,
     GetMessagesResponse,
+    GetMessagesTool,
+    GetMessagesToolInput,
     Message,
     PrefetchCompleteEvent,
     PrefetchOptions,
     PrefetchStartEvent,
     RankedTool,
+    RecallConfig,
+    RecallToolsConfig,
     RegisterResponse,
+    SearchStrategy,
     ServerTool,
     StoredMessage,
+    SummaryRange,
     ToolDefinition,
 )
 
@@ -55,6 +61,9 @@ class ApiClient:
         limit: int | None = None,
         exclude: list[str] | None = None,
         turn_id: str | None = None,
+        strategy: SearchStrategy | None = None,
+        namespace: str | None = None,
+        session: str | None = None,
     ) -> list[RankedTool]:
         body: dict[str, Any] = {"query": query}
         if limit is not None:
@@ -63,6 +72,11 @@ class ApiClient:
             body["exclude"] = exclude
         if turn_id is not None:
             body["turn_id"] = turn_id
+        if namespace is not None:
+            body["namespace"] = namespace
+        if session is not None:
+            body["session"] = session
+        body["strategy"] = strategy or self._config.strategy or "bm25"
 
         resp = await self._http.post(
             f"{self._config.server_url}/api/v1/datasets/{dataset_id}/discover", json=body
@@ -76,7 +90,10 @@ class ApiClient:
         start = time.perf_counter()
 
         query = "\n".join(m.content for m in options.messages)
-        tools = await self.discover(dataset_id, query, options.limit, options.exclude, options.turn_id)
+        tools = await self.discover(
+            dataset_id, query, options.limit, options.exclude,
+            options.turn_id, options.strategy,
+        )
 
         duration_ms = (time.perf_counter() - start) * 1000
         self._emit(PrefetchCompleteEvent(tools=tools, duration_ms=duration_ms))
@@ -164,6 +181,9 @@ class ApiClient:
         strategy: ContextStrategy | None = None,
         max_tokens: int | None = None,
         prune_threshold: int | None = None,
+        keep_first: bool | None = None,
+        recall: RecallConfig | None = None,
+        limit_tokens: int | None = None,
     ) -> ContextResponse:
         messages_config: dict[str, Any] = {}
         if strategy is not None:
@@ -172,10 +192,36 @@ class ApiClient:
             messages_config["max_tokens"] = max_tokens
         if prune_threshold is not None:
             messages_config["prune_threshold"] = prune_threshold
+        if keep_first is not None:
+            messages_config["keep_first"] = keep_first
+
+        body: dict[str, Any] = {
+            "dataset": dataset,
+            "namespace": namespace,
+            "session": session,
+            "messages": messages_config,
+        }
+
+        if recall is not None:
+            recall_body: dict[str, Any] = {}
+            if recall.tools is not None:
+                if isinstance(recall.tools, bool):
+                    recall_body["tools"] = recall.tools
+                else:
+                    tools_config: dict[str, Any] = {}
+                    if recall.tools.limit is not None:
+                        tools_config["limit"] = recall.tools.limit
+                    if recall.tools.min_similarity is not None:
+                        tools_config["min_similarity"] = recall.tools.min_similarity
+                    recall_body["tools"] = tools_config
+            body["recall"] = recall_body
+
+        if limit_tokens is not None:
+            body["limit_tokens"] = limit_tokens
 
         resp = await self._http.post(
             f"{self._config.server_url}/api/v1/context",
-            json={"dataset": dataset, "namespace": namespace, "session": session, "messages": messages_config},
+            json=body,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -191,6 +237,16 @@ class ApiClient:
             )
             for m in data["messages"]
         ]
+
+        summary_range = None
+        if data.get("summary_range"):
+            sr = data["summary_range"]
+            summary_range = SummaryRange(
+                first_seq=sr["first_seq"],
+                last_seq=sr["last_seq"],
+                count=sr["count"],
+            )
+
         return ContextResponse(
             messages=messages,
             strategy_used=data["strategy_used"],
@@ -200,6 +256,8 @@ class ApiClient:
             token_estimate=data["token_estimate"],
             conversation_messages=data["conversation_messages"],
             fallback=data["fallback"],
+            summary=data.get("summary"),
+            summary_range=summary_range,
         )
 
     def get_frontend_tools(self) -> list[ServerTool]:
@@ -208,7 +266,45 @@ class ApiClient:
     def get_frontend_tool_names(self) -> list[str]:
         return [t.name for t in self.get_frontend_tools()]
 
-    def as_discover_tool(self, dataset_id: str) -> DiscoverTool:
+    def as_get_messages_tool(
+        self, dataset: str, namespace: str, session: str,
+    ) -> GetMessagesTool:
+        async def execute(inp: dict[str, Any] | GetMessagesToolInput) -> GetMessagesResponse:
+            if isinstance(inp, dict):
+                inp = GetMessagesToolInput(**inp)
+            return await self.get_messages(
+                dataset, namespace, session,
+                limit=inp.limit or 20,
+                after_seq=inp.after_seq,
+                around_seq=inp.around_seq,
+            )
+
+        return GetMessagesTool(
+            definition=ToolDefinition(
+                name="agentified_get_messages",
+                description=(
+                    "Retrieve conversation messages by sequence number. Use this to read messages "
+                    "that were summarized or excluded from your current context. Returns messages "
+                    "in chronological order."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "number", "description": "Max messages to return (default: 20)"},
+                        "after_seq": {"type": "number", "description": "Return messages after this sequence number (paginate forward)"},
+                        "around_seq": {"type": "number", "description": "Return messages around this sequence number (centered window)"},
+                    },
+                },
+            ),
+            execute=execute,
+        )
+
+    def as_discover_tool(
+        self,
+        dataset_id: str,
+        namespace: str | None = None,
+        session: str | None = None,
+    ) -> DiscoverTool:
         discovered_names: set[str] = set()
 
         async def execute(inp: dict[str, Any] | DiscoverToolInput) -> list[RankedTool]:
@@ -216,7 +312,12 @@ class ApiClient:
                 inp = DiscoverToolInput(**inp)
             self._emit(DiscoverStartEvent(query=inp.query))
             start = time.perf_counter()
-            tools = await self.discover(dataset_id, inp.query, inp.limit)
+            tools = await self.discover(
+                dataset_id, inp.query, inp.limit,
+                strategy=inp.strategy,
+                namespace=namespace,
+                session=session,
+            )
             duration_ms = (time.perf_counter() - start) * 1000
             self._emit(DiscoverCompleteEvent(query=inp.query, tools=tools, duration_ms=duration_ms))
             for t in tools:

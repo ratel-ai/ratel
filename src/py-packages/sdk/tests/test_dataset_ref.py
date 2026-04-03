@@ -4,7 +4,7 @@ import respx
 
 from agentified.client import Agentified
 from agentified.dataset_ref import DatasetRef
-from agentified.models import BackendTool, RegisterInput
+from agentified.models import BackendTool, ClientTool, RegisterInput
 
 TEST_URL = "http://localhost:9119"
 
@@ -34,14 +34,14 @@ class TestDatasetRef:
         assert instance.dataset_id == "myds"
         await ag.disconnect()
 
-    async def test_register_rejects_unsupported_type(self):
+    async def test_register_rejects_client_tools(self):
         ag = Agentified()
         ag._sdk = object()  # fake non-None
         ag._server_url = TEST_URL
         ag._connected = True
 
         ref = ag.dataset("ds")
-        with pytest.raises(ValueError, match="Unsupported tool type"):
+        with pytest.raises(ValueError, match="Client tools are not yet supported"):
             await ref.register(RegisterInput(tools=[
-                BackendTool(name="t", description="d", parameters={}, handler=lambda a: a, type="client"),
+                ClientTool(name="t", description="d", parameters={}),
             ]))

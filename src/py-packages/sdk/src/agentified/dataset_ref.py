@@ -4,7 +4,15 @@ from typing import TYPE_CHECKING
 
 from .api_client import ApiClient
 from .instance import Instance
-from .models import ApiClientConfig, BackendTool, RegisterInput
+from .models import (
+    AgentifiedTool,
+    ApiClientConfig,
+    BackendTool,
+    ClientTool,
+    McpTool,
+    RegisterInput,
+    ServerTool,
+)
 
 if TYPE_CHECKING:
     from .client import Agentified
@@ -22,12 +30,21 @@ class DatasetRef:
         if sdk is None:
             raise RuntimeError("Not connected")
 
-        from .models import ServerTool
+        server_tools = []
+        for t in input.tools:
+            st = ServerTool(name=t.name, description=t.description, parameters=t.parameters)
+            if isinstance(t, McpTool):
+                st = ServerTool(
+                    name=t.name, description=t.description, parameters=t.parameters,
+                    type="mcp", server_uri=t.server,
+                )
+            elif isinstance(t, BackendTool) and t.always_include:
+                st = ServerTool(
+                    name=t.name, description=t.description, parameters=t.parameters,
+                    always_include=True,
+                )
+            server_tools.append(st)
 
-        server_tools = [
-            ServerTool(name=t.name, description=t.description, parameters=t.parameters)
-            for t in input.tools
-        ]
         reg_sdk = ApiClient(
             ApiClientConfig(server_url=self._agentified._server_url, tools=server_tools)
         )
@@ -36,9 +53,10 @@ class DatasetRef:
         return Instance(self.dataset_name, self.dataset_name, sdk, input.tools)
 
 
-def _validate_tools(tools: list[BackendTool]) -> None:
+def _validate_tools(tools: list[AgentifiedTool]) -> None:
     for tool in tools:
-        if tool.type and tool.type not in ("backend", None):
-            raise ValueError(f"Unsupported tool type: {tool.type}")
-        if not callable(tool.handler):
-            raise ValueError(f"Tool '{tool.name}' requires a handler")
+        if isinstance(tool, ClientTool):
+            raise ValueError("Client tools are not yet supported")
+        if isinstance(tool, (BackendTool, McpTool)):
+            if not callable(tool.handler):
+                raise ValueError(f"Tool '{tool.name}' requires a handler")

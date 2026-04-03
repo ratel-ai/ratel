@@ -8,7 +8,6 @@ from langchain_core.tools import StructuredTool
 from agentified import (
     Agentified,
     AssembledContext,
-    BackendTool,
     ContextBuilder,
     DatasetRef,
     Instance,
@@ -16,7 +15,18 @@ from agentified import (
     RegisterInput,
     Session,
 )
-from agentified.models import DiscoverTool, DiscoverToolInput
+from agentified.models import (
+    AgentifiedTool,
+    BackendTool,
+    ClientTool,
+    DiscoverTool,
+    DiscoverToolInput,
+    GetMessagesTool,
+    GetMessagesToolInput,
+    McpTool,
+    RecallConfig,
+    SearchStrategy,
+)
 
 
 # --- Helpers ---
@@ -36,24 +46,29 @@ def _json_schema_to_pydantic(schema: dict[str, Any]) -> type[BaseModel]:
     return create_model("DynamicInput", **fields)
 
 
-def _build_lc_tool_map(backend_tools: list[BackendTool]) -> dict[str, StructuredTool]:
-    tools: dict[str, StructuredTool] = {}
-    for t in backend_tools:
+def _build_lc_tool_map(tools: list[AgentifiedTool]) -> dict[str, StructuredTool]:
+    result: dict[str, StructuredTool] = {}
+    for t in tools:
+        if isinstance(t, ClientTool):
+            continue  # Client tools have no handler
+        if not isinstance(t, (BackendTool, McpTool)):
+            continue
+
         input_model = _json_schema_to_pydantic(t.parameters)
 
         async def _handler(h=t.handler, **kwargs: Any) -> Any:
-            result = h(kwargs)
-            if hasattr(result, "__await__"):
-                return await result
-            return result
+            r = h(kwargs)
+            if hasattr(r, "__await__"):
+                return await r
+            return r
 
-        tools[t.name] = StructuredTool.from_function(
+        result[t.name] = StructuredTool.from_function(
             coroutine=_handler,
             name=t.name,
             description=t.description,
             args_schema=input_model,
         )
-    return tools
+    return result
 
 
 def _wrap_discover_tool(dt: DiscoverTool) -> StructuredTool:
@@ -67,6 +82,20 @@ def _wrap_discover_tool(dt: DiscoverTool) -> StructuredTool:
         name=dt.definition.name,
         description=dt.definition.description,
         args_schema=_json_schema_to_pydantic(dt.definition.parameters),
+    )
+
+
+def _wrap_get_messages_tool(gmt: GetMessagesTool) -> StructuredTool:
+    async def _execute(**kwargs: Any) -> dict[str, Any]:
+        inp = GetMessagesToolInput(**kwargs)
+        result = await gmt.execute(inp)
+        return result.model_dump()
+
+    return StructuredTool.from_function(
+        coroutine=_execute,
+        name=gmt.definition.name,
+        description=gmt.definition.description,
+        args_schema=_json_schema_to_pydantic(gmt.definition.parameters),
     )
 
 
@@ -109,6 +138,14 @@ class LangchainAssembledContext:
     def included_messages(self):
         return self._sdk_ctx.included_messages
 
+    @property
+    def summary(self):
+        return self._sdk_ctx.summary
+
+    @property
+    def summary_range(self):
+        return self._sdk_ctx.summary_range
+
 
 class LangchainContextBuilder:
     def __init__(
@@ -132,8 +169,12 @@ class LangchainContextBuilder:
         self._explicit_tools.update(tools)
         return self
 
-    def recall(self, **kwargs: Any) -> LangchainContextBuilder:
-        self._sdk_builder.recall(**kwargs)
+    def recall(self, config: RecallConfig | None = None) -> LangchainContextBuilder:
+        self._sdk_builder.recall(config)
+        return self
+
+    def limit_tokens(self, budget: int) -> LangchainContextBuilder:
+        self._sdk_builder.limit_tokens(budget)
         return self
 
     async def assemble(self) -> LangchainAssembledContext:
@@ -152,6 +193,7 @@ class LangchainSession:
         self._sess = sess
         self._lc_tool_cache = lc_tool_cache
         self.discover_tool = _wrap_discover_tool(sess.discover_tool)
+        self._get_messages_tool: StructuredTool | None = None
 
     @property
     def id(self) -> str:
@@ -164,6 +206,12 @@ class LangchainSession:
     @property
     def conversation(self):
         return self._sess.conversation
+
+    @property
+    def get_messages_tool(self) -> StructuredTool:
+        if self._get_messages_tool is None:
+            self._get_messages_tool = _wrap_get_messages_tool(self._sess.get_messages_tool)
+        return self._get_messages_tool
 
     @property
     def context(self) -> LangchainContextBuilder:
@@ -202,9 +250,9 @@ class LangchainNamespace:
 
 
 class LangchainInstance:
-    def __init__(self, inst: Instance, backend_tools: list[BackendTool]) -> None:
+    def __init__(self, inst: Instance, tools: list[AgentifiedTool]) -> None:
         self._inst = inst
-        self._lc_tool_cache = _build_lc_tool_map(backend_tools)
+        self._lc_tool_cache = _build_lc_tool_map(tools)
         self.discover_tool = _wrap_discover_tool(inst.discover_tool)
 
     @property
@@ -242,8 +290,14 @@ class LangchainAgentified:
     def __init__(self, ag: Agentified | None = None) -> None:
         self._ag = ag or Agentified()
 
-    async def connect(self, server_url: str, *, headers: dict[str, str] | None = None) -> None:
-        await self._ag.connect(server_url, headers=headers)
+    async def connect(
+        self,
+        server_url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        strategy: SearchStrategy | None = None,
+    ) -> None:
+        await self._ag.connect(server_url, headers=headers, strategy=strategy)
 
     async def disconnect(self) -> None:
         await self._ag.disconnect()

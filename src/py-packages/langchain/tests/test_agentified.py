@@ -324,7 +324,7 @@ class TestLangchainAgentified:
         ag.connect = AsyncMock()
         lc = LangchainAgentified(ag)
         await lc.connect("http://localhost:9119")
-        ag.connect.assert_called_once_with("http://localhost:9119")
+        ag.connect.assert_called_once_with("http://localhost:9119", headers=None, strategy=None)
 
     async def test_disconnect_delegates(self):
         ag = MagicMock()

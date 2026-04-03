@@ -10,6 +10,12 @@ Async and sync clients for [Agentified](../../../README.md) — tool registratio
 pip install agentified
 ```
 
+For MCP tool support:
+
+```bash
+pip install agentified[mcp]
+```
+
 Requires Python >= 3.10.
 
 ## Quick Start
@@ -32,9 +38,9 @@ async def main():
 
     # Assemble context — tools + messages for this turn
     ctx = await session.context.messages(strategy="recent").assemble()
-    # ctx.tools       → discovered tools ranked by relevance
-    # ctx.messages    → conversation history
-    # ctx.token_estimate → estimated token count
+    # ctx.tools       -> discovered tools ranked by relevance
+    # ctx.messages    -> conversation history
+    # ctx.token_estimate -> estimated token count
 
     await ag.disconnect()
 
@@ -51,33 +57,88 @@ await ag.connect("https://my-service.run.app", headers={"Authorization": f"Beare
 
 Headers are sent on every request, including the initial health check.
 
+## Search Strategy
+
+Choose the discovery ranking algorithm:
+
+```python
+await ag.connect("http://localhost:9119", strategy="hybrid")
+```
+
+Available strategies:
+- `"bm25"` (default) — lexical token-based ranking
+- `"semantic"` — embedding-based cosine similarity (requires `OPENAI_API_KEY`)
+- `"hybrid"` — 70% semantic + 30% BM25
+
 ## API Hierarchy
 
 ```
 Agentified
-  ├── connect(server_url, *, headers?) → health check, store url
-  ├── disconnect() → cleanup
-  ├── dataset(name) → DatasetRef
-  │    └── register(RegisterInput) → Instance
-  └── register(RegisterInput) → Instance (default dataset)
+  ├── connect(server_url, *, headers?, strategy?) -> health check, store url
+  ├── disconnect() -> cleanup
+  ├── dataset(name) -> DatasetRef
+  │    └── register(RegisterInput) -> Instance
+  └── register(RegisterInput) -> Instance (default dataset)
 
 Instance
-  ├── discover_tool → DiscoverTool
-  ├── session(id) → Session (namespace="default")
-  └── namespace(id) → Namespace
-       └── session(id) → Session
+  ├── discover_tool -> DiscoverTool
+  ├── session(id) -> Session (namespace="default")
+  └── namespace(id) -> Namespace
+       └── session(id) -> Session
 
 Session
-  ├── conversation → Conversation
-  │    ├── append(messages) → AppendMessagesResponse
-  │    └── messages(opts?) → list[StoredMessage]
-  ├── context → ContextBuilder (new each access)
-  │    ├── messages(strategy?, max_tokens?) → self (fluent)
-  │    ├── recall() → self (stub)
-  │    └── assemble() → AssembledContext
-  ├── discover_tool → DiscoverTool
-  ├── get_messages(opts?) → GetMessagesResult
-  └── update_conversation(messages) → None (with dedup)
+  ├── conversation -> Conversation
+  │    ├── append(messages) -> AppendMessagesResponse
+  │    └── messages(opts?) -> list[StoredMessage]
+  ├── context -> ContextBuilder (new each access)
+  │    ├── messages(strategy?, max_tokens?, keep_first?, prune_threshold?, compaction_strategy?) -> self
+  │    ├── tools(dict) -> self
+  │    ├── recall(config?) -> self
+  │    ├── limit_tokens(budget) -> self
+  │    └── assemble() -> AssembledContext
+  ├── discover_tool -> DiscoverTool
+  ├── get_messages_tool -> GetMessagesTool
+  ├── get_messages(opts?) -> GetMessagesResult
+  └── update_conversation(messages) -> None (with dedup)
+```
+
+## Tool Types
+
+### BackendTool
+
+Server-side tools with a handler function:
+
+```python
+BackendTool(
+    name="get_weather",
+    description="Get current weather",
+    parameters={"type": "object", "properties": {"city": {"type": "string"}}},
+    handler=lambda args: {"temp": 22},
+    always_include=True,  # always present in agent context
+)
+```
+
+### McpTool
+
+Tools from MCP (Model Context Protocol) servers:
+
+```python
+McpTool(
+    name="read_file",
+    description="Read a file",
+    parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+    server="http://localhost:3001/mcp",
+    handler=my_handler,
+)
+```
+
+Or use the `mcp_tools()` helper to auto-discover:
+
+```python
+from agentified import mcp_tools
+
+tools = await mcp_tools(server="http://localhost:3001/mcp")
+instance = await ag.register(RegisterInput(tools=tools))
 ```
 
 ## `Agentified` (async)
@@ -88,8 +149,8 @@ await ag.connect("http://localhost:9119")
 # ... use ag ...
 await ag.disconnect()
 
-# With auth headers:
-await ag.connect("https://my-service.run.app", headers={"Authorization": "Bearer ..."})
+# With auth headers and search strategy:
+await ag.connect("https://my-service.run.app", headers={"Authorization": "Bearer ..."}, strategy="hybrid")
 ```
 
 Or as context manager:
@@ -144,14 +205,53 @@ result = await session.get_messages(GetMessagesOptions(strategy="recent", max_me
 Fluent API for assembling context:
 
 ```python
-ctx = await session.context.messages(strategy="recent", max_tokens=4000).assemble()
+ctx = await session.context \
+    .messages(strategy="recent", max_tokens=4000, keep_first=True) \
+    .recall(RecallConfig(tools=True)) \
+    .limit_tokens(8000) \
+    .assemble()
 # ctx.messages, ctx.strategy_used, ctx.token_estimate, ctx.recalled
+# ctx.tools -> dict of discovered tools
+# ctx.summary -> optional LLM-generated summary (compacted strategy)
+# ctx.summary_range -> SummaryRange with first_seq, last_seq, count
+```
+
+#### Recall
+
+Recall persists discovered tools across turns within a session:
+
+```python
+# Simple recall (default: tools=True, limit=5)
+ctx = await session.context.recall().assemble()
+
+# With custom config
+from agentified import RecallConfig, RecallToolsConfig
+ctx = await session.context.recall(RecallConfig(
+    tools=RecallToolsConfig(limit=3, min_similarity=0.5)
+)).assemble()
+```
+
+#### Token Limiting
+
+Cap the total context size (tools + messages):
+
+```python
+ctx = await session.context.limit_tokens(8000).assemble()
 ```
 
 ### `session.discover_tool`
 
 ```python
 discovered = await session.discover_tool.execute({"query": "weather tools", "limit": 5})
+```
+
+### `session.get_messages_tool`
+
+Agent-callable tool for navigating message history:
+
+```python
+result = await session.get_messages_tool.execute({"limit": 20, "after_seq": 5})
+# result.messages, result.has_more, result.max_seq
 ```
 
 ## `SyncAgentified`
@@ -162,7 +262,7 @@ Synchronous wrapper for `connect`/`disconnect`/`register`/`dataset`:
 from agentified import SyncAgentified, BackendTool, RegisterInput
 
 client = SyncAgentified()
-client.connect("http://localhost:9119")  # or: client.connect(url, headers={...})
+client.connect("http://localhost:9119", strategy="bm25")
 instance = client.register(RegisterInput(tools=[...]))
 # Instance, Session, etc. are async-only — use asyncio.run() for deeper layers
 client.disconnect()

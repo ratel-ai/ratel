@@ -7,7 +7,7 @@ import httpx
 from .api_client import ApiClient
 from .dataset_ref import DatasetRef
 from .instance import Instance
-from .models import ApiClientConfig, RegisterInput
+from .models import ApiClientConfig, RegisterInput, SearchStrategy
 
 
 class Agentified:
@@ -17,7 +17,13 @@ class Agentified:
         self._connected = False
         self._http_client: httpx.AsyncClient | None = None
 
-    async def connect(self, server_url: str, *, headers: dict[str, str] | None = None) -> None:
+    async def connect(
+        self,
+        server_url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        strategy: SearchStrategy | None = None,
+    ) -> None:
         if self._connected:
             raise RuntimeError("Already connected")
 
@@ -27,7 +33,9 @@ class Agentified:
             raise RuntimeError(f"Health check failed: {resp.status_code}")
 
         self._server_url = server_url
-        self._sdk = ApiClient(ApiClientConfig(server_url=server_url, tools=[], headers=headers))
+        self._sdk = ApiClient(ApiClientConfig(
+            server_url=server_url, tools=[], headers=headers, strategy=strategy,
+        ))
         self._connected = True
 
     async def disconnect(self) -> None:
