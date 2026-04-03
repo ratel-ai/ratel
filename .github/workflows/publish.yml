@@ -70,9 +70,14 @@ jobs:
         id: publish
         if: steps.version.outputs.changed == 'false'
         run: |
-          pnpm release
-          SDK_VERSION=$(node -p "require('./sdk/package.json').version")
-          echo "sdk-version=${SDK_VERSION}" >> "$GITHUB_OUTPUT"
+          OUTPUT=$(pnpm release 2>&1)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "New tag:"; then
+            SDK_VERSION=$(node -p "require('./sdk/package.json').version")
+            echo "sdk-version=${SDK_VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            echo "No packages were published, skipping tag/release"
+          fi
         env:
           NPM_CONFIG_PROVENANCE: true
 
