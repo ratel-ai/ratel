@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-commit hook: runs tests, typecheck, and lint for staged changes.
+# Only runs checks for the areas of the codebase that have staged files.
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Get list of staged files (excluding deleted)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=d)
+
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+HAS_TS=false
+HAS_RUST=false
+HAS_PYTHON=false
+
+while IFS= read -r file; do
+  case "$file" in
+    src/ts-packages/*) HAS_TS=true ;;
+    src/core/*) HAS_RUST=true ;;
+    src/py-packages/*) HAS_PYTHON=true ;;
+  esac
+done <<< "$STAGED_FILES"
+
+FAILED=false
+
+# --- TypeScript checks ---
+if $HAS_TS; then
+  echo "==> Running TypeScript checks..."
+  TS_DIR="$REPO_ROOT/src/ts-packages"
+
+  echo "  -> typecheck"
+  if ! pnpm --dir "$TS_DIR" typecheck; then
+    echo "  !! TypeScript typecheck failed"
+    FAILED=true
+  fi
+
+  echo "  -> lint"
+  if ! pnpm --dir "$TS_DIR" lint; then
+    echo "  !! TypeScript lint failed"
+    FAILED=true
+  fi
+
+  echo "  -> test"
+  if ! pnpm --dir "$TS_DIR" test; then
+    echo "  !! TypeScript tests failed"
+    FAILED=true
+  fi
+fi
+
+# --- Rust checks ---
+if $HAS_RUST; then
+  echo "==> Running Rust checks..."
+  RUST_DIR="$REPO_ROOT/src/core"
+
+  echo "  -> fmt check"
+  if ! (cd "$RUST_DIR" && cargo fmt -- --check); then
+    echo "  !! Rust fmt check failed"
+    FAILED=true
+  fi
+
+  echo "  -> clippy"
+  if ! (cd "$RUST_DIR" && cargo clippy -- -D warnings); then
+    echo "  !! Rust clippy failed"
+    FAILED=true
+  fi
+
+  echo "  -> test"
+  if ! (cd "$RUST_DIR" && cargo test); then
+    echo "  !! Rust tests failed"
+    FAILED=true
+  fi
+fi
+
+# --- Python checks ---
+if $HAS_PYTHON; then
+  echo "==> Running Python checks..."
+  PY_DIR="$REPO_ROOT/src/py-packages"
+
+  for pkg in "$PY_DIR"/*/; do
+    if [ -f "$pkg/pyproject.toml" ]; then
+      PKG_NAME=$(basename "$pkg")
+      echo "  -> test ($PKG_NAME)"
+      if [ -d "$pkg/.venv" ]; then
+        PYTEST="$pkg/.venv/bin/python -m pytest"
+      else
+        PYTEST="python3 -m pytest"
+      fi
+      if ! (cd "$pkg" && $PYTEST -q); then
+        echo "  !! Python tests failed ($PKG_NAME)"
+        FAILED=true
+      fi
+    fi
+  done
+fi
+
+if $FAILED; then
+  echo ""
+  echo "Pre-commit checks failed. Commit aborted."
+  exit 1
+fi
+
+echo ""
+echo "All pre-commit checks passed."

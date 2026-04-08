@@ -28,11 +28,19 @@ pub fn weighted_semantic_score(
         total_weight += weights.output_schema;
     }
 
-    if total_weight > 0.0 { total_score / total_weight } else { 0.0 }
+    if total_weight > 0.0 {
+        total_score / total_weight
+    } else {
+        0.0
+    }
 }
 
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    debug_assert_eq!(a.len(), b.len(), "cosine_similarity: vector length mismatch");
+    debug_assert_eq!(
+        a.len(),
+        b.len(),
+        "cosine_similarity: vector length mismatch"
+    );
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let norm_a = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b = b.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -94,7 +102,10 @@ pub fn normalize_min_max(scores: &[f32]) -> Vec<f32> {
     let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     let min = scores.iter().cloned().fold(f32::INFINITY, f32::min);
     let range = max - min;
-    scores.iter().map(|s| if range > 0.0 { (s - min) / range } else { 0.0 }).collect()
+    scores
+        .iter()
+        .map(|s| if range > 0.0 { (s - min) / range } else { 0.0 })
+        .collect()
 }
 
 fn tokenize(text: &str) -> Vec<String> {
@@ -136,14 +147,22 @@ mod tests {
             "get customer account details including name and email".to_string(),
         ];
         let scores = bm25_scores("refund", &docs);
-        assert!(scores[0] > scores[1], "refund doc should score higher: {:?}", scores);
+        assert!(
+            scores[0] > scores[1],
+            "refund doc should score higher: {:?}",
+            scores
+        );
     }
 
     #[test]
     fn bm25_returns_zero_for_no_match() {
         let docs = vec!["get customer account details".to_string()];
         let scores = bm25_scores("refund", &docs);
-        assert!((scores[0]).abs() < 1e-6, "no match should score ~0: {:?}", scores);
+        assert!(
+            (scores[0]).abs() < 1e-6,
+            "no match should score ~0: {:?}",
+            scores
+        );
     }
 
     #[test]
@@ -228,6 +247,9 @@ mod tests {
         // Only name (0.1) + description (0.5) active, total weight = 0.6
         let desc_cos = cosine_similarity(&query, &field_embs.description);
         let expected = (0.1 * 1.0 + 0.5 * desc_cos) / 0.6;
-        assert!((score - expected).abs() < 1e-6, "expected {expected}, got {score}");
+        assert!(
+            (score - expected).abs() < 1e-6,
+            "expected {expected}, got {score}"
+        );
     }
 }

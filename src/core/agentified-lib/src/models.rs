@@ -1,17 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolType {
+    #[default]
     Backend,
     Client,
     Mcp,
-}
-
-impl Default for ToolType {
-    fn default() -> Self {
-        Self::Backend
-    }
 }
 
 // Tool fields for multi-field embeddings
@@ -46,10 +41,18 @@ pub struct EmbeddingFieldWeights {
     pub output_schema: f32,
 }
 
-fn default_name_weight() -> f32 { 0.1 }
-fn default_description_weight() -> f32 { 0.5 }
-fn default_input_schema_weight() -> f32 { 0.3 }
-fn default_output_schema_weight() -> f32 { 0.1 }
+fn default_name_weight() -> f32 {
+    0.1
+}
+fn default_description_weight() -> f32 {
+    0.5
+}
+fn default_input_schema_weight() -> f32 {
+    0.3
+}
+fn default_output_schema_weight() -> f32 {
+    0.1
+}
 
 impl Default for EmbeddingFieldWeights {
     fn default() -> Self {
@@ -64,16 +67,13 @@ impl Default for EmbeddingFieldWeights {
 
 // Search strategy
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchStrategy {
+    #[default]
     Bm25,
     Semantic,
     Hybrid,
-}
-
-impl Default for SearchStrategy {
-    fn default() -> Self { SearchStrategy::Bm25 }
 }
 
 // API types
@@ -228,7 +228,9 @@ pub struct GetMessagesQuery {
     pub around_seq: Option<i64>,
 }
 
-fn default_limit() -> i64 { 50 }
+fn default_limit() -> i64 {
+    50
+}
 
 #[derive(Debug, Serialize)]
 pub struct GetMessagesResponse {
@@ -239,7 +241,9 @@ pub struct GetMessagesResponse {
 
 // Recall types
 
-fn default_recall_limit() -> usize { 5 }
+fn default_recall_limit() -> usize {
+    5
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RecallToolsConfig {
@@ -276,9 +280,15 @@ pub struct ContextMessagesConfig {
     pub prune_threshold: usize,
 }
 
-fn default_context_strategy() -> String { "recent".into() }
-fn default_max_tokens() -> usize { 4000 }
-fn default_prune_threshold() -> usize { 500 }
+fn default_context_strategy() -> String {
+    "recent".into()
+}
+fn default_max_tokens() -> usize {
+    4000
+}
+fn default_prune_threshold() -> usize {
+    500
+}
 
 impl Default for ContextMessagesConfig {
     fn default() -> Self {
@@ -409,15 +419,30 @@ mod tests {
 
     #[test]
     fn tool_type_deserializes_all_variants() {
-        assert_eq!(serde_json::from_str::<ToolType>(r#""backend""#).unwrap(), ToolType::Backend);
-        assert_eq!(serde_json::from_str::<ToolType>(r#""client""#).unwrap(), ToolType::Client);
-        assert_eq!(serde_json::from_str::<ToolType>(r#""mcp""#).unwrap(), ToolType::Mcp);
+        assert_eq!(
+            serde_json::from_str::<ToolType>(r#""backend""#).unwrap(),
+            ToolType::Backend
+        );
+        assert_eq!(
+            serde_json::from_str::<ToolType>(r#""client""#).unwrap(),
+            ToolType::Client
+        );
+        assert_eq!(
+            serde_json::from_str::<ToolType>(r#""mcp""#).unwrap(),
+            ToolType::Mcp
+        );
     }
 
     #[test]
     fn tool_type_serializes_lowercase() {
-        assert_eq!(serde_json::to_string(&ToolType::Backend).unwrap(), r#""backend""#);
-        assert_eq!(serde_json::to_string(&ToolType::Client).unwrap(), r#""client""#);
+        assert_eq!(
+            serde_json::to_string(&ToolType::Backend).unwrap(),
+            r#""backend""#
+        );
+        assert_eq!(
+            serde_json::to_string(&ToolType::Client).unwrap(),
+            r#""client""#
+        );
         assert_eq!(serde_json::to_string(&ToolType::Mcp).unwrap(), r#""mcp""#);
     }
 
@@ -439,7 +464,10 @@ mod tests {
         let json = r#"{"name": "t", "description": "d", "type": "mcp", "server_uri": "http://localhost:3001/mcp"}"#;
         let tool: Tool = serde_json::from_str(json).unwrap();
         assert_eq!(tool.tool_type, ToolType::Mcp);
-        assert_eq!(tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+        assert_eq!(
+            tool.server_uri.as_deref(),
+            Some("http://localhost:3001/mcp")
+        );
     }
 
     #[test]

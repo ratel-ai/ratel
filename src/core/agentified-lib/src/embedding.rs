@@ -183,8 +183,14 @@ impl LlmService for OpenAILlm {
             .json(&ChatRequest {
                 model: "gpt-4o-mini",
                 messages: vec![
-                    ChatMessage { role: "system", content: system },
-                    ChatMessage { role: "user", content: user },
+                    ChatMessage {
+                        role: "system",
+                        content: system,
+                    },
+                    ChatMessage {
+                        role: "user",
+                        content: user,
+                    },
                 ],
                 max_completion_tokens: max_tokens,
             })
@@ -198,10 +204,13 @@ impl LlmService for OpenAILlm {
             anyhow::bail!("OpenAI API error {status}: {body}");
         }
 
-        let raw = response.text().await.context("failed to read chat response body")?;
+        let raw = response
+            .text()
+            .await
+            .context("failed to read chat response body")?;
         tracing::debug!("OpenAI chat response: {}", &raw[..raw.len().min(500)]);
-        let body: ChatResponse = serde_json::from_str(&raw)
-            .context("failed to parse OpenAI chat response")?;
+        let body: ChatResponse =
+            serde_json::from_str(&raw).context("failed to parse OpenAI chat response")?;
 
         body.choices
             .into_iter()
@@ -233,7 +242,8 @@ impl FakeEmbedding {
 #[async_trait]
 impl EmbeddingService for FakeEmbedding {
     async fn embed_batch(&self, texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
-        self.batch_call_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.batch_call_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut results = Vec::with_capacity(texts.len());
         for text in texts {
             results.push(self.embed(text).await?);
@@ -245,7 +255,8 @@ impl EmbeddingService for FakeEmbedding {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
-        self.call_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.call_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         const DIMS: usize = 256;
         let mut vec = Vec::with_capacity(DIMS);
@@ -317,7 +328,10 @@ mod tests {
         let norm_a = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         let norm_b = b.iter().map(|x| x * x).sum::<f32>().sqrt();
         let cosine = dot / (norm_a * norm_b);
-        assert!(cosine < 0.99, "distinct texts should produce cosine < 0.99, got {cosine}");
+        assert!(
+            cosine < 0.99,
+            "distinct texts should produce cosine < 0.99, got {cosine}"
+        );
     }
 
     #[tokio::test]

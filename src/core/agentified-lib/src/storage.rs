@@ -11,10 +11,35 @@ pub trait Storage: Send + Sync {
     fn load_all_turns(&self) -> Result<Vec<(String, Turn)>>;
     fn save_embeddings(&self, entries: &[(&str, &[f32])]) -> Result<()>;
     fn load_all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>>;
-    fn append_messages(&self, dataset: &str, namespace: &str, session: &str, messages: &[MessageInput]) -> Result<(i64, i64)>;
-    fn get_messages(&self, dataset: &str, namespace: &str, session: &str, limit: i64, after_seq: Option<i64>, around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)>;
-    fn save_session_tools(&self, dataset: &str, namespace: &str, session: &str, tool_names: &[&str]) -> Result<()>;
-    fn load_session_tools(&self, dataset: &str, namespace: &str, session: &str) -> Result<Vec<String>>;
+    fn append_messages(
+        &self,
+        dataset: &str,
+        namespace: &str,
+        session: &str,
+        messages: &[MessageInput],
+    ) -> Result<(i64, i64)>;
+    fn get_messages(
+        &self,
+        dataset: &str,
+        namespace: &str,
+        session: &str,
+        limit: i64,
+        after_seq: Option<i64>,
+        around_seq: Option<i64>,
+    ) -> Result<(Vec<StoredMessage>, bool, i64)>;
+    fn save_session_tools(
+        &self,
+        dataset: &str,
+        namespace: &str,
+        session: &str,
+        tool_names: &[&str],
+    ) -> Result<()>;
+    fn load_session_tools(
+        &self,
+        dataset: &str,
+        namespace: &str,
+        session: &str,
+    ) -> Result<Vec<String>>;
 }
 
 // Blob helpers
@@ -52,16 +77,41 @@ impl Storage for NoopStorage {
     fn load_all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>> {
         Ok(vec![])
     }
-    fn append_messages(&self, _dataset: &str, _namespace: &str, _session: &str, _messages: &[MessageInput]) -> Result<(i64, i64)> {
+    fn append_messages(
+        &self,
+        _dataset: &str,
+        _namespace: &str,
+        _session: &str,
+        _messages: &[MessageInput],
+    ) -> Result<(i64, i64)> {
         Ok((0, 0))
     }
-    fn get_messages(&self, _dataset: &str, _namespace: &str, _session: &str, _limit: i64, _after_seq: Option<i64>, _around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)> {
+    fn get_messages(
+        &self,
+        _dataset: &str,
+        _namespace: &str,
+        _session: &str,
+        _limit: i64,
+        _after_seq: Option<i64>,
+        _around_seq: Option<i64>,
+    ) -> Result<(Vec<StoredMessage>, bool, i64)> {
         Ok((vec![], false, 0))
     }
-    fn save_session_tools(&self, _dataset: &str, _namespace: &str, _session: &str, _tool_names: &[&str]) -> Result<()> {
+    fn save_session_tools(
+        &self,
+        _dataset: &str,
+        _namespace: &str,
+        _session: &str,
+        _tool_names: &[&str],
+    ) -> Result<()> {
         Ok(())
     }
-    fn load_session_tools(&self, _dataset: &str, _namespace: &str, _session: &str) -> Result<Vec<String>> {
+    fn load_session_tools(
+        &self,
+        _dataset: &str,
+        _namespace: &str,
+        _session: &str,
+    ) -> Result<Vec<String>> {
         Ok(vec![])
     }
 }
@@ -77,7 +127,7 @@ impl SqliteStorage {
         let conn = rusqlite::Connection::open(path)?;
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
-             PRAGMA synchronous=NORMAL;"
+             PRAGMA synchronous=NORMAL;",
         )?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS tools (
@@ -135,11 +185,12 @@ impl SqliteStorage {
                 [],
                 |r| r.get::<_, i64>(0),
             )
-            .unwrap_or(0) > 0;
+            .unwrap_or(0)
+            > 0;
         if !has_type_col {
             conn.execute_batch(
                 "ALTER TABLE tools ADD COLUMN type TEXT NOT NULL DEFAULT 'backend';
-                 ALTER TABLE tools ADD COLUMN server_uri TEXT;"
+                 ALTER TABLE tools ADD COLUMN server_uri TEXT;",
             )?;
         }
         // Migration: add always_include column if missing (existing databases)
@@ -149,13 +200,16 @@ impl SqliteStorage {
                 [],
                 |r| r.get::<_, i64>(0),
             )
-            .unwrap_or(0) > 0;
+            .unwrap_or(0)
+            > 0;
         if !has_always_include_col {
             conn.execute_batch(
-                "ALTER TABLE tools ADD COLUMN always_include INTEGER NOT NULL DEFAULT 0;"
+                "ALTER TABLE tools ADD COLUMN always_include INTEGER NOT NULL DEFAULT 0;",
             )?;
         }
-        Ok(Self { conn: std::sync::Mutex::new(conn) })
+        Ok(Self {
+            conn: std::sync::Mutex::new(conn),
+        })
     }
 }
 
@@ -165,8 +219,18 @@ impl Storage for SqliteStorage {
         let tx = conn.unchecked_transaction()?;
         for (name, stored) in tools {
             let params_json = serde_json::to_string(&stored.tool.parameters)?;
-            let metadata_json = stored.tool.metadata.as_ref().map(|m| serde_json::to_string(m)).transpose()?;
-            let fields_json = stored.tool.fields.as_ref().map(|f| serde_json::to_string(f)).transpose()?;
+            let metadata_json = stored
+                .tool
+                .metadata
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?;
+            let fields_json = stored
+                .tool
+                .fields
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?;
             let (emb_name, emb_desc, emb_input, emb_output) = match &stored.embeddings {
                 Some(emb) => (
                     Some(vec_f32_to_blob(&emb.name)),
@@ -178,8 +242,8 @@ impl Storage for SqliteStorage {
             };
             let type_str = match stored.tool.tool_type {
                 crate::models::ToolType::Backend => "backend",
-                crate::models::ToolType::Client  => "client",
-                crate::models::ToolType::Mcp     => "mcp",
+                crate::models::ToolType::Client => "client",
+                crate::models::ToolType::Mcp => "mcp",
             };
             tx.execute(
                 "INSERT OR REPLACE INTO tools (dataset_id, name, description, parameters, metadata, fields, emb_name, emb_description, emb_input_schema, emb_output_schema, bm25_text, always_include, type, server_uri)
@@ -210,15 +274,46 @@ impl Storage for SqliteStorage {
             let always_include: i32 = row.get(10)?;
             let type_str: String = row.get(11)?;
             let server_uri: Option<String> = row.get(12)?;
-            Ok((name, description, params_json, metadata_json, fields_json, emb_name_blob, emb_desc_blob, emb_input_blob, emb_output_blob, bm25_text, always_include, type_str, server_uri))
+            Ok((
+                name,
+                description,
+                params_json,
+                metadata_json,
+                fields_json,
+                emb_name_blob,
+                emb_desc_blob,
+                emb_input_blob,
+                emb_output_blob,
+                bm25_text,
+                always_include,
+                type_str,
+                server_uri,
+            ))
         })?;
 
         let mut result = Vec::new();
         for row in rows {
-            let (name, description, params_json, metadata_json, fields_json, emb_name_blob, emb_desc_blob, emb_input_blob, emb_output_blob, bm25_text, always_include, type_str, server_uri) = row?;
+            let (
+                name,
+                description,
+                params_json,
+                metadata_json,
+                fields_json,
+                emb_name_blob,
+                emb_desc_blob,
+                emb_input_blob,
+                emb_output_blob,
+                bm25_text,
+                always_include,
+                type_str,
+                server_uri,
+            ) = row?;
             let parameters: serde_json::Value = serde_json::from_str(&params_json)?;
-            let metadata: Option<serde_json::Value> = metadata_json.map(|s| serde_json::from_str(&s)).transpose()?;
-            let fields: Option<crate::models::ToolFields> = fields_json.map(|s| serde_json::from_str(&s)).transpose()?;
+            let metadata: Option<serde_json::Value> = metadata_json
+                .map(|s| serde_json::from_str(&s))
+                .transpose()?;
+            let fields: Option<crate::models::ToolFields> =
+                fields_json.map(|s| serde_json::from_str(&s)).transpose()?;
             let tool_type = match type_str.as_str() {
                 "mcp" => crate::models::ToolType::Mcp,
                 "client" => crate::models::ToolType::Client,
@@ -235,20 +330,23 @@ impl Storage for SqliteStorage {
                 _ => None,
             };
 
-            result.push((name.clone(), StoredTool {
-                tool: crate::models::Tool {
-                    name,
-                    description,
-                    parameters,
-                    metadata,
-                    fields,
-                    always_include: always_include != 0,
-                    tool_type,
-                    server_uri,
+            result.push((
+                name.clone(),
+                StoredTool {
+                    tool: crate::models::Tool {
+                        name,
+                        description,
+                        parameters,
+                        metadata,
+                        fields,
+                        always_include: always_include != 0,
+                        tool_type,
+                        server_uri,
+                    },
+                    embeddings,
+                    bm25_text,
                 },
-                embeddings,
-                bm25_text,
-            }));
+            ));
         }
         Ok(result)
     }
@@ -277,7 +375,13 @@ impl Storage for SqliteStorage {
         for row in rows {
             let (id, tools_json, message) = row?;
             let tools_loaded: Vec<String> = serde_json::from_str(&tools_json)?;
-            result.push((id, Turn { tools_loaded, message }));
+            result.push((
+                id,
+                Turn {
+                    tools_loaded,
+                    message,
+                },
+            ));
         }
         Ok(result)
     }
@@ -313,7 +417,13 @@ impl Storage for SqliteStorage {
         Ok(result)
     }
 
-    fn append_messages(&self, dataset: &str, namespace: &str, session: &str, messages: &[MessageInput]) -> Result<(i64, i64)> {
+    fn append_messages(
+        &self,
+        dataset: &str,
+        namespace: &str,
+        session: &str,
+        messages: &[MessageInput],
+    ) -> Result<(i64, i64)> {
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
 
@@ -329,7 +439,11 @@ impl Storage for SqliteStorage {
         for (i, msg) in messages.iter().enumerate() {
             let seq = first_seq + i as i64;
             let id = uuid::Uuid::new_v4().to_string();
-            let tool_calls_json = msg.tool_calls.as_ref().map(|v| serde_json::to_string(v)).transpose()?;
+            let tool_calls_json = msg
+                .tool_calls
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?;
             tx.execute(
                 "INSERT INTO messages (id, dataset_id, namespace_id, session_id, role, content, tool_call_id, tool_calls, created_at, seq)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -342,7 +456,15 @@ impl Storage for SqliteStorage {
         Ok((first_seq, last_seq))
     }
 
-    fn get_messages(&self, dataset: &str, namespace: &str, session: &str, limit: i64, after_seq: Option<i64>, around_seq: Option<i64>) -> Result<(Vec<StoredMessage>, bool, i64)> {
+    fn get_messages(
+        &self,
+        dataset: &str,
+        namespace: &str,
+        session: &str,
+        limit: i64,
+        after_seq: Option<i64>,
+        around_seq: Option<i64>,
+    ) -> Result<(Vec<StoredMessage>, bool, i64)> {
         let conn = self.conn.lock().unwrap();
 
         let max_seq: i64 = conn.query_row(
@@ -355,9 +477,11 @@ impl Storage for SqliteStorage {
             return Ok((vec![], false, max_seq));
         }
 
-        let (query, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(after) = after_seq {
+        let (query, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(after) =
+            after_seq
+        {
             (
-                format!("SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 AND seq > ?4 ORDER BY seq ASC LIMIT ?5"),
+                "SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 AND seq > ?4 ORDER BY seq ASC LIMIT ?5".to_string(),
                 vec![Box::new(dataset.to_string()), Box::new(namespace.to_string()), Box::new(session.to_string()), Box::new(after), Box::new(limit + 1)],
             )
         } else if let Some(around) = around_seq {
@@ -365,19 +489,20 @@ impl Storage for SqliteStorage {
             let start = (around - half).max(1);
             let fetch = limit + 1;
             (
-                format!("SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 AND seq >= ?4 ORDER BY seq ASC LIMIT ?5"),
+                "SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 AND seq >= ?4 ORDER BY seq ASC LIMIT ?5".to_string(),
                 vec![Box::new(dataset.to_string()), Box::new(namespace.to_string()), Box::new(session.to_string()), Box::new(start), Box::new(fetch)],
             )
         } else {
             // Default: last N messages ascending
             // Fetch limit+1 desc, reverse to asc, then check has_more
             (
-                format!("SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM (SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 ORDER BY seq DESC LIMIT ?4) sub ORDER BY seq ASC"),
+                "SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM (SELECT id, role, content, tool_call_id, tool_calls, created_at, seq FROM messages WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3 ORDER BY seq DESC LIMIT ?4) sub ORDER BY seq ASC".to_string(),
                 vec![Box::new(dataset.to_string()), Box::new(namespace.to_string()), Box::new(session.to_string()), Box::new(limit + 1)],
             )
         };
 
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&query)?;
         let rows = stmt.query_map(param_refs.as_slice(), |row| {
             let tool_calls_str: Option<String> = row.get(4)?;
@@ -411,7 +536,13 @@ impl Storage for SqliteStorage {
         Ok((messages, has_more, max_seq))
     }
 
-    fn save_session_tools(&self, dataset: &str, namespace: &str, session: &str, tool_names: &[&str]) -> Result<()> {
+    fn save_session_tools(
+        &self,
+        dataset: &str,
+        namespace: &str,
+        session: &str,
+        tool_names: &[&str],
+    ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         tx.execute(
@@ -428,14 +559,22 @@ impl Storage for SqliteStorage {
         Ok(())
     }
 
-    fn load_session_tools(&self, dataset: &str, namespace: &str, session: &str) -> Result<Vec<String>> {
+    fn load_session_tools(
+        &self,
+        dataset: &str,
+        namespace: &str,
+        session: &str,
+    ) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT tool_name FROM session_tools WHERE dataset_id = ?1 AND namespace_id = ?2 AND session_id = ?3"
         )?;
-        let names: Vec<String> = stmt.query_map(rusqlite::params![dataset, namespace, session], |row| {
-            row.get(0)
-        })?.filter_map(|r| r.ok()).collect();
+        let names: Vec<String> = stmt
+            .query_map(rusqlite::params![dataset, namespace, session], |row| {
+                row.get(0)
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
         Ok(names)
     }
 }
@@ -465,7 +604,14 @@ mod tests {
     #[test]
     fn noop_save_load_turns_returns_empty() {
         let s = NoopStorage;
-        s.save_turn("id", &Turn { tools_loaded: vec![], message: "m".into() }).unwrap();
+        s.save_turn(
+            "id",
+            &Turn {
+                tools_loaded: vec![],
+                message: "m".into(),
+            },
+        )
+        .unwrap();
         assert!(s.load_all_turns().unwrap().is_empty());
     }
 
@@ -495,8 +641,16 @@ mod tests {
             embeddings: Some(FieldEmbeddings {
                 name: vec![1.0; 4],
                 description: vec![2.0; 4],
-                input_schema: if with_fields { Some(vec![3.0; 4]) } else { None },
-                output_schema: if with_fields { Some(vec![4.0; 4]) } else { None },
+                input_schema: if with_fields {
+                    Some(vec![3.0; 4])
+                } else {
+                    None
+                },
+                output_schema: if with_fields {
+                    Some(vec![4.0; 4])
+                } else {
+                    None
+                },
             }),
             bm25_text: format!("{name} {desc}"),
         }
@@ -580,7 +734,10 @@ mod tests {
     #[test]
     fn sqlite_roundtrip_turn() {
         let s = SqliteStorage::new(":memory:").unwrap();
-        let turn = Turn { tools_loaded: vec!["a".into(), "b".into()], message: "hello".into() };
+        let turn = Turn {
+            tools_loaded: vec!["a".into(), "b".into()],
+            message: "hello".into(),
+        };
         s.save_turn("t1", &turn).unwrap();
         let loaded = s.load_all_turns().unwrap();
         assert_eq!(loaded.len(), 1);
@@ -620,7 +777,8 @@ mod tests {
     #[test]
     fn sqlite_session_tools_roundtrip() {
         let s = SqliteStorage::new(":memory:").unwrap();
-        s.save_session_tools("ds", "ns", "s1", &["tool_a", "tool_b"]).unwrap();
+        s.save_session_tools("ds", "ns", "s1", &["tool_a", "tool_b"])
+            .unwrap();
         let loaded = s.load_session_tools("ds", "ns", "s1").unwrap();
         assert_eq!(loaded.len(), 2);
         assert!(loaded.contains(&"tool_a".to_string()));
@@ -632,8 +790,14 @@ mod tests {
         let s = SqliteStorage::new(":memory:").unwrap();
         s.save_session_tools("ds", "ns", "s1", &["tool_a"]).unwrap();
         s.save_session_tools("ds", "ns", "s2", &["tool_b"]).unwrap();
-        assert_eq!(s.load_session_tools("ds", "ns", "s1").unwrap(), vec!["tool_a"]);
-        assert_eq!(s.load_session_tools("ds", "ns", "s2").unwrap(), vec!["tool_b"]);
+        assert_eq!(
+            s.load_session_tools("ds", "ns", "s1").unwrap(),
+            vec!["tool_a"]
+        );
+        assert_eq!(
+            s.load_session_tools("ds", "ns", "s2").unwrap(),
+            vec!["tool_b"]
+        );
     }
 
     #[test]
@@ -646,7 +810,10 @@ mod tests {
         let loaded = s.load_tools_for_dataset("ds-1").unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].1.tool.tool_type, crate::models::ToolType::Mcp);
-        assert_eq!(loaded[0].1.tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+        assert_eq!(
+            loaded[0].1.tool.server_uri.as_deref(),
+            Some("http://localhost:3001/mcp")
+        );
     }
 
     #[test]

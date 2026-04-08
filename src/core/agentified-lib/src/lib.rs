@@ -7,7 +7,7 @@ pub use embedding::{EmbeddingService, LlmService, OpenAIEmbedding, OpenAILlm};
 pub use storage::{NoopStorage, SqliteStorage, Storage};
 
 #[cfg(any(test, feature = "test-utils"))]
-pub use embedding::{FakeEmbedding, FailingEmbedding, FakeLlm, FailingLlm};
+pub use embedding::{FailingEmbedding, FailingLlm, FakeEmbedding, FakeLlm};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -31,13 +31,13 @@ fn extract_arg_text(parameters: &serde_json::Value) -> String {
 
 use tokio::sync::RwLock;
 
+use models::SearchStrategy;
 use models::{
     AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
-    ContextRequest, ContextResponse, DiscoverRequest, DiscoverResponse,
-    FieldEmbeddings, GetMessagesQuery, GetMessagesResponse, ListToolsResponse,
-    RankedTool, RecalledContext, RegisterToolsResponse, StoredMessage, StoredTool, Tool, Turn,
+    ContextRequest, ContextResponse, DiscoverRequest, DiscoverResponse, FieldEmbeddings,
+    GetMessagesQuery, GetMessagesResponse, ListToolsResponse, RankedTool, RecalledContext,
+    RegisterToolsResponse, StoredMessage, StoredTool, Tool, Turn,
 };
-use models::SearchStrategy;
 use ranking::{bm25_scores, normalize_min_max, weighted_semantic_score};
 
 // Error types
@@ -77,7 +77,11 @@ impl AgentifiedCore {
         Self::build(Some(embedding), storage, None)
     }
 
-    pub fn new_with_llm(embedding: Arc<dyn EmbeddingService>, storage: Arc<dyn Storage>, llm: Arc<dyn embedding::LlmService>) -> Self {
+    pub fn new_with_llm(
+        embedding: Arc<dyn EmbeddingService>,
+        storage: Arc<dyn Storage>,
+        llm: Arc<dyn embedding::LlmService>,
+    ) -> Self {
         Self::build(Some(embedding), storage, Some(llm))
     }
 
@@ -85,9 +89,21 @@ impl AgentifiedCore {
         Self::build(None, storage, None)
     }
 
-    fn build(embedding: Option<Arc<dyn EmbeddingService>>, storage: Arc<dyn Storage>, llm: Option<Arc<dyn embedding::LlmService>>) -> Self {
-        let turns_map = storage.load_all_turns().unwrap_or_default().into_iter().collect();
-        let cache_map = storage.load_all_embeddings().unwrap_or_default().into_iter().collect();
+    fn build(
+        embedding: Option<Arc<dyn EmbeddingService>>,
+        storage: Arc<dyn Storage>,
+        llm: Option<Arc<dyn embedding::LlmService>>,
+    ) -> Self {
+        let turns_map = storage
+            .load_all_turns()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+        let cache_map = storage
+            .load_all_embeddings()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
 
         Self {
             tools: RwLock::new(HashMap::new()),
@@ -99,30 +115,35 @@ impl AgentifiedCore {
         }
     }
 
-    pub async fn register_tools(&self, dataset_id: &str, tools: Vec<Tool>) -> Result<RegisterToolsResponse, CoreError> {
+    pub async fn register_tools(
+        &self,
+        dataset_id: &str,
+        tools: Vec<Tool>,
+    ) -> Result<RegisterToolsResponse, CoreError> {
         for tool in &tools {
             match tool.tool_type {
-                models::ToolType::Mcp => {
-                    match &tool.server_uri {
-                        None => {
-                            return Err(CoreError::BadRequest(format!(
-                                "tool '{}': mcp tools require server_uri", tool.name
-                            )));
-                        }
-                        Some(uri) if !uri.starts_with("http://") && !uri.starts_with("https://") => {
-                            return Err(CoreError::BadRequest(format!(
-                                "tool '{}': server_uri must be an http:// or https:// URL", tool.name
-                            )));
-                        }
-                        _ => {}
+                models::ToolType::Mcp => match &tool.server_uri {
+                    None => {
+                        return Err(CoreError::BadRequest(format!(
+                            "tool '{}': mcp tools require server_uri",
+                            tool.name
+                        )));
                     }
-                }
+                    Some(uri) if !uri.starts_with("http://") && !uri.starts_with("https://") => {
+                        return Err(CoreError::BadRequest(format!(
+                            "tool '{}': server_uri must be an http:// or https:// URL",
+                            tool.name
+                        )));
+                    }
+                    _ => {}
+                },
                 // Client tools are UI-side only — no server proxy needed, no server_uri allowed.
                 // Backend tools likewise have no server_uri.
                 _ => {
                     if tool.server_uri.is_some() {
                         return Err(CoreError::BadRequest(format!(
-                            "tool '{}': server_uri is only valid for mcp tools", tool.name
+                            "tool '{}': server_uri is only valid for mcp tools",
+                            tool.name
                         )));
                     }
                 }
@@ -165,7 +186,15 @@ impl AgentifiedCore {
             {
                 let cache = self.embedding_cache.read().await;
                 for texts in &all_tool_texts {
-                    for text in [Some(&texts.name), Some(&texts.description), texts.input_schema.as_ref(), texts.output_schema.as_ref()].into_iter().flatten() {
+                    for text in [
+                        Some(&texts.name),
+                        Some(&texts.description),
+                        texts.input_schema.as_ref(),
+                        texts.output_schema.as_ref(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    {
                         if !cache.contains_key(text) && !unique_texts.contains(text) {
                             unique_texts.push(text.clone());
                         }
@@ -174,7 +203,10 @@ impl AgentifiedCore {
             }
 
             if !unique_texts.is_empty() {
-                let embeddings = embedding_svc.embed_batch(&unique_texts).await.map_err(CoreError::EmbeddingFailed)?;
+                let embeddings = embedding_svc
+                    .embed_batch(&unique_texts)
+                    .await
+                    .map_err(CoreError::EmbeddingFailed)?;
                 let mut cache = self.embedding_cache.write().await;
                 for (text, emb) in unique_texts.into_iter().zip(embeddings) {
                     cache.insert(text, emb);
@@ -196,18 +228,36 @@ impl AgentifiedCore {
 
             let embeddings = if has_embeddings {
                 let cache = self.embedding_cache.read().await;
-                let name_emb = cache.get(&texts.name).cloned()
-                    .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for name")))?;
-                let desc_emb = cache.get(&texts.description).cloned()
-                    .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for description")))?;
-                let input_emb = texts.input_schema.as_ref().map(|t| {
-                    cache.get(t).cloned()
-                        .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for input_schema")))
-                }).transpose()?;
-                let output_emb = texts.output_schema.as_ref().map(|t| {
-                    cache.get(t).cloned()
-                        .ok_or_else(|| CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for output_schema")))
-                }).transpose()?;
+                let name_emb = cache.get(&texts.name).cloned().ok_or_else(|| {
+                    CoreError::EmbeddingFailed(anyhow::anyhow!("missing cached embedding for name"))
+                })?;
+                let desc_emb = cache.get(&texts.description).cloned().ok_or_else(|| {
+                    CoreError::EmbeddingFailed(anyhow::anyhow!(
+                        "missing cached embedding for description"
+                    ))
+                })?;
+                let input_emb = texts
+                    .input_schema
+                    .as_ref()
+                    .map(|t| {
+                        cache.get(t).cloned().ok_or_else(|| {
+                            CoreError::EmbeddingFailed(anyhow::anyhow!(
+                                "missing cached embedding for input_schema"
+                            ))
+                        })
+                    })
+                    .transpose()?;
+                let output_emb = texts
+                    .output_schema
+                    .as_ref()
+                    .map(|t| {
+                        cache.get(t).cloned().ok_or_else(|| {
+                            CoreError::EmbeddingFailed(anyhow::anyhow!(
+                                "missing cached embedding for output_schema"
+                            ))
+                        })
+                    })
+                    .transpose()?;
                 Some(FieldEmbeddings {
                     name: name_emb,
                     description: desc_emb,
@@ -224,14 +274,24 @@ impl AgentifiedCore {
         let mut tools_map = self.tools.write().await;
         let dataset_tools = tools_map.entry(dataset_id.to_string()).or_default();
         for (tool, (embeddings, bm25_text)) in tools.into_iter().zip(tool_data) {
-            dataset_tools.insert(tool.name.clone(), StoredTool { tool, embeddings, bm25_text });
+            dataset_tools.insert(
+                tool.name.clone(),
+                StoredTool {
+                    tool,
+                    embeddings,
+                    bm25_text,
+                },
+            );
         }
 
         // Write-through to storage
         {
             let storage = self.storage.clone();
             let did = dataset_id.to_string();
-            let tool_pairs: Vec<(String, StoredTool)> = dataset_tools.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let tool_pairs: Vec<(String, StoredTool)> = dataset_tools
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             let has_emb = has_embeddings;
             let emb_pairs: Vec<(String, Vec<f32>)> = if has_emb {
                 let cache = self.embedding_cache.read().await;
@@ -240,12 +300,16 @@ impl AgentifiedCore {
                 vec![]
             };
             tokio::task::spawn_blocking(move || {
-                let refs: Vec<(&str, &StoredTool)> = tool_pairs.iter().map(|(k, v)| (k.as_str(), v)).collect();
+                let refs: Vec<(&str, &StoredTool)> =
+                    tool_pairs.iter().map(|(k, v)| (k.as_str(), v)).collect();
                 if let Err(e) = storage.save_tools(&did, &refs) {
                     tracing::error!("storage save_tools failed: {e}");
                 }
                 if has_emb {
-                    let emb_refs: Vec<(&str, &[f32])> = emb_pairs.iter().map(|(k, v)| (k.as_str(), v.as_slice())).collect();
+                    let emb_refs: Vec<(&str, &[f32])> = emb_pairs
+                        .iter()
+                        .map(|(k, v)| (k.as_str(), v.as_slice()))
+                        .collect();
                     if let Err(e) = storage.save_embeddings(&emb_refs) {
                         tracing::error!("storage save_embeddings failed: {e}");
                     }
@@ -258,20 +322,25 @@ impl AgentifiedCore {
 
     pub async fn list_tools(&self, dataset_id: &str) -> Result<ListToolsResponse, CoreError> {
         let tools = self.tools.read().await;
-        let tool_list = tools.get(dataset_id)
+        let tool_list = tools
+            .get(dataset_id)
             .map(|m| m.values().map(|st| st.tool.clone()).collect())
             .unwrap_or_default();
         Ok(ListToolsResponse { tools: tool_list })
     }
 
-    pub async fn discover(&self, dataset_id: &str, body: DiscoverRequest) -> Result<DiscoverResponse, CoreError> {
+    pub async fn discover(
+        &self,
+        dataset_id: &str,
+        body: DiscoverRequest,
+    ) -> Result<DiscoverResponse, CoreError> {
         let limit = body.limit.unwrap_or(5).min(100);
 
         let base_tool_names: Vec<String> = if let Some(ref turn_id) = body.turn_id {
             let turns = self.turns.read().await;
-            let turn = turns.get(turn_id).ok_or_else(|| {
-                CoreError::NotFound(format!("turn not found: {turn_id}"))
-            })?;
+            let turn = turns
+                .get(turn_id)
+                .ok_or_else(|| CoreError::NotFound(format!("turn not found: {turn_id}")))?;
             turn.tools_loaded.clone()
         } else {
             vec![]
@@ -301,9 +370,14 @@ impl AgentifiedCore {
             return Ok(DiscoverResponse { tools: vec![] });
         }
 
-        let mut base_tools: Vec<RankedTool> = base_tool_names.iter()
+        let mut base_tools: Vec<RankedTool> = base_tool_names
+            .iter()
             .filter_map(|name| dataset_tools.get(name))
-            .map(|st| RankedTool { tool: st.tool.clone(), score: 1.0, graph_expanded: None })
+            .map(|st| RankedTool {
+                tool: st.tool.clone(),
+                score: 1.0,
+                graph_expanded: None,
+            })
             .collect();
 
         let weights = body.embedding_weights.unwrap_or_default();
@@ -345,40 +419,68 @@ impl AgentifiedCore {
                 let documents: Vec<String> = stored.iter().map(|t| t.bm25_text.clone()).collect();
                 let raw_bm25 = bm25_scores(&body.query, &documents);
                 let norm_bm25 = normalize_min_max(&raw_bm25);
-                stored.iter().enumerate().map(|(i, t)| RankedTool {
-                    tool: t.tool.clone(),
-                    score: norm_bm25[i],
-                    graph_expanded: None,
-                }).collect()
+                stored
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| RankedTool {
+                        tool: t.tool.clone(),
+                        score: norm_bm25[i],
+                        graph_expanded: None,
+                    })
+                    .collect()
             }
             SearchStrategy::Semantic => {
-                let query_embedding = self.embed_cached(&body.query).await.map_err(CoreError::EmbeddingFailed)?;
-                stored.iter().map(|t| {
-                    let emb = t.embeddings.as_ref().unwrap();
-                    RankedTool {
-                        tool: t.tool.clone(),
-                        score: weighted_semantic_score(&query_embedding, emb, &weights),
-                        graph_expanded: None,
-                    }
-                }).collect()
+                let query_embedding = self
+                    .embed_cached(&body.query)
+                    .await
+                    .map_err(CoreError::EmbeddingFailed)?;
+                stored
+                    .iter()
+                    .map(|t| {
+                        let emb = t.embeddings.as_ref().unwrap();
+                        RankedTool {
+                            tool: t.tool.clone(),
+                            score: weighted_semantic_score(&query_embedding, emb, &weights),
+                            graph_expanded: None,
+                        }
+                    })
+                    .collect()
             }
             SearchStrategy::Hybrid => {
-                let query_embedding = self.embed_cached(&body.query).await.map_err(CoreError::EmbeddingFailed)?;
-                let semantic_scores: Vec<f32> = stored.iter()
-                    .map(|t| weighted_semantic_score(&query_embedding, t.embeddings.as_ref().unwrap(), &weights))
+                let query_embedding = self
+                    .embed_cached(&body.query)
+                    .await
+                    .map_err(CoreError::EmbeddingFailed)?;
+                let semantic_scores: Vec<f32> = stored
+                    .iter()
+                    .map(|t| {
+                        weighted_semantic_score(
+                            &query_embedding,
+                            t.embeddings.as_ref().unwrap(),
+                            &weights,
+                        )
+                    })
                     .collect();
                 let documents: Vec<String> = stored.iter().map(|t| t.bm25_text.clone()).collect();
                 let raw_bm25 = bm25_scores(&body.query, &documents);
                 let norm_bm25 = normalize_min_max(&raw_bm25);
-                stored.iter().enumerate().map(|(i, t)| RankedTool {
-                    tool: t.tool.clone(),
-                    score: 0.7 * semantic_scores[i] + 0.3 * norm_bm25[i],
-                    graph_expanded: None,
-                }).collect()
+                stored
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| RankedTool {
+                        tool: t.tool.clone(),
+                        score: 0.7 * semantic_scores[i] + 0.3 * norm_bm25[i],
+                        graph_expanded: None,
+                    })
+                    .collect()
             }
         };
 
-        ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        ranked.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         ranked.truncate(limit);
 
         let ranked = expand_with_providers(ranked, dataset_tools, limit);
@@ -394,7 +496,8 @@ impl AgentifiedCore {
                     all_names.push(t.tool.name.clone());
                 }
             }
-            self.save_session_tools(dataset_id, ns, sess, &all_names).await;
+            self.save_session_tools(dataset_id, ns, sess, &all_names)
+                .await;
         }
 
         Ok(DiscoverResponse { tools: base_tools })
@@ -406,7 +509,10 @@ impl AgentifiedCore {
             tools_loaded: body.tools_loaded,
             message: body.message,
         };
-        self.turns.write().await.insert(turn_id.clone(), turn.clone());
+        self.turns
+            .write()
+            .await
+            .insert(turn_id.clone(), turn.clone());
 
         // Write-through to storage
         {
@@ -422,12 +528,17 @@ impl AgentifiedCore {
         CaptureTurnResponse { turn_id }
     }
 
-    pub async fn append_messages(&self, req: AppendMessagesRequest) -> Result<AppendMessagesResponse, CoreError> {
+    pub async fn append_messages(
+        &self,
+        req: AppendMessagesRequest,
+    ) -> Result<AppendMessagesResponse, CoreError> {
         let storage = self.storage.clone();
         let (first_seq, last_seq) = tokio::task::spawn_blocking(move || {
             storage.append_messages(&req.dataset, &req.namespace, &req.session, &req.messages)
-        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+        })
+        .await
+        .map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+        .map_err(CoreError::EmbeddingFailed)?;
 
         Ok(AppendMessagesResponse {
             appended: (last_seq - first_seq + 1) as usize,
@@ -436,18 +547,36 @@ impl AgentifiedCore {
         })
     }
 
-    pub async fn get_messages(&self, query: GetMessagesQuery) -> Result<GetMessagesResponse, CoreError> {
+    pub async fn get_messages(
+        &self,
+        query: GetMessagesQuery,
+    ) -> Result<GetMessagesResponse, CoreError> {
         if query.after_seq.is_some() && query.around_seq.is_some() {
-            return Err(CoreError::BadRequest("cannot specify both after_seq and around_seq".into()));
+            return Err(CoreError::BadRequest(
+                "cannot specify both after_seq and around_seq".into(),
+            ));
         }
 
         let storage = self.storage.clone();
         let (messages, has_more, max_seq) = tokio::task::spawn_blocking(move || {
-            storage.get_messages(&query.dataset, &query.namespace, &query.session, query.limit, query.after_seq, query.around_seq)
-        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+            storage.get_messages(
+                &query.dataset,
+                &query.namespace,
+                &query.session,
+                query.limit,
+                query.after_seq,
+                query.around_seq,
+            )
+        })
+        .await
+        .map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+        .map_err(CoreError::EmbeddingFailed)?;
 
-        Ok(GetMessagesResponse { messages, has_more, max_seq })
+        Ok(GetMessagesResponse {
+            messages,
+            has_more,
+            max_seq,
+        })
     }
 
     pub async fn get_context(&self, req: ContextRequest) -> Result<ContextResponse, CoreError> {
@@ -460,7 +589,9 @@ impl AgentifiedCore {
             ));
         }
         if !is_compacted && strategy != "recent" && strategy != "full" {
-            return Err(CoreError::BadRequest(format!("unknown strategy: {strategy}")));
+            return Err(CoreError::BadRequest(format!(
+                "unknown strategy: {strategy}"
+            )));
         }
 
         let storage = self.storage.clone();
@@ -469,8 +600,10 @@ impl AgentifiedCore {
         let sess = req.session.clone();
         let (all_messages, _, max_seq) = tokio::task::spawn_blocking(move || {
             storage.get_messages(&ds, &ns, &sess, i64::MAX - 1, None, None)
-        }).await.map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
-          .map_err(|e| CoreError::EmbeddingFailed(e))?;
+        })
+        .await
+        .map_err(|e| CoreError::EmbeddingFailed(anyhow::anyhow!("spawn failed: {e}")))?
+        .map_err(CoreError::EmbeddingFailed)?;
 
         let total_messages = max_seq;
 
@@ -480,7 +613,10 @@ impl AgentifiedCore {
                 strategy_used: strategy.clone(),
                 total_messages: 0,
                 included_messages: 0,
-                recalled: RecalledContext { tools: vec![], memories: vec![] },
+                recalled: RecalledContext {
+                    tools: vec![],
+                    memories: vec![],
+                },
                 token_estimate: 0,
                 conversation_messages: 0,
                 fallback: false,
@@ -490,13 +626,24 @@ impl AgentifiedCore {
         }
 
         // Tool recall
-        let recalled_tools = self.recall_tools(&req.dataset, &req.namespace, &req.session, &all_messages, &req.recall).await?;
+        let recalled_tools = self
+            .recall_tools(
+                &req.dataset,
+                &req.namespace,
+                &req.session,
+                &all_messages,
+                &req.recall,
+            )
+            .await?;
 
         // Compute effective message budget
-        let tool_tokens: usize = recalled_tools.iter().map(|t| {
-            let params_str = serde_json::to_string(&t.tool.parameters).unwrap_or_default();
-            (t.tool.name.len() + t.tool.description.len() + params_str.len()) / 4
-        }).sum();
+        let tool_tokens: usize = recalled_tools
+            .iter()
+            .map(|t| {
+                let params_str = serde_json::to_string(&t.tool.parameters).unwrap_or_default();
+                (t.tool.name.len() + t.tool.description.len() + params_str.len()) / 4
+            })
+            .sum();
         let max_tokens = match req.limit_tokens {
             Some(limit) => {
                 let remaining = limit.saturating_sub(tool_tokens);
@@ -505,13 +652,25 @@ impl AgentifiedCore {
             None => req.messages.max_tokens,
         };
         if max_tokens == 0 {
-            tracing::warn!("effective message token budget is 0 — tools consumed entire limit_tokens budget");
+            tracing::warn!(
+                "effective message token budget is 0 — tools consumed entire limit_tokens budget"
+            );
         }
 
         let keep_first = req.messages.keep_first;
         let prune_threshold = req.messages.prune_threshold;
         match strategy.as_str() {
-            "compacted" => self.get_context_compacted(&all_messages, max_tokens, total_messages, recalled_tools, keep_first, prune_threshold).await,
+            "compacted" => {
+                self.get_context_compacted(
+                    &all_messages,
+                    max_tokens,
+                    total_messages,
+                    recalled_tools,
+                    keep_first,
+                    prune_threshold,
+                )
+                .await
+            }
             _ => {
                 let messages = select_messages(&all_messages, strategy, max_tokens, keep_first);
                 let token_estimate: usize = messages.iter().map(|m| m.content.len() / 4).sum();
@@ -521,7 +680,10 @@ impl AgentifiedCore {
                     strategy_used: strategy.clone(),
                     total_messages,
                     included_messages: included,
-                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                    recalled: RecalledContext {
+                        tools: recalled_tools,
+                        memories: vec![],
+                    },
                     token_estimate,
                     conversation_messages: included,
                     fallback: false,
@@ -541,7 +703,9 @@ impl AgentifiedCore {
         keep_first: bool,
         prune_threshold: usize,
     ) -> Result<ContextResponse, CoreError> {
-        let llm = self.llm.as_ref()
+        let llm = self
+            .llm
+            .as_ref()
             .ok_or_else(|| CoreError::UnsupportedStrategy("LLM not configured".into()))?;
 
         // 60% budget for recent, 40% for summary
@@ -553,18 +717,23 @@ impl AgentifiedCore {
         // Find the min seq of the "recent" portion (excluding the keep_first message)
         // so that the summary covers messages between keep_first and the recent window.
         let first_user_seq = if keep_first {
-            all_messages.iter().find(|m| m.role == "user").map(|m| m.seq)
+            all_messages
+                .iter()
+                .find(|m| m.role == "user")
+                .map(|m| m.seq)
         } else {
             None
         };
-        let recent_min_seq = recent_messages.iter()
+        let recent_min_seq = recent_messages
+            .iter()
             .filter(|m| Some(m.seq) != first_user_seq)
             .map(|m| m.seq)
             .min()
             .unwrap_or(i64::MAX);
 
         // Older messages to summarize (between keep_first and recent window)
-        let older: Vec<&StoredMessage> = all_messages.iter()
+        let older: Vec<&StoredMessage> = all_messages
+            .iter()
             .filter(|m| m.seq < recent_min_seq && Some(m.seq) != first_user_seq)
             .collect();
 
@@ -576,7 +745,10 @@ impl AgentifiedCore {
                 strategy_used: "compacted".into(),
                 total_messages,
                 included_messages: included,
-                recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                recalled: RecalledContext {
+                    tools: recalled_tools,
+                    memories: vec![],
+                },
                 token_estimate,
                 conversation_messages: included,
                 fallback: false,
@@ -587,17 +759,26 @@ impl AgentifiedCore {
 
         let older_owned: Vec<StoredMessage> = older.into_iter().cloned().collect();
         // Phase 1: Prune long tool results before summarization
-        let pruned: Vec<StoredMessage> = older_owned.iter().map(|m| {
-            if m.role == "tool" && m.content.len() > prune_threshold {
-                StoredMessage { content: "[pruned]".into(), ..m.clone() }
-            } else {
-                m.clone()
-            }
-        }).collect();
+        let pruned: Vec<StoredMessage> = older_owned
+            .iter()
+            .map(|m| {
+                if m.role == "tool" && m.content.len() > prune_threshold {
+                    StoredMessage {
+                        content: "[pruned]".into(),
+                        ..m.clone()
+                    }
+                } else {
+                    m.clone()
+                }
+            })
+            .collect();
         let conversation_text = format_conversation(&pruned);
         let system_prompt = "Summarize this conversation concisely. Focus on key decisions, facts, and action items.";
 
-        match llm.chat(system_prompt, &conversation_text, summary_budget).await {
+        match llm
+            .chat(system_prompt, &conversation_text, summary_budget)
+            .await
+        {
             Ok(summary_text) => {
                 tracing::debug!("LLM summary generated: {} chars", summary_text.len());
                 let first_seq = older_owned.first().map(|m| m.seq).unwrap_or(0);
@@ -612,12 +793,19 @@ impl AgentifiedCore {
                     strategy_used: "compacted".into(),
                     total_messages,
                     included_messages: included,
-                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                    recalled: RecalledContext {
+                        tools: recalled_tools,
+                        memories: vec![],
+                    },
                     token_estimate,
                     conversation_messages: all_messages.len(),
                     fallback: false,
                     summary: Some(summary_text),
-                    summary_range: Some(models::SummaryRange { first_seq, last_seq, count }),
+                    summary_range: Some(models::SummaryRange {
+                        first_seq,
+                        last_seq,
+                        count,
+                    }),
                 })
             }
             Err(e) => {
@@ -630,7 +818,10 @@ impl AgentifiedCore {
                     strategy_used: "compacted".into(),
                     total_messages,
                     included_messages: included,
-                    recalled: RecalledContext { tools: recalled_tools, memories: vec![] },
+                    recalled: RecalledContext {
+                        tools: recalled_tools,
+                        memories: vec![],
+                    },
                     token_estimate,
                     conversation_messages: included,
                     fallback: true,
@@ -697,8 +888,10 @@ impl AgentifiedCore {
             _ => {
                 // No query but we have previous tools — return those
                 if !base_tools.is_empty() {
-                    let names: Vec<String> = base_tools.iter().map(|t| t.tool.name.clone()).collect();
-                    self.save_session_tools(dataset_id, namespace_id, session_id, &names).await;
+                    let names: Vec<String> =
+                        base_tools.iter().map(|t| t.tool.name.clone()).collect();
+                    self.save_session_tools(dataset_id, namespace_id, session_id, &names)
+                        .await;
                 }
                 return Ok(base_tools);
             }
@@ -707,16 +900,25 @@ impl AgentifiedCore {
         // Exclude previous session tools from discovery (they're already in base)
         let exclude: Vec<String> = prev_tool_names.clone();
 
-        let discover_resp = self.discover(dataset_id, DiscoverRequest {
-            query,
-            limit: Some(limit),
-            strategy: SearchStrategy::default(),
-            embedding_weights: None,
-            exclude: if exclude.is_empty() { None } else { Some(exclude) },
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await?;
+        let discover_resp = self
+            .discover(
+                dataset_id,
+                DiscoverRequest {
+                    query,
+                    limit: Some(limit),
+                    strategy: SearchStrategy::default(),
+                    embedding_weights: None,
+                    exclude: if exclude.is_empty() {
+                        None
+                    } else {
+                        Some(exclude)
+                    },
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                },
+            )
+            .await?;
 
         let mut new_tools = discover_resp.tools;
         if let Some(min_sim) = min_similarity {
@@ -729,12 +931,19 @@ impl AgentifiedCore {
 
         // Save merged tool names for next turn
         let names: Vec<String> = all_tools.iter().map(|t| t.tool.name.clone()).collect();
-        self.save_session_tools(dataset_id, namespace_id, session_id, &names).await;
+        self.save_session_tools(dataset_id, namespace_id, session_id, &names)
+            .await;
 
         Ok(all_tools)
     }
 
-    async fn save_session_tools(&self, dataset_id: &str, namespace_id: &str, session_id: &str, names: &[String]) {
+    async fn save_session_tools(
+        &self,
+        dataset_id: &str,
+        namespace_id: &str,
+        session_id: &str,
+        names: &[String],
+    ) {
         let storage = self.storage.clone();
         let ds = dataset_id.to_string();
         let ns = namespace_id.to_string();
@@ -745,7 +954,8 @@ impl AgentifiedCore {
             if let Err(e) = storage.save_session_tools(&ds, &ns, &sess, &name_refs) {
                 tracing::error!("storage save_session_tools failed: {e}");
             }
-        }).await;
+        })
+        .await;
     }
 
     fn can_use_embeddings(&self, tools: &[&StoredTool]) -> bool {
@@ -757,10 +967,15 @@ impl AgentifiedCore {
         if let Some(emb) = cached {
             return Ok(emb);
         }
-        let embedding_svc = self.embedding.as_ref()
+        let embedding_svc = self
+            .embedding
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("embedding service not configured"))?;
         let emb = embedding_svc.embed(text).await?;
-        self.embedding_cache.write().await.insert(text.to_string(), emb.clone());
+        self.embedding_cache
+            .write()
+            .await
+            .insert(text.to_string(), emb.clone());
 
         // Write-through to storage
         {
@@ -776,16 +991,24 @@ impl AgentifiedCore {
 
         Ok(emb)
     }
-
 }
 
 // Helpers
 
 fn format_conversation(messages: &[StoredMessage]) -> String {
-    messages.iter().map(|m| format!("{}: {}", m.role, m.content)).collect::<Vec<_>>().join("\n")
+    messages
+        .iter()
+        .map(|m| format!("{}: {}", m.role, m.content))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
-fn select_messages(all_messages: &[StoredMessage], strategy: &str, max_tokens: usize, keep_first: bool) -> Vec<StoredMessage> {
+fn select_messages(
+    all_messages: &[StoredMessage],
+    strategy: &str,
+    max_tokens: usize,
+    keep_first: bool,
+) -> Vec<StoredMessage> {
     match strategy {
         "full" => {
             let mut selected = Vec::new();
@@ -815,7 +1038,9 @@ fn select_messages(all_messages: &[StoredMessage], strategy: &str, max_tokens: u
             let first_user_seq = first_user_msg.map(|m| m.seq);
             let mut recent = Vec::new();
             for msg in all_messages.iter().rev() {
-                if Some(msg.seq) == first_user_seq { continue; }
+                if Some(msg.seq) == first_user_seq {
+                    continue;
+                }
                 let msg_tokens = msg.content.len() / 4;
                 if tokens_used + msg_tokens > max_tokens && !recent.is_empty() {
                     break;
@@ -836,9 +1061,14 @@ fn select_messages(all_messages: &[StoredMessage], strategy: &str, max_tokens: u
 }
 
 fn get_string_array(metadata: &serde_json::Value, key: &str) -> Vec<String> {
-    metadata.get(key)
+    metadata
+        .get(key)
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -848,7 +1078,8 @@ fn expand_with_providers(
     limit: usize,
 ) -> Vec<RankedTool> {
     let mut required_params: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let ranked_names: std::collections::HashSet<String> = ranked.iter().map(|r| r.tool.name.clone()).collect();
+    let ranked_names: std::collections::HashSet<String> =
+        ranked.iter().map(|r| r.tool.name.clone()).collect();
 
     for rt in &ranked {
         if let Some(ref meta) = rt.tool.metadata {
@@ -869,7 +1100,10 @@ fn expand_with_providers(
         }
         if let Some(ref meta) = stored.tool.metadata {
             let provides = get_string_array(meta, "provides");
-            let coverage = provides.iter().filter(|p| required_params.contains(*p)).count();
+            let coverage = provides
+                .iter()
+                .filter(|p| required_params.contains(*p))
+                .count();
             if coverage > 0 {
                 providers.push((stored.tool.name.clone(), coverage, stored));
             }
@@ -893,7 +1127,7 @@ fn expand_with_providers(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use models::{ToolType, SearchStrategy};
+    use models::{SearchStrategy, ToolType};
     use std::sync::Arc;
 
     fn make_core() -> AgentifiedCore {
@@ -911,33 +1145,40 @@ mod tests {
 
         // Append 5 messages with 100 chars each → 100/4 = 25 tokens each
         let content = "x".repeat(100);
-        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
-            role: "user".into(),
-            content: content.clone(),
-            tool_call_id: None,
-            tool_calls: None,
-        }).collect();
+        let msgs: Vec<models::MessageInput> = (0..5)
+            .map(|_| models::MessageInput {
+                role: "user".into(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
 
         core.append_messages(models::AppendMessagesRequest {
             dataset: "ds".into(),
             namespace: "ns".into(),
             session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Budget = 60 tokens → fits 2 messages (25 tokens each = 50, 3rd would be 75)
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(),
-            namespace: "ns".into(),
-            session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "recent".into(),
-                max_tokens: 60,
-                ..Default::default()
-            },
-            recall: None,
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 60,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.strategy_used, "recent");
         assert_eq!(resp.messages.len(), 2);
@@ -956,11 +1197,21 @@ mod tests {
     #[tokio::test]
     async fn compacted_without_llm_returns_unsupported() {
         let core = make_core(); // no LLM
-        let err = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 4000, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap_err();
+        let err = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "compacted".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap_err();
         match err {
             CoreError::UnsupportedStrategy(_) => {}
             _ => panic!("expected UnsupportedStrategy, got {err:?}"),
@@ -970,11 +1221,21 @@ mod tests {
     #[tokio::test]
     async fn summary_strategy_returns_bad_request() {
         let core = make_core_with_llm();
-        let err = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "summary".into(), max_tokens: 4000, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap_err();
+        let err = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "summary".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap_err();
         match err {
             CoreError::BadRequest(msg) => assert!(msg.contains("unknown strategy")),
             _ => panic!("expected BadRequest, got {err:?}"),
@@ -984,11 +1245,21 @@ mod tests {
     #[tokio::test]
     async fn recent_summary_strategy_returns_bad_request() {
         let core = make_core_with_llm();
-        let err = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent+summary".into(), max_tokens: 4000, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap_err();
+        let err = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent+summary".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap_err();
         match err {
             CoreError::BadRequest(msg) => assert!(msg.contains("unknown strategy")),
             _ => panic!("expected BadRequest, got {err:?}"),
@@ -998,18 +1269,21 @@ mod tests {
     #[tokio::test]
     async fn context_empty_session_returns_zeros() {
         let core = make_core();
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(),
-            namespace: "ns".into(),
-            session: "empty".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "recent".into(),
-                max_tokens: 4000,
-                ..Default::default()
-            },
-            recall: None,
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "empty".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.messages.len(), 0);
         assert_eq!(resp.total_messages, 0);
@@ -1023,33 +1297,40 @@ mod tests {
         let core = make_core();
 
         let content = "x".repeat(100); // 25 tokens each
-        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
-            role: "user".into(),
-            content: content.clone(),
-            tool_call_id: None,
-            tool_calls: None,
-        }).collect();
+        let msgs: Vec<models::MessageInput> = (0..5)
+            .map(|_| models::MessageInput {
+                role: "user".into(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
 
         core.append_messages(models::AppendMessagesRequest {
             dataset: "ds".into(),
             namespace: "ns".into(),
             session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Budget = 60 tokens → fits 2 messages from oldest (seq 1, 2)
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(),
-            namespace: "ns".into(),
-            session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "full".into(),
-                max_tokens: 60,
-                ..Default::default()
-            },
-            recall: None,
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "full".into(),
+                    max_tokens: 60,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.strategy_used, "full");
         assert_eq!(resp.messages.len(), 2);
@@ -1063,32 +1344,39 @@ mod tests {
     async fn context_full_returns_all_when_within_budget() {
         let core = make_core();
 
-        let msgs: Vec<models::MessageInput> = (0..3).map(|i| models::MessageInput {
-            role: "user".into(),
-            content: format!("msg {i}"),
-            tool_call_id: None,
-            tool_calls: None,
-        }).collect();
+        let msgs: Vec<models::MessageInput> = (0..3)
+            .map(|i| models::MessageInput {
+                role: "user".into(),
+                content: format!("msg {i}"),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
 
         core.append_messages(models::AppendMessagesRequest {
             dataset: "ds".into(),
             namespace: "ns".into(),
             session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(),
-            namespace: "ns".into(),
-            session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "full".into(),
-                max_tokens: 4000,
-                ..Default::default()
-            },
-            recall: None,
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "full".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.messages.len(), 3);
         assert_eq!(resp.total_messages, 3);
@@ -1102,35 +1390,43 @@ mod tests {
         // 5 messages: user, assistant, user, assistant, user — each 100 chars (25 tokens)
         let content = "x".repeat(100);
         let roles = ["user", "assistant", "user", "assistant", "user"];
-        let msgs: Vec<models::MessageInput> = roles.iter().map(|r| models::MessageInput {
-            role: r.to_string(),
-            content: content.clone(),
-            tool_call_id: None,
-            tool_calls: None,
-        }).collect();
+        let msgs: Vec<models::MessageInput> = roles
+            .iter()
+            .map(|r| models::MessageInput {
+                role: r.to_string(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
 
         core.append_messages(models::AppendMessagesRequest {
             dataset: "ds".into(),
             namespace: "ns".into(),
             session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Budget = 60 tokens → fits 2 messages (25 each).
         // With keep_first=true: first user msg (seq 1) + most recent (seq 5)
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(),
-            namespace: "ns".into(),
-            session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "recent".into(),
-                max_tokens: 60,
-                keep_first: true,
-                ..Default::default()
-            },
-            recall: None,
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 60,
+                    keep_first: true,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.messages.len(), 2);
         assert_eq!(resp.messages[0].seq, 1); // first user message preserved
@@ -1143,25 +1439,51 @@ mod tests {
 
         // 3 short messages — all fit in budget
         let msgs: Vec<models::MessageInput> = vec![
-            models::MessageInput { role: "user".into(), content: "hello".into(), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "assistant".into(), content: "hi".into(), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "user".into(), content: "bye".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput {
+                role: "user".into(),
+                content: "hello".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "assistant".into(),
+                content: "hi".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "user".into(),
+                content: "bye".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
         ];
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(), messages: msgs,
-        }).await.unwrap();
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: msgs,
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "recent".into(),
-                max_tokens: 4000,
-                keep_first: true,
-                ..Default::default()
-            },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    keep_first: true,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         // All 3 fit, first user msg (seq 1) already in window — no duplication
         assert_eq!(resp.messages.len(), 3);
@@ -1176,27 +1498,58 @@ mod tests {
 
         // Only system/assistant messages, no user
         let msgs: Vec<models::MessageInput> = vec![
-            models::MessageInput { role: "system".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "system".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput {
+                role: "system".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "assistant".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "system".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "assistant".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
         ];
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(), messages: msgs,
-        }).await.unwrap();
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: msgs,
+        })
+        .await
+        .unwrap();
 
         // Budget fits 2. keep_first=true but no user msgs → same as keep_first=false
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "recent".into(),
-                max_tokens: 60,
-                keep_first: true,
-                ..Default::default()
-            },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 60,
+                    keep_first: true,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.messages.len(), 2);
         assert_eq!(resp.messages[0].seq, 3);
@@ -1208,25 +1561,41 @@ mod tests {
         let core = make_core();
 
         let content = "x".repeat(100);
-        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
-            role: "user".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
-        }).collect();
+        let msgs: Vec<models::MessageInput> = (0..5)
+            .map(|_| models::MessageInput {
+                role: "user".into(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(), messages: msgs,
-        }).await.unwrap();
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: msgs,
+        })
+        .await
+        .unwrap();
 
         // full strategy with keep_first=true — should behave same as keep_first=false
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "full".into(),
-                max_tokens: 60,
-                keep_first: true,
-                ..Default::default()
-            },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "full".into(),
+                    max_tokens: 60,
+                    keep_first: true,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.strategy_used, "full");
         assert_eq!(resp.messages.len(), 2);
@@ -1239,28 +1608,33 @@ mod tests {
         let core = make_core();
 
         // Register some tools
-        core.register_tools("ds", vec![
-            models::Tool {
-                name: "get_weather".into(),
-                description: "Get weather forecast for a location".into(),
-                parameters: serde_json::json!({}),
-                metadata: None,
-                fields: None,
-                always_include: false,
-                tool_type: models::ToolType::default(),
-                server_uri: None,
-            },
-            models::Tool {
-                name: "get_stock".into(),
-                description: "Get stock price for a ticker symbol".into(),
-                parameters: serde_json::json!({}),
-                metadata: None,
-                fields: None,
-                always_include: false,
-                tool_type: models::ToolType::default(),
-                server_uri: None,
-            },
-        ]).await.unwrap();
+        core.register_tools(
+            "ds",
+            vec![
+                models::Tool {
+                    name: "get_weather".into(),
+                    description: "Get weather forecast for a location".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+                models::Tool {
+                    name: "get_stock".into(),
+                    description: "Get stock price for a ticker symbol".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+            ],
+        )
+        .await
+        .unwrap();
 
         // Append a user message about weather
         core.append_messages(models::AppendMessagesRequest {
@@ -1273,26 +1647,39 @@ mod tests {
                 tool_call_id: None,
                 tool_calls: None,
             }],
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(),
-            namespace: "ns".into(),
-            session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "recent".into(),
-                max_tokens: 4000,
-                ..Default::default()
-            },
-            recall: Some(models::RecallConfig {
-                tools: Some(models::RecallToolsOption::Bool(true)),
-            }),
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Bool(true)),
+                }),
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
-        assert!(!resp.recalled.tools.is_empty(), "recalled tools should not be empty");
+        assert!(
+            !resp.recalled.tools.is_empty(),
+            "recalled tools should not be empty"
+        );
         // Verify tools have names from our registered set
-        let tool_names: Vec<&str> = resp.recalled.tools.iter().map(|t| t.tool.name.as_str()).collect();
+        let tool_names: Vec<&str> = resp
+            .recalled
+            .tools
+            .iter()
+            .map(|t| t.tool.name.as_str())
+            .collect();
         assert!(tool_names.contains(&"get_weather") || tool_names.contains(&"get_stock"));
     }
 
@@ -1301,25 +1688,80 @@ mod tests {
         let core = make_core();
 
         // Register 3 tools
-        core.register_tools("ds", vec![
-            models::Tool { name: "tool_a".into(), description: "Alpha tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
-            models::Tool { name: "tool_b".into(), description: "Beta tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
-            models::Tool { name: "tool_c".into(), description: "Gamma tool".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
-        ]).await.unwrap();
+        core.register_tools(
+            "ds",
+            vec![
+                models::Tool {
+                    name: "tool_a".into(),
+                    description: "Alpha tool".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+                models::Tool {
+                    name: "tool_b".into(),
+                    description: "Beta tool".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+                models::Tool {
+                    name: "tool_c".into(),
+                    description: "Gamma tool".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+            ],
+        )
+        .await
+        .unwrap();
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: vec![models::MessageInput { role: "user".into(), content: "alpha beta gamma".into(), tool_call_id: None, tool_calls: None }],
-        }).await.unwrap();
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: vec![models::MessageInput {
+                role: "user".into(),
+                content: "alpha beta gamma".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            }],
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
-            recall: Some(models::RecallConfig {
-                tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
-            }),
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Config(
+                        models::RecallToolsConfig {
+                            limit: 1,
+                            min_similarity: None,
+                        },
+                    )),
+                }),
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.recalled.tools.len(), 1, "should limit to 1 tool");
     }
@@ -1328,32 +1770,68 @@ mod tests {
     async fn recall_tools_no_user_message_returns_empty() {
         let core = make_core();
 
-        core.register_tools("ds", vec![
-            models::Tool { name: "tool_a".into(), description: "Alpha".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
-        ]).await.unwrap();
+        core.register_tools(
+            "ds",
+            vec![models::Tool {
+                name: "tool_a".into(),
+                description: "Alpha".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: models::ToolType::default(),
+                server_uri: None,
+            }],
+        )
+        .await
+        .unwrap();
 
         // Only assistant messages, no user messages
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: vec![models::MessageInput { role: "assistant".into(), content: "Hello!".into(), tool_call_id: None, tool_calls: None }],
-        }).await.unwrap();
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: vec![models::MessageInput {
+                role: "assistant".into(),
+                content: "Hello!".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            }],
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
-            recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Bool(true)),
+                }),
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
-        assert!(resp.recalled.tools.is_empty(), "no user message → no recalled tools");
+        assert!(
+            resp.recalled.tools.is_empty(),
+            "no user message → no recalled tools"
+        );
     }
 
     #[tokio::test]
     async fn limit_tokens_reduces_message_budget_when_tools_recalled() {
         let core = make_core();
 
-        core.register_tools("ds", vec![
-            models::Tool {
+        core.register_tools(
+            "ds",
+            vec![models::Tool {
                 name: "my_tool".into(),
                 description: "A tool with a description".into(),
                 parameters: serde_json::json!({"type": "object"}),
@@ -1362,40 +1840,81 @@ mod tests {
                 always_include: false,
                 tool_type: models::ToolType::default(),
                 server_uri: None,
-            },
-        ]).await.unwrap();
+            }],
+        )
+        .await
+        .unwrap();
 
         // 5 messages, 100 chars each = 25 tokens each
         let content = "x".repeat(100);
-        let mut msgs: Vec<models::MessageInput> = (0..4).map(|_| models::MessageInput {
-            role: "assistant".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
-        }).collect();
-        msgs.push(models::MessageInput { role: "user".into(), content: "find my tool".into(), tool_call_id: None, tool_calls: None });
+        let mut msgs: Vec<models::MessageInput> = (0..4)
+            .map(|_| models::MessageInput {
+                role: "assistant".into(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
+        msgs.push(models::MessageInput {
+            role: "user".into(),
+            content: "find my tool".into(),
+            tool_call_id: None,
+            tool_calls: None,
+        });
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Without limit_tokens, maxTokens=4000 → all 5 messages fit
-        let resp_unlimited = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
-            recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp_unlimited = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Bool(true)),
+                }),
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         // With tight limit_tokens, tools eat into the budget → fewer messages
-        let resp_limited = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
-            recall: Some(models::RecallConfig { tools: Some(models::RecallToolsOption::Bool(true)) }),
-            limit_tokens: Some(60), // tight budget
-        }).await.unwrap();
+        let resp_limited = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Bool(true)),
+                }),
+                limit_tokens: Some(60), // tight budget
+            })
+            .await
+            .unwrap();
 
-        assert!(resp_limited.included_messages < resp_unlimited.included_messages,
+        assert!(
+            resp_limited.included_messages < resp_unlimited.included_messages,
             "limited={} should be less than unlimited={}",
-            resp_limited.included_messages, resp_unlimited.included_messages);
+            resp_limited.included_messages,
+            resp_unlimited.included_messages
+        );
     }
 
     #[tokio::test]
@@ -1403,22 +1922,40 @@ mod tests {
         let core = make_core();
 
         let content = "x".repeat(100); // 25 tokens each
-        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
-            role: "user".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
-        }).collect();
+        let msgs: Vec<models::MessageInput> = (0..5)
+            .map(|_| models::MessageInput {
+                role: "user".into(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // limit_tokens=60, no recall → no tool tokens subtracted → same as max_tokens=60
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
-            recall: None,
-            limit_tokens: Some(60),
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: Some(60),
+            })
+            .await
+            .unwrap();
 
         // 60 tokens fits 2 messages (25 tokens each)
         assert_eq!(resp.included_messages, 2);
@@ -1429,51 +1966,146 @@ mod tests {
         let core = make_core();
 
         // Register 3 tools with distinct descriptions
-        core.register_tools("ds", vec![
-            models::Tool { name: "get_weather".into(), description: "Get weather forecast for a location".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
-            models::Tool { name: "get_stock".into(), description: "Get stock price for a ticker".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
-            models::Tool { name: "send_email".into(), description: "Send an email message".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: models::ToolType::default(), server_uri: None },
-        ]).await.unwrap();
+        core.register_tools(
+            "ds",
+            vec![
+                models::Tool {
+                    name: "get_weather".into(),
+                    description: "Get weather forecast for a location".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+                models::Tool {
+                    name: "get_stock".into(),
+                    description: "Get stock price for a ticker".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+                models::Tool {
+                    name: "send_email".into(),
+                    description: "Send an email message".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+            ],
+        )
+        .await
+        .unwrap();
 
         // First turn: user asks about weather, limit=1 so only weather tool is recalled
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: vec![models::MessageInput { role: "user".into(), content: "What is the weather forecast?".into(), tool_call_id: None, tool_calls: None }],
-        }).await.unwrap();
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: vec![models::MessageInput {
+                role: "user".into(),
+                content: "What is the weather forecast?".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            }],
+        })
+        .await
+        .unwrap();
 
-        let resp1 = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
-            recall: Some(models::RecallConfig {
-                tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
-            }),
-            limit_tokens: None,
-        }).await.unwrap();
-        let first_tool_names: Vec<String> = resp1.recalled.tools.iter().map(|t| t.tool.name.clone()).collect();
+        let resp1 = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Config(
+                        models::RecallToolsConfig {
+                            limit: 1,
+                            min_similarity: None,
+                        },
+                    )),
+                }),
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
+        let first_tool_names: Vec<String> = resp1
+            .recalled
+            .tools
+            .iter()
+            .map(|t| t.tool.name.clone())
+            .collect();
         assert_eq!(first_tool_names.len(), 1, "first turn should recall 1 tool");
 
         // Second turn: user asks about something different, limit=1
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: vec![models::MessageInput { role: "user".into(), content: "Send an email now".into(), tool_call_id: None, tool_calls: None }],
-        }).await.unwrap();
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
+            messages: vec![models::MessageInput {
+                role: "user".into(),
+                content: "Send an email now".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            }],
+        })
+        .await
+        .unwrap();
 
-        let resp2 = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "recent".into(), max_tokens: 4000, ..Default::default() },
-            recall: Some(models::RecallConfig {
-                tools: Some(models::RecallToolsOption::Config(models::RecallToolsConfig { limit: 1, min_similarity: None })),
-            }),
-            limit_tokens: None,
-        }).await.unwrap();
-        let second_tool_names: Vec<String> = resp2.recalled.tools.iter().map(|t| t.tool.name.clone()).collect();
+        let resp2 = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Config(
+                        models::RecallToolsConfig {
+                            limit: 1,
+                            min_similarity: None,
+                        },
+                    )),
+                }),
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
+        let second_tool_names: Vec<String> = resp2
+            .recalled
+            .tools
+            .iter()
+            .map(|t| t.tool.name.clone())
+            .collect();
 
         // Session continuity: first turn's tool should persist + second turn's new discovery
-        assert!(second_tool_names.len() > 1,
-            "second turn should have tools from first turn + new discovery, got {:?}", second_tool_names);
+        assert!(
+            second_tool_names.len() > 1,
+            "second turn should have tools from first turn + new discovery, got {:?}",
+            second_tool_names
+        );
         for name in &first_tool_names {
-            assert!(second_tool_names.contains(name),
-                "tool '{}' from first turn should persist. second={:?}", name, second_tool_names);
+            assert!(
+                second_tool_names.contains(name),
+                "tool '{}' from first turn should persist. second={:?}",
+                name,
+                second_tool_names
+            );
         }
     }
 
@@ -1491,11 +2123,21 @@ mod tests {
     async fn compacted_empty_session_returns_empty() {
         let core = make_core_with_llm();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "empty".into(),
-            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 4000, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "empty".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "compacted".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.messages.len(), 0);
         assert_eq!(resp.total_messages, 0);
@@ -1507,22 +2149,46 @@ mod tests {
 
         // Add enough messages that not all fit in 60% budget
         let content = "x".repeat(100); // 25 tokens each
-        let mut msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
-            role: "assistant".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
-        }).collect();
-        msgs.push(models::MessageInput { role: "user".into(), content: "summary please".into(), tool_call_id: None, tool_calls: None });
+        let mut msgs: Vec<models::MessageInput> = (0..5)
+            .map(|_| models::MessageInput {
+                role: "assistant".into(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
+        msgs.push(models::MessageInput {
+            role: "user".into(),
+            content: "summary please".into(),
+            tool_call_id: None,
+            tool_calls: None,
+        });
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Budget = 100 tokens. Recent 60% = 60 tokens → 2 messages. Summary 40% = 40 tokens.
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "compacted".into(),
+                    max_tokens: 100,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(resp.strategy_used, "compacted");
         assert!(!resp.fallback);
@@ -1543,20 +2209,39 @@ mod tests {
         let core = AgentifiedCore::new_with_llm(embedding, storage, llm);
 
         let content = "x".repeat(100);
-        let msgs: Vec<models::MessageInput> = (0..5).map(|_| models::MessageInput {
-            role: "user".into(), content: content.clone(), tool_call_id: None, tool_calls: None,
-        }).collect();
+        let msgs: Vec<models::MessageInput> = (0..5)
+            .map(|_| models::MessageInput {
+                role: "user".into(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "compacted".into(),
+                    max_tokens: 100,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert!(resp.fallback);
         assert!(resp.summary.is_none());
@@ -1568,22 +2253,39 @@ mod tests {
         let core = make_core_with_llm();
 
         let content = "x".repeat(100); // 25 tokens each
-        let msgs: Vec<models::MessageInput> = (0..6).map(|i| models::MessageInput {
-            role: if i % 2 == 0 { "user" } else { "assistant" }.into(),
-            content: content.clone(),
-            tool_call_id: None, tool_calls: None,
-        }).collect();
+        let msgs: Vec<models::MessageInput> = (0..6)
+            .map(|i| models::MessageInput {
+                role: if i % 2 == 0 { "user" } else { "assistant" }.into(),
+                content: content.clone(),
+                tool_call_id: None,
+                tool_calls: None,
+            })
+            .collect();
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "compacted".into(),
+                    max_tokens: 100,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert!(!resp.fallback);
         assert!(resp.summary.is_some());
@@ -1601,31 +2303,81 @@ mod tests {
         // Create messages: old tool msg with long content (>500 chars), then recent user msg
         let long_tool_content = "x".repeat(600); // > default prune_threshold of 500
         let msgs = vec![
-            models::MessageInput { role: "user".into(), content: "call tool".into(), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "tool".into(), content: long_tool_content.clone(), tool_call_id: Some("tc1".into()), tool_calls: None },
-            models::MessageInput { role: "assistant".into(), content: "got it".into(), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "user".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "user".into(), content: "summarize".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput {
+                role: "user".into(),
+                content: "call tool".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "tool".into(),
+                content: long_tool_content.clone(),
+                tool_call_id: Some("tc1".into()),
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "assistant".into(),
+                content: "got it".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "user".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "assistant".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "user".into(),
+                content: "summarize".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
         ];
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Budget 100 → recent gets last ~2 msgs, older msgs (including tool) get summarized
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "compacted".into(),
+                    max_tokens: 100,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert!(resp.summary.is_some());
         // FakeLlm echoes first 100 chars of input. The tool content should be [pruned], not the 600-char original.
         let summary = resp.summary.unwrap();
-        assert!(!summary.contains(&long_tool_content), "long tool content should have been pruned before summarization");
-        assert!(summary.contains("[pruned]"), "summary should contain [pruned] marker from pruned tool result");
+        assert!(
+            !summary.contains(&long_tool_content),
+            "long tool content should have been pruned before summarization"
+        );
+        assert!(
+            summary.contains("[pruned]"),
+            "summary should contain [pruned] marker from pruned tool result"
+        );
     }
 
     #[tokio::test]
@@ -1633,31 +2385,73 @@ mod tests {
         let core = make_core_with_llm();
 
         let short_tool_content = "result: 42"; // < 500 chars
-        // Need enough bulk so recent window doesn't fit everything → older msgs get summarized
+                                               // Need enough bulk so recent window doesn't fit everything → older msgs get summarized
         let mut msgs = vec![
-            models::MessageInput { role: "user".into(), content: "call tool".into(), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "tool".into(), content: short_tool_content.into(), tool_call_id: Some("tc1".into()), tool_calls: None },
-            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
+            models::MessageInput {
+                role: "user".into(),
+                content: "call tool".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "tool".into(),
+                content: short_tool_content.into(),
+                tool_call_id: Some("tc1".into()),
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "assistant".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
         ];
         for _ in 0..4 {
-            msgs.push(models::MessageInput { role: "user".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None });
-            msgs.push(models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None });
+            msgs.push(models::MessageInput {
+                role: "user".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            });
+            msgs.push(models::MessageInput {
+                role: "assistant".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            });
         }
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig { strategy: "compacted".into(), max_tokens: 100, ..Default::default() },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "compacted".into(),
+                    max_tokens: 100,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert!(resp.summary.is_some());
         let summary = resp.summary.unwrap();
-        assert!(!summary.contains("[pruned]"), "short tool content should not be pruned");
+        assert!(
+            !summary.contains("[pruned]"),
+            "short tool content should not be pruned"
+        );
     }
 
     #[tokio::test]
@@ -1666,68 +2460,120 @@ mod tests {
 
         let tool_content = "x".repeat(200); // > custom threshold of 100, but < default 500
         let msgs = vec![
-            models::MessageInput { role: "user".into(), content: "call tool".into(), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "tool".into(), content: tool_content.clone(), tool_call_id: Some("tc1".into()), tool_calls: None },
-            models::MessageInput { role: "assistant".into(), content: "got it".into(), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "user".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "assistant".into(), content: "x".repeat(100), tool_call_id: None, tool_calls: None },
-            models::MessageInput { role: "user".into(), content: "summarize".into(), tool_call_id: None, tool_calls: None },
+            models::MessageInput {
+                role: "user".into(),
+                content: "call tool".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "tool".into(),
+                content: tool_content.clone(),
+                tool_call_id: Some("tc1".into()),
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "assistant".into(),
+                content: "got it".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "user".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "assistant".into(),
+                content: "x".repeat(100),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+            models::MessageInput {
+                role: "user".into(),
+                content: "summarize".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
         ];
 
         core.append_messages(models::AppendMessagesRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
+            dataset: "ds".into(),
+            namespace: "ns".into(),
+            session: "s1".into(),
             messages: msgs,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Custom prune_threshold = 100 → 200-char tool content should be pruned
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(), namespace: "ns".into(), session: "s1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "compacted".into(),
-                max_tokens: 100,
-                prune_threshold: 100,
-                ..Default::default()
-            },
-            recall: None, limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "s1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "compacted".into(),
+                    max_tokens: 100,
+                    prune_threshold: 100,
+                    ..Default::default()
+                },
+                recall: None,
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
         assert!(resp.summary.is_some());
         let summary = resp.summary.unwrap();
-        assert!(summary.contains("[pruned]"), "tool content >100 chars should be pruned with custom threshold");
+        assert!(
+            summary.contains("[pruned]"),
+            "tool content >100 chars should be pruned with custom threshold"
+        );
     }
 
     #[tokio::test]
     async fn mcp_tool_appears_in_list_with_type_and_server_uri() {
         let core = make_core();
-        core.register_tools("ds", vec![
-            models::Tool {
-                name: "mcp_search".into(),
-                description: "Search via MCP".into(),
-                parameters: serde_json::json!({}),
-                metadata: None,
-                fields: None,
-                always_include: false,
-                tool_type: models::ToolType::Mcp,
-                server_uri: Some("http://localhost:3001/mcp".into()),
-            },
-            models::Tool {
-                name: "backend_tool".into(),
-                description: "A backend tool".into(),
-                parameters: serde_json::json!({}),
-                metadata: None,
-                fields: None,
-                always_include: false,
-                tool_type: models::ToolType::default(),
-                server_uri: None,
-            },
-        ]).await.unwrap();
+        core.register_tools(
+            "ds",
+            vec![
+                models::Tool {
+                    name: "mcp_search".into(),
+                    description: "Search via MCP".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::Mcp,
+                    server_uri: Some("http://localhost:3001/mcp".into()),
+                },
+                models::Tool {
+                    name: "backend_tool".into(),
+                    description: "A backend tool".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::default(),
+                    server_uri: None,
+                },
+            ],
+        )
+        .await
+        .unwrap();
 
         let resp = core.list_tools("ds").await.unwrap();
         assert_eq!(resp.tools.len(), 2);
         let mcp = resp.tools.iter().find(|t| t.name == "mcp_search").unwrap();
         assert_eq!(mcp.tool_type, models::ToolType::Mcp);
         assert_eq!(mcp.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
-        let backend = resp.tools.iter().find(|t| t.name == "backend_tool").unwrap();
+        let backend = resp
+            .tools
+            .iter()
+            .find(|t| t.name == "backend_tool")
+            .unwrap();
         assert_eq!(backend.tool_type, models::ToolType::Backend);
         assert!(backend.server_uri.is_none());
     }
@@ -1735,8 +2581,9 @@ mod tests {
     #[tokio::test]
     async fn mcp_tool_appears_in_discover_with_type_and_server_uri() {
         let core = make_core();
-        core.register_tools("ds", vec![
-            models::Tool {
+        core.register_tools(
+            "ds",
+            vec![models::Tool {
                 name: "mcp_search".into(),
                 description: "Search via MCP server".into(),
                 parameters: serde_json::json!({}),
@@ -1745,43 +2592,61 @@ mod tests {
                 always_include: false,
                 tool_type: models::ToolType::Mcp,
                 server_uri: Some("http://localhost:3001/mcp".into()),
-            },
-        ]).await.unwrap();
+            }],
+        )
+        .await
+        .unwrap();
 
-        let resp = core.discover("ds", models::DiscoverRequest {
-            query: "search".into(),
-            limit: Some(5),
-            strategy: SearchStrategy::default(),
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await.unwrap();
+        let resp = core
+            .discover(
+                "ds",
+                models::DiscoverRequest {
+                    query: "search".into(),
+                    limit: Some(5),
+                    strategy: SearchStrategy::default(),
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                },
+            )
+            .await
+            .unwrap();
 
         assert_eq!(resp.tools.len(), 1);
         assert_eq!(resp.tools[0].tool.name, "mcp_search");
         assert_eq!(resp.tools[0].tool.tool_type, models::ToolType::Mcp);
-        assert_eq!(resp.tools[0].tool.server_uri.as_deref(), Some("http://localhost:3001/mcp"));
+        assert_eq!(
+            resp.tools[0].tool.server_uri.as_deref(),
+            Some("http://localhost:3001/mcp")
+        );
     }
 
     #[tokio::test]
     async fn register_mcp_tool_without_server_uri_returns_bad_request() {
         let core = make_core();
-        let err = core.register_tools("ds", vec![
-            models::Tool {
-                name: "mcp_tool".into(),
-                description: "An MCP tool".into(),
-                parameters: serde_json::json!({}),
-                metadata: None,
-                fields: None,
-                always_include: false,
-                tool_type: models::ToolType::Mcp,
-                server_uri: None,
-            },
-        ]).await.unwrap_err();
+        let err = core
+            .register_tools(
+                "ds",
+                vec![models::Tool {
+                    name: "mcp_tool".into(),
+                    description: "An MCP tool".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::Mcp,
+                    server_uri: None,
+                }],
+            )
+            .await
+            .unwrap_err();
         match err {
-            CoreError::BadRequest(msg) => assert!(msg.contains("server_uri"), "error should mention server_uri: {msg}"),
+            CoreError::BadRequest(msg) => assert!(
+                msg.contains("server_uri"),
+                "error should mention server_uri: {msg}"
+            ),
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }
@@ -1796,9 +2661,16 @@ mod tests {
     #[tokio::test]
     async fn register_tools_without_embedding_service() {
         let core = make_bm25_core();
-        let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-        ];
+        let tools = vec![Tool {
+            name: "refund".into(),
+            description: "Process a refund".into(),
+            parameters: serde_json::json!({}),
+            metadata: None,
+            fields: None,
+            always_include: false,
+            tool_type: ToolType::default(),
+            server_uri: None,
+        }];
         let resp = core.register_tools("ds", tools).await.unwrap();
         assert_eq!(resp.registered, 1);
 
@@ -1816,21 +2688,45 @@ mod tests {
     async fn discover_bm25_without_embedding_service() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund for invoice".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "getUser".into(), description: "Get user account details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool {
+                name: "refund".into(),
+                description: "Process a refund for invoice".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "getUser".into(),
+                description: "Get user account details".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
-        let resp = core.discover("ds", DiscoverRequest {
-            query: "refund".into(),
-            limit: Some(5),
-            strategy: SearchStrategy::Bm25,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await.unwrap();
+        let resp = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(5),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                },
+            )
+            .await
+            .unwrap();
 
         assert!(!resp.tools.is_empty());
         assert_eq!(resp.tools[0].tool.name, "refund");
@@ -1839,22 +2735,35 @@ mod tests {
     #[tokio::test]
     async fn discover_semantic_falls_back_to_bm25_without_embeddings() {
         let core = make_bm25_core();
-        let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-        ];
+        let tools = vec![Tool {
+            name: "refund".into(),
+            description: "Process a refund".into(),
+            parameters: serde_json::json!({}),
+            metadata: None,
+            fields: None,
+            always_include: false,
+            tool_type: ToolType::default(),
+            server_uri: None,
+        }];
         core.register_tools("ds", tools).await.unwrap();
 
         // Request semantic but no embedding service → should fallback to BM25
-        let resp = core.discover("ds", DiscoverRequest {
-            query: "refund".into(),
-            limit: Some(5),
-            strategy: SearchStrategy::Semantic,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await.unwrap();
+        let resp = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(5),
+                    strategy: SearchStrategy::Semantic,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                },
+            )
+            .await
+            .unwrap();
 
         assert!(!resp.tools.is_empty());
         assert_eq!(resp.tools[0].tool.name, "refund");
@@ -1866,76 +2775,134 @@ mod tests {
         let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
         let core = AgentifiedCore::new(fake.clone() as Arc<dyn EmbeddingService>, storage);
 
-        let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-        ];
+        let tools = vec![Tool {
+            name: "refund".into(),
+            description: "Process a refund".into(),
+            parameters: serde_json::json!({}),
+            metadata: None,
+            fields: None,
+            always_include: false,
+            tool_type: ToolType::default(),
+            server_uri: None,
+        }];
         core.register_tools("ds", tools).await.unwrap();
 
-        let batch_before = fake.batch_call_count.load(std::sync::atomic::Ordering::Relaxed);
+        let batch_before = fake
+            .batch_call_count
+            .load(std::sync::atomic::Ordering::Relaxed);
         let call_before = fake.call_count.load(std::sync::atomic::Ordering::Relaxed);
 
-        let _resp = core.discover("ds", DiscoverRequest {
-            query: "refund".into(),
-            limit: Some(5),
-            strategy: SearchStrategy::Bm25,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await.unwrap();
+        let _resp = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(5),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                },
+            )
+            .await
+            .unwrap();
 
         // No new embedding calls should have been made for the query
-        let batch_after = fake.batch_call_count.load(std::sync::atomic::Ordering::Relaxed);
+        let batch_after = fake
+            .batch_call_count
+            .load(std::sync::atomic::Ordering::Relaxed);
         let call_after = fake.call_count.load(std::sync::atomic::Ordering::Relaxed);
-        assert_eq!(batch_before, batch_after, "BM25 strategy should not call embed_batch");
-        assert_eq!(call_before, call_after, "BM25 strategy should not call embed");
+        assert_eq!(
+            batch_before, batch_after,
+            "BM25 strategy should not call embed_batch"
+        );
+        assert_eq!(
+            call_before, call_after,
+            "BM25 strategy should not call embed"
+        );
     }
 
     #[tokio::test]
     async fn discover_hybrid_blends_semantic_and_bm25() {
         let core = make_core();
         let tools = vec![
-            Tool { name: "refund".into(), description: "Process a refund".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "getUser".into(), description: "Get user details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool {
+                name: "refund".into(),
+                description: "Process a refund".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "getUser".into(),
+                description: "Get user details".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
-        let resp = core.discover("ds", DiscoverRequest {
-            query: "refund".into(),
-            limit: Some(5),
-            strategy: SearchStrategy::Hybrid,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await.unwrap();
+        let resp = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(5),
+                    strategy: SearchStrategy::Hybrid,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                },
+            )
+            .await
+            .unwrap();
 
         assert!(!resp.tools.is_empty());
         // Scores should be in [0, 1] range (blend of semantic + bm25)
         for tool in &resp.tools {
-            assert!(tool.score >= 0.0 && tool.score <= 1.0, "score out of range: {}", tool.score);
+            assert!(
+                tool.score >= 0.0 && tool.score <= 1.0,
+                "score out of range: {}",
+                tool.score
+            );
         }
     }
 
     #[tokio::test]
     async fn register_backend_tool_with_server_uri_returns_bad_request() {
         let core = make_core();
-        let err = core.register_tools("ds", vec![
-            models::Tool {
-                name: "backend_tool".into(),
-                description: "A backend tool".into(),
-                parameters: serde_json::json!({}),
-                metadata: None,
-                fields: None,
-                always_include: false,
-                tool_type: models::ToolType::Backend,
-                server_uri: Some("http://localhost/mcp".into()),
-            },
-        ]).await.unwrap_err();
+        let err = core
+            .register_tools(
+                "ds",
+                vec![models::Tool {
+                    name: "backend_tool".into(),
+                    description: "A backend tool".into(),
+                    parameters: serde_json::json!({}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: models::ToolType::Backend,
+                    server_uri: Some("http://localhost/mcp".into()),
+                }],
+            )
+            .await
+            .unwrap_err();
         match err {
-            CoreError::BadRequest(msg) => assert!(msg.contains("server_uri"), "error should mention server_uri: {msg}"),
+            CoreError::BadRequest(msg) => assert!(
+                msg.contains("server_uri"),
+                "error should mention server_uri: {msg}"
+            ),
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }
@@ -1951,25 +2918,61 @@ mod tests {
     async fn discover_excludes_always_include_tools() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "escalate".into(), description: "Escalate to human agent".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: true, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool {
+                name: "escalate".into(),
+                description: "Escalate to human agent".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: true,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "get_employee".into(),
+                description: "Get employee details".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "update_employee".into(),
+                description: "Update employee record".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
-        let resp = core.discover("ds", DiscoverRequest {
-            query: "employee".into(),
-            limit: Some(10),
-            strategy: SearchStrategy::Bm25,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await.unwrap();
+        let resp = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "employee".into(),
+                    limit: Some(10),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                },
+            )
+            .await
+            .unwrap();
 
         let names: Vec<&str> = resp.tools.iter().map(|t| t.tool.name.as_str()).collect();
-        assert!(!names.contains(&"escalate"), "alwaysInclude tool should be excluded from discover results");
+        assert!(
+            !names.contains(&"escalate"),
+            "alwaysInclude tool should be excluded from discover results"
+        );
         assert!(names.contains(&"get_employee"));
         assert!(names.contains(&"update_employee"));
     }
@@ -1978,39 +2981,81 @@ mod tests {
     async fn discover_with_session_persists_tools_across_calls() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "delete_employee".into(), description: "Delete employee from system".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool {
+                name: "get_employee".into(),
+                description: "Get employee details".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "update_employee".into(),
+                description: "Update employee record".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "delete_employee".into(),
+                description: "Delete employee from system".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
         // Turn 1: discover with session — should find get_employee
-        let resp1 = core.discover("ds", DiscoverRequest {
-            query: "get employee".into(),
-            limit: Some(1),
-            strategy: SearchStrategy::Bm25,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: Some("ns".into()),
-            session: Some("sess1".into()),
-        }).await.unwrap();
+        let resp1 = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "get employee".into(),
+                    limit: Some(1),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: Some("ns".into()),
+                    session: Some("sess1".into()),
+                },
+            )
+            .await
+            .unwrap();
         assert_eq!(resp1.tools.len(), 1);
         assert_eq!(resp1.tools[0].tool.name, "get_employee");
 
         // Turn 2: discover with same session — get_employee should be excluded (already persisted)
-        let resp2 = core.discover("ds", DiscoverRequest {
-            query: "employee".into(),
-            limit: Some(5),
-            strategy: SearchStrategy::Bm25,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: Some("ns".into()),
-            session: Some("sess1".into()),
-        }).await.unwrap();
+        let resp2 = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "employee".into(),
+                    limit: Some(5),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: Some("ns".into()),
+                    session: Some("sess1".into()),
+                },
+            )
+            .await
+            .unwrap();
         let names: Vec<&str> = resp2.tools.iter().map(|t| t.tool.name.as_str()).collect();
-        assert!(!names.contains(&"get_employee"), "previously discovered tool should be excluded");
+        assert!(
+            !names.contains(&"get_employee"),
+            "previously discovered tool should be excluded"
+        );
         assert!(names.contains(&"update_employee") || names.contains(&"delete_employee"));
     }
 
@@ -2018,34 +3063,63 @@ mod tests {
     async fn discover_without_session_does_not_persist() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool {
+                name: "get_employee".into(),
+                description: "Get employee details".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "update_employee".into(),
+                description: "Update employee record".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
         // Discover without session
-        core.discover("ds", DiscoverRequest {
-            query: "get employee".into(),
-            limit: Some(1),
-            strategy: SearchStrategy::Bm25,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await.unwrap();
+        core.discover(
+            "ds",
+            DiscoverRequest {
+                query: "get employee".into(),
+                limit: Some(1),
+                strategy: SearchStrategy::Bm25,
+                embedding_weights: None,
+                exclude: None,
+                turn_id: None,
+                namespace: None,
+                session: None,
+            },
+        )
+        .await
+        .unwrap();
 
         // Second discover without session — should still return get_employee (not persisted)
-        let resp2 = core.discover("ds", DiscoverRequest {
-            query: "get employee".into(),
-            limit: Some(1),
-            strategy: SearchStrategy::Bm25,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: None,
-            session: None,
-        }).await.unwrap();
+        let resp2 = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "get employee".into(),
+                    limit: Some(1),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                },
+            )
+            .await
+            .unwrap();
         assert_eq!(resp2.tools[0].tool.name, "get_employee");
     }
 
@@ -2053,22 +3127,45 @@ mod tests {
     async fn discover_session_tools_loaded_via_recall() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool {
+                name: "get_employee".into(),
+                description: "Get employee details".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "update_employee".into(),
+                description: "Update employee record".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
         // Discover with session to persist get_employee
-        core.discover("ds", DiscoverRequest {
-            query: "get employee".into(),
-            limit: Some(1),
-            strategy: SearchStrategy::Bm25,
-            embedding_weights: None,
-            exclude: None,
-            turn_id: None,
-            namespace: Some("ns".into()),
-            session: Some("sess1".into()),
-        }).await.unwrap();
+        core.discover(
+            "ds",
+            DiscoverRequest {
+                query: "get employee".into(),
+                limit: Some(1),
+                strategy: SearchStrategy::Bm25,
+                embedding_weights: None,
+                exclude: None,
+                turn_id: None,
+                namespace: Some("ns".into()),
+                session: Some("sess1".into()),
+            },
+        )
+        .await
+        .unwrap();
 
         // Now add a user message and call getContext with recall — should load get_employee at score 1.0
         core.append_messages(models::AppendMessagesRequest {
@@ -2081,34 +3178,74 @@ mod tests {
                 tool_call_id: None,
                 tool_calls: None,
             }],
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
-        let ctx = core.get_context(models::ContextRequest {
-            dataset: "ds".into(),
-            namespace: "ns".into(),
-            session: "sess1".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "recent".into(),
-                max_tokens: 4000,
-                ..Default::default()
-            },
-            recall: Some(models::RecallConfig {
-                tools: Some(models::RecallToolsOption::Bool(true)),
-            }),
-            limit_tokens: None,
-        }).await.unwrap();
+        let ctx = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "sess1".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Bool(true)),
+                }),
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
-        let recalled_names: Vec<&str> = ctx.recalled.tools.iter().map(|t| t.tool.name.as_str()).collect();
-        assert!(recalled_names.contains(&"get_employee"), "previously discovered tool should be recalled at score 1.0");
+        let recalled_names: Vec<&str> = ctx
+            .recalled
+            .tools
+            .iter()
+            .map(|t| t.tool.name.as_str())
+            .collect();
+        assert!(
+            recalled_names.contains(&"get_employee"),
+            "previously discovered tool should be recalled at score 1.0"
+        );
     }
 
     #[tokio::test]
     async fn recall_excludes_always_include_tools() {
         let core = make_bm25_core();
         let tools = vec![
-            Tool { name: "escalate".into(), description: "Escalate to human agent".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: true, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "get_employee".into(), description: "Get employee details".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
-            Tool { name: "update_employee".into(), description: "Update employee record".into(), parameters: serde_json::json!({}), metadata: None, fields: None, always_include: false, tool_type: ToolType::default(), server_uri: None },
+            Tool {
+                name: "escalate".into(),
+                description: "Escalate to human agent".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: true,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "get_employee".into(),
+                description: "Get employee details".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "update_employee".into(),
+                description: "Update employee record".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
         ];
         core.register_tools("ds", tools).await.unwrap();
 
@@ -2122,25 +3259,38 @@ mod tests {
                 tool_call_id: None,
                 tool_calls: None,
             }],
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
-        let resp = core.get_context(models::ContextRequest {
-            dataset: "ds".into(),
-            namespace: "ns".into(),
-            session: "sess".into(),
-            messages: models::ContextMessagesConfig {
-                strategy: "recent".into(),
-                max_tokens: 4000,
-                ..Default::default()
-            },
-            recall: Some(models::RecallConfig {
-                tools: Some(models::RecallToolsOption::Bool(true)),
-            }),
-            limit_tokens: None,
-        }).await.unwrap();
+        let resp = core
+            .get_context(models::ContextRequest {
+                dataset: "ds".into(),
+                namespace: "ns".into(),
+                session: "sess".into(),
+                messages: models::ContextMessagesConfig {
+                    strategy: "recent".into(),
+                    max_tokens: 4000,
+                    ..Default::default()
+                },
+                recall: Some(models::RecallConfig {
+                    tools: Some(models::RecallToolsOption::Bool(true)),
+                }),
+                limit_tokens: None,
+            })
+            .await
+            .unwrap();
 
-        let tool_names: Vec<&str> = resp.recalled.tools.iter().map(|t| t.tool.name.as_str()).collect();
-        assert!(!tool_names.contains(&"escalate"), "alwaysInclude tool should be excluded from recall results");
+        let tool_names: Vec<&str> = resp
+            .recalled
+            .tools
+            .iter()
+            .map(|t| t.tool.name.as_str())
+            .collect();
+        assert!(
+            !tool_names.contains(&"escalate"),
+            "alwaysInclude tool should be excluded from recall results"
+        );
     }
 
     #[test]
@@ -2192,34 +3342,33 @@ mod tests {
     #[tokio::test]
     async fn bm25_text_uses_arg_names_not_raw_json() {
         let core = make_bm25_core();
-        let tools = vec![
-            Tool {
-                name: "get_employee".into(),
-                description: "Retrieve employee details".into(),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "employee_id": {
-                            "type": "string",
-                            "description": "The employee's unique identifier"
-                        }
+        let tools = vec![Tool {
+            name: "get_employee".into(),
+            description: "Retrieve employee details".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "employee_id": {
+                        "type": "string",
+                        "description": "The employee's unique identifier"
                     }
-                }),
-                metadata: None,
-                fields: None,
-                always_include: false,
-                tool_type: ToolType::default(),
-                server_uri: None,
-            },
-        ];
+                }
+            }),
+            metadata: None,
+            fields: None,
+            always_include: false,
+            tool_type: ToolType::default(),
+            server_uri: None,
+        }];
         core.register_tools("ds", tools).await.unwrap();
 
         let tools_map = core.tools.read().await;
         let stored = tools_map.get("ds").unwrap().get("get_employee").unwrap();
         assert!(stored.bm25_text.contains("employee_id"));
-        assert!(stored.bm25_text.contains("The employee's unique identifier"));
+        assert!(stored
+            .bm25_text
+            .contains("The employee's unique identifier"));
         assert!(!stored.bm25_text.contains("{"));
         assert!(!stored.bm25_text.contains("\"type\""));
     }
-
 }
