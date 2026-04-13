@@ -10,14 +10,15 @@ Most teams solve this by manually curating tool subsets and stitching context to
 
 ## Agentified's solution
 
-1. You **register all your tools once** inside Agentified
+1. You **register all your tools once** inside Agentified — they're indexed but cost zero tokens until needed
 2. On every turn, the agent calls `session.context.assemble()`
-3. Agentified **returns exactly what your agent needs**: a ranked set of relevant tools, conversation history, and recalled context, **in a single call**
+3. Agentified **returns exactly what your agent needs**: the tools marked `alwaysInclude`, the tools accumulated this session, any tools discovered for the current intent, plus conversation history and recalled context — **in a single call**
 
 Every primitive Agentified stores exists because **it makes the next `assemble()` call smarter**:
  - Memories inform which tools surface
  - Tool usage creates memories
- - Session history shapes ranking 
+ - Session history shapes ranking
+ - Tools discovered mid-turn persist into subsequent turns
 
 As the system grows, entity relationships and knowledge graphs feed back into assembly too. Ultimately, **one call gets progressively more intelligent**.
 
@@ -43,20 +44,23 @@ Your Agent (any framework, any language)
 
 Three steps:
 
-1. **Register** (*once*): You give Agentified your full tool catalog. The server computes embeddings for each tool's name, description, and schemas, then indexes them for fast retrieval.
-2. **Assemble**: Agentified takes the conversation context and runs a **hybrid ranking algorithm** to score every tool against the current intent while **cross-referencing memories and session history** to refine results. With **tool recall**, the system auto-discovers relevant tools based on the last user message. **Message strategies** (`recent`, `full`, `compacted`) control how conversation history is assembled — the `compacted` strategy uses LLM summarization for older messages, with long tool results pruned before summarization. **Token budgets** via `.limitTokens()` cap total assembly output.
-3. **Execute**: Agentified passes the assembled context (tools + messages) to your agent framework. Your framework calls the tools as usual. Agentified **tracks which tools were used so it can prioritize them in subsequent turns**.
+1. **Register** (*once*): You give Agentified your full tool catalog. The server indexes each tool for BM25 retrieval and computes embeddings for semantic retrieval. By default, **every registered tool is deferred** — it costs zero tokens until discovered. Mark critical tools with `alwaysInclude: true` to keep them unconditionally present in every turn.
+2. **Assemble**: Agentified takes the conversation context and ranks the deferred tools against the current intent, while **cross-referencing memories and session history** to refine results. With **tool recall**, the system auto-discovers relevant tools from the last user message. Discovered tools **persist within the turn and across subsequent turns** of the same session. **Message strategies** (`recent`, `full`, `summary`, `recent+summary`) control how conversation history is assembled — the summary strategies use LLM summarization for older messages, with long tool results pruned first. **Token budgets** via `.limitTokens()` cap total assembly output.
+3. **Execute**: Agentified passes the assembled context (tools + messages) to your agent framework. Your framework calls the tools as usual. Agentified **tracks which tools were used so they stay available in subsequent turns**.
 
 ## What Makes the Ranking Smart
 
-**Hybrid ranking algorithm**:
+**Three ranking strategies, BM25 by default:**
 
-- **Semantic similarity (70%)**: Understands intent. "Cancel my subscription" finds `process_refund` even though the words don't overlap. Powered by OpenAI embeddings across four tool fields (description, input schema, name, output schema), each weighted by importance
-- **Keyword matching (30%)**: Catches exact terms the embedding model might underweight. "PTO" matches `get_pto_balance` directly
+- **BM25** *(default)* — pure keyword matching with field-aware extraction from JSON Schema `properties`. No embedding call per query, so it's fast and cheap. Works well when tool names, descriptions, and parameter keys share vocabulary with the query (e.g. "PTO" → `get_pto_balance`).
+- **Semantic** — OpenAI embeddings across four tool fields (description, input schema, name, output schema), each weighted by importance. Catches intent even when words don't overlap ("cancel my subscription" → `process_refund`).
+- **Hybrid** — `0.7 × semantic + 0.3 × BM25`. Best of both when exact-match recall and intent-matching both matter.
+
+Pick per use case via the `strategy` field on `discover`. See [Ranking](./server/ranking.md) for the full breakdown.
 
 **Two more mechanisms make your agent smarter**:
 
-- **Session continuity**: If the agent used `get_employee_details` in turn 1, it stays available in turn 2. No context amnesia mid-conversation.
+- **Session continuity**: Tools discovered mid-turn stay available for the rest of the turn, and previously-used tools carry into the next turn. No context amnesia mid-conversation, and no re-discovery cost.
 - **Graph expansion**: If a selected tool declares it *requires* another tool's output, that dependency gets auto-injected. You define the relationships once; Agentified handles the wiring.
 
 ## A real example
@@ -91,7 +95,7 @@ Same accuracy — and massively fewer resources:
 
 - *Runtime tool discovery*: An agent-callable tool that lets the LLM itself search for additional tools mid-conversation. Useful for open-ended workflows where the needed tools aren't predictable upfront.
 
-- *Deferred tool loading*: Register hundreds of tools but only surface them when needed. Mark critical tools with `alwaysInclude` to keep them always available; all other tools are discovered on demand via ranking or agent-initiated search. Discovered tools persist within the session for cross-turn continuity.
+- *Deferred tool loading*: The default. Registered tools cost zero tokens until discovered via ranking or `agentified_discover`. Use `alwaysInclude` to pin critical tools. Discovered tools accumulate within and across turns of the session.
 
 - *A fast Rust core*: The server is built with Axum, uses read-write locks for concurrent access, caches embeddings by content hash, and runs ranking in sub-milliseconds for hundreds of tools. Storage is in-memory by default, with optional SQLite persistence and more storage backends coming soon.
 
