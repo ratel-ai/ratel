@@ -1,27 +1,37 @@
-# Hybrid Ranking
+# Ranking
 
-Agentified uses a hybrid ranking algorithm that combines semantic similarity with BM25 keyword matching to select the most relevant tools for a query.
+Agentified offers three ranking strategies for tool discovery. **BM25 is the default** — it requires no embedding call per query, runs in sub-milliseconds, and works well whenever tool metadata shares vocabulary with the query. `semantic` and `hybrid` are opt-in via the `strategy` field on `discover`.
 
-## How It Works
+## Strategies
 
-```
-final_score = 0.7 × semantic_score + 0.3 × normalized_bm25
-```
+| Strategy | How it scores | When to use |
+|----------|---------------|-------------|
+| `bm25` *(default)* | Keyword matching with field-aware extraction from JSON Schema | Fast, cheap; works when the query shares terms with tool metadata |
+| `semantic` | Weighted cosine similarity across 4 embedded fields | Intent-heavy queries where wording diverges from tool metadata |
+| `hybrid` | `0.7 × semantic + 0.3 × normalized_bm25` | Both exact-match and intent-matching matter; worth the embedding cost |
 
-Two signals, complementary strengths:
+If `semantic` or `hybrid` is requested and a tool has no embeddings available, the request falls back to `bm25` automatically.
 
-- **Semantic** (70%) — catches intent even with different wording ("cancel my subscription" → `process_refund`)
-- **BM25** (30%) — catches exact keyword matches the embedding model might under-weight ("PTO" → `get_pto_balance`)
+## BM25
 
-## Semantic Scoring
+Standard [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) with tuned parameters:
+
+- `k1 = 0.9` — term frequency saturation
+- `b = 0.4` — document length normalization
+
+Each tool's BM25 document is built by concatenating its name, description, input-schema field names, and output-schema field names. Field names are extracted from JSON Schema `properties` so parameter keys contribute as first-class terms (e.g. `city`, `employee_id`) rather than getting lost inside raw JSON.
+
+Raw BM25 scores are min-max normalized to `[0, 1]` across the tools in the dataset.
+
+## Semantic
 
 Each tool is embedded across 4 fields using OpenAI `text-embedding-3-small` (1536 dimensions). The query is embedded the same way, then cosine similarity is computed per field:
 
 | Field | Default Weight | Why |
 |-------|---------------|-----|
 | `description` | 0.5 | Primary signal — describes what the tool does |
-| `input_schema` | 0.3 | Matches parameter structure (e.g., "city" aligns with weather tools) |
-| `name` | 0.1 | Tool name — short, often abbreviated |
+| `input_schema` | 0.3 | Matches parameter structure |
+| `name` | 0.1 | Short, often abbreviated |
 | `output_schema` | 0.1 | Return type — useful for chaining |
 
 ```
@@ -37,6 +47,7 @@ Pass `embedding_weights` on any discover request:
 ```json
 {
   "query": "get employee salary details",
+  "strategy": "semantic",
   "embedding_weights": {
     "name": 0.05,
     "description": 0.4,
@@ -48,28 +59,20 @@ Pass `embedding_weights` on any discover request:
 
 Use case: bump `input_schema` weight when the query describes parameters rather than intent.
 
-## BM25 Scoring
-
-Standard [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) with parameters:
-
-- `k1 = 1.2` — term frequency saturation
-- `b = 0.75` — document length normalization
-
-Each tool's BM25 document is the concatenation of all its field texts (name + description + input_schema + output_schema). The query is tokenized by splitting on non-alphanumeric characters and lowercasing.
-
-### Normalization
-
-Raw BM25 scores are min-max normalized to [0, 1] across all tools in the dataset:
+## Hybrid
 
 ```
-normalized = (raw - min) / (max - min)
+final_score = 0.7 × semantic_score + 0.3 × normalized_bm25
 ```
 
-If all scores are equal (range = 0), all normalized scores are 0.
+BM25 acts as a tiebreaker and safety net:
+
+- Two tools with similar embeddings → BM25 picks the one with exact keyword matches
+- A tool with a generic description but exact parameter names → BM25 boosts it
 
 ## Worked Example
 
-Given 3 tools and the query `"process a refund"`:
+Given 3 tools and the query `"process a refund"` with `strategy: "hybrid"`:
 
 | Tool | Semantic | BM25 (normalized) | Final |
 |------|----------|-------------------|-------|
@@ -77,14 +80,7 @@ Given 3 tools and the query `"process a refund"`:
 | `get_order_details` | 0.72 | 0.30 | 0.7 × 0.72 + 0.3 × 0.30 = **0.594** |
 | `send_email` | 0.35 | 0.00 | 0.7 × 0.35 + 0.3 × 0.00 = **0.245** |
 
-`process_refund` ranks first — both signals agree. `get_order_details` ranks second — semantically related (orders context) with some keyword overlap.
-
-## When Semantic and BM25 Disagree
-
-The 70/30 split means semantic usually dominates. BM25 acts as a tiebreaker and safety net:
-
-- Two tools with similar embeddings → BM25 picks the one with exact keyword matches
-- A tool with a generic description but exact parameter names → BM25 boosts it
+`process_refund` ranks first — both signals agree. `get_order_details` ranks second — semantically related with some keyword overlap.
 
 ## See Also
 

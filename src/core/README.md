@@ -1,6 +1,6 @@
 # agentified-core
 
-Rust server. Hybrid ranking. Sub-millisecond discovery.
+Rust server. BM25 / semantic / hybrid ranking. Sub-millisecond discovery.
 
 Registers tools, computes embeddings, and serves the most relevant subset for any query via a REST API. See [Architecture](../../docs/server/architecture.md) for the full system design.
 
@@ -86,13 +86,14 @@ List all registered tools in a dataset.
 
 ### `POST /api/v1/datasets/{id}/discover`
 
-Discover the most relevant tools for a query using hybrid ranking. See [Ranking docs](../../docs/server/ranking.md).
+Discover the most relevant tools for a query. The `strategy` field selects the ranker — **BM25 is the default**. See [Ranking docs](../../docs/server/ranking.md).
 
 **Request:**
 
 ```json
 {
   "query": "What's the weather in Rome?",
+  "strategy": "bm25",
   "limit": 5,
   "exclude": ["irrelevant_tool"],
   "turn_id": "prev-turn-uuid",
@@ -108,21 +109,25 @@ Discover the most relevant tools for a query using hybrid ranking. See [Ranking 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `query` | string | required | Natural language query |
+| `strategy` | string | `"bm25"` | Ranker to use: `"bm25"`, `"semantic"`, or `"hybrid"` |
 | `limit` | number | 5 | Max tools to return (max 100) |
 | `exclude` | string[] | [] | Tool names to exclude |
 | `turn_id` | string | — | Previous turn ID for [session continuity](../../docs/server/session-continuity.md) |
-| `embedding_weights` | object | see below | Field weights for semantic scoring |
+| `embedding_weights` | object | see below | Field weights for `semantic` / `hybrid` scoring |
 
 **Default embedding weights:** name=0.1, description=0.5, input_schema=0.3, output_schema=0.1
 
 **Ranking algorithm:**
-1. Embed query using `text-embedding-3-small`
-2. Compute weighted cosine similarity across tool fields (name, description, input_schema, output_schema)
-3. Compute BM25 scores over concatenated tool text
-4. Normalize BM25 to [0, 1]
-5. Final score = `0.7 × semantic + 0.3 × BM25`
-6. If `turn_id` provided, tools from that turn are prepended with score=1.0
-7. [Graph expansion](../../docs/server/graph-expansion.md) injects dependency tools
+
+The `strategy` field selects the ranker (default `bm25`). See [Ranking docs](../../docs/server/ranking.md) for the full comparison.
+
+1. If `strategy = "bm25"`: tokenize the query, compute BM25 (`k1=0.9`, `b=0.4`) over per-tool documents (name + description + JSON Schema field names), min-max normalize to `[0, 1]`.
+2. If `strategy = "semantic"`: embed the query via `text-embedding-3-small`, compute weighted cosine similarity across tool fields (name, description, input_schema, output_schema).
+3. If `strategy = "hybrid"`: compute both of the above; `final_score = 0.7 × semantic + 0.3 × normalized_bm25`.
+4. `always_include` tools are excluded from ranked results — they are injected unconditionally by the SDK.
+5. If `turn_id` is provided, tools from that turn are prepended with `score = 1.0`.
+6. [Graph expansion](../../docs/server/graph-expansion.md) injects dependency tools.
+7. `semantic` / `hybrid` fall back to `bm25` if embeddings are unavailable.
 
 **Response:**
 

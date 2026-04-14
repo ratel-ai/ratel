@@ -134,8 +134,9 @@ ctx = await session.context.messages(strategy="recent").assemble()
 | Problem | Without Agentified | With Agentified |
 |---------|-------------------|-----------------|
 | **Context assembly** | Hand-wire tools + messages per turn | `session.context.assemble()` — one call |
-| **Tool selection** | Dump all tools in prompt | Hybrid-ranked selection based on intent |
+| **Tool selection** | Dump all tools in prompt | Deferred by default — ranked (BM25 / semantic / hybrid) on demand; `alwaysInclude` exempts critical tools |
 | **Token costs** | Pay for irrelevant tools | Only load what's needed |
+| **Cross-turn tool state** | Re-discover every turn | Discovered tools persist within and across turns of the session |
 | **Multi-turn context** | No memory across turns | Session continuity via turn tracking |
 | **Framework switching** | Rebuild context layer | Plug and play |
 | **Context debugging** | Black box | Inspector with full visibility |
@@ -146,9 +147,11 @@ ctx = await session.context.messages(strategy="recent").assemble()
 
 **[Context Assembly](./docs/)** — `session.context.tools(...).messages(...).recall(...).limitTokens(n).assemble()` — one fluent call assembles the right tools, messages, and memory for each agent turn. Supports `recent`, `full`, `summary`, and `recent+summary` strategies. Tool recall auto-discovers relevant tools based on the last user message. Returns an `AssembledContext` you pass straight to your framework.
 
-**[Hybrid Ranking](./docs/server/ranking.md)** — Semantic similarity (70%) + BM25 keyword matching (30%) across tool name, description, and schemas.
+**[Ranking](./docs/server/ranking.md)** — Three strategies: `bm25` (default — field-aware keyword matching, no embedding call per query), `semantic` (OpenAI embeddings across 4 weighted fields), and `hybrid` (`0.7 × semantic + 0.3 × BM25`). Pick per request via the `strategy` field.
 
-**[Session Continuity](./docs/server/session-continuity.md)** — Capture turns to track tool usage. Previously-used tools are prioritized automatically.
+**Deferred Tool Loading** — Registered tools cost zero tokens until discovered. Mark critical tools with `alwaysInclude` to keep them unconditionally available; everything else is surfaced on demand via ranking or `agentified_discover`. Discovered tools persist within and across turns.
+
+**[Session Continuity](./docs/server/session-continuity.md)** — Tools discovered mid-turn stay available for the rest of the turn, and previously-used tools carry into subsequent turns. No context amnesia, no re-discovery cost.
 
 **[Graph Expansion](./docs/server/graph-expansion.md)** — Tools declare `requires`/`provides` metadata. Dependencies are auto-injected.
 
