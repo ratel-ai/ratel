@@ -1,5 +1,16 @@
 # @agentified/react
 
+## 0.1.0
+
+### Minor Changes
+
+- 3a6e9ca: Add observer hooks for context assembly + agent steps. New `ag.on("context:assembled" | "recall", cb)` on the SDK and `mag.on("step", cb)` on the Mastra adapter let consumers subscribe once and receive typed events with a disposer return. Additive — no breaking changes.
+
+### Patch Changes
+
+- Updated dependencies [3a6e9ca]
+  - @agentified/fe-client@0.1.0
+
 ## 0.0.9
 
 ### Patch Changes
