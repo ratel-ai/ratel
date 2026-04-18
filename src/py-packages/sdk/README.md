@@ -305,6 +305,36 @@ result = await agent.ainvoke({"messages": ctx.messages})
 
 See [agentified-langchain README](../../py-packages/langchain/README.md) for full docs, or [py-langchain-sdk-smoke](../../../examples/py-langchain-sdk-smoke/) for a working example.
 
+## Observability
+
+Subscribe once at startup to receive events from every `.recall()` / `.assemble()`. Listeners can be sync or async (coroutines are scheduled on the running event loop).
+
+```python
+from agentified import Agentified
+
+ag = Agentified()
+await ag.connect("http://localhost:9119")
+
+def on_ctx(evt):
+    metrics.emit("ctx", evt)
+
+unsub = ag.on("context_assembled", on_ctx)
+ag.on("recall", lambda evt: print(f"recalled {len(evt.matches)} tools in {evt.duration_ms}ms"))
+
+# later
+unsub()
+```
+
+### Event names + payloads
+
+| Event | Payload fields |
+| --- | --- |
+| `context_assembled` | `session_id`, `dataset_id`, `strategy_used`, `total_messages`, `included_messages`, `token_estimate`, `fallback`, `recalled: {"tools": [...]}`, `duration_ms` |
+| `recall` | `session_id`, `dataset_id`, `config`, `matches`, `duration_ms` (only fires when `.recall(...)` was configured) |
+| `step` | `session_id`, `step_index`, `tool_calls`, `tool_results`, `usage`, `finish_reason`, `duration_ms` — wire via `instance.on_step_finish(data)` from your agent's per-step callback (e.g. LangGraph node post-hook) |
+
+Callbacks are fire-and-forget; errors are swallowed. `on(...)` returns a zero-arg disposer.
+
 ## Links
 
 - [Root README](../../../README.md)

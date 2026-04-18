@@ -8,6 +8,16 @@ export { ContextBuilder } from "./context-builder.js";
 export { Conversation } from "./conversation.js";
 export { tool } from "./tool.js";
 export { mcpTools } from "./mcp-tools.js";
+export { ObserverEmitter } from "./events.js";
+export type {
+  ContextAssembledEvent,
+  RecallEvent,
+  StepEvent,
+  ObserverEventMap,
+  ObserverEventName,
+  ObserverListener,
+  Unsubscribe,
+} from "./events.js";
 export type { McpToolsOptions } from "./mcp-tools.js";
 export type {
   AgentifiedTool,

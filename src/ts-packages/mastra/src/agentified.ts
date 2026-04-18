@@ -18,6 +18,10 @@ import type {
   ContextStrategy,
   RecallConfig,
   AgentifiedTool,
+  ObserverEventName,
+  ObserverListener,
+  Unsubscribe,
+  StepEvent,
 } from "agentified";
 import { jsonSchemaToZod } from "./schema.js";
 
@@ -117,6 +121,10 @@ export class MastraAgentified {
   connect(url?: string, options?: { headers?: Record<string, string> }) { return this.ag.connect(url, options); }
   disconnect() { return this.ag.disconnect(); }
 
+  on<K extends ObserverEventName>(name: K, cb: ObserverListener<K>): Unsubscribe {
+    return this.ag.on(name, cb);
+  }
+
   dataset(name: string) { return new MastraDatasetRef(this.ag.dataset(name)); }
 
   async register(input: RegisterInput) {
@@ -143,6 +151,7 @@ export class MastraInstance {
   get datasetId() { return this.inst.datasetId; }
 
   private readonly alwaysIncludeNames: Set<string>;
+  private stepCount = 0;
 
   constructor(
     private readonly inst: Instance,
@@ -152,6 +161,19 @@ export class MastraInstance {
     this.mastraToolCache = buildMastraToolMap(backendTools);
     this.alwaysIncludeNames = extractAlwaysIncludeNames(backendTools);
   }
+
+  on<K extends ObserverEventName>(name: K, cb: ObserverListener<K>): Unsubscribe {
+    if (!this.inst.emitter) return () => { /* no-op when no emitter */ };
+    return this.inst.emitter.on(name, cb);
+  }
+
+  readonly onStepFinish = (data: Record<string, unknown>): void => {
+    const stepIndex = typeof data["stepIndex"] === "number"
+      ? (data["stepIndex"] as number)
+      : this.stepCount;
+    this.stepCount = stepIndex + 1;
+    this.inst.emitter?.emit("step", toStepEvent(data, stepIndex));
+  };
 
   readonly prepareStep = async (params: { stepNumber: number; steps: any[] }) => {
     await this.inst.prepareStep(params);
@@ -184,6 +206,7 @@ export class MastraSession {
   get conversation() { return this.sess.conversation; }
 
   private readonly alwaysIncludeNames: Set<string>;
+  private stepCount = 0;
 
   constructor(
     private readonly sess: Session,
@@ -194,6 +217,21 @@ export class MastraSession {
     this.mastraToolCache = buildMastraToolMap(backendTools);
     this.alwaysIncludeNames = extractAlwaysIncludeNames(backendTools);
   }
+
+  on<K extends ObserverEventName>(name: K, cb: ObserverListener<K>): Unsubscribe {
+    if (!this.sess.emitter) return () => { /* no-op when no emitter */ };
+    return this.sess.emitter.on(name, cb);
+  }
+
+  readonly onStepFinish = (data: Record<string, unknown>): void => {
+    const stepIndex = typeof data["stepIndex"] === "number"
+      ? (data["stepIndex"] as number)
+      : this.stepCount;
+    this.stepCount = stepIndex + 1;
+    const evt = toStepEvent(data, stepIndex);
+    evt.sessionId = this.sess.id;
+    this.sess.emitter?.emit("step", evt);
+  };
 
   get context(): MastraContextBuilder {
     return new MastraContextBuilder(
@@ -291,4 +329,15 @@ function buildMastraToolMap(backendTools: (BackendTool | McpTool)[]): Record<str
     }) as MastraTool;
   }
   return tools;
+}
+
+function toStepEvent(data: Record<string, unknown>, stepIndex: number): StepEvent {
+  return {
+    stepIndex,
+    toolCalls: Array.isArray(data["toolCalls"]) ? (data["toolCalls"] as unknown[]) : [],
+    toolResults: Array.isArray(data["toolResults"]) ? (data["toolResults"] as unknown[]) : [],
+    usage: data["usage"],
+    finishReason: typeof data["finishReason"] === "string" ? (data["finishReason"] as string) : undefined,
+    durationMs: typeof data["durationMs"] === "number" ? (data["durationMs"] as number) : undefined,
+  };
 }

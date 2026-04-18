@@ -251,6 +251,36 @@ interface TokenUsage {
 }
 ```
 
+## Observability
+
+Subscribe once at startup to receive events from every `.recall()` / `.assemble()` call — no need to destructure the assembled context in every turn.
+
+```typescript
+const ag = new Agentified();
+await ag.connect("http://localhost:9119");
+
+const offCtx = ag.on("context:assembled", (evt) => {
+  metrics.emit("ctx", evt);
+});
+
+const offRecall = ag.on("recall", (evt) => {
+  console.log(`recalled ${evt.matches.length} tools in ${evt.durationMs}ms`);
+});
+
+// later: offCtx(); offRecall();
+```
+
+### Event names + payloads
+
+| Event | Payload fields |
+| --- | --- |
+| `context:assembled` | `sessionId`, `datasetId`, `strategyUsed`, `totalMessages`, `includedMessages`, `tokenEstimate`, `fallback`, `recalled: { tools }`, `durationMs` |
+| `recall` | `sessionId`, `datasetId`, `config`, `matches`, `durationMs` (only fires when `.recall(...)` was configured) |
+
+Listeners can be sync or async. Errors thrown inside listeners are swallowed; each subscriber owns its own batching / backpressure. `ag.on(...)` returns a disposer — call it to unsubscribe.
+
+For agent-step events (`step`), see the Mastra adapter — it exposes `mag.on("step", cb)` and `mag.onStepFinish` to wire into `agent.generate(...)`.
+
 ## Links
 
 - [Root README](../../../README.md)

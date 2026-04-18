@@ -1,4 +1,5 @@
 import { ApiClient } from "./api-client.js";
+import type { ObserverEmitter } from "./events.js";
 import { Instance } from "./instance.js";
 import type { AgentifiedTool, RegisterInput } from "./types.js";
 
@@ -15,7 +16,7 @@ function validateTools(tools: AgentifiedTool[]): void {
 
 export class DatasetRef {
   constructor(
-    /** @internal */ protected readonly _agentified: { sdk: ApiClient | null; serverUrl: string | null },
+    /** @internal */ protected readonly _agentified: { sdk: ApiClient | null; serverUrl: string | null; emitter?: ObserverEmitter },
     readonly datasetName: string,
   ) {}
 
@@ -39,6 +40,6 @@ export class DatasetRef {
     });
     await regSdk.register(this.datasetName);
 
-    return new Instance(this.datasetName, this.datasetName, sdk, input.tools);
+    return new Instance(this.datasetName, this.datasetName, sdk, input.tools, this._agentified.emitter);
   }
 }

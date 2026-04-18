@@ -128,6 +128,31 @@ tool = session.get_messages_tool
 # StructuredTool wrapping agentified_get_messages
 ```
 
+## Observability
+
+`LangchainAgentified` forwards `context_assembled` / `recall` events from the underlying SDK. `LangchainInstance` exposes a `step` event that fires once per agent step. Wire it from your LangGraph node post-hook (or any per-step callback).
+
+```python
+lc = LangchainAgentified()
+await lc.connect("http://localhost:9119")
+instance = await lc.register(RegisterInput(tools=[...]))
+
+unsub = lc.on("context_assembled", lambda evt: metrics.emit("ctx", evt))
+instance.on("step", lambda evt: metrics.emit("step", evt))
+
+# Inside your LangGraph post-hook:
+def post_hook(state, node_name):
+    instance.on_step_finish({
+        "step_index": state["step_index"],
+        "tool_calls": state.get("tool_calls", []),
+        "tool_results": state.get("tool_results", []),
+        "usage": state.get("usage"),
+        "finish_reason": state.get("finish_reason"),
+    })
+```
+
+Supported events: `context_assembled`, `recall`, `step`. See the [Python SDK README](../sdk/README.md#observability) for payload details.
+
 ## Links
 
 - [Root README](../../../README.md)

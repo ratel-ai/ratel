@@ -50,7 +50,10 @@ class DatasetRef:
         )
         await reg_sdk.register(self.dataset_name)
 
-        return Instance(self.dataset_name, self.dataset_name, sdk, input.tools)
+        return Instance(
+            self.dataset_name, self.dataset_name, sdk, input.tools,
+            emitter=self._agentified.emitter,
+        )
 
 
 def _validate_tools(tools: list[AgentifiedTool]) -> None:

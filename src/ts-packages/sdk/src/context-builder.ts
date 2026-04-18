@@ -1,4 +1,5 @@
 import type { ApiClient } from "./api-client.js";
+import type { ObserverEmitter } from "./events.js";
 import type { AgentifiedTool, AssembledContext, CompactionStrategy, ContextStrategy, RecallConfig, StoredMessage } from "./types.js";
 
 export class ContextBuilder<T = AgentifiedTool> {
@@ -14,6 +15,7 @@ export class ContextBuilder<T = AgentifiedTool> {
     private readonly sessionId: string,
     private readonly registeredTools: T[] = [],
     private readonly discoveredNames: Set<string> = new Set(),
+    private readonly emitter?: ObserverEmitter,
   ) {}
 
   tools(tools: Record<string, T>): this {
@@ -39,6 +41,7 @@ export class ContextBuilder<T = AgentifiedTool> {
   async assemble(): Promise<AssembledContext<T>> {
     const { compactionStrategy } = this.messageOpts;
     const isClientCompaction = compactionStrategy && this.messageOpts.strategy === "compacted";
+    const startedAt = Date.now();
 
     const res = await this.sdk.getContext(this.datasetId, this.namespaceId, this.sessionId, {
       strategy: isClientCompaction ? "recent" : this.messageOpts.strategy,
@@ -48,6 +51,16 @@ export class ContextBuilder<T = AgentifiedTool> {
       recall: this.recallOpts,
       limitTokens: this.tokenLimit,
     });
+
+    if (this.emitter && this.recallOpts) {
+      this.emitter.emit("recall", {
+        sessionId: this.sessionId,
+        datasetId: this.datasetId,
+        config: this.recallOpts,
+        matches: res.recalled?.tools ?? [],
+        durationMs: Date.now() - startedAt,
+      });
+    }
 
     // Client-side compaction: fetch all messages, find older ones, call user's compactionStrategy
     if (isClientCompaction) {
@@ -100,7 +113,7 @@ export class ContextBuilder<T = AgentifiedTool> {
       }
     }
 
-    return {
+    const assembled: AssembledContext<T> = {
       messages: finalMessages,
       recalled: res.recalled,
       strategyUsed: res.strategyUsed,
@@ -113,5 +126,21 @@ export class ContextBuilder<T = AgentifiedTool> {
       summary: res.summary,
       summaryRange: res.summaryRange,
     };
+
+    if (this.emitter) {
+      this.emitter.emit("context:assembled", {
+        sessionId: this.sessionId,
+        datasetId: this.datasetId,
+        strategyUsed: assembled.strategyUsed,
+        totalMessages: assembled.totalMessages,
+        includedMessages: assembled.includedMessages,
+        tokenEstimate: assembled.tokenEstimate,
+        fallback: assembled.fallback,
+        recalled: { tools: assembled.recalled?.tools ?? [] },
+        durationMs: Date.now() - startedAt,
+      });
+    }
+
+    return assembled;
   }
 }

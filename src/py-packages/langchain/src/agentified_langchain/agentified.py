@@ -15,6 +15,11 @@ from agentified import (
     RegisterInput,
     Session,
 )
+from agentified.events import (
+    Listener,
+    ObserverEventName,
+    Unsubscribe,
+)
 from agentified.models import (
     AgentifiedTool,
     BackendTool,
@@ -263,6 +268,12 @@ class LangchainInstance:
     def dataset_id(self) -> str:
         return self._inst.dataset_id
 
+    def on(self, name: ObserverEventName, cb: Listener) -> Unsubscribe:
+        return self._inst.on(name, cb)
+
+    def on_step_finish(self, data: dict) -> None:
+        self._inst.on_step_finish(data)
+
     def get_tools(self) -> list[StructuredTool]:
         tools: list[StructuredTool] = [self.discover_tool]
         for name in self._inst.discover_tool.discovered_names:
@@ -301,6 +312,9 @@ class LangchainAgentified:
 
     async def disconnect(self) -> None:
         await self._ag.disconnect()
+
+    def on(self, name: ObserverEventName, cb: Listener) -> Unsubscribe:
+        return self._ag.on(name, cb)
 
     def dataset(self, name: str) -> LangchainDatasetRef:
         return LangchainDatasetRef(self._ag.dataset(name))

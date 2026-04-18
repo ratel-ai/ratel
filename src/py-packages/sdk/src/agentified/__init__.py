@@ -4,6 +4,13 @@ from .api_client import ApiClient
 from .context_builder import ContextBuilder
 from .conversation import Conversation
 from .dataset_ref import DatasetRef
+from .events import (
+    ContextAssembledEvent,
+    ObserverEmitter,
+    ObserverEventName,
+    RecallEvent,
+    StepEvent,
+)
 from .instance import Instance
 from .namespace import Namespace
 from .session import Session
@@ -64,7 +71,12 @@ __all__ = [
     "ApiClient",
     "ContextBuilder",
     "Conversation",
+    "ContextAssembledEvent",
     "DatasetRef",
+    "ObserverEmitter",
+    "ObserverEventName",
+    "RecallEvent",
+    "StepEvent",
     "Instance",
     "Namespace",
     "Session",
