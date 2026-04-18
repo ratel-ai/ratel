@@ -119,6 +119,37 @@ Converts a JSON Schema object to a Zod schema. Used internally to hydrate Mastra
 import { jsonSchemaToZod } from "@agentified/mastra";
 ```
 
+## Observability
+
+`MastraAgentified` forwards `context:assembled` / `recall` events from the underlying SDK and adds a `step` event that fires once per agent step.
+
+```typescript
+const mag = new Agentified().adaptTo(mastra());
+await mag.connect("http://localhost:9119");
+
+const instance = await mag.register({ tools: [...] });
+const session = instance.session("chat-1");
+
+mag.on("context:assembled", (evt) => metrics.emit("ctx", evt));
+session.on("step", (evt) => metrics.emit("step", evt));
+
+const ctx = await session.context.recall().messages({ strategy: "recent" }).assemble();
+const result = await agent.generate(messages, {
+  prepareStep: ctx.prepareStep,
+  onStepFinish: session.onStepFinish, // wires Mastra steps into the "step" event
+});
+```
+
+### Event names + payloads
+
+| Event | Source | Payload |
+| --- | --- | --- |
+| `context:assembled` | SDK | `sessionId`, `datasetId`, `strategyUsed`, `totalMessages`, `includedMessages`, `tokenEstimate`, `fallback`, `recalled: { tools }`, `durationMs` |
+| `recall` | SDK | `sessionId`, `datasetId`, `config`, `matches`, `durationMs` |
+| `step` | Mastra | `sessionId`, `stepIndex`, `toolCalls`, `toolResults`, `usage`, `finishReason`, `durationMs` |
+
+`mag.on(...)`, `instance.on(...)`, `session.on(...)` all return a disposer. Listeners can be sync or async; listener errors are swallowed.
+
 ## Links
 
 - [Root README](../../../README.md)

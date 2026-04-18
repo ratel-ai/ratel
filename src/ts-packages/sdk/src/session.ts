@@ -1,6 +1,7 @@
 import type { ApiClient } from "./api-client.js";
 import { ContextBuilder } from "./context-builder.js";
 import { Conversation } from "./conversation.js";
+import type { ObserverEmitter } from "./events.js";
 import type { AgentifiedTool, GetMessagesTool, GetMessagesOptions, GetMessagesResult, PrepareStepFn } from "./types.js";
 
 export class Session {
@@ -15,8 +16,9 @@ export class Session {
     readonly id: string,
     readonly namespaceId: string,
     /** @internal */ private readonly sdk: ApiClient,
-    /** @internal */ private readonly datasetId: string,
+    /** @internal */ readonly datasetId: string,
     /** @internal */ private readonly registeredTools: AgentifiedTool[],
+    /** @internal */ readonly emitter?: ObserverEmitter,
   ) {
     this.conversation = new Conversation(sdk, datasetId, namespaceId, id);
     this._discoverTool = sdk.asDiscoverTool(datasetId, namespaceId, id);
@@ -27,6 +29,7 @@ export class Session {
       this.sdk, this.datasetId, this.namespaceId, this.id,
       this.registeredTools,
       this._discoverTool.discoveredNames,
+      this.emitter,
     );
   }
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Awaitable, Callable, TYPE_CHECKING
 
+from .events import ContextAssembledEvent, ObserverEmitter, RecallEvent
 from .models import (
     AssembledContext,
     BackendTool,
@@ -29,6 +31,7 @@ class ContextBuilder:
         session_id: str,
         registered_tools: list[Any] | None = None,
         discovered_names: set[str] | None = None,
+        emitter: ObserverEmitter | None = None,
     ) -> None:
         self._sdk = sdk
         self._dataset_id = dataset_id
@@ -44,6 +47,7 @@ class ContextBuilder:
         self._recall_config: RecallConfig | None = None
         self._token_limit: int | None = None
         self._explicit_tools: dict[str, Any] = {}
+        self._emitter = emitter
 
     def messages(
         self,
@@ -77,6 +81,7 @@ class ContextBuilder:
             self._compaction_strategy is not None
             and self._strategy == "compacted"
         )
+        started_at = time.perf_counter()
 
         res = await self._sdk.get_context(
             self._dataset_id, self._namespace_id, self._session_id,
@@ -87,6 +92,16 @@ class ContextBuilder:
             recall=self._recall_config,
             limit_tokens=self._token_limit,
         )
+
+        if self._emitter is not None and self._recall_config is not None:
+            matches = (res.recalled or {}).get("tools", []) if isinstance(res.recalled, dict) else []
+            self._emitter.emit("recall", RecallEvent(
+                session_id=self._session_id,
+                dataset_id=self._dataset_id,
+                config=self._recall_config,
+                matches=list(matches),
+                duration_ms=(time.perf_counter() - started_at) * 1000,
+            ))
 
         # Client-side compaction
         if is_client_compaction and self._compaction_strategy:
@@ -143,7 +158,7 @@ class ContextBuilder:
             if name and name in self._discovered_names and name not in resolved:
                 resolved[name] = tool
 
-        return AssembledContext(
+        assembled = AssembledContext(
             messages=final_messages,
             recalled=res.recalled,
             strategy_used=res.strategy_used,
@@ -156,3 +171,19 @@ class ContextBuilder:
             summary=res.summary,
             summary_range=res.summary_range,
         )
+
+        if self._emitter is not None:
+            recalled_tools = (res.recalled or {}).get("tools", []) if isinstance(res.recalled, dict) else []
+            self._emitter.emit("context_assembled", ContextAssembledEvent(
+                session_id=self._session_id,
+                dataset_id=self._dataset_id,
+                strategy_used=assembled.strategy_used,
+                total_messages=assembled.total_messages,
+                included_messages=assembled.included_messages,
+                token_estimate=assembled.token_estimate,
+                fallback=assembled.fallback,
+                recalled={"tools": list(recalled_tools)},
+                duration_ms=(time.perf_counter() - started_at) * 1000,
+            ))
+
+        return assembled

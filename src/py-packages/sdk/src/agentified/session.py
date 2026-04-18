@@ -4,6 +4,7 @@ from typing import Any, TYPE_CHECKING
 
 from .context_builder import ContextBuilder
 from .conversation import Conversation
+from .events import ObserverEmitter
 from .models import (
     AgentifiedTool,
     DiscoverTool,
@@ -24,6 +25,7 @@ class Session:
         sdk: ApiClient,
         dataset_id: str,
         registered_tools: list[AgentifiedTool],
+        emitter: ObserverEmitter | None = None,
     ) -> None:
         self.id = id
         self.namespace_id = namespace_id
@@ -33,6 +35,15 @@ class Session:
         self.conversation = Conversation(sdk, dataset_id, namespace_id, id)
         self._discover_tool = sdk.as_discover_tool(dataset_id, namespace_id, id)
         self._get_messages_tool: GetMessagesTool | None = None
+        self._emitter = emitter
+
+    @property
+    def dataset_id(self) -> str:
+        return self._dataset_id
+
+    @property
+    def emitter(self) -> ObserverEmitter | None:
+        return self._emitter
 
     @property
     def context(self) -> ContextBuilder:
@@ -40,6 +51,7 @@ class Session:
             self._sdk, self._dataset_id, self.namespace_id, self.id,
             registered_tools=self._registered_tools,
             discovered_names=self._discover_tool.discovered_names,
+            emitter=self._emitter,
         )
 
     @property

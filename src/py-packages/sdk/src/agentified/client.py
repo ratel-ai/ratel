@@ -6,6 +6,7 @@ import httpx
 
 from .api_client import ApiClient
 from .dataset_ref import DatasetRef
+from .events import Listener, ObserverEmitter, ObserverEventName, Unsubscribe
 from .instance import Instance
 from .models import ApiClientConfig, RegisterInput, SearchStrategy
 
@@ -16,6 +17,14 @@ class Agentified:
         self._server_url: str | None = None
         self._connected = False
         self._http_client: httpx.AsyncClient | None = None
+        self._emitter = ObserverEmitter()
+
+    @property
+    def emitter(self) -> ObserverEmitter:
+        return self._emitter
+
+    def on(self, name: ObserverEventName, cb: Listener) -> Unsubscribe:
+        return self._emitter.on(name, cb)
 
     async def connect(
         self,

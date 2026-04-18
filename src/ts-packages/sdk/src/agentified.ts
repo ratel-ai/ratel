@@ -1,6 +1,7 @@
 import { ApiClient } from "./api-client.js";
 import { DatasetRef } from "./dataset-ref.js";
 import { Instance } from "./instance.js";
+import { ObserverEmitter, type ObserverEventName, type ObserverListener, type Unsubscribe } from "./events.js";
 import { resolveBinaryPath, findFreePort } from "./spawn-utils.js";
 import type { RegisterInput, SearchStrategy } from "./types.js";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -8,6 +9,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 export class Agentified {
   /** @internal */ sdk: ApiClient | null = null;
   /** @internal */ serverUrl: string | null = null;
+  /** @internal */ readonly emitter: ObserverEmitter = new ObserverEmitter();
   private connected = false;
   private spawnedProcess: ChildProcess | null = null;
   private cleanupHandlers: Array<[string, (...args: any[]) => void]> = [];
@@ -15,6 +17,10 @@ export class Agentified {
   private spawnArgs: { binaryPath: string; port: number } | null = null;
   private headers?: Record<string, string>;
   private strategy?: SearchStrategy;
+
+  on<K extends ObserverEventName>(name: K, cb: ObserverListener<K>): Unsubscribe {
+    return this.emitter.on(name, cb);
+  }
 
   async connect(serverUrl?: string, options?: { headers?: Record<string, string>; strategy?: SearchStrategy }): Promise<void> {
     if (this.connected) throw new Error("Already connected");
