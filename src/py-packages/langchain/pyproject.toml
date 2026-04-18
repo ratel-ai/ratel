@@ -4,12 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentified-langchain"
-version = "0.2.0"
+version = "0.3.0"
 description = "LangChain adapter for Agentified — tool injection for LangChain/LangGraph agents"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
-    "agentified>=0.2.0",
+    "agentified>=0.3.0",
     "langchain-core>=0.3",
 ]
 
