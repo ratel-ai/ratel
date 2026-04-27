@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Agentified Inspector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --bg-elev: #14181d;
+      --bg-hover: #1c2229;
+      --border: #232931;
+      --text: #e6e9ee;
+      --text-dim: #8b95a3;
+      --accent: #7dd3fc;
+      --good: #4ade80;
+      --warn: #fbbf24;
+      --bad: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    header .pill {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      padding: 0.15rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+    .recordings-bar {
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .rec-tab {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 0.4rem 0.85rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+    .rec-tab:hover { background: var(--bg-hover); color: var(--text); }
+    .rec-tab.active {
+      background: var(--bg-hover);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    .rec-tab.compare { margin-left: auto; }
+    main { padding: 1.5rem; display: grid; gap: 1.5rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+    }
+    .card h2 {
+      margin: 0 0 0.75rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    .metric:last-child { border-bottom: 0; }
+    .metric .v { color: var(--text); font-variant-numeric: tabular-nums; }
+    .metric .v.good { color: var(--good); }
+    .metric .v.warn { color: var(--warn); }
+    .metric .v.bad  { color: var(--bad); }
+    ul.list { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; }
+    ul.list li {
+      padding: 0.4rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 0.5rem;
+      align-items: baseline;
+    }
+    ul.list li:last-child { border-bottom: 0; }
+    .badge {
+      font-size: 0.7rem;
+      padding: 0.05rem 0.4rem;
+      border-radius: 3px;
+      background: var(--bg-hover);
+      color: var(--text-dim);
+    }
+    .badge.skill { color: var(--accent); }
+    .badge.fail  { color: var(--bad); }
+    .badge.warn  { color: var(--warn); }
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 7ch 1fr 8ch;
+      gap: 0.5rem;
+      padding: 0.3rem 0;
+      font-size: 0.8rem;
+      border-bottom: 1px dashed var(--border);
+    }
+    .timeline-row:last-child { border-bottom: 0; }
+    .timeline-row .t { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .timeline-row .ms { color: var(--text-dim); text-align: right; }
+    .empty { color: var(--text-dim); font-style: italic; padding: 2rem; text-align: center; }
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 900px) { .compare-grid { grid-template-columns: 1fr; } }
+    .compare-grid h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+    a.repo-link { color: var(--accent); text-decoration: none; }
+    a.repo-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Agentified Inspector</h1>
+    <span class="pill" id="dir-pill">…</span>
+  </header>
+  <div class="recordings-bar" id="bar"></div>
+  <main id="main"></main>
+
+  <script>
+    const fmt = (n) => typeof n === "number"
+      ? n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+      : "—";
+    const usd = (n) => typeof n === "number" ? "$" + n.toFixed(4) : "—";
+
+    let recordings = [];
+    let activeIdx = 0;
+    let compareMode = false;
+
+    async function load() {
+      const meta = await fetch("/api/recordings").then((r) => r.json());
+      document.getElementById("dir-pill").textContent = meta.dir || "(no dir)";
+      recordings = meta.recordings || [];
+      renderBar();
+      renderMain();
+    }
+
+    function renderBar() {
+      const bar = document.getElementById("bar");
+      bar.innerHTML = "";
+      if (recordings.length === 0) return;
+      recordings.forEach((r, i) => {
+        const btn = document.createElement("button");
+        btn.className = "rec-tab" + (!compareMode && i === activeIdx ? " active" : "");
+        btn.textContent = r.label || r.name;
+        btn.onclick = () => { compareMode = false; activeIdx = i; renderBar(); renderMain(); };
+        bar.appendChild(btn);
+      });
+      if (recordings.length >= 2) {
+        const cmp = document.createElement("button");
+        cmp.className = "rec-tab compare" + (compareMode ? " active" : "");
+        cmp.textContent = "Compare ⇄";
+        cmp.onclick = () => { compareMode = !compareMode; renderBar(); renderMain(); };
+        bar.appendChild(cmp);
+      }
+    }
+
+    function renderMain() {
+      const main = document.getElementById("main");
+      if (recordings.length === 0) {
+        main.innerHTML = '<div class="empty">No recordings found. Drop JSON files in the recordings directory and reload.</div>';
+        return;
+      }
+      if (compareMode && recordings.length >= 2) {
+        main.innerHTML = "";
+        const grid = document.createElement("div");
+        grid.className = "compare-grid";
+        recordings.slice(0, 2).forEach((r) => {
+          const col = document.createElement("div");
+          col.innerHTML = "<h3>" + (r.label || r.name) + "</h3>";
+          col.appendChild(renderRecording(r));
+          grid.appendChild(col);
+        });
+        main.appendChild(grid);
+      } else {
+        main.innerHTML = "";
+        main.appendChild(renderRecording(recordings[activeIdx]));
+      }
+    }
+
+    function renderRecording(rec) {
+      const wrap = document.createElement("div");
+      wrap.className = "grid";
+
+      // Summary card
+      const summary = card("Summary", () => {
+        const m = rec.metrics || {};
+        const lines = [
+          ["Tools loaded", fmt(m.tools_loaded)],
+          ["Tool calls", fmt(m.tool_calls)],
+          ["Skill activations", fmt(m.skill_activations)],
+          ["Total tokens", fmt(m.total_tokens)],
+          ["Estimated cost", usd(m.estimated_cost_usd)],
+          ["Wall clock (s)", fmt(m.wall_clock_seconds)],
+          ["Reliability score", fmt(m.reliability_score)],
+        ];
+        return lines.map(([k, v]) => metricRow(k, v)).join("");
+      });
+      wrap.appendChild(summary);
+
+      // Skills card
+      const skills = (rec.skills || []);
+      wrap.appendChild(card("Skills activated", () => {
+        if (skills.length === 0) return '<div class="empty">No skills activated.</div>';
+        return '<ul class="list">' + skills.map((s) =>
+          `<li><span class="badge skill">skill</span><b>${esc(s.name)}</b><span style="color:var(--text-dim);margin-left:auto">${fmt(s.atoms_used)}/${fmt(s.atoms_total)} atoms</span></li>`
+        ).join("") + "</ul>";
+      }));
+
+      // Tool calls card
+      const tools = (rec.tool_calls || []);
+      wrap.appendChild(card("Tool calls", () => {
+        if (tools.length === 0) return '<div class="empty">No tool calls.</div>';
+        return '<ul class="list">' + tools.slice(0, 20).map((t) => {
+          const status = t.outcome === "success" ? "" : `<span class="badge ${t.outcome === "retry" ? "warn" : "fail"}">${t.outcome}</span>`;
+          return `<li>${status}<span>${esc(t.name)}</span><span style="color:var(--text-dim);margin-left:auto">${fmt(t.duration_ms)}ms</span></li>`;
+        }).join("") + "</ul>";
+      }));
+
+      // Suggestions card
+      const suggestions = (rec.suggestions || []);
+      wrap.appendChild(card("Inspector suggestions", () => {
+        if (suggestions.length === 0) return '<div class="empty">No suggestions.</div>';
+        return '<ul class="list">' + suggestions.map((s) =>
+          `<li><span class="badge skill">propose</span><span><b>${esc(s.name)}</b><br><span style="color:var(--text-dim)">${esc(s.reason)}</span></span></li>`
+        ).join("") + "</ul>";
+      }));
+
+      // Reliability issues card
+      const issues = (rec.reliability_issues || []);
+      wrap.appendChild(card("Reliability issues", () => {
+        if (issues.length === 0) return '<div class="empty">No reliability issues.</div>';
+        return '<ul class="list">' + issues.map((i) =>
+          `<li><span class="badge fail">${esc(i.kind)}</span><span><b>${esc(i.tool)}</b><br><span style="color:var(--text-dim)">${esc(i.detail)}</span></span></li>`
+        ).join("") + "</ul>";
+      }));
+
+      // Timeline card
+      const timeline = (rec.timeline || []);
+      wrap.appendChild(card("Timeline", () => {
+        if (timeline.length === 0) return '<div class="empty">No timeline events.</div>';
+        return timeline.slice(0, 50).map((row) =>
+          `<div class="timeline-row"><div class="t">${esc(row.t || "")}</div><div>${esc(row.label)}</div><div class="ms">${row.ms ? fmt(row.ms) + "ms" : ""}</div></div>`
+        ).join("");
+      }));
+
+      return wrap;
+    }
+
+    function card(title, body) {
+      const c = document.createElement("div");
+      c.className = "card";
+      c.innerHTML = `<h2>${esc(title)}</h2>${body()}`;
+      return c;
+    }
+
+    function metricRow(k, v) {
+      return `<div class="metric"><span>${esc(k)}</span><span class="v">${esc(v)}</span></div>`;
+    }
+
+    function esc(v) {
+      if (v === null || v === undefined) return "";
+      return String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    load().catch((e) => {
+      document.getElementById("main").innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + '</div>';
+    });
+  </script>
+</body>
+</html>

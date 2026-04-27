@@ -1,0 +1,47 @@
+{
+  "label": "Agentified-curated — skill-first",
+  "task": "Investigate anomalous transactions in the last 7 days and email a CFO memo.",
+  "metrics": {
+    "tools_loaded": 7,
+    "tool_calls": 7,
+    "skill_activations": 1,
+    "total_tokens": 1820,
+    "estimated_cost_usd": 0.0054,
+    "wall_clock_seconds": 11.2,
+    "reliability_score": 0.96
+  },
+  "skills": [
+    {
+      "name": "investigate_anomalous_transactions",
+      "atoms_used": 7,
+      "atoms_total": 7
+    }
+  ],
+  "tool_calls": [
+    { "name": "ledger_list_transactions", "duration_ms": 380, "outcome": "success" },
+    { "name": "ledger_detect_anomalies", "duration_ms": 460, "outcome": "success" },
+    { "name": "ledger_get_transaction", "duration_ms": 210, "outcome": "success" },
+    { "name": "crm_get_contact", "duration_ms": 200, "outcome": "success" },
+    { "name": "docs_search_policy", "duration_ms": 390, "outcome": "success" },
+    { "name": "docs_draft_memo", "duration_ms": 1080, "outcome": "success" },
+    { "name": "comms_send_email", "duration_ms": 360, "outcome": "success" }
+  ],
+  "suggestions": [
+    {
+      "name": "anomaly_followup_with_internal_audit",
+      "reason": "Two of the three flagged tx involved the same vendor — consider extending the skill with an internal-audit branch when vendor risk score > 0.7."
+    }
+  ],
+  "reliability_issues": [],
+  "timeline": [
+    { "t": "00:00", "label": "Loaded 7 tools via skill activation (1,820 input tokens)", "ms": 0 },
+    { "t": "00:00", "label": "skill: investigate_anomalous_transactions", "ms": 0 },
+    { "t": "00:01", "label": "ledger_list_transactions", "ms": 380 },
+    { "t": "00:02", "label": "ledger_detect_anomalies", "ms": 460 },
+    { "t": "00:03", "label": "ledger_get_transaction", "ms": 210 },
+    { "t": "00:04", "label": "crm_get_contact", "ms": 200 },
+    { "t": "00:05", "label": "docs_search_policy", "ms": 390 },
+    { "t": "00:08", "label": "docs_draft_memo", "ms": 1080 },
+    { "t": "00:11", "label": "comms_send_email", "ms": 360 }
+  ]
+}

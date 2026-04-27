@@ -1,4 +1,6 @@
+mod analyze;
 mod cli;
+mod inspect;
 mod mcp;
 
 use std::sync::Arc;
@@ -173,7 +175,57 @@ async fn main() {
                 .init();
             run_mcp_stdio(dataset).await;
         }
+        Some(Command::Analyze { path, dataset }) => {
+            tracing_subscriber::fmt::init();
+            run_analyze(path, dataset);
+        }
+        Some(Command::Inspect { recordings, port }) => {
+            tracing_subscriber::fmt::init();
+            run_inspect(recordings, port).await;
+        }
     }
+}
+
+fn run_analyze(path: std::path::PathBuf, dataset: String) {
+    match analyze::run(&path, &dataset) {
+        Ok(out) => {
+            println!(
+                "wrote {} skills → {}",
+                out.skill_count,
+                out.skills_path.display()
+            );
+            println!("wrote MCP client config → {}", out.mcp_path.display());
+            println!();
+            println!("next steps:");
+            println!("  1. start the core:   agentified serve --dataset {dataset}");
+            println!("  2. load skills.json from your app via instance.registerSkills()");
+            println!(
+                "  3. point your MCP client at .mcp.json (Claude Code reads it automatically)"
+            );
+        }
+        Err(e) => {
+            eprintln!("analyze failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn run_inspect(recordings: std::path::PathBuf, port: u16) {
+    let addr = format!("0.0.0.0:{port}");
+    let router = inspect::router(recordings.clone());
+    tracing::info!(
+        recordings = %recordings.display(),
+        "inspector UI listening on http://{addr}"
+    );
+    println!("Agentified Inspector → http://localhost:{port}");
+    println!("  recordings dir: {}", recordings.display());
+
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .expect("failed to bind inspector port");
+    axum::serve(listener, router)
+        .await
+        .expect("inspector server failed");
 }
 
 fn build_core_from_env() -> Arc<AgentifiedCore> {

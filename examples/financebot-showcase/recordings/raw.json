@@ -1,0 +1,79 @@
+{
+  "label": "Raw — 100 tools dumped to the model",
+  "task": "Investigate anomalous transactions in the last 7 days and email a CFO memo.",
+  "metrics": {
+    "tools_loaded": 100,
+    "tool_calls": 14,
+    "skill_activations": 0,
+    "total_tokens": 24500,
+    "estimated_cost_usd": 0.0735,
+    "wall_clock_seconds": 38.4,
+    "reliability_score": 0.68
+  },
+  "skills": [],
+  "tool_calls": [
+    { "name": "ledger_search_transactions", "duration_ms": 320, "outcome": "success" },
+    { "name": "ledger_get_audit_log", "duration_ms": 280, "outcome": "retry" },
+    { "name": "ledger_list_transactions", "duration_ms": 410, "outcome": "success" },
+    { "name": "ledger_get_transaction", "duration_ms": 220, "outcome": "success" },
+    { "name": "ledger_recategorize_transaction", "duration_ms": 240, "outcome": "fail" },
+    { "name": "crm_search_contacts", "duration_ms": 350, "outcome": "retry" },
+    { "name": "crm_get_contact", "duration_ms": 210, "outcome": "success" },
+    { "name": "crm_get_contact_payment_history", "duration_ms": 330, "outcome": "success" },
+    { "name": "docs_list_templates", "duration_ms": 190, "outcome": "success" },
+    { "name": "docs_search_policy", "duration_ms": 410, "outcome": "success" },
+    { "name": "docs_draft_memo", "duration_ms": 1140, "outcome": "success" },
+    { "name": "docs_render_pdf", "duration_ms": 720, "outcome": "fail" },
+    { "name": "docs_save_draft", "duration_ms": 240, "outcome": "success" },
+    { "name": "comms_send_email", "duration_ms": 380, "outcome": "success" }
+  ],
+  "suggestions": [
+    {
+      "name": "investigate_anomalous_transactions",
+      "reason": "ledger_list_transactions → ledger_get_transaction → docs_draft_memo → comms_send_email co-occurred 8x in the last 30 days. Promote to a skill."
+    },
+    {
+      "name": "ar_followup_campaign",
+      "reason": "ledger_list_invoices + ledger_get_invoice_aging + crm_get_contact_health + comms_send_email fired together 5x. Promote to a skill."
+    }
+  ],
+  "reliability_issues": [
+    {
+      "tool": "ledger_recategorize_transaction",
+      "kind": "wrong-tool",
+      "detail": "Model picked recategorize when only get_transaction was needed. Reverted manually."
+    },
+    {
+      "tool": "ledger_get_audit_log",
+      "kind": "retry",
+      "detail": "First call had ambiguous accountId (expected txId). Retried with the right param."
+    },
+    {
+      "tool": "crm_search_contacts",
+      "kind": "retry",
+      "detail": "Search query was too broad; second attempt narrowed by email domain."
+    },
+    {
+      "tool": "docs_render_pdf",
+      "kind": "fail",
+      "detail": "Render failed because the memo wasn't saved as a draft yet — model called render before save."
+    }
+  ],
+  "timeline": [
+    { "t": "00:00", "label": "Loaded 100 tools (24,500 input tokens)", "ms": 0 },
+    { "t": "00:01", "label": "ledger_search_transactions", "ms": 320 },
+    { "t": "00:02", "label": "ledger_get_audit_log (retry)", "ms": 280 },
+    { "t": "00:04", "label": "ledger_list_transactions", "ms": 410 },
+    { "t": "00:05", "label": "ledger_get_transaction", "ms": 220 },
+    { "t": "00:06", "label": "ledger_recategorize_transaction (fail — wrong tool)", "ms": 240 },
+    { "t": "00:09", "label": "crm_search_contacts (retry)", "ms": 350 },
+    { "t": "00:11", "label": "crm_get_contact", "ms": 210 },
+    { "t": "00:13", "label": "crm_get_contact_payment_history", "ms": 330 },
+    { "t": "00:15", "label": "docs_list_templates", "ms": 190 },
+    { "t": "00:18", "label": "docs_search_policy", "ms": 410 },
+    { "t": "00:23", "label": "docs_draft_memo", "ms": 1140 },
+    { "t": "00:28", "label": "docs_render_pdf (fail — draft not saved)", "ms": 720 },
+    { "t": "00:32", "label": "docs_save_draft", "ms": 240 },
+    { "t": "00:38", "label": "comms_send_email", "ms": 380 }
+  ]
+}

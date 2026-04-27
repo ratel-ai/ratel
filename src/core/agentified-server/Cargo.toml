@@ -25,3 +25,4 @@ tower = { version = "0.5", features = ["util"] }
 agentified-lib = { path = "../agentified-lib", features = ["test-utils"] }
 http-body-util = "0.1"
 rmcp = { version = "1.5", features = ["client", "server", "transport-async-rw"] }
+tempfile = "3"

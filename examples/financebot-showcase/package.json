@@ -1,0 +1,17 @@
+{
+  "name": "financebot-showcase",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "agentified": "link:../../src/ts-packages/sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0"
+  }
+}
