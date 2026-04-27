@@ -50,6 +50,8 @@ function initialState(): InspectorState {
     isLoading: false,
     error: null,
     frontendTools: [],
+    skills: { registered: [], activations: [], suggestions: [], reliability: [] },
+    cost: { totalTokens: 0, inputCostUsd: 0, outputCostUsd: 0, cachedCostUsd: 0, totalCostUsd: 0 },
   };
 }
 
@@ -843,6 +845,166 @@ describe("AgentifiedClient", () => {
       const events = client.getState().events;
       expect(events).toHaveLength(1);
       expect(events[0]!.isAgentified).toBe(true);
+    });
+  });
+
+  describe("Inspector v2: skills", () => {
+    it("setRegisteredSkills exposes skills via state", () => {
+      client.setRegisteredSkills([
+        { name: "anomaly_review", description: "find and report anomalies", atoms: ["search", "summarize"] },
+      ]);
+      expect(client.getState().skills.registered).toHaveLength(1);
+      expect(client.getState().skills.registered[0]!.atoms).toEqual(["search", "summarize"]);
+    });
+
+    it("activates registered skill when one of its atoms is called", async () => {
+      client.setRegisteredSkills([
+        { name: "compose_email", description: "draft an email", atoms: ["draft_email", "send_email"] },
+      ]);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "draft_email" } as ToolCallStartEvent);
+
+      const activations = client.getState().skills.activations;
+      expect(activations).toHaveLength(1);
+      expect(activations[0]!.skillName).toBe("compose_email");
+      expect(activations[0]!.toolCallIds).toEqual(["tc1"]);
+    });
+
+    it("subsequent tool calls of the same skill append to existing activation", async () => {
+      client.setRegisteredSkills([
+        { name: "compose_email", description: "draft an email", atoms: ["draft_email", "send_email"] },
+      ]);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "draft_email" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc2", toolCallName: "send_email" } as ToolCallStartEvent);
+
+      const activations = client.getState().skills.activations;
+      expect(activations).toHaveLength(1);
+      expect(activations[0]!.toolCallIds).toEqual(["tc1", "tc2"]);
+    });
+
+    it("does not activate skill when no atom matches", async () => {
+      client.setRegisteredSkills([
+        { name: "compose_email", description: "", atoms: ["draft_email"] },
+      ]);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+
+      expect(client.getState().skills.activations).toHaveLength(0);
+    });
+
+    it("agentified:skills:registered custom event sets registered skills", async () => {
+      await mockAgent.emitEvent({
+        type: EventType.CUSTOM,
+        name: "agentified:skills:registered",
+        value: { skills: [{ name: "s1", description: "d", atoms: ["a"] }] },
+      } as CustomEvent);
+
+      expect(client.getState().skills.registered).toHaveLength(1);
+      expect(client.getState().skills.registered[0]!.name).toBe("s1");
+    });
+
+    it("agentified:skill:activated custom event records activation with reasoning", async () => {
+      await mockAgent.emitEvent({
+        type: EventType.CUSTOM,
+        name: "agentified:skill:activated",
+        value: { skillName: "compose_email", toolCallIds: ["tc1"], reasoning: "user asked to draft an email" },
+      } as CustomEvent);
+
+      const activations = client.getState().skills.activations;
+      expect(activations).toHaveLength(1);
+      expect(activations[0]!.reasoning).toBe("user asked to draft an email");
+    });
+  });
+
+  describe("Inspector v2: suggestion engine", () => {
+    it("suggests a skill when same set of tools fires across multiple runs", async () => {
+      for (let i = 0; i < 2; i++) {
+        await mockAgent.emitEvent({ type: EventType.RUN_STARTED, runId: `r${i}`, threadId: "t" } as RunStartedEvent);
+        await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: `tc${i}-1`, toolCallName: "search" } as ToolCallStartEvent);
+        await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: `tc${i}-2`, toolCallName: "summarize" } as ToolCallStartEvent);
+        await mockAgent.emitEvent({ type: EventType.RUN_FINISHED, runId: `r${i}`, threadId: "t" } as RunFinishedEvent);
+      }
+
+      const suggestions = client.getState().skills.suggestions;
+      expect(suggestions.length).toBeGreaterThanOrEqual(1);
+      expect(suggestions[0]!.toolNames.sort()).toEqual(["search", "summarize"]);
+      expect(suggestions[0]!.cooccurrenceCount).toBe(2);
+      expect(suggestions[0]!.proposedName).toContain("skill_");
+    });
+
+    it("does not suggest a pattern fully covered by an existing registered skill", async () => {
+      client.setRegisteredSkills([
+        { name: "search_summarize", description: "", atoms: ["search", "summarize"] },
+      ]);
+
+      for (let i = 0; i < 2; i++) {
+        await mockAgent.emitEvent({ type: EventType.RUN_STARTED, runId: `r${i}`, threadId: "t" } as RunStartedEvent);
+        await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: `tc${i}-1`, toolCallName: "search" } as ToolCallStartEvent);
+        await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: `tc${i}-2`, toolCallName: "summarize" } as ToolCallStartEvent);
+        await mockAgent.emitEvent({ type: EventType.RUN_FINISHED, runId: `r${i}`, threadId: "t" } as RunFinishedEvent);
+      }
+
+      expect(client.getState().skills.suggestions).toHaveLength(0);
+    });
+  });
+
+  describe("Inspector v2: reliability tracking", () => {
+    it("flags retry when same tool with same args is called twice", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "search" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_ARGS, toolCallId: "tc1", delta: '{"q":"x"}' } as ToolCallArgsEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_END, toolCallId: "tc1" } as ToolCallEndEvent);
+
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc2", toolCallName: "search" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_ARGS, toolCallId: "tc2", delta: '{"q":"x"}' } as ToolCallArgsEvent);
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_END, toolCallId: "tc2" } as ToolCallEndEvent);
+
+      const reliability = client.getState().skills.reliability;
+      expect(reliability).toHaveLength(1);
+      expect(reliability[0]!.toolName).toBe("search");
+      expect(reliability[0]!.type).toBe("retry");
+    });
+
+    it("flags failure when tool result is an error", async () => {
+      await mockAgent.emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: "tc1", toolCallName: "send_email" } as ToolCallStartEvent);
+      await mockAgent.emitEvent({
+        type: EventType.TOOL_CALL_RESULT,
+        toolCallId: "tc1",
+        content: '{"error":"smtp timed out"}',
+      } as ToolCallResultEvent);
+
+      const reliability = client.getState().skills.reliability;
+      expect(reliability).toHaveLength(1);
+      expect(reliability[0]!.type).toBe("failure");
+      expect(reliability[0]!.toolName).toBe("send_email");
+    });
+  });
+
+  describe("Inspector v2: cost panel", () => {
+    it("recomputes cost when tokens change", async () => {
+      await mockAgent.emitEvent({
+        type: EventType.CUSTOM,
+        name: "agentified:prefetch:complete",
+        value: { tools: [], durationMs: 0, tokenUsage: { input: 1_000_000, output: 500_000, cached: 0, reasoning: 0 } },
+      } as CustomEvent);
+
+      const cost = client.getState().cost;
+      // defaults: input $3 / 1M, output $15 / 1M
+      expect(cost.inputCostUsd).toBeCloseTo(3, 4);
+      expect(cost.outputCostUsd).toBeCloseTo(7.5, 4);
+      expect(cost.totalCostUsd).toBeCloseTo(10.5, 4);
+      expect(cost.totalTokens).toBe(1_500_000);
+    });
+
+    it("setCostConfig overrides default pricing", async () => {
+      client.setCostConfig({ inputUsdPerMillion: 1, outputUsdPerMillion: 4 });
+      await mockAgent.emitEvent({
+        type: EventType.CUSTOM,
+        name: "agentified:prefetch:complete",
+        value: { tools: [], durationMs: 0, tokenUsage: { input: 2_000_000, output: 1_000_000, cached: 0, reasoning: 0 } },
+      } as CustomEvent);
+
+      const cost = client.getState().cost;
+      expect(cost.inputCostUsd).toBeCloseTo(2, 4);
+      expect(cost.outputCostUsd).toBeCloseTo(4, 4);
+      expect(cost.totalCostUsd).toBeCloseTo(6, 4);
     });
   });
 });

@@ -1,9 +1,32 @@
 import type { AbstractAgent, BaseEvent, CustomEvent, Message, Context } from "@ag-ui/client";
 import { HttpAgent, EventType, randomUUID } from "@ag-ui/client";
-import type { AgentifiedClientConfig, FrontendToolHandler, InspectorState, SharedContext, StateListener, Subscription, ToolCallDetail } from "./types.js";
+import type {
+  AgentifiedClientConfig,
+  CostConfig,
+  CostMetrics,
+  FrontendToolHandler,
+  InspectorState,
+  RegisteredSkill,
+  ReliabilityIssue,
+  SharedContext,
+  SkillActivation,
+  SkillSuggestion,
+  StateListener,
+  Subscription,
+  ToolCallDetail,
+} from "./types.js";
 import { isAgentifiedEvent } from "./types.js";
 
 const MAX_FRONTEND_TOOL_ITERATIONS = 5;
+
+const DEFAULT_COST_CONFIG: CostConfig = {
+  inputUsdPerMillion: 3,
+  outputUsdPerMillion: 15,
+  cachedUsdPerMillion: 0.3,
+};
+
+const SUGGESTION_MIN_COOCCURRENCE = 2;
+const SUGGESTION_MIN_TOOLS = 2;
 
 export class AgentifiedClient {
   private state: InspectorState;
@@ -11,6 +34,10 @@ export class AgentifiedClient {
   private agent: AbstractAgent;
   private pendingMessages: Map<string, { role: "assistant" | "user"; content: string }> = new Map();
   private frontendToolHandlers: Map<string, FrontendToolHandler> = new Map();
+  private costConfig: CostConfig = DEFAULT_COST_CONFIG;
+  private currentRunToolNames: Set<string> = new Set();
+  private currentRunToolSignatures: Map<string, number> = new Map();
+  private cooccurrencePatterns: Map<string, number> = new Map();
 
   constructor(config: AgentifiedClientConfig) {
     this.state = createInitialState();
@@ -43,6 +70,20 @@ export class AgentifiedClient {
 
   setSharedContext(ctx: SharedContext): void {
     this.state = { ...this.state, sharedContext: ctx };
+    this.notify();
+  }
+
+  setRegisteredSkills(skills: RegisteredSkill[]): void {
+    this.state = {
+      ...this.state,
+      skills: { ...this.state.skills, registered: skills },
+    };
+    this.notify();
+  }
+
+  setCostConfig(config: CostConfig): void {
+    this.costConfig = config;
+    this.state = { ...this.state, cost: this.computeCost() };
     this.notify();
   }
 
@@ -128,6 +169,9 @@ export class AgentifiedClient {
   reset(): void {
     this.agent.abortRun();
     this.pendingMessages.clear();
+    this.currentRunToolNames = new Set();
+    this.currentRunToolSignatures = new Map();
+    this.cooccurrencePatterns = new Map();
     this.state = createInitialState();
     this.notify();
   }
@@ -148,6 +192,8 @@ export class AgentifiedClient {
     switch (event.type) {
       case EventType.RUN_STARTED: {
         const e = event as unknown as { runId: string; threadId?: string };
+        this.currentRunToolNames = new Set();
+        this.currentRunToolSignatures = new Map();
         this.state = {
           ...this.state,
           connection: "connected",
@@ -156,6 +202,7 @@ export class AgentifiedClient {
         break;
       }
       case EventType.RUN_FINISHED:
+        this.recordRunPattern();
         this.state = {
           ...this.state,
           connection: "disconnected",
@@ -163,6 +210,7 @@ export class AgentifiedClient {
             ...this.state.run,
             durationMs: this.state.run.startedAt ? Date.now() - this.state.run.startedAt : 0,
           },
+          skills: { ...this.state.skills, suggestions: this.computeSuggestions() },
         };
         break;
       case EventType.RUN_ERROR:
@@ -213,10 +261,12 @@ export class AgentifiedClient {
       case EventType.TOOL_CALL_START: {
         const e = event as unknown as { toolCallId: string; toolCallName: string; parentMessageId?: string };
         const detail: ToolCallDetail = { id: e.toolCallId, name: e.toolCallName, args: "", parentMessageId: e.parentMessageId, startedAt: Date.now() };
+        this.currentRunToolNames.add(e.toolCallName);
         this.state = {
           ...this.state,
           streaming: { ...this.state.streaming, toolCallCount: this.state.streaming.toolCallCount + 1 },
           toolCalls: [...this.state.toolCalls, detail],
+          skills: this.applyActivationForToolCall(this.state.skills, detail),
         };
         break;
       }
@@ -233,21 +283,52 @@ export class AgentifiedClient {
       case EventType.TOOL_CALL_END: {
         const now = Date.now();
         const e = event as unknown as { toolCallId: string };
+        const finished = this.state.toolCalls.find(tc => tc.id === e.toolCallId);
+        const updatedToolCalls = this.state.toolCalls.map(tc =>
+          tc.id === e.toolCallId ? { ...tc, endedAt: now, durationMs: now - tc.startedAt } : tc,
+        );
+        let nextSkills = this.state.skills;
+        if (finished) {
+          const sig = `${finished.name}::${finished.args}`;
+          const seen = (this.currentRunToolSignatures.get(sig) ?? 0) + 1;
+          this.currentRunToolSignatures.set(sig, seen);
+          if (seen > 1) {
+            nextSkills = applyReliabilityIssue(nextSkills, {
+              toolName: finished.name,
+              type: "retry",
+              count: 1,
+              lastSeen: now,
+              detail: `Repeated invocation with identical arguments`,
+            });
+          }
+        }
         this.state = {
           ...this.state,
-          toolCalls: this.state.toolCalls.map(tc =>
-            tc.id === e.toolCallId ? { ...tc, endedAt: now, durationMs: now - tc.startedAt } : tc,
-          ),
+          toolCalls: updatedToolCalls,
+          skills: nextSkills,
         };
         break;
       }
       case EventType.TOOL_CALL_RESULT: {
         const e = event as unknown as { toolCallId: string; content: string };
+        const updatedToolCalls = this.state.toolCalls.map(tc =>
+          tc.id === e.toolCallId ? { ...tc, result: e.content } : tc,
+        );
+        const tc = this.state.toolCalls.find(t => t.id === e.toolCallId);
+        let nextSkills = this.state.skills;
+        if (tc && resultLooksLikeError(e.content)) {
+          nextSkills = applyReliabilityIssue(nextSkills, {
+            toolName: tc.name,
+            type: "failure",
+            count: 1,
+            lastSeen: Date.now(),
+            detail: truncate(e.content, 120),
+          });
+        }
         this.state = {
           ...this.state,
-          toolCalls: this.state.toolCalls.map(tc =>
-            tc.id === e.toolCallId ? { ...tc, result: e.content } : tc,
-          ),
+          toolCalls: updatedToolCalls,
+          skills: nextSkills,
         };
         break;
       }
@@ -297,7 +378,99 @@ export class AgentifiedClient {
       if (tokenUsage) {
         this.state = { ...this.state, tokens: { ...this.state.tokens, ...tokenUsage } };
       }
+    } else if (name === "agentified:skills:registered") {
+      const skills = (value?.skills as RegisteredSkill[]) ?? [];
+      this.state = {
+        ...this.state,
+        skills: { ...this.state.skills, registered: skills },
+      };
+    } else if (name === "agentified:skill:activated") {
+      const skillName = value?.skillName as string;
+      const toolCallIds = (value?.toolCallIds as string[]) ?? [];
+      const reasoning = value?.reasoning as string | undefined;
+      if (skillName) {
+        this.state = {
+          ...this.state,
+          skills: applySkillActivation(
+            this.state.skills,
+            { skillName, firstActivatedAt: Date.now(), toolCallIds, reasoning },
+          ),
+        };
+      }
     }
+
+    this.state = { ...this.state, cost: this.computeCost() };
+  }
+
+  private applyActivationForToolCall(
+    skills: InspectorState["skills"],
+    tc: ToolCallDetail,
+  ): InspectorState["skills"] {
+    const matching = skills.registered.filter(s => s.atoms.includes(tc.name));
+    if (matching.length === 0) return skills;
+    let activations = skills.activations;
+    for (const skill of matching) {
+      const existing = activations.find(a => a.skillName === skill.name);
+      if (existing) {
+        if (existing.toolCallIds.includes(tc.id)) continue;
+        activations = activations.map(a =>
+          a.skillName === skill.name
+            ? { ...a, toolCallIds: [...a.toolCallIds, tc.id] }
+            : a,
+        );
+      } else {
+        activations = [
+          ...activations,
+          { skillName: skill.name, firstActivatedAt: Date.now(), toolCallIds: [tc.id] },
+        ];
+      }
+    }
+    return { ...skills, activations };
+  }
+
+  private recordRunPattern(): void {
+    const tools = [...this.currentRunToolNames];
+    if (tools.length < SUGGESTION_MIN_TOOLS) return;
+    const covered = this.state.skills.registered.some(skill =>
+      skill.atoms.length >= SUGGESTION_MIN_TOOLS &&
+      skill.atoms.every(atom => this.currentRunToolNames.has(atom)) &&
+      tools.every(t => skill.atoms.includes(t)),
+    );
+    if (covered) return;
+    const key = [...tools].sort().join(",");
+    this.cooccurrencePatterns.set(key, (this.cooccurrencePatterns.get(key) ?? 0) + 1);
+  }
+
+  private computeSuggestions(): SkillSuggestion[] {
+    const suggestions: SkillSuggestion[] = [];
+    for (const [key, count] of this.cooccurrencePatterns.entries()) {
+      if (count < SUGGESTION_MIN_COOCCURRENCE) continue;
+      const names = key.split(",").filter(Boolean);
+      if (names.length < SUGGESTION_MIN_TOOLS) continue;
+      suggestions.push({
+        toolNames: names,
+        cooccurrenceCount: count,
+        proposedName: `skill_${names.join("_")}`,
+        rationale: `Tools ${names.join(", ")} fired together in ${count} runs — propose extracting as a skill.`,
+      });
+    }
+    suggestions.sort((a, b) => b.cooccurrenceCount - a.cooccurrenceCount);
+    return suggestions;
+  }
+
+  private computeCost(): CostMetrics {
+    const t = this.state.tokens;
+    const c = this.costConfig;
+    const inputCostUsd = (t.input * c.inputUsdPerMillion) / 1_000_000;
+    const outputCostUsd = (t.output * c.outputUsdPerMillion) / 1_000_000;
+    const cachedCostUsd = (t.cached * (c.cachedUsdPerMillion ?? 0)) / 1_000_000;
+    return {
+      totalTokens: t.input + t.output + t.cached + t.reasoning,
+      inputCostUsd,
+      outputCostUsd,
+      cachedCostUsd,
+      totalCostUsd: inputCostUsd + outputCostUsd + cachedCostUsd,
+    };
   }
 
   private notify(): void {
@@ -389,5 +562,70 @@ function createInitialState(): InspectorState {
     isLoading: false,
     error: null,
     frontendTools: [],
+    skills: { registered: [], activations: [], suggestions: [], reliability: [] },
+    cost: { totalTokens: 0, inputCostUsd: 0, outputCostUsd: 0, cachedCostUsd: 0, totalCostUsd: 0 },
   };
+}
+
+function applySkillActivation(
+  skills: InspectorState["skills"],
+  activation: SkillActivation,
+): InspectorState["skills"] {
+  const existing = skills.activations.find(a => a.skillName === activation.skillName);
+  if (existing) {
+    const toolCallIds = Array.from(new Set([...existing.toolCallIds, ...activation.toolCallIds]));
+    return {
+      ...skills,
+      activations: skills.activations.map(a =>
+        a.skillName === activation.skillName
+          ? { ...a, toolCallIds, reasoning: activation.reasoning ?? a.reasoning }
+          : a,
+      ),
+    };
+  }
+  return { ...skills, activations: [...skills.activations, activation] };
+}
+
+function applyReliabilityIssue(
+  skills: InspectorState["skills"],
+  issue: ReliabilityIssue,
+): InspectorState["skills"] {
+  const existing = skills.reliability.find(
+    r => r.toolName === issue.toolName && r.type === issue.type,
+  );
+  if (existing) {
+    return {
+      ...skills,
+      reliability: skills.reliability.map(r =>
+        r.toolName === issue.toolName && r.type === issue.type
+          ? { ...r, count: r.count + issue.count, lastSeen: issue.lastSeen, detail: issue.detail ?? r.detail }
+          : r,
+      ),
+    };
+  }
+  return { ...skills, reliability: [...skills.reliability, issue] };
+}
+
+function resultLooksLikeError(content: string): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  if (/^error\b/i.test(trimmed)) return true;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object") {
+      const obj = parsed as Record<string, unknown>;
+      if (typeof obj.error === "string" && obj.error) return true;
+      if (obj.error === true) return true;
+      if (typeof obj.success === "boolean" && obj.success === false) return true;
+    }
+  } catch {
+    // not JSON — fall through
+  }
+  return false;
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
 }

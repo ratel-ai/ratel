@@ -107,6 +107,69 @@ export interface SharedContext {
   activeTab?: string;
 }
 
+// Skills (molecules composed of tool atoms) — Inspector v2
+
+export interface RegisteredSkill {
+  name: string;
+  description: string;
+  intent?: string;
+  atoms: string[];
+}
+
+export interface SkillActivation {
+  skillName: string;
+  firstActivatedAt: number;
+  toolCallIds: string[];
+  reasoning?: string;
+}
+
+export interface SkillSuggestion {
+  /** Tool names (sorted) that co-occur across runs. */
+  toolNames: string[];
+  /** Number of distinct runs in which all of these tools fired together. */
+  cooccurrenceCount: number;
+  /** Suggested name for the proposed skill. */
+  proposedName: string;
+  /** Human-readable rationale. */
+  rationale: string;
+}
+
+export type ReliabilityIssueType = "retry" | "failure";
+
+export interface ReliabilityIssue {
+  toolName: string;
+  type: ReliabilityIssueType;
+  count: number;
+  lastSeen: number;
+  detail?: string;
+}
+
+export interface SkillsState {
+  registered: RegisteredSkill[];
+  activations: SkillActivation[];
+  suggestions: SkillSuggestion[];
+  reliability: ReliabilityIssue[];
+}
+
+// Token + cost panel — the "Ramp for agents" view
+
+export interface CostConfig {
+  /** USD per million input tokens. */
+  inputUsdPerMillion: number;
+  /** USD per million output tokens. */
+  outputUsdPerMillion: number;
+  /** USD per million cached input tokens. */
+  cachedUsdPerMillion?: number;
+}
+
+export interface CostMetrics {
+  totalTokens: number;
+  inputCostUsd: number;
+  outputCostUsd: number;
+  cachedCostUsd: number;
+  totalCostUsd: number;
+}
+
 export interface InspectorState {
   connection: ConnectionStatus;
   run: RunInfo;
@@ -120,6 +183,8 @@ export interface InspectorState {
   error: string | null;
   frontendTools: string[];
   sharedContext?: SharedContext;
+  skills: SkillsState;
+  cost: CostMetrics;
 }
 
 // Client types

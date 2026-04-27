@@ -5,13 +5,19 @@ import type {
   EventLogEntry,
   AgentifiedTool,
   ConnectionStatus,
+  CostMetrics,
+  RegisteredSkill,
+  ReliabilityIssue,
+  SkillActivation,
+  SkillSuggestion,
+  SkillsState,
   ToolCallDetail,
 } from "@agentified/fe-client";
 import { useAgentified } from "./hook.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-type Tab = "timeline" | "session" | "log";
+type Tab = "timeline" | "skills" | "session" | "log";
 type EventFilter = "all" | "agentified" | "tool_calls" | "messages";
 
 export interface InspectorProps {
@@ -20,6 +26,7 @@ export interface InspectorProps {
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "timeline", label: "Timeline" },
+  { key: "skills", label: "Skills" },
   { key: "session", label: "Session" },
   { key: "log", label: "Log" },
 ];
@@ -154,6 +161,7 @@ export function Inspector({ defaultOpen = false }: InspectorProps) {
 
       <div style={S.body}>
         {activeTab === "timeline" && <TimelineTab state={state} />}
+        {activeTab === "skills" && <SkillsTab state={state} />}
         {activeTab === "session" && <SessionTab state={state} />}
         {activeTab === "log" && <LogTab state={state} />}
       </div>
@@ -184,7 +192,7 @@ function TimelineTab({ state }: { state: InspectorState }) {
       </Section>
 
       <Section title="Interaction Timeline">
-        <TimelineList events={events} toolCalls={toolCalls} />
+        <TimelineList events={events} toolCalls={toolCalls} skills={state.skills} />
       </Section>
 
       {agentified.currentTools.length > 0 && (
@@ -225,7 +233,7 @@ function TimelineTab({ state }: { state: InspectorState }) {
   );
 }
 
-function TimelineList({ events, toolCalls }: { events: EventLogEntry[]; toolCalls: ToolCallDetail[] }) {
+function TimelineList({ events, toolCalls, skills }: { events: EventLogEntry[]; toolCalls: ToolCallDetail[]; skills: SkillsState }) {
   const listRef = useRef<HTMLDivElement>(null);
   const prevLen = useRef(events.length);
 
@@ -240,7 +248,7 @@ function TimelineList({ events, toolCalls }: { events: EventLogEntry[]; toolCall
     return <div style={S.emptyState}>No events yet</div>;
   }
 
-  const items = buildTimelineItems(events, toolCalls);
+  const items = buildTimelineItems(events, toolCalls, skills);
 
   return (
     <div ref={listRef} style={S.timelineList} data-testid="timeline-list">
@@ -252,29 +260,46 @@ function TimelineList({ events, toolCalls }: { events: EventLogEntry[]; toolCall
 }
 
 interface TimelineItemData {
-  type: "run_started" | "run_finished" | "agentified" | "tool_call" | "message" | "other";
+  type: "run_started" | "run_finished" | "agentified" | "tool_call" | "message" | "skill_activation" | "other";
   label: string;
   timestamp: number;
   detail?: string;
   expandable?: boolean;
   expanded?: Record<string, unknown>;
+  /** Children rendered indented beneath this item (used for skill_activation). */
+  children?: TimelineItemData[];
 }
 
-function buildTimelineItems(events: EventLogEntry[], toolCalls: ToolCallDetail[]): TimelineItemData[] {
+function findSkillForToolCall(skills: SkillsState, toolCallId: string, toolName?: string): string | null {
+  const byActivation = skills.activations.find(a => a.toolCallIds.includes(toolCallId));
+  if (byActivation) return byActivation.skillName;
+  if (!toolName) return null;
+  const byRegistered = skills.registered.find(s => s.atoms.includes(toolName));
+  return byRegistered?.name ?? null;
+}
+
+function buildTimelineItems(events: EventLogEntry[], toolCalls: ToolCallDetail[], skills: SkillsState): TimelineItemData[] {
   const items: TimelineItemData[] = [];
   const toolCallMap = new Map(toolCalls.map(tc => [tc.id, tc]));
+  const activationByName = new Map(skills.activations.map(a => [a.skillName, a]));
 
   const seenToolCalls = new Set<string>();
+  let currentGroup: { skillName: string; group: TimelineItemData } | null = null;
+
+  const flushGroup = () => { currentGroup = null; };
 
   for (const entry of events) {
     const e = entry.event as Record<string, unknown>;
     const type = e.type as string;
 
     if (type === "RUN_STARTED") {
+      flushGroup();
       items.push({ type: "run_started", label: `Run started${e.runId ? ` · ${e.runId}` : ""}`, timestamp: entry.timestamp });
     } else if (type === "RUN_FINISHED") {
+      flushGroup();
       items.push({ type: "run_finished", label: "Run complete", timestamp: entry.timestamp });
     } else if (entry.isAgentified) {
+      flushGroup();
       const name = (e as Record<string, unknown>).name as string;
       const value = (e as Record<string, unknown>).value as Record<string, unknown> | undefined;
       if (name === "agentified:prefetch:complete") {
@@ -286,6 +311,16 @@ function buildTimelineItems(events: EventLogEntry[], toolCalls: ToolCallDetail[]
         const tools = (value?.tools as unknown[]) ?? [];
         const dur = value?.durationMs ?? "?";
         items.push({ type: "agentified", label: `Discover "${query}" · ${tools.length} tools · ${dur}ms`, timestamp: entry.timestamp, expandable: true, expanded: value });
+      } else if (name === "agentified:skill:activated") {
+        const skillName = (value?.skillName as string) ?? "?";
+        const reasoning = value?.reasoning as string | undefined;
+        items.push({
+          type: "agentified",
+          label: `Skill activated · ${skillName}${reasoning ? ` — ${truncate(reasoning, 60)}` : ""}`,
+          timestamp: entry.timestamp,
+          expandable: !!reasoning,
+          expanded: value,
+        });
       } else {
         items.push({ type: "agentified", label: name, timestamp: entry.timestamp });
       }
@@ -296,17 +331,51 @@ function buildTimelineItems(events: EventLogEntry[], toolCalls: ToolCallDetail[]
         const tc = toolCallMap.get(tcId);
         if (tc) {
           const dur = tc.durationMs != null ? ` · ${tc.durationMs}ms` : "";
-          items.push({ type: "tool_call", label: `${tc.name}${dur}`, timestamp: entry.timestamp, expandable: true, expanded: { args: tc.args, result: tc.result } });
+          const tcItem: TimelineItemData = { type: "tool_call", label: `${tc.name}${dur}`, timestamp: entry.timestamp, expandable: true, expanded: { args: tc.args, result: tc.result } };
+
+          const skillName = findSkillForToolCall(skills, tc.id, tc.name);
+          if (skillName) {
+            if (currentGroup && currentGroup.skillName === skillName) {
+              currentGroup.group.children!.push(tcItem);
+              currentGroup.group.label = formatSkillGroupLabel(skillName, currentGroup.group.children!.length);
+            } else {
+              const reasoning = activationByName.get(skillName)?.reasoning;
+              const group: TimelineItemData = {
+                type: "skill_activation",
+                label: formatSkillGroupLabel(skillName, 1),
+                timestamp: entry.timestamp,
+                children: [tcItem],
+                expandable: !!reasoning,
+                expanded: reasoning ? { reasoning } : undefined,
+              };
+              items.push(group);
+              currentGroup = { skillName, group };
+            }
+          } else {
+            flushGroup();
+            items.push(tcItem);
+          }
         }
       }
     } else if (type === "TEXT_MESSAGE_START") {
+      flushGroup();
       const role = (e.role as string) ?? "assistant";
       items.push({ type: "message", label: `${role} message`, timestamp: entry.timestamp });
     } else if (type !== "TEXT_MESSAGE_CONTENT" && type !== "TEXT_MESSAGE_END" && type !== "TOOL_CALL_ARGS" && type !== "TOOL_CALL_END" && type !== "TOOL_CALL_RESULT") {
+      flushGroup();
       items.push({ type: "other", label: type, timestamp: entry.timestamp });
     }
   }
   return items;
+}
+
+function formatSkillGroupLabel(skillName: string, atomCount: number): string {
+  return `Skill: ${skillName} · ${atomCount} atom${atomCount === 1 ? "" : "s"}`;
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
 }
 
 function TimelineItem({ item }: { item: TimelineItemData }) {
@@ -314,11 +383,12 @@ function TimelineItem({ item }: { item: TimelineItemData }) {
   const time = new Date(item.timestamp).toLocaleTimeString();
   const color = item.type === "agentified" ? C.agentified
     : item.type === "tool_call" ? C.accent
+    : item.type === "skill_activation" ? C.agentified
     : item.type === "run_started" || item.type === "run_finished" ? C.green
     : C.text;
 
   return (
-    <div style={S.timelineItem} data-testid="timeline-item">
+    <div style={S.timelineItem} data-testid={item.type === "skill_activation" ? "skill-activation-group" : "timeline-item"}>
       <div
         style={{ ...S.timelineItemHeader, cursor: item.expandable ? "pointer" : "default" }}
         onClick={() => item.expandable && setExpanded(!expanded)}
@@ -333,6 +403,137 @@ function TimelineItem({ item }: { item: TimelineItemData }) {
           {JSON.stringify(item.expanded, null, 2)}
         </pre>
       )}
+      {item.children && item.children.length > 0 && (
+        <div style={S.skillGroupChildren} data-testid="skill-group-children">
+          {item.children.map((child, i) => (
+            <TimelineItem key={i} item={child} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: Skills ────────────────────────────────────────────────────────
+
+function SkillsTab({ state }: { state: InspectorState }) {
+  const { skills } = state;
+  const activatedNames = new Set(skills.activations.map(a => a.skillName));
+  const inactive = skills.registered.filter(s => !activatedNames.has(s.name));
+
+  return (
+    <div data-testid="skills-tab">
+      <Section title="Skill Activations">
+        {skills.activations.length === 0 ? (
+          <div style={S.emptyState}>No skills activated yet</div>
+        ) : (
+          <div data-testid="skill-activations">
+            {skills.activations.map((a) => (
+              <SkillActivationRow
+                key={a.skillName}
+                activation={a}
+                skill={skills.registered.find((s) => s.name === a.skillName)}
+              />
+            ))}
+          </div>
+        )}
+        {inactive.length > 0 && (
+          <div style={S.inactiveSkillsBox} data-testid="skill-inactive-list">
+            <div style={S.inactiveSkillsLabel}>Inactive skills</div>
+            <div style={S.inactiveSkillsItems}>
+              {inactive.map((s) => (
+                <span key={s.name} style={S.inactiveSkillBadge}>{s.name}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Suggested Skills">
+        {skills.suggestions.length === 0 ? (
+          <div style={S.emptyState}>No suggestions yet</div>
+        ) : (
+          <div data-testid="skill-suggestions">
+            {skills.suggestions.map((s, i) => (
+              <SkillSuggestionRow key={i} suggestion={s} />
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Reliability">
+        {skills.reliability.length === 0 ? (
+          <div style={S.emptyState}>No reliability issues observed</div>
+        ) : (
+          <div data-testid="reliability-list">
+            {skills.reliability.map((r, i) => (
+              <ReliabilityRow key={i} issue={r} />
+            ))}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+function SkillActivationRow({ activation, skill }: { activation: SkillActivation; skill?: RegisteredSkill }) {
+  const [expanded, setExpanded] = useState(false);
+  const atomCount = activation.toolCallIds.length;
+  return (
+    <div style={S.skillActivationRow} data-testid="skill-activation">
+      <div
+        style={{ ...S.skillActivationHeader, cursor: "pointer" }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span style={S.skillDot} />
+        <span style={S.skillName}>{activation.skillName}</span>
+        <span style={S.skillMeta}>{atomCount} atom{atomCount === 1 ? "" : "s"} fired</span>
+        <span style={S.expandArrow}>{expanded ? "▾" : "▸"}</span>
+      </div>
+      {expanded && (
+        <div style={S.skillActivationDetail}>
+          {skill?.description && <div style={S.skillDesc}>{skill.description}</div>}
+          {activation.reasoning && <div style={S.skillReasoning} data-testid="skill-reasoning">“{activation.reasoning}”</div>}
+          <div style={S.skillAtomList}>
+            {(skill?.atoms ?? []).map((atom) => (
+              <span key={atom} style={S.skillAtomBadge}>{atom}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SkillSuggestionRow({ suggestion }: { suggestion: SkillSuggestion }) {
+  return (
+    <div style={S.skillSuggestionRow} data-testid="skill-suggestion">
+      <div style={S.skillSuggestionTop}>
+        <span style={S.skillSuggestionName}>{suggestion.proposedName}</span>
+        <span style={S.skillSuggestionCount}>×{suggestion.cooccurrenceCount}</span>
+      </div>
+      <div style={S.skillSuggestionRationale}>{suggestion.rationale}</div>
+      <div style={S.skillAtomList}>
+        {suggestion.toolNames.map((n) => (
+          <span key={n} style={S.skillAtomBadge}>{n}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReliabilityRow({ issue }: { issue: ReliabilityIssue }) {
+  const color = issue.type === "failure" ? C.red : C.yellow;
+  return (
+    <div style={S.reliabilityRow} data-testid="reliability-issue">
+      <div style={S.reliabilityRowTop}>
+        <span style={{ ...S.reliabilityBadge, background: color, color: "#0c0c0e" }}>
+          {issue.type}
+        </span>
+        <span style={S.reliabilityToolName}>{issue.toolName}</span>
+        <span style={S.reliabilityCount}>×{issue.count}</span>
+      </div>
+      {issue.detail && <div style={S.reliabilityDetail}>{issue.detail}</div>}
     </div>
   );
 }
@@ -387,6 +588,12 @@ function SessionTab({ state }: { state: InspectorState }) {
         </Section>
       )}
 
+      {state.cost.totalTokens > 0 && (
+        <Section title="Estimated Cost">
+          <CostPanel cost={state.cost} />
+        </Section>
+      )}
+
       {agentified.prefetchResults.length > 0 && (
         <Section title="Prefetch History">
           {agentified.prefetchResults.map((pr, i) => (
@@ -410,6 +617,28 @@ function SessionTab({ state }: { state: InspectorState }) {
       )}
     </div>
   );
+}
+
+function CostPanel({ cost }: { cost: CostMetrics }) {
+  return (
+    <div style={S.costPanel} data-testid="cost-panel">
+      <Row label="Input" value={formatUsd(cost.inputCostUsd)} />
+      <Row label="Output" value={formatUsd(cost.outputCostUsd)} />
+      <Row label="Cached" value={formatUsd(cost.cachedCostUsd)} />
+      <div style={S.costTotalRow}>
+        <span style={S.costTotalLabel}>Total</span>
+        <span style={S.costTotalValue} data-testid="cost-total">{formatUsd(cost.totalCostUsd)}</span>
+      </div>
+    </div>
+  );
+}
+
+function formatUsd(n: number): string {
+  if (n === 0) return "$0";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  if (n < 1) return `$${n.toFixed(3)}`;
+  if (n < 10) return `$${n.toFixed(2)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 function ToolRow({ tool }: { tool: AgentifiedTool }) {
@@ -1084,5 +1313,214 @@ const S = {
     background: C.surface,
     border: `1px solid ${C.border}`,
     borderRadius: 6,
+  } as CSSProperties,
+
+  // Skills tab + hierarchical timeline
+  skillGroupChildren: {
+    marginLeft: 16,
+    paddingLeft: 8,
+    borderLeft: `1px solid ${C.border}`,
+  } as CSSProperties,
+
+  skillActivationRow: {
+    padding: "4px 0",
+    borderBottom: `1px solid ${C.border}`,
+  } as CSSProperties,
+
+  skillActivationHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  } as CSSProperties,
+
+  skillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: C.agentified,
+    flexShrink: 0,
+  } as CSSProperties,
+
+  skillName: {
+    fontFamily: C.mono,
+    fontSize: 11,
+    color: C.agentified,
+    flex: 1,
+  } as CSSProperties,
+
+  skillMeta: {
+    fontSize: 10,
+    color: C.textDim,
+  } as CSSProperties,
+
+  skillActivationDetail: {
+    marginLeft: 12,
+    marginTop: 4,
+    padding: 6,
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 4,
+  } as CSSProperties,
+
+  skillDesc: {
+    fontSize: 11,
+    color: C.text,
+    marginBottom: 4,
+  } as CSSProperties,
+
+  skillReasoning: {
+    fontSize: 10,
+    color: C.textDim,
+    fontStyle: "italic",
+    marginBottom: 4,
+  } as CSSProperties,
+
+  skillAtomList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 4,
+  } as CSSProperties,
+
+  skillAtomBadge: {
+    fontFamily: C.mono,
+    fontSize: 10,
+    color: C.text,
+    background: "rgba(88,166,255,0.08)",
+    border: `1px solid rgba(88,166,255,0.25)`,
+    borderRadius: 4,
+    padding: "1px 6px",
+  } as CSSProperties,
+
+  inactiveSkillsBox: {
+    marginTop: 6,
+    padding: 6,
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 4,
+  } as CSSProperties,
+
+  inactiveSkillsLabel: {
+    fontSize: 10,
+    color: C.textDim,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    marginBottom: 4,
+  } as CSSProperties,
+
+  inactiveSkillsItems: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 4,
+  } as CSSProperties,
+
+  inactiveSkillBadge: {
+    fontFamily: C.mono,
+    fontSize: 10,
+    color: C.textDim,
+    background: "transparent",
+    border: `1px dashed ${C.border}`,
+    borderRadius: 4,
+    padding: "1px 6px",
+  } as CSSProperties,
+
+  skillSuggestionRow: {
+    padding: "6px 0",
+    borderBottom: `1px solid ${C.border}`,
+  } as CSSProperties,
+
+  skillSuggestionTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  } as CSSProperties,
+
+  skillSuggestionName: {
+    fontFamily: C.mono,
+    fontSize: 11,
+    color: C.agentified,
+  } as CSSProperties,
+
+  skillSuggestionCount: {
+    fontFamily: C.mono,
+    fontSize: 11,
+    color: C.accent,
+  } as CSSProperties,
+
+  skillSuggestionRationale: {
+    fontSize: 10,
+    color: C.textDim,
+    marginTop: 2,
+    marginBottom: 2,
+  } as CSSProperties,
+
+  reliabilityRow: {
+    padding: "4px 0",
+    borderBottom: `1px solid ${C.border}`,
+  } as CSSProperties,
+
+  reliabilityRowTop: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  } as CSSProperties,
+
+  reliabilityBadge: {
+    fontFamily: C.mono,
+    fontSize: 9,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    padding: "1px 6px",
+    borderRadius: 3,
+  } as CSSProperties,
+
+  reliabilityToolName: {
+    fontFamily: C.mono,
+    fontSize: 11,
+    color: C.text,
+    flex: 1,
+  } as CSSProperties,
+
+  reliabilityCount: {
+    fontFamily: C.mono,
+    fontSize: 11,
+    color: C.textDim,
+  } as CSSProperties,
+
+  reliabilityDetail: {
+    fontSize: 10,
+    color: C.textDim,
+    marginTop: 2,
+    marginLeft: 8,
+  } as CSSProperties,
+
+  // Cost panel
+  costPanel: {
+    padding: "6px 8px",
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+  } as CSSProperties,
+
+  costTotalRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    paddingTop: 4,
+    marginTop: 4,
+    borderTop: `1px solid ${C.border}`,
+  } as CSSProperties,
+
+  costTotalLabel: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: C.text,
+  } as CSSProperties,
+
+  costTotalValue: {
+    fontFamily: C.mono,
+    fontSize: 12,
+    fontWeight: 700,
+    color: C.green,
   } as CSSProperties,
 };
