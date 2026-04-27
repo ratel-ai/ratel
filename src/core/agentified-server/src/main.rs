@@ -1,3 +1,6 @@
+mod cli;
+mod mcp;
+
 use std::sync::Arc;
 
 use agentified_lib::{
@@ -16,7 +19,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use clap::Parser;
 use serde::Serialize;
+
+use crate::cli::{Cli, Command};
+use crate::mcp::AgentifiedMcpHandler;
 
 // Types
 
@@ -124,11 +131,28 @@ fn map_error(e: CoreError) -> (StatusCode, Json<ErrorResponse>) {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let cli = Cli::parse();
 
-    let port = std::env::var("AGENTIFIED_PORT").unwrap_or_else(|_| "9119".to_string());
-    let addr = format!("0.0.0.0:{port}");
+    match cli.command {
+        None | Some(Command::Serve { .. }) => {
+            tracing_subscriber::fmt::init();
+            let dataset = match &cli.command {
+                Some(Command::Serve { dataset }) => dataset.clone(),
+                _ => "default".to_string(),
+            };
+            run_http_server(dataset).await;
+        }
+        Some(Command::Mcp { dataset }) => {
+            // MCP-over-stdio: route logs to stderr to avoid corrupting JSON-RPC on stdout.
+            tracing_subscriber::fmt()
+                .with_writer(std::io::stderr)
+                .init();
+            run_mcp_stdio(dataset).await;
+        }
+    }
+}
 
+fn build_core_from_env() -> Arc<AgentifiedCore> {
     let api_key = std::env::var("OPENAI_API_KEY").ok();
 
     let storage_mode = std::env::var("AGENTIFIED_STORAGE").unwrap_or_else(|_| "sqlite".into());
@@ -145,7 +169,7 @@ async fn main() {
         }
     };
 
-    let core = match api_key {
+    match api_key {
         Some(key) => {
             let embedding: Arc<dyn EmbeddingService> = Arc::new(OpenAIEmbedding::new(key.clone()));
             let llm: Arc<dyn LlmService> = Arc::new(OpenAILlm::new(key));
@@ -155,12 +179,55 @@ async fn main() {
             tracing::warn!("OPENAI_API_KEY not set — running in BM25-only mode (semantic/hybrid will fall back to bm25)");
             Arc::new(AgentifiedCore::new_bm25_only(storage))
         }
-    };
+    }
+}
 
-    tracing::info!("agentified-core listening on {addr}");
+async fn run_http_server(dataset: String) {
+    let port = std::env::var("AGENTIFIED_PORT").unwrap_or_else(|_| "9119".to_string());
+    let addr = format!("0.0.0.0:{port}");
+
+    let core = build_core_from_env();
+
+    let mcp_router = build_mcp_http_router(core.clone(), dataset.clone());
+    let router = app(core).merge(mcp_router);
+
+    tracing::info!(
+        dataset = %dataset,
+        "agentified-core listening on {addr} (MCP-over-HTTP at /mcp)"
+    );
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app(core)).await.unwrap();
+    axum::serve(listener, router).await.unwrap();
+}
+
+async fn run_mcp_stdio(dataset: String) {
+    use rmcp::{transport::io::stdio, ServiceExt};
+
+    let core = build_core_from_env();
+    let handler = AgentifiedMcpHandler::new(core, dataset.clone());
+
+    tracing::info!(dataset = %dataset, "starting MCP server over stdio");
+
+    let service = handler
+        .serve(stdio())
+        .await
+        .expect("failed to initialize MCP stdio server");
+    service.waiting().await.expect("MCP service ended");
+}
+
+fn build_mcp_http_router(core: Arc<AgentifiedCore>, dataset: String) -> Router {
+    use rmcp::transport::streamable_http_server::{
+        session::local::LocalSessionManager, tower::StreamableHttpService,
+    };
+
+    let core = core.clone();
+    let service = StreamableHttpService::new(
+        move || Ok(AgentifiedMcpHandler::new(core.clone(), dataset.clone())),
+        Arc::new(LocalSessionManager::default()),
+        Default::default(),
+    );
+
+    Router::new().nest_service("/mcp", service)
 }
 
 #[cfg(test)]

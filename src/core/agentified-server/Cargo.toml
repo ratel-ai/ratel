@@ -12,8 +12,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+clap = { version = "4", features = ["derive", "env"] }
+rmcp = { version = "1.5", features = [
+    "server",
+    "macros",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
+tower = { version = "0.5", features = ["util"] }
 
 [dev-dependencies]
 agentified-lib = { path = "../agentified-lib", features = ["test-utils"] }
-tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+rmcp = { version = "1.5", features = ["client", "server", "transport-async-rw"] }
