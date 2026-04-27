@@ -35,8 +35,9 @@ use models::SearchStrategy;
 use models::{
     AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
     ContextRequest, ContextResponse, DiscoverRequest, DiscoverResponse, FieldEmbeddings,
-    GetMessagesQuery, GetMessagesResponse, ListToolsResponse, RankedTool, RecalledContext,
-    RegisterToolsResponse, StoredMessage, StoredTool, Tool, Turn,
+    GetMessagesQuery, GetMessagesResponse, ListSkillsResponse, ListToolsResponse, RankedTool,
+    RecalledContext, RegisterSkillsResponse, RegisterToolsResponse, Skill, StoredMessage,
+    StoredSkill, StoredTool, Tool, Turn,
 };
 use ranking::{bm25_scores, normalize_min_max, weighted_semantic_score};
 
@@ -65,6 +66,7 @@ impl std::fmt::Display for CoreError {
 
 pub struct AgentifiedCore {
     tools: RwLock<HashMap<String, HashMap<String, StoredTool>>>,
+    skills: RwLock<HashMap<String, HashMap<String, StoredSkill>>>,
     turns: RwLock<HashMap<String, Turn>>,
     embedding_cache: RwLock<HashMap<String, Vec<f32>>>,
     embedding: Option<Arc<dyn EmbeddingService>>,
@@ -107,6 +109,7 @@ impl AgentifiedCore {
 
         Self {
             tools: RwLock::new(HashMap::new()),
+            skills: RwLock::new(HashMap::new()),
             turns: RwLock::new(turns_map),
             embedding_cache: RwLock::new(cache_map),
             embedding,
@@ -327,6 +330,88 @@ impl AgentifiedCore {
             .map(|m| m.values().map(|st| st.tool.clone()).collect())
             .unwrap_or_default();
         Ok(ListToolsResponse { tools: tool_list })
+    }
+
+    pub async fn register_skills(
+        &self,
+        dataset_id: &str,
+        skills: Vec<Skill>,
+    ) -> Result<RegisterSkillsResponse, CoreError> {
+        let tools = self.tools.read().await;
+        let dataset_tools = tools.get(dataset_id);
+
+        for skill in &skills {
+            if skill.name.trim().is_empty() {
+                return Err(CoreError::BadRequest("skill name cannot be empty".into()));
+            }
+            if skill.atoms.is_empty() {
+                return Err(CoreError::BadRequest(format!(
+                    "skill '{}' must compose at least one atom",
+                    skill.name
+                )));
+            }
+            let known: Option<&HashMap<String, StoredTool>> = dataset_tools;
+            for atom in &skill.atoms {
+                let exists = known.map(|m| m.contains_key(atom)).unwrap_or(false);
+                if !exists {
+                    return Err(CoreError::BadRequest(format!(
+                        "skill '{}': unknown atom '{}' (register the tool first)",
+                        skill.name, atom
+                    )));
+                }
+            }
+            let atom_set: HashSet<&str> = skill.atoms.iter().map(String::as_str).collect();
+            for edge in &skill.edges {
+                if !atom_set.contains(edge.from.as_str()) {
+                    return Err(CoreError::BadRequest(format!(
+                        "skill '{}': edge.from '{}' is not in atoms",
+                        skill.name, edge.from
+                    )));
+                }
+                if !atom_set.contains(edge.to.as_str()) {
+                    return Err(CoreError::BadRequest(format!(
+                        "skill '{}': edge.to '{}' is not in atoms",
+                        skill.name, edge.to
+                    )));
+                }
+            }
+        }
+        drop(tools);
+
+        let count = skills.len();
+        let mut skills_map = self.skills.write().await;
+        let dataset_skills = skills_map.entry(dataset_id.to_string()).or_default();
+        for skill in skills {
+            dataset_skills.insert(skill.name.clone(), StoredSkill { skill });
+        }
+
+        // Write-through to storage
+        {
+            let storage = self.storage.clone();
+            let did = dataset_id.to_string();
+            let pairs: Vec<(String, StoredSkill)> = dataset_skills
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            tokio::task::spawn_blocking(move || {
+                let refs: Vec<(&str, &StoredSkill)> =
+                    pairs.iter().map(|(k, v)| (k.as_str(), v)).collect();
+                if let Err(e) = storage.save_skills(&did, &refs) {
+                    tracing::error!("storage save_skills failed: {e}");
+                }
+            });
+        }
+
+        Ok(RegisterSkillsResponse { registered: count })
+    }
+
+    pub async fn list_skills(&self, dataset_id: &str) -> Result<ListSkillsResponse, CoreError> {
+        let skills = self.skills.read().await;
+        let list = skills
+            .get(dataset_id)
+            .map(|m| m.values().map(|s| s.skill.clone()).collect())
+            .unwrap_or_default();
+        Ok(ListSkillsResponse { skills: list })
     }
 
     pub async fn discover(
@@ -3370,5 +3455,159 @@ mod tests {
             .contains("The employee's unique identifier"));
         assert!(!stored.bm25_text.contains("{"));
         assert!(!stored.bm25_text.contains("\"type\""));
+    }
+
+    // Skills
+
+    async fn register_two_atoms(core: &AgentifiedCore, dataset: &str) {
+        let atoms = vec![
+            Tool {
+                name: "list_transactions".into(),
+                description: "List recent transactions".into(),
+                parameters: serde_json::json!({"type": "object"}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "draft_memo".into(),
+                description: "Draft a memo".into(),
+                parameters: serde_json::json!({"type": "object"}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+        ];
+        core.register_tools(dataset, atoms).await.unwrap();
+    }
+
+    fn skill_anomaly_memo() -> models::Skill {
+        models::Skill {
+            name: "anomaly_memo".into(),
+            description: "Investigate anomalous transactions and draft a CFO memo".into(),
+            intent: "When the user asks about suspicious transactions".into(),
+            atoms: vec!["list_transactions".into(), "draft_memo".into()],
+            edges: vec![models::SkillEdge {
+                from: "list_transactions".into(),
+                to: "draft_memo".into(),
+                source: models::EdgeSource::Developer,
+            }],
+            metadata: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn register_skills_persists_and_lists() {
+        let core = make_core();
+        register_two_atoms(&core, "ds").await;
+        let resp = core
+            .register_skills("ds", vec![skill_anomaly_memo()])
+            .await
+            .unwrap();
+        assert_eq!(resp.registered, 1);
+
+        let listed = core.list_skills("ds").await.unwrap();
+        assert_eq!(listed.skills.len(), 1);
+        assert_eq!(listed.skills[0].name, "anomaly_memo");
+        assert_eq!(listed.skills[0].atoms.len(), 2);
+        assert_eq!(listed.skills[0].edges.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn register_skills_rejects_unknown_atom() {
+        let core = make_core();
+        register_two_atoms(&core, "ds").await;
+        let mut skill = skill_anomaly_memo();
+        skill.atoms.push("nonexistent_tool".into());
+        let err = core.register_skills("ds", vec![skill]).await.unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => {
+                assert!(msg.contains("nonexistent_tool"));
+                assert!(msg.contains("anomaly_memo"));
+            }
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn register_skills_rejects_empty_atoms() {
+        let core = make_core();
+        register_two_atoms(&core, "ds").await;
+        let mut skill = skill_anomaly_memo();
+        skill.atoms.clear();
+        let err = core.register_skills("ds", vec![skill]).await.unwrap_err();
+        assert!(matches!(err, CoreError::BadRequest(_)));
+    }
+
+    #[tokio::test]
+    async fn register_skills_rejects_edge_outside_atoms() {
+        let core = make_core();
+        register_two_atoms(&core, "ds").await;
+        let mut skill = skill_anomaly_memo();
+        skill.edges.push(models::SkillEdge {
+            from: "list_transactions".into(),
+            to: "missing_atom".into(),
+            source: models::EdgeSource::default(),
+        });
+        let err = core.register_skills("ds", vec![skill]).await.unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => assert!(msg.contains("missing_atom")),
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn register_skills_rejects_when_dataset_has_no_tools() {
+        let core = make_core();
+        let err = core
+            .register_skills("ds", vec![skill_anomaly_memo()])
+            .await
+            .unwrap_err();
+        match err {
+            CoreError::BadRequest(msg) => {
+                assert!(msg.contains("list_transactions") || msg.contains("unknown atom"));
+            }
+            other => panic!("expected BadRequest, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn register_skills_upsert_replaces_by_name() {
+        let core = make_core();
+        register_two_atoms(&core, "ds").await;
+        core.register_skills("ds", vec![skill_anomaly_memo()])
+            .await
+            .unwrap();
+
+        let mut updated = skill_anomaly_memo();
+        updated.description = "v2 description".into();
+        core.register_skills("ds", vec![updated]).await.unwrap();
+
+        let listed = core.list_skills("ds").await.unwrap();
+        assert_eq!(listed.skills.len(), 1);
+        assert_eq!(listed.skills[0].description, "v2 description");
+    }
+
+    #[tokio::test]
+    async fn list_skills_returns_empty_for_unknown_dataset() {
+        let core = make_core();
+        let listed = core.list_skills("missing").await.unwrap();
+        assert!(listed.skills.is_empty());
+    }
+
+    #[tokio::test]
+    async fn skills_scoped_per_dataset() {
+        let core = make_core();
+        register_two_atoms(&core, "ds-a").await;
+        register_two_atoms(&core, "ds-b").await;
+        core.register_skills("ds-a", vec![skill_anomaly_memo()])
+            .await
+            .unwrap();
+        assert_eq!(core.list_skills("ds-a").await.unwrap().skills.len(), 1);
+        assert!(core.list_skills("ds-b").await.unwrap().skills.is_empty());
     }
 }

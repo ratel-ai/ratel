@@ -14,12 +14,15 @@ import type {
   GetMessagesResponse,
   GetMessagesTool,
   GetMessagesToolInput,
+  ListSkillsResponse,
   Message,
   PrefetchOptions,
   RankedTool,
   RegisterResponse,
+  RegisterSkillsResponse,
   SearchStrategy,
   ServerTool,
+  Skill,
 } from "./types.js";
 
 export class ApiClient {
@@ -55,6 +58,33 @@ export class ApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tools }),
     });
+  }
+
+  async registerSkills(datasetId: string, skills: Skill[]): Promise<RegisterSkillsResponse> {
+    const wireSkills = skills.map((s) => ({
+      name: s.name,
+      description: s.description,
+      ...(s.intent !== undefined ? { intent: s.intent } : {}),
+      atoms: s.atoms,
+      ...(s.edges ? { edges: s.edges } : {}),
+      ...(s.metadata ? { metadata: s.metadata } : {}),
+    }));
+    return this.fetchJson<RegisterSkillsResponse>(
+      `${this.config.serverUrl}/api/v1/datasets/${datasetId}/skills`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skills: wireSkills }),
+      },
+    );
+  }
+
+  async listSkills(datasetId: string): Promise<Skill[]> {
+    const data = await this.fetchJson<ListSkillsResponse>(
+      `${this.config.serverUrl}/api/v1/datasets/${datasetId}/skills`,
+      { method: "GET" },
+    );
+    return data.skills ?? [];
   }
 
   async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string, strategy?: SearchStrategy, namespace?: string, session?: string): Promise<RankedTool[]> {

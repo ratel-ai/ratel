@@ -274,3 +274,37 @@ export interface GetMessagesResult {
 export interface RegisterInput {
   tools: AgentifiedTool[];
 }
+
+// Skills — molecules composed of tool atoms
+
+export type EdgeSource = "developer" | "inspector" | "agentic";
+
+export interface SkillEdge {
+  from: string;
+  to: string;
+  source?: EdgeSource;
+}
+
+export interface Skill {
+  name: string;
+  description: string;
+  /** Natural-language guidance for when to invoke this skill. */
+  intent?: string;
+  /** Tool names this skill composes. Each must reference a registered tool. */
+  atoms: string[];
+  /** Optional explicit edges between atoms. */
+  edges?: SkillEdge[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface RegisterSkillsRequest {
+  skills: Skill[];
+}
+
+export interface RegisterSkillsResponse {
+  registered: number;
+}
+
+export interface ListSkillsResponse {
+  skills: Skill[];
+}

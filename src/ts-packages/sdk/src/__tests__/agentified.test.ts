@@ -635,6 +635,95 @@ describe("ApiClient", () => {
     });
   });
 
+  describe("registerSkills", () => {
+    it("posts skills to dataset endpoint and returns registered count", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ registered: 1 }), { status: 201 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.registerSkills("ds-abc", [
+        {
+          name: "anomaly_memo",
+          description: "Investigate and draft a memo",
+          intent: "When CFO asks about anomalies",
+          atoms: ["list_transactions", "draft_memo"],
+          edges: [{ from: "list_transactions", to: "draft_memo", source: "developer" }],
+          metadata: { team: "finance" },
+        },
+      ]);
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/skills`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skills: [
+            {
+              name: "anomaly_memo",
+              description: "Investigate and draft a memo",
+              intent: "When CFO asks about anomalies",
+              atoms: ["list_transactions", "draft_memo"],
+              edges: [{ from: "list_transactions", to: "draft_memo", source: "developer" }],
+              metadata: { team: "finance" },
+            },
+          ],
+        }),
+      });
+      expect(result).toEqual({ registered: 1 });
+    });
+
+    it("omits optional fields when absent", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ registered: 1 }), { status: 201 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.registerSkills("ds-abc", [
+        { name: "x", description: "y", atoms: ["a"] },
+      ]);
+
+      const callBody = JSON.parse((fetch as any).mock.calls[0][1].body);
+      expect(callBody.skills[0]).toEqual({ name: "x", description: "y", atoms: ["a"] });
+      expect(callBody.skills[0]).not.toHaveProperty("intent");
+      expect(callBody.skills[0]).not.toHaveProperty("edges");
+      expect(callBody.skills[0]).not.toHaveProperty("metadata");
+    });
+  });
+
+  describe("listSkills", () => {
+    it("gets skills from dataset endpoint", async () => {
+      const skills = [
+        {
+          name: "anomaly_memo",
+          description: "Investigate",
+          atoms: ["a", "b"],
+          edges: [],
+        },
+      ];
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ skills }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      const result = await agent.listSkills("ds-abc");
+
+      expect(fetch).toHaveBeenCalledWith(
+        `${TEST_URL}/api/v1/datasets/ds-abc/skills`,
+        { method: "GET" },
+      );
+      expect(result).toEqual(skills);
+    });
+
+    it("returns empty array when server returns no skills", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({}), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      expect(await agent.listSkills("ds-abc")).toEqual([]);
+    });
+  });
+
   describe("custom headers", () => {
     it("merges config headers into every request", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValue(

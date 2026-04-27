@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # Search strategy
@@ -222,6 +222,39 @@ AgentifiedTool = Union[BackendTool, ClientTool, McpTool]
 @dataclass
 class RegisterInput:
     tools: list[AgentifiedTool]
+
+
+# Skills — molecules composed of tool atoms
+
+EdgeSource = Literal["developer", "inspector", "agentic"]
+
+
+class SkillEdge(BaseModel):
+    # `from` is a Python keyword, so the attribute uses the trailing-underscore
+    # convention while the wire format keeps the JSON field name "from".
+    # Callers should serialize with `model_dump(by_alias=True, exclude_none=True)`.
+    from_: str = Field(alias="from")
+    to: str
+    source: EdgeSource | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class Skill(BaseModel):
+    name: str
+    description: str
+    intent: str | None = None
+    atoms: list[str]
+    edges: list[SkillEdge] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class RegisterSkillsResponse(BaseModel):
+    registered: int
+
+
+class ListSkillsResponse(BaseModel):
+    skills: list[Skill]
 
 
 # Event types

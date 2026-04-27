@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .events import Listener, ObserverEmitter, ObserverEventName, StepEvent, Unsubscribe
-from .models import AgentifiedTool, DiscoverTool
+from .models import AgentifiedTool, DiscoverTool, RegisterSkillsResponse, Skill
 from .namespace import Namespace
 from .session import Session
 
@@ -60,3 +60,9 @@ class Instance:
 
     def namespace(self, id: str) -> Namespace:
         return Namespace(id, self._sdk, self.dataset_id, self._registered_tools, emitter=self._emitter)
+
+    async def register_skills(self, skills: list[Skill]) -> RegisterSkillsResponse:
+        return await self._sdk.register_skills(self.dataset_id, skills)
+
+    async def list_skills(self) -> list[Skill]:
+        return await self._sdk.list_skills(self.dataset_id)

@@ -2,7 +2,13 @@ import type { ApiClient } from "./api-client.js";
 import type { ObserverEmitter } from "./events.js";
 import { Namespace } from "./namespace.js";
 import { Session } from "./session.js";
-import type { AgentifiedTool, DiscoverTool, PrepareStepFn } from "./types.js";
+import type {
+  AgentifiedTool,
+  DiscoverTool,
+  PrepareStepFn,
+  RegisterSkillsResponse,
+  Skill,
+} from "./types.js";
 
 export class Instance {
   readonly discoverTool: DiscoverTool;
@@ -28,5 +34,13 @@ export class Instance {
 
   namespace(id: string): Namespace {
     return new Namespace(id, this.sdk, this.datasetId, this.registeredTools, this.emitter);
+  }
+
+  registerSkills(skills: Skill[]): Promise<RegisterSkillsResponse> {
+    return this.sdk.registerSkills(this.datasetId, skills);
+  }
+
+  listSkills(): Promise<Skill[]> {
+    return this.sdk.listSkills(this.datasetId);
   }
 }

@@ -1,12 +1,14 @@
 use anyhow::Result;
 
-use crate::models::{MessageInput, StoredMessage, StoredTool, Turn};
+use crate::models::{MessageInput, StoredMessage, StoredSkill, StoredTool, Turn};
 
 // Trait
 
 pub trait Storage: Send + Sync {
     fn save_tools(&self, dataset_id: &str, tools: &[(&str, &StoredTool)]) -> Result<()>;
     fn load_tools_for_dataset(&self, dataset_id: &str) -> Result<Vec<(String, StoredTool)>>;
+    fn save_skills(&self, dataset_id: &str, skills: &[(&str, &StoredSkill)]) -> Result<()>;
+    fn load_skills_for_dataset(&self, dataset_id: &str) -> Result<Vec<(String, StoredSkill)>>;
     fn save_turn(&self, id: &str, turn: &Turn) -> Result<()>;
     fn load_all_turns(&self) -> Result<Vec<(String, Turn)>>;
     fn save_embeddings(&self, entries: &[(&str, &[f32])]) -> Result<()>;
@@ -63,6 +65,12 @@ impl Storage for NoopStorage {
         Ok(())
     }
     fn load_tools_for_dataset(&self, _dataset_id: &str) -> Result<Vec<(String, StoredTool)>> {
+        Ok(vec![])
+    }
+    fn save_skills(&self, _dataset_id: &str, _skills: &[(&str, &StoredSkill)]) -> Result<()> {
+        Ok(())
+    }
+    fn load_skills_for_dataset(&self, _dataset_id: &str) -> Result<Vec<(String, StoredSkill)>> {
         Ok(vec![])
     }
     fn save_turn(&self, _id: &str, _turn: &Turn) -> Result<()> {
@@ -176,7 +184,18 @@ impl SqliteStorage {
                 session_id TEXT NOT NULL,
                 tool_name TEXT NOT NULL,
                 PRIMARY KEY (dataset_id, namespace_id, session_id, tool_name)
-            );"
+            );
+            CREATE TABLE IF NOT EXISTS skills (
+                dataset_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                intent TEXT NOT NULL DEFAULT '',
+                atoms TEXT NOT NULL,
+                edges TEXT NOT NULL DEFAULT '[]',
+                metadata TEXT,
+                PRIMARY KEY (dataset_id, name)
+            );
+            CREATE INDEX IF NOT EXISTS idx_skills_dataset ON skills(dataset_id);"
         )?;
         // Migration: add type and server_uri columns if missing (existing databases)
         let has_type_col: bool = conn
@@ -345,6 +364,83 @@ impl Storage for SqliteStorage {
                     },
                     embeddings,
                     bm25_text,
+                },
+            ));
+        }
+        Ok(result)
+    }
+
+    fn save_skills(&self, dataset_id: &str, skills: &[(&str, &StoredSkill)]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tx = conn.unchecked_transaction()?;
+        for (name, stored) in skills {
+            let atoms_json = serde_json::to_string(&stored.skill.atoms)?;
+            let edges_json = serde_json::to_string(&stored.skill.edges)?;
+            let metadata_json = stored
+                .skill
+                .metadata
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?;
+            tx.execute(
+                "INSERT OR REPLACE INTO skills (dataset_id, name, description, intent, atoms, edges, metadata)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    dataset_id,
+                    name,
+                    stored.skill.description,
+                    stored.skill.intent,
+                    atoms_json,
+                    edges_json,
+                    metadata_json
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn load_skills_for_dataset(&self, dataset_id: &str) -> Result<Vec<(String, StoredSkill)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, description, intent, atoms, edges, metadata FROM skills WHERE dataset_id = ?1",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![dataset_id], |row| {
+            let name: String = row.get(0)?;
+            let description: String = row.get(1)?;
+            let intent: String = row.get(2)?;
+            let atoms_json: String = row.get(3)?;
+            let edges_json: String = row.get(4)?;
+            let metadata_json: Option<String> = row.get(5)?;
+            Ok((
+                name,
+                description,
+                intent,
+                atoms_json,
+                edges_json,
+                metadata_json,
+            ))
+        })?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            let (name, description, intent, atoms_json, edges_json, metadata_json) = row?;
+            let atoms: Vec<String> = serde_json::from_str(&atoms_json)?;
+            let edges: Vec<crate::models::SkillEdge> = serde_json::from_str(&edges_json)?;
+            let metadata: Option<serde_json::Value> = metadata_json
+                .map(|s| serde_json::from_str(&s))
+                .transpose()?;
+            result.push((
+                name.clone(),
+                StoredSkill {
+                    skill: crate::models::Skill {
+                        name,
+                        description,
+                        intent,
+                        atoms,
+                        edges,
+                        metadata,
+                    },
                 },
             ));
         }
@@ -582,7 +678,9 @@ impl Storage for SqliteStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{FieldEmbeddings, Tool, ToolFields, ToolType};
+    use crate::models::{
+        EdgeSource, FieldEmbeddings, Skill, SkillEdge, Tool, ToolFields, ToolType,
+    };
 
     // Phase 1: blob helpers + NoopStorage
 
@@ -851,5 +949,70 @@ mod tests {
         let loaded = s.load_tools_for_dataset("ds-1").unwrap();
         assert_eq!(loaded.len(), 1);
         assert!(!loaded[0].1.tool.always_include);
+    }
+
+    // Skills
+
+    fn make_stored_skill(name: &str) -> StoredSkill {
+        StoredSkill {
+            skill: Skill {
+                name: name.into(),
+                description: "Investigate anomalies and draft a CFO memo".into(),
+                intent: "User asks about suspicious transactions".into(),
+                atoms: vec!["list_transactions".into(), "draft_memo".into()],
+                edges: vec![SkillEdge {
+                    from: "list_transactions".into(),
+                    to: "draft_memo".into(),
+                    source: EdgeSource::Developer,
+                }],
+                metadata: Some(serde_json::json!({"team": "finance"})),
+            },
+        }
+    }
+
+    #[test]
+    fn sqlite_roundtrip_skill() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        let skill = make_stored_skill("anomaly_memo");
+        s.save_skills("ds-1", &[("anomaly_memo", &skill)]).unwrap();
+        let loaded = s.load_skills_for_dataset("ds-1").unwrap();
+        assert_eq!(loaded.len(), 1);
+        let (name, st) = &loaded[0];
+        assert_eq!(name, "anomaly_memo");
+        assert_eq!(st.skill.name, "anomaly_memo");
+        assert_eq!(st.skill.atoms, vec!["list_transactions", "draft_memo"]);
+        assert_eq!(st.skill.intent, "User asks about suspicious transactions");
+        assert_eq!(st.skill.edges.len(), 1);
+        assert_eq!(st.skill.edges[0].source, EdgeSource::Developer);
+        assert!(st.skill.metadata.is_some());
+    }
+
+    #[test]
+    fn sqlite_skill_upsert_replaces() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        let mut sk = make_stored_skill("svc");
+        sk.skill.description = "v1".into();
+        s.save_skills("ds-1", &[("svc", &sk)]).unwrap();
+        sk.skill.description = "v2".into();
+        s.save_skills("ds-1", &[("svc", &sk)]).unwrap();
+        let loaded = s.load_skills_for_dataset("ds-1").unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].1.skill.description, "v2");
+    }
+
+    #[test]
+    fn sqlite_skills_scoped_per_dataset() {
+        let s = SqliteStorage::new(":memory:").unwrap();
+        let sk = make_stored_skill("shared_name");
+        s.save_skills("ds-a", &[("shared_name", &sk)]).unwrap();
+        assert!(s.load_skills_for_dataset("ds-b").unwrap().is_empty());
+        assert_eq!(s.load_skills_for_dataset("ds-a").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn noop_save_load_skills_returns_empty() {
+        let s = NoopStorage;
+        s.save_skills("ds-1", &[]).unwrap();
+        assert!(s.load_skills_for_dataset("ds-1").unwrap().is_empty());
     }
 }

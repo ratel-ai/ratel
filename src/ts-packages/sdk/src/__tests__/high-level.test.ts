@@ -7,6 +7,8 @@ const mockAppendMessages = vi.fn();
 const mockGetMessages = vi.fn();
 const mockGetContext = vi.fn();
 const mockAsGetMessagesTool = vi.fn();
+const mockRegisterSkills = vi.fn();
+const mockListSkills = vi.fn();
 
 vi.mock("../api-client.js", () => ({
   ApiClient: vi.fn(() => ({
@@ -16,6 +18,8 @@ vi.mock("../api-client.js", () => ({
     appendMessages: mockAppendMessages,
     getMessages: mockGetMessages,
     getContext: mockGetContext,
+    registerSkills: mockRegisterSkills,
+    listSkills: mockListSkills,
   })),
 }));
 
@@ -493,6 +497,38 @@ describe("Agentified", () => {
       expect(step3.activeTools).toContain("toolF");
       expect(step3.activeTools).toContain("toolG");
       expect(step3.activeTools).toHaveLength(5);
+
+      await ag.disconnect();
+    });
+
+    it("registerSkills delegates to ApiClient.registerSkills with the dataset id", async () => {
+      mockRegisterSkills.mockResolvedValue({ registered: 1 });
+
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag);
+
+      const result = await instance.registerSkills([
+        { name: "s1", description: "d", atoms: ["myTool"] },
+      ]);
+      expect(mockRegisterSkills).toHaveBeenCalledWith("default", [
+        { name: "s1", description: "d", atoms: ["myTool"] },
+      ]);
+      expect(result).toEqual({ registered: 1 });
+
+      await ag.disconnect();
+    });
+
+    it("listSkills delegates to ApiClient.listSkills with the dataset id", async () => {
+      mockListSkills.mockResolvedValue([
+        { name: "s1", description: "d", atoms: ["myTool"] },
+      ]);
+
+      const ag = await connectedAg();
+      const instance = await registerInstance(ag);
+
+      const result = await instance.listSkills();
+      expect(mockListSkills).toHaveBeenCalledWith("default");
+      expect(result).toEqual([{ name: "s1", description: "d", atoms: ["myTool"] }]);
 
       await ag.disconnect();
     });

@@ -175,6 +175,58 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+// Skill types — molecules composed of tool atoms
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EdgeSource {
+    #[default]
+    Developer,
+    Inspector,
+    Agentic,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillEdge {
+    pub from: String,
+    pub to: String,
+    #[serde(default)]
+    pub source: EdgeSource,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Skill {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub intent: String,
+    pub atoms: Vec<String>,
+    #[serde(default)]
+    pub edges: Vec<SkillEdge>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredSkill {
+    pub skill: Skill,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegisterSkillsRequest {
+    pub skills: Vec<Skill>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RegisterSkillsResponse {
+    pub registered: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ListSkillsResponse {
+    pub skills: Vec<Skill>,
+}
+
 // Message types
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

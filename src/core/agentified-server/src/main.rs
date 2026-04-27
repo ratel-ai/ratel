@@ -7,8 +7,8 @@ use agentified_lib::{
     models::{
         AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
         ContextRequest, ContextResponse, DiscoverRequest, DiscoverResponse, ErrorResponse,
-        GetMessagesQuery, GetMessagesResponse, ListToolsResponse, RegisterToolsRequest,
-        RegisterToolsResponse,
+        GetMessagesQuery, GetMessagesResponse, ListSkillsResponse, ListToolsResponse,
+        RegisterSkillsRequest, RegisterSkillsResponse, RegisterToolsRequest, RegisterToolsResponse,
     },
     AgentifiedCore, CoreError, EmbeddingService, LlmService, NoopStorage, OpenAIEmbedding,
     OpenAILlm, SqliteStorage, Storage,
@@ -41,6 +41,10 @@ pub fn app(core: Arc<AgentifiedCore>) -> Router {
             "/api/v1/datasets/{id}/tools",
             post(register_tools).get(list_tools),
         )
+        .route(
+            "/api/v1/datasets/{id}/skills",
+            post(register_skills).get(list_skills),
+        )
         .route("/api/v1/datasets/{id}/discover", post(discover))
         .route("/api/v1/turns", post(capture_turn))
         .route("/api/v1/messages", post(append_messages).get(get_messages))
@@ -71,6 +75,26 @@ async fn list_tools(
     Path(id): Path<String>,
 ) -> Result<Json<ListToolsResponse>, (StatusCode, Json<ErrorResponse>)> {
     let response = core.list_tools(&id).await.map_err(map_error)?;
+    Ok(Json(response))
+}
+
+async fn register_skills(
+    State(core): State<Arc<AgentifiedCore>>,
+    Path(id): Path<String>,
+    Json(body): Json<RegisterSkillsRequest>,
+) -> Result<(StatusCode, Json<RegisterSkillsResponse>), (StatusCode, Json<ErrorResponse>)> {
+    let response = core
+        .register_skills(&id, body.skills)
+        .await
+        .map_err(map_error)?;
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+async fn list_skills(
+    State(core): State<Arc<AgentifiedCore>>,
+    Path(id): Path<String>,
+) -> Result<Json<ListSkillsResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let response = core.list_skills(&id).await.map_err(map_error)?;
     Ok(Json(response))
 }
 
@@ -1105,7 +1129,7 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(json["turn_id"].as_str().unwrap().len() > 0);
+        assert!(!json["turn_id"].as_str().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -2006,5 +2030,133 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["strategy_used"], "recent");
         assert_eq!(json["messages"].as_array().unwrap().len(), 1);
+    }
+
+    // Skills HTTP routes
+
+    async fn register_atoms_via_http(app: Router) {
+        let body = serde_json::json!({
+            "tools": [
+                {"name": "list_transactions", "description": "List transactions", "parameters": {"type": "object"}},
+                {"name": "draft_memo", "description": "Draft a memo", "parameters": {"type": "object"}}
+            ]
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/datasets/ds/tools")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn register_skills_returns_created() {
+        let app = test_app_with_storage();
+        register_atoms_via_http(app.clone()).await;
+
+        let body = serde_json::json!({
+            "skills": [{
+                "name": "anomaly_memo",
+                "description": "Investigate and draft a memo",
+                "intent": "Suspicious transactions",
+                "atoms": ["list_transactions", "draft_memo"],
+                "edges": [{"from": "list_transactions", "to": "draft_memo"}]
+            }]
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/datasets/ds/skills")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["registered"], 1);
+    }
+
+    #[tokio::test]
+    async fn list_skills_returns_registered_skills() {
+        let app = test_app_with_storage();
+        register_atoms_via_http(app.clone()).await;
+
+        let body = serde_json::json!({
+            "skills": [{
+                "name": "anomaly_memo",
+                "description": "Investigate and draft a memo",
+                "atoms": ["list_transactions", "draft_memo"]
+            }]
+        });
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/datasets/ds/skills")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/datasets/ds/skills")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["skills"].as_array().unwrap().len(), 1);
+        assert_eq!(json["skills"][0]["name"], "anomaly_memo");
+        assert_eq!(json["skills"][0]["atoms"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn register_skills_with_unknown_atom_returns_bad_request() {
+        let app = test_app_with_storage();
+        register_atoms_via_http(app.clone()).await;
+
+        let body = serde_json::json!({
+            "skills": [{
+                "name": "broken",
+                "description": "References a missing atom",
+                "atoms": ["list_transactions", "missing_atom"]
+            }]
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/datasets/ds/skills")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 }

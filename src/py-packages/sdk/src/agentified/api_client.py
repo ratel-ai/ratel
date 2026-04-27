@@ -20,6 +20,7 @@ from .models import (
     GetMessagesResponse,
     GetMessagesTool,
     GetMessagesToolInput,
+    ListSkillsResponse,
     Message,
     PrefetchCompleteEvent,
     PrefetchOptions,
@@ -28,8 +29,10 @@ from .models import (
     RecallConfig,
     RecallToolsConfig,
     RegisterResponse,
+    RegisterSkillsResponse,
     SearchStrategy,
     ServerTool,
+    Skill,
     StoredMessage,
     SummaryRange,
     ToolDefinition,
@@ -53,6 +56,26 @@ class ApiClient:
         )
         resp.raise_for_status()
         return RegisterResponse.model_validate(resp.json())
+
+    async def register_skills(
+        self, dataset_id: str, skills: list[Skill]
+    ) -> RegisterSkillsResponse:
+        data = {
+            "skills": [s.model_dump(by_alias=True, exclude_none=True) for s in skills]
+        }
+        resp = await self._http.post(
+            f"{self._config.server_url}/api/v1/datasets/{dataset_id}/skills", json=data
+        )
+        resp.raise_for_status()
+        return RegisterSkillsResponse.model_validate(resp.json())
+
+    async def list_skills(self, dataset_id: str) -> list[Skill]:
+        resp = await self._http.get(
+            f"{self._config.server_url}/api/v1/datasets/{dataset_id}/skills"
+        )
+        resp.raise_for_status()
+        data = ListSkillsResponse.model_validate(resp.json())
+        return data.skills
 
     async def discover(
         self,

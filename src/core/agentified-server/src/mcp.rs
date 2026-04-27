@@ -1,21 +1,27 @@
 use std::sync::Arc;
 
-use agentified_lib::{models::Tool as AgentifiedTool, AgentifiedCore};
+use agentified_lib::{
+    models::{Skill as AgentifiedSkill, Tool as AgentifiedTool},
+    AgentifiedCore,
+};
 use rmcp::{
     model::{
-        CallToolRequestParams, CallToolResult, Content, ErrorData, Implementation, ListToolsResult,
-        PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool as McpTool,
+        CallToolRequestParams, CallToolResult, Content, ErrorData, GetPromptRequestParams,
+        GetPromptResult, Implementation, ListPromptsResult, ListToolsResult,
+        PaginatedRequestParams, Prompt, PromptMessage, PromptMessageContent, PromptMessageRole,
+        ServerCapabilities, ServerInfo, Tool as McpTool,
     },
     service::{RequestContext, RoleServer},
     ServerHandler,
 };
 
-/// MCP server handler that exposes Agentified-registered tools as MCP primitives.
+/// MCP server handler that exposes Agentified-registered tools and skills as MCP primitives.
 ///
-/// In Phase 1, `tools/list` returns all tools registered to the configured dataset.
+/// `tools/list` returns all tools registered to the configured dataset (atoms).
+/// `prompts/list` returns all skills registered to the configured dataset (molecules).
+/// `prompts/get` returns the structured workflow for a skill (intent + atom sequence).
 /// `tools/call` returns an error explaining that Agentified is a metadata layer; the
-/// host application is responsible for executing tools. Future phases will add
-/// proxying for `Mcp`-typed tools and a `discover` meta-tool for two-stage selection.
+/// host application is responsible for executing tools.
 pub struct AgentifiedMcpHandler {
     core: Arc<AgentifiedCore>,
     dataset_id: String,
@@ -40,14 +46,65 @@ fn to_mcp_tool(t: &AgentifiedTool) -> McpTool {
     )
 }
 
+/// Convert an Agentified `Skill` to an MCP `Prompt`. Used by `prompts/list`.
+fn to_mcp_prompt(s: &AgentifiedSkill) -> Prompt {
+    Prompt::new(s.name.clone(), Some(s.description.clone()), None)
+}
+
+/// Render a skill as a structured prompt result. The user-role message describes
+/// the intent and the assistant-role message lays out the suggested atom sequence
+/// and edges so a downstream agent can execute the workflow.
+fn skill_to_prompt_result(s: &AgentifiedSkill) -> GetPromptResult {
+    let intent_text = if s.intent.trim().is_empty() {
+        s.description.clone()
+    } else {
+        format!("{}\n\n{}", s.description, s.intent)
+    };
+
+    let mut plan = format!("Skill '{}' composes the following atoms:\n", s.name);
+    for (i, atom) in s.atoms.iter().enumerate() {
+        plan.push_str(&format!("  {}. {}\n", i + 1, atom));
+    }
+    if !s.edges.is_empty() {
+        plan.push_str("\nGraph edges:\n");
+        for edge in &s.edges {
+            let source = match edge.source {
+                agentified_lib::models::EdgeSource::Developer => "developer",
+                agentified_lib::models::EdgeSource::Inspector => "inspector",
+                agentified_lib::models::EdgeSource::Agentic => "agentic",
+            };
+            plan.push_str(&format!("  - {} -> {} ({})\n", edge.from, edge.to, source));
+        }
+    }
+    plan.push_str("\nNote: Agentified exposes skill metadata only — the host agent decides whether and how to execute these atoms.");
+
+    GetPromptResult::new(vec![
+        PromptMessage::new(
+            PromptMessageRole::User,
+            PromptMessageContent::text(intent_text),
+        ),
+        PromptMessage::new(
+            PromptMessageRole::Assistant,
+            PromptMessageContent::text(plan),
+        ),
+    ])
+}
+
 impl ServerHandler for AgentifiedMcpHandler {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("agentified", env!("CARGO_PKG_VERSION")))
-            .with_instructions(
-                "Agentified context intelligence MCP server. \
-                Use tools/list to see the tools registered to this dataset.",
-            )
+        ServerInfo::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_prompts()
+                .build(),
+        )
+        .with_server_info(Implementation::new("agentified", env!("CARGO_PKG_VERSION")))
+        .with_instructions(
+            "Agentified context intelligence MCP server. \
+            Use tools/list to see the atoms (single-purpose tools) and \
+            prompts/list to see the skills (molecules — composable workflows over atoms) \
+            registered to this dataset.",
+        )
     }
 
     async fn list_tools(
@@ -75,10 +132,48 @@ impl ServerHandler for AgentifiedMcpHandler {
     ) -> Result<CallToolResult, ErrorData> {
         Ok(CallToolResult::error(vec![Content::text(format!(
             "Tool '{}' was not executed by Agentified. \
-            In Phase 1, Agentified exposes tool metadata only — \
+            Agentified exposes tool metadata only — \
             the host application is responsible for executing tools.",
             request.name
         ))]))
+    }
+
+    async fn list_prompts(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListPromptsResult, ErrorData> {
+        let response = self
+            .core
+            .list_skills(&self.dataset_id)
+            .await
+            .map_err(|e| ErrorData::internal_error(format!("list_skills failed: {e}"), None))?;
+        let prompts: Vec<Prompt> = response.skills.iter().map(to_mcp_prompt).collect();
+        Ok(ListPromptsResult {
+            prompts,
+            next_cursor: None,
+            meta: None,
+        })
+    }
+
+    async fn get_prompt(
+        &self,
+        request: GetPromptRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<GetPromptResult, ErrorData> {
+        let response = self
+            .core
+            .list_skills(&self.dataset_id)
+            .await
+            .map_err(|e| ErrorData::internal_error(format!("list_skills failed: {e}"), None))?;
+        let skill = response
+            .skills
+            .into_iter()
+            .find(|s| s.name == request.name)
+            .ok_or_else(|| {
+                ErrorData::invalid_params(format!("skill '{}' not found", request.name), None)
+            })?;
+        Ok(skill_to_prompt_result(&skill))
     }
 }
 
@@ -86,7 +181,7 @@ impl ServerHandler for AgentifiedMcpHandler {
 mod tests {
     use super::*;
     use agentified_lib::{
-        models::{RegisterToolsRequest, Tool, ToolType},
+        models::{EdgeSource, RegisterToolsRequest, Skill, SkillEdge, Tool, ToolType},
         FakeEmbedding, NoopStorage,
     };
 
@@ -173,12 +268,129 @@ mod tests {
     }
 
     #[test]
-    fn server_info_declares_tools_capability() {
+    fn server_info_declares_tools_and_prompts_capabilities() {
         let core = build_core();
         let handler = AgentifiedMcpHandler::new(core, "ds".into());
         let info = handler.get_info();
         assert!(info.capabilities.tools.is_some());
+        assert!(info.capabilities.prompts.is_some());
         assert_eq!(info.server_info.name, "agentified");
+    }
+
+    fn sample_skill() -> Skill {
+        Skill {
+            name: "anomaly_memo".into(),
+            description: "Investigate anomalous transactions and draft a memo".into(),
+            intent: "User asks about suspicious activity".into(),
+            atoms: vec!["getAccountInfo".into(), "processRefund".into()],
+            edges: vec![SkillEdge {
+                from: "getAccountInfo".into(),
+                to: "processRefund".into(),
+                source: EdgeSource::Developer,
+            }],
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn to_mcp_prompt_carries_name_and_description() {
+        let skill = sample_skill();
+        let prompt = to_mcp_prompt(&skill);
+        assert_eq!(prompt.name, "anomaly_memo");
+        assert_eq!(
+            prompt.description.as_deref(),
+            Some("Investigate anomalous transactions and draft a memo")
+        );
+    }
+
+    #[test]
+    fn skill_to_prompt_result_renders_intent_and_atom_sequence() {
+        let skill = sample_skill();
+        let result = skill_to_prompt_result(&skill);
+        assert_eq!(result.messages.len(), 2);
+        // user message: intent
+        if let PromptMessageContent::Text { ref text } = result.messages[0].content {
+            assert!(text.contains("Investigate anomalous transactions"));
+            assert!(text.contains("User asks about suspicious activity"));
+        } else {
+            panic!("expected text content for user message");
+        }
+        // assistant message: plan
+        if let PromptMessageContent::Text { ref text } = result.messages[1].content {
+            assert!(text.contains("anomaly_memo"));
+            assert!(text.contains("getAccountInfo"));
+            assert!(text.contains("processRefund"));
+            assert!(text.contains("getAccountInfo -> processRefund"));
+            assert!(text.contains("(developer)"));
+        } else {
+            panic!("expected text content for assistant message");
+        }
+    }
+
+    /// End-to-end: register tools + skills, then verify a real rmcp client
+    /// can list them via `tools/list`, `prompts/list`, and fetch via `prompts/get`.
+    #[tokio::test]
+    async fn mcp_client_round_trips_skills() {
+        use rmcp::{model::GetPromptRequestParams, ServiceExt};
+        use tokio::io::duplex;
+
+        let core = build_core();
+        core.register_tools(
+            "test-ds",
+            vec![
+                sample_tool(),
+                Tool {
+                    name: "processRefund".into(),
+                    description: "Process a refund".into(),
+                    parameters: serde_json::json!({"type": "object", "properties": {}}),
+                    metadata: None,
+                    fields: None,
+                    always_include: false,
+                    tool_type: ToolType::Backend,
+                    server_uri: None,
+                },
+            ],
+        )
+        .await
+        .unwrap();
+        core.register_skills("test-ds", vec![sample_skill()])
+            .await
+            .unwrap();
+
+        let (server_io, client_io) = duplex(8192);
+
+        let handler = AgentifiedMcpHandler::new(core, "test-ds".into());
+        let server_handle = tokio::spawn(async move {
+            let service = handler.serve(server_io).await.unwrap();
+            service.waiting().await.unwrap();
+        });
+
+        let client = ().serve(client_io).await.expect("client failed to initialize");
+
+        let info = client.peer_info().expect("server info");
+        assert!(info.capabilities.prompts.is_some());
+
+        let prompts = client
+            .list_prompts(Default::default())
+            .await
+            .expect("list_prompts succeeds");
+        assert_eq!(prompts.prompts.len(), 1);
+        assert_eq!(prompts.prompts[0].name, "anomaly_memo");
+
+        let result = client
+            .get_prompt(GetPromptRequestParams::new("anomaly_memo"))
+            .await
+            .expect("get_prompt succeeds");
+        assert_eq!(result.messages.len(), 2);
+        if let PromptMessageContent::Text { ref text } = result.messages[1].content {
+            assert!(text.contains("getAccountInfo"));
+            assert!(text.contains("processRefund"));
+        } else {
+            panic!("expected text content");
+        }
+
+        client.cancel().await.ok();
+        server_handle.abort();
     }
 
     /// End-to-end: spin up the MCP server over an in-memory duplex stream,

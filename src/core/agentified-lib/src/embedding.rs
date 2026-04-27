@@ -231,6 +231,13 @@ pub struct FakeEmbedding {
 #[cfg(any(test, feature = "test-utils"))]
 impl FakeEmbedding {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl Default for FakeEmbedding {
+    fn default() -> Self {
         Self {
             call_count: std::sync::atomic::AtomicUsize::new(0),
             batch_call_count: std::sync::atomic::AtomicUsize::new(0),
