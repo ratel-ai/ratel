@@ -23,6 +23,26 @@ export interface ServerTool {
 export interface RankedTool extends ServerTool {
   score: number;
   graphExpanded?: boolean;
+  /** Stage-2 reranker reasoning, when rerank was enabled. */
+  rerankReasoning?: string;
+}
+
+/**
+ * Stage-2 LLM reranker options. Pass any of these to enable two-stage
+ * selection: BM25/semantic stage 1 followed by an LLM curating the top
+ * `candidatePool` candidates down to `limit` results, with optional
+ * developer-supplied prompt customization.
+ */
+export interface RerankOptions {
+  /** Number of stage-1 candidates fed to the reranker (default: 50). */
+  candidatePool?: number;
+  /** Override the LLM model used for reranking (e.g., "claude-haiku-4-5"). */
+  model?: string;
+  /**
+   * Developer-supplied guidance appended to the rerank system prompt.
+   * Examples: "prefer tools that compose well", "exclude deprecated tools".
+   */
+  prompt?: string;
 }
 
 export interface ToolDefinition {
@@ -57,6 +77,7 @@ export interface PrefetchOptions {
   exclude?: string[];
   turnId?: string;
   strategy?: SearchStrategy;
+  rerank?: RerankOptions;
 }
 
 export interface CaptureTurnOptions {
@@ -72,6 +93,7 @@ export interface DiscoverToolInput {
   query: string;
   limit?: number;
   strategy?: SearchStrategy;
+  rerank?: RerankOptions;
 }
 
 export interface DiscoverTool {

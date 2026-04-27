@@ -121,11 +121,27 @@ impl EmbeddingService for OpenAIEmbedding {
     }
 }
 
-// LLM service trait (for summary generation)
+// LLM service trait (for summary generation and rerank)
+
+pub const DEFAULT_LLM_MODEL: &str = "gpt-4o-mini";
 
 #[async_trait]
 pub trait LlmService: Send + Sync {
     async fn chat(&self, system: &str, user: &str, max_tokens: usize) -> anyhow::Result<String>;
+
+    /// Chat against a caller-specified model (used by stage-2 rerank, where
+    /// developers can opt into a smaller/cheaper model than the embedding LLM).
+    /// Defaults to ignoring `model` and delegating to `chat`, so existing
+    /// implementations (and test fakes) remain compatible.
+    async fn chat_with_model(
+        &self,
+        _model: &str,
+        system: &str,
+        user: &str,
+        max_tokens: usize,
+    ) -> anyhow::Result<String> {
+        self.chat(system, user, max_tokens).await
+    }
 }
 
 pub struct OpenAILlm {
@@ -143,45 +159,20 @@ impl OpenAILlm {
             api_key,
         }
     }
-}
 
-#[derive(Serialize)]
-struct ChatRequest<'a> {
-    model: &'a str,
-    messages: Vec<ChatMessage<'a>>,
-    max_completion_tokens: usize,
-}
-
-#[derive(Serialize)]
-struct ChatMessage<'a> {
-    role: &'a str,
-    content: &'a str,
-}
-
-#[derive(Deserialize)]
-struct ChatResponse {
-    choices: Vec<ChatChoice>,
-}
-
-#[derive(Deserialize)]
-struct ChatChoice {
-    message: ChatChoiceMessage,
-}
-
-#[derive(Deserialize)]
-struct ChatChoiceMessage {
-    content: Option<String>,
-}
-
-#[async_trait]
-impl LlmService for OpenAILlm {
-    async fn chat(&self, system: &str, user: &str, max_tokens: usize) -> anyhow::Result<String> {
+    async fn chat_request(
+        &self,
+        model: &str,
+        system: &str,
+        user: &str,
+        max_tokens: usize,
+    ) -> anyhow::Result<String> {
         let response = self
             .client
             .post("https://api.openai.com/v1/chat/completions")
             .bearer_auth(&self.api_key)
             .json(&ChatRequest {
-                model: "gpt-4o-mini",
+                model,
                 messages: vec![
                     ChatMessage {
                         role: "system",
@@ -217,6 +208,52 @@ impl LlmService for OpenAILlm {
             .next()
             .and_then(|c| c.message.content.filter(|s| !s.trim().is_empty()))
             .context("no chat completion content returned")
+    }
+}
+
+#[derive(Serialize)]
+struct ChatRequest<'a> {
+    model: &'a str,
+    messages: Vec<ChatMessage<'a>>,
+    max_completion_tokens: usize,
+}
+
+#[derive(Serialize)]
+struct ChatMessage<'a> {
+    role: &'a str,
+    content: &'a str,
+}
+
+#[derive(Deserialize)]
+struct ChatResponse {
+    choices: Vec<ChatChoice>,
+}
+
+#[derive(Deserialize)]
+struct ChatChoice {
+    message: ChatChoiceMessage,
+}
+
+#[derive(Deserialize)]
+struct ChatChoiceMessage {
+    content: Option<String>,
+}
+
+#[async_trait]
+impl LlmService for OpenAILlm {
+    async fn chat(&self, system: &str, user: &str, max_tokens: usize) -> anyhow::Result<String> {
+        self.chat_request(DEFAULT_LLM_MODEL, system, user, max_tokens)
+            .await
+    }
+
+    async fn chat_with_model(
+        &self,
+        model: &str,
+        system: &str,
+        user: &str,
+        max_tokens: usize,
+    ) -> anyhow::Result<String> {
+        self.chat_request(model, system, user, max_tokens).await
     }
 }
 
@@ -302,6 +339,84 @@ pub struct FailingLlm;
 impl LlmService for FailingLlm {
     async fn chat(&self, _system: &str, _user: &str, _max_tokens: usize) -> anyhow::Result<String> {
         anyhow::bail!("LLM service unavailable")
+    }
+}
+
+/// Test fake for the rerank stage. Parses tool names from the user prompt
+/// (lines starting with `- ` or `* `) and returns them as a JSON rerank
+/// response in REVERSE order, so tests can verify rerank actually changed
+/// the ordering. Records the model name and system prompt of the most
+/// recent call for assertion in tests.
+#[cfg(any(test, feature = "test-utils"))]
+pub struct FakeRerankLlm {
+    pub last_model: std::sync::Mutex<Option<String>>,
+    pub last_system: std::sync::Mutex<Option<String>>,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl FakeRerankLlm {
+    pub fn new() -> Self {
+        Self {
+            last_model: std::sync::Mutex::new(None),
+            last_system: std::sync::Mutex::new(None),
+        }
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl Default for FakeRerankLlm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+#[async_trait]
+impl LlmService for FakeRerankLlm {
+    async fn chat(&self, _system: &str, _user: &str, _max_tokens: usize) -> anyhow::Result<String> {
+        anyhow::bail!("FakeRerankLlm only supports chat_with_model")
+    }
+
+    async fn chat_with_model(
+        &self,
+        model: &str,
+        system: &str,
+        user: &str,
+        _max_tokens: usize,
+    ) -> anyhow::Result<String> {
+        *self.last_model.lock().unwrap() = Some(model.to_string());
+        *self.last_system.lock().unwrap() = Some(system.to_string());
+
+        let mut names: Vec<String> = user
+            .lines()
+            .filter_map(|l| {
+                let trimmed = l.trim_start();
+                let body = trimmed
+                    .strip_prefix("- ")
+                    .or_else(|| trimmed.strip_prefix("* "))?;
+                let name = body.split(':').next()?.trim();
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(name.to_string())
+                }
+            })
+            .collect();
+        names.reverse();
+
+        let entries: Vec<serde_json::Value> = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let score = 1.0 - (i as f32) * 0.05;
+                serde_json::json!({
+                    "name": name,
+                    "score": score,
+                    "reasoning": format!("rank {} (fake)", i + 1),
+                })
+            })
+            .collect();
+        Ok(serde_json::to_string(&entries).unwrap())
     }
 }
 

@@ -20,6 +20,7 @@ import type {
   RankedTool,
   RegisterResponse,
   RegisterSkillsResponse,
+  RerankOptions,
   SearchStrategy,
   ServerTool,
   Skill,
@@ -87,7 +88,7 @@ export class ApiClient {
     return data.skills ?? [];
   }
 
-  async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string, strategy?: SearchStrategy, namespace?: string, session?: string): Promise<RankedTool[]> {
+  async discover(datasetId: string, query: string, limit?: number, exclude?: string[], turnId?: string, strategy?: SearchStrategy, namespace?: string, session?: string, rerank?: RerankOptions): Promise<RankedTool[]> {
     const body: Record<string, unknown> = { query };
     if (limit !== undefined) body.limit = limit;
     if (exclude !== undefined) body.exclude = exclude;
@@ -95,6 +96,13 @@ export class ApiClient {
     if (namespace !== undefined) body.namespace = namespace;
     if (session !== undefined) body.session = session;
     body.strategy = strategy ?? this.config.strategy ?? "bm25";
+    if (rerank !== undefined) {
+      const wireRerank: Record<string, unknown> = {};
+      if (rerank.candidatePool !== undefined) wireRerank.candidate_pool = rerank.candidatePool;
+      if (rerank.model !== undefined) wireRerank.model = rerank.model;
+      if (rerank.prompt !== undefined) wireRerank.prompt = rerank.prompt;
+      body.rerank = wireRerank;
+    }
 
     const data = await this.fetchJson<DiscoverResponse>(`${this.config.serverUrl}/api/v1/datasets/${datasetId}/discover`, {
       method: "POST",
@@ -109,7 +117,7 @@ export class ApiClient {
     const start = performance.now();
 
     const query = options.messages.map((m) => m.content).join("\n");
-    const tools = await this.discover(datasetId, query, options.limit, options.exclude, options.turnId, options.strategy);
+    const tools = await this.discover(datasetId, query, options.limit, options.exclude, options.turnId, options.strategy, undefined, undefined, options.rerank);
 
     this.emit({
       type: "agentified:prefetch:complete",
@@ -282,7 +290,7 @@ export class ApiClient {
         this.emit({ type: "agentified:discover:start", query: input.query });
         const start = performance.now();
 
-        const tools = await this.discover(datasetId, input.query, input.limit, undefined, undefined, input.strategy, namespace, session);
+        const tools = await this.discover(datasetId, input.query, input.limit, undefined, undefined, input.strategy, namespace, session, input.rerank);
         for (const t of tools) discoveredNames.add(t.name);
 
         this.emit({

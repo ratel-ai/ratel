@@ -135,6 +135,40 @@ pub struct DiscoverRequest {
     pub namespace: Option<String>,
     #[serde(default)]
     pub session: Option<String>,
+    /// Opt-in stage-2 LLM reranking. When present, top stage-1 candidates are
+    /// reranked by an LLM before truncation to `limit`.
+    #[serde(default)]
+    pub rerank: Option<RerankConfig>,
+}
+
+fn default_rerank_candidate_pool() -> usize {
+    50
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RerankConfig {
+    /// Number of stage-1 candidates fed to the reranker. The LLM curates these
+    /// down to the request's `limit`. Defaults to 50.
+    #[serde(default = "default_rerank_candidate_pool")]
+    pub candidate_pool: usize,
+    /// Override the LLM model used for reranking (e.g., "gpt-4o-mini",
+    /// "claude-haiku-4-5"). If absent, the underlying `LlmService` default is used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Developer-supplied guidance appended to the rerank system prompt
+    /// (e.g., "prefer tools that compose well", "exclude deprecated tools").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+}
+
+impl Default for RerankConfig {
+    fn default() -> Self {
+        Self {
+            candidate_pool: default_rerank_candidate_pool(),
+            model: None,
+            prompt: None,
+        }
+    }
 }
 
 // Session/turn tracking
@@ -168,6 +202,10 @@ pub struct RankedTool {
     pub score: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph_expanded: Option<bool>,
+    /// Human-readable reasoning supplied by the stage-2 reranker, surfaced for
+    /// inspector display. Absent for tools that did not pass through rerank.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rerank_reasoning: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

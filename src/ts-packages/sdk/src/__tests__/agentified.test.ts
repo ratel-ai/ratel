@@ -153,6 +153,64 @@ describe("ApiClient", () => {
         body: JSON.stringify({ query: "test", strategy: "hybrid" }),
       });
     });
+
+    it("forwards rerank options as snake_case wire format", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.discover(
+        "ds-abc",
+        "test",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { candidatePool: 10, model: "claude-haiku-4-5", prompt: "prefer composable tools" },
+      );
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "test",
+          strategy: "bm25",
+          rerank: {
+            candidate_pool: 10,
+            model: "claude-haiku-4-5",
+            prompt: "prefer composable tools",
+          },
+        }),
+      });
+    });
+
+    it("sends an empty rerank object to opt in with all defaults", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ tools: [] }), { status: 200 }),
+      );
+
+      const agent = new ApiClient({ serverUrl: TEST_URL, tools: [testTool] });
+      await agent.discover(
+        "ds-abc",
+        "test",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {},
+      );
+
+      expect(fetch).toHaveBeenCalledWith(`${TEST_URL}/api/v1/datasets/ds-abc/discover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "test", strategy: "bm25", rerank: {} }),
+      });
+    });
   });
 
   describe("prefetch", () => {

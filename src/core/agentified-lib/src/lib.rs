@@ -3,11 +3,11 @@ pub mod models;
 pub mod ranking;
 pub mod storage;
 
-pub use embedding::{EmbeddingService, LlmService, OpenAIEmbedding, OpenAILlm};
+pub use embedding::{EmbeddingService, LlmService, OpenAIEmbedding, OpenAILlm, DEFAULT_LLM_MODEL};
 pub use storage::{NoopStorage, SqliteStorage, Storage};
 
 #[cfg(any(test, feature = "test-utils"))]
-pub use embedding::{FailingEmbedding, FailingLlm, FakeEmbedding, FakeLlm};
+pub use embedding::{FailingEmbedding, FailingLlm, FakeEmbedding, FakeLlm, FakeRerankLlm};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -36,8 +36,8 @@ use models::{
     AppendMessagesRequest, AppendMessagesResponse, CaptureTurnRequest, CaptureTurnResponse,
     ContextRequest, ContextResponse, DiscoverRequest, DiscoverResponse, FieldEmbeddings,
     GetMessagesQuery, GetMessagesResponse, ListSkillsResponse, ListToolsResponse, RankedTool,
-    RecalledContext, RegisterSkillsResponse, RegisterToolsResponse, Skill, StoredMessage,
-    StoredSkill, StoredTool, Tool, Turn,
+    RecalledContext, RegisterSkillsResponse, RegisterToolsResponse, RerankConfig, Skill,
+    StoredMessage, StoredSkill, StoredTool, Tool, Turn,
 };
 use ranking::{bm25_scores, normalize_min_max, weighted_semantic_score};
 
@@ -462,6 +462,7 @@ impl AgentifiedCore {
                 tool: st.tool.clone(),
                 score: 1.0,
                 graph_expanded: None,
+                rerank_reasoning: None,
             })
             .collect();
 
@@ -511,6 +512,7 @@ impl AgentifiedCore {
                         tool: t.tool.clone(),
                         score: norm_bm25[i],
                         graph_expanded: None,
+                        rerank_reasoning: None,
                     })
                     .collect()
             }
@@ -527,6 +529,7 @@ impl AgentifiedCore {
                             tool: t.tool.clone(),
                             score: weighted_semantic_score(&query_embedding, emb, &weights),
                             graph_expanded: None,
+                            rerank_reasoning: None,
                         }
                     })
                     .collect()
@@ -556,6 +559,7 @@ impl AgentifiedCore {
                         tool: t.tool.clone(),
                         score: 0.7 * semantic_scores[i] + 0.3 * norm_bm25[i],
                         graph_expanded: None,
+                        rerank_reasoning: None,
                     })
                     .collect()
             }
@@ -566,6 +570,25 @@ impl AgentifiedCore {
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        // Stage 2: optional LLM rerank. The reranker operates on the top
+        // `candidate_pool` stage-1 results, then `limit` truncation runs after.
+        // On any rerank failure we fall back to the stage-1 ordering — rerank
+        // is opt-in and must never fail the request.
+        if let Some(rerank_cfg) = body.rerank.as_ref() {
+            let pool = rerank_cfg.candidate_pool.max(limit).min(ranked.len());
+            ranked.truncate(pool);
+            match self
+                .rerank_with_llm(&body.query, &mut ranked, rerank_cfg)
+                .await
+            {
+                Ok(()) => {}
+                Err(e) => {
+                    tracing::warn!("rerank failed ({e}); falling back to stage-1 ordering");
+                }
+            }
+        }
+
         ranked.truncate(limit);
 
         let ranked = expand_with_providers(ranked, dataset_tools, limit);
@@ -586,6 +609,81 @@ impl AgentifiedCore {
         }
 
         Ok(DiscoverResponse { tools: base_tools })
+    }
+
+    /// Stage-2 LLM reranker. Mutates `candidates` in place: reorders by
+    /// LLM-supplied scores and attaches reasoning. Tools the LLM omits are
+    /// preserved at the tail in their original stage-1 order, so rerank can
+    /// only ever curate — never drop tools the caller would otherwise see.
+    async fn rerank_with_llm(
+        &self,
+        query: &str,
+        candidates: &mut Vec<RankedTool>,
+        cfg: &RerankConfig,
+    ) -> anyhow::Result<()> {
+        let llm = self
+            .llm
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("LLM service unavailable"))?;
+
+        if candidates.is_empty() {
+            return Ok(());
+        }
+
+        let mut system = String::from(
+            "You are reranking tools for an AI agent based on relevance to the user's query. \
+            Given the query and a list of candidate tools, return ONLY a JSON array of objects \
+            ordered by relevance (most relevant first), each: {\"name\": string, \"score\": number in [0,1], \"reasoning\": string}. \
+            Only include tools from the provided candidate list. Output the JSON array only, no prose.",
+        );
+        if let Some(custom) = cfg.prompt.as_ref().filter(|s| !s.trim().is_empty()) {
+            system.push_str("\n\nAdditional guidance: ");
+            system.push_str(custom);
+        }
+
+        let mut user = format!("Query: {}\n\nCandidates:\n", query);
+        for c in candidates.iter() {
+            user.push_str("- ");
+            user.push_str(&c.tool.name);
+            user.push_str(": ");
+            user.push_str(&c.tool.description);
+            user.push('\n');
+        }
+
+        let model = cfg.model.as_deref().unwrap_or(DEFAULT_LLM_MODEL);
+        let raw = llm
+            .chat_with_model(model, &system, &user, 1024)
+            .await
+            .map_err(|e| anyhow::anyhow!("rerank LLM call failed: {e}"))?;
+
+        let entries = parse_rerank_response(&raw).map_err(|e| {
+            anyhow::anyhow!(
+                "rerank response parse failed: {e}; raw: {}",
+                &raw[..raw.len().min(200)]
+            )
+        })?;
+
+        let mut by_name: HashMap<String, RankedTool> = candidates
+            .drain(..)
+            .map(|t| (t.tool.name.clone(), t))
+            .collect();
+
+        let mut reordered: Vec<RankedTool> = Vec::with_capacity(by_name.len());
+        for entry in entries {
+            if let Some(mut tool) = by_name.remove(&entry.name) {
+                tool.score = entry.score.clamp(0.0, 1.0);
+                tool.rerank_reasoning = entry.reasoning;
+                reordered.push(tool);
+            }
+            // Unknown tool names from the LLM are silently dropped.
+        }
+        // Preserve any candidates the LLM omitted (preferred over silent drops),
+        // appended at the tail in original stage-1 order.
+        let omitted: Vec<RankedTool> = by_name.into_values().collect();
+        reordered.extend(omitted);
+
+        *candidates = reordered;
+        Ok(())
     }
 
     pub async fn capture_turn(&self, body: CaptureTurnRequest) -> CaptureTurnResponse {
@@ -960,6 +1058,7 @@ impl AgentifiedCore {
                                 tool: st.tool.clone(),
                                 score: 1.0,
                                 graph_expanded: None,
+                                rerank_reasoning: None,
                             });
                         }
                     }
@@ -1001,6 +1100,7 @@ impl AgentifiedCore {
                     turn_id: None,
                     namespace: None,
                     session: None,
+                    rerank: None,
                 },
             )
             .await?;
@@ -1145,6 +1245,44 @@ fn select_messages(
     }
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct RerankEntry {
+    name: String,
+    #[serde(default = "default_rerank_entry_score")]
+    score: f32,
+    #[serde(default)]
+    reasoning: Option<String>,
+}
+
+fn default_rerank_entry_score() -> f32 {
+    0.5
+}
+
+/// Parse the LLM rerank response. Tolerates JSON wrapped in code fences or
+/// surrounded by leading/trailing prose by extracting the first JSON array.
+fn parse_rerank_response(raw: &str) -> anyhow::Result<Vec<RerankEntry>> {
+    let trimmed = raw.trim();
+    let candidate = if let Some(rest) = trimmed.strip_prefix("```") {
+        // Tolerate ```json or just ```
+        let body = rest
+            .trim_start_matches("json")
+            .trim_start_matches('\n')
+            .trim_end_matches("```")
+            .trim();
+        body.to_string()
+    } else if let (Some(start), Some(end)) = (trimmed.find('['), trimmed.rfind(']')) {
+        if start < end {
+            trimmed[start..=end].to_string()
+        } else {
+            trimmed.to_string()
+        }
+    } else {
+        trimmed.to_string()
+    };
+
+    serde_json::from_str(&candidate).map_err(|e| anyhow::anyhow!("invalid rerank JSON: {e}"))
+}
+
 fn get_string_array(metadata: &serde_json::Value, key: &str) -> Vec<String> {
     metadata
         .get(key)
@@ -1203,6 +1341,7 @@ fn expand_with_providers(
             tool: stored.tool.clone(),
             score: 0.0,
             graph_expanded: Some(true),
+            rerank_reasoning: None,
         });
     }
 
@@ -2694,6 +2833,7 @@ mod tests {
                     turn_id: None,
                     namespace: None,
                     session: None,
+                    rerank: None,
                 },
             )
             .await
@@ -2808,6 +2948,7 @@ mod tests {
                     turn_id: None,
                     namespace: None,
                     session: None,
+                    rerank: None,
                 },
             )
             .await
@@ -2845,6 +2986,7 @@ mod tests {
                     turn_id: None,
                     namespace: None,
                     session: None,
+                    rerank: None,
                 },
             )
             .await
@@ -2889,6 +3031,7 @@ mod tests {
                     turn_id: None,
                     namespace: None,
                     session: None,
+                    rerank: None,
                 },
             )
             .await
@@ -2948,6 +3091,7 @@ mod tests {
                     turn_id: None,
                     namespace: None,
                     session: None,
+                    rerank: None,
                 },
             )
             .await
@@ -2999,6 +3143,295 @@ mod tests {
         assert_eq!(req.strategy, SearchStrategy::Bm25);
     }
 
+    fn make_core_with_rerank_llm() -> (AgentifiedCore, Arc<embedding::FakeRerankLlm>) {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        let embedding: Arc<dyn EmbeddingService> = Arc::new(FakeEmbedding::new());
+        let llm = Arc::new(embedding::FakeRerankLlm::new());
+        let core = AgentifiedCore::new_with_llm(
+            embedding,
+            storage,
+            llm.clone() as Arc<dyn embedding::LlmService>,
+        );
+        (core, llm)
+    }
+
+    fn three_distinct_tools() -> Vec<Tool> {
+        vec![
+            Tool {
+                name: "refund_invoice".into(),
+                description: "Issue a refund for an invoice".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "get_user".into(),
+                description: "Look up user account details".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+            Tool {
+                name: "send_email".into(),
+                description: "Send a transactional email".into(),
+                parameters: serde_json::json!({}),
+                metadata: None,
+                fields: None,
+                always_include: false,
+                tool_type: ToolType::default(),
+                server_uri: None,
+            },
+        ]
+    }
+
+    #[tokio::test]
+    async fn rerank_request_deserializes_with_defaults() {
+        let req: DiscoverRequest = serde_json::from_str(r#"{"query": "x", "rerank": {}}"#).unwrap();
+        let cfg = req.rerank.expect("rerank present");
+        assert_eq!(cfg.candidate_pool, 50);
+        assert!(cfg.model.is_none());
+        assert!(cfg.prompt.is_none());
+    }
+
+    #[tokio::test]
+    async fn rerank_request_deserializes_with_overrides() {
+        let req: DiscoverRequest = serde_json::from_str(
+            r#"{"query": "x", "rerank": {"candidate_pool": 8, "model": "claude-haiku-4-5", "prompt": "prefer composable tools"}}"#,
+        )
+        .unwrap();
+        let cfg = req.rerank.unwrap();
+        assert_eq!(cfg.candidate_pool, 8);
+        assert_eq!(cfg.model.as_deref(), Some("claude-haiku-4-5"));
+        assert_eq!(cfg.prompt.as_deref(), Some("prefer composable tools"));
+    }
+
+    #[test]
+    fn parse_rerank_response_accepts_plain_array() {
+        let raw = r#"[{"name": "a", "score": 0.9, "reasoning": "best match"}, {"name": "b", "score": 0.5}]"#;
+        let entries = parse_rerank_response(raw).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].name, "a");
+        assert_eq!(entries[0].reasoning.as_deref(), Some("best match"));
+        assert!(entries[1].reasoning.is_none());
+    }
+
+    #[test]
+    fn parse_rerank_response_strips_code_fences() {
+        let raw = "```json\n[{\"name\": \"a\", \"score\": 0.7}]\n```";
+        let entries = parse_rerank_response(raw).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "a");
+    }
+
+    #[test]
+    fn parse_rerank_response_extracts_array_from_prose() {
+        let raw = "Here is your ranking: [{\"name\":\"a\",\"score\":0.8}] hope it helps!";
+        let entries = parse_rerank_response(raw).unwrap();
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn parse_rerank_response_rejects_non_json() {
+        assert!(parse_rerank_response("not json at all").is_err());
+    }
+
+    #[tokio::test]
+    async fn rerank_reorders_stage_one_results() {
+        let (core, _llm) = make_core_with_rerank_llm();
+        core.register_tools("ds", three_distinct_tools())
+            .await
+            .unwrap();
+
+        // BM25 alone should put refund_invoice first for "refund". FakeRerankLlm
+        // reverses the candidate order, so the top result should change.
+        let stage_one = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(3),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                    rerank: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(stage_one.tools[0].tool.name, "refund_invoice");
+        assert!(stage_one.tools[0].rerank_reasoning.is_none());
+
+        let stage_two = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(3),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                    rerank: Some(RerankConfig::default()),
+                },
+            )
+            .await
+            .unwrap();
+        // Reverse-order fake puts the original tail first.
+        assert_eq!(stage_two.tools.len(), 3);
+        assert_ne!(
+            stage_two.tools[0].tool.name, stage_one.tools[0].tool.name,
+            "rerank should change the head when the fake reverses ordering"
+        );
+        // Reasoning is attached to reranked tools.
+        assert!(stage_two.tools.iter().all(|t| t.rerank_reasoning.is_some()));
+    }
+
+    #[tokio::test]
+    async fn rerank_passes_custom_model_and_prompt_to_llm() {
+        let (core, fake_llm) = make_core_with_rerank_llm();
+        core.register_tools("ds", three_distinct_tools())
+            .await
+            .unwrap();
+
+        core.discover(
+            "ds",
+            DiscoverRequest {
+                query: "refund".into(),
+                limit: Some(3),
+                strategy: SearchStrategy::Bm25,
+                embedding_weights: None,
+                exclude: None,
+                turn_id: None,
+                namespace: None,
+                session: None,
+                rerank: Some(RerankConfig {
+                    candidate_pool: 50,
+                    model: Some("claude-haiku-4-5".into()),
+                    prompt: Some("prefer tools that compose well".into()),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        let model = fake_llm.last_model.lock().unwrap().clone();
+        assert_eq!(model.as_deref(), Some("claude-haiku-4-5"));
+
+        let system = fake_llm.last_system.lock().unwrap().clone().unwrap();
+        assert!(
+            system.contains("prefer tools that compose well"),
+            "custom prompt should be appended to system: {system}"
+        );
+    }
+
+    #[tokio::test]
+    async fn rerank_falls_back_to_stage_one_on_llm_failure() {
+        let storage = Arc::new(SqliteStorage::new(":memory:").unwrap());
+        let embedding: Arc<dyn EmbeddingService> = Arc::new(FakeEmbedding::new());
+        let llm: Arc<dyn embedding::LlmService> = Arc::new(FailingLlm);
+        let core = AgentifiedCore::new_with_llm(embedding, storage, llm);
+        core.register_tools("ds", three_distinct_tools())
+            .await
+            .unwrap();
+
+        let resp = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(3),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                    rerank: Some(RerankConfig::default()),
+                },
+            )
+            .await
+            .unwrap();
+
+        // Stage-1 ordering must survive an LLM failure.
+        assert_eq!(resp.tools[0].tool.name, "refund_invoice");
+        assert!(resp.tools.iter().all(|t| t.rerank_reasoning.is_none()));
+    }
+
+    #[tokio::test]
+    async fn rerank_without_llm_falls_back_silently() {
+        // No LLM configured at all — rerank request should still succeed.
+        let core = make_bm25_core();
+        core.register_tools("ds", three_distinct_tools())
+            .await
+            .unwrap();
+
+        let resp = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(3),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                    rerank: Some(RerankConfig::default()),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.tools[0].tool.name, "refund_invoice");
+        assert!(resp.tools.iter().all(|t| t.rerank_reasoning.is_none()));
+    }
+
+    #[tokio::test]
+    async fn rerank_pool_is_at_least_limit() {
+        // candidate_pool < limit must not under-feed the reranker. The pool
+        // should be max(candidate_pool, limit), so the user always has at
+        // least `limit` candidates competing for the `limit` final slots.
+        let (core, _llm) = make_core_with_rerank_llm();
+        core.register_tools("ds", three_distinct_tools())
+            .await
+            .unwrap();
+
+        let resp = core
+            .discover(
+                "ds",
+                DiscoverRequest {
+                    query: "refund".into(),
+                    limit: Some(3),
+                    strategy: SearchStrategy::Bm25,
+                    embedding_weights: None,
+                    exclude: None,
+                    turn_id: None,
+                    namespace: None,
+                    session: None,
+                    rerank: Some(RerankConfig {
+                        candidate_pool: 1,
+                        ..Default::default()
+                    }),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.tools.len(), 3);
+    }
+
     #[tokio::test]
     async fn discover_excludes_always_include_tools() {
         let core = make_bm25_core();
@@ -3048,6 +3481,7 @@ mod tests {
                     turn_id: None,
                     namespace: None,
                     session: None,
+                    rerank: None,
                 },
             )
             .await
@@ -3112,6 +3546,7 @@ mod tests {
                     turn_id: None,
                     namespace: Some("ns".into()),
                     session: Some("sess1".into()),
+                    rerank: None,
                 },
             )
             .await
@@ -3132,6 +3567,7 @@ mod tests {
                     turn_id: None,
                     namespace: Some("ns".into()),
                     session: Some("sess1".into()),
+                    rerank: None,
                 },
             )
             .await
@@ -3183,6 +3619,7 @@ mod tests {
                 turn_id: None,
                 namespace: None,
                 session: None,
+                rerank: None,
             },
         )
         .await
@@ -3201,6 +3638,7 @@ mod tests {
                     turn_id: None,
                     namespace: None,
                     session: None,
+                    rerank: None,
                 },
             )
             .await
@@ -3247,6 +3685,7 @@ mod tests {
                 turn_id: None,
                 namespace: Some("ns".into()),
                 session: Some("sess1".into()),
+                rerank: None,
             },
         )
         .await
