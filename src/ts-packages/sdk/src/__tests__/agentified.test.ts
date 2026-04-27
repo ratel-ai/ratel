@@ -662,10 +662,12 @@ describe("ApiClient", () => {
       });
     });
 
-    it("defaults to bm25 strategy when no strategy specified", async () => {
+    it("defaults to recent messages strategy when none specified", async () => {
+      // The messages-strategy enum is "recent" | "full" | "compacted" — not the search-strategy
+      // enum ("bm25" | "semantic" | "hybrid"). Sending "bm25" here would 400 on the server.
       const contextRes = {
         messages: [],
-        strategy_used: "bm25",
+        strategy_used: "recent",
         total_messages: 0,
         included_messages: 0,
         recalled: { tools: [], memories: [] },
@@ -687,7 +689,7 @@ describe("ApiClient", () => {
           dataset: "ds",
           namespace: "ns",
           session: "sess",
-          messages: { strategy: "bm25" },
+          messages: { strategy: "recent" },
         }),
       });
     });

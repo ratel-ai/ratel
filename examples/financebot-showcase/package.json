@@ -7,7 +7,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "agentified": "link:../../src/ts-packages/sdk"
+    "@agentified/ai-sdk": "link:../../src/ts-packages/ai-sdk",
+    "@ai-sdk/openai": "^3.0.0",
+    "agentified": "link:../../src/ts-packages/sdk",
+    "ai": "^6.0.0",
+    "dotenv": "^16.4.0",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

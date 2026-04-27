@@ -15,6 +15,8 @@ import type {
   ContextBuilder,
   AssembledContext,
   RecallConfig,
+  Skill,
+  RegisterSkillsResponse,
 } from "agentified";
 import { jsonSchemaToZod } from "./schema.js";
 
@@ -152,6 +154,9 @@ export class AiSdkInstance {
     const result = await this.inst.prepareStep(params);
     return { activeTools: result.activeTools };
   };
+
+  registerSkills(skills: Skill[]): Promise<RegisterSkillsResponse> { return this.inst.registerSkills(skills); }
+  listSkills(): Promise<Skill[]> { return this.inst.listSkills(); }
 
   session(id: string) { return new AiSdkSession(this.inst.session(id), this.backendTools); }
   namespace(id: string) { return new AiSdkNamespace(this.inst.namespace(id), this.backendTools); }

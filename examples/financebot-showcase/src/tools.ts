@@ -1,13 +1,24 @@
 // 100 simulated FinanceBot tools — 40 ledger, 30 CRM, 20 docs/comms, 10 misc.
-// Shape mirrors `BackendTool` from the SDK. Handlers return canned data; this is a showcase.
+// Shape mirrors `BackendTool` from the SDK.
+//
+// The ~10 tools the canned anomaly-investigation task uses return realistic deterministic data
+// from `fixtures.ts` (so the LLM can do real reasoning). The other ~90 are stubs returning
+// `{ok: true, args}` — they exist purely to inflate the registered tool surface so the
+// "raw 100 tools" baseline measures what we claim it measures.
 
 import type { BackendTool } from "agentified";
+import { contacts, policies, transactions } from "./fixtures.js";
 
 const stub = (label: string) => async (args: Record<string, unknown>) => ({
   ok: true,
   tool: label,
   args,
 });
+
+// Drafts written by docs_draft_memo are kept in-memory so a follow-up email tool can reference
+// the draft body. Resets on each process start.
+const draftStore = new Map<string, { id: string; title: string; body: string }>();
+let draftCounter = 0;
 
 const obj = (props: Record<string, { type: string; description?: string }>, required: string[] = []) => ({
   type: "object",
@@ -38,19 +49,56 @@ const ledgerTools: BackendTool[] = [
       to: { type: "string" },
       accountId: { type: "string" },
     }),
-    handler: stub("ledger_list_transactions"),
+    handler: async (args) => {
+      const filtered = transactions.filter((t) => {
+        if (typeof args.from === "string" && t.date < args.from) return false;
+        if (typeof args.to === "string" && t.date > args.to) return false;
+        if (typeof args.accountId === "string" && !t.account.startsWith(args.accountId)) return false;
+        return true;
+      });
+      return {
+        count: filtered.length,
+        transactions: filtered.map((t) => ({
+          id: t.id,
+          date: t.date,
+          vendor: t.vendorName,
+          amount: t.amount,
+          currency: t.currency,
+          account: t.account,
+          memo: t.memo,
+        })),
+      };
+    },
   },
   {
     name: "ledger_get_transaction",
     description: "Fetch a single transaction by ID with line items and audit metadata.",
     parameters: obj({ txId: { type: "string" } }, ["txId"]),
-    handler: stub("ledger_get_transaction"),
+    handler: async (args) => {
+      const tx = transactions.find((t) => t.id === args.txId);
+      if (!tx) return { error: `transaction ${args.txId} not found` };
+      return tx;
+    },
   },
   {
     name: "ledger_detect_anomalies",
     description: "Run anomaly detection on recent transactions and return suspicious entries with scores.",
     parameters: obj({ window: { type: "string", description: "e.g. '7d', '30d'" } }),
-    handler: stub("ledger_detect_anomalies"),
+    handler: async (_args) => {
+      const flagged = transactions.filter((t) => t.isAnomalous);
+      return {
+        window: typeof _args.window === "string" ? _args.window : "7d",
+        count: flagged.length,
+        flagged: flagged.map((t) => ({
+          txId: t.id,
+          date: t.date,
+          vendor: t.vendorName,
+          amount: t.amount,
+          score: t.anomalyScore,
+          reason: t.anomalyReason,
+        })),
+      };
+    },
   },
   {
     name: "ledger_post_journal_entry",
@@ -277,7 +325,12 @@ const crmTools: BackendTool[] = [
     name: "crm_get_contact",
     description: "Fetch a contact by ID with full profile and recent activity.",
     parameters: obj({ contactId: { type: "string" } }, ["contactId"]),
-    handler: stub("crm_get_contact"),
+    handler: async (args) => {
+      if (typeof args.contactId !== "string") return { error: "contactId is required" };
+      const contact = contacts[args.contactId];
+      if (!contact) return { error: `contact ${args.contactId} not found` };
+      return contact;
+    },
   },
   {
     name: "crm_create_contact",
@@ -456,7 +509,23 @@ const docsCommsTools: BackendTool[] = [
     name: "docs_search_policy",
     description: "Search internal finance policy and SOP documents.",
     parameters: obj({ query: { type: "string" } }, ["query"]),
-    handler: stub("docs_search_policy"),
+    handler: async (args) => {
+      const q = String(args.query ?? "").toLowerCase();
+      const tokens = q.split(/\W+/).filter(Boolean);
+      const scored = policies.map((p) => {
+        const hay = (p.title + " " + p.body + " " + p.tags.join(" ")).toLowerCase();
+        const score = tokens.reduce((acc, t) => acc + (hay.includes(t) ? 1 : 0), 0);
+        return { p, score };
+      });
+      const hits = scored
+        .filter((s) => s.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 4)
+        .map((s) => s.p);
+      // Fall back to top 2 by alphabetical id if nothing matched, so the LLM gets some context.
+      const out = hits.length > 0 ? hits : policies.slice(0, 2);
+      return { count: out.length, snippets: out };
+    },
   },
   {
     name: "docs_get_document",
@@ -474,7 +543,17 @@ const docsCommsTools: BackendTool[] = [
     name: "docs_draft_memo",
     description: "Draft a memo (e.g., a CFO memo on anomalies) from supplied facts.",
     parameters: obj({ title: { type: "string" }, facts: { type: "array" } }, ["title", "facts"]),
-    handler: stub("docs_draft_memo"),
+    handler: async (args) => {
+      const title = String(args.title ?? "Untitled memo");
+      const facts = Array.isArray(args.facts) ? args.facts : [];
+      const id = `memo_${++draftCounter}`;
+      const factLines = facts
+        .map((f) => "- " + (typeof f === "string" ? f : JSON.stringify(f)))
+        .join("\n");
+      const body = `# ${title}\n\nDate: ${new Date().toISOString().slice(0, 10)}\n\n## Findings\n${factLines || "- (no facts supplied)"}\n\n## Recommendation\nReview the flagged transactions per AP anomaly-review SLA (POL-AP-003) and post a written disposition within 1 business day.\n`;
+      draftStore.set(id, { id, title, body });
+      return { draftId: id, title, body };
+    },
   },
   {
     name: "docs_draft_email",
@@ -516,7 +595,13 @@ const docsCommsTools: BackendTool[] = [
     name: "comms_send_email",
     description: "Send an email to one or more recipients.",
     parameters: obj({ to: { type: "string" }, subject: { type: "string" }, body: { type: "string" } }, ["to", "subject", "body"]),
-    handler: stub("comms_send_email"),
+    handler: async (args) => ({
+      sent: true,
+      to: args.to,
+      subject: args.subject,
+      bodyChars: typeof args.body === "string" ? args.body.length : 0,
+      messageId: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    }),
   },
   {
     name: "comms_post_slack",
