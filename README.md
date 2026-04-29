@@ -4,7 +4,7 @@ The **Context Engineering platform for AI agents** — the layer that decides wh
 
 v1 ships two things: **smart, telemetry-driven tool selection** and **OAuth/auth lifecycle** as table-stakes infrastructure. Usable both as an in-process library and as a self-hostable server. One concrete integration is an MCP gateway (`ratel-mcp-server`), but the core is generic and works for agents that use internal APIs, function calls, or any tool surface — not just MCP servers.
 
-The lib runs with **zero infra dependencies** in local mode (SQLite + FTS5 + sqlite-vec + bundled local embeddings via fastembed-rs). The server unlocks fleet-scale features that lib-only can't deliver — central token vault with shared refresh, cross-session telemetry-driven learning, fleet observability — while keeping a single `Backend` interface so the local↔remote distinction is one config switch, not a code change.
+The lib runs with **zero infra dependencies** in local mode (SQLite + FTS5 + sqlite-vector + bundled local embeddings via fastembed-rs). The server unlocks fleet-scale features that lib-only can't deliver — central token vault with shared refresh, cross-session telemetry-driven learning, fleet observability — while keeping a single `Backend` interface so the local↔remote distinction is one config switch, not a code change.
 
 ## Status
 
