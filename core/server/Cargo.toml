@@ -1,0 +1,13 @@
+[package]
+name = "ratel-server"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ratel-server"
+path = "src/main.rs"
+
+[dependencies]
+ratel-core.workspace = true
