@@ -1,9 +1,0 @@
-[package]
-name = "ratel-core"
-version.workspace = true
-edition.workspace = true
-license-file.workspace = true
-repository.workspace = true
-
-[lib]
-name = "ratel_core"
