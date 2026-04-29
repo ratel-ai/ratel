@@ -1,104 +1,41 @@
-# License
+Elastic License 2.0 (modified for open-source use)
 
-Portions of this software are licensed as follows:
+Copyright © 2026 Agentified
 
-- Content under `core/` and `integrations/` is licensed under the "Sustainable Use License" as defined below.
-- All third-party components incorporated into the Ratel software are licensed under the original
-  license provided by the owner of the applicable component.
-- All other content (including `sdks/`, `docs/`, `scripts/`, examples, and the project chassis) is available
-  under the "MIT License" as defined below.
+This software is licensed under the Elastic License 2.0, with the additional grant described below.
 
-## Sustainable Use License
+You may not use this file except in compliance with the Elastic License 2.0 and the conditions outlined here.
 
-Version 1.0
+You may obtain a copy of the Elastic License 2.0 at:
 
-### Acceptance
+```
+https://www.elastic.co/licensing/elastic-license
+```
 
-By using the software, you agree to all of the terms and conditions below.
+Software distributed under the Elastic License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
-### Copyright License
+See the Elastic License 2.0 for the specific language governing permissions and limitations under the license.
 
-The licensor grants you a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable license
-to use, copy, distribute, make available, and prepare derivative works of the software, in each case subject
-to the limitations below.
+---
 
-### Limitations
+## Additional Grant for Open-Source Projects
 
-You may use or modify the software only for your own internal business purposes or for non-commercial or
-personal use. You may distribute the software or provide it to others only if you do so free of charge for
-non-commercial purposes. You may not alter, remove, or obscure any licensing, copyright, or other notices of
-the licensor in the software. Any use of the licensor's trademarks is subject to applicable law.
+In addition to the permissions granted under the Elastic License 2.0:
 
-### Patents
+* **Free Use in Open-Source Projects**:
+  You may use, copy, distribute, and prepare derivative works of the software — in source or object form, with or without modification — freely and without fee, provided the software is incorporated into or used by an **open-source project** licensed under an OSI-approved open-source license.
 
-The licensor grants you a license, under any patent claims the licensor can license, or becomes able to
-license, to make, have made, use, sell, offer for sale, import and have imported the software, in each case
-subject to the limitations and conditions in this license. This license does not cover any patent claims that
-you cause to be infringed by modifications or additions to the software. If you or your company make any
-written claim that the software infringes or contributes to infringement of any patent, your patent license
-for the software granted under these terms ends immediately. If your company makes such a claim, your patent
-license ends immediately for work on behalf of your company.
+---
 
-### Notices
+## Conditions
 
-You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these
-terms. If you modify the software, you must include in any modified copies of the software a prominent notice
-stating that you have modified the software.
+1. For **open-source projects**, the software may be used, copied, modified, and distributed without restriction or fee.
 
-### No Other Rights
+2. For **non–open-source or commercial production use**, you may use, copy, distribute, and prepare derivative works of the software only with a commercial license from Agentified.
 
-These terms do not imply any licenses other than those expressly granted in these terms.
+3. You may not provide the software to third parties as a managed service, such as a hosted or cloud-based service, unless you have a license for that use.
 
-### Termination
+4. The software may not be used to circumvent the license grant limitations.
 
-If you use the software in violation of these terms, such use is not licensed, and your license will
-automatically terminate. If the licensor provides you with a notice of your violation, and you cease all
-violation of this license no later than 30 days after you receive that notice, your license will be reinstated
-retroactively. However, if you violate these terms after such reinstatement, any additional violation of these
-terms will cause your license to terminate automatically and permanently.
-
-### No Liability
-
-As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will
-not be liable to you for any damages arising out of these terms or the use or nature of the software, under
-any kind of legal claim.
-
-### Definitions
-
-The "licensor" is the entity offering these terms, and the "software" is the software the licensor makes
-available under these terms, including any portion of it.
-
-"You" refers to the individual or entity agreeing to these terms.
-
-"Your company" is any legal entity, sole proprietorship, or other kind of organization that you work for, plus
-all organizations that have control over, are under the control of, or are under common control with that
-organization. Control means ownership of substantially all the assets of an entity, or the power to direct its
-management and policies by vote, contract, or otherwise. Control can be direct or indirect.
-
-"Your license" is the license granted to you for the software under these terms.
-
-"Use" means anything you do with the software requiring your license.
-
-"Trademark" means trademarks, service marks, and similar rights.
-
-## MIT License
-
-Copyright (c) 2025 Agentified
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+5. Any permitted use is subject to compliance with the Elastic License 2.0, this additional grant, and applicable law.
