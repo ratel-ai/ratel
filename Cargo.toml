@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = [
+    "src/core/lib",
+    "benchmark",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license-file = "LICENSE.md"
+repository = "https://github.com/ratel-ai/ratel"
+
+[workspace.dependencies]
+ratel-core = { path = "src/core/lib" }

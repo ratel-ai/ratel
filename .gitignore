@@ -34,7 +34,10 @@ build/
 
 # TypeScript
 *.tsbuildinfo
-sdks/ts/dist/
+src/sdk/ts/dist/
 
 # Logs
 *.log
+
+# Local scratch
+plan.md

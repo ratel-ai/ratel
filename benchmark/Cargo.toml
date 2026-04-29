@@ -1,0 +1,11 @@
+[package]
+name = "ratel-benchmark"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "ratel-benchmark"
+path = "src/main.rs"
