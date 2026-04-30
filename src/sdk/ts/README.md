@@ -28,4 +28,4 @@ pnpm lint        # biome
 pnpm test        # vitest
 ```
 
-Or run against the whole workspace using the commands in the root `CLAUDE.md`.
+Or run against the whole workspace from the repo root with `pnpm -r <script>`.

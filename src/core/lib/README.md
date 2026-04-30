@@ -19,4 +19,4 @@ cargo test  -p ratel-core
 cargo clippy -p ratel-core --all-targets -- -D warnings
 ```
 
-Or run against the whole workspace using the commands in the root `CLAUDE.md`.
+Or run against the whole workspace from the repo root with `cargo build --workspace` / `cargo test --workspace`.

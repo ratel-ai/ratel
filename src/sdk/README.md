@@ -14,6 +14,6 @@ Other languages (Python, etc.) land here when their milestones come up.
 
 ## `ts/` — `@ratel-ai/sdk`
 
-The TypeScript SDK. Part of the pnpm workspace; build/test commands are in the root `CLAUDE.md`.
+The TypeScript SDK. Part of the pnpm workspace. See [`ts/README.md`](ts/README.md).
 
 Binding strategy and tool-injection mode are locked in [ADR 0002](../../docs/adr/0002-ts-rust-binding-strategy.md) and [ADR 0003](../../docs/adr/0003-tool-selection-replace-vs-suggest.md).

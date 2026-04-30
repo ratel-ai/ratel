@@ -14,4 +14,4 @@ A `server/` sibling will land here once a central server is needed (cross-instan
 
 The Rust crate that every other piece of Ratel wraps. SDKs (`src/sdk/*`) bind to it; the benchmark links it directly; integrations call it through the SDK or directly.
 
-Standalone Rust crate, no extra setup beyond the workspace `cargo` commands listed in the root `CLAUDE.md`.
+Standalone Rust crate; no setup beyond the workspace `cargo` commands. See [`lib/README.md`](lib/README.md).

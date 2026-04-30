@@ -41,6 +41,7 @@ CI (`.github/workflows/{rust,ts}.yml`) runs all of the above on every PR; PRs la
 - **TDD** for backend / business logic / lib code (use the `tdd` skill). Frontend without business logic can skip.
 - **Backend before frontend**: features that aren't frontend-only land on the Rust core (with tests) first, then surface in the SDK.
 - **ADRs** for cross-cutting choices: new file in `docs/adr/`, next number, Nygard format. Don't edit accepted ADRs — supersede.
+- **Folder READMEs**: every folder under `src/`, plus `benchmark/` and `docs/`, has a `README.md` describing only what's *in that folder* — purpose, layout (children with one-liners), and any folder-specific build/usage commands. Keep them lean and timeless: no roadmap, no status, no version-specific framing. Link to deeper READMEs instead of duplicating their content. When you add a new folder of that kind, add its README in the same change.
 - **Commits**: concise, imperative. No AI-attribution lines.
 
 ## Where to find more
