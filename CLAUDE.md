@@ -50,3 +50,8 @@ CI (`.github/workflows/{rust,ts}.yml`) runs all of the above on every PR; PRs la
 - `CONTRIBUTING.md` — contributor workflow, prerequisites, branching
 - `docs/adr/` — every locked architectural decision and its rationale
 - `LICENSE.md` — license terms
+
+## Local conventions
+
+@CLAUDE.local.md
+
