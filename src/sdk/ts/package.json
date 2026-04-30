@@ -5,15 +5,21 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": ["dist", "native/index.cjs", "native/index.d.ts", "native/*.node"],
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "build:native": "napi build --platform --release --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts",
+    "build:ts": "tsc",
+    "build": "pnpm build:native && pnpm build:ts",
+    "typecheck": "pnpm build:native && tsc --noEmit",
     "lint": "biome check src",
-    "test": "vitest run"
+    "test": "pnpm build:native && vitest run"
+  },
+  "napi": {
+    "binaryName": "ratel-sdk"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
+    "@napi-rs/cli": "^3.6.0",
     "typescript": "^5.6.0",
     "vitest": "^4.1.5"
   }

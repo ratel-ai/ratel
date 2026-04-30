@@ -36,6 +36,11 @@ build/
 *.tsbuildinfo
 src/sdk/ts/dist/
 
+# NAPI native binding outputs
+src/sdk/ts/native/index.cjs
+src/sdk/ts/native/index.d.cts
+src/sdk/ts/native/*.node
+
 # Logs
 *.log
 
