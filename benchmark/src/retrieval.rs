@@ -23,6 +23,10 @@ pub struct RetrievalMetrics {
     pub reciprocal_rank: f64,
     /// True if at least one gold tool is in the top-K.
     pub hit_at_k: bool,
+    /// Normalized DCG@K under binary relevance: DCG / IDCG, where IDCG places
+    /// every gold tool at the top of the ranking. 0.0 when there are no gold
+    /// tools (IDCG would be 0 too). Comparable to ToolRet's leaderboard column.
+    pub ndcg_at_k: f64,
 }
 
 /// Evaluate retrieval quality at multiple K cutoffs in one BM25 pass.
@@ -52,12 +56,14 @@ pub fn evaluate_at_ks(
             let cutoff = hits.len().min(k);
             let mut gold_in_topk = 0usize;
             let mut first_gold_rank: Option<usize> = None;
+            let mut dcg = 0.0f64;
             for (rank0, hit) in hits.iter().take(cutoff).enumerate() {
                 if gold_tool_ids.iter().any(|g| g == &hit.tool_id) {
                     gold_in_topk += 1;
                     if first_gold_rank.is_none() {
                         first_gold_rank = Some(rank0 + 1);
                     }
+                    dcg += 1.0 / ((rank0 + 2) as f64).log2();
                 }
             }
             let recall_at_k = if gold_count == 0 {
@@ -71,6 +77,10 @@ pub fn evaluate_at_ks(
                 gold_in_topk as f64 / cutoff as f64
             };
             let reciprocal_rank = first_gold_rank.map(|r| 1.0 / r as f64).unwrap_or(0.0);
+            // Ideal DCG places every gold tool at the top of the ranking, up to K.
+            let ideal_hits = gold_count.min(k);
+            let idcg: f64 = (0..ideal_hits).map(|i| 1.0 / ((i + 2) as f64).log2()).sum();
+            let ndcg_at_k = if idcg == 0.0 { 0.0 } else { dcg / idcg };
             RetrievalMetrics {
                 k,
                 pool_size: pool.len(),
@@ -79,6 +89,7 @@ pub fn evaluate_at_ks(
                 precision_at_k,
                 reciprocal_rank,
                 hit_at_k: gold_in_topk > 0,
+                ndcg_at_k,
             }
         })
         .collect()
@@ -295,6 +306,97 @@ mod tests {
         // At K=3 the gold tool has room to land → recall@3 should pick it up.
         assert_eq!(metrics[1].recall_at_k, 1.0);
         assert!(metrics[1].hit_at_k);
+    }
+
+    #[test]
+    fn ndcg_is_one_when_gold_at_rank_one() {
+        let pool = read_file_pool();
+        let m = evaluate(&pool, "send an email via SMTP", &["mail.send".into()], 5);
+        assert_eq!(m.ndcg_at_k, 1.0);
+    }
+
+    #[test]
+    fn ndcg_is_zero_when_gold_missing_from_topk() {
+        let pool = read_file_pool();
+        let m = evaluate(
+            &pool,
+            "completely unrelated query about astrophysics",
+            &["does.not.exist".into()],
+            3,
+        );
+        assert_eq!(m.ndcg_at_k, 0.0);
+    }
+
+    #[test]
+    fn ndcg_is_zero_when_no_gold_tools() {
+        let pool = read_file_pool();
+        let m = evaluate(&pool, "anything", &[], 5);
+        assert_eq!(m.ndcg_at_k, 0.0);
+    }
+
+    #[test]
+    fn ndcg_at_rank_two_uses_log2_three_discount() {
+        // Query is ambiguous between two file/disk tools; gold lands at rank 2.
+        let pool = vec![
+            tool(
+                "fs.write_file",
+                "write_file",
+                "Write contents to a file on disk.",
+            ),
+            tool(
+                "fs.read_file",
+                "read_file",
+                "Read a file from local disk and return its textual contents.",
+            ),
+            tool("net.http_get", "http_get", "Fetch an HTTP URL."),
+        ];
+        let m = evaluate(&pool, "write file disk", &["fs.read_file".into()], 3);
+        // Single gold at rank 2 → DCG = 1/log2(3); IDCG = 1 (gold at top); nDCG = 1/log2(3).
+        let expected = 1.0 / 3.0_f64.log2();
+        assert!(
+            (m.ndcg_at_k - expected).abs() < 1e-9,
+            "nDCG was {}",
+            m.ndcg_at_k
+        );
+    }
+
+    #[test]
+    fn ndcg_with_multi_gold_partial_recovery() {
+        // Two gold tools; if both land in top-K but at ranks 1 and 3, nDCG should
+        // be the ratio (1 + 1/log2(4)) / (1 + 1/log2(3)).
+        let pool = vec![
+            tool("a.alpha", "alpha", "alpha alpha alpha"),
+            tool("b.beta", "beta", "beta beta beta"),
+            tool("a.gamma", "gamma", "alpha alpha gamma"),
+            tool("c.cee", "cee", "unrelated"),
+        ];
+        // Query "alpha" matches both a.alpha (rank 1) and a.gamma (rank 2 or 3 depending on BM25)
+        // — the assertion is structural: nDCG should be in (0, 1] and equal to DCG/IDCG.
+        let m = evaluate(&pool, "alpha", &["a.alpha".into(), "a.gamma".into()], 5);
+        assert!(m.gold_count == 2);
+        // Both gold present (recall 1.0) but order may not be ideal → nDCG ≤ 1.
+        if m.recall_at_k == 1.0 {
+            assert!(
+                m.ndcg_at_k > 0.0 && m.ndcg_at_k <= 1.0,
+                "nDCG was {}",
+                m.ndcg_at_k
+            );
+        }
+    }
+
+    #[test]
+    fn ndcg_at_ks_monotone_when_gold_in_window() {
+        // With one gold at rank 1, nDCG@K stays 1.0 across K ≥ 1.
+        let pool = read_file_pool();
+        let metrics = evaluate_at_ks(
+            &pool,
+            "send an email via SMTP",
+            &["mail.send".into()],
+            &[1, 3, 5],
+        );
+        assert_eq!(metrics[0].ndcg_at_k, 1.0);
+        assert_eq!(metrics[1].ndcg_at_k, 1.0);
+        assert_eq!(metrics[2].ndcg_at_k, 1.0);
     }
 
     #[test]

@@ -7,6 +7,10 @@ use ratel_benchmark::ingest::metatool::{
     self as metatool, MetaToolPaths, PLUGIN_DES_URL, SINGLE_TOOL_CSV_URL, SampleSpec,
     ingest_to_jsonl as ingest_metatool,
 };
+use ratel_benchmark::ingest::toolret::{
+    QUERIES_URLS as TOOLRET_QUERIES_URLS, TOOLS_URLS as TOOLRET_TOOLS_URLS, ToolRetPaths,
+    ingest_to_jsonl as ingest_toolret,
+};
 use ratel_benchmark::runner::{RunConfig, run_retrieval};
 
 #[derive(Parser)]
@@ -83,6 +87,23 @@ enum IngestSource {
         #[arg(long, default_value_t = 42)]
         seed: u64,
     },
+    /// ToolRet (mangopy/ToolRet-Tools + ToolRet-Queries, Apache-2.0). With
+    /// `--download` the upstream parquet files (3 tool subsets + 35 query
+    /// sub-corpora) are pulled into `--fixtures-dir`. No sampling — the full
+    /// corpus is normalized; rows with unknown gold tools are skipped.
+    Toolret {
+        /// Where downloaded parquet files live (`<dir>/tools/*.parquet`,
+        /// `<dir>/queries/*.parquet`).
+        #[arg(long, default_value = "benchmark/fixtures/toolret")]
+        fixtures_dir: PathBuf,
+        /// Pull upstream parquet files into `--fixtures-dir` before ingesting
+        /// (uses the system `curl`). Skip the flag to read pre-existing files.
+        #[arg(long, default_value_t = false)]
+        download: bool,
+        /// Where to write the normalized JSONL corpus.
+        #[arg(short, long, default_value = "benchmark/test-data/toolret.jsonl")]
+        output: PathBuf,
+    },
 }
 
 fn fetch_via_curl(url: &str, dest: &Path) -> anyhow::Result<()> {
@@ -114,6 +135,23 @@ fn download_metatool_upstream(paths: &MetaToolPaths) -> anyhow::Result<()> {
     fetch_via_curl(SINGLE_TOOL_CSV_URL, &paths.single_tool)?;
     if let Some(multi) = &paths.multi_tool {
         fetch_via_curl(metatool::MULTI_TOOL_JSON_URL, multi)?;
+    }
+    Ok(())
+}
+
+fn download_toolret_upstream(paths: &ToolRetPaths) -> anyhow::Result<()> {
+    eprintln!(
+        "downloading ToolRet upstream sources via curl ({} tool + {} query parquet files)...",
+        TOOLRET_TOOLS_URLS.len(),
+        TOOLRET_QUERIES_URLS.len()
+    );
+    for ((subset, url), (_, dest)) in TOOLRET_TOOLS_URLS.iter().zip(paths.tools.iter()) {
+        eprintln!("  tools/{subset}");
+        fetch_via_curl(url, dest)?;
+    }
+    for ((subset, url), (_, dest)) in TOOLRET_QUERIES_URLS.iter().zip(paths.queries.iter()) {
+        eprintln!("  queries/{subset}");
+        fetch_via_curl(url, dest)?;
     }
     Ok(())
 }
@@ -192,6 +230,28 @@ fn main() -> anyhow::Result<()> {
                     stats.single_tool_in,
                     stats.multi_tool_in,
                     stats.skipped_unknown_gold,
+                    stats.scenarios_out,
+                    output.display(),
+                );
+            }
+            IngestSource::Toolret {
+                fixtures_dir,
+                download,
+                output,
+            } => {
+                let paths = ToolRetPaths::under_fixtures_dir(&fixtures_dir);
+                if download {
+                    download_toolret_upstream(&paths)?;
+                }
+                let stats = ingest_toolret(&paths, &output)?;
+                println!(
+                    "toolret: {} tools, {} queries in, \
+                     {} skipped (unknown gold), {} skipped (no positive label) \
+                     → {} scenarios at {}",
+                    stats.tools_loaded,
+                    stats.queries_in,
+                    stats.skipped_unknown_gold,
+                    stats.skipped_no_positive_label,
                     stats.scenarios_out,
                     output.display(),
                 );

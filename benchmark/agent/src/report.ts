@@ -17,6 +17,7 @@ export interface RetrievalRow {
   precision_at_k: number;
   reciprocal_rank: number;
   hit_at_k: boolean;
+  ndcg_at_k: number;
 }
 
 export function median(xs: number[]): number {
@@ -156,6 +157,8 @@ export interface RetrievalSummary {
   median_recall: number;
   mean_mrr: number;
   median_mrr: number;
+  mean_ndcg: number;
+  median_ndcg: number;
   hit_rate: number;
 }
 
@@ -200,6 +203,7 @@ export function retrievalByPoolSize(rows: RetrievalRow[]): RetrievalSummary[] {
     ];
     const recalls = arr.map((r) => r.recall_at_k);
     const mrrs = arr.map((r) => r.reciprocal_rank);
+    const ndcgs = arr.map((r) => r.ndcg_at_k);
     out.push({
       corpus,
       subset,
@@ -210,6 +214,8 @@ export function retrievalByPoolSize(rows: RetrievalRow[]): RetrievalSummary[] {
       median_recall: median(recalls),
       mean_mrr: mean(mrrs),
       median_mrr: median(mrrs),
+      mean_ndcg: mean(ndcgs),
+      median_ndcg: median(ndcgs),
       hit_rate: mean(arr.map((r) => (r.hit_at_k ? 1 : 0))),
     });
   }
@@ -347,12 +353,12 @@ export function renderReport(args: {
       lines.push(`### ${corpus} / ${subset}`);
       lines.push("");
       lines.push(
-        "| K | pool size | n | hit@K | mean recall@K | median recall@K | mean MRR@K | median MRR@K |",
+        "| K | pool size | n | hit@K | mean recall@K | median recall@K | mean MRR@K | median MRR@K | mean nDCG@K | median nDCG@K |",
       );
-      lines.push("|---|---|---|---|---|---|---|---|");
+      lines.push("|---|---|---|---|---|---|---|---|---|---|");
       for (const r of summaries) {
         lines.push(
-          `| ${r.k} | ${r.pool_size} | ${r.n} | ${fmtPct(r.hit_rate * 100)} | ${r.mean_recall.toFixed(3)} | ${r.median_recall.toFixed(3)} | ${r.mean_mrr.toFixed(3)} | ${r.median_mrr.toFixed(3)} |`,
+          `| ${r.k} | ${r.pool_size} | ${r.n} | ${fmtPct(r.hit_rate * 100)} | ${r.mean_recall.toFixed(3)} | ${r.median_recall.toFixed(3)} | ${r.mean_mrr.toFixed(3)} | ${r.median_mrr.toFixed(3)} | ${r.mean_ndcg.toFixed(3)} | ${r.median_ndcg.toFixed(3)} |`,
         );
       }
       lines.push("");

@@ -21,6 +21,7 @@ function retrievalRow(over: {
   hit_at_k: boolean;
   k?: number;
   gold_count?: number;
+  ndcg_at_k?: number;
 }) {
   return {
     scenario_id: over.scenario_id,
@@ -33,6 +34,7 @@ function retrievalRow(over: {
     precision_at_k: 0,
     reciprocal_rank: over.reciprocal_rank,
     hit_at_k: over.hit_at_k,
+    ndcg_at_k: over.ndcg_at_k ?? over.reciprocal_rank,
   };
 }
 
@@ -194,6 +196,38 @@ describe("retrievalByPoolSize", () => {
     expect(summaries[0].median_recall).toBeCloseTo(0.75);
     expect(summaries[0].hit_rate).toBe(1);
     expect(summaries[1].hit_rate).toBe(0);
+  });
+
+  it("aggregates nDCG into mean and median per cell", () => {
+    const rows = [
+      retrievalRow({
+        scenario_id: "s1",
+        target_pool_size: 30,
+        recall_at_k: 1,
+        reciprocal_rank: 1,
+        hit_at_k: true,
+        ndcg_at_k: 1,
+      }),
+      retrievalRow({
+        scenario_id: "s2",
+        target_pool_size: 30,
+        recall_at_k: 0.5,
+        reciprocal_rank: 0.5,
+        hit_at_k: true,
+        ndcg_at_k: 0.5,
+      }),
+      retrievalRow({
+        scenario_id: "s3",
+        target_pool_size: 30,
+        recall_at_k: 0,
+        reciprocal_rank: 0,
+        hit_at_k: false,
+        ndcg_at_k: 0,
+      }),
+    ];
+    const [s] = retrievalByPoolSize(rows);
+    expect(s.mean_ndcg).toBeCloseTo(0.5);
+    expect(s.median_ndcg).toBeCloseTo(0.5);
   });
 
   it("splits single-tool and multi-tool rows into distinct subsets", () => {
@@ -381,6 +415,7 @@ describe("renderReport", () => {
     expect(md).toContain("### metatool / multi-tool");
     expect(md).toContain("### toolret / single-tool");
     expect(md).toContain("median recall@K");
+    expect(md).toContain("median nDCG@K");
     expect(md).toContain("| K |");
   });
 

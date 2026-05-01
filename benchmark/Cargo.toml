@@ -22,6 +22,7 @@ anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 csv = "1.3"
 indicatif = "0.17"
+parquet = { version = "58", default-features = false, features = ["snap", "zstd"] }
 rand = "0.9"
 
 [dev-dependencies]
