@@ -144,32 +144,82 @@ export function savingsByModel(cells: CellResult[]): SavingsRow[] {
   return out;
 }
 
+export type RetrievalSubset = "single-tool" | "multi-tool";
+
 export interface RetrievalSummary {
+  corpus: string;
+  subset: RetrievalSubset;
+  k: number;
   pool_size: number;
   n: number;
   mean_recall: number;
+  median_recall: number;
   mean_mrr: number;
+  median_mrr: number;
   hit_rate: number;
 }
 
+/**
+ * Infer a corpus label from a scenario id. The retrieval JSONL doesn't carry a
+ * corpus tag of its own — the ingestion adapters prefix scenario ids per source
+ * (`metatool-st-*` / `metatool-mt-*`, `toolret-*`, ...), and the report groups
+ * by that prefix so multi-corpus runs render one table per source.
+ */
+export function corpusOf(scenarioId: string): string {
+  if (scenarioId.startsWith("metatool-")) return "metatool";
+  if (scenarioId.startsWith("toolret-")) return "toolret";
+  return "other";
+}
+
+/**
+ * Bucket a row by gold-set size. Single-tool rows have binary recall (0 or 1),
+ * which is mathematically the hit rate; multi-tool rows produce fractional
+ * recall and are interpreted differently (e.g. "do both gold tools land in
+ * top-K"). We surface them in separate panels so neither story drowns the
+ * other.
+ */
+export function subsetOf(goldCount: number): RetrievalSubset {
+  return goldCount > 1 ? "multi-tool" : "single-tool";
+}
+
 export function retrievalByPoolSize(rows: RetrievalRow[]): RetrievalSummary[] {
-  const groups = new Map<number, RetrievalRow[]>();
+  const groups = new Map<string, RetrievalRow[]>();
   for (const r of rows) {
-    const arr = groups.get(r.target_pool_size) ?? [];
+    const key = `${corpusOf(r.scenario_id)}::${subsetOf(r.gold_count)}::${r.k}::${r.target_pool_size}`;
+    const arr = groups.get(key) ?? [];
     arr.push(r);
-    groups.set(r.target_pool_size, arr);
+    groups.set(key, arr);
   }
   const out: RetrievalSummary[] = [];
-  for (const [size, arr] of groups) {
+  for (const [key, arr] of groups) {
+    const [corpus, subset, kStr, poolStr] = key.split("::") as [
+      string,
+      RetrievalSubset,
+      string,
+      string,
+    ];
+    const recalls = arr.map((r) => r.recall_at_k);
+    const mrrs = arr.map((r) => r.reciprocal_rank);
     out.push({
-      pool_size: size,
+      corpus,
+      subset,
+      k: Number(kStr),
+      pool_size: Number(poolStr),
       n: arr.length,
-      mean_recall: mean(arr.map((r) => r.recall_at_k)),
-      mean_mrr: mean(arr.map((r) => r.reciprocal_rank)),
+      mean_recall: mean(recalls),
+      median_recall: median(recalls),
+      mean_mrr: mean(mrrs),
+      median_mrr: median(mrrs),
       hit_rate: mean(arr.map((r) => (r.hit_at_k ? 1 : 0))),
     });
   }
-  return out.sort((a, b) => a.pool_size - b.pool_size);
+  return out.sort(
+    (a, b) =>
+      a.corpus.localeCompare(b.corpus) ||
+      a.subset.localeCompare(b.subset) ||
+      a.k - b.k ||
+      a.pool_size - b.pool_size,
+  );
 }
 
 export interface FailureCounts {
@@ -275,23 +325,39 @@ export function renderReport(args: {
   }
   lines.push("");
 
-  // 3. Retrieval quality
+  // 3. Retrieval quality. One panel per (corpus, gold-set bucket); inside the
+  // panel rows are sorted by (k, pool_size). Single-tool and multi-tool live in
+  // different panels because their recall semantics differ (binary vs fractional).
   lines.push("## Retrieval quality (BM25, no LLM)");
   lines.push("");
   if (retrieval.length === 0) {
     lines.push(
-      "_No retrieval.jsonl rows; run `cargo run -p ratel-benchmark -- retrieval ...` to populate._",
+      "_No retrieval rows; run `cargo run -p ratel-benchmark -- retrieval ...` to populate._",
     );
   } else {
-    lines.push("| pool size | n | hit-rate | mean recall@k | mean MRR |");
-    lines.push("|---|---|---|---|---|");
+    const panels = new Map<string, RetrievalSummary[]>();
     for (const r of retrieval) {
+      const key = `${r.corpus}::${r.subset}`;
+      const arr = panels.get(key) ?? [];
+      arr.push(r);
+      panels.set(key, arr);
+    }
+    for (const [key, summaries] of panels) {
+      const [corpus, subset] = key.split("::");
+      lines.push(`### ${corpus} / ${subset}`);
+      lines.push("");
       lines.push(
-        `| ${r.pool_size} | ${r.n} | ${fmtPct(r.hit_rate * 100)} | ${r.mean_recall.toFixed(3)} | ${r.mean_mrr.toFixed(3)} |`,
+        "| K | pool size | n | hit@K | mean recall@K | median recall@K | mean MRR@K | median MRR@K |",
       );
+      lines.push("|---|---|---|---|---|---|---|---|");
+      for (const r of summaries) {
+        lines.push(
+          `| ${r.k} | ${r.pool_size} | ${r.n} | ${fmtPct(r.hit_rate * 100)} | ${r.mean_recall.toFixed(3)} | ${r.median_recall.toFixed(3)} | ${r.mean_mrr.toFixed(3)} | ${r.median_mrr.toFixed(3)} |`,
+        );
+      }
+      lines.push("");
     }
   }
-  lines.push("");
 
   // 4. Failure taxonomy
   lines.push("## Failure taxonomy");

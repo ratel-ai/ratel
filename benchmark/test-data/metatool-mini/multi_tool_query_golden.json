@@ -1,0 +1,10 @@
+[
+  {
+    "query": "I want to know the latest news about Tesla and how it's affecting the stock market.",
+    "tool": ["NewsTool", "FinanceTool"]
+  },
+  {
+    "query": "Find recent research on climate models and summarize the latest news on climate policy.",
+    "tool": ["ResearchHelper", "NewsTool"]
+  }
+]

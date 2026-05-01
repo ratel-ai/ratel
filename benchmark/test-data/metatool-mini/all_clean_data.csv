@@ -1,0 +1,7 @@
+Query,Tool
+What's the forecast for Tokyo this weekend?,WeatherTool
+Show me the current price of AAPL stock.,FinanceTool
+Find peer-reviewed papers on transformer architectures.,ResearchHelper
+"Summarize today's headlines about climate, please.",NewsTool
+Send a welcome email to alice@example.com.,MailComposer
+Suggest a vegan dinner recipe with chickpeas.,RecipeFinder

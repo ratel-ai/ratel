@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  corpusOf,
   failureTaxonomy,
   mean,
   median,
@@ -8,8 +9,32 @@ import {
   retrievalByPoolSize,
   savingsByModel,
   statsByArmModel,
+  subsetOf,
 } from "./report.js";
 import type { Arm, CellResult } from "./types.js";
+
+function retrievalRow(over: {
+  scenario_id: string;
+  target_pool_size: number;
+  recall_at_k: number;
+  reciprocal_rank: number;
+  hit_at_k: boolean;
+  k?: number;
+  gold_count?: number;
+}) {
+  return {
+    scenario_id: over.scenario_id,
+    target_pool_size: over.target_pool_size,
+    actual_pool_size: over.target_pool_size,
+    k: over.k ?? 5,
+    pool_size: over.target_pool_size,
+    gold_count: over.gold_count ?? 1,
+    recall_at_k: over.recall_at_k,
+    precision_at_k: 0,
+    reciprocal_rank: over.reciprocal_rank,
+    hit_at_k: over.hit_at_k,
+  };
+}
 
 function cell(over: Partial<CellResult>): CellResult {
   return {
@@ -107,52 +132,185 @@ describe("savingsByModel", () => {
   });
 });
 
+describe("corpusOf", () => {
+  it("recognizes metatool single- and multi-tool ids", () => {
+    expect(corpusOf("metatool-st-42")).toBe("metatool");
+    expect(corpusOf("metatool-mt-7")).toBe("metatool");
+  });
+  it("recognizes toolret ids", () => {
+    expect(corpusOf("toolret-001")).toBe("toolret");
+  });
+  it("falls back to 'other' for unprefixed ids", () => {
+    expect(corpusOf("fs-001")).toBe("other");
+    expect(corpusOf("anything-else")).toBe("other");
+  });
+});
+
+describe("subsetOf", () => {
+  it("buckets gold_count==1 as single-tool", () => {
+    expect(subsetOf(1)).toBe("single-tool");
+  });
+  it("buckets gold_count>1 as multi-tool", () => {
+    expect(subsetOf(2)).toBe("multi-tool");
+    expect(subsetOf(5)).toBe("multi-tool");
+  });
+  it("treats gold_count==0 as single-tool (defensive default)", () => {
+    expect(subsetOf(0)).toBe("single-tool");
+  });
+});
+
 describe("retrievalByPoolSize", () => {
-  it("aggregates by pool size", () => {
+  it("aggregates by (corpus, subset, k, pool) and reports mean + median + hit rate", () => {
     const rows = [
-      {
+      retrievalRow({
         scenario_id: "s1",
         target_pool_size: 30,
-        actual_pool_size: 30,
-        k: 5,
-        pool_size: 30,
-        gold_count: 1,
         recall_at_k: 1,
-        precision_at_k: 0.2,
         reciprocal_rank: 1,
         hit_at_k: true,
-      },
-      {
+      }),
+      retrievalRow({
         scenario_id: "s2",
         target_pool_size: 30,
-        actual_pool_size: 30,
-        k: 5,
-        pool_size: 30,
-        gold_count: 1,
         recall_at_k: 0.5,
-        precision_at_k: 0.1,
         reciprocal_rank: 0.5,
         hit_at_k: true,
-      },
-      {
+      }),
+      retrievalRow({
         scenario_id: "s1",
         target_pool_size: 150,
-        actual_pool_size: 150,
-        k: 5,
-        pool_size: 150,
-        gold_count: 1,
         recall_at_k: 0,
-        precision_at_k: 0,
         reciprocal_rank: 0,
         hit_at_k: false,
-      },
+      }),
     ];
     const summaries = retrievalByPoolSize(rows);
     expect(summaries).toHaveLength(2);
+    expect(summaries[0].corpus).toBe("other");
+    expect(summaries[0].subset).toBe("single-tool");
+    expect(summaries[0].k).toBe(5);
     expect(summaries[0].pool_size).toBe(30);
     expect(summaries[0].mean_recall).toBeCloseTo(0.75);
+    expect(summaries[0].median_recall).toBeCloseTo(0.75);
     expect(summaries[0].hit_rate).toBe(1);
     expect(summaries[1].hit_rate).toBe(0);
+  });
+
+  it("splits single-tool and multi-tool rows into distinct subsets", () => {
+    // Same corpus, same pool, same K — different gold_count.
+    const rows = [
+      retrievalRow({
+        scenario_id: "metatool-st-1",
+        target_pool_size: 30,
+        recall_at_k: 1,
+        reciprocal_rank: 1,
+        hit_at_k: true,
+      }),
+      retrievalRow({
+        scenario_id: "metatool-mt-1",
+        target_pool_size: 30,
+        recall_at_k: 0.5,
+        reciprocal_rank: 1,
+        hit_at_k: true,
+        gold_count: 2,
+      }),
+    ];
+    const summaries = retrievalByPoolSize(rows);
+    expect(summaries).toHaveLength(2);
+    const single = summaries.find((s) => s.subset === "single-tool");
+    const multi = summaries.find((s) => s.subset === "multi-tool");
+    expect(single?.n).toBe(1);
+    expect(single?.mean_recall).toBe(1);
+    expect(multi?.n).toBe(1);
+    expect(multi?.mean_recall).toBeCloseTo(0.5);
+  });
+
+  it("splits rows by K cutoff", () => {
+    const rows = [
+      retrievalRow({
+        scenario_id: "metatool-st-1",
+        target_pool_size: 30,
+        recall_at_k: 0,
+        reciprocal_rank: 0,
+        hit_at_k: false,
+        k: 1,
+      }),
+      retrievalRow({
+        scenario_id: "metatool-st-1",
+        target_pool_size: 30,
+        recall_at_k: 1,
+        reciprocal_rank: 0.5,
+        hit_at_k: true,
+        k: 5,
+      }),
+    ];
+    const summaries = retrievalByPoolSize(rows);
+    expect(summaries.map((s) => s.k)).toEqual([1, 5]);
+    expect(summaries[0].hit_rate).toBe(0);
+    expect(summaries[1].hit_rate).toBe(1);
+  });
+
+  it("groups by corpus when scenario ids carry distinct prefixes", () => {
+    const rows = [
+      retrievalRow({
+        scenario_id: "metatool-st-1",
+        target_pool_size: 30,
+        recall_at_k: 1,
+        reciprocal_rank: 1,
+        hit_at_k: true,
+      }),
+      retrievalRow({
+        scenario_id: "metatool-st-2",
+        target_pool_size: 30,
+        recall_at_k: 0,
+        reciprocal_rank: 0,
+        hit_at_k: false,
+      }),
+      retrievalRow({
+        scenario_id: "toolret-1",
+        target_pool_size: 30,
+        recall_at_k: 1,
+        reciprocal_rank: 1,
+        hit_at_k: true,
+      }),
+    ];
+    const summaries = retrievalByPoolSize(rows);
+    expect(summaries.map((s) => s.corpus)).toEqual(["metatool", "toolret"]);
+    const meta = summaries.find((s) => s.corpus === "metatool");
+    const tret = summaries.find((s) => s.corpus === "toolret");
+    expect(meta?.n).toBe(2);
+    expect(meta?.mean_recall).toBeCloseTo(0.5);
+    expect(meta?.median_recall).toBeCloseTo(0.5);
+    expect(tret?.n).toBe(1);
+    expect(tret?.mean_recall).toBe(1);
+  });
+
+  it("median diverges from mean when the distribution is skewed (real MetaTool case)", () => {
+    // Mirrors what we see on MetaTool retrieval: most queries hit gold at rank 1
+    // (recall=1), but a long tail of misses pulls the mean below 1.
+    const rows = [
+      ...Array.from({ length: 7 }, (_, i) =>
+        retrievalRow({
+          scenario_id: `metatool-st-${i}`,
+          target_pool_size: 100,
+          recall_at_k: 1,
+          reciprocal_rank: 1,
+          hit_at_k: true,
+        }),
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        retrievalRow({
+          scenario_id: `metatool-st-${100 + i}`,
+          target_pool_size: 100,
+          recall_at_k: 0,
+          reciprocal_rank: 0,
+          hit_at_k: false,
+        }),
+      ),
+    ];
+    const [s] = retrievalByPoolSize(rows);
+    expect(s.mean_recall).toBeCloseTo(0.7);
+    expect(s.median_recall).toBe(1);
   });
 });
 
@@ -191,6 +349,39 @@ describe("renderReport", () => {
     expect(md).toContain("## Variance flags");
     expect(md).toContain("**75.0%**"); // input savings
     expect(md).toContain("**70.0%**"); // dollar savings
+  });
+
+  it("renders one retrieval panel per (corpus, subset) when input spans both", () => {
+    const retrieval = [
+      retrievalRow({
+        scenario_id: "metatool-st-1",
+        target_pool_size: 100,
+        recall_at_k: 1,
+        reciprocal_rank: 1,
+        hit_at_k: true,
+      }),
+      retrievalRow({
+        scenario_id: "metatool-mt-1",
+        target_pool_size: 100,
+        recall_at_k: 0.5,
+        reciprocal_rank: 1,
+        hit_at_k: true,
+        gold_count: 2,
+      }),
+      retrievalRow({
+        scenario_id: "toolret-1",
+        target_pool_size: 100,
+        recall_at_k: 0.5,
+        reciprocal_rank: 0.5,
+        hit_at_k: true,
+      }),
+    ];
+    const md = renderReport({ cells: [], retrieval, generatedAt: new Date("2026-05-01") });
+    expect(md).toContain("### metatool / single-tool");
+    expect(md).toContain("### metatool / multi-tool");
+    expect(md).toContain("### toolret / single-tool");
+    expect(md).toContain("median recall@K");
+    expect(md).toContain("| K |");
   });
 
   it("omits control from the variance-flag panel even when control is high-variance", () => {

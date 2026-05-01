@@ -8,5 +8,6 @@
 //! See `docs/adr/0005-benchmark-design.md` for design.
 
 pub mod corpus;
+pub mod ingest;
 pub mod retrieval;
 pub mod runner;

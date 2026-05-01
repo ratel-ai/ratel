@@ -1,0 +1,8 @@
+{
+  "WeatherTool": "Get current weather conditions and short-range forecasts for any city worldwide.",
+  "FinanceTool": "Real-time stock quotes, market news, and financial data on equities, ETFs, and crypto.",
+  "ResearchHelper": "Search academic papers, citations, and scholarly articles across major databases.",
+  "NewsTool": "Fetch the latest world headlines, breaking news, and topic-specific articles.",
+  "MailComposer": "Draft and send emails to a recipient with a subject and body.",
+  "RecipeFinder": "Discover recipes by ingredients, cuisine, dietary restrictions, or meal type."
+}

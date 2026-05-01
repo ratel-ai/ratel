@@ -47,18 +47,6 @@ impl From<&ToolSpec> for ratel_core::Tool {
     }
 }
 
-/// One expected tool call in a scenario's gold trace.
-///
-/// `response` is the canned output the harness returns when the agent invokes
-/// `tool_id` — the agent never reaches a real backend during a benchmark run.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GoldCall {
-    pub tool_id: String,
-    pub args: Value,
-    #[serde(default = "empty_object")]
-    pub response: Value,
-}
-
 /// A single benchmark scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Scenario {
@@ -66,7 +54,6 @@ pub struct Scenario {
     pub prompt: String,
     pub candidate_pool: Vec<ToolSpec>,
     pub gold_tools: Vec<String>,
-    pub gold_trace: Vec<GoldCall>,
     #[serde(default)]
     pub judge_criteria: Option<String>,
     #[serde(default)]
@@ -128,11 +115,6 @@ mod tests {
             prompt: "Show me the contents of /etc/hosts".into(),
             candidate_pool: vec![read_file_spec()],
             gold_tools: vec!["fs.read_file".into()],
-            gold_trace: vec![GoldCall {
-                tool_id: "fs.read_file".into(),
-                args: json!({ "path": "/etc/hosts" }),
-                response: json!({ "contents": "127.0.0.1 localhost\n" }),
-            }],
             judge_criteria: Some("Mentions localhost".into()),
             category: Some("filesystem".into()),
         }
@@ -200,12 +182,22 @@ mod tests {
 
     #[test]
     fn optional_fields_default_when_missing() {
-        let json =
-            r#"{"id":"fs-003","prompt":"x","candidate_pool":[],"gold_tools":[],"gold_trace":[]}"#;
+        let json = r#"{"id":"fs-003","prompt":"x","candidate_pool":[],"gold_tools":[]}"#;
         let parsed = parse_scenarios(Cursor::new(json)).unwrap();
         assert_eq!(parsed.len(), 1);
         assert!(parsed[0].judge_criteria.is_none());
         assert!(parsed[0].category.is_none());
+    }
+
+    #[test]
+    fn parses_selection_only_row_without_gold_trace() {
+        // MetaTool / ToolRet rows ship without a gold tool-call trace — only
+        // {id, prompt, candidate_pool, gold_tools}. The harness must accept them.
+        let json = r#"{"id":"meta-001","prompt":"convert 100 USD to EUR","candidate_pool":[{"id":"fx.convert","name":"convert","description":"Currency conversion.","input_schema":{}}],"gold_tools":["fx.convert"]}"#;
+        let parsed = parse_scenarios(Cursor::new(json)).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].id, "meta-001");
+        assert_eq!(parsed[0].gold_tools, vec!["fx.convert".to_string()]);
     }
 
     #[test]

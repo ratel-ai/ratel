@@ -25,51 +25,77 @@ pub struct RetrievalMetrics {
     pub hit_at_k: bool,
 }
 
-/// Evaluate retrieval quality for a single query against a fixed pool.
+/// Evaluate retrieval quality at multiple K cutoffs in one BM25 pass.
+///
+/// Runs one ranking per (pool, query) and slices metrics for each K — much
+/// cheaper than re-ranking per K. Returns one `RetrievalMetrics` per `k`,
+/// preserving the input order. Empty `ks` yields an empty result.
+pub fn evaluate_at_ks(
+    pool: &[ToolSpec],
+    query: &str,
+    gold_tool_ids: &[String],
+    ks: &[usize],
+) -> Vec<RetrievalMetrics> {
+    if ks.is_empty() {
+        return Vec::new();
+    }
+    let max_k = *ks.iter().max().unwrap();
+    let mut registry = ToolRegistry::new();
+    for spec in pool {
+        registry.register(spec.into());
+    }
+    let hits = registry.search(query, max_k);
+
+    let gold_count = gold_tool_ids.len();
+    ks.iter()
+        .map(|&k| {
+            let cutoff = hits.len().min(k);
+            let mut gold_in_topk = 0usize;
+            let mut first_gold_rank: Option<usize> = None;
+            for (rank0, hit) in hits.iter().take(cutoff).enumerate() {
+                if gold_tool_ids.iter().any(|g| g == &hit.tool_id) {
+                    gold_in_topk += 1;
+                    if first_gold_rank.is_none() {
+                        first_gold_rank = Some(rank0 + 1);
+                    }
+                }
+            }
+            let recall_at_k = if gold_count == 0 {
+                0.0
+            } else {
+                gold_in_topk as f64 / gold_count as f64
+            };
+            let precision_at_k = if cutoff == 0 {
+                0.0
+            } else {
+                gold_in_topk as f64 / cutoff as f64
+            };
+            let reciprocal_rank = first_gold_rank.map(|r| 1.0 / r as f64).unwrap_or(0.0);
+            RetrievalMetrics {
+                k,
+                pool_size: pool.len(),
+                gold_count,
+                recall_at_k,
+                precision_at_k,
+                reciprocal_rank,
+                hit_at_k: gold_in_topk > 0,
+            }
+        })
+        .collect()
+}
+
+/// Single-K shim around [`evaluate_at_ks`]. Kept for callers that just want
+/// metrics at one cutoff.
 pub fn evaluate(
     pool: &[ToolSpec],
     query: &str,
     gold_tool_ids: &[String],
     k: usize,
 ) -> RetrievalMetrics {
-    let mut registry = ToolRegistry::new();
-    for spec in pool {
-        registry.register(spec.into());
-    }
-    let hits = registry.search(query, k);
-
-    let gold_count = gold_tool_ids.len();
-    let mut gold_in_topk = 0usize;
-    let mut first_gold_rank: Option<usize> = None;
-    for (rank0, hit) in hits.iter().enumerate() {
-        if gold_tool_ids.iter().any(|g| g == &hit.tool_id) {
-            gold_in_topk += 1;
-            if first_gold_rank.is_none() {
-                first_gold_rank = Some(rank0 + 1);
-            }
-        }
-    }
-    let recall_at_k = if gold_count == 0 {
-        0.0
-    } else {
-        gold_in_topk as f64 / gold_count as f64
-    };
-    let precision_at_k = if hits.is_empty() {
-        0.0
-    } else {
-        gold_in_topk as f64 / hits.len() as f64
-    };
-    let reciprocal_rank = first_gold_rank.map(|r| 1.0 / r as f64).unwrap_or(0.0);
-
-    RetrievalMetrics {
-        k,
-        pool_size: pool.len(),
-        gold_count,
-        recall_at_k,
-        precision_at_k,
-        reciprocal_rank,
-        hit_at_k: gold_in_topk > 0,
-    }
+    evaluate_at_ks(pool, query, gold_tool_ids, &[k])
+        .into_iter()
+        .next()
+        .expect("evaluate_at_ks with one k always returns one metric")
 }
 
 /// Build a pool of `target_size` tools = scenario tools + leading distractors.
@@ -227,5 +253,70 @@ mod tests {
         let distractors = vec![tool("b", "b", "beta")];
         let pool = build_pool(&scenario, &distractors, 100);
         assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn evaluate_at_ks_returns_one_metric_per_k_in_order() {
+        let pool = read_file_pool();
+        let metrics = evaluate_at_ks(
+            &pool,
+            "read a file from disk",
+            &["fs.read_file".into()],
+            &[1, 3, 5],
+        );
+        assert_eq!(metrics.len(), 3);
+        assert_eq!(metrics[0].k, 1);
+        assert_eq!(metrics[1].k, 3);
+        assert_eq!(metrics[2].k, 5);
+    }
+
+    #[test]
+    fn evaluate_at_ks_smaller_k_can_miss_when_gold_is_lower_ranked() {
+        // Construct a query that puts the gold tool at rank 2: query weakly
+        // matches read but more strongly matches "file disk", which surfaces
+        // multiple file/disk-mentioning tools above it.
+        let pool = vec![
+            tool(
+                "fs.write_file",
+                "write_file",
+                "Write contents to a file on disk.",
+            ),
+            tool(
+                "fs.read_file",
+                "read_file",
+                "Read a file from local disk and return its textual contents.",
+            ),
+            tool("net.http_get", "http_get", "Fetch an HTTP URL."),
+        ];
+        let metrics = evaluate_at_ks(&pool, "write file disk", &["fs.read_file".into()], &[1, 3]);
+        // At K=1 a non-gold rank-1 tool dominates → miss.
+        assert_eq!(metrics[0].recall_at_k, 0.0);
+        assert!(!metrics[0].hit_at_k);
+        // At K=3 the gold tool has room to land → recall@3 should pick it up.
+        assert_eq!(metrics[1].recall_at_k, 1.0);
+        assert!(metrics[1].hit_at_k);
+    }
+
+    #[test]
+    fn evaluate_at_ks_empty_ks_yields_empty_vec() {
+        let pool = read_file_pool();
+        let metrics = evaluate_at_ks(&pool, "anything", &["x".into()], &[]);
+        assert!(metrics.is_empty());
+    }
+
+    #[test]
+    fn evaluate_at_ks_runs_one_search_for_max_k() {
+        // Smoke: with K=[1,5] the single search at K=5 is enough to score both.
+        // Just asserts both metrics are populated and consistent.
+        let pool = read_file_pool();
+        let metrics = evaluate_at_ks(&pool, "send email via SMTP", &["mail.send".into()], &[1, 5]);
+        assert_eq!(metrics.len(), 2);
+        assert_eq!(metrics[0].k, 1);
+        assert_eq!(metrics[1].k, 5);
+        // Same query → same first-gold rank → same reciprocal_rank across K
+        // cutoffs (as long as the gold is within both cutoffs).
+        if metrics[0].hit_at_k {
+            assert_eq!(metrics[0].reciprocal_rank, metrics[1].reciprocal_rank);
+        }
     }
 }

@@ -14,7 +14,7 @@ use rand::seq::SliceRandom;
 use serde::Serialize;
 
 use crate::corpus::{Scenario, ToolSpec, load_scenarios};
-use crate::retrieval::{RetrievalMetrics, build_pool, evaluate};
+use crate::retrieval::{RetrievalMetrics, build_pool, evaluate_at_ks};
 
 /// Inputs for one retrieval-only run.
 #[derive(Debug, Clone)]
@@ -22,7 +22,9 @@ pub struct RunConfig {
     pub corpus_path: PathBuf,
     pub output_path: PathBuf,
     pub scenario_limit: Option<usize>,
-    pub top_k: usize,
+    /// K cutoffs to score at, in the order the runner should emit them.
+    /// Each `(scenario, pool_size)` cell produces one JSONL row per K.
+    pub top_ks: Vec<usize>,
     pub pool_sizes: Vec<usize>,
     pub seed: u64,
 }
@@ -70,15 +72,22 @@ pub fn run_retrieval(config: &RunConfig) -> anyhow::Result<RunSummary> {
 
         for &target_size in &config.pool_sizes {
             let pool = build_pool(&scenario.candidate_pool, &distractors, target_size);
-            let metrics = evaluate(&pool, &scenario.prompt, &scenario.gold_tools, config.top_k);
-            let row = RetrievalRow {
-                scenario_id: scenario.id.clone(),
-                target_pool_size: target_size,
-                actual_pool_size: pool.len(),
-                metrics,
-            };
-            writeln!(writer, "{}", serde_json::to_string(&row)?)?;
-            rows += 1;
+            let all_metrics = evaluate_at_ks(
+                &pool,
+                &scenario.prompt,
+                &scenario.gold_tools,
+                &config.top_ks,
+            );
+            for metrics in all_metrics {
+                let row = RetrievalRow {
+                    scenario_id: scenario.id.clone(),
+                    target_pool_size: target_size,
+                    actual_pool_size: pool.len(),
+                    metrics,
+                };
+                writeln!(writer, "{}", serde_json::to_string(&row)?)?;
+                rows += 1;
+            }
         }
     }
 
@@ -123,7 +132,7 @@ fn scenario_rng(scenario_id: &str, seed: u64) -> rand::rngs::StdRng {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::corpus::{GoldCall, ToolSpec};
+    use crate::corpus::ToolSpec;
     use serde_json::json;
     use std::io::Read;
 
@@ -154,21 +163,13 @@ mod tests {
             prompt: prompt.into(),
             candidate_pool: pool,
             gold_tools: gold.iter().map(|s| (*s).to_string()).collect(),
-            gold_trace: gold
-                .iter()
-                .map(|s| GoldCall {
-                    tool_id: (*s).to_string(),
-                    args: json!({}),
-                    response: json!({}),
-                })
-                .collect(),
             judge_criteria: None,
             category: None,
         }
     }
 
     #[test]
-    fn run_emits_one_row_per_scenario_and_pool_size() {
+    fn run_emits_one_row_per_scenario_pool_and_k() {
         let scenarios = vec![
             scenario(
                 "s1",
@@ -189,13 +190,14 @@ mod tests {
             corpus_path: corpus.path().to_path_buf(),
             output_path: out.path().to_path_buf(),
             scenario_limit: None,
-            top_k: 3,
+            top_ks: vec![1, 3],
             pool_sizes: vec![1, 2, 5],
             seed: 42,
         };
         let summary = run_retrieval(&cfg).unwrap();
         assert_eq!(summary.scenarios, 2);
-        assert_eq!(summary.rows_written, 6);
+        // 2 scenarios × 3 pool sizes × 2 K values = 12 rows.
+        assert_eq!(summary.rows_written, 12);
 
         let mut contents = String::new();
         std::fs::File::open(out.path())
@@ -203,11 +205,13 @@ mod tests {
             .read_to_string(&mut contents)
             .unwrap();
         let lines: Vec<&str> = contents.lines().filter(|l| !l.is_empty()).collect();
-        assert_eq!(lines.len(), 6);
+        assert_eq!(lines.len(), 12);
+        let mut ks_seen = std::collections::HashSet::new();
         for line in lines {
-            // Every row must round-trip through JSON.
-            let _v: serde_json::Value = serde_json::from_str(line).unwrap();
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            ks_seen.insert(v["k"].as_u64().unwrap() as usize);
         }
+        assert_eq!(ks_seen, std::collections::HashSet::from([1, 3]));
     }
 
     #[test]
@@ -223,7 +227,7 @@ mod tests {
             corpus_path: corpus.path().to_path_buf(),
             output_path: out.path().to_path_buf(),
             scenario_limit: Some(2),
-            top_k: 3,
+            top_ks: vec![3],
             pool_sizes: vec![5],
             seed: 42,
         };
@@ -242,7 +246,7 @@ mod tests {
             corpus_path: corpus.path().to_path_buf(),
             output_path: out.clone(),
             scenario_limit: None,
-            top_k: 3,
+            top_ks: vec![3],
             pool_sizes: vec![1],
             seed: 42,
         };
