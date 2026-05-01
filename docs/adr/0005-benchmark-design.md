@@ -4,7 +4,7 @@ Date: 2026-05-01
 
 ## Status
 
-Accepted
+Partially superseded by ADR-0006 (corpus + primary-oracle decisions). The rest — two-layer harness, three-arm primitive, N=5 + median/p90, two-model matrix, catalog scaling, gitignored manual results, fairness/determinism controls — stands.
 
 ## Context
 
