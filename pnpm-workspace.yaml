@@ -1,3 +1,4 @@
 packages:
   - 'src/sdk/ts'
   - 'examples/*'
+  - 'benchmark/agent'

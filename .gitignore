@@ -48,3 +48,8 @@ src/sdk/ts/native/*.node
 plan.md
 progress.md
 CLAUDE.local.md
+
+# Benchmark outputs
+benchmark/results/
+benchmark/fixtures/
+benchmark/agent/results/

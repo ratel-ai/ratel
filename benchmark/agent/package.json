@@ -1,0 +1,29 @@
+{
+  "name": "@ratel-ai/benchmark",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -F @ratel-ai/sdk build && tsc --noEmit",
+    "typecheck": "pnpm -F @ratel-ai/sdk build && tsc --noEmit",
+    "lint": "biome check src",
+    "test": "pnpm -F @ratel-ai/sdk build && vitest run",
+    "start": "pnpm -F @ratel-ai/sdk build && tsx src/cli.ts",
+    "report": "tsx src/report-cli.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.0",
+    "@ai-sdk/openai": "^3.0.0",
+    "@ratel-ai/sdk": "workspace:*",
+    "ai": "^6.0.0",
+    "dotenv": "^16.4.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  }
+}
