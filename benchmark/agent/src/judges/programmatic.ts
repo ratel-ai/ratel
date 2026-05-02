@@ -1,7 +1,7 @@
 // Programmatic judge: checks the *effective* tool-call trace against the
 // scenario's `gold_tools` set. "Effective" means `invoke_tool({toolId: X})`
 // counts as a call to X (the gateway is unwrapped) and `search_tools` is
-// dropped. Without this unwrapping, the hybrid arm — whose whole point is to
+// dropped. Without this unwrapping, the ratel arm — whose whole point is to
 // invoke tools through the gateway — would fail every scenario.
 //
 // Per ADR-0006 the verdict is selection-only: pass iff at least one gold id

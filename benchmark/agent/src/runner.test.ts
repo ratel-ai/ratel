@@ -20,7 +20,7 @@ const scenario: Scenario = {
 };
 
 function makeFakeRunCell(perCellDollars: number, called: string[]): RunCellFn {
-  return async ({ scenario: s, arm, model, runIndex, poolSize }) => {
+  return async ({ scenario: s, arm, model, runIndex, pool }) => {
     const key = `${s.id}::${arm}::${model.id}::${runIndex}`;
     called.push(key);
     const cell: CellResult = {
@@ -29,7 +29,7 @@ function makeFakeRunCell(perCellDollars: number, called: string[]): RunCellFn {
       model: model.id,
       run_index: runIndex,
       catalog_size: 1,
-      pool_size: poolSize,
+      pool_size: pool.length,
       seed: 0,
       input_tokens: 100,
       output_tokens: 50,
@@ -67,7 +67,7 @@ function baseConfig(corpusPath: string, outputPath: string): RunnerConfig {
   return {
     corpusPath,
     outputPath,
-    arms: ["control", "hybrid", "oracle"],
+    arms: ["control-baseline", "ratel-full", "control-oracle"],
     models: [{ id: "fake-model", model: {} as never }],
     runsPerCell: 1,
     topK: 3,
@@ -97,9 +97,9 @@ describe("runner", () => {
     expect(summary.cells_run).toBe(3);
     expect(summary.cells_skipped).toBe(0);
     expect(called).toEqual([
-      "fs-001::control::fake-model::0",
-      "fs-001::hybrid::fake-model::0",
-      "fs-001::oracle::fake-model::0",
+      "fs-001::control-baseline::fake-model::0",
+      "fs-001::ratel-full::fake-model::0",
+      "fs-001::control-oracle::fake-model::0",
     ]);
     const lines = readFileSync(output, "utf-8").trim().split("\n");
     expect(lines.length).toBe(3);
@@ -113,7 +113,7 @@ describe("runner", () => {
     await run({
       ...baseConfig(corpus, output),
       poolSize: 25,
-      arms: ["control"],
+      arms: ["control-baseline"],
       runCell: makeFakeRunCell(0.001, []),
     });
 
@@ -145,7 +145,7 @@ describe("runner", () => {
     await run({
       ...baseConfig(corpus, output),
       poolSize: 4,
-      arms: ["control"],
+      arms: ["control-baseline"],
       scenarioLimit: 1,
       runCell: makeFakeRunCell(0.001, called),
     });
@@ -170,13 +170,13 @@ describe("runner", () => {
     const out2 = join(tempDir, "b.jsonl");
     await run({
       ...baseConfig(corpus, out1),
-      arms: ["control"],
+      arms: ["control-baseline"],
       scenarioLimit: 5,
       runCell: makeFakeRunCell(0.001, calledA),
     });
     await run({
       ...baseConfig(corpus, out2),
-      arms: ["control"],
+      arms: ["control-baseline"],
       scenarioLimit: 5,
       runCell: makeFakeRunCell(0.001, calledB),
     });
@@ -196,14 +196,14 @@ describe("runner", () => {
     const calledB: string[] = [];
     await run({
       ...baseConfig(corpus, join(tempDir, "a.jsonl")),
-      arms: ["control"],
+      arms: ["control-baseline"],
       scenarioLimit: 5,
       seed: 1,
       runCell: makeFakeRunCell(0.001, calledA),
     });
     await run({
       ...baseConfig(corpus, join(tempDir, "b.jsonl")),
-      arms: ["control"],
+      arms: ["control-baseline"],
       scenarioLimit: 5,
       seed: 999,
       runCell: makeFakeRunCell(0.001, calledB),
@@ -246,7 +246,7 @@ describe("runner", () => {
     const path = join(tempDir, "appended.jsonl");
     const sample: CellResult = {
       scenario_id: "x",
-      arm: "control",
+      arm: "control-baseline",
       model: "m",
       run_index: 0,
       catalog_size: 0,
@@ -306,7 +306,7 @@ describe("runner", () => {
         model: args.model.id,
         run_index: args.runIndex,
         catalog_size: 1,
-        pool_size: args.poolSize,
+        pool_size: args.pool.length,
         seed: 0,
         input_tokens: 0,
         output_tokens: 0,
@@ -333,7 +333,7 @@ describe("runner", () => {
 
     const summary = await run({
       ...baseConfig(corpus, output),
-      arms: ["control"],
+      arms: ["control-baseline"],
       concurrency: 5,
       runCell: slowRunCell,
     });
@@ -369,7 +369,7 @@ describe("runner", () => {
     const concurrency = 5;
     const summary = await run({
       ...baseConfig(corpus, output),
-      arms: ["control"],
+      arms: ["control-baseline"],
       dollarGlobalCap: 0.005, // budget for 5 cells; overshoot bounded by ~concurrency.
       concurrency,
       runCell: slow,
@@ -397,7 +397,7 @@ describe("runner", () => {
     const called: string[] = [];
     const summary = await run({
       ...baseConfig(corpus, output),
-      arms: ["control"],
+      arms: ["control-baseline"],
       dollarGlobalCap: 0.0015, // budget for ~1.5 cells at $0.001 each — third should bail
       runCell: makeFakeRunCell(0.001, called),
     });

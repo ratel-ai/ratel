@@ -2,6 +2,8 @@
 // `benchmark/retrieval/src/corpus.rs` so both layers consume the same JSONL
 // files without an adapter.
 
+import type { LanguageModel } from "ai";
+
 export interface ToolSpec {
   id: string;
   name: string;
@@ -19,7 +21,12 @@ export interface Scenario {
   category?: string;
 }
 
-export type Arm = "control" | "hybrid" | "oracle";
+/**
+ * Arm id, matching `AgentDescriptor.id` of the agent that produced the row.
+ * Loose string so the registry can grow (control-baseline, control-oracle,
+ * ratel-full, ratel-pre-discovery, ratel-discovery-tool, claude-sdk-...).
+ */
+export type Arm = string;
 
 export interface ToolCall {
   toolId: string;
@@ -35,6 +42,41 @@ export interface UsageTotals {
   cachedInputTokens: number;
   cacheCreationTokens: number;
   totalTokens: number;
+}
+
+/**
+ * Per-agent contract. Each file under `agents/` (control or non-control)
+ * exports a `descriptor: AgentDescriptor`. The runner builds a registry
+ * (`id` → descriptor) at startup, then dispatches each cell to
+ * `descriptor.run(input)`. The agent function is end-to-end: it constructs
+ * tools, runs the agent loop, calls `meter(...)`, and returns the metered
+ * cell. The runner overlays the judging fields (programmatic + LLM) and the
+ * cell's `arm` is set to the descriptor id.
+ *
+ * `skipForModel(modelId)` lets a descriptor opt out for incompatible models —
+ * e.g. the claude-sdk arm declines non-Claude models.
+ */
+export interface AgentRunInput {
+  scenario: Scenario;
+  /** Expanded pool (gold + distractors) at config.poolSize. Same across arms in a cell. */
+  pool: ToolSpec[];
+  model: { id: string; model: LanguageModel };
+  runIndex: number;
+  topK: number;
+  maxSteps: number;
+  perRunTimeoutMs: number;
+  seed: number;
+  /** Optional pricing override (defaults applied inside metering). */
+  pricing?: unknown;
+}
+
+export interface AgentDescriptor {
+  /** Stable arm id; written verbatim to `CellResult.arm`. */
+  id: string;
+  /** Display label for logs and the report. */
+  label: string;
+  skipForModel?: (modelId: string) => boolean;
+  run: (input: AgentRunInput) => Promise<CellResult>;
 }
 
 export interface CellResult {

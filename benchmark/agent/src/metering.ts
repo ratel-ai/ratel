@@ -95,7 +95,7 @@ export interface MeterContext {
   arm: Arm;
   model: string;
   runIndex: number;
-  /** Tools the model directly sees this run (= `BuiltArm.activeToolIds.length`). */
+  /** Tools the model directly sees this run (= `ToolBundle.activeToolIds.length`). */
   catalogSize: number;
   /** Universe the BM25 ranked against this run (gold + distractors). Same across arms in a cell. */
   poolSize: number;

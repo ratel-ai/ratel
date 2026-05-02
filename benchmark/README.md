@@ -31,7 +31,7 @@ Per [ADR-0006](../docs/adr/0006-benchmark-corpus-and-eval-modes.md), three eval 
 
 **Agentic** — end-to-end agent runs with token cost + correctness signals. Requires API keys. Lives in [`agent/`](agent/).
 
-- **(c) MetaTool tasks + LLM-as-judge.** Runs control + Ratel hybrid (+ oracle) arms on MetaTool user-task queries with stubbed tool responses. Programmatic judge does selection-only intersection (`effective_tool_ids ∩ gold_tools ≠ ∅`); the LLM judge scores final-text coherence against the user prompt as a fallback / tiebreaker. Reports input/output tokens, cache hit rate, and $-cost at realistic catalog sizes (default pool size 180).
+- **(c) MetaTool tasks + LLM-as-judge.** Runs control (baseline + oracle) arms alongside three Ratel arms (full / pre-discovery only / discovery-tool only) on MetaTool user-task queries with stubbed tool responses. The full Ratel arm pre-discovers BM25 top-K from the prompt *and* exposes the gateway (`search_tools` / `invoke_tool`) so the model can recover when pre-discovery missed; the two ablations isolate which layer is doing the work. An optional local-only `claude-sdk-tool-search` arm can be wired up alongside as a competitive baseline against Anthropic's native tool-search-tool. Programmatic judge does selection-only intersection (`effective_tool_ids ∩ gold_tools ≠ ∅`); the LLM judge scores final-text coherence against the user prompt as a fallback / tiebreaker. Reports input/output tokens, cache hit rate, $-cost, and wall-clock time at realistic catalog sizes (default pool size 180), averaged per-scenario across runs and then across scenarios.
 
 ## Run the whole benchmark
 
@@ -43,7 +43,7 @@ This single command:
 
 1. Ingests MetaTool and ToolRet (downloads upstream sources via `curl`) if their normalized JSONL isn't already present under `benchmark/test-data/`.
 2. Runs BM25 retrieval over each corpus at corpus-appropriate pool sizes (modes a + b).
-3. Runs the mode-(c) MetaTool agent campaign with conservative defaults if `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set; otherwise prints a notice and skips. Defaults: 50 sampled scenarios × 1 run × all three arms × available models, $5 global cap.
+3. Runs the mode-(c) MetaTool agent campaign with conservative defaults if `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set; otherwise prints a notice and skips. Defaults: 50 sampled scenarios × 1 run × every committed arm × available models, $5 global cap.
 4. Renders `benchmark/results/REPORT.md` from the retrieval and (if present) agent JSONL outputs.
 
 Re-running `run-all` skips ingest when the snapshot already exists; pass `--force` to re-ingest, `--skip-ingest` to fail loudly if missing, `--skip-agent` to opt out of mode (c) even when keys are set, or `--only metatool|toolret` to restrict retrieval to one corpus. For the headline N=5 variance run, invoke `pnpm -F @ratel-ai/benchmark start` directly — see [`agent/README.md`](agent/README.md).

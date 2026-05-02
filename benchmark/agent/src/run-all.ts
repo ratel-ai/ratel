@@ -150,8 +150,10 @@ function agentCampaign(skipAgent: boolean): void {
   if (hasOpenAI) models.push("gpt-5.4-mini");
 
   // Conservative defaults for an automated invocation: small sampled subset,
-  // 1 run per cell, all three arms (so the report has the full picture), $5 cap.
-  // Override these by calling `pnpm -F @ratel-ai/benchmark start` directly.
+  // 1 run per cell, every committed arm (control + 3 ratel ablations), $5 cap.
+  // The local-only `claude-sdk-tool-search` arm is excluded by default — opt
+  // into it via `pnpm -F @ratel-ai/benchmark start --arms ...,claude-sdk-tool-search`.
+  // Override these defaults by calling `pnpm -F @ratel-ai/benchmark start` directly.
   runStep("agent campaign (mode c)", "pnpm", [
     "-F",
     "@ratel-ai/benchmark",
@@ -161,7 +163,7 @@ function agentCampaign(skipAgent: boolean): void {
     "--runs",
     "1",
     "--arms",
-    "control,hybrid,oracle",
+    "control-baseline,control-oracle,ratel-full,ratel-pre-discovery,ratel-discovery-tool",
     "--models",
     models.join(","),
     "--pool-size",

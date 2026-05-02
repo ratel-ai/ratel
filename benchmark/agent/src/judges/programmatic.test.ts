@@ -56,7 +56,7 @@ describe("effectiveToolIds (gateway unwrap)", () => {
     expect(effectiveToolIds(calls)).toEqual(["fs.read_file"]);
   });
 
-  it("hybrid arm: gateway-style invocation passes the programmatic judge", () => {
+  it("ratel arm: gateway-style invocation passes the programmatic judge", () => {
     const calls: ToolCall[] = [
       { toolId: "search_tools", args: { query: "send email" } },
       {

@@ -14,13 +14,62 @@ import { createOpenAI, openai } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import { config as loadEnv } from "dotenv";
 import { resolveRepoPath } from "./paths.js";
-import { type RunnerConfig, type RunnerModel, run } from "./runner.js";
+import { loadAgentRegistry, type RunnerConfig, type RunnerModel, run } from "./runner.js";
 import type { Arm } from "./types.js";
 
 loadEnv();
 
 const OLLAMA_PREFIX = "ollama:";
 const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1";
+
+/** Default arms when `--arms` isn't passed: every committed arm. The local-only
+ * `claude-sdk-tool-search` is included automatically by the registry but
+ * excluded from the default list — opt in via `--arms` once it's wired locally. */
+const DEFAULT_ARMS: Arm[] = [
+  "control-baseline",
+  "control-oracle",
+  "ratel-full",
+  "ratel-pre-discovery",
+  "ratel-discovery-tool",
+];
+
+/** Old → new id hints for the rename in v0.1.2. Pre-empts a confusing
+ * `unknown arm` error when developers re-run an older command. */
+const RENAMES: Record<string, string> = {
+  control: "control-baseline",
+  oracle: "control-oracle",
+  ratel: "ratel-full",
+  hybrid: "ratel-full",
+};
+
+/**
+ * Parse + validate the `--arms` value against the registry. Bad input used to
+ * flow through `as Arm[]` and crash deep in the runner with a useless
+ * TypeError; this surface validates at the boundary and surfaces both the
+ * legacy → new id rename and the full set of known ids.
+ */
+function parseArms(raw: string, knownArms: readonly string[]): Arm[] {
+  const parts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (parts.length === 0) throw new Error("--arms must list at least one arm");
+  const out: Arm[] = [];
+  for (const p of parts) {
+    if (knownArms.includes(p)) {
+      out.push(p);
+      continue;
+    }
+    if (RENAMES[p]) {
+      throw new Error(
+        `--arms: "${p}" was renamed to "${RENAMES[p]}". Update your command to ` +
+          `--arms ${DEFAULT_ARMS.join(",")} (or whichever subset you want).`,
+      );
+    }
+    throw new Error(`--arms: unknown arm "${p}" (expected one of: ${knownArms.join(", ")})`);
+  }
+  return out;
+}
 
 interface ParsedArgs {
   corpus: string;
@@ -48,13 +97,13 @@ interface ParsedArgs {
   logLevel: "quiet" | "normal" | "verbose";
 }
 
-function parseArgs(argv: string[]): ParsedArgs {
+function parseArgs(argv: string[], knownArms: readonly string[]): ParsedArgs {
   const args: ParsedArgs = {
     corpus: "benchmark/test-data/metatool.jsonl",
     output: "benchmark/agent/results/agent.jsonl",
     outputExplicit: false,
     ephemeral: false,
-    arms: ["control", "hybrid", "oracle"],
+    arms: [...DEFAULT_ARMS],
     models: ["gpt-5.4-mini", "claude-sonnet-4-6"],
     runs: 1,
     topK: 5,
@@ -92,7 +141,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         args.scenarios = Number(next());
         break;
       case "--arms":
-        args.arms = next().split(",") as Arm[];
+        args.arms = parseArms(next(), knownArms);
         break;
       case "--models":
         args.models = next().split(",");
@@ -231,7 +280,9 @@ function ephemeralOutputPath(): string {
 }
 
 async function main(): Promise<void> {
-  const parsed = parseArgs(process.argv.slice(2));
+  const registry = await loadAgentRegistry();
+  const knownArms = [...registry.keys()];
+  const parsed = parseArgs(process.argv.slice(2), knownArms);
   if (parsed.ephemeral) {
     if (parsed.outputExplicit) {
       throw new Error("--ephemeral and --output are mutually exclusive");
@@ -267,6 +318,7 @@ async function main(): Promise<void> {
     seed: parsed.seed,
     concurrency: parsed.concurrency,
     logLevel: parsed.logLevel,
+    registry,
   };
 
   console.log(

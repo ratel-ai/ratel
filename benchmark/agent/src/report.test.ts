@@ -4,7 +4,6 @@ import {
   failureTaxonomy,
   mean,
   median,
-  percentile,
   renderReport,
   retrievalByPoolSize,
   savingsByModel,
@@ -41,7 +40,7 @@ function retrievalRow(over: {
 function cell(over: Partial<CellResult>): CellResult {
   return {
     scenario_id: "s1",
-    arm: "control" as Arm,
+    arm: "control-baseline" as Arm,
     model: "gpt-5.4-mini",
     run_index: 0,
     catalog_size: 5,
@@ -79,10 +78,6 @@ describe("statistics helpers", () => {
     expect(median([1, 5, 3])).toBe(3);
   });
 
-  it("percentile is order-statistic at floor(p%/100 * len)", () => {
-    expect(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 90)).toBe(10);
-  });
-
   it("mean returns 0 for empty", () => {
     expect(mean([])).toBe(0);
     expect(median([])).toBe(0);
@@ -90,61 +85,144 @@ describe("statistics helpers", () => {
 });
 
 describe("statsByArmModel", () => {
-  it("groups by (arm, model) and computes medians + success rate", () => {
+  it("groups by (arm, model) and reports per-scenario averaged success + means", () => {
+    // Single-scenario case: per-scenario mean equals the run-level mean,
+    // so the headline numbers are direct averages of the input cells.
     const cells = [
-      cell({ arm: "control", input_tokens: 1000 }),
-      cell({ arm: "control", input_tokens: 1500, programmatic_verdict: "fail" }),
-      cell({ arm: "hybrid", input_tokens: 200 }),
-      cell({ arm: "hybrid", input_tokens: 300 }),
+      cell({ arm: "control-baseline", input_tokens: 1000 }),
+      cell({
+        arm: "control-baseline",
+        input_tokens: 1500,
+        run_index: 1,
+        programmatic_verdict: "fail",
+      }),
+      cell({ arm: "ratel-full", input_tokens: 200 }),
+      cell({ arm: "ratel-full", input_tokens: 300, run_index: 1 }),
     ];
     const stats = statsByArmModel(cells);
     expect(stats).toHaveLength(2);
-    const control = stats.find((s) => s.arm === "control");
-    const hybrid = stats.find((s) => s.arm === "hybrid");
+    const control = stats.find((s) => s.arm === "control-baseline");
+    const ratel = stats.find((s) => s.arm === "ratel-full");
     expect(control?.n).toBe(2);
+    expect(control?.scenarios).toBe(1);
     expect(control?.success_rate).toBe(0.5);
-    expect(control?.median_input_tokens).toBe(1250);
-    expect(hybrid?.median_input_tokens).toBe(250);
-    expect(hybrid?.success_rate).toBe(1);
+    expect(control?.mean_input_tokens).toBe(1250);
+    expect(ratel?.mean_input_tokens).toBe(250);
+    expect(ratel?.success_rate).toBe(1);
+  });
+
+  it("averages per-scenario means across scenarios — equal weight per scenario, regardless of run count", () => {
+    // Scenario A: 5 runs, 4 pass / 1 fail → success rate 0.8
+    // Scenario B: 2 runs, 1 pass / 1 fail → success rate 0.5
+    // Headline success_rate = mean(0.8, 0.5) = 0.65, NOT 5/7 ≈ 0.714 (that
+    // would be a flat global mean that lets a high-run-count scenario drown
+    // out the others).
+    const cells = [
+      ...Array.from({ length: 4 }, (_, i) =>
+        cell({
+          scenario_id: "A",
+          arm: "ratel-full",
+          run_index: i,
+          programmatic_verdict: "pass",
+          input_tokens: 100,
+          wall_ms: 100,
+        }),
+      ),
+      cell({
+        scenario_id: "A",
+        arm: "ratel-full",
+        run_index: 4,
+        programmatic_verdict: "fail",
+        input_tokens: 100,
+        wall_ms: 100,
+      }),
+      cell({
+        scenario_id: "B",
+        arm: "ratel-full",
+        run_index: 0,
+        programmatic_verdict: "pass",
+        input_tokens: 500,
+        wall_ms: 500,
+      }),
+      cell({
+        scenario_id: "B",
+        arm: "ratel-full",
+        run_index: 1,
+        programmatic_verdict: "fail",
+        input_tokens: 500,
+        wall_ms: 500,
+      }),
+    ];
+    const stats = statsByArmModel(cells);
+    const ratel = stats.find((s) => s.arm === "ratel-full");
+    expect(ratel?.scenarios).toBe(2);
+    expect(ratel?.n).toBe(7);
+    expect(ratel?.success_rate).toBeCloseTo(0.65, 5);
+    // Per-scenario mean input: A = 100, B = 500 → headline mean(100, 500) = 300.
+    expect(ratel?.mean_input_tokens).toBeCloseTo(300, 5);
+    // Wall follows the same shape: A = 100, B = 500 → mean = 300.
+    expect(ratel?.mean_wall_ms).toBeCloseTo(300, 5);
   });
 
   it("surfaces the distinct pool_size values per (arm, model) group", () => {
     const cells = [
-      cell({ arm: "control", pool_size: 180 }),
-      cell({ arm: "control", pool_size: 180 }),
-      cell({ arm: "hybrid", pool_size: 180 }),
-      cell({ arm: "hybrid", pool_size: 30 }), // mixed-pool campaign
+      cell({ arm: "control-baseline", pool_size: 180 }),
+      cell({ arm: "control-baseline", pool_size: 180, run_index: 1 }),
+      cell({ arm: "ratel-full", pool_size: 180 }),
+      cell({ arm: "ratel-full", pool_size: 30, run_index: 1 }), // mixed-pool campaign
     ];
     const stats = statsByArmModel(cells);
-    const control = stats.find((s) => s.arm === "control");
-    const hybrid = stats.find((s) => s.arm === "hybrid");
+    const control = stats.find((s) => s.arm === "control-baseline");
+    const ratel = stats.find((s) => s.arm === "ratel-full");
     expect(control?.pool_sizes).toEqual([180]);
-    expect(hybrid?.pool_sizes).toEqual([30, 180]);
+    expect(ratel?.pool_sizes).toEqual([30, 180]);
   });
 });
 
 describe("savingsByModel", () => {
-  it("computes hybrid vs control savings % across input, total, and $", () => {
+  it("computes ratel vs control savings % across input, total, $, and wall", () => {
     const cells = [
-      cell({ arm: "control", input_tokens: 1000, total_tokens: 1200, dollar_cost: 0.01 }),
-      cell({ arm: "hybrid", input_tokens: 250, total_tokens: 400, dollar_cost: 0.003 }),
-      cell({ arm: "oracle", input_tokens: 100, total_tokens: 200, dollar_cost: 0.001 }),
+      cell({
+        arm: "control-baseline",
+        input_tokens: 1000,
+        total_tokens: 1200,
+        dollar_cost: 0.01,
+        wall_ms: 4000,
+      }),
+      cell({
+        arm: "ratel-full",
+        input_tokens: 250,
+        total_tokens: 400,
+        dollar_cost: 0.003,
+        wall_ms: 1000,
+      }),
+      cell({
+        arm: "control-oracle",
+        input_tokens: 100,
+        total_tokens: 200,
+        dollar_cost: 0.001,
+        wall_ms: 500,
+      }),
     ];
     const [s] = savingsByModel(cells);
-    expect(s.control_median_input).toBe(1000);
-    expect(s.hybrid_median_input).toBe(250);
+    expect(s.control_mean_input).toBe(1000);
+    expect(s.ratel_mean_input).toBe(250);
     expect(s.input_savings_pct).toBeCloseTo(75, 5);
-    expect(s.control_median_total).toBe(1200);
-    expect(s.hybrid_median_total).toBe(400);
+    expect(s.control_mean_total).toBe(1200);
+    expect(s.ratel_mean_total).toBe(400);
     expect(s.total_savings_pct).toBeCloseTo((1 - 400 / 1200) * 100, 5);
-    expect(s.control_median_dollars).toBeCloseTo(0.01, 5);
-    expect(s.hybrid_median_dollars).toBeCloseTo(0.003, 5);
+    expect(s.control_mean_dollars).toBeCloseTo(0.01, 5);
+    expect(s.ratel_mean_dollars).toBeCloseTo(0.003, 5);
     expect(s.dollar_savings_pct).toBeCloseTo(70, 5);
-    expect(s.oracle_median_input).toBe(100);
+    expect(s.oracle_mean_input).toBe(100);
+    // Wall savings: 4000 → 1000 = 75% saved.
+    expect(s.control_mean_wall_ms).toBe(4000);
+    expect(s.ratel_mean_wall_ms).toBe(1000);
+    expect(s.wall_savings_pct).toBeCloseTo(75, 5);
   });
 
-  it("skips models without both control and hybrid arms", () => {
-    const cells = [cell({ arm: "control" })];
+  it("skips models without both control and ratel arms", () => {
+    const cells = [cell({ arm: "control-baseline" })];
     expect(savingsByModel(cells)).toHaveLength(0);
   });
 });
@@ -366,13 +444,13 @@ describe("retrievalByPoolSize", () => {
 describe("failureTaxonomy", () => {
   it("counts pass/fail/errored per (arm, model)", () => {
     const cells = [
-      cell({ arm: "control", programmatic_verdict: "pass" }),
+      cell({ arm: "control-baseline", programmatic_verdict: "pass" }),
       cell({
-        arm: "control",
+        arm: "control-baseline",
         programmatic_verdict: "fail",
         tool_calls: [{ toolId: "wrong", args: {} }],
       }),
-      cell({ arm: "control", programmatic_verdict: "fail", error: "timeout" }),
+      cell({ arm: "control-baseline", programmatic_verdict: "fail", error: "timeout" }),
     ];
     const [t] = failureTaxonomy(cells);
     expect(t.pass).toBe(1);
@@ -385,9 +463,27 @@ describe("failureTaxonomy", () => {
 describe("renderReport", () => {
   it("produces a markdown document with each panel", () => {
     const cells = [
-      cell({ arm: "control", input_tokens: 1000, total_tokens: 1200, dollar_cost: 0.01 }),
-      cell({ arm: "hybrid", input_tokens: 250, total_tokens: 400, dollar_cost: 0.003 }),
-      cell({ arm: "oracle", input_tokens: 100, total_tokens: 200, dollar_cost: 0.001 }),
+      cell({
+        arm: "control-baseline",
+        input_tokens: 1000,
+        total_tokens: 1200,
+        dollar_cost: 0.01,
+        wall_ms: 4000,
+      }),
+      cell({
+        arm: "ratel-full",
+        input_tokens: 250,
+        total_tokens: 400,
+        dollar_cost: 0.003,
+        wall_ms: 1000,
+      }),
+      cell({
+        arm: "control-oracle",
+        input_tokens: 100,
+        total_tokens: 200,
+        dollar_cost: 0.001,
+        wall_ms: 500,
+      }),
     ];
     const md = renderReport({ cells, retrieval: [], generatedAt: new Date("2026-05-01") });
     expect(md).toContain("# Ratel benchmark report");
@@ -395,9 +491,12 @@ describe("renderReport", () => {
     expect(md).toContain("## Token savings");
     expect(md).toContain("## Retrieval quality");
     expect(md).toContain("## Failure taxonomy");
-    expect(md).toContain("## Variance flags");
-    expect(md).toContain("**75.0%**"); // input savings
+    // Variance-flags section is gone — mean-of-means doesn't compose with p90/median.
+    expect(md).not.toContain("## Variance flags");
+    expect(md).toContain("**75.0%**"); // input savings (and wall savings) both 75%
     expect(md).toContain("**70.0%**"); // dollar savings
+    // Wall time is part of the headline + savings tables now.
+    expect(md).toContain("mean wall");
   });
 
   it("renders one retrieval panel per (corpus, subset) when input spans both", () => {
@@ -432,19 +531,5 @@ describe("renderReport", () => {
     expect(md).toContain("median recall@K");
     expect(md).toContain("median nDCG@K");
     expect(md).toContain("| K |");
-  });
-
-  it("omits control from the variance-flag panel even when control is high-variance", () => {
-    // Control with two wildly different runs → p90/median > 1.5×; hybrid is steady.
-    const cells = [
-      cell({ arm: "control", input_tokens: 1000, run_index: 0 }),
-      cell({ arm: "control", input_tokens: 5000, run_index: 1 }),
-      cell({ arm: "hybrid", input_tokens: 250, run_index: 0 }),
-      cell({ arm: "hybrid", input_tokens: 260, run_index: 1 }),
-    ];
-    const md = renderReport({ cells, retrieval: [], generatedAt: new Date("2026-05-01") });
-    expect(md).toContain("## Variance flags (hybrid / oracle, p90/median > 1.5)");
-    expect(md).toContain("_No high-variance cells in hybrid / oracle._");
-    expect(md).not.toMatch(/\*\*control \//);
   });
 });

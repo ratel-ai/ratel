@@ -1,14 +1,43 @@
 # `benchmark/agent/`
 
-End-to-end agent layer of the benchmark plus the unified suite orchestrator. Drives the Vercel AI SDK [`ToolLoopAgent`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent) under three arms (control / hybrid / oracle), meters token usage, judges correctness, and emits one JSONL row per `(scenario, arm, model, run)` cell. Mode (c) per ADR-0006 is the agent campaign this layer powers.
+End-to-end agent layer of the benchmark plus the unified suite orchestrator. Drives the Vercel AI SDK [`ToolLoopAgent`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent) across two control arms and several non-control arms (see below), meters token usage, judges correctness, and emits one JSONL row per `(scenario, arm, model, run)` cell. Mode (c) per ADR-0006 is the agent campaign this layer powers.
+
+Headline metrics in `REPORT.md` average per scenario across runs first, then across scenarios — so a scenario passing 4/5 runs contributes a 0.8 success rate, and high-run-count scenarios can't drown out the rest.
 
 Pairs with the Rust retrieval-only layer at [`benchmark/retrieval/`](../retrieval). For modes overview see [`benchmark/README.md`](../README.md). Locked decisions in [`docs/adr/0005-benchmark-design.md`](../../docs/adr/0005-benchmark-design.md), [`0006`](../../docs/adr/0006-benchmark-corpus-and-eval-modes.md), [`0007`](../../docs/adr/0007-benchmark-corpus-not-snapshotted.md).
+
+## Arms
+
+Each arm is an `AgentDescriptor` (`{ id, label, run(input) }`) defined in its own file under [`src/agents/`](src/agents/). The runner builds a registry at startup and dispatches each cell to the arm's `run` function. Reading any one file shows the full integration end-to-end (tool construction, optional Ratel wiring, agent loop) — no implicit framework magic.
+
+| id | label | path | what it does |
+|---|---|---|---|
+| `control-baseline` | control (baseline) | `agents/control-baseline.ts` | Every tool in the expanded pool, registered directly. Fat-context floor. |
+| `control-oracle`   | control (oracle)   | `agents/control-oracle.ts`   | Only the gold tools. Upper bound on what the model can do given perfect selection. |
+| `ratel-full`       | ratel (full)       | `agents/non-control/ratel-full.ts` | BM25 top-K of the prompt pre-fetched as direct tools, **plus** the `search_tools` / `invoke_tool` gateway. The canonical Ratel surface. |
+| `ratel-pre-discovery`  | ratel (pre-discovery only) | `agents/non-control/ratel-pre-discovery.ts` | BM25 top-K only — no gateway. Ablation: did pre-fetch alone suffice? |
+| `ratel-discovery-tool` | ratel (discovery-tool only) | `agents/non-control/ratel-discovery-tool.ts` | Gateway only — no pre-fetch. Ablation: can the agent self-discover with a strong index? |
+| `claude-sdk-tool-search` | claude-sdk (tool-search tool) | `agents/non-control/ignore.claude-sdk-tool-search.ts` | **Local-only, gitignored.** Anthropic's native [tool-search-tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool) as a competitive baseline. Claude-only via `skipForModel`. |
+
+The default `--arms` list excludes `claude-sdk-tool-search` (it lives behind a local-only gitignored file); opt in via `--arms ...,claude-sdk-tool-search` on a host that has wired it up.
+
+### Adding a local-only arm
+
+Drop a new file in `src/agents/non-control/` whose name starts with `ignore.` (matches the local `.gitignore` rule). Export a `descriptor: AgentDescriptor` with a unique `id`. The runner's auto-discovery picks it up next time. Use this for prototypes, closed-SDK baselines, or any arm you don't want to commit yet.
 
 ## Layout
 
 ```
 src/
-  arms.ts             control / hybrid / oracle tool-set builders
+  agents/
+    _shared.ts                shared sanitization / AI SDK adapters / metered loop
+    control-baseline.ts       control arm — all tools direct
+    control-oracle.ts         control arm — gold tools only
+    non-control/              auto-discovered; `ignore.*` is gitignored
+      ratel-full.ts           ratel: BM25 pre-fetch + gateway
+      ratel-pre-discovery.ts  ratel: BM25 pre-fetch only
+      ratel-discovery-tool.ts ratel: gateway only
+      ignore.claude-sdk-tool-search.ts  (local-only) Anthropic tool-search-tool
   cli.ts              entry — pnpm start (mode c agent campaign)
   corpus.ts           reads the shared JSONL scenario format
   judges/
@@ -19,8 +48,8 @@ src/
   report.ts           aggregator (medians, savings, retrieval, taxonomy)
   report-cli.ts       entry — pnpm report
   run-all.ts          entry — pnpm run-all (whole benchmark: ingest + a + b + c + report)
-  runner.ts           orchestrates cells, resumable, dollar-capped
-  types.ts            CellResult + Scenario shapes shared across modules
+  runner.ts           registry-based dispatch, resumable, dollar-capped
+  types.ts            AgentDescriptor / AgentRunInput / CellResult / Scenario shapes
 ```
 
 ## Run the whole benchmark
@@ -33,7 +62,7 @@ Ingests both corpora (if missing), runs retrieval modes (a) + (b), runs the mode
 
 Flags: `--force` (re-ingest), `--skip-ingest`, `--skip-agent` (skip mode (c) even with keys), `--only metatool|toolret`.
 
-The auto-invoked mode (c) defaults to: 50 sampled scenarios × 1 run × all three arms, available models only (`claude-sonnet-4-6` and/or `gpt-5.4-mini` depending on which key is set), pool size 180, $5 global cap. For the headline variance run see the next section.
+The auto-invoked mode (c) defaults to: 50 sampled scenarios × 1 run × every committed arm (the two control arms plus the three ratel ablations), available models only (`claude-sonnet-4-6` and/or `gpt-5.4-mini` depending on which key is set), pool size 180, $5 global cap. The local-only `claude-sdk-tool-search` arm is excluded by default. For the headline variance run see the next section.
 
 ## Run the headline agent campaign (mode c)
 
@@ -50,7 +79,7 @@ The auto-invoked mode (c) defaults to: 50 sampled scenarios × 1 run × all thre
 pnpm -F @ratel-ai/benchmark start \
   --output benchmark/agent/results/agent.jsonl \
   --scenarios 200 \
-  --arms control,hybrid,oracle \
+  --arms control-baseline,control-oracle,ratel-full,ratel-pre-discovery,ratel-discovery-tool \
   --models gpt-5.4-mini,claude-sonnet-4-6 \
   --runs 5 \
   --top-k 5 \
@@ -73,7 +102,7 @@ For a fast local smoke (~$0.20–$1):
 ```bash
 pnpm -F @ratel-ai/benchmark start \
   --scenarios 50 --runs 1 \
-  --arms control,hybrid,oracle \
+  --arms control-baseline,control-oracle,ratel-full \
   --models claude-sonnet-4-6 \
   --pool-size 180 \
   --dollar-global 5 \
@@ -89,7 +118,7 @@ The `ollama:` model prefix routes through a local [Ollama](https://ollama.com) s
 
 pnpm -F @ratel-ai/benchmark start \
   --scenarios 50 --runs 1 \
-  --arms control,hybrid \
+  --arms control-baseline,ratel-full \
   --models ollama:qwen3.5,ollama:gemma4 \
   --pool-size 180 \
   --judge-model ollama:qwen3.5 \  # cost-free local judge
@@ -120,4 +149,4 @@ Auto-discovers every `*retrieval.jsonl` under `benchmark/results/` if `--retriev
 pnpm -F @ratel-ai/benchmark test
 ```
 
-Unit tests cover the corpus reader, arm builders, metering math, both judges (programmatic intersection + LLM prompt-only fallback), pool universe + distractor expansion, runner orchestration (resume / dollar caps / cell iteration / seeded sampling), and report aggregations. Real LLM calls are not exercised in unit tests.
+Unit tests cover the corpus reader, shared agent helpers (sanitization, schema normalization, tool-bundle assembly), per-arm bundle-builders (one test file per agent), agent registry auto-discovery, metering math, both judges (programmatic intersection + LLM prompt-only fallback), pool universe + distractor expansion, runner orchestration (resume / dollar caps / cell iteration / seeded sampling), and report aggregations. Real LLM calls are not exercised in unit tests.

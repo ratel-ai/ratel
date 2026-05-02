@@ -137,7 +137,7 @@ describe("meter", () => {
     const { cell, raw } = await meter(
       {
         scenarioId: "fs-001",
-        arm: "hybrid",
+        arm: "ratel-full",
         model: "gpt-5.4-mini",
         runIndex: 0,
         catalogSize: 30,
@@ -147,7 +147,7 @@ describe("meter", () => {
       async () => fakeResult,
     );
     expect(cell.scenario_id).toBe("fs-001");
-    expect(cell.arm).toBe("hybrid");
+    expect(cell.arm).toBe("ratel-full");
     expect(cell.catalog_size).toBe(30);
     expect(cell.pool_size).toBe(180);
     expect(cell.input_tokens).toBe(210);
@@ -164,7 +164,7 @@ describe("meter", () => {
     const { cell } = await meter(
       {
         scenarioId: "x",
-        arm: "control",
+        arm: "control-baseline",
         model: "gpt-5.4-mini",
         runIndex: 0,
         catalogSize: 5,

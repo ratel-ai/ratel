@@ -27,13 +27,6 @@ export function median(xs: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-export function percentile(xs: number[], p: number): number {
-  if (xs.length === 0) return 0;
-  const sorted = [...xs].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
-  return sorted[idx];
-}
-
 export function mean(xs: number[]): number {
   if (xs.length === 0) return 0;
   return xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -44,50 +37,99 @@ export interface ArmModelStats {
   model: string;
   /** Distinct `pool_size` values seen in this group; multiple values mean the campaign mixed pool sizes. */
   pool_sizes: number[];
+  /** Distinct scenarios contributing to this group. */
+  scenarios: number;
+  /** Total cells (= scenarios × runs_per_scenario_for_this_group). */
   n: number;
+  /** Mean across per-scenario success rates (passes / runs, averaged across scenarios). */
   success_rate: number;
-  median_input_tokens: number;
-  median_total_tokens: number;
-  median_turns: number;
-  median_dollar_cost: number;
-  p90_input_tokens: number;
-  p90_total_tokens: number;
-  variance_ratio: number;
+  mean_input_tokens: number;
+  mean_total_tokens: number;
+  mean_turns: number;
+  mean_dollar_cost: number;
+  mean_wall_ms: number;
 }
 
+interface ScenarioStats {
+  arm: Arm;
+  model: string;
+  scenario_id: string;
+  /** Passes / runs for this scenario in this (arm, model). */
+  success_rate: number;
+  mean_input: number;
+  mean_total: number;
+  mean_turns: number;
+  mean_dollar: number;
+  mean_wall: number;
+  pool_sizes: Set<number>;
+  /** Number of runs aggregated for this scenario. */
+  runs: number;
+}
+
+/**
+ * Two-stage aggregation: cells → per-scenario means → per-(arm, model) means.
+ *
+ * The per-scenario stage gives every scenario equal weight in the headline,
+ * so a high-run-count scenario can't drown out the rest. Concretely: a
+ * scenario that passes 4/5 runs contributes a 0.8 success rate, regardless
+ * of how many other scenarios ran 1× or 10×. This is the natural reading
+ * of "what fraction of scenarios succeed" when runs-per-scenario varies.
+ */
 export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
-  const groups = new Map<string, CellResult[]>();
+  // Stage 1: per (scenario, arm, model) → per-scenario means.
+  const byScenario = new Map<string, CellResult[]>();
   for (const c of cells) {
-    const key = `${c.arm}::${c.model}`;
-    const arr = groups.get(key) ?? [];
+    const key = `${c.scenario_id}::${c.arm}::${c.model}`;
+    const arr = byScenario.get(key) ?? [];
     arr.push(c);
-    groups.set(key, arr);
+    byScenario.set(key, arr);
   }
-  const out: ArmModelStats[] = [];
-  for (const [key, arr] of groups) {
-    const [arm, model] = key.split("::") as [Arm, string];
-    const passed = arr.filter(
+  const perScenario: ScenarioStats[] = [];
+  for (const arr of byScenario.values()) {
+    const head = arr[0];
+    const passes = arr.filter(
       (c) => c.programmatic_verdict === "pass" || c.judge_verdict === "pass",
     ).length;
-    const inputs = arr.map((c) => c.input_tokens);
-    const totals = arr.map((c) => c.total_tokens);
-    const turns = arr.map((c) => c.turns);
-    const costs = arr.map((c) => c.dollar_cost);
-    const poolSizes = [...new Set(arr.map((c) => c.pool_size))].sort((a, b) => a - b);
-    const med = median(inputs);
+    perScenario.push({
+      arm: head.arm,
+      model: head.model,
+      scenario_id: head.scenario_id,
+      success_rate: passes / arr.length,
+      mean_input: mean(arr.map((c) => c.input_tokens)),
+      mean_total: mean(arr.map((c) => c.total_tokens)),
+      mean_turns: mean(arr.map((c) => c.turns)),
+      mean_dollar: mean(arr.map((c) => c.dollar_cost)),
+      mean_wall: mean(arr.map((c) => c.wall_ms)),
+      pool_sizes: new Set(arr.map((c) => c.pool_size)),
+      runs: arr.length,
+    });
+  }
+
+  // Stage 2: per (arm, model) → mean across per-scenario means.
+  const byGroup = new Map<string, ScenarioStats[]>();
+  for (const p of perScenario) {
+    const key = `${p.arm}::${p.model}`;
+    const arr = byGroup.get(key) ?? [];
+    arr.push(p);
+    byGroup.set(key, arr);
+  }
+  const out: ArmModelStats[] = [];
+  for (const [key, ps] of byGroup) {
+    const [arm, model] = key.split("::") as [Arm, string];
+    const pools = new Set<number>();
+    for (const p of ps) for (const sz of p.pool_sizes) pools.add(sz);
     out.push({
       arm,
       model,
-      pool_sizes: poolSizes,
-      n: arr.length,
-      success_rate: arr.length === 0 ? 0 : passed / arr.length,
-      median_input_tokens: med,
-      median_total_tokens: median(totals),
-      median_turns: median(turns),
-      median_dollar_cost: median(costs),
-      p90_input_tokens: percentile(inputs, 90),
-      p90_total_tokens: percentile(totals, 90),
-      variance_ratio: med === 0 ? 0 : percentile(inputs, 90) / med,
+      pool_sizes: [...pools].sort((a, b) => a - b),
+      scenarios: ps.length,
+      n: ps.reduce((acc, p) => acc + p.runs, 0),
+      success_rate: mean(ps.map((p) => p.success_rate)),
+      mean_input_tokens: mean(ps.map((p) => p.mean_input)),
+      mean_total_tokens: mean(ps.map((p) => p.mean_total)),
+      mean_turns: mean(ps.map((p) => p.mean_turns)),
+      mean_dollar_cost: mean(ps.map((p) => p.mean_dollar)),
+      mean_wall_ms: mean(ps.map((p) => p.mean_wall)),
     });
   }
   return out.sort((a, b) => a.model.localeCompare(b.model) || a.arm.localeCompare(b.arm));
@@ -95,24 +137,27 @@ export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
 
 export interface SavingsRow {
   model: string;
-  control_median_input: number;
-  hybrid_median_input: number;
-  oracle_median_input: number;
+  control_mean_input: number;
+  ratel_mean_input: number;
+  oracle_mean_input: number;
   input_savings_pct: number;
-  control_median_total: number;
-  hybrid_median_total: number;
+  control_mean_total: number;
+  ratel_mean_total: number;
   total_savings_pct: number;
-  control_median_dollars: number;
-  hybrid_median_dollars: number;
+  control_mean_dollars: number;
+  ratel_mean_dollars: number;
   dollar_savings_pct: number;
-  control_median_turns: number;
-  hybrid_median_turns: number;
-  oracle_median_turns: number;
+  control_mean_turns: number;
+  ratel_mean_turns: number;
+  oracle_mean_turns: number;
+  control_mean_wall_ms: number;
+  ratel_mean_wall_ms: number;
+  wall_savings_pct: number;
 }
 
-function pctSavings(control: number, hybrid: number): number {
+function pctSavings(control: number, ratel: number): number {
   if (control === 0) return 0;
-  return (1 - hybrid / control) * 100;
+  return (1 - ratel / control) * 100;
 }
 
 export function savingsByModel(cells: CellResult[]): SavingsRow[] {
@@ -125,25 +170,28 @@ export function savingsByModel(cells: CellResult[]): SavingsRow[] {
   }
   const out: SavingsRow[] = [];
   for (const [model, arr] of byModel) {
-    const control = arr.find((s) => s.arm === "control");
-    const hybrid = arr.find((s) => s.arm === "hybrid");
-    const oracle = arr.find((s) => s.arm === "oracle");
-    if (!control || !hybrid) continue;
+    const control = arr.find((s) => s.arm === "control-baseline");
+    const ratel = arr.find((s) => s.arm === "ratel-full");
+    const oracle = arr.find((s) => s.arm === "control-oracle");
+    if (!control || !ratel) continue;
     out.push({
       model,
-      control_median_input: control.median_input_tokens,
-      hybrid_median_input: hybrid.median_input_tokens,
-      oracle_median_input: oracle?.median_input_tokens ?? 0,
-      input_savings_pct: pctSavings(control.median_input_tokens, hybrid.median_input_tokens),
-      control_median_total: control.median_total_tokens,
-      hybrid_median_total: hybrid.median_total_tokens,
-      total_savings_pct: pctSavings(control.median_total_tokens, hybrid.median_total_tokens),
-      control_median_dollars: control.median_dollar_cost,
-      hybrid_median_dollars: hybrid.median_dollar_cost,
-      dollar_savings_pct: pctSavings(control.median_dollar_cost, hybrid.median_dollar_cost),
-      control_median_turns: control.median_turns,
-      hybrid_median_turns: hybrid.median_turns,
-      oracle_median_turns: oracle?.median_turns ?? 0,
+      control_mean_input: control.mean_input_tokens,
+      ratel_mean_input: ratel.mean_input_tokens,
+      oracle_mean_input: oracle?.mean_input_tokens ?? 0,
+      input_savings_pct: pctSavings(control.mean_input_tokens, ratel.mean_input_tokens),
+      control_mean_total: control.mean_total_tokens,
+      ratel_mean_total: ratel.mean_total_tokens,
+      total_savings_pct: pctSavings(control.mean_total_tokens, ratel.mean_total_tokens),
+      control_mean_dollars: control.mean_dollar_cost,
+      ratel_mean_dollars: ratel.mean_dollar_cost,
+      dollar_savings_pct: pctSavings(control.mean_dollar_cost, ratel.mean_dollar_cost),
+      control_mean_turns: control.mean_turns,
+      ratel_mean_turns: ratel.mean_turns,
+      oracle_mean_turns: oracle?.mean_turns ?? 0,
+      control_mean_wall_ms: control.mean_wall_ms,
+      ratel_mean_wall_ms: ratel.mean_wall_ms,
+      wall_savings_pct: pctSavings(control.mean_wall_ms, ratel.mean_wall_ms),
     });
   }
   return out;
@@ -283,6 +331,10 @@ function fmtDollars(x: number): string {
   return `$${x.toFixed(4)}`;
 }
 
+function fmtSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 export function renderReport(args: {
   cells: CellResult[];
   retrieval: RetrievalRow[];
@@ -302,35 +354,36 @@ export function renderReport(args: {
   lines.push(`Cells: **${args.cells.length}**, retrieval rows: **${args.retrieval.length}**.`);
   lines.push("");
 
-  // 1. Headline
+  // 1. Headline. Numbers are mean-of-per-scenario-means: every scenario weighs
+  // the same in the headline regardless of how many runs it has.
   lines.push("## Headline");
   lines.push("");
   lines.push(
-    "| arm | model | pool | n | success | median input | median total | median turns | median $ | p90/median input |",
+    "| arm | model | pool | scenarios | n | success | mean input | mean total | mean turns | mean $ | mean wall |",
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of stats) {
     const pool = s.pool_sizes.length === 0 ? "—" : s.pool_sizes.join(",");
     lines.push(
-      `| ${s.arm} | ${s.model} | ${pool} | ${s.n} | ${fmtPct(s.success_rate * 100)} | ${fmtNum(s.median_input_tokens)} | ${fmtNum(s.median_total_tokens)} | ${fmtNum(s.median_turns)} | ${fmtDollars(s.median_dollar_cost)} | ${s.variance_ratio.toFixed(2)}× |`,
+      `| ${s.arm} | ${s.model} | ${pool} | ${s.scenarios} | ${s.n} | ${fmtPct(s.success_rate * 100)} | ${fmtNum(s.mean_input_tokens)} | ${fmtNum(s.mean_total_tokens)} | ${fmtNum(s.mean_turns)} | ${fmtDollars(s.mean_dollar_cost)} | ${fmtSeconds(s.mean_wall_ms)} |`,
     );
   }
   lines.push("");
 
-  // 2. Token savings
-  lines.push("## Token savings (hybrid vs control)");
+  // 2. Token + wall savings
+  lines.push("## Token savings (ratel vs control)");
   lines.push("");
   if (savings.length === 0) {
-    lines.push("_No control + hybrid pairs in this run._");
+    lines.push("_No control + ratel pairs in this run._");
   } else {
     lines.push(
-      "| model | input (ctrl → hyb) | input savings | total (ctrl → hyb) | total savings | $ (ctrl → hyb) | $ savings | oracle input | turns Δ |",
+      "| model | input (ctrl → ratel) | input savings | total (ctrl → ratel) | total savings | $ (ctrl → ratel) | $ savings | wall (ctrl → ratel) | wall savings | oracle input | turns Δ |",
     );
-    lines.push("|---|---|---|---|---|---|---|---|---|");
+    lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
     for (const s of savings) {
-      const turnsDelta = s.hybrid_median_turns - s.control_median_turns;
+      const turnsDelta = s.ratel_mean_turns - s.control_mean_turns;
       lines.push(
-        `| ${s.model} | ${fmtNum(s.control_median_input)} → ${fmtNum(s.hybrid_median_input)} | **${fmtPct(s.input_savings_pct)}** | ${fmtNum(s.control_median_total)} → ${fmtNum(s.hybrid_median_total)} | **${fmtPct(s.total_savings_pct)}** | ${fmtDollars(s.control_median_dollars)} → ${fmtDollars(s.hybrid_median_dollars)} | **${fmtPct(s.dollar_savings_pct)}** | ${fmtNum(s.oracle_median_input)} | ${turnsDelta >= 0 ? "+" : ""}${fmtNum(turnsDelta)} |`,
+        `| ${s.model} | ${fmtNum(s.control_mean_input)} → ${fmtNum(s.ratel_mean_input)} | **${fmtPct(s.input_savings_pct)}** | ${fmtNum(s.control_mean_total)} → ${fmtNum(s.ratel_mean_total)} | **${fmtPct(s.total_savings_pct)}** | ${fmtDollars(s.control_mean_dollars)} → ${fmtDollars(s.ratel_mean_dollars)} | **${fmtPct(s.dollar_savings_pct)}** | ${fmtSeconds(s.control_mean_wall_ms)} → ${fmtSeconds(s.ratel_mean_wall_ms)} | **${fmtPct(s.wall_savings_pct)}** | ${fmtNum(s.oracle_mean_input)} | ${turnsDelta >= 0 ? "+" : ""}${fmtNum(turnsDelta)} |`,
       );
     }
   }
@@ -379,23 +432,6 @@ export function renderReport(args: {
     lines.push(
       `| ${f.arm} | ${f.model} | ${f.pass} | ${f.fail} | ${f.errored} | ${f.missing_gold} | ${f.step_limit} |`,
     );
-  }
-  lines.push("");
-
-  // 5. Variance flags. Skip `control`: its variance is expected (token use scales
-  // with how many tools were dumped in × how long the agent flailed) and is not
-  // a finding. Hybrid/oracle are where consistency is part of the claim.
-  const flagged = stats.filter((s) => s.arm !== "control" && s.variance_ratio > 1.5);
-  lines.push("## Variance flags (hybrid / oracle, p90/median > 1.5)");
-  lines.push("");
-  if (flagged.length === 0) {
-    lines.push("_No high-variance cells in hybrid / oracle._");
-  } else {
-    for (const s of flagged) {
-      lines.push(
-        `- **${s.arm} / ${s.model}**: p90/median = ${s.variance_ratio.toFixed(2)}× — investigate scenario-level outliers.`,
-      );
-    }
   }
   lines.push("");
 
