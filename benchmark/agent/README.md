@@ -21,6 +21,8 @@ Each arm is an `AgentDescriptor` (`{ id, label, run(input) }`) defined in its ow
 
 The default `--arms` list excludes `claude-sdk-tool-search` (it lives behind a local-only gitignored file); opt in via `--arms ...,claude-sdk-tool-search` on a host that has wired it up.
 
+`control-oracle` is committed in the default arm list, deviating from ADR-0006 ("oracle drops from the default arm list... stays available behind a flag"). Even under stubbed execution it's the cleanest selection-noise floor — the model's output coherence given exactly the gold tools and no distractors — and we want it in every report rather than gated behind a flag.
+
 ### Adding a local-only arm
 
 Drop a new file in `src/agents/non-control/` whose name starts with `ignore.` (matches the local `.gitignore` rule). Export a `descriptor: AgentDescriptor` with a unique `id`. The runner's auto-discovery picks it up next time. Use this for prototypes, closed-SDK baselines, or any arm you don't want to commit yet.
