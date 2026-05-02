@@ -77,6 +77,9 @@ export function dollarCost(
   pricing: PricingTable = DEFAULT_PRICING,
 ): number {
   const price = pricing[modelId];
+  // Unknown models (incl. `ollama:*` local runs) intentionally return $0 — the
+  // caller can spot a stale price table by cross-referencing raw tokens with
+  // expected provider rates. For local runs the $0 is real, not stale.
   if (!price) return 0;
   return (
     (tokens.input * price.inputPer1M +
@@ -92,7 +95,10 @@ export interface MeterContext {
   arm: Arm;
   model: string;
   runIndex: number;
+  /** Tools the model directly sees this run (= `BuiltArm.activeToolIds.length`). */
   catalogSize: number;
+  /** Universe the BM25 ranked against this run (gold + distractors). Same across arms in a cell. */
+  poolSize: number;
   seed: number;
   /**
    * Map from AI-SDK function name → canonical tool id for direct (non-gateway)
@@ -142,6 +148,7 @@ export async function meter(
     model: ctx.model,
     run_index: ctx.runIndex,
     catalog_size: ctx.catalogSize,
+    pool_size: ctx.poolSize,
     seed: ctx.seed,
     input_tokens: summary.inputTokens,
     output_tokens: summary.outputTokens,

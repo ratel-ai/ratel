@@ -42,6 +42,8 @@ export function mean(xs: number[]): number {
 export interface ArmModelStats {
   arm: Arm;
   model: string;
+  /** Distinct `pool_size` values seen in this group; multiple values mean the campaign mixed pool sizes. */
+  pool_sizes: number[];
   n: number;
   success_rate: number;
   median_input_tokens: number;
@@ -71,10 +73,12 @@ export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
     const totals = arr.map((c) => c.total_tokens);
     const turns = arr.map((c) => c.turns);
     const costs = arr.map((c) => c.dollar_cost);
+    const poolSizes = [...new Set(arr.map((c) => c.pool_size))].sort((a, b) => a - b);
     const med = median(inputs);
     out.push({
       arm,
       model,
+      pool_sizes: poolSizes,
       n: arr.length,
       success_rate: arr.length === 0 ? 0 : passed / arr.length,
       median_input_tokens: med,
@@ -302,12 +306,13 @@ export function renderReport(args: {
   lines.push("## Headline");
   lines.push("");
   lines.push(
-    "| arm | model | n | success | median input | median total | median turns | median $ | p90/median input |",
+    "| arm | model | pool | n | success | median input | median total | median turns | median $ | p90/median input |",
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|");
   for (const s of stats) {
+    const pool = s.pool_sizes.length === 0 ? "—" : s.pool_sizes.join(",");
     lines.push(
-      `| ${s.arm} | ${s.model} | ${s.n} | ${fmtPct(s.success_rate * 100)} | ${fmtNum(s.median_input_tokens)} | ${fmtNum(s.median_total_tokens)} | ${fmtNum(s.median_turns)} | ${fmtDollars(s.median_dollar_cost)} | ${s.variance_ratio.toFixed(2)}× |`,
+      `| ${s.arm} | ${s.model} | ${pool} | ${s.n} | ${fmtPct(s.success_rate * 100)} | ${fmtNum(s.median_input_tokens)} | ${fmtNum(s.median_total_tokens)} | ${fmtNum(s.median_turns)} | ${fmtDollars(s.median_dollar_cost)} | ${s.variance_ratio.toFixed(2)}× |`,
     );
   }
   lines.push("");

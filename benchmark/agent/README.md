@@ -13,8 +13,9 @@ src/
   corpus.ts           reads the shared JSONL scenario format
   judges/
     programmatic.ts   selection-intersection (per ADR-0006)
-    llm.ts            Sonnet-as-judge primary for mode (c)
+    llm.ts            Sonnet-as-judge primary for mode (c) (prompt-only fallback when no criteria)
   metering.ts         tokens, calls, turns, cost wrapped around agent.generate
+  pool.ts             builds the per-scenario tool pool (gold + seeded distractors)
   report.ts           aggregator (medians, savings, retrieval, taxonomy)
   report-cli.ts       entry — pnpm report
   run-all.ts          entry — pnpm run-all (whole benchmark: ingest + a + b + c + report)
@@ -28,11 +29,13 @@ src/
 pnpm -F @ratel-ai/benchmark run-all
 ```
 
-Ingests both corpora (if missing), runs retrieval modes (a) + (b), skips mode (c) until it ships, and renders REPORT.md. See [`benchmark/README.md`](../README.md) for the full description.
+Ingests both corpora (if missing), runs retrieval modes (a) + (b), runs the mode-(c) agent campaign with conservative defaults if a provider key is set (skipped with a notice otherwise — keeping `run-all` $0 by default), and renders REPORT.md. See [`benchmark/README.md`](../README.md) for the full description.
 
-Flags: `--force` (re-ingest), `--skip-ingest`, `--only metatool|toolret`.
+Flags: `--force` (re-ingest), `--skip-ingest`, `--skip-agent` (skip mode (c) even with keys), `--only metatool|toolret`.
 
-## Run an agent campaign (mode c — coming soon)
+The auto-invoked mode (c) defaults to: 50 sampled scenarios × 1 run × all three arms, available models only (`claude-sonnet-4-6` and/or `gpt-5.4-mini` depending on which key is set), pool size 180, $5 global cap. For the headline variance run see the next section.
+
+## Run the headline agent campaign (mode c)
 
 ```bash
 # Required env (one or both):
@@ -42,22 +45,55 @@ Flags: `--force` (re-ingest), `--skip-ingest`, `--only metatool|toolret`.
 # The default --corpus path expects the ingested MetaTool snapshot at
 # benchmark/test-data/metatool.jsonl. Run `pnpm -F @ratel-ai/benchmark run-all`
 # (or `cargo run -p ratel-benchmark-retrieval --release -- ingest metatool --download`)
-# first. Defaults run all three arms × both models × 1 run; use --runs 5 for the
-# full v0.1.1 variance protocol.
+# first.
 
 pnpm -F @ratel-ai/benchmark start \
   --output benchmark/agent/results/agent.jsonl \
+  --scenarios 200 \
   --arms control,hybrid,oracle \
   --models gpt-5.4-mini,claude-sonnet-4-6 \
   --runs 5 \
   --top-k 5 \
+  --pool-size 180 \
   --max-steps 12 \
   --dollar-global 25
 ```
 
-Resumable — re-runs skip cells already in `agent.jsonl` unless `--force`.
+Resumable — re-runs skip cells already in `agent.jsonl` unless `--force`. `--scenarios N` samples a deterministic seeded subset of the full ~21k MetaTool query set; the same `--seed` reproduces the same subset across runs.
 
-The mode-(c) wiring in `start` is currently the v0.1.1-harness scaffolding; until the mode-(c) slice in the plan lands, prefer `run-all` for end-to-end runs (it skips this step with a notice).
+`--pool-size` controls the per-scenario tool catalog (gold + distractors pulled from other scenarios). The default (180) sits at the MetaTool plugin universe ceiling; smaller values stress retrieval less, larger values are clamped at the universe size.
+
+For a fast local smoke (~$0.20–$1):
+
+```bash
+pnpm -F @ratel-ai/benchmark start \
+  --scenarios 50 --runs 1 \
+  --arms control,hybrid,oracle \
+  --models claude-sonnet-4-6 \
+  --pool-size 180 \
+  --dollar-global 5
+```
+
+## Local models (Ollama)
+
+The `ollama:` model prefix routes through a local [Ollama](https://ollama.com) server's OpenAI-compatible endpoint — no API keys, $0 cost. Tool calling depends on the model's native function-calling support: Qwen / Llama families work well, Gemma is hit-or-miss.
+
+```bash
+# Make sure Ollama is running and the model is pulled (`ollama pull qwen3.5`).
+
+pnpm -F @ratel-ai/benchmark start \
+  --scenarios 50 --runs 1 \
+  --arms control,hybrid \
+  --models ollama:qwen3.5,ollama:gemma4 \
+  --pool-size 180 \
+  --judge-model ollama:qwen3.5    # cost-free local judge
+```
+
+Flags:
+- `--ollama-base-url URL` — override the default `http://localhost:11434/v1` (or set `OLLAMA_BASE_URL` in the env). Useful for remote Ollama instances.
+- `--judge-model MODEL` — pick any model id (cloud or `ollama:*`) for the LLM judge. Defaults to `claude-sonnet-4-6` when `ANTHROPIC_API_KEY` is set, otherwise the LLM judge is disabled and only the programmatic verdict is recorded.
+
+`dollar_cost` is recorded as `0` for `ollama:*` cells — `--dollar-global` and `--dollar-cell` therefore never trip on local-only runs. If you mix cloud + local models in one run, the caps still bound the cloud spend. The model id keeps its `ollama:` prefix in the JSONL row and the report so local vs cloud cells stay distinguishable.
 
 ## Generate the report only
 
@@ -76,4 +112,4 @@ Auto-discovers every `*retrieval.jsonl` under `benchmark/results/` if `--retriev
 pnpm -F @ratel-ai/benchmark test
 ```
 
-Unit tests cover the corpus reader, arm builders, metering math, both judges (programmatic and LLM-error paths), runner orchestration (resume / dollar caps / cell iteration), and report aggregations. Real LLM calls are not exercised in unit tests.
+Unit tests cover the corpus reader, arm builders, metering math, both judges (programmatic intersection + LLM prompt-only fallback), pool universe + distractor expansion, runner orchestration (resume / dollar caps / cell iteration / seeded sampling), and report aggregations. Real LLM calls are not exercised in unit tests.

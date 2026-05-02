@@ -1,16 +1,20 @@
 // Unified entrypoint for the benchmark suite. Drives both retrieval modes
-// (MetaTool + ToolRet, the Rust crate) and — once shipped — the agent campaign
-// (mode (c)), then emits the merged REPORT.md.
+// (MetaTool + ToolRet, the Rust crate), then the agent campaign (mode (c)) if
+// at least one provider key is set, then emits the merged REPORT.md.
 //
 // Behavior:
 //   1. Ingest each corpus if its normalized JSONL is missing (`--download`).
 //   2. Run BM25 retrieval over each corpus at corpus-appropriate pool sizes.
-//   3. Mode (c): print a "not yet implemented" notice and skip.
+//   3. If `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set (and `--skip-agent` is
+//      not), spawn the agent campaign with conservative defaults — small
+//      sampled subset, 1 run/cell, all three arms, $5 global cap. Skipped with
+//      a notice otherwise so the rest of run-all stays $0 and CI-friendly.
 //   4. Render REPORT.md from the retrieval JSONLs (and agent.jsonl when present).
 //
 // Flags:
 //   --force         re-ingest even if the snapshot already exists
 //   --skip-ingest   never call the ingest CLI (fail loudly if missing)
+//   --skip-agent    never run mode (c), even if a provider key is present
 //   --only NAME     restrict to a single corpus: "metatool" | "toolret"
 
 import { spawnSync } from "node:child_process";
@@ -116,12 +120,56 @@ function retrieval(spec: CorpusSpec): void {
   ]);
 }
 
-function modeCNotice(): void {
-  console.log(
-    "\n→ mode (c) — agent campaign\n" +
-      "  not yet implemented (see progress.md). When mode (c) ships, this orchestrator " +
-      "will invoke the agent runner here before the report step.",
-  );
+/**
+ * Mode (c) — agent campaign. Gated on a provider key being available, so a
+ * clean clone with no `.env` still runs the free retrieval modes + report.
+ *
+ * The `--skip-agent` flag short-circuits this even when keys are present (e.g.
+ * for a fast iteration on the report layout). Defaults are deliberately
+ * conservative — a developer iterating locally shouldn't blow $25 by typing
+ * `pnpm run-all`. The first headline campaign is launched explicitly via
+ * `pnpm -F @ratel-ai/benchmark start --runs 5 ...` (see agent/README.md).
+ */
+function agentCampaign(skipAgent: boolean): void {
+  if (skipAgent) {
+    console.log("\n→ mode (c) — agent campaign\n  --skip-agent set, skipping.");
+    return;
+  }
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  if (!hasOpenAI && !hasAnthropic) {
+    console.log(
+      "\n→ mode (c) — agent campaign\n" +
+        "  no provider key set (OPENAI_API_KEY / ANTHROPIC_API_KEY). Skipping. " +
+        "Set one and re-run, or invoke `pnpm -F @ratel-ai/benchmark start ...` directly.",
+    );
+    return;
+  }
+  const models: string[] = [];
+  if (hasAnthropic) models.push("claude-sonnet-4-6");
+  if (hasOpenAI) models.push("gpt-5.4-mini");
+
+  // Conservative defaults for an automated invocation: small sampled subset,
+  // 1 run per cell, all three arms (so the report has the full picture), $5 cap.
+  // Override these by calling `pnpm -F @ratel-ai/benchmark start` directly.
+  runStep("agent campaign (mode c)", "pnpm", [
+    "-F",
+    "@ratel-ai/benchmark",
+    "start",
+    "--scenarios",
+    "50",
+    "--runs",
+    "1",
+    "--arms",
+    "control,hybrid,oracle",
+    "--models",
+    models.join(","),
+    "--pool-size",
+    "180",
+    "--dollar-global",
+    "5",
+    "--quiet",
+  ]);
 }
 
 function report(): void {
@@ -133,6 +181,7 @@ function report(): void {
 function main(): void {
   const force = hasFlag("--force");
   const skipIngest = hasFlag("--skip-ingest");
+  const skipAgent = hasFlag("--skip-agent");
   const only = flagValue("--only") as CorpusName | undefined;
 
   const targets = only ? CORPORA.filter((c) => c.name === only) : CORPORA;
@@ -145,7 +194,7 @@ function main(): void {
     retrieval(spec);
   }
 
-  modeCNotice();
+  agentCampaign(skipAgent);
   report();
 
   console.log("\n✓ benchmark run-all complete.");

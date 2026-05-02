@@ -4,6 +4,12 @@
 // Resumable: skips cells already present in the output JSONL unless `force` is
 // set. Cost guards bound per-cell and global spend so a misconfigured catalog
 // can't burn through the budget.
+//
+// The corpora ship per-scenario `candidate_pool` containing only the gold
+// tools; the runner pools distractors from other scenarios at startup
+// (`buildToolUniverse`) and synthesizes per-scenario pools at the configured
+// `poolSize` (`expandPool`). Same pool drives every arm in a cell so the
+// "fat baseline vs Ratel" comparison is fair.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -13,7 +19,8 @@ import { loadScenarios } from "./corpus.js";
 import { judgeLLM } from "./judges/llm.js";
 import { judgeProgrammatic } from "./judges/programmatic.js";
 import { type AgentLikeResult, meter, type PricingTable } from "./metering.js";
-import type { Arm, CellResult, Scenario } from "./types.js";
+import { buildToolUniverse, expandPool } from "./pool.js";
+import type { Arm, CellResult, Scenario, ToolSpec } from "./types.js";
 
 export interface RunnerModel {
   /** Stable id used in the JSONL row (e.g. "gpt-5.4-mini"). Must match the pricing table. */
@@ -30,6 +37,8 @@ export interface RunnerConfig {
   models: RunnerModel[];
   runsPerCell: number;
   topK: number;
+  /** Total tools per scenario (gold + distractors). The catalog size every arm ranks against. */
+  poolSize: number;
   maxSteps: number;
   perRunTimeoutMs: number;
   dollarCellCap: number;
@@ -54,6 +63,7 @@ export type RunCellFn = (args: {
   builtArm: BuiltArm;
   model: RunnerModel;
   runIndex: number;
+  poolSize: number;
   config: RunnerConfig;
 }) => Promise<CellResult>;
 
@@ -175,9 +185,10 @@ export async function defaultRunCell(args: {
   builtArm: BuiltArm;
   model: RunnerModel;
   runIndex: number;
+  poolSize: number;
   config: RunnerConfig;
 }): Promise<CellResult> {
-  const { scenario, arm, builtArm, model, runIndex, config } = args;
+  const { scenario, arm, builtArm, model, runIndex, poolSize, config } = args;
   const agent = new ToolLoopAgent({
     model: model.model,
     tools: builtArm.tools,
@@ -191,6 +202,7 @@ export async function defaultRunCell(args: {
     model: model.id,
     runIndex,
     catalogSize: builtArm.activeToolIds.length,
+    poolSize,
     seed: config.seed,
     nameToId: builtArm.nameToId,
   };
@@ -205,13 +217,15 @@ export async function defaultRunCell(args: {
 
   const { cell } = await meter(ctx, generate, config.pricing);
 
-  const programmatic = judgeProgrammatic(scenario.gold_trace, cell.effective_tool_ids);
+  const programmatic = judgeProgrammatic(scenario.gold_tools, cell.effective_tool_ids);
   cell.programmatic_verdict = programmatic.verdict;
 
-  // Run LLM judge as a tiebreaker / fallback when programmatic gives no signal.
+  // Run LLM judge as a tiebreaker / fallback when programmatic gives no signal,
+  // or as a coherence check on top of a programmatic fail.
   if (config.judgeModel && (programmatic.verdict === "n/a" || programmatic.verdict === "fail")) {
     const judged = await judgeLLM({
-      judgeCriteria: scenario.judge_criteria ?? "",
+      prompt: scenario.prompt,
+      judgeCriteria: scenario.judge_criteria,
       finalText: cell.final_text,
       model: config.judgeModel,
     });
@@ -220,11 +234,42 @@ export async function defaultRunCell(args: {
   return cell;
 }
 
+/**
+ * Seeded shuffle so a `--scenarios N` subset is representative of the full
+ * corpus rather than an id-sorted prefix (which on MetaTool would cluster all
+ * `metatool-mt-*` rows at the head). Same `seed` reproduces the same subset
+ * across runs — important for resume.
+ */
+function sampleScenarios(
+  scenarios: Scenario[],
+  limit: number | undefined,
+  seed: number,
+): Scenario[] {
+  if (limit === undefined || limit >= scenarios.length) return scenarios;
+  const shuffled = [...scenarios];
+  let h = seed >>> 0;
+  // Fisher-Yates with a mulberry32 PRNG seeded from `seed`.
+  const rng = () => {
+    h = (h + 0x6d2b79f5) >>> 0;
+    let t = h;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled.slice(0, limit);
+}
+
 export async function run(config: RunnerConfig): Promise<RunnerSummary> {
-  const scenarios = loadScenarios(config.corpusPath).slice(
-    0,
-    config.scenarioLimit ?? Number.POSITIVE_INFINITY,
-  );
+  const allScenarios = loadScenarios(config.corpusPath);
+  const scenarios = sampleScenarios(allScenarios, config.scenarioLimit, config.seed);
+
+  // Universe is built from the full corpus, not the sampled subset, so smaller
+  // runs still have a realistic distractor population to draw from.
+  const universe = buildToolUniverse(allScenarios);
 
   mkdirSync(dirname(config.outputPath), { recursive: true });
   if (config.force && existsSync(config.outputPath)) {
@@ -239,8 +284,9 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
   let stopped: RunnerSummary["stopped_reason"] = "completed";
 
   outer: for (const scenario of scenarios) {
+    const expandedPool: ToolSpec[] = expandPool(scenario, universe, config.poolSize, config.seed);
     for (const arm of config.arms) {
-      const builtArm = buildArm(arm, scenario, config.topK);
+      const builtArm = buildArm(arm, scenario, expandedPool, config.topK);
       for (const model of config.models) {
         let cellDollars = 0;
         for (let runIndex = 0; runIndex < config.runsPerCell; runIndex++) {
@@ -269,6 +315,7 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
             builtArm,
             model,
             runIndex,
+            poolSize: expandedPool.length,
             config,
           });
           appendRow(config.outputPath, cell);

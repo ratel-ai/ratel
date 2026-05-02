@@ -45,6 +45,7 @@ function cell(over: Partial<CellResult>): CellResult {
     model: "gpt-5.4-mini",
     run_index: 0,
     catalog_size: 5,
+    pool_size: 30,
     seed: 42,
     input_tokens: 1000,
     output_tokens: 200,
@@ -105,6 +106,20 @@ describe("statsByArmModel", () => {
     expect(control?.median_input_tokens).toBe(1250);
     expect(hybrid?.median_input_tokens).toBe(250);
     expect(hybrid?.success_rate).toBe(1);
+  });
+
+  it("surfaces the distinct pool_size values per (arm, model) group", () => {
+    const cells = [
+      cell({ arm: "control", pool_size: 180 }),
+      cell({ arm: "control", pool_size: 180 }),
+      cell({ arm: "hybrid", pool_size: 180 }),
+      cell({ arm: "hybrid", pool_size: 30 }), // mixed-pool campaign
+    ];
+    const stats = statsByArmModel(cells);
+    const control = stats.find((s) => s.arm === "control");
+    const hybrid = stats.find((s) => s.arm === "hybrid");
+    expect(control?.pool_sizes).toEqual([180]);
+    expect(hybrid?.pool_sizes).toEqual([30, 180]);
   });
 });
 

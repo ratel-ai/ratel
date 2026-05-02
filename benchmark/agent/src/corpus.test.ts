@@ -15,13 +15,6 @@ const sample: Scenario = {
     },
   ],
   gold_tools: ["fs.read_file"],
-  gold_trace: [
-    {
-      tool_id: "fs.read_file",
-      args: { path: "/etc/hosts" },
-      response: { contents: "127.0.0.1 localhost\n" },
-    },
-  ],
   judge_criteria: "mentions localhost",
   category: "filesystem",
 };

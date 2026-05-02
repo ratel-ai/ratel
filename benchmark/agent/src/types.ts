@@ -1,5 +1,6 @@
-// Shared types. Mirror the Rust `Scenario` shape from `benchmark/src/corpus.rs`
-// so both layers consume the same JSONL files without an adapter.
+// Shared types. Mirror the Rust `Scenario` shape from
+// `benchmark/retrieval/src/corpus.rs` so both layers consume the same JSONL
+// files without an adapter.
 
 export interface ToolSpec {
   id: string;
@@ -9,18 +10,11 @@ export interface ToolSpec {
   output_schema?: Record<string, unknown>;
 }
 
-export interface GoldCall {
-  tool_id: string;
-  args: Record<string, unknown>;
-  response?: Record<string, unknown>;
-}
-
 export interface Scenario {
   id: string;
   prompt: string;
   candidate_pool: ToolSpec[];
   gold_tools: string[];
-  gold_trace: GoldCall[];
   judge_criteria?: string;
   category?: string;
 }
@@ -48,7 +42,10 @@ export interface CellResult {
   arm: Arm;
   model: string;
   run_index: number;
+  /** Tools the model directly sees this run (= what its context pays for). */
   catalog_size: number;
+  /** Universe the BM25 ranked against this run (gold + distractors). Same across arms in a cell. */
+  pool_size: number;
   seed: number;
   // Tokens
   input_tokens: number;

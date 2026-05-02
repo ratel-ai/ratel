@@ -1,6 +1,8 @@
-// Arm builders. Each one takes a scenario and returns the tool dictionary that
-// gets handed to a Vercel AI SDK ToolLoopAgent. Every arm uses the same stub
-// executor so the only variable across arms is *which tools the agent sees*.
+// Arm builders. Each one takes a scenario and the expanded tool pool (gold +
+// distractors, sized + ordered by `pool.expandPool`) and returns the tool
+// dictionary that gets handed to a Vercel AI SDK ToolLoopAgent. Every arm uses
+// the same stub executor — there are no canned responses for v0.1.1's corpora —
+// so the only variable across arms is *which tools the agent sees*.
 
 import {
   type ExecutableTool,
@@ -11,7 +13,7 @@ import {
   ToolCatalog,
 } from "@ratel-ai/sdk";
 import { type Tool as AISDKTool, jsonSchema, tool } from "ai";
-import type { Arm, GoldCall, Scenario, ToolSpec } from "./types.js";
+import type { Arm, Scenario, ToolSpec } from "./types.js";
 
 export interface BuiltArm {
   arm: Arm;
@@ -44,12 +46,11 @@ export function sanitizeToolName(id: string): string {
 
 function registerDirect(
   spec: ToolSpec,
-  stubs: Map<string, unknown>,
   tools: Record<string, AISDKTool>,
   nameToId: Map<string, string>,
   activeToolIds: string[],
 ): void {
-  const exec = toExecutable(spec, stubs);
+  const exec = toExecutable(spec);
   const name = sanitizeToolName(exec.id);
   if (Object.hasOwn(tools, name)) {
     throw new Error(
@@ -62,30 +63,21 @@ function registerDirect(
   activeToolIds.push(exec.id);
 }
 
-/** Bundle the executor + stub responses with each tool definition. */
-function toExecutable(spec: ToolSpec, stubResponses: Map<string, unknown>): ExecutableTool {
+/**
+ * Bundle the executor with each tool definition. v0.1.1's MetaTool/ToolRet
+ * corpora ship no canned responses, so the executor returns a fixed stub —
+ * what matters is the agent's *selection*, not the response payload (per
+ * ADR-0006).
+ */
+function toExecutable(spec: ToolSpec): ExecutableTool {
   return {
     id: spec.id,
     name: spec.name,
     description: spec.description,
     inputSchema: spec.input_schema,
     outputSchema: spec.output_schema ?? {},
-    execute: async (_args) => {
-      const canned = stubResponses.get(spec.id);
-      if (canned !== undefined) return canned;
-      return { _stub: "no canned response for this tool", toolId: spec.id };
-    },
+    execute: async (_args) => ({ _stub: "stubbed for benchmark", toolId: spec.id }),
   };
-}
-
-function buildStubMap(goldTrace: GoldCall[]): Map<string, unknown> {
-  const map = new Map<string, unknown>();
-  for (const call of goldTrace) {
-    if (!map.has(call.tool_id)) {
-      map.set(call.tool_id, call.response ?? {});
-    }
-  }
-  return map;
 }
 
 function toAISDK(exec: ExecutableTool): AISDKTool {
@@ -96,38 +88,40 @@ function toAISDK(exec: ExecutableTool): AISDKTool {
   });
 }
 
-/** Control arm — every tool in the candidate pool, no Ratel layer. */
-export function buildControl(scenario: Scenario): BuiltArm {
-  const stubs = buildStubMap(scenario.gold_trace);
+/** Control arm — every tool in the expanded pool, no Ratel layer. */
+export function buildControl(_scenario: Scenario, pool: ToolSpec[]): BuiltArm {
   const tools: Record<string, AISDKTool> = {};
   const activeToolIds: string[] = [];
   const nameToId = new Map<string, string>();
-  for (const spec of scenario.candidate_pool) {
-    registerDirect(spec, stubs, tools, nameToId, activeToolIds);
+  for (const spec of pool) {
+    registerDirect(spec, tools, nameToId, activeToolIds);
   }
   return { arm: "control", tools, activeToolIds, nameToId };
 }
 
-/** Oracle arm — only the gold tools. The "model can't do better than this" upper bound. */
+/**
+ * Oracle arm — only the gold tools. The "model can't do better than this"
+ * upper bound. Pulls gold specs from `scenario.candidate_pool` (where the
+ * ingest contract guarantees they're present); the expanded pool is irrelevant
+ * because oracle never sees distractors.
+ */
 export function buildOracle(scenario: Scenario): BuiltArm {
-  const stubs = buildStubMap(scenario.gold_trace);
   const goldSet = new Set(scenario.gold_tools);
   const tools: Record<string, AISDKTool> = {};
   const activeToolIds: string[] = [];
   const nameToId = new Map<string, string>();
   for (const spec of scenario.candidate_pool) {
     if (!goldSet.has(spec.id)) continue;
-    registerDirect(spec, stubs, tools, nameToId, activeToolIds);
+    registerDirect(spec, tools, nameToId, activeToolIds);
   }
   return { arm: "oracle", tools, activeToolIds, nameToId };
 }
 
-/** Hybrid arm — BM25 top-K from the candidate pool plus the two Ratel gateway tools. */
-export function buildHybrid(scenario: Scenario, topK: number): BuiltArm {
-  const stubs = buildStubMap(scenario.gold_trace);
+/** Hybrid arm — BM25 top-K from the expanded pool plus the two Ratel gateway tools. */
+export function buildHybrid(scenario: Scenario, pool: ToolSpec[], topK: number): BuiltArm {
   const catalog = new ToolCatalog();
-  for (const spec of scenario.candidate_pool) {
-    catalog.register(toExecutable(spec, stubs));
+  for (const spec of pool) {
+    catalog.register(toExecutable(spec));
   }
   const tools: Record<string, AISDKTool> = {
     [SEARCH_TOOLS_ID]: toAISDK(searchToolsTool(catalog)),
@@ -148,7 +142,6 @@ export function buildHybrid(scenario: Scenario, topK: number): BuiltArm {
         input_schema: exec.inputSchema as Record<string, unknown>,
         output_schema: (exec.outputSchema as Record<string, unknown>) ?? {},
       },
-      stubs,
       tools,
       nameToId,
       activeToolIds,
@@ -158,12 +151,12 @@ export function buildHybrid(scenario: Scenario, topK: number): BuiltArm {
 }
 
 /** Convenience: build any arm by name. */
-export function buildArm(arm: Arm, scenario: Scenario, topK: number): BuiltArm {
+export function buildArm(arm: Arm, scenario: Scenario, pool: ToolSpec[], topK: number): BuiltArm {
   switch (arm) {
     case "control":
-      return buildControl(scenario);
+      return buildControl(scenario, pool);
     case "hybrid":
-      return buildHybrid(scenario, topK);
+      return buildHybrid(scenario, pool, topK);
     case "oracle":
       return buildOracle(scenario);
   }

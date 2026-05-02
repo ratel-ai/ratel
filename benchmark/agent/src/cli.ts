@@ -2,17 +2,25 @@
 // corpus is the ingested MetaTool snapshot, which `pnpm -F @ratel-ai/benchmark
 // run-all` produces from a clean clone.
 //
-// Required env: at least one of OPENAI_API_KEY (for gpt-5.4-mini) or
-// ANTHROPIC_API_KEY (for claude-sonnet-4-6 + the LLM judge).
+// Required env: at least one of OPENAI_API_KEY (for gpt-*) or
+// ANTHROPIC_API_KEY (for claude-* + the default LLM judge). Local models via
+// Ollama need no key — the `ollama:` prefix routes through the local server's
+// OpenAI-compatible endpoint (http://localhost:11434/v1 by default). Examples:
+//   --models ollama:qwen3.5,ollama:gemma4
+//   --judge-model ollama:qwen3.5         (cost-free judge)
 
 import { anthropic } from "@ai-sdk/anthropic";
-import { openai } from "@ai-sdk/openai";
+import { createOpenAI, openai } from "@ai-sdk/openai";
+import type { LanguageModel } from "ai";
 import { config as loadEnv } from "dotenv";
 import { resolveRepoPath } from "./paths.js";
 import { type RunnerConfig, type RunnerModel, run } from "./runner.js";
 import type { Arm } from "./types.js";
 
 loadEnv();
+
+const OLLAMA_PREFIX = "ollama:";
+const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1";
 
 interface ParsedArgs {
   corpus: string;
@@ -22,12 +30,16 @@ interface ParsedArgs {
   models: string[];
   runs: number;
   topK: number;
+  poolSize: number;
   maxSteps: number;
   timeoutMs: number;
   dollarCell: number;
   dollarGlobal: number;
   force: boolean;
   noJudge: boolean;
+  /** Override the LLM judge model. Defaults to claude-sonnet-4-6 if ANTHROPIC_API_KEY is set. */
+  judgeModelId?: string;
+  ollamaBaseURL: string;
   seed: number;
   logLevel: "quiet" | "normal" | "verbose";
 }
@@ -40,12 +52,14 @@ function parseArgs(argv: string[]): ParsedArgs {
     models: ["gpt-5.4-mini", "claude-sonnet-4-6"],
     runs: 1,
     topK: 5,
+    poolSize: 180,
     maxSteps: 12,
     timeoutMs: 60_000,
     dollarCell: 0.5,
     dollarGlobal: 25,
     force: false,
     noJudge: false,
+    ollamaBaseURL: process.env.OLLAMA_BASE_URL ?? DEFAULT_OLLAMA_BASE_URL,
     seed: 42,
     logLevel: "normal",
   };
@@ -78,6 +92,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--top-k":
         args.topK = Number(next());
         break;
+      case "--pool-size":
+        args.poolSize = Number(next());
+        break;
       case "--max-steps":
         args.maxSteps = Number(next());
         break;
@@ -95,6 +112,12 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--no-judge":
         args.noJudge = true;
+        break;
+      case "--judge-model":
+        args.judgeModelId = next();
+        break;
+      case "--ollama-base-url":
+        args.ollamaBaseURL = next();
         break;
       case "--seed":
         args.seed = Number(next());
@@ -114,7 +137,35 @@ function parseArgs(argv: string[]): ParsedArgs {
   return args;
 }
 
-function resolveModel(modelId: string): RunnerModel {
+interface ResolveOpts {
+  ollamaBaseURL: string;
+}
+
+/**
+ * Resolve an Ollama model id (e.g. `ollama:qwen3.5`) into a Vercel AI SDK
+ * `LanguageModel` that talks to the local Ollama server via its OpenAI-
+ * compatible endpoint. The model id stored on the cell row keeps the
+ * `ollama:` prefix so reports clearly distinguish local vs cloud models.
+ *
+ * Tool calling depends on the underlying model's native function-calling
+ * support — Qwen / Llama families work well; Gemma is hit-or-miss. If a
+ * local-model cell consistently logs zero tool calls, the model likely
+ * isn't function-calling and the run is mainly measuring "did the model
+ * write a coherent answer." That's still informative — just call it out
+ * when reading the report.
+ */
+function resolveOllama(modelTag: string, baseURL: string): RunnerModel {
+  // `.chat(...)` forces the legacy `/v1/chat/completions` wire format. The
+  // default factory call uses OpenAI's newer Responses API (typed items like
+  // `item_reference`), which Ollama's OpenAI-compat endpoint doesn't speak.
+  const provider = createOpenAI({ baseURL, apiKey: "ollama" });
+  return { id: `${OLLAMA_PREFIX}${modelTag}`, model: provider.chat(modelTag) };
+}
+
+function resolveModel(modelId: string, opts: ResolveOpts): RunnerModel {
+  if (modelId.startsWith(OLLAMA_PREFIX)) {
+    return resolveOllama(modelId.slice(OLLAMA_PREFIX.length), opts.ollamaBaseURL);
+  }
   if (modelId.startsWith("claude")) {
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error(`model ${modelId} requires ANTHROPIC_API_KEY (set in .env or shell)`);
@@ -127,21 +178,37 @@ function resolveModel(modelId: string): RunnerModel {
     }
     return { id: modelId, model: openai(modelId) };
   }
-  throw new Error(`unknown model provider for: ${modelId}`);
+  throw new Error(
+    `unknown model provider for: ${modelId} ` +
+      `(expected gpt-*, claude-*, or ${OLLAMA_PREFIX}<tag>)`,
+  );
+}
+
+/**
+ * Pick the LLM judge model. `--no-judge` always wins. With `--judge-model X`
+ * the user picks any provider (including `ollama:*`); without it the default
+ * is Sonnet when ANTHROPIC_API_KEY is set, else no LLM judge (programmatic
+ * judge still runs).
+ */
+function resolveJudge(parsed: ParsedArgs): LanguageModel | undefined {
+  if (parsed.noJudge) return undefined;
+  if (parsed.judgeModelId) {
+    return resolveModel(parsed.judgeModelId, { ollamaBaseURL: parsed.ollamaBaseURL }).model;
+  }
+  if (process.env.ANTHROPIC_API_KEY) return anthropic("claude-sonnet-4-6");
+  return undefined;
 }
 
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
-  const models = parsed.models.map(resolveModel);
-  const judgeModel = parsed.noJudge
-    ? undefined
-    : process.env.ANTHROPIC_API_KEY
-      ? anthropic("claude-sonnet-4-6")
-      : undefined;
+  const resolveOpts: ResolveOpts = { ollamaBaseURL: parsed.ollamaBaseURL };
+  const models = parsed.models.map((m) => resolveModel(m, resolveOpts));
+  const judgeModel = resolveJudge(parsed);
 
   if (!parsed.noJudge && !judgeModel) {
     console.warn(
-      "warn: ANTHROPIC_API_KEY not set; LLM-as-judge disabled (programmatic judge still active).",
+      "warn: no LLM judge configured (set ANTHROPIC_API_KEY or pass --judge-model); " +
+        "programmatic judge still active.",
     );
   }
 
@@ -153,6 +220,7 @@ async function main(): Promise<void> {
     models,
     runsPerCell: parsed.runs,
     topK: parsed.topK,
+    poolSize: parsed.poolSize,
     maxSteps: parsed.maxSteps,
     perRunTimeoutMs: parsed.timeoutMs,
     dollarCellCap: parsed.dollarCell,

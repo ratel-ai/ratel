@@ -1,34 +1,39 @@
 import { describe, expect, it } from "vitest";
 import { effectiveToolIds } from "../metering.js";
-import type { GoldCall, ToolCall } from "../types.js";
+import type { ToolCall } from "../types.js";
 import { judgeProgrammatic } from "./programmatic.js";
 
 describe("judgeProgrammatic", () => {
-  const gold: GoldCall[] = [
-    { tool_id: "fs.read_file", args: {}, response: {} },
-    { tool_id: "mail.send", args: {}, response: {} },
-  ];
-
-  it("passes when all gold ids appear in the effective trace", () => {
-    expect(judgeProgrammatic(gold, ["fs.read_file", "mail.send"]).verdict).toBe("pass");
+  it("passes when the single gold tool is in the effective trace", () => {
+    expect(judgeProgrammatic(["fs.read_file"], ["fs.read_file"]).verdict).toBe("pass");
   });
 
-  it("passes when gold appears in any order", () => {
-    expect(judgeProgrammatic(gold, ["mail.send", "fs.read_file"]).verdict).toBe("pass");
-  });
-
-  it("fails when a gold id is missing", () => {
-    const d = judgeProgrammatic(gold, ["fs.read_file"]);
-    expect(d.verdict).toBe("fail");
+  it("passes when at least one of multiple gold tools is invoked (intersection-only)", () => {
+    // ADR-0006: selection-only judge — pass iff effective ∩ gold ≠ ∅.
+    const d = judgeProgrammatic(["fs.read_file", "mail.send"], ["fs.read_file"]);
+    expect(d.verdict).toBe("pass");
     expect(d.missing_gold).toEqual(["mail.send"]);
   });
 
-  it("returns n/a when gold trace is empty", () => {
+  it("fails when no gold id appears in the effective trace", () => {
+    const d = judgeProgrammatic(["fs.read_file", "mail.send"], ["calendar.create_event"]);
+    expect(d.verdict).toBe("fail");
+    expect(d.missing_gold.sort()).toEqual(["fs.read_file", "mail.send"]);
+    expect(d.extra_calls).toEqual(["calendar.create_event"]);
+  });
+
+  it("fails when the agent invoked nothing", () => {
+    expect(judgeProgrammatic(["fs.read_file"], []).verdict).toBe("fail");
+  });
+
+  it("returns n/a when gold_tools is empty (defensive contract)", () => {
+    // Shouldn't happen on MetaTool/ToolRet — every scenario has ≥1 gold tool —
+    // but the judge stays defined when callers pass an empty set.
     expect(judgeProgrammatic([], ["anything"]).verdict).toBe("n/a");
   });
 
-  it("flags non-gold ids as extras", () => {
-    const d = judgeProgrammatic(gold, ["fs.read_file", "mail.send", "fs.delete_file"]);
+  it("flags non-gold ids as extras even on a passing verdict", () => {
+    const d = judgeProgrammatic(["fs.read_file"], ["fs.read_file", "fs.delete_file"]);
     expect(d.verdict).toBe("pass");
     expect(d.extra_calls).toEqual(["fs.delete_file"]);
   });
@@ -59,10 +64,7 @@ describe("effectiveToolIds (gateway unwrap)", () => {
         args: { toolId: "mail.send", args: { to: "x@y.com", subject: "hi", body: "x" } },
       },
     ];
-    const verdict = judgeProgrammatic(
-      [{ tool_id: "mail.send", args: {}, response: {} }],
-      effectiveToolIds(calls),
-    );
+    const verdict = judgeProgrammatic(["mail.send"], effectiveToolIds(calls));
     expect(verdict.verdict).toBe("pass");
   });
 

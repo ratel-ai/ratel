@@ -141,12 +141,15 @@ describe("meter", () => {
         model: "gpt-5.4-mini",
         runIndex: 0,
         catalogSize: 30,
+        poolSize: 180,
         seed: 42,
       },
       async () => fakeResult,
     );
     expect(cell.scenario_id).toBe("fs-001");
     expect(cell.arm).toBe("hybrid");
+    expect(cell.catalog_size).toBe(30);
+    expect(cell.pool_size).toBe(180);
     expect(cell.input_tokens).toBe(210);
     expect(cell.tool_calls_total).toBe(3);
     expect(cell.gateway_calls).toBe(1);
@@ -165,6 +168,7 @@ describe("meter", () => {
         model: "gpt-5.4-mini",
         runIndex: 0,
         catalogSize: 5,
+        poolSize: 30,
         seed: 1,
       },
       async () => {

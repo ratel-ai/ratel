@@ -1,42 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { buildControl, buildHybrid, buildOracle, sanitizeToolName } from "./arms.js";
-import type { Scenario } from "./types.js";
+import { buildArm, buildControl, buildHybrid, buildOracle, sanitizeToolName } from "./arms.js";
+import type { Scenario, ToolSpec } from "./types.js";
+
+const candidatePool: ToolSpec[] = [
+  {
+    id: "fs.read_file",
+    name: "read_file",
+    description: "Read a file from disk.",
+    input_schema: { type: "object", properties: { path: { type: "string" } } },
+    output_schema: { type: "object" },
+  },
+  {
+    id: "fs.write_file",
+    name: "write_file",
+    description: "Write contents to a file.",
+    input_schema: { type: "object", properties: { path: { type: "string" } } },
+    output_schema: { type: "object" },
+  },
+  {
+    id: "mail.send",
+    name: "send_email",
+    description: "Send an email via SMTP.",
+    input_schema: { type: "object", properties: { to: { type: "string" } } },
+    output_schema: { type: "object" },
+  },
+];
 
 const scenario: Scenario = {
   id: "test-001",
   prompt: "read a file from disk",
-  candidate_pool: [
-    {
-      id: "fs.read_file",
-      name: "read_file",
-      description: "Read a file from disk.",
-      input_schema: { type: "object", properties: { path: { type: "string" } } },
-      output_schema: { type: "object" },
-    },
-    {
-      id: "fs.write_file",
-      name: "write_file",
-      description: "Write contents to a file.",
-      input_schema: { type: "object", properties: { path: { type: "string" } } },
-      output_schema: { type: "object" },
-    },
-    {
-      id: "mail.send",
-      name: "send_email",
-      description: "Send an email via SMTP.",
-      input_schema: { type: "object", properties: { to: { type: "string" } } },
-      output_schema: { type: "object" },
-    },
-  ],
+  candidate_pool: [candidatePool[0]],
   gold_tools: ["fs.read_file"],
-  gold_trace: [
-    {
-      tool_id: "fs.read_file",
-      args: { path: "/etc/hosts" },
-      response: { contents: "127.0.0.1 localhost" },
-    },
-  ],
 };
+
+function distractor(id: string, description: string): ToolSpec {
+  return { id, name: id, description, input_schema: {} };
+}
 
 describe("sanitizeToolName", () => {
   it("leaves ids that already match the provider pattern unchanged", () => {
@@ -60,47 +59,55 @@ describe("sanitizeToolName", () => {
 });
 
 describe("buildControl", () => {
-  it("exposes every tool, keyed by sanitized name, with nameToId mapping back to id", () => {
-    const built = buildControl(scenario);
+  it("exposes every tool in the expanded pool, keyed by sanitized name", () => {
+    const built = buildControl(scenario, candidatePool);
     expect(built.arm).toBe("control");
     expect(built.activeToolIds).toEqual(["fs.read_file", "fs.write_file", "mail.send"]);
-    // Dict keys are provider-acceptable function names (no dots).
     expect(Object.keys(built.tools).sort()).toEqual(["fs_read_file", "fs_write_file", "mail_send"]);
-    // Reverse mapping is populated so metering can canonicalize the trace.
     expect(built.nameToId.get("fs_read_file")).toBe("fs.read_file");
     expect(built.nameToId.get("mail_send")).toBe("mail.send");
     expect(built.catalog).toBeUndefined();
   });
 
+  it("scales with the expanded pool — 50-distractor case", () => {
+    const distractors = Array.from({ length: 49 }, (_, i) =>
+      distractor(`d${i}`, `distractor ${i}`),
+    );
+    const pool = [candidatePool[0], ...distractors];
+    const built = buildControl(scenario, pool);
+    expect(built.activeToolIds).toHaveLength(50);
+    expect(built.activeToolIds[0]).toBe("fs.read_file"); // gold first
+  });
+
   it("throws on tool-id collisions after sanitization", () => {
-    const collision: Scenario = {
-      ...scenario,
-      candidate_pool: [
-        { ...scenario.candidate_pool[0], id: "fs.read_file" },
-        { ...scenario.candidate_pool[0], id: "fs/read_file" },
-      ],
-    };
-    expect(() => buildControl(collision)).toThrow(/collision/);
+    const collision: ToolSpec[] = [
+      { ...candidatePool[0], id: "fs.read_file" },
+      { ...candidatePool[0], id: "fs/read_file" },
+    ];
+    expect(() => buildControl(scenario, collision)).toThrow(/collision/);
   });
 });
 
 describe("buildOracle", () => {
-  it("exposes only the gold tools, keyed by sanitized name", () => {
-    const built = buildOracle(scenario);
+  it("exposes only the gold tools, regardless of the expanded pool size", () => {
+    const distractors = Array.from({ length: 50 }, (_, i) => distractor(`d${i}`, `noise ${i}`));
+    const pool = [candidatePool[0], ...distractors];
+    // candidate_pool must carry the gold spec — that's the ingest contract.
+    const fullScenario: Scenario = { ...scenario, candidate_pool: [candidatePool[0]] };
+    const built = buildOracle(fullScenario);
     expect(built.arm).toBe("oracle");
     expect(built.activeToolIds).toEqual(["fs.read_file"]);
     expect(Object.keys(built.tools)).toEqual(["fs_read_file"]);
     expect(built.nameToId.get("fs_read_file")).toBe("fs.read_file");
+    // Distractors in the expanded pool are deliberately ignored.
+    expect(pool.length).toBeGreaterThan(built.activeToolIds.length);
   });
 
   it("respects multi-gold-tool scenarios", () => {
     const multi: Scenario = {
       ...scenario,
+      candidate_pool: [candidatePool[0], candidatePool[1]],
       gold_tools: ["fs.read_file", "fs.write_file"],
-      gold_trace: [
-        ...scenario.gold_trace,
-        { tool_id: "fs.write_file", args: { path: "/tmp/a", contents: "x" }, response: {} },
-      ],
     };
     const built = buildOracle(multi);
     expect(built.activeToolIds.sort()).toEqual(["fs.read_file", "fs.write_file"]);
@@ -109,20 +116,27 @@ describe("buildOracle", () => {
 
 describe("buildHybrid", () => {
   it("includes the two gateway tools plus top-K hits", () => {
-    const built = buildHybrid(scenario, 2);
+    const built = buildHybrid(scenario, candidatePool, 2);
     expect(built.arm).toBe("hybrid");
     expect(built.tools.search_tools).toBeDefined();
     expect(built.tools.invoke_tool).toBeDefined();
-    // BM25 should rank fs.read_file high for "read a file from disk"
     expect(built.activeToolIds).toContain("fs.read_file");
     expect(built.activeToolIds.length).toBeLessThanOrEqual(2);
     expect(built.catalog).toBeDefined();
   });
 
-  it("populates the catalog with the full pool, even though only top-K are direct tools", () => {
-    const built = buildHybrid(scenario, 1);
+  it("populates the catalog with the full expanded pool, even if only top-K become direct tools", () => {
+    const built = buildHybrid(scenario, candidatePool, 1);
     expect(built.catalog?.has("fs.read_file")).toBe(true);
     expect(built.catalog?.has("fs.write_file")).toBe(true);
     expect(built.catalog?.has("mail.send")).toBe(true);
+  });
+});
+
+describe("buildArm dispatcher", () => {
+  it("routes by arm name", () => {
+    expect(buildArm("control", scenario, candidatePool, 5).arm).toBe("control");
+    expect(buildArm("hybrid", scenario, candidatePool, 5).arm).toBe("hybrid");
+    expect(buildArm("oracle", scenario, candidatePool, 5).arm).toBe("oracle");
   });
 });
