@@ -74,7 +74,6 @@ function baseConfig(corpusPath: string, outputPath: string): RunnerConfig {
     poolSize: 30,
     maxSteps: 8,
     perRunTimeoutMs: 1000,
-    dollarCellCap: 1.0,
     dollarGlobalCap: 100.0,
     force: false,
     seed: 42,

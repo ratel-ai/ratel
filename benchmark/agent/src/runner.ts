@@ -3,7 +3,7 @@
 // per cell.
 //
 // Resumable: skips cells already present in the output JSONL unless `force` is
-// set. Cost guards bound per-cell and global spend so a misconfigured catalog
+// set. A global dollar cap bounds total spend so a misconfigured catalog
 // can't burn through the budget.
 //
 // Each arm is an `AgentDescriptor` defined in its own file under `agents/`;
@@ -53,7 +53,6 @@ export interface RunnerConfig {
   poolSize: number;
   maxSteps: number;
   perRunTimeoutMs: number;
-  dollarCellCap: number;
   dollarGlobalCap: number;
   force: boolean;
   judgeModel?: LanguageModel;
@@ -73,9 +72,9 @@ export interface RunnerConfig {
    * tests; the CLI defaults to 10 because the benchmark is wall-clock-bound
    * on provider latency.
    *
-   * Dollar caps are best-effort under concurrency: when a cap fires, in-flight
-   * cells finish but no new ones start, so overshoot is bounded by
-   * `concurrency × max_cell_cost`.
+   * The global dollar cap is best-effort under concurrency: when it fires,
+   * in-flight cells finish but no new ones start, so overshoot is bounded by
+   * `concurrency × per-cell cost`.
    */
   concurrency?: number;
   /** Optional injection point for tests: replaces the real agent dispatch. */
@@ -103,7 +102,7 @@ export interface RunnerSummary {
   cells_skipped: number;
   scenarios: number;
   total_dollars: number;
-  stopped_reason: "completed" | "global_cap" | "cell_cap";
+  stopped_reason: "completed" | "global_cap";
 }
 
 interface CellKey {
@@ -342,8 +341,6 @@ interface PendingTask {
   model: RunnerModel;
   runIndex: number;
   expandedPool: ToolSpec[];
-  /** Key into `cellDollarsByGroup` — accumulated cost per (scenario, model). */
-  cellGroupKey: string;
 }
 
 /**
@@ -392,7 +389,6 @@ function buildTaskQueue(
             model,
             runIndex,
             expandedPool,
-            cellGroupKey: `${scenario.id}::${model.id}`,
           });
         }
       }
@@ -445,31 +441,20 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
   let cellsRun = 0;
   let totalDollars = 0;
   let stopped: RunnerSummary["stopped_reason"] = "completed";
-  const cellDollarsByGroup = new Map<string, number>();
   let nextTaskIdx = 0;
 
-  // Pick the next runnable task, or `null` if the queue is drained / a cap
-  // has fired. Synchronous; safe to call from any worker because the JS event
-  // loop guarantees no preemption between the read and the increment.
+  // Pick the next runnable task, or `null` if the queue is drained / the
+  // global dollar cap has fired. Synchronous; safe to call from any worker
+  // because the JS event loop guarantees no preemption between the read and
+  // the increment.
   const pickTask = (): PendingTask | null => {
     if (stopped !== "completed") return null;
     if (totalDollars >= config.dollarGlobalCap) {
       stopped = "global_cap";
       return null;
     }
-    while (nextTaskIdx < tasks.length) {
-      const t = tasks[nextTaskIdx++];
-      const groupSpend = cellDollarsByGroup.get(t.cellGroupKey) ?? 0;
-      if (groupSpend >= config.dollarCellCap) {
-        // The (scenario, model) tuple has already burned its budget. Skip
-        // remaining runs for it but keep going on other tuples — same shape
-        // as the legacy `break` of the inner runs loop.
-        stopped = stopped === "completed" ? "cell_cap" : stopped;
-        continue;
-      }
-      return t;
-    }
-    return null;
+    if (nextTaskIdx >= tasks.length) return null;
+    return tasks[nextTaskIdx++];
   };
 
   const totalToRun = tasks.length;
@@ -490,10 +475,6 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
       appendRow(config.outputPath, cell);
       cellsRun++;
       totalDollars += cell.dollar_cost;
-      cellDollarsByGroup.set(
-        task.cellGroupKey,
-        (cellDollarsByGroup.get(task.cellGroupKey) ?? 0) + cell.dollar_cost,
-      );
       logCell(cell, logLevel, cellsRun, totalToRun);
       if (totalDollars >= config.dollarGlobalCap) {
         stopped = "global_cap";

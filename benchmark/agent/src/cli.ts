@@ -84,7 +84,6 @@ interface ParsedArgs {
   poolSize: number;
   maxSteps: number;
   timeoutMs: number;
-  dollarCell: number;
   dollarGlobal: number;
   force: boolean;
   noJudge: boolean;
@@ -110,7 +109,6 @@ function parseArgs(argv: string[], knownArms: readonly string[]): ParsedArgs {
     poolSize: 180,
     maxSteps: 12,
     timeoutMs: 60_000,
-    dollarCell: 0.5,
     dollarGlobal: 25,
     force: false,
     noJudge: false,
@@ -160,9 +158,6 @@ function parseArgs(argv: string[], knownArms: readonly string[]): ParsedArgs {
         break;
       case "--timeout-ms":
         args.timeoutMs = Number(next());
-        break;
-      case "--dollar-cell":
-        args.dollarCell = Number(next());
         break;
       case "--dollar-global":
         args.dollarGlobal = Number(next());
@@ -311,7 +306,6 @@ async function main(): Promise<void> {
     poolSize: parsed.poolSize,
     maxSteps: parsed.maxSteps,
     perRunTimeoutMs: parsed.timeoutMs,
-    dollarCellCap: parsed.dollarCell,
     dollarGlobalCap: parsed.dollarGlobal,
     force: parsed.force,
     judgeModel,
