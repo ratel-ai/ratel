@@ -6,6 +6,8 @@ Runnable demos of `@ratel-ai/sdk` wired into real agent frameworks. Each entry i
 
 ```
 ai-sdk/    Ratel + Vercel AI SDK — top-K tool filtering before generateText
+mcp/       Ratel + an upstream MCP server over stdio — no LLM, no API key
+mcp-chat/  Interactive REPL against an MCP-backed agent (Vercel AI SDK + OpenAI)
 ```
 
 ## Conventions

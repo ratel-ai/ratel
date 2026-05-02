@@ -66,6 +66,31 @@ const invoke = invokeToolTool(catalog);
 
 Tool injection (replace vs suggest, [ADR 0003](../../../docs/adr/0003-tool-selection-replace-vs-suggest.md)) is layered on later when the SDK exposes a higher-level adapter.
 
+### `registerMcpServer` — index an MCP server's tools into the catalog
+
+Hand the catalog a connected MCP transport and Ratel will call `tools/list`, register each upstream tool with a server-namespaced id (`<name>__<toolName>`), and wire its executor to `tools/call` over the same connection. Use any [transport from `@modelcontextprotocol/sdk`](https://modelcontextprotocol.io) — stdio, Streamable HTTP, or SSE.
+
+```ts
+import { ToolCatalog, registerMcpServer } from "@ratel-ai/sdk";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+const catalog = new ToolCatalog();
+const handle = await registerMcpServer(catalog, {
+  name: "fs",
+  transport: new StdioClientTransport({
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-everything"],
+  }),
+});
+
+// handle.toolIds → ["fs__echo", "fs__add", ...]
+// catalog.search / catalog.invoke now see the upstream tools alongside any local ones.
+
+await handle.close(); // disconnect on shutdown
+```
+
+Errors from the upstream `tools/call` propagate as rejected promises from `catalog.invoke`, so they slot into the same handling as local executors.
+
 ## Package shape
 
 - Package name: `@ratel-ai/sdk`

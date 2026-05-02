@@ -8,3 +8,5 @@ export {
   SEARCH_TOOLS_ID,
   searchToolsTool,
 } from "./gateway.js";
+export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
+export { registerMcpServer } from "./mcp.js";
