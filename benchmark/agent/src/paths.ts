@@ -1,6 +1,6 @@
 // Resolve relative paths against the repo root, not the current cwd. pnpm runs
 // workspace scripts with `cwd = <package dir>`, so a default path like
-// `benchmark/test-data/synthetic.jsonl` would otherwise resolve under
+// `benchmark/test-data/metatool.jsonl` would otherwise resolve under
 // `benchmark/agent/benchmark/...`. Anchoring to the root makes the CLI behave
 // the same whether invoked from the repo root or from the package directory.
 

@@ -974,7 +974,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ratel-benchmark"
+name = "ratel-benchmark-retrieval"
 version = "0.0.0"
 dependencies = [
  "anyhow",

@@ -3,7 +3,7 @@ resolver = "3"
 members = [
     "src/core/lib",
     "src/sdk/ts/native",
-    "benchmark",
+    "benchmark/retrieval",
 ]
 
 [workspace.package]

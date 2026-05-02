@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { Scenario } from "./types.js";
 
 export function parseScenarios(jsonl: string): Scenario[] {
@@ -17,6 +17,13 @@ export function parseScenarios(jsonl: string): Scenario[] {
 }
 
 export function loadScenarios(path: string): Scenario[] {
+  if (!existsSync(path)) {
+    throw new Error(
+      `corpus not found at ${path}. Run \`pnpm -F @ratel-ai/benchmark run-all\` ` +
+        `to ingest + run end-to-end, or \`cargo run -p ratel-benchmark-retrieval --release ` +
+        `-- ingest metatool --download\` to ingest only.`,
+    );
+  }
   const contents = readFileSync(path, "utf-8");
   return parseScenarios(contents);
 }

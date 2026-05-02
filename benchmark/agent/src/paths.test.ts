@@ -9,14 +9,9 @@ describe("paths", () => {
   });
 
   it("resolves relative paths against the repo root, not cwd", () => {
-    expect(resolveRepoPath("benchmark/test-data/synthetic.jsonl")).toBe(
-      resolve(REPO_ROOT, "benchmark/test-data/synthetic.jsonl"),
+    expect(resolveRepoPath("benchmark/test-data/metatool.jsonl")).toBe(
+      resolve(REPO_ROOT, "benchmark/test-data/metatool.jsonl"),
     );
-  });
-
-  it("default corpus path resolves to an existing file", () => {
-    const p = resolveRepoPath("benchmark/test-data/synthetic.jsonl");
-    expect(existsSync(p)).toBe(true);
   });
 
   it("absolute paths pass through unchanged", () => {

@@ -52,4 +52,5 @@ CLAUDE.local.md
 # Benchmark outputs
 benchmark/results/
 benchmark/fixtures/
+benchmark/test-data/
 benchmark/agent/results/

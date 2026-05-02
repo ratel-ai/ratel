@@ -9,7 +9,8 @@
     "lint": "biome check src",
     "test": "pnpm -F @ratel-ai/sdk build && vitest run",
     "start": "pnpm -F @ratel-ai/sdk build && tsx src/cli.ts",
-    "report": "tsx src/report-cli.ts"
+    "report": "tsx src/report-cli.ts",
+    "run-all": "tsx src/run-all.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",

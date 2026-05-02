@@ -1,5 +1,6 @@
-// CLI entry. Wires AI SDK provider models to the runner. Default scenario corpus
-// is the synthetic fixture so a smoke run works without ToolBench access.
+// CLI entry. Wires AI SDK provider models to the runner. Default scenario
+// corpus is the ingested MetaTool snapshot, which `pnpm -F @ratel-ai/benchmark
+// run-all` produces from a clean clone.
 //
 // Required env: at least one of OPENAI_API_KEY (for gpt-5.4-mini) or
 // ANTHROPIC_API_KEY (for claude-sonnet-4-6 + the LLM judge).
@@ -33,7 +34,7 @@ interface ParsedArgs {
 
 function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {
-    corpus: "benchmark/test-data/synthetic.jsonl",
+    corpus: "benchmark/test-data/metatool.jsonl",
     output: "benchmark/agent/results/agent.jsonl",
     arms: ["control", "hybrid", "oracle"],
     models: ["gpt-5.4-mini", "claude-sonnet-4-6"],

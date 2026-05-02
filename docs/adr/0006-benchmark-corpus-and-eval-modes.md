@@ -6,6 +6,8 @@ Date: 2026-05-01
 
 Accepted. Supersedes the corpus and primary-oracle decisions in ADR-0005; the rest of 0005 (two-layer harness, N=5 + median/p90, two-model matrix, catalog scaling, gitignored manual results, fairness/determinism controls) stands.
 
+Partially superseded by ADR-0007: the "snapshot normalized JSONL into the repo" stance and the MetaTool sampling cap are dropped. Two retrieval modes, the gold-only pooling, and the judge stack stand.
+
 ## Context
 
 ADR-0005 locked **ToolBench** as the corpus. Two issues surfaced when we went to ingest it:
