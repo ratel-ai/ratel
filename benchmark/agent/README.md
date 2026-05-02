@@ -56,10 +56,15 @@ pnpm -F @ratel-ai/benchmark start \
   --top-k 5 \
   --pool-size 180 \
   --max-steps 12 \
-  --dollar-global 25
+  --dollar-global 25 \
+  --concurrency 10
 ```
 
-Resumable — re-runs skip cells already in `agent.jsonl` unless `--force`. `--scenarios N` samples a deterministic seeded subset of the full ~21k MetaTool query set; the same `--seed` reproduces the same subset across runs.
+Resumable — re-runs skip cells already in `agent.jsonl` unless `--force`. Pass `--ephemeral` instead to write each smoke into a fresh `benchmark/agent/results/ephemeral/agent-<timestamp>.jsonl` file so the canonical `agent.jsonl` stays untouched. `--scenarios N` samples a deterministic seeded subset of the full ~21k MetaTool query set; the same `--seed` reproduces the same subset across runs.
+
+`--concurrency N` (default 10) controls how many cells run in parallel. The benchmark is wall-clock-bound on provider latency, so 10 typically yields ~10× speedup against cloud APIs. Dial down to `1` for Ollama (single-process server) or tight provider tiers. Dollar caps are best-effort under concurrency: in-flight cells finish, no new ones start, so overshoot is bounded by `concurrency × per-cell-cost` (~$0.30 at the defaults).
+
+`--timeout-ms N` (default 60000) sets the per-cell wall-clock timeout. Cloud models rarely need more, but local Ollama models (especially CPU-bound or large 70B+) can comfortably exceed a minute on a 12-step trace — bump to `300000` (5 min) or higher when you see `run timed out after 60000ms` errors in the trace.
 
 `--pool-size` controls the per-scenario tool catalog (gold + distractors pulled from other scenarios). The default (180) sits at the MetaTool plugin universe ceiling; smaller values stress retrieval less, larger values are clamped at the universe size.
 
@@ -71,7 +76,8 @@ pnpm -F @ratel-ai/benchmark start \
   --arms control,hybrid,oracle \
   --models claude-sonnet-4-6 \
   --pool-size 180 \
-  --dollar-global 5
+  --dollar-global 5 \
+  --concurrency 10
 ```
 
 ## Local models (Ollama)
@@ -86,7 +92,9 @@ pnpm -F @ratel-ai/benchmark start \
   --arms control,hybrid \
   --models ollama:qwen3.5,ollama:gemma4 \
   --pool-size 180 \
-  --judge-model ollama:qwen3.5    # cost-free local judge
+  --judge-model ollama:qwen3.5 \  # cost-free local judge
+  --concurrency 1 \               # local Ollama is single-process
+  --timeout-ms 300000             # 5 min — local models often need more than 60s
 ```
 
 Flags:

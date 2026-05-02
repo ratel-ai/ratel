@@ -168,6 +168,8 @@ function agentCampaign(skipAgent: boolean): void {
     "180",
     "--dollar-global",
     "5",
+    "--concurrency",
+    "10",
     "--quiet",
   ]);
 }

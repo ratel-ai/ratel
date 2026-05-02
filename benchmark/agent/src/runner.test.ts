@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type RunCellFn, type RunnerConfig, run } from "./runner.js";
+import { appendRow, type RunCellFn, type RunnerConfig, run } from "./runner.js";
 import type { CellResult, Scenario } from "./types.js";
 
 const scenario: Scenario = {
@@ -240,6 +240,152 @@ describe("runner", () => {
     });
     expect(forced.cells_run).toBe(3);
     expect(called3.length).toBe(3);
+  });
+
+  it("appendRow writes one valid JSON line per call without quadratic rewrites", () => {
+    const path = join(tempDir, "appended.jsonl");
+    const sample: CellResult = {
+      scenario_id: "x",
+      arm: "control",
+      model: "m",
+      run_index: 0,
+      catalog_size: 0,
+      pool_size: 0,
+      seed: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cached_input_tokens: 0,
+      cache_creation_tokens: 0,
+      total_tokens: 0,
+      tool_calls_total: 0,
+      tool_calls_unique: 0,
+      gateway_calls: 0,
+      non_gateway_calls: 0,
+      turns: 0,
+      programmatic_verdict: "n/a",
+      judge_verdict: "n/a",
+      final_text: "",
+      finish_reason: "stop",
+      error: null,
+      wall_ms: 0,
+      dollar_cost: 0,
+      tool_calls: [],
+      effective_tool_ids: [],
+    };
+    for (let i = 0; i < 50; i++) {
+      appendRow(path, { ...sample, scenario_id: `s-${i}` });
+    }
+    const lines = readFileSync(path, "utf-8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(50);
+    for (const line of lines) {
+      expect(() => JSON.parse(line)).not.toThrow();
+    }
+    const ids = lines.map((l) => (JSON.parse(l) as CellResult).scenario_id);
+    expect(new Set(ids).size).toBe(50);
+  });
+
+  it("runs cells in parallel under concurrency > 1 and emits one row per cell", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    const scenarios: Scenario[] = Array.from({ length: 30 }, (_, i) => ({
+      ...scenario,
+      id: `s-${String(i).padStart(2, "0")}`,
+    }));
+    writeFileSync(corpus, scenarios.map((s) => JSON.stringify(s)).join("\n"));
+    const output = join(tempDir, "agent.jsonl");
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const slowRunCell: RunCellFn = async (args) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 10));
+      inFlight--;
+      const cell: CellResult = {
+        scenario_id: args.scenario.id,
+        arm: args.arm,
+        model: args.model.id,
+        run_index: args.runIndex,
+        catalog_size: 1,
+        pool_size: args.poolSize,
+        seed: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        cached_input_tokens: 0,
+        cache_creation_tokens: 0,
+        total_tokens: 0,
+        tool_calls_total: 0,
+        tool_calls_unique: 0,
+        gateway_calls: 0,
+        non_gateway_calls: 0,
+        turns: 0,
+        programmatic_verdict: "pass",
+        judge_verdict: "n/a",
+        final_text: "ok",
+        finish_reason: "stop",
+        error: null,
+        wall_ms: 10,
+        dollar_cost: 0.001,
+        tool_calls: [],
+        effective_tool_ids: ["fs.read_file"],
+      };
+      return cell;
+    };
+
+    const summary = await run({
+      ...baseConfig(corpus, output),
+      arms: ["control"],
+      concurrency: 5,
+      runCell: slowRunCell,
+    });
+
+    expect(summary.cells_run).toBe(30);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(5);
+
+    const lines = readFileSync(output, "utf-8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(30);
+    const parsed = lines.map((l) => JSON.parse(l) as CellResult);
+    const ids = parsed.map((c) => c.scenario_id).sort();
+    expect(new Set(ids).size).toBe(30);
+  });
+
+  it("under concurrency, the global dollar cap stops new picks but lets in-flight cells finish", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    const scenarios: Scenario[] = Array.from({ length: 50 }, (_, i) => ({
+      ...scenario,
+      id: `s-${String(i).padStart(2, "0")}`,
+    }));
+    writeFileSync(corpus, scenarios.map((s) => JSON.stringify(s)).join("\n"));
+    const output = join(tempDir, "agent.jsonl");
+    const called: string[] = [];
+
+    // Tiny delay so several workers can be in flight before the cap is observed.
+    const slow: RunCellFn = async (args) => {
+      await new Promise((r) => setTimeout(r, 5));
+      const cell = await makeFakeRunCell(0.001, called)({ ...args });
+      return cell;
+    };
+
+    const concurrency = 5;
+    const summary = await run({
+      ...baseConfig(corpus, output),
+      arms: ["control"],
+      dollarGlobalCap: 0.005, // budget for 5 cells; overshoot bounded by ~concurrency.
+      concurrency,
+      runCell: slow,
+    });
+
+    expect(summary.stopped_reason).toBe("global_cap");
+    // Exactly 5 cells fit under the cap; bounded overshoot is at most `concurrency`
+    // additional cells (the workers that had already picked when the cap fired).
+    expect(summary.cells_run).toBeGreaterThanOrEqual(5);
+    expect(summary.cells_run).toBeLessThanOrEqual(5 + concurrency);
+
+    const lines = readFileSync(output, "utf-8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(summary.cells_run);
+    for (const line of lines) {
+      expect(() => JSON.parse(line)).not.toThrow();
+    }
   });
 
   it("stops at the global dollar cap", async () => {

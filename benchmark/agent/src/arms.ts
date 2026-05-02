@@ -83,9 +83,22 @@ function toExecutable(spec: ToolSpec): ExecutableTool {
 function toAISDK(exec: ExecutableTool): AISDKTool {
   return tool({
     description: exec.description,
-    inputSchema: jsonSchema(exec.inputSchema as Record<string, unknown>),
+    inputSchema: jsonSchema(normalizeInputSchema(exec.inputSchema)),
     execute: exec.execute,
   });
+}
+
+/**
+ * MetaTool ships plugin tools with `input_schema: {}` (no parameters declared).
+ * Anthropic's API rejects any tool whose input_schema lacks `type: "object"`,
+ * so we default the type here at the provider-translation seam. An empty JSON
+ * Schema means "anything"; for a function-call signature the practical
+ * equivalent is "object with no required properties".
+ */
+function normalizeInputSchema(schema: unknown): Record<string, unknown> {
+  const obj = schema && typeof schema === "object" ? (schema as Record<string, unknown>) : {};
+  if (typeof obj.type === "string") return obj;
+  return { ...obj, type: "object" };
 }
 
 /** Control arm — every tool in the expanded pool, no Ratel layer. */

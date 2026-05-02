@@ -25,6 +25,8 @@ const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1";
 interface ParsedArgs {
   corpus: string;
   output: string;
+  outputExplicit: boolean;
+  ephemeral: boolean;
   scenarios?: number;
   arms: Arm[];
   models: string[];
@@ -41,6 +43,8 @@ interface ParsedArgs {
   judgeModelId?: string;
   ollamaBaseURL: string;
   seed: number;
+  /** Cells in flight at once. See `RunnerConfig.concurrency` for cap semantics. */
+  concurrency: number;
   logLevel: "quiet" | "normal" | "verbose";
 }
 
@@ -48,6 +52,8 @@ function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {
     corpus: "benchmark/test-data/metatool.jsonl",
     output: "benchmark/agent/results/agent.jsonl",
+    outputExplicit: false,
+    ephemeral: false,
     arms: ["control", "hybrid", "oracle"],
     models: ["gpt-5.4-mini", "claude-sonnet-4-6"],
     runs: 1,
@@ -61,6 +67,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     noJudge: false,
     ollamaBaseURL: process.env.OLLAMA_BASE_URL ?? DEFAULT_OLLAMA_BASE_URL,
     seed: 42,
+    concurrency: 10,
     logLevel: "normal",
   };
   for (let i = 0; i < argv.length; i++) {
@@ -76,6 +83,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--output":
         args.output = next();
+        args.outputExplicit = true;
+        break;
+      case "--ephemeral":
+        args.ephemeral = true;
         break;
       case "--scenarios":
         args.scenarios = Number(next());
@@ -122,6 +133,14 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--seed":
         args.seed = Number(next());
         break;
+      case "--concurrency": {
+        const n = Number(next());
+        if (!Number.isFinite(n) || n < 1 || !Number.isInteger(n)) {
+          throw new Error(`--concurrency must be a positive integer, got ${n}`);
+        }
+        args.concurrency = n;
+        break;
+      }
       case "--verbose":
       case "-v":
         args.logLevel = "verbose";
@@ -199,8 +218,26 @@ function resolveJudge(parsed: ParsedArgs): LanguageModel | undefined {
   return undefined;
 }
 
+/**
+ * `--ephemeral` writes to a fresh per-run file under
+ * `benchmark/agent/results/ephemeral/<UTC-timestamp>.jsonl` instead of the
+ * shared `agent.jsonl`. Designed for smoke tests / one-off campaigns where
+ * the developer doesn't want to clobber the canonical output and shouldn't
+ * have to think about `--force`. Conflicts with an explicit `--output`.
+ */
+function ephemeralOutputPath(): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `benchmark/agent/results/ephemeral/agent-${stamp}.jsonl`;
+}
+
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
+  if (parsed.ephemeral) {
+    if (parsed.outputExplicit) {
+      throw new Error("--ephemeral and --output are mutually exclusive");
+    }
+    parsed.output = ephemeralOutputPath();
+  }
   const resolveOpts: ResolveOpts = { ollamaBaseURL: parsed.ollamaBaseURL };
   const models = parsed.models.map((m) => resolveModel(m, resolveOpts));
   const judgeModel = resolveJudge(parsed);
@@ -228,12 +265,14 @@ async function main(): Promise<void> {
     force: parsed.force,
     judgeModel,
     seed: parsed.seed,
+    concurrency: parsed.concurrency,
     logLevel: parsed.logLevel,
   };
 
   console.log(
     `running ${parsed.arms.length} arms × ${models.length} models × ${parsed.runs} runs ` +
-      `over ≤ ${parsed.scenarios ?? "all"} scenarios → ${parsed.output}`,
+      `over ≤ ${parsed.scenarios ?? "all"} scenarios at concurrency=${parsed.concurrency} ` +
+      `→ ${parsed.output}`,
   );
   const summary = await run(cfg);
   console.log(

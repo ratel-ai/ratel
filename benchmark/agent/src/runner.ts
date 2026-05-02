@@ -11,7 +11,7 @@
 // `poolSize` (`expandPool`). Same pool drives every arm in a cell so the
 // "fat baseline vs Ratel" comparison is fair.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { type LanguageModel, stepCountIs, ToolLoopAgent } from "ai";
 import { type BuiltArm, buildArm } from "./arms.js";
@@ -53,6 +53,18 @@ export interface RunnerConfig {
    * `verbose` — also print the active tool ids and full tool-call trace
    */
   logLevel?: "quiet" | "normal" | "verbose";
+  /**
+   * How many cells run in parallel. Cells are independent (per-cell catalogs,
+   * fresh agent per call) so the only shared state is the JSONL output and the
+   * accumulators — both serialized inside synchronous boundaries. Default 1
+   * preserves the legacy single-threaded ordering for tests; the CLI defaults
+   * to 10 because the benchmark is wall-clock-bound on provider latency.
+   *
+   * Dollar caps are best-effort under concurrency: when a cap fires, in-flight
+   * cells finish but no new ones start, so overshoot is bounded by
+   * `concurrency × max_cell_cost`.
+   */
+  concurrency?: number;
   /** Optional injection point for tests: replaces the real agent execution. */
   runCell?: RunCellFn;
 }
@@ -109,10 +121,18 @@ function readCompletedKeys(path: string): Set<string> {
   return out;
 }
 
-function appendRow(path: string, cell: CellResult): void {
-  const existing = existsSync(path) ? readFileSync(path, "utf-8") : "";
-  const sep = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
-  writeFileSync(path, `${existing}${sep}${JSON.stringify(cell)}\n`, "utf-8");
+/**
+ * Single-syscall append. Synchronous on purpose: the JS event loop guarantees
+ * no two `appendRow` calls interleave even when multiple workers are in flight
+ * (each worker awaits the agent, then writes synchronously), so no extra
+ * mutex is needed. O(1) per call — important once the JSONL grows past a few
+ * thousand rows.
+ *
+ * Exported for direct testing of the append path; production callers go
+ * through `run`.
+ */
+export function appendRow(path: string, cell: CellResult): void {
+  appendFileSync(path, `${JSON.stringify(cell)}\n`, "utf-8");
 }
 
 function verdictBadge(cell: CellResult): string {
@@ -129,9 +149,12 @@ function logCell(
   cell: CellResult,
   builtArm: BuiltArm,
   level: "quiet" | "normal" | "verbose",
+  done?: number,
+  total?: number,
 ): void {
   if (level === "quiet") return;
-  const tag = `[${cell.scenario_id} · ${cell.arm} · ${cell.model} · #${cell.run_index}]`;
+  const counter = done !== undefined && total !== undefined ? `[${done}/${total}] ` : "";
+  const tag = `${counter}[${cell.scenario_id} · ${cell.arm} · ${cell.model} · #${cell.run_index}]`;
   const verdict = verdictBadge(cell);
   const tokens = `${cell.input_tokens}in/${cell.output_tokens}out`;
   const calls = `${cell.tool_calls_total} calls (${cell.gateway_calls} gw)`;
@@ -263,6 +286,68 @@ function sampleScenarios(
   return shuffled.slice(0, limit);
 }
 
+interface PendingTask {
+  scenario: Scenario;
+  arm: Arm;
+  builtArm: BuiltArm;
+  model: RunnerModel;
+  runIndex: number;
+  expandedPool: ToolSpec[];
+  /** Key into `cellDollarsByGroup` — accumulated cost per (scenario, model). */
+  cellGroupKey: string;
+}
+
+/**
+ * Materializes the full task list ahead of time so the worker pool has a flat
+ * queue to consume. Pre-built `BuiltArm` and expanded pool are shared across
+ * runs of the same (scenario, arm) — both are pure derivations of inputs, so
+ * sharing them is safe and saves repeated work.
+ *
+ * Already-completed cells are filtered out here. The order is the same as the
+ * legacy nested loop (scenarios × arms × models × runs); workers pick from
+ * the head of the queue, so at concurrency=1 behavior is byte-identical to the
+ * pre-parallel runner.
+ */
+function buildTaskQueue(
+  scenarios: Scenario[],
+  universe: ReturnType<typeof buildToolUniverse>,
+  config: RunnerConfig,
+  completed: Set<string>,
+): { tasks: PendingTask[]; cellsSkipped: number } {
+  const tasks: PendingTask[] = [];
+  let cellsSkipped = 0;
+  for (const scenario of scenarios) {
+    const expandedPool = expandPool(scenario, universe, config.poolSize, config.seed);
+    for (const arm of config.arms) {
+      const builtArm = buildArm(arm, scenario, expandedPool, config.topK);
+      for (const model of config.models) {
+        for (let runIndex = 0; runIndex < config.runsPerCell; runIndex++) {
+          const key = cellKeyString({
+            scenarioId: scenario.id,
+            arm,
+            model: model.id,
+            runIndex,
+          });
+          if (completed.has(key)) {
+            cellsSkipped++;
+            continue;
+          }
+          tasks.push({
+            scenario,
+            arm,
+            builtArm,
+            model,
+            runIndex,
+            expandedPool,
+            cellGroupKey: `${scenario.id}::${model.id}`,
+          });
+        }
+      }
+    }
+  }
+  return { tasks, cellsSkipped };
+}
+
 export async function run(config: RunnerConfig): Promise<RunnerSummary> {
   const allScenarios = loadScenarios(config.corpusPath);
   const scenarios = sampleScenarios(allScenarios, config.scenarioLimit, config.seed);
@@ -278,59 +363,83 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
   }
   const completed = config.force ? new Set<string>() : readCompletedKeys(config.outputPath);
 
+  const { tasks, cellsSkipped: initialSkipped } = buildTaskQueue(
+    scenarios,
+    universe,
+    config,
+    completed,
+  );
+
+  const concurrency = Math.max(1, Math.floor(config.concurrency ?? 1));
+  const runCellFn = config.runCell ?? defaultRunCell;
+  const logLevel = config.logLevel ?? "normal";
+
   let cellsRun = 0;
-  let cellsSkipped = 0;
   let totalDollars = 0;
   let stopped: RunnerSummary["stopped_reason"] = "completed";
+  const cellDollarsByGroup = new Map<string, number>();
+  let nextTaskIdx = 0;
 
-  outer: for (const scenario of scenarios) {
-    const expandedPool: ToolSpec[] = expandPool(scenario, universe, config.poolSize, config.seed);
-    for (const arm of config.arms) {
-      const builtArm = buildArm(arm, scenario, expandedPool, config.topK);
-      for (const model of config.models) {
-        let cellDollars = 0;
-        for (let runIndex = 0; runIndex < config.runsPerCell; runIndex++) {
-          const key = cellKeyString({
-            scenarioId: scenario.id,
-            arm,
-            model: model.id,
-            runIndex,
-          });
-          if (completed.has(key)) {
-            cellsSkipped++;
-            continue;
-          }
-          if (totalDollars >= config.dollarGlobalCap) {
-            stopped = "global_cap";
-            break outer;
-          }
-          if (cellDollars >= config.dollarCellCap) {
-            stopped = "cell_cap";
-            break;
-          }
-          const runCellFn = config.runCell ?? defaultRunCell;
-          const cell = await runCellFn({
-            scenario,
-            arm,
-            builtArm,
-            model,
-            runIndex,
-            poolSize: expandedPool.length,
-            config,
-          });
-          appendRow(config.outputPath, cell);
-          cellsRun++;
-          cellDollars += cell.dollar_cost;
-          totalDollars += cell.dollar_cost;
-          logCell(cell, builtArm, config.logLevel ?? "normal");
-        }
+  // Pick the next runnable task, or `null` if the queue is drained / a cap
+  // has fired. Synchronous; safe to call from any worker because the JS event
+  // loop guarantees no preemption between the read and the increment.
+  const pickTask = (): PendingTask | null => {
+    if (stopped !== "completed") return null;
+    if (totalDollars >= config.dollarGlobalCap) {
+      stopped = "global_cap";
+      return null;
+    }
+    while (nextTaskIdx < tasks.length) {
+      const t = tasks[nextTaskIdx++];
+      const groupSpend = cellDollarsByGroup.get(t.cellGroupKey) ?? 0;
+      if (groupSpend >= config.dollarCellCap) {
+        // The (scenario, model) tuple has already burned its budget. Skip
+        // remaining runs for it but keep going on other tuples — same shape
+        // as the legacy `break` of the inner runs loop.
+        stopped = stopped === "completed" ? "cell_cap" : stopped;
+        continue;
+      }
+      return t;
+    }
+    return null;
+  };
+
+  const totalToRun = tasks.length;
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const task = pickTask();
+      if (!task) return;
+      const cell = await runCellFn({
+        scenario: task.scenario,
+        arm: task.arm,
+        builtArm: task.builtArm,
+        model: task.model,
+        runIndex: task.runIndex,
+        poolSize: task.expandedPool.length,
+        config,
+      });
+      // Synchronous tail: append + counters happen without yielding, so two
+      // workers cannot interleave their writes or accumulator updates.
+      appendRow(config.outputPath, cell);
+      cellsRun++;
+      totalDollars += cell.dollar_cost;
+      cellDollarsByGroup.set(
+        task.cellGroupKey,
+        (cellDollarsByGroup.get(task.cellGroupKey) ?? 0) + cell.dollar_cost,
+      );
+      logCell(cell, task.builtArm, logLevel, cellsRun, totalToRun);
+      if (totalDollars >= config.dollarGlobalCap) {
+        stopped = "global_cap";
       }
     }
-  }
+  };
+
+  const workerCount = Math.min(concurrency, Math.max(1, tasks.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   return {
     cells_run: cellsRun,
-    cells_skipped: cellsSkipped,
+    cells_skipped: initialSkipped,
     scenarios: scenarios.length,
     total_dollars: totalDollars,
     stopped_reason: stopped,

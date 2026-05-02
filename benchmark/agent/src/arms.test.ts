@@ -58,6 +58,46 @@ describe("sanitizeToolName", () => {
   });
 });
 
+describe("input schema normalization", () => {
+  // MetaTool tools ship with `input_schema: {}` — Anthropic's API rejects
+  // tools whose input_schema is missing `type: "object"`. The arm builder
+  // is the provider-translation seam, so it normalizes here.
+  it("defaults type to object when the spec ships an empty schema", () => {
+    const built = buildControl(scenario, [{ ...candidatePool[0], input_schema: {} }]);
+    const t = built.tools.fs_read_file as unknown as {
+      inputSchema: { jsonSchema: { type?: string } };
+    };
+    expect(t.inputSchema.jsonSchema.type).toBe("object");
+  });
+
+  it("leaves a valid object schema untouched", () => {
+    const built = buildControl(scenario, [candidatePool[0]]);
+    const t = built.tools.fs_read_file as unknown as {
+      inputSchema: { jsonSchema: { type?: string; properties?: unknown } };
+    };
+    expect(t.inputSchema.jsonSchema.type).toBe("object");
+    expect(t.inputSchema.jsonSchema.properties).toEqual({ path: { type: "string" } });
+  });
+
+  it("normalizes the gateway pool when hybrid registers MetaTool-style tools", () => {
+    const noSchema: ToolSpec = {
+      id: "FinanceTool",
+      name: "FinanceTool",
+      description: "Finance plugin.",
+      input_schema: {},
+    };
+    const built = buildHybrid(
+      { ...scenario, prompt: "FinanceTool", gold_tools: ["FinanceTool"] },
+      [noSchema],
+      1,
+    );
+    const t = built.tools.FinanceTool as unknown as {
+      inputSchema: { jsonSchema: { type?: string } };
+    };
+    expect(t.inputSchema.jsonSchema.type).toBe("object");
+  });
+});
+
 describe("buildControl", () => {
   it("exposes every tool in the expanded pool, keyed by sanitized name", () => {
     const built = buildControl(scenario, candidatePool);
