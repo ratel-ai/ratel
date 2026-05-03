@@ -1,13 +1,13 @@
 # `examples/`
 
-Runnable demos of `@ratel-ai/sdk` wired into real agent frameworks. Each entry is a private workspace package (not published) that depends on `@ratel-ai/sdk` and an external integration.
+Runnable demos of Ratel wired into real agent frameworks and protocol surfaces. Each entry is a private workspace package (not published).
 
 ## Layout
 
 ```
-ai-sdk/    Ratel + Vercel AI SDK — top-K tool filtering before generateText
-mcp/       Ratel + an upstream MCP server over stdio — no LLM, no API key
-mcp-chat/  Interactive REPL against an MCP-backed agent (Vercel AI SDK + OpenAI)
+ai-sdk/      Ratel + Vercel AI SDK — top-K tool filtering before generateText
+mcp-chat/    Interactive REPL against an MCP-backed agent (Vercel AI SDK + OpenAI)
+mcp-server/  Claude Code session driven by Ratel as the only MCP, fronting N upstream MCPs
 ```
 
 ## Conventions

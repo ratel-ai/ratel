@@ -5,6 +5,9 @@
       "src/sdk/**/*.ts",
       "src/sdk/**/*.tsx",
       "src/sdk/**/*.js",
+      "src/integrations/**/*.ts",
+      "src/integrations/**/*.tsx",
+      "src/integrations/**/*.js",
       "benchmark/agent/src/**/*.ts",
       "benchmark/agent/src/**/*.tsx"
     ]

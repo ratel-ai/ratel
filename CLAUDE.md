@@ -9,10 +9,11 @@ Core is a Rust lib (`ratel-core`); language SDKs bundle it. In-process, no infra
 ## Layout
 
 ```
-src/core/    Rust core
-src/sdk/     language SDKs
-benchmark/   eval harness
-docs/        ADRs and other docs
+src/core/           Rust core
+src/sdk/            language SDKs
+src/integrations/   protocol surfaces (MCP server, ...)
+benchmark/          eval harness
+docs/               ADRs and other docs
 ```
 
 Each folder has its own `README.md` with the details. Cargo + pnpm workspaces are rooted at the repo top level.

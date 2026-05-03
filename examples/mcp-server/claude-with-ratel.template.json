@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ratel": {
+      "command": "node",
+      "args": [
+        "<REPO_ROOT>/src/integrations/mcp-server/dist/bin.js",
+        "<REPO_ROOT>/examples/mcp-server/ratel-config.json"
+      ]
+    }
+  }
+}
