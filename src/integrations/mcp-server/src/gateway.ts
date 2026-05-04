@@ -1,7 +1,12 @@
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { type McpServerHandle, registerMcpServer, ToolCatalog } from "@ratel-ai/sdk";
+import {
+  type McpServerHandle,
+  registerMcpServer,
+  ToolCatalog,
+  type UpstreamServerInfo,
+} from "@ratel-ai/sdk";
 import type { RatelConfig, ServerEntry } from "./config.js";
 
 export type TransportFactory = (name: string, entry: ServerEntry) => Transport | undefined;
@@ -13,6 +18,7 @@ export interface BuildGatewayOptions {
 
 export interface GatewayHandle {
   catalog: ToolCatalog;
+  upstreamServers: UpstreamServerInfo[];
   close: () => Promise<void>;
 }
 
@@ -25,6 +31,7 @@ export async function buildGatewayFromConfig(
 
   const catalog = new ToolCatalog();
   const upstreamHandles: McpServerHandle[] = [];
+  const upstreamServers: UpstreamServerInfo[] = [];
 
   for (const [name, entry] of Object.entries(config.mcpServers)) {
     try {
@@ -35,6 +42,9 @@ export async function buildGatewayFromConfig(
       }
       const handle = await registerMcpServer(catalog, { name, transport });
       upstreamHandles.push(handle);
+      const info: UpstreamServerInfo = { name, toolCount: handle.toolIds.length };
+      if (entry.description) info.description = entry.description;
+      upstreamServers.push(info);
     } catch (err) {
       log(`[ratel] failed to register ${name}: ${(err as Error).message}`);
     }
@@ -42,6 +52,7 @@ export async function buildGatewayFromConfig(
 
   return {
     catalog,
+    upstreamServers,
     close: async () => {
       const results = await Promise.allSettled(upstreamHandles.map((h) => h.close()));
       for (const r of results) {

@@ -126,6 +126,63 @@ describe("buildGatewayFromConfig", () => {
     await handle.close();
   });
 
+  it("exposes upstreamServers with name, description from config, and tool count", async () => {
+    const fs = await startUpstream([
+      { name: "read_file", description: "Read a file." },
+      { name: "write_file", description: "Write a file." },
+    ]);
+    const remote = await startUpstream([{ name: "fetch", description: "Fetch a URL." }]);
+    const transports: Record<string, Transport> = {
+      fs: fs.clientTransport,
+      remote: remote.clientTransport,
+    };
+
+    const handle = await buildGatewayFromConfig(
+      {
+        mcpServers: {
+          fs: { type: "stdio", command: "noop", description: "filesystem tools" },
+          remote: { type: "http", url: "https://example.com" },
+        },
+      },
+      { transportFactory: (name) => transports[name] },
+    );
+
+    expect(handle.upstreamServers).toEqual([
+      { name: "fs", description: "filesystem tools", toolCount: 2 },
+      { name: "remote", toolCount: 1 },
+    ]);
+
+    await handle.close();
+    await fs.server.close();
+    await remote.server.close();
+  });
+
+  it("omits failed upstreams from upstreamServers", async () => {
+    const ok = await startUpstream([{ name: "ping", description: "Ping." }]);
+    const handle = await buildGatewayFromConfig(
+      {
+        mcpServers: {
+          broken: { type: "stdio", command: "noop", description: "broken one" },
+          ok: { type: "stdio", command: "noop" },
+          unsupported: { type: "websocket", url: "ws://x" },
+        },
+      },
+      {
+        transportFactory: (name) => {
+          if (name === "broken") throw new Error("boom");
+          if (name === "ok") return ok.clientTransport;
+          return undefined;
+        },
+        logger: () => {},
+      },
+    );
+
+    expect(handle.upstreamServers).toEqual([{ name: "ok", toolCount: 1 }]);
+
+    await handle.close();
+    await ok.server.close();
+  });
+
   it("close() tears down every upstream handle even if one rejects", async () => {
     const upstream = await startUpstream([{ name: "x", description: "x" }]);
     const handle = await buildGatewayFromConfig(

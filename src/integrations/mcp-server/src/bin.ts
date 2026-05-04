@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 import { runCli } from "./cli.js";
+import { defaultPromptAdapter } from "./prompts.js";
 
 async function main() {
-  const { shutdown } = await runCli(process.argv.slice(2));
+  const result = await runCli(process.argv.slice(2), {
+    prompts: defaultPromptAdapter(),
+  });
 
+  if (!result.shutdown) return;
+
+  const shutdown = result.shutdown;
   let shuttingDown = false;
   const onSignal = async (signal: NodeJS.Signals) => {
     if (shuttingDown) return;

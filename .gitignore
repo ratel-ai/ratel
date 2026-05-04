@@ -49,6 +49,9 @@ plan.md
 progress.md
 CLAUDE.local.md
 
+# Ratel local-scope MCP config (per-user, never committed)
+.ratel/config.local.json
+
 # Benchmark outputs
 benchmark/results/
 benchmark/fixtures/

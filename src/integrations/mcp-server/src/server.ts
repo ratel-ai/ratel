@@ -3,15 +3,18 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import {
   type ExecutableTool,
+  formatUpstreamLine,
   invokeToolTool,
   searchToolsTool,
   type ToolCatalog,
+  type UpstreamServerInfo,
 } from "@ratel-ai/sdk";
 
 export interface CreateMcpServerOptions {
   name: string;
   version: string;
   transport: Transport;
+  upstreamServers?: readonly UpstreamServerInfo[];
 }
 
 export interface McpServerHandle {
@@ -22,14 +25,20 @@ export async function createMcpServer(
   catalog: ToolCatalog,
   options: CreateMcpServerOptions,
 ): Promise<McpServerHandle> {
-  const { name, version, transport } = options;
+  const { name, version, transport, upstreamServers } = options;
 
   const gateway: Record<string, ExecutableTool> = {};
-  for (const tool of [searchToolsTool(catalog), invokeToolTool(catalog)]) {
+  for (const tool of [searchToolsTool(catalog, { upstreamServers }), invokeToolTool(catalog)]) {
     gateway[tool.name] = tool;
   }
 
-  const server = new Server({ name, version }, { capabilities: { tools: {} } });
+  const server = new Server(
+    { name, version },
+    {
+      capabilities: { tools: {} },
+      instructions: buildServerInstructions(upstreamServers),
+    },
+  );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: Object.values(gateway).map((tool) => ({
@@ -59,6 +68,17 @@ export async function createMcpServer(
       await server.close();
     },
   };
+}
+
+function buildServerInstructions(upstreams?: readonly UpstreamServerInfo[]): string {
+  const base =
+    "This is the Ratel context-engineering gateway. Before reaching for any built-in capability " +
+    "(web fetch, shell, search, automation, etc.), call `search_tools` first — Ratel may have a " +
+    "purpose-built tool registered for the task. If `search_tools` returns a relevant hit, run it " +
+    "via `invoke_tool` instead of falling back to a generic capability.";
+  if (!upstreams || upstreams.length === 0) return base;
+  const list = upstreams.map(formatUpstreamLine).join("\n");
+  return `${base}\n\nThis catalog aggregates tools from these upstream MCP servers:\n${list}`;
 }
 
 function isObjectSchema(schema: unknown): boolean {

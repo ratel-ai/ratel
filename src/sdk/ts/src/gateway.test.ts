@@ -70,6 +70,37 @@ describe("searchToolsTool", () => {
     const hits = (await tool.execute({ query: "read a file" })) as Array<unknown>;
     expect(Array.isArray(hits)).toBe(true);
   });
+
+  it("description is unchanged when upstreamServers is empty or omitted", () => {
+    const catalog = new ToolCatalog();
+    const baseline = searchToolsTool(catalog).description;
+    expect(searchToolsTool(catalog, {}).description).toBe(baseline);
+    expect(searchToolsTool(catalog, { upstreamServers: [] }).description).toBe(baseline);
+  });
+
+  it("description appends a list of upstream MCP servers with name, optional desc, optional tool count", () => {
+    const catalog = new ToolCatalog();
+    const baseline = searchToolsTool(catalog).description;
+
+    const tool = searchToolsTool(catalog, {
+      upstreamServers: [
+        { name: "ev", description: "file & shell utilities", toolCount: 12 },
+        { name: "linear", description: "Linear ticket ops" },
+        { name: "metrics", toolCount: 3 },
+        { name: "bare" },
+      ],
+    });
+
+    expect(tool.description.startsWith(baseline)).toBe(true);
+    expect(tool.description).toContain("upstream MCP servers");
+    expect(tool.description).toContain("- ev — file & shell utilities (12 tools)");
+    expect(tool.description).toContain("- linear — Linear ticket ops");
+    expect(tool.description).not.toContain("- linear — Linear ticket ops (");
+    expect(tool.description).toContain("- metrics (3 tools)");
+    expect(tool.description).toMatch(/- bare\b/);
+    expect(tool.description).not.toContain("- bare —");
+    expect(tool.description).not.toContain("- bare (");
+  });
 });
 
 describe("invokeToolTool", () => {

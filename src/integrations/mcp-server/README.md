@@ -15,10 +15,61 @@ pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk
 ## CLI
 
 ```bash
-ratel-mcp-server <config.json>
+ratel-mcp-server [<subcommand>] [--config <path> ...]
 ```
 
-The config mirrors Claude Code's `.claude.json` `mcpServers` shape so a future migration is a passthrough copy:
+### Subcommands
+
+| Subcommand | Purpose |
+|---|---|
+| (default) / `run` | Start the gateway over stdio. Pass one or more configs via `--config` (or a single positional path); right-most wins on key collision. |
+| `import` | Migrate Claude Code's existing MCP servers into Ratel. Two stages: (a) pick which upstreams to migrate, optionally describe each, then confirm Ratel writes; (b) confirm the Claude rewrite that points Claude at Ratel for the migrated entries. Deselected entries stay in Claude's config untouched. Decline Stage B and re-run `import` (or run `link`) later. |
+| `link` | Stage B alone: rewrites Claude's config to point at Ratel for entries already present in Ratel scopes. Useful after a declined Stage B or hand-authored Ratel configs. Entries Ratel doesn't know about are left alone in Claude. |
+| `add --scope <s> --name <n>` | Add an entry to a Ratel scope. Use `--command <cmd>` for a stdio entry, or `--entry-json '{...}'` for full control. Optional `--description <text>`. `--force` to overwrite. |
+| `edit --scope <s> --name <n>` | Edit fields on an existing Ratel entry. Pass any subset of `--description`, `--type`, `--command`, `--arg` (repeatable), `--env KEY=VAL` (repeatable; `KEY=` clears one), `--cwd`, `--url`, `--header KEY=VAL` (repeatable). `--entry-json '{...}'` does a full replacement. With no flags, prompts interactively. |
+| `remove --scope <s> --name <n>` | Remove an entry from a Ratel scope. |
+| `list` | List backup sets created under `~/.ratel/backups/`. |
+| `undo` | Restore the most recent backup set. Prompts for confirmation. |
+| `help` / `--help` / `-h` | Show usage. |
+
+### Three-scope hierarchy
+
+Ratel mirrors Claude Code's MCP scoping with three logical configs:
+
+| Scope | Path | Notes |
+|---|---|---|
+| global | `~/.ratel/config.json` | Per-user, applies everywhere. |
+| project | `<root>/.ratel/config.json` | Committed alongside the repo. |
+| local | `<root>/.ratel/config.local.json` | Per-user-per-project; **add to your project's `.gitignore`**. |
+
+When you run the gateway with `--config a.json --config b.json --config c.json`, the configs are merged in order — last wins on `mcpServers` key collisions. The `import` wizard wires the right `--config` chain into Claude Code at each scope:
+
+| Claude scope | Ratel entry's `--config` chain |
+|---|---|
+| global (`~/.claude.json` root `mcpServers`) | `[global]` |
+| project (`<root>/.mcp.json`) | `[global, project]` |
+| local (`~/.claude.json` `projects[<root>].mcpServers`) | `[global, project, local]` |
+
+### Backups & undo
+
+Every `import`, `link`, `add`, `edit`, and `remove` snapshots the files it touches into `~/.ratel/backups/<ISO>/` (with a `manifest.json` describing what was captured). `ratel-mcp-server undo` restores the most recent set byte-for-byte. `ratel-mcp-server list` shows what's available.
+
+### Agent discoverability
+
+The gateway pushes host agents to consult Ratel before reaching for built-in capabilities, on two channels:
+
+- **Server-level `instructions`** (delivered in the MCP `initialize` response and surfaced by hosts as a system-prompt block, e.g. Claude Code's MCP-instructions block): prescriptive — "before reaching for any built-in capability, call `search_tools` first" — followed by the same upstream list. Most universal channel; fires before the agent picks its first tool.
+- **`search_tools` tool description**: same upstream list, attached to the tool that consumes it.
+
+Each upstream entry shows name, optional human description (from `description` set during `import`/`add`/`edit`), and the live tool count from `tools/list`. Both channels are derived from the same source — there's no separate config knob.
+
+### Locating the binary for Claude Code
+
+When the wizard writes the `ratel` entry into Claude's config, it has to record an absolute command. The cascade is: `$RATEL_MCP_BIN` → `which ratel-mcp-server` on PATH → walk up to `pnpm-workspace.yaml` and use the workspace's built `dist/bin.js` (run via `node`) → ask you. Set `RATEL_MCP_BIN` to skip the cascade.
+
+### Config shape
+
+The config mirrors Claude Code's `.claude.json` `mcpServers` shape so the import path is a near-passthrough:
 
 ```json
 {
@@ -26,7 +77,8 @@ The config mirrors Claude Code's `.claude.json` `mcpServers` shape so a future m
     "ev": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-everything"]
+      "args": ["-y", "@modelcontextprotocol/server-everything"],
+      "description": "filesystem & shell utilities"
     },
     "remote": {
       "type": "http",
@@ -37,7 +89,7 @@ The config mirrors Claude Code's `.claude.json` `mcpServers` shape so a future m
 }
 ```
 
-`type` defaults to `"stdio"` when absent. `stdio` and `http` are wired up; `sse` and unknown types are accepted by the parser but skipped at runtime with a stderr warning. If any single upstream fails to start, the failure is logged and the rest still register — Ratel's own server stays up.
+`type` defaults to `"stdio"` when absent. `description` is optional Ratel-only metadata — used to seed the agent's awareness of each upstream via `search_tools`'s description, never sent over the upstream transport. `stdio` and `http` are wired up; `sse` and unknown types are accepted by the parser but skipped at runtime with a stderr warning. If any single upstream fails to start, the failure is logged and the rest still register — Ratel's own server stays up.
 
 Logs go to stderr only (stdout is reserved for stdio MCP traffic). The CLI handles `SIGINT` / `SIGTERM` for clean shutdown of every upstream.
 

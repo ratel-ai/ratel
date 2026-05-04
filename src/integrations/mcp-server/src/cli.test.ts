@@ -51,6 +51,34 @@ describe("runCli", () => {
     await upstream.server.close();
   });
 
+  it("threads upstream descriptions and tool counts into search_tools' listed description", async () => {
+    const upstream = await fakeUpstream();
+    const [downstreamServerTransport, downstreamClientTransport] =
+      InMemoryTransport.createLinkedPair();
+
+    const { shutdown } = await runCli(["/fake/config.json"], {
+      readConfig: async () => ({
+        mcpServers: {
+          up: { type: "stdio", command: "noop", description: "ping server" },
+        },
+      }),
+      transportFactory: () => upstream.clientTransport,
+      serverTransport: downstreamServerTransport,
+      logger: () => {},
+    });
+
+    const client = new Client({ name: "test", version: "0.0.0" });
+    await client.connect(downstreamClientTransport);
+    const { tools } = await client.listTools();
+    const search = tools.find((t) => t.name === SEARCH_TOOLS_ID);
+    expect(search?.description).toContain("upstream MCP servers");
+    expect(search?.description).toContain("- up — ping server (1 tools)");
+
+    await client.close();
+    if (shutdown) await shutdown();
+    await upstream.server.close();
+  });
+
   it("rejects when no config path is provided, with a usage message", async () => {
     await expect(runCli([])).rejects.toThrow(/usage/i);
   });
@@ -89,7 +117,46 @@ describe("runCli", () => {
 
     expect(logs.some((m) => /ready/i.test(m))).toBe(true);
 
-    await shutdown();
+    if (shutdown) await shutdown();
     await upstream.server.close();
+  });
+
+  it("merges repeated --config files (right-wins) before running the server", async () => {
+    const upstream = await fakeUpstream();
+    const [serverTransport] = InMemoryTransport.createLinkedPair();
+    const reads: string[] = [];
+
+    const { shutdown } = await runCli(["--config", "/a.json", "--config", "/b.json"], {
+      readConfig: async (path) => {
+        reads.push(path);
+        if (path === "/a.json") {
+          return { mcpServers: { up: { type: "stdio", command: "from-a" } } };
+        }
+        return { mcpServers: { up: { type: "stdio", command: "from-b" } } };
+      },
+      transportFactory: () => upstream.clientTransport,
+      serverTransport,
+      logger: () => {},
+    });
+
+    expect(reads).toEqual(["/a.json", "/b.json"]);
+
+    if (shutdown) await shutdown();
+    await upstream.server.close();
+  });
+
+  it("--help logs usage including every subcommand", async () => {
+    const logs: string[] = [];
+    await runCli(["--help"], { logger: (m) => logs.push(m) });
+    const out = logs.join("\n");
+    expect(out).toMatch(/import/);
+    expect(out).toMatch(/add/);
+    expect(out).toMatch(/remove/);
+    expect(out).toMatch(/list/);
+    expect(out).toMatch(/undo/);
+  });
+
+  it("rejects an unknown subcommand with ArgError", async () => {
+    await expect(runCli(["importt"], { logger: () => {} })).rejects.toThrow(/importt/);
   });
 });

@@ -71,6 +71,77 @@ function localTool(
 }
 
 describe("createMcpServer", () => {
+  it("includes upstreamServers in the instructions so hosts see what's reachable behind Ratel", async () => {
+    const catalog = new ToolCatalog();
+
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const handle = await createMcpServer(catalog, {
+      name: "ratel-test",
+      version: "0.0.0",
+      transport: serverTransport,
+      upstreamServers: [
+        { name: "ev", description: "everything server", toolCount: 13 },
+        { name: "bare" },
+      ],
+    });
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    const instructions = client.getInstructions();
+    expect(instructions).toContain("- ev — everything server (13 tools)");
+    expect(instructions).toMatch(/- bare\b/);
+
+    await client.close();
+    await handle.close();
+  });
+
+  it("announces prescriptive server-level instructions even with no upstreams", async () => {
+    const catalog = new ToolCatalog();
+
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const handle = await createMcpServer(catalog, {
+      name: "ratel-test",
+      version: "0.0.0",
+      transport: serverTransport,
+    });
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    const instructions = client.getInstructions();
+    expect(instructions).toBeDefined();
+    expect(instructions).toMatch(/search_tools/);
+    expect(instructions?.toLowerCase()).toMatch(/before/);
+
+    await client.close();
+    await handle.close();
+  });
+
+  it("forwards upstreamServers into the listed search_tools description", async () => {
+    const catalog = new ToolCatalog();
+
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const handle = await createMcpServer(catalog, {
+      name: "ratel-test",
+      version: "0.0.0",
+      transport: serverTransport,
+      upstreamServers: [
+        { name: "ev", description: "everything server", toolCount: 13 },
+        { name: "bare" },
+      ],
+    });
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    const { tools } = await client.listTools();
+    const searchTool = tools.find((t) => t.name === SEARCH_TOOLS_ID);
+    expect(searchTool?.description).toContain("upstream MCP servers");
+    expect(searchTool?.description).toContain("- ev — everything server (13 tools)");
+    expect(searchTool?.description).toMatch(/- bare\b/);
+
+    await client.close();
+    await handle.close();
+  });
+
   it("exposes exactly search_tools and invoke_tool via tools/list", async () => {
     const catalog = new ToolCatalog();
     catalog.register(localTool("echo", "Echo a message back to the caller.", (a) => a));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseConfig } from "./config.js";
+import { mergeConfigs, parseConfig, type RatelConfig } from "./config.js";
 
 describe("parseConfig", () => {
   it("parses a well-formed multi-server config with stdio and http entries", () => {
@@ -90,6 +90,44 @@ describe("parseConfig", () => {
     expect(config.mcpServers.future.type).toBe("websocket");
   });
 
+  it("preserves a string description on stdio, http, and unknown-type entries", () => {
+    const config = parseConfig({
+      mcpServers: {
+        fs: {
+          type: "stdio",
+          command: "echo",
+          description: "echo for tests",
+        },
+        remote: {
+          type: "http",
+          url: "https://x",
+          description: "remote api",
+        },
+        legacy: {
+          type: "sse",
+          url: "https://y",
+          description: "legacy sse",
+        },
+      },
+    });
+    expect(config.mcpServers.fs.description).toBe("echo for tests");
+    expect(config.mcpServers.remote.description).toBe("remote api");
+    expect(config.mcpServers.legacy.description).toBe("legacy sse");
+  });
+
+  it("rejects a non-string description, surfacing the field path", () => {
+    expect(() =>
+      parseConfig({
+        mcpServers: { fs: { command: "echo", description: 42 } },
+      }),
+    ).toThrow(/mcpServers\.fs\.description/);
+    expect(() =>
+      parseConfig({
+        mcpServers: { remote: { type: "http", url: "https://x", description: { wat: 1 } } },
+      }),
+    ).toThrow(/mcpServers\.remote\.description/);
+  });
+
   it("tolerates unknown per-entry fields for forward compatibility", () => {
     const config = parseConfig({
       mcpServers: {
@@ -102,5 +140,54 @@ describe("parseConfig", () => {
     });
     expect(config.mcpServers.fs.command).toBe("echo");
     // Unknown fields are tolerated; we don't promise to surface them.
+  });
+});
+
+describe("mergeConfigs", () => {
+  const a: RatelConfig = {
+    mcpServers: {
+      fs: { type: "stdio", command: "echo", args: ["a"] },
+      remote: { type: "http", url: "https://a" },
+    },
+  };
+  const b: RatelConfig = {
+    mcpServers: {
+      fs: { type: "stdio", command: "echo", args: ["b"] },
+      extra: { type: "stdio", command: "ls" },
+    },
+  };
+
+  it("returns an empty config for an empty list", () => {
+    expect(mergeConfigs([])).toEqual({ mcpServers: {} });
+  });
+
+  it("returns a clone of the single input when given one config", () => {
+    const merged = mergeConfigs([a]);
+    expect(merged).toEqual(a);
+    expect(merged).not.toBe(a);
+    expect(merged.mcpServers).not.toBe(a.mcpServers);
+  });
+
+  it("uses right-most precedence on duplicate keys", () => {
+    const merged = mergeConfigs([a, b]);
+    expect(merged.mcpServers.fs).toEqual({ type: "stdio", command: "echo", args: ["b"] });
+  });
+
+  it("preserves keys unique to each config", () => {
+    const merged = mergeConfigs([a, b]);
+    expect(merged.mcpServers.remote).toEqual({ type: "http", url: "https://a" });
+    expect(merged.mcpServers.extra).toEqual({ type: "stdio", command: "ls" });
+  });
+
+  it("does not mutate any input config", () => {
+    const aFrozen = Object.freeze({
+      mcpServers: Object.freeze({ ...a.mcpServers }),
+    }) as RatelConfig;
+    const bFrozen = Object.freeze({
+      mcpServers: Object.freeze({ ...b.mcpServers }),
+    }) as RatelConfig;
+    expect(() => mergeConfigs([aFrozen, bFrozen])).not.toThrow();
+    expect(Object.keys(aFrozen.mcpServers)).toEqual(["fs", "remote"]);
+    expect(Object.keys(bFrozen.mcpServers)).toEqual(["fs", "extra"]);
   });
 });

@@ -3,14 +3,43 @@ import type { ExecutableTool, ToolCatalog } from "./catalog.js";
 export const SEARCH_TOOLS_ID = "search_tools" as const;
 export const INVOKE_TOOL_ID = "invoke_tool" as const;
 
-export function searchToolsTool(catalog: ToolCatalog): ExecutableTool {
+const SEARCH_TOOLS_BASE_DESCRIPTION =
+  "Search the catalog of available tools by natural-language query. " +
+  "Returns the most relevant tool ids with their descriptions and input schemas. " +
+  "Use this to discover tools that aren't in your direct tool list, then run them via invoke_tool.";
+
+export interface UpstreamServerInfo {
+  name: string;
+  description?: string;
+  toolCount?: number;
+}
+
+export interface SearchToolsToolOptions {
+  upstreamServers?: readonly UpstreamServerInfo[];
+}
+
+export function formatUpstreamLine(s: UpstreamServerInfo): string {
+  let line = `- ${s.name}`;
+  if (s.description) line += ` — ${s.description}`;
+  if (typeof s.toolCount === "number") line += ` (${s.toolCount} tools)`;
+  return line;
+}
+
+function buildSearchToolsDescription(opts?: SearchToolsToolOptions): string {
+  const upstreams = opts?.upstreamServers ?? [];
+  if (upstreams.length === 0) return SEARCH_TOOLS_BASE_DESCRIPTION;
+  const list = upstreams.map(formatUpstreamLine).join("\n");
+  return `${SEARCH_TOOLS_BASE_DESCRIPTION}\n\nThis catalog aggregates tools from these upstream MCP servers:\n${list}`;
+}
+
+export function searchToolsTool(
+  catalog: ToolCatalog,
+  opts?: SearchToolsToolOptions,
+): ExecutableTool {
   return {
     id: SEARCH_TOOLS_ID,
     name: SEARCH_TOOLS_ID,
-    description:
-      "Search the catalog of available tools by natural-language query. " +
-      "Returns the most relevant tool ids with their descriptions and input schemas. " +
-      "Use this to discover tools that aren't in your direct tool list, then run them via invoke_tool.",
+    description: buildSearchToolsDescription(opts),
     inputSchema: {
       type: "object",
       properties: {

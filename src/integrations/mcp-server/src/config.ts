@@ -6,6 +6,7 @@ export interface ServerEntry {
   cwd?: string;
   url?: string;
   headers?: Record<string, string>;
+  description?: string;
   [k: string]: unknown;
 }
 
@@ -36,6 +37,7 @@ function parseEntry(path: string, raw: unknown): ServerEntry {
   const obj = raw as Record<string, unknown>;
   const type = typeof obj.type === "string" ? obj.type : "stdio";
 
+  validateDescription(path, obj);
   switch (type) {
     case "stdio":
       return parseStdio(path, obj);
@@ -46,6 +48,12 @@ function parseEntry(path: string, raw: unknown): ServerEntry {
       // Unknown transport type — keep the entry verbatim so runtime can
       // skip-with-warn. No further validation, since we can't predict the shape.
       return { ...obj, type };
+  }
+}
+
+function validateDescription(path: string, obj: Record<string, unknown>): void {
+  if (obj.description !== undefined && typeof obj.description !== "string") {
+    throw new ConfigError(`${path}.description must be a string`);
   }
 }
 
@@ -109,6 +117,16 @@ function parseHttpLike(
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+export function mergeConfigs(configs: readonly RatelConfig[]): RatelConfig {
+  const out: Record<string, ServerEntry> = {};
+  for (const c of configs) {
+    for (const [name, entry] of Object.entries(c.mcpServers)) {
+      out[name] = entry;
+    }
+  }
+  return { mcpServers: out };
 }
 
 export class ConfigError extends Error {
