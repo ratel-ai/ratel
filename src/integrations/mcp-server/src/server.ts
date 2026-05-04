@@ -9,36 +9,57 @@ import {
   type ToolCatalog,
   type UpstreamServerInfo,
 } from "@ratel-ai/sdk";
+import { type AuthRunner, authTool } from "./tools/auth.js";
 
 export interface CreateMcpServerOptions {
   name: string;
   version: string;
   transport: Transport;
-  upstreamServers?: readonly UpstreamServerInfo[];
+  /** Mutated in place when invoke_tool sees a 401 — the matching entry's `needsAuth` flips to true. */
+  upstreamServers?: UpstreamServerInfo[];
+  /** When provided, registers the `auth` tool and declares `tools.listChanged` so hosts refresh on auth state changes. */
+  runAuthFlow?: AuthRunner;
 }
 
 export interface McpServerHandle {
   close: () => Promise<void>;
+  /** Emits `notifications/tools/list_changed` so hosts re-fetch the tool list (e.g., after a successful auth flow). */
+  notifyToolListChanged: () => Promise<void>;
 }
 
 export async function createMcpServer(
   catalog: ToolCatalog,
   options: CreateMcpServerOptions,
 ): Promise<McpServerHandle> {
-  const { name, version, transport, upstreamServers } = options;
-
-  const gateway: Record<string, ExecutableTool> = {};
-  for (const tool of [searchToolsTool(catalog, { upstreamServers }), invokeToolTool(catalog)]) {
-    gateway[tool.name] = tool;
-  }
+  const { name, version, transport, upstreamServers, runAuthFlow } = options;
 
   const server = new Server(
     { name, version },
     {
-      capabilities: { tools: {} },
+      capabilities: { tools: { listChanged: true } },
       instructions: buildServerInstructions(upstreamServers),
     },
   );
+
+  const onUnauthorized = (upstream: string): void => {
+    const info = upstreamServers?.find((u) => u.name === upstream);
+    if (info && !info.needsAuth) {
+      info.needsAuth = true;
+    }
+    void server.sendToolListChanged().catch(() => undefined);
+  };
+
+  const gateway: Record<string, ExecutableTool> = {};
+  for (const tool of [
+    searchToolsTool(catalog, { upstreamServers }),
+    invokeToolTool(catalog, { onUnauthorized }),
+  ]) {
+    gateway[tool.name] = tool;
+  }
+  if (runAuthFlow) {
+    const t = authTool(upstreamServers ?? [], runAuthFlow);
+    gateway[t.name] = t;
+  }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: Object.values(gateway).map((tool) => ({
@@ -66,6 +87,9 @@ export async function createMcpServer(
   return {
     close: async () => {
       await server.close();
+    },
+    notifyToolListChanged: async () => {
+      await server.sendToolListChanged();
     },
   };
 }

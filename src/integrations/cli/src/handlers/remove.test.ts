@@ -124,4 +124,18 @@ describe("runRemove", () => {
     });
     await expect(runRemove(ctx)).rejects.toThrow();
   });
+
+  it("defaults to user scope when --scope is omitted", async () => {
+    const fs = new MemFs();
+    fs.files.set(
+      "/home/u/.ratel/config.json",
+      `${JSON.stringify({
+        mcpServers: { fs: { type: "stdio", command: "echo" } },
+      })}\n`,
+    );
+    const ctx = makeCtx(fs, { flags: { name: "fs" } });
+    await runRemove(ctx);
+    const parsed = JSON.parse(fs.files.get("/home/u/.ratel/config.json") as string);
+    expect(parsed.mcpServers.fs).toBeUndefined();
+  });
 });

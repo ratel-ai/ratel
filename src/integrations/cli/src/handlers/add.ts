@@ -1,16 +1,18 @@
 import { parseConfig, type RatelConfig, type ServerEntry } from "@ratel-ai/mcp-server";
 import { type BackupManifest, startBackup } from "../backup.js";
-import { type RatelScope, ratelConfigPath } from "../hierarchy.js";
+import { type RatelScope, ratelConfigPath, resolveScope } from "../hierarchy.js";
 import { readJson, writeJson } from "../io.js";
-import { probeEntryInstructions } from "../probe.js";
+import { type AuthProbeResult, authProbeEntry, probeEntryInstructions } from "../probe.js";
 import type { HandlerCtx } from "./types.js";
 
-const OAUTH_FLAGS = ["client-id", "client-secret", "callback-port"] as const;
+const OAUTH_FLAGS = ["client-id", "client-secret", "callback-port", "oauth-scope"] as const;
 
 export type ProbeFn = (name: string, entry: ServerEntry) => Promise<string | undefined>;
+export type AuthProbeFn = (name: string, entry: ServerEntry) => Promise<AuthProbeResult>;
 
 export interface RunAddOptions {
   probe?: ProbeFn;
+  authProbe?: AuthProbeFn;
 }
 
 export async function runAdd(ctx: HandlerCtx, opts: RunAddOptions = {}): Promise<BackupManifest> {
@@ -18,11 +20,11 @@ export async function runAdd(ctx: HandlerCtx, opts: RunAddOptions = {}): Promise
   const name = readName(ctx);
   const entry = assembleEntry(ctx);
 
+  applyOAuthFlags(ctx, entry);
+
   parseConfig({ mcpServers: { [name]: entry } });
 
-  warnAboutOAuthFlags(ctx);
-
-  await maybeFetchDescription(ctx, name, entry, opts);
+  await maybeProbeAndAuth(ctx, name, entry, opts);
 
   const path = ratelConfigPath(scope, ctx.env);
   const current = (await readJson<RatelConfig>(ctx.fs, path)) ?? { mcpServers: {} };
@@ -38,21 +40,54 @@ export async function runAdd(ctx: HandlerCtx, opts: RunAddOptions = {}): Promise
   current.mcpServers[name] = entry;
   await writeJson(ctx.fs, path, current);
   ctx.log(`added "${name}" to ${path}`);
+  logEntryRecap(ctx, scope, name, entry);
   return manifest;
 }
 
+const PREVIEW_MAX = 120;
+
+function previewDescription(s: string): string {
+  const newlineIdx = s.indexOf("\n");
+  const cut = newlineIdx >= 0 ? Math.min(newlineIdx, PREVIEW_MAX) : PREVIEW_MAX;
+  if (cut < s.length) return `${s.slice(0, cut)}…`;
+  return s;
+}
+
+function logEntryRecap(ctx: HandlerCtx, scope: RatelScope, name: string, entry: ServerEntry): void {
+  const type = entry.type ?? "stdio";
+  ctx.log(`  type:          ${type}`);
+  if (type === "stdio") {
+    if (entry.command) {
+      const cmd =
+        entry.args && entry.args.length > 0
+          ? `${entry.command} ${entry.args.join(" ")}`
+          : entry.command;
+      ctx.log(`  command:       ${cmd}`);
+    }
+    if (entry.env && Object.keys(entry.env).length > 0) {
+      ctx.log(`  env:           ${Object.keys(entry.env).join(", ")}`);
+    }
+    if (entry.cwd) ctx.log(`  cwd:           ${entry.cwd}`);
+  } else {
+    if (entry.url) ctx.log(`  url:           ${entry.url}`);
+    if (entry.headers && Object.keys(entry.headers).length > 0) {
+      ctx.log(`  headers:       ${Object.keys(entry.headers).join(", ")}`);
+    }
+    if (entry.clientId) ctx.log(`  client-id:     ${entry.clientId}`);
+    if (entry.clientSecret) ctx.log(`  client-secret: (hidden)`);
+    if (entry.callbackPort !== undefined) {
+      ctx.log(`  callback-port: ${entry.callbackPort}`);
+    }
+    if (entry.scope) ctx.log(`  oauth-scope:   ${entry.scope}`);
+  }
+  if (entry.description) {
+    ctx.log(`  description:   ${previewDescription(entry.description)}`);
+  }
+  ctx.log(`something not right? \`ratel mcp edit --scope ${scope} --name ${name}\``);
+}
+
 function readScope(ctx: HandlerCtx): RatelScope {
-  const v = ctx.argv.flags.scope;
-  if (typeof v !== "string" || v.length === 0) {
-    throw new Error("--scope is required (one of user|project|local)");
-  }
-  if (v === "global") {
-    throw new Error('--scope value "global" is no longer supported; use "user" instead');
-  }
-  if (v !== "user" && v !== "project" && v !== "local") {
-    throw new Error(`--scope must be one of user|project|local, got "${v}"`);
-  }
-  return v;
+  return resolveScope(ctx.argv.flags.scope);
 }
 
 function readName(ctx: HandlerCtx): string {
@@ -143,14 +178,40 @@ function parseHeaders(ctx: HandlerCtx): Record<string, string> | undefined {
   return out;
 }
 
-async function maybeFetchDescription(
+async function maybeProbeAndAuth(
   ctx: HandlerCtx,
   name: string,
   entry: ServerEntry,
   opts: RunAddOptions,
 ): Promise<void> {
-  if (entry.description) return;
   if (ctx.argv.flags["fetch-description"] === false) return;
+
+  if (entry.type === "http" || entry.type === "sse") {
+    const authProbe = opts.authProbe ?? ((n, e) => authProbeEntry(n, e, { logger: ctx.log }));
+    let result: AuthProbeResult;
+    try {
+      result = await authProbe(name, entry);
+    } catch (err) {
+      ctx.log(
+        `[ratel] could not authorize ${name}: ${(err as Error).message}; run \`ratel mcp auth ${name}\` to retry`,
+      );
+      return;
+    }
+    if (result.status !== "authorized") {
+      const reason = result.reason ?? "unknown reason";
+      ctx.log(
+        `[ratel] could not authorize ${name}: ${reason}; run \`ratel mcp auth ${name}\` to retry`,
+      );
+      return;
+    }
+    if (!entry.description && result.instructions && result.instructions.length > 0) {
+      entry.description = result.instructions;
+      ctx.log(`[ratel] fetched description from ${name}'s upstream instructions`);
+    }
+    return;
+  }
+
+  if (entry.description) return;
   const probe = opts.probe ?? ((n, e) => probeEntryInstructions(n, e));
   let fetched: string | undefined;
   try {
@@ -164,12 +225,33 @@ async function maybeFetchDescription(
   }
 }
 
-function warnAboutOAuthFlags(ctx: HandlerCtx): void {
+function applyOAuthFlags(ctx: HandlerCtx, entry: ServerEntry): void {
   const present = OAUTH_FLAGS.filter((k) => ctx.argv.flags[k] !== undefined);
   if (present.length === 0) return;
-  ctx.log(
-    `[ratel] note: --${present.join(", --")} captured but not yet wired into auth flow (deferred to v0.1.4)`,
-  );
+  if (entry.type !== "http" && entry.type !== "sse") {
+    throw new Error(
+      `--${present.join(", --")} only apply to http/sse entries; received type="${entry.type}"`,
+    );
+  }
+  const clientId = ctx.argv.flags["client-id"];
+  if (typeof clientId === "string" && clientId.length > 0) entry.clientId = clientId;
+  const clientSecret = ctx.argv.flags["client-secret"];
+  if (typeof clientSecret === "string" && clientSecret.length > 0) {
+    entry.clientSecret = clientSecret;
+    ctx.log(
+      "[ratel] warning: --client-secret is stored as plaintext in the config file; prefer PKCE (no client secret) when the upstream supports it",
+    );
+  }
+  const callbackPort = ctx.argv.flags["callback-port"];
+  if (callbackPort !== undefined) {
+    const n = typeof callbackPort === "number" ? callbackPort : Number(callbackPort);
+    if (!Number.isInteger(n) || n < 0 || n > 65535) {
+      throw new Error(`--callback-port must be an integer in [0, 65535], got "${callbackPort}"`);
+    }
+    entry.callbackPort = n;
+  }
+  const scope = ctx.argv.flags["oauth-scope"];
+  if (typeof scope === "string" && scope.length > 0) entry.scope = scope;
 }
 
 function looksLikeUrl(s: string): boolean {

@@ -1,5 +1,10 @@
 import type { RatelConfig, ServerEntry } from "@ratel-ai/mcp-server";
-import { ProjectRootNotFoundError, type RatelScope, ratelConfigPath } from "../hierarchy.js";
+import {
+  ProjectRootNotFoundError,
+  type RatelScope,
+  ratelConfigPath,
+  resolveScope,
+} from "../hierarchy.js";
 import { readJson } from "../io.js";
 import type { HandlerCtx } from "./types.js";
 
@@ -11,19 +16,14 @@ export async function runMcpGet(ctx: HandlerCtx): Promise<void> {
     throw new Error("name is required: ratel mcp get <name> [--scope <s>]");
   }
   const scopeFlag = ctx.argv.flags.scope;
-  if (scopeFlag === "global") {
-    throw new Error('--scope value "global" is no longer supported; use "user" instead');
-  }
-  if (typeof scopeFlag === "string") {
-    if (scopeFlag !== "user" && scopeFlag !== "project" && scopeFlag !== "local") {
-      throw new Error(`--scope must be one of user|project|local, got "${scopeFlag}"`);
-    }
-    const found = await readScope(ctx, scopeFlag);
+  if (typeof scopeFlag === "string" && scopeFlag.length > 0) {
+    const scope = resolveScope(scopeFlag);
+    const found = await readScope(ctx, scope);
     const entry = found?.cfg.mcpServers[name];
     if (!entry) {
-      throw new Error(`entry "${name}" not found in scope ${scopeFlag}`);
+      throw new Error(`entry "${name}" not found in scope ${scope}`);
     }
-    printResolved(ctx, name, scopeFlag, found?.path ?? "", entry);
+    printResolved(ctx, name, scope, found?.path ?? "", entry);
     return;
   }
 

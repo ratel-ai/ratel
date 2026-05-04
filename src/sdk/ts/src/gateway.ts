@@ -13,6 +13,8 @@ export interface UpstreamServerInfo {
   description?: string;
   instructions?: string;
   toolCount?: number;
+  /** True when the upstream rejected its boot connection with 401 / requires re-authorization. */
+  needsAuth?: boolean;
 }
 
 export interface SearchToolsToolOptions {
@@ -41,6 +43,7 @@ export function formatUpstreamLine(s: UpstreamServerInfo): string {
   let line = `- ${s.name}`;
   if (s.description) line += ` — ${compactDescription(s.description)}`;
   if (typeof s.toolCount === "number") line += ` (${s.toolCount} tools)`;
+  if (s.needsAuth) line += " (auth required)";
   return line;
 }
 
@@ -153,7 +156,15 @@ export function searchToolsTool(
   };
 }
 
-export function invokeToolTool(catalog: ToolCatalog): ExecutableTool {
+export interface InvokeToolToolOptions {
+  /** Notified when the underlying tool throws UnauthorizedError, with the upstream name inferred from the toolId. */
+  onUnauthorized?: (upstream: string) => void | Promise<void>;
+}
+
+export function invokeToolTool(
+  catalog: ToolCatalog,
+  opts: InvokeToolToolOptions = {},
+): ExecutableTool {
   return {
     id: INVOKE_TOOL_ID,
     name: INVOKE_TOOL_ID,
@@ -194,8 +205,31 @@ export function invokeToolTool(catalog: ToolCatalog): ExecutableTool {
       try {
         return await catalog.invoke(toolId, args);
       } catch (err) {
+        if (isUnauthorizedError(err)) {
+          const upstream = upstreamFromToolId(toolId);
+          if (upstream && opts.onUnauthorized) {
+            await opts.onUnauthorized(upstream);
+          }
+          const payload: { error: string; upstream?: string; hint: string } = {
+            error: "needs_auth",
+            hint: `call the auth tool to re-authorize${upstream ? ` ${upstream}` : ""}`,
+          };
+          if (upstream) payload.upstream = upstream;
+          return payload;
+        }
         return { error: `tool ${toolId} threw: ${(err as Error).message}` };
       }
     },
   };
+}
+
+function isUnauthorizedError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === "UnauthorizedError";
+}
+
+function upstreamFromToolId(toolId: string): string | undefined {
+  const idx = toolId.indexOf("__");
+  if (idx <= 0) return undefined;
+  return toolId.slice(0, idx);
 }

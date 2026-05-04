@@ -92,6 +92,29 @@ The config mirrors Claude Code's `.claude.json` `mcpServers` shape:
 
 If any single upstream fails to start, `buildGatewayFromConfig` logs the failure and the rest still register — the gateway stays available.
 
+## OAuth-protected upstreams
+
+HTTP and SSE upstreams that require OAuth 2.1 authorization run through the library's loopback PKCE flow. `buildGatewayFromConfig` attempts to register every upstream at boot; entries that don't yet have a token file at `~/.ratel/oauth/<name>.json` (or whose stored tokens fail to refresh) are flagged `needsAuth: true` on `gateway.upstreamServers`, retained in the gateway's config map, and wait for an interactive flow. Concurrent `invoke_tool` calls during a 401 are serialized through a per-upstream send-mutex so refresh-token rotation can't race.
+
+The handle exposes:
+
+```ts
+const gateway = await buildGatewayFromConfig(config);
+
+// Drive the interactive flow for one or every needs-auth upstream.
+await gateway.runAuthFlow();              // every upstream marked needsAuth
+await gateway.runAuthFlow({ name: "stripe" }); // a single upstream
+
+// Wire `notifications/tools/list_changed` so hosts re-list after a successful flow.
+gateway.setListChangedNotifier(async () => {
+  await mcpServer.sendToolListChanged();
+});
+```
+
+`createMcpServer` wires it for you: pass `runAuthFlow: gateway.runAuthFlow` and call `gateway.setListChangedNotifier(handle.notifyToolListChanged)`. The MCP server then exposes a third `auth` tool whose description recomputes on every list to reflect the live `needsAuth` state, declares the `tools.listChanged` capability, and translates `invoke_tool` 401s into a structured `{ error: "needs_auth", upstream }` payload (no exception out of the tool — the agent can branch on the field and call `auth` to recover).
+
+The CLI surface (`ratel mcp auth`, the OAuth columns in `ratel mcp list`) lives in [`@ratel-ai/cli`](../cli/README.md).
+
 ## Result wrapping
 
 Every `tools/call` response carries the gateway's return value as a JSON-serialized text block; plain-object returns are also surfaced as `structuredContent`:

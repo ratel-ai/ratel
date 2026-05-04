@@ -1,6 +1,15 @@
 export type Group = "mcp" | "backup" | "help";
 
-export type McpVerb = "serve" | "add" | "remove" | "list" | "get" | "edit" | "import" | "link";
+export type McpVerb =
+  | "serve"
+  | "add"
+  | "remove"
+  | "list"
+  | "get"
+  | "edit"
+  | "import"
+  | "link"
+  | "auth";
 
 export type BackupVerb = "list" | "undo";
 
@@ -13,6 +22,7 @@ const MCP_VERBS: ReadonlySet<string> = new Set([
   "edit",
   "import",
   "link",
+  "auth",
 ]);
 
 const BACKUP_VERBS: ReadonlySet<string> = new Set(["list", "undo"]);

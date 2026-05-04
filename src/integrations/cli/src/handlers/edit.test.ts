@@ -77,6 +77,16 @@ describe("runEdit", () => {
     expect(read(fs).mcpServers.ev.command).toBe("echo");
   });
 
+  it("defaults to user scope when --scope is omitted", async () => {
+    const fs = new MemFs();
+    seed(fs, { ev: { type: "stdio", command: "echo" } });
+    const ctx = makeCtx(fs, {
+      flags: { name: "ev", description: "new" },
+    });
+    await runEdit(ctx);
+    expect(read(fs).mcpServers.ev.description).toBe("new");
+  });
+
   it("clears description with empty --description=''", async () => {
     const fs = new MemFs();
     seed(fs, { ev: { type: "stdio", command: "echo", description: "old" } });

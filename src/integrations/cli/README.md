@@ -25,12 +25,13 @@ ratel backup                 # backup group usage
 |---|---|
 | `serve` | Start the gateway over stdio. Pass one or more configs via `--config`; right-most wins on `mcpServers` collisions. |
 | `add` | Add an MCP server entry to a Ratel scope. **Mirrors `claude mcp add`** (see below). |
-| `remove --scope <s> --name <n>` | Remove an entry from a scope. |
+| `remove [--scope <s>] --name <n>` | Remove an entry from a scope. `--scope` defaults to `user`. |
 | `list` | List MCP servers configured across Ratel scopes. |
 | `get <name> [--scope <s>]` | Print one entry's resolved details. Without `--scope`, walks local → project → user. |
-| `edit --scope <s> --name <n>` | Edit fields on an existing entry. Pass any subset of `--description`, `--type`, `--command`, `--arg` (repeatable), `--env KEY=VAL` (repeatable; `KEY=` clears one), `--cwd`, `--url`, `--header KEY=VAL`. `--entry-json '{...}'` does a full replacement. With no flags, prompts interactively. |
+| `edit [--scope <s>] --name <n>` | Edit fields on an existing entry. `--scope` defaults to `user`. Pass any subset of `--description`, `--type`, `--command`, `--arg` (repeatable), `--env KEY=VAL` (repeatable; `KEY=` clears one), `--cwd`, `--url`, `--header KEY=VAL`. `--entry-json '{...}'` does a full replacement. With no flags, prompts interactively. |
 | `import` | Migrate Claude Code's existing MCP servers into Ratel. Two stages: (a) pick which upstreams to migrate, optionally describe each (each prompt is pre-filled with the upstream's MCP `instructions` if it exposes one), then confirm Ratel writes; (b) confirm the Claude rewrite that points Claude at `ratel mcp serve`. Deselected entries stay in Claude untouched. Decline Stage B and re-run `import` (or run `link`) later. |
 | `link` | Stage B alone: rewrites Claude's config to point at Ratel for entries already present in Ratel scopes. Useful after a declined Stage B or hand-authored Ratel configs. |
+| `auth [<name>]` | Drive the OAuth 2.1 / PKCE flow for HTTP/SSE upstreams that need authorization. With no name, runs every upstream the merged config marks `needsAuth`. With a name, targets a single upstream. Opens the browser to the auth server, captures the code on a loopback callback, persists tokens to `~/.ratel/oauth/<name>.json` (mode 0600), and refreshes them automatically thereafter. |
 
 ### `ratel backup`
 
@@ -52,15 +53,20 @@ ratel mcp add [flags] <name> <url>                       # http / sse
 | Flag | Meaning |
 |---|---|
 | `--transport stdio\|http\|sse` | Force a transport. Inferred otherwise (URL → http, `--` → stdio). |
-| `--scope user\|project\|local` | Which Ratel scope to write to. Default: prompted / required. |
+| `--scope user\|project\|local` | Which Ratel scope to write to. Defaults to `user`. |
 | `--env KEY=VALUE` / `-e KEY=VALUE` | Environment variable for stdio entries. Repeatable. |
 | `--header "Name: Value"` | HTTP header for http/sse entries. Repeatable. |
-| `--client-id <id>` / `--client-secret` / `--callback-port <n>` | OAuth client config. Captured but **not yet wired** (deferred to v0.1.4). A note is logged when set. |
+| `--client-id <id>` / `--client-secret <s>` / `--callback-port <n>` / `--oauth-scope <s>` | OAuth client config for http/sse entries. `--client-id` / `--client-secret` are for upstreams that don't support Dynamic Client Registration (DCR is preferred — pass `--client-id` only when you must). `--callback-port` pins the loopback redirect port (required when the auth server expects a fixed redirect URI). `--oauth-scope` is the initial requested scope; the SDK handles 403-upscope independently. `--client-secret` is stored as plaintext in the Ratel config — a warning is logged when set. |
 | `--description <text>` | Ratel-only: human description of the server. Wins over the auto-fetched upstream instructions. |
-| `--no-fetch-description` | Skip the auto-fetch step (see below). |
+| `--no-fetch-description` | Skip the auto-probe entirely — no connect, no description fetch, no OAuth flow. |
 | `--force` | Overwrite an existing entry of the same name in the chosen scope. |
 
-By default, after the entry is assembled, `mcp add` briefly connects to the upstream (5s timeout), reads the server-level `instructions` field (per the MCP spec), and stores it as the entry's `description`. Pass `--description` to override, or `--no-fetch-description` to skip the probe entirely. A failed probe is silent and leaves the description blank; you can fill it in later with `ratel mcp edit --description`.
+By default, after the entry is assembled, `mcp add` connects to the upstream and stores its server-level `instructions` (per the MCP spec) as the entry's `description`. Behavior by transport:
+
+- **stdio**: silent connect → read instructions → close.
+- **http / sse**: drives the OAuth 2.1 / PKCE flow against the upstream (browser opens to authorize), persists tokens to `~/.ratel/oauth/<name>.json`, then reads instructions. After this, the entry is fully usable by `ratel mcp serve` — no follow-up `ratel mcp auth` required.
+
+Pass `--description` to override the fetched text (the OAuth flow still runs for http/sse so tokens get persisted). Pass `--no-fetch-description` to skip the probe entirely (useful in CI / headless boxes — you can run `ratel mcp auth <name>` from a workstation later). A failed probe / declined authorization is logged with a hint to retry via `ratel mcp auth <name>` and does not fail the add.
 
 Examples:
 
@@ -91,6 +97,18 @@ When you run `ratel mcp serve --config a.json --config b.json --config c.json`, 
 | user (`~/.claude.json` root `mcpServers`) | `["mcp", "serve", "--config", <user>]` |
 | project (`<root>/.mcp.json`) | `["mcp", "serve", "--config", <user>, "--config", <project>]` |
 | local (`~/.claude.json` `projects[<root>].mcpServers`) | `["mcp", "serve", "--config", <user>, "--config", <project>, "--config", <local>]` |
+
+## OAuth flow
+
+HTTP and SSE upstreams that require OAuth authorization are handled at the gateway layer ([`@ratel-ai/mcp-server`'s OAuth section](../mcp-server/README.md#oauth-protected-upstreams) has the architectural detail). From the CLI:
+
+1. `ratel mcp add --scope user my-upstream https://mcp.example/mcp [--client-id <id>] [--callback-port <n>] [--oauth-scope "<s>"]` — records the entry **and** drives the OAuth flow inline: opens your default browser to the upstream's authorization URL, captures the redirect on `127.0.0.1:<port>`, exchanges the code for tokens, persists them at `~/.ratel/oauth/my-upstream.json` (mode 0600). Most upstreams support Dynamic Client Registration; only pass `--client-id` if yours doesn't. Pass `--no-fetch-description` to defer auth (handy on headless boxes — see step 2).
+2. `ratel mcp auth my-upstream` — re-runs the flow. Use it when add-time auth was deferred (CI / headless), the user declined the prompt, or stored tokens have expired and a refresh failed. Refreshes happen automatically on subsequent gateway calls when refresh tokens are still valid.
+3. `ratel mcp list` — shows the auth status column for each entry: `ok` / `expired` / `needs auth` / `n/a` (the last for stdio entries).
+
+When the gateway's `ratel mcp serve` boots an HTTP upstream that has no stored tokens, the upstream is flagged `needsAuth: true` rather than blocking the boot — the agent can call the `auth` MCP tool to recover at runtime. A 401 during a live `invoke_tool` returns `{ error: "needs_auth", upstream }` so the agent can branch and call `auth` itself.
+
+Token state is per-user-per-machine (`~/.ratel/oauth/`), not per-config-scope. Concurrent `invoke_tool` calls during a refresh are serialized by a per-upstream send-mutex so refresh-token rotation can't race.
 
 ## Backups & undo
 

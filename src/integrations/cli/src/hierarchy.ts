@@ -14,6 +14,23 @@ export class ProjectRootNotFoundError extends Error {
   }
 }
 
+/**
+ * Resolve a `--scope` flag into a {@link RatelScope}. Accepts user|project|local;
+ * falls back to `"user"` when the flag is absent. Throws on unrecognized values
+ * (with a special hint for the legacy `"global"` alias).
+ */
+export function resolveScope(flag: unknown): RatelScope {
+  if (flag === undefined || flag === false) return "user";
+  if (typeof flag !== "string" || flag.length === 0) return "user";
+  if (flag === "global") {
+    throw new Error('--scope value "global" is no longer supported; use "user" instead');
+  }
+  if (flag !== "user" && flag !== "project" && flag !== "local") {
+    throw new Error(`--scope must be one of user|project|local, got "${flag}"`);
+  }
+  return flag;
+}
+
 export function ratelConfigPath(scope: RatelScope, env: HierarchyEnv): string {
   if (scope === "user") {
     return join(env.homeDir, ".ratel", "config.json");

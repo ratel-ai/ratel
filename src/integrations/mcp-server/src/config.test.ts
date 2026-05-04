@@ -141,6 +141,78 @@ describe("parseConfig", () => {
     expect(config.mcpServers.fs.command).toBe("echo");
     // Unknown fields are tolerated; we don't promise to surface them.
   });
+
+  it("preserves OAuth fields on http and sse entries", () => {
+    const config = parseConfig({
+      mcpServers: {
+        remote: {
+          type: "http",
+          url: "https://x/mcp",
+          clientId: "abc123",
+          clientSecret: "shh",
+          callbackPort: 12345,
+          scope: "read write",
+        },
+        legacy: {
+          type: "sse",
+          url: "https://y/mcp",
+          clientId: "zzz",
+          callbackPort: 9999,
+        },
+      },
+    });
+    expect(config.mcpServers.remote).toEqual({
+      type: "http",
+      url: "https://x/mcp",
+      clientId: "abc123",
+      clientSecret: "shh",
+      callbackPort: 12345,
+      scope: "read write",
+    });
+    expect(config.mcpServers.legacy).toEqual({
+      type: "sse",
+      url: "https://y/mcp",
+      clientId: "zzz",
+      callbackPort: 9999,
+    });
+  });
+
+  it("rejects OAuth fields on stdio entries", () => {
+    expect(() => parseConfig({ mcpServers: { fs: { command: "echo", clientId: "abc" } } })).toThrow(
+      /mcpServers\.fs\.clientId/,
+    );
+    expect(() =>
+      parseConfig({ mcpServers: { fs: { command: "echo", callbackPort: 1234 } } }),
+    ).toThrow(/mcpServers\.fs\.callbackPort/);
+  });
+
+  it("rejects malformed OAuth fields on http entries", () => {
+    expect(() =>
+      parseConfig({
+        mcpServers: { r: { type: "http", url: "https://x", clientId: 42 } },
+      }),
+    ).toThrow(/mcpServers\.r\.clientId.*string/);
+    expect(() =>
+      parseConfig({
+        mcpServers: { r: { type: "http", url: "https://x", callbackPort: "1234" } },
+      }),
+    ).toThrow(/mcpServers\.r\.callbackPort.*(number|integer)/);
+    expect(() =>
+      parseConfig({
+        mcpServers: { r: { type: "http", url: "https://x", callbackPort: 1.5 } },
+      }),
+    ).toThrow(/mcpServers\.r\.callbackPort.*integer/);
+    expect(() =>
+      parseConfig({
+        mcpServers: { r: { type: "http", url: "https://x", callbackPort: -1 } },
+      }),
+    ).toThrow(/mcpServers\.r\.callbackPort/);
+    expect(() =>
+      parseConfig({
+        mcpServers: { r: { type: "http", url: "https://x", scope: 42 } },
+      }),
+    ).toThrow(/mcpServers\.r\.scope.*string/);
+  });
 });
 
 describe("mergeConfigs", () => {

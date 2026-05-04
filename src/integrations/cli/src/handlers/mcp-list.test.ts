@@ -128,4 +128,46 @@ describe("runMcpList", () => {
     await runMcpList(ctx);
     expect(logs.join("\n")).toMatch(/fs/);
   });
+
+  it("annotates http entries with their auth status: needs auth (no file), ok (valid), expired (past expires_at)", async () => {
+    const fs = new MemFs();
+    fs.files.set(
+      "/home/u/.ratel/config.json",
+      `${JSON.stringify({
+        mcpServers: {
+          stdio_one: { type: "stdio", command: "echo" },
+          locked: { type: "http", url: "https://locked.example" },
+          fresh: { type: "http", url: "https://fresh.example" },
+          stale: { type: "http", url: "https://stale.example" },
+        },
+      })}\n`,
+    );
+    fs.files.set(
+      "/home/u/.ratel/oauth/fresh.json",
+      JSON.stringify({
+        tokens: { access_token: "abc", token_type: "Bearer" },
+        expires_at: Date.now() + 60_000,
+      }),
+    );
+    fs.files.set(
+      "/home/u/.ratel/oauth/stale.json",
+      JSON.stringify({
+        tokens: { access_token: "abc", token_type: "Bearer" },
+        expires_at: Date.now() - 60_000,
+      }),
+    );
+
+    const { ctx, logs } = makeCtx(fs, {});
+    await runMcpList(ctx);
+    const out = logs.join("\n");
+
+    // stdio rows show n/a for auth.
+    expect(out).toMatch(/stdio_one[^\n]*n\/a/);
+    // missing token file → needs auth.
+    expect(out).toMatch(/locked[^\n]*needs auth/);
+    // valid expires_at → ok.
+    expect(out).toMatch(/fresh[^\n]*ok/);
+    // past expires_at → expired.
+    expect(out).toMatch(/stale[^\n]*expired/);
+  });
 });

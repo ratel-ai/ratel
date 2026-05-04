@@ -1,3 +1,4 @@
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -242,5 +243,56 @@ describe("buildGatewayFromConfig", () => {
 
     await expect(handle.close()).resolves.toBeUndefined();
     await upstream.server.close();
+  });
+
+  it("flags HTTP upstreams as needsAuth when boot register throws UnauthorizedError, retaining the entry for re-auth", async () => {
+    const ok = await startUpstream([{ name: "ping", description: "Ping." }]);
+    const logs: string[] = [];
+
+    const handle = await buildGatewayFromConfig(
+      {
+        mcpServers: {
+          locked: { type: "http", url: "https://locked.example/mcp" },
+          fs: { type: "stdio", command: "noop" },
+        },
+      },
+      {
+        transportFactory: (name) => {
+          if (name === "fs") return ok.clientTransport;
+          // For the http entry, return a transport whose start() throws Unauthorized
+          return {
+            async start() {
+              throw new UnauthorizedError("missing tokens");
+            },
+            async send() {},
+            async close() {},
+          };
+        },
+        logger: (m) => logs.push(m),
+      },
+    );
+
+    expect(handle.upstreamServers).toContainEqual(
+      expect.objectContaining({ name: "locked", needsAuth: true }),
+    );
+    expect(handle.upstreamServers).toContainEqual(
+      expect.objectContaining({ name: "fs", toolCount: 1 }),
+    );
+    expect(handle.catalog.has("fs__ping")).toBe(true);
+
+    await handle.close();
+    await ok.server.close();
+  });
+
+  it("exposes a runAuthFlow function on the handle", async () => {
+    const handle = await buildGatewayFromConfig(
+      { mcpServers: {} },
+      { transportFactory: () => undefined },
+    );
+    expect(typeof handle.runAuthFlow).toBe("function");
+    // Without any http upstreams, runs no targets and returns empty.
+    const results = await handle.runAuthFlow({});
+    expect(results).toEqual([]);
+    await handle.close();
   });
 });

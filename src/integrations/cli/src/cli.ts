@@ -19,6 +19,7 @@ import { runMcpGet } from "./handlers/get.js";
 import { runImport } from "./handlers/import.js";
 import { runLink } from "./handlers/link.js";
 import { runListBackups } from "./handlers/list.js";
+import { runMcpAuth } from "./handlers/mcp-auth.js";
 import { runMcpList } from "./handlers/mcp-list.js";
 import { runRemove } from "./handlers/remove.js";
 import type { HandlerCtx } from "./handlers/types.js";
@@ -63,7 +64,8 @@ Verbs:
   get     show one entry's resolved details
   edit    edit fields on an existing entry (interactive when no flags supplied)
   import  migrate Claude Code MCP configs into Ratel (two stages: Ratel write, then Claude rewrite)
-  link    rewrite Claude Code's config to point at Ratel for entries already in Ratel scopes`;
+  link    rewrite Claude Code's config to point at Ratel for entries already in Ratel scopes
+  auth    drive an interactive OAuth flow for one or all http/sse upstreams that need authorization`;
 
 const BACKUP_USAGE = `usage: ratel backup <verb> [args...]
 
@@ -135,6 +137,9 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
       case "link":
         await runLink(ctx, { yes: parsed.flags.yes === true });
         return {};
+      case "auth":
+        await runMcpAuth(ctx);
+        return {};
       default:
         throw new ArgError(`unknown mcp verb: ${parsed.verb}`);
     }
@@ -184,7 +189,9 @@ async function runServer(
     version: options.serverVersion ?? "0.0.0",
     transport: downstream,
     upstreamServers: gateway.upstreamServers,
+    runAuthFlow: gateway.runAuthFlow,
   });
+  gateway.setListChangedNotifier(exposed.notifyToolListChanged);
 
   const upstreamCount = Object.keys(config.mcpServers).length;
   log(`[ratel] ready, ${upstreamCount} upstream server(s) configured`);

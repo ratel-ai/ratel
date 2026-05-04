@@ -2,7 +2,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { ServerEntry } from "@ratel-ai/mcp-server";
+import {
+  type AuthStep,
+  defaultAuthStep,
+  defaultOAuthStorePath,
+  type ServerEntry,
+} from "@ratel-ai/mcp-server";
+import { ToolCatalog } from "@ratel-ai/sdk";
 
 export interface ProbeOptions {
   transportFactory?: (name: string, entry: ServerEntry) => Transport | undefined;
@@ -65,4 +71,64 @@ export async function probeEntryInstructions(
       // ignore close errors after a failed probe
     }
   }
+}
+
+export interface AuthProbeOptions {
+  /** Inject a custom AuthStep (tests stub this to skip the loopback flow). */
+  authStep?: AuthStep;
+  /** Override `~/.ratel/oauth/<name>.json` path. */
+  storePath?: (serverName: string) => string;
+  /** Override the user-action timeout for the loopback callback. */
+  callbackTimeoutMs?: number;
+  /** Sink for human-readable auth-flow progress messages. */
+  logger?: (m: string) => void;
+}
+
+export interface AuthProbeResult {
+  status: "authorized" | "failed" | "skipped";
+  reason?: string;
+  /** `serverInstructions` from the upstream when the flow succeeds. */
+  instructions?: string;
+}
+
+/**
+ * One-shot OAuth + register pass for an HTTP/SSE entry. Wraps `defaultAuthStep`
+ * so `ratel mcp add` can persist tokens and capture the upstream's instructions
+ * at add-time. The handle returned by the underlying step is closed before we
+ * return — the catalog we register into is discarded; `ratel mcp serve` will
+ * re-register against fresh transports using the just-persisted tokens.
+ */
+export async function authProbeEntry(
+  name: string,
+  entry: ServerEntry,
+  options: AuthProbeOptions = {},
+): Promise<AuthProbeResult> {
+  const step =
+    options.authStep ??
+    defaultAuthStep({
+      logger: options.logger,
+      storePath: options.storePath ?? defaultOAuthStorePath,
+      callbackTimeoutMs: options.callbackTimeoutMs,
+    });
+
+  const catalog = new ToolCatalog();
+  let result: Awaited<ReturnType<AuthStep>>;
+  try {
+    result = await step(name, entry, { catalog, logger: options.logger });
+  } catch (err) {
+    return { status: "failed", reason: (err as Error).message };
+  }
+
+  if (result.status !== "authorized") {
+    return { status: result.status, reason: result.reason };
+  }
+
+  try {
+    await result.handle.close();
+  } catch {
+    // best-effort; tokens are already persisted by the step.
+  }
+  const out: AuthProbeResult = { status: "authorized" };
+  if (result.instructions !== undefined) out.instructions = result.instructions;
+  return out;
 }

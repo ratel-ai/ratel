@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { AUTH_TOOL_ID } from "@ratel-ai/mcp-server";
 import { INVOKE_TOOL_ID, SEARCH_TOOLS_ID } from "@ratel-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
@@ -37,7 +38,9 @@ describe("runCli — mcp serve", () => {
     const client = new Client({ name: "test", version: "0.0.0" });
     await client.connect(downstreamClientTransport);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual([SEARCH_TOOLS_ID, INVOKE_TOOL_ID].sort());
+    expect(tools.map((t) => t.name).sort()).toEqual(
+      [SEARCH_TOOLS_ID, INVOKE_TOOL_ID, AUTH_TOOL_ID].sort(),
+    );
 
     const search = await client.callTool({
       name: SEARCH_TOOLS_ID,

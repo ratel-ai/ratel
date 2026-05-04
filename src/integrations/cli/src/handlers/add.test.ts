@@ -145,7 +145,10 @@ describe("runAdd — http/sse (positional URL)", () => {
       flags: { scope: "user", transport: "http" },
       rest: ["stripe", "https://mcp.stripe.com"],
     });
-    await runAdd(ctx, { probe: async () => undefined });
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => ({ status: "skipped", reason: "test" }),
+    });
     const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
     expect(parsed.mcpServers.stripe).toEqual({
       type: "http",
@@ -159,7 +162,10 @@ describe("runAdd — http/sse (positional URL)", () => {
       flags: { scope: "user" },
       rest: ["stripe", "https://mcp.stripe.com"],
     });
-    await runAdd(ctx, { probe: async () => undefined });
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => ({ status: "skipped", reason: "test" }),
+    });
     const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
     expect(parsed.mcpServers.stripe.type).toBe("http");
   });
@@ -170,7 +176,10 @@ describe("runAdd — http/sse (positional URL)", () => {
       flags: { scope: "user", transport: "sse" },
       rest: ["stripe", "https://example.com/sse"],
     });
-    await runAdd(ctx, { probe: async () => undefined });
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => ({ status: "skipped", reason: "test" }),
+    });
     const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
     expect(parsed.mcpServers.stripe.type).toBe("sse");
   });
@@ -185,7 +194,10 @@ describe("runAdd — http/sse (positional URL)", () => {
       },
       rest: ["stripe", "https://mcp.stripe.com"],
     });
-    await runAdd(ctx, { probe: async () => undefined });
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => ({ status: "skipped", reason: "test" }),
+    });
     const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
     expect(parsed.mcpServers.stripe.headers).toEqual({
       Authorization: "Bearer x",
@@ -228,7 +240,33 @@ describe("runAdd — flags and overrides", () => {
     expect(parsed.mcpServers.fs.description).toBeUndefined();
   });
 
-  it("warns once when OAuth flags are set (deferred until v0.1.4)", async () => {
+  it("persists --client-id, --callback-port, and --scope onto an http entry", async () => {
+    const fs = new MemFs();
+    const ctx = makeCtx(fs, {
+      flags: {
+        scope: "user",
+        transport: "http",
+        "client-id": "static-abc",
+        "callback-port": "37123",
+        "oauth-scope": "read:tools write:tools",
+      },
+      rest: ["stripe", "https://mcp.stripe.com"],
+    });
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => ({ status: "skipped", reason: "test" }),
+    });
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.stripe).toMatchObject({
+      type: "http",
+      url: "https://mcp.stripe.com",
+      clientId: "static-abc",
+      callbackPort: 37123,
+      scope: "read:tools write:tools",
+    });
+  });
+
+  it("persists --client-secret but warns about plaintext storage", async () => {
     const fs = new MemFs();
     const logs: string[] = [];
     const ctx = makeCtx(fs, {
@@ -236,12 +274,37 @@ describe("runAdd — flags and overrides", () => {
         scope: "user",
         transport: "http",
         "client-id": "abc",
+        "client-secret": "shhh",
       },
       rest: ["stripe", "https://mcp.stripe.com"],
       log: (m) => logs.push(m),
     });
-    await runAdd(ctx, { probe: async () => undefined });
-    expect(logs.some((l) => /not yet wired/i.test(l))).toBe(true);
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => ({ status: "skipped", reason: "test" }),
+    });
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.stripe.clientSecret).toBe("shhh");
+    expect(logs.some((l) => /plaintext|client.secret/i.test(l))).toBe(true);
+  });
+
+  it("rejects OAuth flags on a stdio entry", async () => {
+    const fs = new MemFs();
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user", "client-id": "abc" },
+      rest: ["fs"],
+      extras: ["npx"],
+    });
+    await expect(runAdd(ctx, { probe: async () => undefined })).rejects.toThrow(/stdio|http\/sse/i);
+  });
+
+  it("rejects a non-numeric --callback-port", async () => {
+    const fs = new MemFs();
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user", transport: "http", "callback-port": "not-a-number" },
+      rest: ["stripe", "https://mcp.stripe.com"],
+    });
+    await expect(runAdd(ctx, { probe: async () => undefined })).rejects.toThrow(/callback-port/i);
   });
 
   it("refuses to overwrite an existing entry without --force", async () => {
@@ -291,10 +354,12 @@ describe("runAdd — flags and overrides", () => {
 });
 
 describe("runAdd — error paths", () => {
-  it("errors when --scope is missing", async () => {
+  it("defaults to --scope user when omitted", async () => {
     const fs = new MemFs();
     const ctx = makeCtx(fs, { rest: ["fs"], extras: ["echo"] });
-    await expect(runAdd(ctx, { probe: async () => undefined })).rejects.toThrow(/--scope/);
+    await runAdd(ctx, { probe: async () => undefined });
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.fs).toEqual({ type: "stdio", command: "echo" });
   });
 
   it("errors when no name positional is provided", async () => {
@@ -331,23 +396,24 @@ describe("runAdd — error paths", () => {
   });
 });
 
-describe("runAdd — fetch-description default", () => {
+describe("runAdd — fetch-description default (stdio)", () => {
   it("by default probes the upstream and stores the returned instructions as description", async () => {
     const fs = new MemFs();
     const ctx = makeCtx(fs, {
       flags: { scope: "user" },
-      rest: ["stripe", "https://mcp.stripe.com"],
+      rest: ["fs"],
+      extras: ["echo"],
     });
     const calls: Array<{ name: string; type: string }> = [];
     await runAdd(ctx, {
       probe: async (name, entry) => {
         calls.push({ name, type: entry.type ?? "stdio" });
-        return "stripe upstream instructions";
+        return "echo upstream instructions";
       },
     });
-    expect(calls).toEqual([{ name: "stripe", type: "http" }]);
+    expect(calls).toEqual([{ name: "fs", type: "stdio" }]);
     const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
-    expect(parsed.mcpServers.stripe.description).toBe("stripe upstream instructions");
+    expect(parsed.mcpServers.fs.description).toBe("echo upstream instructions");
   });
 
   it("does not call the probe when --description is explicitly set", async () => {
@@ -414,5 +480,230 @@ describe("runAdd — fetch-description default", () => {
     });
     const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
     expect(parsed.mcpServers.fs).toEqual({ type: "stdio", command: "echo" });
+  });
+});
+
+describe("runAdd — auth-probe at add-time (http/sse)", () => {
+  it("calls authProbe (not the silent probe) for an http entry and stores returned instructions", async () => {
+    const fs = new MemFs();
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user" },
+      rest: ["stripe", "https://mcp.stripe.com"],
+    });
+    const probeCalls: string[] = [];
+    const authCalls: Array<{ name: string; type: string }> = [];
+    await runAdd(ctx, {
+      probe: async (name) => {
+        probeCalls.push(name);
+        return undefined;
+      },
+      authProbe: async (name, entry) => {
+        authCalls.push({ name, type: entry.type ?? "stdio" });
+        return { status: "authorized", instructions: "stripe instructions" };
+      },
+    });
+    expect(probeCalls).toEqual([]);
+    expect(authCalls).toEqual([{ name: "stripe", type: "http" }]);
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.stripe.description).toBe("stripe instructions");
+  });
+
+  it("calls authProbe for an sse entry too", async () => {
+    const fs = new MemFs();
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user", transport: "sse" },
+      rest: ["stripe", "https://example.com/sse"],
+    });
+    const calls: Array<{ name: string; type: string }> = [];
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async (name, entry) => {
+        calls.push({ name, type: entry.type ?? "stdio" });
+        return { status: "authorized", instructions: "sse instructions" };
+      },
+    });
+    expect(calls).toEqual([{ name: "stripe", type: "sse" }]);
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.stripe.description).toBe("sse instructions");
+  });
+
+  it("still triggers authProbe when --description is explicit (so tokens get persisted), but user's text wins", async () => {
+    const fs = new MemFs();
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user", description: "user-supplied" },
+      rest: ["stripe", "https://mcp.stripe.com"],
+    });
+    let authCalled = false;
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => {
+        authCalled = true;
+        return { status: "authorized", instructions: "from upstream" };
+      },
+    });
+    expect(authCalled).toBe(true);
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.stripe.description).toBe("user-supplied");
+  });
+
+  it("logs a warning + hint and persists the entry without description when authProbe returns failed", async () => {
+    const fs = new MemFs();
+    const logs: string[] = [];
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user" },
+      rest: ["stripe", "https://mcp.stripe.com"],
+      log: (m) => logs.push(m),
+    });
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => ({ status: "failed", reason: "user denied" }),
+    });
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.stripe.description).toBeUndefined();
+    const all = logs.join("\n");
+    expect(all).toMatch(/stripe/);
+    expect(all).toMatch(/user denied/);
+    expect(all).toMatch(/ratel mcp auth/);
+  });
+
+  it("--no-fetch-description skips authProbe too", async () => {
+    const fs = new MemFs();
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user", "fetch-description": false },
+      rest: ["stripe", "https://mcp.stripe.com"],
+    });
+    let authCalled = false;
+    let probeCalled = false;
+    await runAdd(ctx, {
+      probe: async () => {
+        probeCalled = true;
+        return undefined;
+      },
+      authProbe: async () => {
+        authCalled = true;
+        return { status: "authorized" };
+      },
+    });
+    expect(authCalled).toBe(false);
+    expect(probeCalled).toBe(false);
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.stripe.description).toBeUndefined();
+  });
+
+  it("does not throw when authProbe itself throws (degrades to a logged warning)", async () => {
+    const fs = new MemFs();
+    const logs: string[] = [];
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user" },
+      rest: ["stripe", "https://mcp.stripe.com"],
+      log: (m) => logs.push(m),
+    });
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => {
+        throw new Error("network down");
+      },
+    });
+    const parsed = JSON.parse(fs.files.get(RATEL_USER_PATH) as string);
+    expect(parsed.mcpServers.stripe.url).toBe("https://mcp.stripe.com");
+    expect(logs.join("\n")).toMatch(/network down|stripe/);
+  });
+});
+
+describe("runAdd — recap output after writing", () => {
+  it("logs the type, command, args, env keys, and the chosen description for a stdio entry", async () => {
+    const fs = new MemFs();
+    const logs: string[] = [];
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user", env: ["A=1", "B=2"] },
+      rest: ["fs"],
+      extras: ["echo", "hi"],
+      log: (m) => logs.push(m),
+    });
+    await runAdd(ctx, { probe: async () => "echo says hello" });
+    const all = logs.join("\n");
+    expect(all).toMatch(/type:.*stdio/);
+    expect(all).toMatch(/command:.*echo hi/);
+    expect(all).toMatch(/env:.*A.*B/);
+    expect(all).toMatch(/description:.*echo says hello/);
+    expect(all).toMatch(/ratel mcp edit --scope user --name fs/);
+  });
+
+  it("logs the url, header keys, oauth fields, and description for an http entry (never echoes the client-secret value)", async () => {
+    const fs = new MemFs();
+    const logs: string[] = [];
+    const ctx = makeCtx(fs, {
+      flags: {
+        scope: "user",
+        transport: "http",
+        header: "Authorization: Bearer xyz",
+        "client-id": "cid",
+        "client-secret": "shhh",
+        "callback-port": "37123",
+      },
+      rest: ["stripe", "https://mcp.stripe.com"],
+      log: (m) => logs.push(m),
+    });
+    await runAdd(ctx, {
+      probe: async () => undefined,
+      authProbe: async () => ({ status: "authorized", instructions: "stripe upstream" }),
+    });
+    const all = logs.join("\n");
+    expect(all).toMatch(/url:.*https:\/\/mcp\.stripe\.com/);
+    expect(all).toMatch(/headers:.*Authorization/);
+    expect(all).not.toMatch(/Bearer xyz/);
+    expect(all).toMatch(/client-id:.*cid/);
+    expect(all).toMatch(/callback-port:.*37123/);
+    expect(all).not.toMatch(/shhh/);
+    expect(all).toMatch(/client-secret:.*\(hidden\)/);
+    expect(all).toMatch(/description:.*stripe upstream/);
+    expect(all).toMatch(/ratel mcp edit --scope user --name stripe/);
+  });
+
+  it("trims a description preview at the first newline (with ellipsis)", async () => {
+    const fs = new MemFs();
+    const logs: string[] = [];
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user" },
+      rest: ["fs"],
+      extras: ["echo"],
+      log: (m) => logs.push(m),
+    });
+    await runAdd(ctx, { probe: async () => "first line\nsecond line\nmore" });
+    const all = logs.join("\n");
+    expect(all).toMatch(/description:.*first line…/);
+    expect(all).not.toMatch(/second line/);
+  });
+
+  it("trims a long single-line description preview at 120 chars (with ellipsis)", async () => {
+    const fs = new MemFs();
+    const logs: string[] = [];
+    const long = "a".repeat(150);
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user" },
+      rest: ["fs"],
+      extras: ["echo"],
+      log: (m) => logs.push(m),
+    });
+    await runAdd(ctx, { probe: async () => long });
+    const all = logs.join("\n");
+    const desc = all.split("\n").find((l) => /description:/.test(l)) ?? "";
+    expect(desc).toMatch(/a{120}…/);
+    expect(desc).not.toMatch(/a{121}/);
+  });
+
+  it("does not show a description line when none was set or fetched", async () => {
+    const fs = new MemFs();
+    const logs: string[] = [];
+    const ctx = makeCtx(fs, {
+      flags: { scope: "user" },
+      rest: ["fs"],
+      extras: ["echo"],
+      log: (m) => logs.push(m),
+    });
+    await runAdd(ctx, { probe: async () => undefined });
+    const all = logs.join("\n");
+    expect(all).not.toMatch(/description:/);
+    expect(all).toMatch(/ratel mcp edit --scope user --name fs/);
   });
 });

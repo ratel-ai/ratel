@@ -195,6 +195,21 @@ describe("searchToolsTool", () => {
     });
     expect(tool.description).toContain("- x — short and sweet (1 tools)");
   });
+
+  it("appends a `(auth required)` suffix on upstreams flagged as needsAuth", () => {
+    const catalog = new ToolCatalog();
+    const tool = searchToolsTool(catalog, {
+      upstreamServers: [
+        { name: "stripe", description: "billing", toolCount: 7, needsAuth: true },
+        { name: "fs", toolCount: 2 },
+      ],
+    });
+    const lines = tool.description.split("\n");
+    const stripe = lines.find((l) => l.startsWith("- stripe"));
+    const fs = lines.find((l) => l.startsWith("- fs"));
+    expect(stripe).toMatch(/\(auth required\)/);
+    expect(fs).not.toMatch(/auth required/);
+  });
 });
 
 describe("invokeToolTool", () => {
@@ -248,5 +263,90 @@ describe("invokeToolTool", () => {
     const tool = invokeToolTool(catalog);
     const result = (await tool.execute({ toolId: "boom", args: {} })) as { error: string };
     expect(result.error).toMatch(/boom threw: kaboom/);
+  });
+
+  it("returns a needs_auth payload when the underlying tool throws UnauthorizedError", async () => {
+    const catalog = new ToolCatalog();
+    class UnauthorizedError extends Error {
+      constructor(msg: string) {
+        super(msg);
+        this.name = "UnauthorizedError";
+      }
+    }
+    catalog.register({
+      id: "stripe__charges",
+      name: "stripe__charges",
+      description: "...",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => {
+        throw new UnauthorizedError("token expired");
+      },
+    });
+
+    const tool = invokeToolTool(catalog);
+    const result = (await tool.execute({ toolId: "stripe__charges", args: {} })) as {
+      error: string;
+      upstream?: string;
+      hint?: string;
+    };
+    expect(result.error).toBe("needs_auth");
+    expect(result.upstream).toBe("stripe");
+    expect(result.hint).toMatch(/auth tool/i);
+  });
+
+  it("invokes onUnauthorized once with the inferred upstream when configured", async () => {
+    const catalog = new ToolCatalog();
+    class UnauthorizedError extends Error {
+      constructor(msg: string) {
+        super(msg);
+        this.name = "UnauthorizedError";
+      }
+    }
+    catalog.register({
+      id: "stripe__charges",
+      name: "stripe__charges",
+      description: "...",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => {
+        throw new UnauthorizedError("token expired");
+      },
+    });
+
+    const seen: string[] = [];
+    const tool = invokeToolTool(catalog, { onUnauthorized: (upstream) => seen.push(upstream) });
+    await tool.execute({ toolId: "stripe__charges", args: {} });
+    expect(seen).toEqual(["stripe"]);
+  });
+
+  it("does not call onUnauthorized for a non-namespaced toolId since the upstream cannot be inferred", async () => {
+    const catalog = new ToolCatalog();
+    class UnauthorizedError extends Error {
+      constructor(msg: string) {
+        super(msg);
+        this.name = "UnauthorizedError";
+      }
+    }
+    catalog.register({
+      id: "loose",
+      name: "loose",
+      description: "...",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => {
+        throw new UnauthorizedError("token expired");
+      },
+    });
+
+    const seen: string[] = [];
+    const tool = invokeToolTool(catalog, { onUnauthorized: (upstream) => seen.push(upstream) });
+    const result = (await tool.execute({ toolId: "loose", args: {} })) as {
+      error: string;
+      upstream?: string;
+    };
+    expect(result.error).toBe("needs_auth");
+    expect(result.upstream).toBeUndefined();
+    expect(seen).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 import { parseConfig, type RatelConfig, type ServerEntry } from "@ratel-ai/mcp-server";
 import { type BackupManifest, startBackup } from "../backup.js";
-import { type RatelScope, ratelConfigPath } from "../hierarchy.js";
+import { type RatelScope, ratelConfigPath, resolveScope } from "../hierarchy.js";
 import { readJson, writeJson } from "../io.js";
 import type { PromptAdapter } from "../prompts.js";
 import type { HandlerCtx } from "./types.js";
@@ -186,11 +186,7 @@ function stringField(entry: ServerEntry, key: FieldFlag): string | undefined {
 }
 
 function readScope(ctx: HandlerCtx): RatelScope {
-  const v = readRequiredString(ctx, "scope");
-  if (v !== "user" && v !== "project" && v !== "local") {
-    throw new Error(`--scope must be one of global|project|local, got "${v}"`);
-  }
-  return v;
+  return resolveScope(ctx.argv.flags.scope);
 }
 
 function readRequiredString(ctx: HandlerCtx, key: string): string {
