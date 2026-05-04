@@ -9,7 +9,7 @@ function fakeFs(present: ReadonlySet<string>) {
 
 describe("ratelConfigPath", () => {
   it("resolves global to <home>/.ratel/config.json", () => {
-    expect(ratelConfigPath("global", { homeDir: HOME })).toBe("/home/u/.ratel/config.json");
+    expect(ratelConfigPath("user", { homeDir: HOME })).toBe("/home/u/.ratel/config.json");
   });
 
   it("resolves project to <root>/.ratel/config.json", () => {

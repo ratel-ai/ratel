@@ -3,23 +3,29 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import {
+  buildGatewayFromConfig,
+  createMcpServer,
+  mergeConfigs,
+  parseConfig,
+  type TransportFactory,
+} from "@ratel-ai/mcp-server";
 import { ArgError, type ParsedArgs, parseArgs } from "./args.js";
 import type { BackupFs } from "./backup.js";
 import type { ClaudeFs } from "./claude.js";
-import { mergeConfigs, parseConfig } from "./config.js";
-import { buildGatewayFromConfig, type TransportFactory } from "./gateway.js";
 import { runAdd } from "./handlers/add.js";
 import { runEdit } from "./handlers/edit.js";
+import { runMcpGet } from "./handlers/get.js";
 import { runImport } from "./handlers/import.js";
 import { runLink } from "./handlers/link.js";
 import { runListBackups } from "./handlers/list.js";
+import { runMcpList } from "./handlers/mcp-list.js";
 import { runRemove } from "./handlers/remove.js";
 import type { HandlerCtx } from "./handlers/types.js";
 import { runUndo } from "./handlers/undo.js";
 import { findProjectRoot, type HierarchyEnv } from "./hierarchy.js";
 import { type JsonFs, nodeFs } from "./io.js";
 import { type PromptAdapter, silentPromptAdapter } from "./prompts.js";
-import { createMcpServer } from "./server.js";
 
 export interface RunCliOptions {
   readConfig?: (path: string) => Promise<unknown>;
@@ -38,21 +44,31 @@ export interface RunCliResult {
   shutdown?: () => Promise<void>;
 }
 
-const USAGE = `usage: ratel-mcp-server [<subcommand>] [--config <path> ...]
+const TOP_USAGE = `usage: ratel <group> <verb> [args...]
 
-Subcommands:
-  run                            (default) start the gateway over stdio
-  import                         migrate Claude Code MCP configs into Ratel (two stages: Ratel write, then Claude rewrite)
-  link                           rewrite Claude to point at Ratel for entries already in Ratel scopes
-  add    --scope <s> --name <n>  add an entry to a Ratel scope (--command or --entry-json; optional --description)
-  edit   --scope <s> --name <n>  edit fields on an existing Ratel entry (--description, --command, --arg, --env KEY=VAL,
-                                 --cwd, --url, --header KEY=VAL, --entry-json; interactive when no flags supplied)
-  remove --scope <s> --name <n>  remove an entry from a Ratel scope
-  list                           list backup sets under ~/.ratel/backups
-  undo                           restore the most recent backup set
-  help                           show this message
+Groups:
+  mcp      manage MCP servers (add, remove, list, get, edit, import, link) and serve the gateway
+  backup   manage backup snapshots (list)
 
-Pass --config repeatedly for multi-file run; right-most wins on key collision.`;
+Run \`ratel <group>\` for the verbs available in a group.`;
+
+const MCP_USAGE = `usage: ratel mcp <verb> [args...]
+
+Verbs:
+  serve   start the gateway over stdio (use --config <path> to load a Ratel config; repeat for multi-file merge)
+  add     add an MCP server entry (Claude-compatible: ratel mcp add [flags] <name> -- <command> [args...]
+                                   or ratel mcp add [flags] <name> <url>)
+  remove  remove an entry from a Ratel scope
+  list    list MCP servers configured across Ratel scopes
+  get     show one entry's resolved details
+  edit    edit fields on an existing entry (interactive when no flags supplied)
+  import  migrate Claude Code MCP configs into Ratel (two stages: Ratel write, then Claude rewrite)
+  link    rewrite Claude Code's config to point at Ratel for entries already in Ratel scopes`;
+
+const BACKUP_USAGE = `usage: ratel backup <verb> [args...]
+
+Verbs:
+  list    list backup sets under ~/.ratel/backups/`;
 
 export async function runCli(argv: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
   const log = options.logger ?? ((m) => console.error(m));
@@ -61,17 +77,27 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
     parsed = parseArgs(argv);
   } catch (err) {
     if (err instanceof ArgError) {
-      log(`${err.message}\n${USAGE}`);
+      log(`${err.message}\n${TOP_USAGE}`);
     }
     throw err;
   }
 
-  if (parsed.subcommand === "help") {
-    log(USAGE);
+  if (parsed.group === "help") {
+    log(TOP_USAGE);
     return {};
   }
 
-  if (parsed.subcommand === "run") {
+  if (parsed.group === "mcp" && parsed.verb === undefined) {
+    log(MCP_USAGE);
+    return {};
+  }
+
+  if (parsed.group === "backup" && parsed.verb === undefined) {
+    log(BACKUP_USAGE);
+    return {};
+  }
+
+  if (parsed.group === "mcp" && parsed.verb === "serve") {
     return runServer(parsed, options, log);
   }
 
@@ -83,34 +109,51 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
     prompts: options.prompts ?? silentPromptAdapter(),
   };
 
-  switch (parsed.subcommand) {
-    case "list":
-      await runListBackups(ctx);
-      return {};
-    case "undo":
-      await runUndo(ctx);
-      return {};
-    case "add":
-      await runAdd(ctx);
-      return {};
-    case "edit":
-      await runEdit(ctx);
-      return {};
-    case "remove":
-      await runRemove(ctx);
-      return {};
-    case "import":
-      await runImport(ctx, {
-        yes: parsed.flags.yes === true,
-        dryRun: parsed.flags["dry-run"] === true,
-      });
-      return {};
-    case "link":
-      await runLink(ctx, { yes: parsed.flags.yes === true });
-      return {};
-    default:
-      throw new ArgError(`unknown subcommand: ${parsed.subcommand}`);
+  if (parsed.group === "mcp") {
+    switch (parsed.verb) {
+      case "add":
+        await runAdd(ctx);
+        return {};
+      case "remove":
+        await runRemove(ctx);
+        return {};
+      case "list":
+        await runMcpList(ctx);
+        return {};
+      case "get":
+        await runMcpGet(ctx);
+        return {};
+      case "edit":
+        await runEdit(ctx);
+        return {};
+      case "import":
+        await runImport(ctx, {
+          yes: parsed.flags.yes === true,
+          dryRun: parsed.flags["dry-run"] === true,
+        });
+        return {};
+      case "link":
+        await runLink(ctx, { yes: parsed.flags.yes === true });
+        return {};
+      default:
+        throw new ArgError(`unknown mcp verb: ${parsed.verb}`);
+    }
   }
+
+  if (parsed.group === "backup") {
+    switch (parsed.verb) {
+      case "list":
+        await runListBackups(ctx);
+        return {};
+      case "undo":
+        await runUndo(ctx);
+        return {};
+      default:
+        throw new ArgError(`unknown backup verb: ${parsed.verb}`);
+    }
+  }
+
+  throw new ArgError(`unhandled command: ${parsed.group} ${parsed.verb}`);
 }
 
 async function runServer(
@@ -119,7 +162,7 @@ async function runServer(
   log: (m: string) => void,
 ): Promise<RunCliResult> {
   if (parsed.configPaths.length === 0) {
-    throw new Error("usage: ratel-mcp-server <config.json>");
+    throw new Error("usage: ratel mcp serve <config.json> [--config <path> ...]");
   }
 
   const readConfig = options.readConfig ?? defaultReadConfig;

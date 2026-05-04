@@ -11,6 +11,7 @@ const SEARCH_TOOLS_BASE_DESCRIPTION =
 export interface UpstreamServerInfo {
   name: string;
   description?: string;
+  instructions?: string;
   toolCount?: number;
 }
 
@@ -18,11 +19,38 @@ export interface SearchToolsToolOptions {
   upstreamServers?: readonly UpstreamServerInfo[];
 }
 
+export interface SearchToolHit {
+  toolId: string;
+  score: number;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface SearchToolsGroup {
+  server: { name: string; description?: string; instructions?: string };
+  hits: SearchToolHit[];
+}
+
+export interface SearchToolsResult {
+  groups: SearchToolsGroup[];
+}
+
+const MAX_DESCRIPTION_LEN = 160;
+
 export function formatUpstreamLine(s: UpstreamServerInfo): string {
   let line = `- ${s.name}`;
-  if (s.description) line += ` — ${s.description}`;
+  if (s.description) line += ` — ${compactDescription(s.description)}`;
   if (typeof s.toolCount === "number") line += ` (${s.toolCount} tools)`;
   return line;
+}
+
+function compactDescription(s: string): string {
+  const collapsed = s.trim().replace(/\s+/g, " ");
+  if (collapsed.length <= MAX_DESCRIPTION_LEN) return collapsed;
+  const cut = collapsed.slice(0, MAX_DESCRIPTION_LEN - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  const head = lastSpace > 80 ? cut.slice(0, lastSpace) : cut;
+  return `${head.trimEnd()}…`;
 }
 
 function buildSearchToolsDescription(opts?: SearchToolsToolOptions): string {
@@ -36,6 +64,8 @@ export function searchToolsTool(
   catalog: ToolCatalog,
   opts?: SearchToolsToolOptions,
 ): ExecutableTool {
+  const upstreams = opts?.upstreamServers ?? [];
+  const upstreamByName = new Map(upstreams.map((u) => [u.name, u]));
   return {
     id: SEARCH_TOOLS_ID,
     name: SEARCH_TOOLS_ID,
@@ -49,26 +79,76 @@ export function searchToolsTool(
       required: ["query"],
     },
     outputSchema: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          toolId: { type: "string" },
-          score: { type: "number" },
-          description: { type: "string" },
-          inputSchema: { type: "object" },
+      type: "object",
+      properties: {
+        groups: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              server: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  description: { type: "string" },
+                  instructions: { type: "string" },
+                },
+                required: ["name"],
+              },
+              hits: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    toolId: { type: "string" },
+                    score: { type: "number" },
+                    description: { type: "string" },
+                    inputSchema: { type: "object" },
+                  },
+                },
+              },
+            },
+            required: ["server", "hits"],
+          },
         },
       },
+      required: ["groups"],
     },
     execute: async (input) => {
       const { query, topK } = input as { query: string; topK?: number };
       const hits = catalog.search(query, topK ?? 5);
-      return hits.map((h) => ({
-        toolId: h.toolId,
-        score: h.score,
-        description: catalog.get(h.toolId)?.description ?? "",
-        inputSchema: catalog.get(h.toolId)?.inputSchema ?? {},
-      }));
+      const order: string[] = [];
+      const groups = new Map<string, SearchToolsGroup>();
+      for (const h of hits) {
+        const sep = h.toolId.indexOf("__");
+        const serverName = sep > 0 ? h.toolId.slice(0, sep) : h.toolId;
+        let group = groups.get(serverName);
+        if (!group) {
+          const meta = upstreamByName.get(serverName);
+          group = {
+            server: {
+              name: serverName,
+              ...(meta?.description ? { description: meta.description } : {}),
+              ...(meta?.instructions ? { instructions: meta.instructions } : {}),
+            },
+            hits: [],
+          };
+          groups.set(serverName, group);
+          order.push(serverName);
+        }
+        const tool = catalog.get(h.toolId);
+        group.hits.push({
+          toolId: h.toolId,
+          score: h.score,
+          description: tool?.description ?? "",
+          inputSchema: (tool?.inputSchema ?? {}) as Record<string, unknown>,
+        });
+      }
+      const result: SearchToolsResult = {
+        // biome-ignore lint/style/noNonNullAssertion: order entries are guaranteed by construction
+        groups: order.map((n) => groups.get(n)!),
+      };
+      return result;
     },
   };
 }

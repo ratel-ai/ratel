@@ -45,7 +45,14 @@ class MemFs implements BackupFs, JsonFs, ClaudeFs {
 
 function makeCtx(fs: MemFs, args: { flags: ParsedArgs["flags"]; env?: HierarchyEnv }): HandlerCtx {
   return {
-    argv: { subcommand: "remove", configPaths: [], rest: [], flags: args.flags },
+    argv: {
+      group: "mcp",
+      verb: "remove",
+      configPaths: [],
+      rest: [],
+      extras: [],
+      flags: args.flags,
+    },
     env: args.env ?? { homeDir: HOME, projectRoot: ROOT },
     fs,
     log: () => {},
@@ -65,7 +72,7 @@ describe("runRemove", () => {
         },
       })}\n`,
     );
-    const ctx = makeCtx(fs, { flags: { scope: "global", name: "fs" } });
+    const ctx = makeCtx(fs, { flags: { scope: "user", name: "fs" } });
     await runRemove(ctx);
     const parsed = JSON.parse(fs.files.get("/home/u/.ratel/config.json") as string);
     expect(parsed.mcpServers.fs).toBeUndefined();
@@ -74,7 +81,7 @@ describe("runRemove", () => {
 
   it("errors when the entry doesn't exist", async () => {
     const fs = new MemFs();
-    const ctx = makeCtx(fs, { flags: { scope: "global", name: "missing" } });
+    const ctx = makeCtx(fs, { flags: { scope: "user", name: "missing" } });
     await expect(runRemove(ctx)).rejects.toThrow(/missing/);
   });
 
@@ -86,7 +93,7 @@ describe("runRemove", () => {
         mcpServers: { only: { type: "stdio", command: "x" } },
       })}\n`,
     );
-    const ctx = makeCtx(fs, { flags: { scope: "global", name: "only" } });
+    const ctx = makeCtx(fs, { flags: { scope: "user", name: "only" } });
     await runRemove(ctx);
     expect(fs.files.has("/home/u/.ratel/config.json")).toBe(true);
     const parsed = JSON.parse(fs.files.get("/home/u/.ratel/config.json") as string);
@@ -101,7 +108,7 @@ describe("runRemove", () => {
         mcpServers: { x: { type: "stdio", command: "x" } },
       })}\n`,
     );
-    const ctx = makeCtx(fs, { flags: { scope: "global", name: "x" } });
+    const ctx = makeCtx(fs, { flags: { scope: "user", name: "x" } });
     await runRemove(ctx);
     const backupKeys = Array.from(fs.files.keys()).filter((k) =>
       k.startsWith("/home/u/.ratel/backups/"),

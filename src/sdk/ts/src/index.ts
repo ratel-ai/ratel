@@ -2,7 +2,13 @@ export type { SearchHit, Tool } from "../native/index.cjs";
 export { ToolRegistry } from "../native/index.cjs";
 export type { ExecutableTool, Executor } from "./catalog.js";
 export { ToolCatalog } from "./catalog.js";
-export type { SearchToolsToolOptions, UpstreamServerInfo } from "./gateway.js";
+export type {
+  SearchToolHit,
+  SearchToolsGroup,
+  SearchToolsResult,
+  SearchToolsToolOptions,
+  UpstreamServerInfo,
+} from "./gateway.js";
 export {
   formatUpstreamLine,
   INVOKE_TOOL_ID,

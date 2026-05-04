@@ -98,11 +98,36 @@ importers:
 
   examples/mcp-server: {}
 
-  src/integrations/mcp-server:
+  src/integrations/cli:
     dependencies:
       '@clack/prompts':
         specifier: ^1.3.0
         version: 1.3.0
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.1)
+      '@ratel-ai/mcp-server':
+        specifier: workspace:*
+        version: link:../mcp-server
+      '@ratel-ai/sdk':
+        specifier: workspace:*
+        version: link:../../sdk/ts
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.4.13
+        version: 2.4.13
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.2
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@opentelemetry/api@1.9.0)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(tsx@4.21.0))
+
+  src/integrations/mcp-server:
+    dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.1)

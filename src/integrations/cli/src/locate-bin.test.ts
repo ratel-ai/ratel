@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { locateRatelBin } from "./locate-bin.js";
 
 describe("locateRatelBin", () => {
-  it("prefers $RATEL_MCP_BIN when set", async () => {
+  it("prefers $RATEL_BIN when set", async () => {
     const r = await locateRatelBin({ envVar: "/custom/bin" });
     expect(r).toEqual({ command: "/custom/bin", args: [], source: "env" });
   });
@@ -10,28 +10,28 @@ describe("locateRatelBin", () => {
   it("treats an empty env var as unset", async () => {
     const r = await locateRatelBin({
       envVar: "",
-      whichResult: "/usr/local/bin/ratel-mcp-server",
+      whichResult: "/usr/local/bin/ratel",
     });
     expect(r.source).toBe("path");
   });
 
   it("falls back to PATH lookup when env var unset", async () => {
-    const r = await locateRatelBin({ whichResult: "/usr/local/bin/ratel-mcp-server" });
+    const r = await locateRatelBin({ whichResult: "/usr/local/bin/ratel" });
     expect(r).toEqual({
-      command: "/usr/local/bin/ratel-mcp-server",
+      command: "/usr/local/bin/ratel",
       args: [],
       source: "path",
     });
   });
 
-  it("falls back to workspace dist/bin.js with `node` as command", async () => {
+  it("falls back to workspace src/integrations/cli/dist/bin.js with `node` as command", async () => {
     const r = await locateRatelBin({
       workspaceRoot: "/repo",
-      exists: async (p) => p === "/repo/src/integrations/mcp-server/dist/bin.js",
+      exists: async (p) => p === "/repo/src/integrations/cli/dist/bin.js",
     });
     expect(r).toEqual({
       command: "node",
-      args: ["/repo/src/integrations/mcp-server/dist/bin.js"],
+      args: ["/repo/src/integrations/cli/dist/bin.js"],
       source: "workspace",
     });
   });

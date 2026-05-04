@@ -13,7 +13,7 @@ function fakeFs(files: Record<string, string>) {
 
 describe("claudeConfigPath", () => {
   it("resolves global to <home>/.claude.json", () => {
-    expect(claudeConfigPath("global", { homeDir: HOME })).toBe("/home/u/.claude.json");
+    expect(claudeConfigPath("user", { homeDir: HOME })).toBe("/home/u/.claude.json");
   });
 
   it("resolves project to <root>/.mcp.json", () => {
@@ -33,16 +33,16 @@ describe("claudeConfigPath", () => {
 
 describe("readClaudeConfig", () => {
   it("returns null when the file is missing", async () => {
-    const doc = await readClaudeConfig("global", { homeDir: HOME }, fakeFs({}));
+    const doc = await readClaudeConfig("user", { homeDir: HOME }, fakeFs({}));
     expect(doc).toBeNull();
   });
 
   it("returns an empty mcpServers when the global file has no key", async () => {
     const fs = fakeFs({ "/home/u/.claude.json": JSON.stringify({ otherStuff: 1 }) });
-    const doc = await readClaudeConfig("global", { homeDir: HOME }, fs);
+    const doc = await readClaudeConfig("user", { homeDir: HOME }, fs);
     expect(doc?.mcpServers).toEqual({});
     expect(doc?.raw).toEqual({ otherStuff: 1 });
-    expect(doc?.scope).toBe("global");
+    expect(doc?.scope).toBe("user");
     expect(doc?.path).toBe("/home/u/.claude.json");
   });
 
@@ -52,7 +52,7 @@ describe("readClaudeConfig", () => {
         mcpServers: { fs: { type: "stdio", command: "echo" } },
       }),
     });
-    const doc = await readClaudeConfig("global", { homeDir: HOME }, fs);
+    const doc = await readClaudeConfig("user", { homeDir: HOME }, fs);
     expect(doc?.mcpServers).toEqual({ fs: { type: "stdio", command: "echo" } });
   });
 
@@ -106,7 +106,7 @@ describe("readClaudeConfig", () => {
       projects: { "/elsewhere": { mcpServers: { other: { command: "x" } } } },
     };
     const fs = fakeFs({ "/home/u/.claude.json": JSON.stringify(raw) });
-    const doc = await readClaudeConfig("global", { homeDir: HOME }, fs);
+    const doc = await readClaudeConfig("user", { homeDir: HOME }, fs);
     expect(doc?.raw).toEqual(raw);
   });
 
@@ -118,7 +118,7 @@ describe("readClaudeConfig", () => {
 
   it("surfaces a parse error when the file is not valid JSON", async () => {
     const fs = fakeFs({ "/home/u/.claude.json": "not json" });
-    await expect(readClaudeConfig("global", { homeDir: HOME }, fs)).rejects.toThrow(
+    await expect(readClaudeConfig("user", { homeDir: HOME }, fs)).rejects.toThrow(
       /\/home\/u\/\.claude\.json/,
     );
   });
@@ -132,7 +132,7 @@ describe("readClaudeConfig", () => {
         },
       }),
     });
-    const doc = await readClaudeConfig("global", { homeDir: HOME }, fs);
+    const doc = await readClaudeConfig("user", { homeDir: HOME }, fs);
     expect(doc?.mcpServers.weird).toEqual({ type: "stdio" });
     expect(doc?.mcpServers.alsoWeird).toEqual({ type: "fake", custom: true });
   });

@@ -14,7 +14,7 @@ export interface ResolvedBin {
   source: "env" | "path" | "workspace" | "prompt";
 }
 
-const WORKSPACE_BIN_REL = join("src", "integrations", "mcp-server", "dist", "bin.js");
+const WORKSPACE_BIN_REL = join("src", "integrations", "cli", "dist", "bin.js");
 
 export async function locateRatelBin(env: LocateBinEnv): Promise<ResolvedBin> {
   if (env.envVar && env.envVar.length > 0) {
@@ -37,6 +37,6 @@ export async function locateRatelBin(env: LocateBinEnv): Promise<ResolvedBin> {
     }
   }
   throw new Error(
-    "Could not locate the ratel-mcp-server binary. Set $RATEL_MCP_BIN or run from inside the ratel workspace.",
+    "Could not locate the ratel binary. Set $RATEL_BIN or run from inside the ratel workspace.",
   );
 }

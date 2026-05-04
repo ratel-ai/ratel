@@ -57,7 +57,7 @@ function makeCtx(
   args: { flags: ParsedArgs["flags"]; env?: HierarchyEnv; prompts?: PromptAdapter },
 ): HandlerCtx {
   return {
-    argv: { subcommand: "edit", configPaths: [], rest: [], flags: args.flags },
+    argv: { group: "mcp", verb: "edit", configPaths: [], rest: [], extras: [], flags: args.flags },
     env: args.env ?? { homeDir: HOME, projectRoot: ROOT },
     fs,
     log: () => {},
@@ -70,7 +70,7 @@ describe("runEdit", () => {
     const fs = new MemFs();
     seed(fs, { ev: { type: "stdio", command: "echo", description: "old" } });
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "ev", description: "new" },
+      flags: { scope: "user", name: "ev", description: "new" },
     });
     await runEdit(ctx);
     expect(read(fs).mcpServers.ev.description).toBe("new");
@@ -81,7 +81,7 @@ describe("runEdit", () => {
     const fs = new MemFs();
     seed(fs, { ev: { type: "stdio", command: "echo", description: "old" } });
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "ev", description: "" },
+      flags: { scope: "user", name: "ev", description: "" },
     });
     await runEdit(ctx);
     expect(read(fs).mcpServers.ev).toEqual({ type: "stdio", command: "echo" });
@@ -91,7 +91,7 @@ describe("runEdit", () => {
     const fs = new MemFs();
     seed(fs, { ev: { type: "stdio", command: "old", args: ["a", "b"] } });
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "ev", command: "new", arg: ["x", "y", "z"] },
+      flags: { scope: "user", name: "ev", command: "new", arg: ["x", "y", "z"] },
     });
     await runEdit(ctx);
     expect(read(fs).mcpServers.ev).toEqual({
@@ -112,7 +112,7 @@ describe("runEdit", () => {
     });
     const ctx = makeCtx(fs, {
       flags: {
-        scope: "global",
+        scope: "user",
         name: "ev",
         env: ["A=10", "B=", "D=4"],
       },
@@ -132,7 +132,7 @@ describe("runEdit", () => {
     });
     const ctx = makeCtx(fs, {
       flags: {
-        scope: "global",
+        scope: "user",
         name: "remote",
         header: ["Authorization=Bearer new", "X-Trace="],
       },
@@ -145,7 +145,7 @@ describe("runEdit", () => {
     const fs = new MemFs();
     seed(fs, { remote: { type: "http", url: "https://old" } });
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "remote", url: "https://new" },
+      flags: { scope: "user", name: "remote", url: "https://new" },
     });
     await runEdit(ctx);
     expect(read(fs).mcpServers.remote.url).toBe("https://new");
@@ -155,7 +155,7 @@ describe("runEdit", () => {
     const fs = new MemFs();
     seed(fs, { ev: { type: "stdio", command: "echo", cwd: "/tmp" } });
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "ev", cwd: "" },
+      flags: { scope: "user", name: "ev", cwd: "" },
     });
     await runEdit(ctx);
     expect(read(fs).mcpServers.ev.cwd).toBeUndefined();
@@ -166,7 +166,7 @@ describe("runEdit", () => {
     seed(fs, { ev: { type: "stdio", command: "echo", description: "old" } });
     const ctx = makeCtx(fs, {
       flags: {
-        scope: "global",
+        scope: "user",
         name: "ev",
         "entry-json": JSON.stringify({
           type: "http",
@@ -188,7 +188,7 @@ describe("runEdit", () => {
     seed(fs, { ev: { type: "stdio", command: "echo" } });
     const ctx = makeCtx(fs, {
       flags: {
-        scope: "global",
+        scope: "user",
         name: "ev",
         "entry-json": JSON.stringify({ type: "stdio", command: "x" }),
         description: "won't fly",
@@ -201,7 +201,7 @@ describe("runEdit", () => {
     const fs = new MemFs();
     seed(fs, { ev: { type: "stdio", command: "echo" } });
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "ev", command: "" },
+      flags: { scope: "user", name: "ev", command: "" },
     });
     await expect(runEdit(ctx)).rejects.toThrow();
   });
@@ -210,7 +210,7 @@ describe("runEdit", () => {
     const fs = new MemFs();
     seed(fs, { other: { type: "stdio", command: "x" } });
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "ev", description: "x" },
+      flags: { scope: "user", name: "ev", description: "x" },
     });
     await expect(runEdit(ctx)).rejects.toThrow(/not found/);
   });
@@ -219,7 +219,7 @@ describe("runEdit", () => {
     const fs = new MemFs();
     seed(fs, { ev: { type: "stdio", command: "echo" } });
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "ev", description: "new" },
+      flags: { scope: "user", name: "ev", description: "new" },
     });
     await runEdit(ctx);
     const backupDirs = Array.from(fs.files.keys()).filter((k) =>
@@ -253,7 +253,7 @@ describe("runEdit", () => {
     };
 
     const ctx = makeCtx(fs, {
-      flags: { scope: "global", name: "ev" },
+      flags: { scope: "user", name: "ev" },
       prompts,
     });
     await runEdit(ctx);

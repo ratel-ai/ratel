@@ -1,5 +1,5 @@
+import type { RatelConfig } from "@ratel-ai/mcp-server";
 import { type BackupManifest, startBackup } from "../backup.js";
-import type { RatelConfig } from "../config.js";
 import { type RatelScope, ratelConfigPath } from "../hierarchy.js";
 import { readJson, writeJson } from "../io.js";
 import type { HandlerCtx } from "./types.js";
@@ -25,7 +25,7 @@ export async function runRemove(ctx: HandlerCtx): Promise<BackupManifest> {
 
 function readScope(ctx: HandlerCtx): RatelScope {
   const v = readRequiredString(ctx, "scope");
-  if (v !== "global" && v !== "project" && v !== "local") {
+  if (v !== "user" && v !== "project" && v !== "local") {
     throw new Error(`--scope must be one of global|project|local, got "${v}"`);
   }
   return v;

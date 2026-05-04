@@ -44,7 +44,7 @@ class MemFs implements BackupFs, JsonFs, ClaudeFs {
 function ctx(fs: MemFs): HandlerCtx {
   const lines: string[] = [];
   const c: HandlerCtx = {
-    argv: { subcommand: "list", configPaths: [], rest: [], flags: {} },
+    argv: { group: "backup", verb: "list", configPaths: [], rest: [], extras: [], flags: {} },
     env: { homeDir: HOME },
     fs,
     log: (m) => lines.push(m),

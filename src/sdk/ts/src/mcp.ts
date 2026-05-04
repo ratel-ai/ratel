@@ -10,6 +10,7 @@ export interface RegisterMcpServerOptions {
 
 export interface McpServerHandle {
   toolIds: string[];
+  serverInstructions: string | undefined;
   close: () => Promise<void>;
 }
 
@@ -21,6 +22,8 @@ export async function registerMcpServer(
 
   const client = new Client({ name: "@ratel-ai/sdk", version: "0.0.0" });
   await client.connect(transport);
+
+  const serverInstructions = client.getInstructions();
 
   const { tools } = await client.listTools();
   const toolIds: string[] = [];
@@ -43,6 +46,7 @@ export async function registerMcpServer(
 
   return {
     toolIds,
+    serverInstructions,
     close: async () => {
       await client.close();
     },

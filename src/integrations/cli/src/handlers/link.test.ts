@@ -9,11 +9,11 @@ import type { HandlerCtx } from "./types.js";
 
 const HOME = "/home/u";
 const ROOT = "/r";
-const BIN: ResolvedBin = { command: "ratel-mcp-server", args: [], source: "path" };
+const BIN: ResolvedBin = { command: "ratel", args: [], source: "path" };
 
 const HOME_CLAUDE = "/home/u/.claude.json";
 const PROJECT_MCP = "/r/.mcp.json";
-const RATEL_GLOBAL = "/home/u/.ratel/config.json";
+const RATEL_USER = "/home/u/.ratel/config.json";
 const RATEL_PROJECT = "/r/.ratel/config.json";
 
 class MemFs implements BackupFs, JsonFs, ClaudeFs {
@@ -57,7 +57,7 @@ function ctxOf(
   return {
     logs,
     ctx: {
-      argv: { subcommand: "link", configPaths: [], rest: [], flags: {} },
+      argv: { group: "mcp", verb: "link", configPaths: [], rest: [], extras: [], flags: {} },
       env: { homeDir: HOME, projectRoot: withProjectRoot ? ROOT : undefined },
       fs,
       log: (m) => logs.push(m),
@@ -79,7 +79,7 @@ describe("runLink", () => {
   it("rewrites Claude global to point at Ratel for entries already in Ratel global", async () => {
     const fs = new MemFs();
     fs.files.set(
-      RATEL_GLOBAL,
+      RATEL_USER,
       JSON.stringify({
         mcpServers: { fs: { type: "stdio", command: "echo" } },
       }),
@@ -99,8 +99,8 @@ describe("runLink", () => {
     const claude = JSON.parse(fs.files.get(HOME_CLAUDE) as string);
     expect(claude.mcpServers.ratel).toEqual({
       type: "stdio",
-      command: "ratel-mcp-server",
-      args: ["--config", RATEL_GLOBAL],
+      command: "ratel",
+      args: ["mcp", "serve", "--config", RATEL_USER],
     });
     // The covered entry was removed from Claude.
     expect(claude.mcpServers.fs).toBeUndefined();
@@ -113,7 +113,7 @@ describe("runLink", () => {
     const ratelBefore = JSON.stringify({
       mcpServers: { fs: { type: "stdio", command: "echo" } },
     });
-    fs.files.set(RATEL_GLOBAL, ratelBefore);
+    fs.files.set(RATEL_USER, ratelBefore);
     fs.files.set(
       HOME_CLAUDE,
       JSON.stringify({
@@ -122,13 +122,13 @@ describe("runLink", () => {
     );
     const { ctx } = ctxOf(fs, autoConfirm(), false);
     await runLink(ctx, { bin: BIN, yes: true });
-    expect(fs.files.get(RATEL_GLOBAL)).toBe(ratelBefore);
+    expect(fs.files.get(RATEL_USER)).toBe(ratelBefore);
   });
 
   it("no-ops when no Claude entries are also in Ratel", async () => {
     const fs = new MemFs();
     fs.files.set(
-      RATEL_GLOBAL,
+      RATEL_USER,
       JSON.stringify({
         mcpServers: { fs: { type: "stdio", command: "echo" } },
       }),
@@ -148,7 +148,7 @@ describe("runLink", () => {
   it("idempotent: running twice produces no further changes", async () => {
     const fs = new MemFs();
     fs.files.set(
-      RATEL_GLOBAL,
+      RATEL_USER,
       JSON.stringify({
         mcpServers: { fs: { type: "stdio", command: "echo" } },
       }),
@@ -169,7 +169,7 @@ describe("runLink", () => {
   it("declines cleanly: leaves Claude untouched when the user says no", async () => {
     const fs = new MemFs();
     fs.files.set(
-      RATEL_GLOBAL,
+      RATEL_USER,
       JSON.stringify({
         mcpServers: { fs: { type: "stdio", command: "echo" } },
       }),
@@ -207,8 +207,10 @@ describe("runLink", () => {
     await runLink(ctx, { bin: BIN, yes: true });
     const claudeProj = JSON.parse(fs.files.get(PROJECT_MCP) as string);
     expect(claudeProj.mcpServers.ratel.args).toEqual([
+      "mcp",
+      "serve",
       "--config",
-      RATEL_GLOBAL,
+      RATEL_USER,
       "--config",
       RATEL_PROJECT,
     ]);
@@ -217,7 +219,7 @@ describe("runLink", () => {
   it("captures a backup before writing", async () => {
     const fs = new MemFs();
     fs.files.set(
-      RATEL_GLOBAL,
+      RATEL_USER,
       JSON.stringify({
         mcpServers: { fs: { type: "stdio", command: "echo" } },
       }),

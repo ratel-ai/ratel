@@ -1,6 +1,6 @@
+import type { RatelConfig } from "@ratel-ai/mcp-server";
 import type { BackupManifest } from "../backup.js";
 import { type ClaudeConfigDoc, readClaudeConfig } from "../claude.js";
-import type { RatelConfig } from "../config.js";
 import { ratelConfigPath } from "../hierarchy.js";
 import { buildImportPlan } from "../import-plan.js";
 import { readJson } from "../io.js";
@@ -23,24 +23,24 @@ export async function runLink(
 ): Promise<BackupManifest | null> {
   ctx.prompts.intro("Ratel · link Claude Code at Ratel");
 
-  const claudeGlobal = await readClaudeConfig("global", ctx.env, ctx.fs);
+  const claudeUser = await readClaudeConfig("user", ctx.env, ctx.fs);
   const claudeProject = ctx.env.projectRoot
     ? await readClaudeConfig("project", ctx.env, ctx.fs)
     : null;
   const claudeLocal = ctx.env.projectRoot ? await readClaudeConfig("local", ctx.env, ctx.fs) : null;
 
-  const ratelGlobalPath = ratelConfigPath("global", ctx.env);
+  const ratelUserPath = ratelConfigPath("user", ctx.env);
   const ratelProjectPath = ctx.env.projectRoot ? ratelConfigPath("project", ctx.env) : undefined;
   const ratelLocalPath = ctx.env.projectRoot ? ratelConfigPath("local", ctx.env) : undefined;
 
-  const ratelGlobal = await readJson<RatelConfig>(ctx.fs, ratelGlobalPath);
+  const ratelUser = await readJson<RatelConfig>(ctx.fs, ratelUserPath);
   const ratelProject = ratelProjectPath
     ? await readJson<RatelConfig>(ctx.fs, ratelProjectPath)
     : null;
   const ratelLocal = ratelLocalPath ? await readJson<RatelConfig>(ctx.fs, ratelLocalPath) : null;
 
   const ratelKnown = new Set<string>();
-  for (const cfg of [ratelGlobal, ratelProject, ratelLocal]) {
+  for (const cfg of [ratelUser, ratelProject, ratelLocal]) {
     if (cfg) for (const name of Object.keys(cfg.mcpServers)) ratelKnown.add(name);
   }
   if (ratelKnown.size === 0) {
@@ -49,7 +49,7 @@ export async function runLink(
     return null;
   }
 
-  const claudeKnown = collectClaudeNames(claudeGlobal, claudeProject, claudeLocal);
+  const claudeKnown = collectClaudeNames(claudeUser, claudeProject, claudeLocal);
   const overlap = [...claudeKnown].filter((n) => ratelKnown.has(n));
   if (overlap.length === 0) {
     ctx.prompts.note(
@@ -63,14 +63,14 @@ export async function runLink(
 
   const plan = buildImportPlan(
     {
-      claudeGlobal,
+      claudeUser,
       claudeProject,
       claudeLocal,
-      ratelGlobal,
+      ratelUser,
       ratelProject,
       ratelLocal,
       bin,
-      ratelGlobalPath,
+      ratelUserPath,
       ratelProjectPath,
       ratelLocalPath,
       projectRoot: ctx.env.projectRoot,
@@ -125,12 +125,12 @@ function collectClaudeNames(
 
 async function resolveBin(ctx: HandlerCtx, opts: LinkOptions): Promise<ResolvedBin> {
   return locateRatelBin({
-    envVar: opts.envVar ?? process.env.RATEL_MCP_BIN,
+    envVar: opts.envVar ?? process.env.RATEL_BIN,
     whichResult: opts.whichResult ?? (await whichRatelBin()),
     workspaceRoot: opts.workspaceRoot,
     exists: opts.exists,
     promptForPath: async () => {
-      const v = await ctx.prompts.text({ message: "Path to ratel-mcp-server binary?" });
+      const v = await ctx.prompts.text({ message: "Path to ratel binary?" });
       return ctx.prompts.isCancel(v) ? "" : (v as string);
     },
   });
@@ -139,7 +139,7 @@ async function resolveBin(ctx: HandlerCtx, opts: LinkOptions): Promise<ResolvedB
 async function whichRatelBin(): Promise<string | undefined> {
   try {
     const { execSync } = await import("node:child_process");
-    const out = execSync("which ratel-mcp-server", {
+    const out = execSync("which ratel", {
       stdio: ["ignore", "pipe", "ignore"],
     })
       .toString()

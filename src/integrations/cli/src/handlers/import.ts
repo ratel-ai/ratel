@@ -1,12 +1,15 @@
+import type { RatelConfig, ServerEntry } from "@ratel-ai/mcp-server";
 import type { BackupManifest } from "../backup.js";
 import { type ClaudeConfigDoc, type ClaudeScope, readClaudeConfig } from "../claude.js";
-import type { RatelConfig } from "../config.js";
 import { ratelConfigPath } from "../hierarchy.js";
 import { buildImportPlan, type FileChange, type ImportPlan } from "../import-plan.js";
 import { readJson } from "../io.js";
 import { locateRatelBin, type ResolvedBin } from "../locate-bin.js";
 import { executePlan } from "../plan-exec.js";
+import { probeEntryInstructions } from "../probe.js";
 import type { HandlerCtx } from "./types.js";
+
+export type ProbeFn = (name: string, entry: ServerEntry) => Promise<string | undefined>;
 
 export interface ImportFlowOptions {
   yes?: boolean;
@@ -16,6 +19,7 @@ export interface ImportFlowOptions {
   whichResult?: string;
   workspaceRoot?: string;
   exists?: (path: string) => Promise<boolean>;
+  probe?: ProbeFn;
 }
 
 interface Candidate {
@@ -30,26 +34,26 @@ export async function runImport(
 ): Promise<BackupManifest | null> {
   ctx.prompts.intro("Ratel · import Claude Code MCP servers");
 
-  const claudeGlobal = await readClaudeConfig("global", ctx.env, ctx.fs);
+  const claudeUser = await readClaudeConfig("user", ctx.env, ctx.fs);
   const claudeProject = ctx.env.projectRoot
     ? await readClaudeConfig("project", ctx.env, ctx.fs)
     : null;
   const claudeLocal = ctx.env.projectRoot ? await readClaudeConfig("local", ctx.env, ctx.fs) : null;
 
-  const candidates = collectCandidates(claudeGlobal, claudeProject, claudeLocal);
+  const candidates = collectCandidates(claudeUser, claudeProject, claudeLocal);
   if (candidates.length === 0) {
     ctx.prompts.note("No Claude Code MCP servers found at any scope. Nothing to import.");
     ctx.prompts.outro("done");
     return null;
   }
 
-  const ratelGlobalPath = ratelConfigPath("global", ctx.env);
+  const ratelUserPath = ratelConfigPath("user", ctx.env);
   const ratelProjectPath = ctx.env.projectRoot ? ratelConfigPath("project", ctx.env) : undefined;
   const ratelLocalPath = ctx.env.projectRoot ? ratelConfigPath("local", ctx.env) : undefined;
 
   const bin = opts.bin ?? (await resolveBin(ctx, opts));
 
-  const ratelGlobal = await readJson<RatelConfig>(ctx.fs, ratelGlobalPath);
+  const ratelUser = await readJson<RatelConfig>(ctx.fs, ratelUserPath);
   const ratelProject = ratelProjectPath
     ? await readJson<RatelConfig>(ctx.fs, ratelProjectPath)
     : null;
@@ -61,18 +65,18 @@ export async function runImport(
     return null;
   }
 
-  await captureDescriptions(ctx, selection, claudeGlobal, claudeProject, claudeLocal, opts);
+  await captureDescriptions(ctx, selection, claudeUser, claudeProject, claudeLocal, opts);
 
   const plan = buildImportPlan(
     {
-      claudeGlobal,
+      claudeUser,
       claudeProject,
       claudeLocal,
-      ratelGlobal,
+      ratelUser,
       ratelProject,
       ratelLocal,
       bin,
-      ratelGlobalPath,
+      ratelUserPath,
       ratelProjectPath,
       ratelLocalPath,
       projectRoot: ctx.env.projectRoot,
@@ -142,13 +146,13 @@ export async function runImport(
 }
 
 function collectCandidates(
-  global: ClaudeConfigDoc | null,
+  user: ClaudeConfigDoc | null,
   project: ClaudeConfigDoc | null,
   local: ClaudeConfigDoc | null,
 ): Candidate[] {
   const out: Candidate[] = [];
   for (const [scope, doc] of [
-    ["global", global],
+    ["user", user],
     ["project", project],
     ["local", local],
   ] as const) {
@@ -189,29 +193,59 @@ function tagOf(c: Candidate): string {
 async function captureDescriptions(
   ctx: HandlerCtx,
   selected: Candidate[],
-  global: ClaudeConfigDoc | null,
+  user: ClaudeConfigDoc | null,
   project: ClaudeConfigDoc | null,
   local: ClaudeConfigDoc | null,
   opts: ImportFlowOptions,
 ): Promise<void> {
   if (opts.yes) return;
-  const docByScope: Record<ClaudeScope, ClaudeConfigDoc | null> = {
-    global,
-    project,
-    local,
-  };
-  for (const c of selected) {
-    if (c.hasDescription) continue;
-    const entry = docByScope[c.scope]?.mcpServers[c.name];
-    if (!entry) continue;
+  const docByScope: Record<ClaudeScope, ClaudeConfigDoc | null> = { user, project, local };
+  const targets = selected
+    .filter((c) => !c.hasDescription)
+    .map((c) => ({ c, entry: docByScope[c.scope]?.mcpServers[c.name] }))
+    .filter((t): t is { c: Candidate; entry: ServerEntry } => Boolean(t.entry));
+  if (targets.length === 0) return;
+
+  const probe = opts.probe ?? ((name, entry) => probeEntryInstructions(name, entry));
+  const sp = ctx.prompts.spinner();
+  sp.start("Spinning up the MCPs to get instructions...");
+  let fetched: Array<string | undefined>;
+  try {
+    fetched = await Promise.all(
+      targets.map(({ c, entry }) => probe(c.name, entry).catch(() => undefined)),
+    );
+  } finally {
+    sp.stop("Probed upstream MCPs");
+  }
+
+  for (let i = 0; i < targets.length; i++) {
+    const { c, entry } = targets[i];
+    const instructions = fetched[i];
+    const noteBody =
+      instructions && instructions.trim().length > 0
+        ? instructions
+        : "(none provided by the upstream MCP)";
+    ctx.prompts.note(noteBody, `Upstream instructions · ${c.name}`);
+
+    const initialValue = instructions ? previewInstructions(instructions) : "";
     const v = await ctx.prompts.text({
-      message: `Optional description for "${c.name}" [${c.scope}]?`,
-      placeholder: "(leave blank to skip)",
+      message: `Description for "${c.name}" [${c.scope}] — a brief, concise summary is recommended`,
+      placeholder: initialValue ? undefined : "(leave blank to skip)",
+      initialValue,
     });
     if (ctx.prompts.isCancel(v)) continue;
     const text = (v as string).trim();
     if (text.length > 0) entry.description = text;
   }
+}
+
+function previewInstructions(s: string): string {
+  const trimmed = s.trimStart();
+  const newlineIdx = trimmed.indexOf("\n");
+  const candidate = newlineIdx >= 0 ? trimmed.slice(0, newlineIdx) : trimmed;
+  const trimmedEnd = candidate.trimEnd();
+  if (trimmedEnd.length <= 120) return trimmedEnd;
+  return `${trimmedEnd.slice(0, 119).trimEnd()}…`;
 }
 
 async function tryExecute(
@@ -232,7 +266,7 @@ async function tryExecute(
 
 async function resolveBin(ctx: HandlerCtx, opts: ImportFlowOptions): Promise<ResolvedBin> {
   return locateRatelBin({
-    envVar: opts.envVar ?? process.env.RATEL_MCP_BIN,
+    envVar: opts.envVar ?? process.env.RATEL_BIN,
     whichResult: opts.whichResult ?? (await whichRatelBin()),
     workspaceRoot: opts.workspaceRoot,
     exists: opts.exists,
@@ -248,7 +282,7 @@ async function resolveBin(ctx: HandlerCtx, opts: ImportFlowOptions): Promise<Res
 async function whichRatelBin(): Promise<string | undefined> {
   try {
     const { execSync } = await import("node:child_process");
-    const out = execSync("which ratel-mcp-server", {
+    const out = execSync("which ratel", {
       stdio: ["ignore", "pipe", "ignore"],
     })
       .toString()
@@ -261,8 +295,8 @@ async function whichRatelBin(): Promise<string | undefined> {
 
 function renderSummary(plan: ImportPlan): string {
   const lines: string[] = [];
-  if (plan.summary.movedFromGlobal.length > 0) {
-    lines.push(`global: ${plan.summary.movedFromGlobal.join(", ")}`);
+  if (plan.summary.movedFromUser.length > 0) {
+    lines.push(`user: ${plan.summary.movedFromUser.join(", ")}`);
   }
   if (plan.summary.movedFromProject.length > 0) {
     lines.push(`project: ${plan.summary.movedFromProject.join(", ")}`);

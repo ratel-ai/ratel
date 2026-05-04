@@ -4,12 +4,13 @@ import {
   INVOKE_TOOL_ID,
   invokeToolTool,
   SEARCH_TOOLS_ID,
+  type SearchToolsResult,
   searchToolsTool,
   ToolCatalog,
 } from "./index.js";
 
 const readFile: ExecutableTool = {
-  id: "read_file",
+  id: "fs__read_file",
   name: "read_file",
   description: "Read a file from local disk.",
   inputSchema: {
@@ -20,7 +21,7 @@ const readFile: ExecutableTool = {
 };
 
 const sendEmail: ExecutableTool = {
-  id: "send_email",
+  id: "mail__send_email",
   name: "send_email",
   description: "Send an email via SMTP.",
   inputSchema: {
@@ -42,24 +43,78 @@ describe("searchToolsTool", () => {
     expect(SEARCH_TOOLS_ID).toBe("search_tools");
   });
 
-  it("returns hits enriched with description and inputSchema from the catalog", async () => {
+  it("groups hits by upstream server (derived from toolId prefix) with description and inputSchema", async () => {
     const catalog = new ToolCatalog();
     catalog.register(readFile);
     catalog.register(sendEmail);
 
     const tool = searchToolsTool(catalog);
-    const hits = (await tool.execute({ query: "read a file", topK: 5 })) as Array<{
-      toolId: string;
-      score: number;
-      description: string;
-      inputSchema: Record<string, unknown>;
-    }>;
+    const result = (await tool.execute({ query: "read a file", topK: 5 })) as SearchToolsResult;
 
-    expect(hits.length).toBeGreaterThan(0);
-    const top = hits[0];
-    expect(top.toolId).toBe("read_file");
-    expect(top.description).toContain("Read");
-    expect(top.inputSchema).toBeDefined();
+    expect(result.groups.length).toBeGreaterThan(0);
+    const top = result.groups[0];
+    expect(top.server.name).toBe("fs");
+    const topHit = top.hits[0];
+    expect(topHit.toolId).toBe("fs__read_file");
+    expect(topHit.description).toContain("Read");
+    expect(topHit.inputSchema).toBeDefined();
+  });
+
+  it("includes the upstream server's description in each group's server block", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+
+    const tool = searchToolsTool(catalog, {
+      upstreamServers: [{ name: "fs", description: "filesystem helpers" }],
+    });
+    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
+
+    const fsGroup = result.groups.find((g) => g.server.name === "fs");
+    expect(fsGroup?.server.description).toBe("filesystem helpers");
+  });
+
+  it("omits server.description when no matching upstream metadata is supplied", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+
+    const tool = searchToolsTool(catalog);
+    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
+
+    const fsGroup = result.groups.find((g) => g.server.name === "fs");
+    expect(fsGroup?.server.description).toBeUndefined();
+  });
+
+  it("includes the raw upstream instructions on the group's server block, alongside any user description", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+
+    const tool = searchToolsTool(catalog, {
+      upstreamServers: [
+        {
+          name: "fs",
+          description: "filesystem helpers",
+          instructions: "Use this MCP for safe local file IO. Paths must be absolute.",
+        },
+      ],
+    });
+    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
+    const fsGroup = result.groups.find((g) => g.server.name === "fs");
+    expect(fsGroup?.server.description).toBe("filesystem helpers");
+    expect(fsGroup?.server.instructions).toBe(
+      "Use this MCP for safe local file IO. Paths must be absolute.",
+    );
+  });
+
+  it("omits server.instructions when the upstream did not provide any", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+
+    const tool = searchToolsTool(catalog, {
+      upstreamServers: [{ name: "fs", description: "filesystem helpers" }],
+    });
+    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
+    const fsGroup = result.groups.find((g) => g.server.name === "fs");
+    expect(fsGroup?.server.instructions).toBeUndefined();
   });
 
   it("defaults topK to 5 when not provided", async () => {
@@ -67,8 +122,8 @@ describe("searchToolsTool", () => {
     catalog.register(readFile);
 
     const tool = searchToolsTool(catalog);
-    const hits = (await tool.execute({ query: "read a file" })) as Array<unknown>;
-    expect(Array.isArray(hits)).toBe(true);
+    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
+    expect(Array.isArray(result.groups)).toBe(true);
   });
 
   it("description is unchanged when upstreamServers is empty or omitted", () => {
@@ -101,6 +156,45 @@ describe("searchToolsTool", () => {
     expect(tool.description).not.toContain("- bare —");
     expect(tool.description).not.toContain("- bare (");
   });
+
+  it("truncates per-upstream descriptions longer than ~160 chars and appends an ellipsis", () => {
+    const catalog = new ToolCatalog();
+    const long =
+      "Use this server to fetch current documentation whenever the user asks about a library, framework, SDK, API, CLI tool, or cloud service -- even well-known ones like React, Next.js, Prisma, Express, Tailwind, Django, or Spring Boot.";
+    const tool = searchToolsTool(catalog, {
+      upstreamServers: [{ name: "context7", description: long, toolCount: 2 }],
+    });
+    const lines = tool.description.split("\n");
+    const c7 = lines.find((l) => l.startsWith("- context7"));
+    expect(c7).toBeDefined();
+    // The full long text must NOT be present.
+    expect(tool.description).not.toContain(long);
+    // The line should end with ellipsis followed by tool count.
+    expect(c7 ?? "").toMatch(/…\s+\(2 tools\)$/);
+    // Total line length should be capped, leaving room for the count suffix.
+    expect((c7 ?? "").length).toBeLessThan(200);
+  });
+
+  it("collapses multi-line descriptions (newlines and runs of whitespace) into a single line", () => {
+    const catalog = new ToolCatalog();
+    const multiline = "First line of description.\n\nSecond paragraph that should be collapsed.";
+    const tool = searchToolsTool(catalog, {
+      upstreamServers: [{ name: "x", description: multiline, toolCount: 1 }],
+    });
+    const c = tool.description.split("\n").find((l) => l.startsWith("- x"));
+    expect(c).toBeDefined();
+    expect(c).not.toMatch(/\n/);
+    // The collapsed form should fit on one line and contain text from both paragraphs (or be truncated, but not contain a literal newline).
+    expect(c).toContain("First line");
+  });
+
+  it("does not modify a short single-line description", () => {
+    const catalog = new ToolCatalog();
+    const tool = searchToolsTool(catalog, {
+      upstreamServers: [{ name: "x", description: "short and sweet", toolCount: 1 }],
+    });
+    expect(tool.description).toContain("- x — short and sweet (1 tools)");
+  });
 });
 
 describe("invokeToolTool", () => {
@@ -117,7 +211,7 @@ describe("invokeToolTool", () => {
     catalog.register(readFile);
 
     const tool = invokeToolTool(catalog);
-    const result = await tool.execute({ toolId: "read_file", args: { path: "/tmp/x" } });
+    const result = await tool.execute({ toolId: "fs__read_file", args: { path: "/tmp/x" } });
     expect(result).toEqual({ contents: "contents of /tmp/x" });
   });
 
@@ -126,7 +220,7 @@ describe("invokeToolTool", () => {
     catalog.register(readFile);
 
     const tool = invokeToolTool(catalog);
-    const result = await tool.execute({ toolId: "read_file", path: "/tmp/y" });
+    const result = await tool.execute({ toolId: "fs__read_file", path: "/tmp/y" });
     expect(result).toEqual({ contents: "contents of /tmp/y" });
   });
 

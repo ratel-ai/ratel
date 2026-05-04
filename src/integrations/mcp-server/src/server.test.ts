@@ -154,23 +154,88 @@ describe("createMcpServer", () => {
     await handle.close();
   });
 
-  it("search_tools roundtrips BM25 hits as JSON text content", async () => {
+  it("search_tools roundtrips BM25 hits grouped by upstream MCP", async () => {
     const catalog = new ToolCatalog();
     catalog.register(
-      localTool("weather", "Get the current weather forecast for a city.", () => ({})),
+      localTool("wx__weather", "Get the current weather forecast for a city.", () => ({})),
     );
-    catalog.register(localTool("echo", "Echo a message back to the caller.", (a) => a));
+    catalog.register(localTool("util__echo", "Echo a message back to the caller.", (a) => a));
 
-    const { client, handle } = await buildClientAgainst(catalog);
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const handle = await createMcpServer(catalog, {
+      name: "ratel-test",
+      version: "0.0.0",
+      transport: serverTransport,
+      upstreamServers: [
+        { name: "wx", description: "Weather server", toolCount: 1 },
+        { name: "util", toolCount: 1 },
+      ],
+    });
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+    await client.connect(clientTransport);
+
     const result = await client.callTool({
       name: SEARCH_TOOLS_ID,
       arguments: { query: "weather forecast" },
     });
 
+    const structured = result.structuredContent as {
+      groups: Array<{
+        server: { name: string; description?: string; instructions?: string };
+        hits: Array<{ toolId: string }>;
+      }>;
+    };
+    expect(structured.groups[0].server.name).toBe("wx");
+    expect(structured.groups[0].server.description).toBe("Weather server");
+    expect(structured.groups[0].hits[0].toolId).toBe("wx__weather");
+
     const content = result.content as Array<{ type: string; text: string }>;
     expect(content[0].type).toBe("text");
-    const hits = JSON.parse(content[0].text) as Array<{ toolId: string }>;
-    expect(hits[0].toolId).toBe("weather");
+    const parsed = JSON.parse(content[0].text) as {
+      groups: Array<{ server: { name: string }; hits: Array<{ toolId: string }> }>;
+    };
+    expect(parsed.groups[0].hits[0].toolId).toBe("wx__weather");
+
+    await client.close();
+    await handle.close();
+  });
+
+  it("search_tools surfaces the upstream's official `instructions` on each group, separately from any user description", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(
+      localTool("wx__weather", "Get the current weather forecast for a city.", () => ({})),
+    );
+
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const handle = await createMcpServer(catalog, {
+      name: "ratel-test",
+      version: "0.0.0",
+      transport: serverTransport,
+      upstreamServers: [
+        {
+          name: "wx",
+          description: "Weather server",
+          instructions: "Use this for weather. Coordinates must be ISO-6709.",
+          toolCount: 1,
+        },
+      ],
+    });
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    const result = await client.callTool({
+      name: SEARCH_TOOLS_ID,
+      arguments: { query: "weather forecast" },
+    });
+    const structured = result.structuredContent as {
+      groups: Array<{
+        server: { name: string; description?: string; instructions?: string };
+      }>;
+    };
+    expect(structured.groups[0].server.description).toBe("Weather server");
+    expect(structured.groups[0].server.instructions).toBe(
+      "Use this for weather. Coordinates must be ISO-6709.",
+    );
 
     await client.close();
     await handle.close();

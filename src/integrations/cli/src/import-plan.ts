@@ -1,17 +1,17 @@
 import { resolve } from "node:path";
+import type { RatelConfig, ServerEntry } from "@ratel-ai/mcp-server";
 import type { ClaudeConfigDoc, ClaudeScope } from "./claude.js";
-import type { RatelConfig, ServerEntry } from "./config.js";
 import type { ResolvedBin } from "./locate-bin.js";
 
 export interface ImportInputs {
-  claudeGlobal: ClaudeConfigDoc | null;
+  claudeUser: ClaudeConfigDoc | null;
   claudeProject: ClaudeConfigDoc | null;
   claudeLocal: ClaudeConfigDoc | null;
-  ratelGlobal: RatelConfig | null;
+  ratelUser: RatelConfig | null;
   ratelProject: RatelConfig | null;
   ratelLocal: RatelConfig | null;
   bin: ResolvedBin;
-  ratelGlobalPath: string;
+  ratelUserPath: string;
   ratelProjectPath?: string;
   ratelLocalPath?: string;
   projectRoot?: string;
@@ -34,7 +34,7 @@ export interface ImportPlan {
   ratelChanges: FileChange[];
   claudeChanges: FileChange[];
   summary: {
-    movedFromGlobal: string[];
+    movedFromUser: string[];
     movedFromProject: string[];
     movedFromLocal: string[];
     skipped: SkippedEntry[];
@@ -78,7 +78,7 @@ export function buildImportPlan(
   const skipped: SkippedEntry[] = [];
   const selection = normalizeSelection(options.selection);
 
-  const g = bundleClaudeScope(inputs.claudeGlobal);
+  const g = bundleClaudeScope(inputs.claudeUser);
   const p = bundleClaudeScope(inputs.claudeProject);
   const l = bundleClaudeScope(inputs.claudeLocal);
 
@@ -92,10 +92,10 @@ export function buildImportPlan(
   for (const name of g.movableNames.slice()) {
     if (l.movableEntries[name]) {
       removeFromBundle(g, name);
-      skipped.push({ name, scope: "global", reason: "shadowed by local scope" });
+      skipped.push({ name, scope: "user", reason: "shadowed by local scope" });
     } else if (p.movableEntries[name]) {
       removeFromBundle(g, name);
-      skipped.push({ name, scope: "global", reason: "shadowed by project scope" });
+      skipped.push({ name, scope: "user", reason: "shadowed by project scope" });
     }
   }
   for (const name of p.movableNames.slice()) {
@@ -130,7 +130,7 @@ export function buildImportPlan(
   const claudeRewriteL = l.movableNames.slice();
 
   // Apply Ratel-wins on collisions.
-  const ratelGlobalNew = applyRatelWins(inputs.ratelGlobal, g, "global", skipped);
+  const ratelUserNew = applyRatelWins(inputs.ratelUser, g, "user", skipped);
   const ratelProjectNew = inputs.ratelProjectPath
     ? applyRatelWins(inputs.ratelProject, p, "project", skipped)
     : null;
@@ -140,24 +140,24 @@ export function buildImportPlan(
 
   // Compute ratel entry per scope: gated on the Claude-rewrite snapshot.
   const ratelEntryArgsByScope: Partial<Record<ClaudeScope, string[]>> = {};
-  let globalRatelEntry: ServerEntry | undefined;
+  let userRatelEntry: ServerEntry | undefined;
   let projectRatelEntry: ServerEntry | undefined;
   let localRatelEntry: ServerEntry | undefined;
 
   if (claudeRewriteG.length > 0) {
-    const args = ["--config", inputs.ratelGlobalPath];
-    ratelEntryArgsByScope.global = args;
-    globalRatelEntry = makeRatelEntry(inputs.bin, args);
+    const args = ["--config", inputs.ratelUserPath];
+    ratelEntryArgsByScope.user = args;
+    userRatelEntry = makeRatelEntry(inputs.bin, args);
   }
   if (claudeRewriteP.length > 0 && inputs.ratelProjectPath) {
-    const args = ["--config", inputs.ratelGlobalPath, "--config", inputs.ratelProjectPath];
+    const args = ["--config", inputs.ratelUserPath, "--config", inputs.ratelProjectPath];
     ratelEntryArgsByScope.project = args;
     projectRatelEntry = makeRatelEntry(inputs.bin, args);
   }
   if (claudeRewriteL.length > 0 && inputs.ratelLocalPath && inputs.ratelProjectPath) {
     const args = [
       "--config",
-      inputs.ratelGlobalPath,
+      inputs.ratelUserPath,
       "--config",
       inputs.ratelProjectPath,
       "--config",
@@ -168,7 +168,7 @@ export function buildImportPlan(
   }
 
   const overwrittenRatelEntries: ClaudeScope[] = [];
-  if (claudeRewriteG.length > 0 && g.hadRatelEntry) overwrittenRatelEntries.push("global");
+  if (claudeRewriteG.length > 0 && g.hadRatelEntry) overwrittenRatelEntries.push("user");
   if (claudeRewriteP.length > 0 && p.hadRatelEntry) overwrittenRatelEntries.push("project");
   if (claudeRewriteL.length > 0 && l.hadRatelEntry) overwrittenRatelEntries.push("local");
 
@@ -176,7 +176,7 @@ export function buildImportPlan(
   const ratelChanges: FileChange[] = [];
   const claudeChanges: FileChange[] = [];
 
-  pushRatelWrite(ratelChanges, inputs.ratelGlobalPath, inputs.ratelGlobal, ratelGlobalNew);
+  pushRatelWrite(ratelChanges, inputs.ratelUserPath, inputs.ratelUser, ratelUserNew);
   if (inputs.ratelProjectPath) {
     pushRatelWrite(ratelChanges, inputs.ratelProjectPath, inputs.ratelProject, ratelProjectNew);
   }
@@ -185,11 +185,11 @@ export function buildImportPlan(
   }
 
   // ~/.claude.json (global + local rewrites coalesced)
-  const homeDoc = inputs.claudeGlobal ?? inputs.claudeLocal;
+  const homeDoc = inputs.claudeUser ?? inputs.claudeLocal;
   if (homeDoc && (claudeRewriteG.length > 0 || claudeRewriteL.length > 0)) {
     const newRaw = rewriteHomeClaude(
       homeDoc.raw,
-      globalRatelEntry,
+      userRatelEntry,
       localRatelEntry,
       claudeRewriteG.length > 0 ? new Set(claudeRewriteG) : null,
       claudeRewriteL.length > 0 ? new Set(claudeRewriteL) : null,
@@ -212,7 +212,7 @@ export function buildImportPlan(
     ratelChanges,
     claudeChanges,
     summary: {
-      movedFromGlobal: g.movableNames.slice(),
+      movedFromUser: g.movableNames.slice(),
       movedFromProject: p.movableNames.slice(),
       movedFromLocal: l.movableNames.slice(),
       skipped,
@@ -268,7 +268,7 @@ function makeRatelEntry(bin: ResolvedBin, configArgs: string[]): ServerEntry {
   return {
     type: "stdio",
     command: bin.command,
-    args: [...bin.args, ...configArgs],
+    args: [...bin.args, "mcp", "serve", ...configArgs],
   };
 }
 
@@ -301,16 +301,16 @@ function pushClaudeWrite(
 
 function rewriteHomeClaude(
   raw: Record<string, unknown>,
-  globalRatelEntry: ServerEntry | undefined,
+  userRatelEntry: ServerEntry | undefined,
   localRatelEntry: ServerEntry | undefined,
-  removeGlobal: ReadonlySet<string> | null,
+  removeUser: ReadonlySet<string> | null,
   removeLocal: ReadonlySet<string> | null,
   projectRoot: string | undefined,
 ): Record<string, unknown> {
   const out = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
-  if (removeGlobal && globalRatelEntry) {
+  if (removeUser && userRatelEntry) {
     const before = isPlainObject(out.mcpServers) ? (out.mcpServers as Record<string, unknown>) : {};
-    out.mcpServers = mergeWithRatel(before, removeGlobal, globalRatelEntry);
+    out.mcpServers = mergeWithRatel(before, removeUser, userRatelEntry);
   }
   if (removeLocal && localRatelEntry && projectRoot) {
     const absRoot = resolve(projectRoot);

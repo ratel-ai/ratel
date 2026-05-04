@@ -52,7 +52,7 @@ function ctxWith(
   return {
     lines,
     ctx: {
-      argv: { subcommand: "undo", configPaths: [], rest: [], flags: {} },
+      argv: { group: "backup", verb: "undo", configPaths: [], rest: [], extras: [], flags: {} },
       env: { homeDir: HOME },
       fs,
       log: (m) => lines.push(m),

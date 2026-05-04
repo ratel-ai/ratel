@@ -1,8 +1,8 @@
 import { join, resolve } from "node:path";
-import type { ServerEntry } from "./config.js";
+import type { ServerEntry } from "@ratel-ai/mcp-server";
 import { type HierarchyEnv, ProjectRootNotFoundError } from "./hierarchy.js";
 
-export type ClaudeScope = "global" | "project" | "local";
+export type ClaudeScope = "user" | "project" | "local";
 
 export interface ClaudeFs {
   read(path: string): Promise<string | null>;
@@ -16,7 +16,7 @@ export interface ClaudeConfigDoc {
 }
 
 export function claudeConfigPath(scope: ClaudeScope, env: HierarchyEnv): string {
-  if (scope === "global" || scope === "local") {
+  if (scope === "user" || scope === "local") {
     return join(env.homeDir, ".claude.json");
   }
   if (!env.projectRoot) {

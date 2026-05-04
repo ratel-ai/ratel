@@ -9,11 +9,11 @@ import type { HandlerCtx } from "./types.js";
 
 const HOME = "/home/u";
 const ROOT = "/r";
-const BIN: ResolvedBin = { command: "ratel-mcp-server", args: [], source: "path" };
+const BIN: ResolvedBin = { command: "ratel", args: [], source: "path" };
 
 const HOME_CLAUDE = "/home/u/.claude.json";
 const PROJECT_MCP = "/r/.mcp.json";
-const RATEL_GLOBAL = "/home/u/.ratel/config.json";
+const RATEL_USER = "/home/u/.ratel/config.json";
 const RATEL_PROJECT = "/r/.ratel/config.json";
 const RATEL_LOCAL = "/r/.ratel/config.local.json";
 
@@ -63,7 +63,7 @@ function ctxOf(
   return {
     logs,
     ctx: {
-      argv: { subcommand: "import", configPaths: [], rest: [], flags: {} },
+      argv: { group: "mcp", verb: "import", configPaths: [], rest: [], extras: [], flags: {} },
       env: { homeDir: HOME, projectRoot: withProjectRoot ? ROOT : undefined },
       fs,
       log: (m) => logs.push(m),
@@ -139,15 +139,15 @@ describe("runImport", () => {
     const { ctx } = ctxOf(fs, autoConfirm(), false);
     await runImport(ctx, { bin: BIN, yes: true });
 
-    expect(fs.files.has(RATEL_GLOBAL)).toBe(true);
-    const ratelGlobal = JSON.parse(fs.files.get(RATEL_GLOBAL) as string);
-    expect(ratelGlobal.mcpServers.fs).toEqual({ type: "stdio", command: "echo" });
+    expect(fs.files.has(RATEL_USER)).toBe(true);
+    const ratelUser = JSON.parse(fs.files.get(RATEL_USER) as string);
+    expect(ratelUser.mcpServers.fs).toEqual({ type: "stdio", command: "echo" });
 
     const claude = JSON.parse(fs.files.get(HOME_CLAUDE) as string);
     expect(claude.mcpServers.ratel).toEqual({
       type: "stdio",
-      command: "ratel-mcp-server",
-      args: ["--config", RATEL_GLOBAL],
+      command: "ratel",
+      args: ["mcp", "serve", "--config", RATEL_USER],
     });
   });
 
@@ -170,8 +170,10 @@ describe("runImport", () => {
 
     const claudeProj = JSON.parse(fs.files.get(PROJECT_MCP) as string);
     expect(claudeProj.mcpServers.ratel.args).toEqual([
+      "mcp",
+      "serve",
       "--config",
-      RATEL_GLOBAL,
+      RATEL_USER,
       "--config",
       RATEL_PROJECT,
     ]);
@@ -198,18 +200,22 @@ describe("runImport", () => {
     await runImport(ctx, { bin: BIN, yes: true });
 
     const claude = JSON.parse(fs.files.get(HOME_CLAUDE) as string);
-    expect(claude.mcpServers.ratel.args).toEqual(["--config", RATEL_GLOBAL]);
+    expect(claude.mcpServers.ratel.args).toEqual(["mcp", "serve", "--config", RATEL_USER]);
     expect(claude.projects[ROOT].mcpServers.ratel.args).toEqual([
+      "mcp",
+      "serve",
       "--config",
-      RATEL_GLOBAL,
+      RATEL_USER,
       "--config",
       RATEL_PROJECT,
       "--config",
       RATEL_LOCAL,
     ]);
     expect(JSON.parse(fs.files.get(PROJECT_MCP) as string).mcpServers.ratel.args).toEqual([
+      "mcp",
+      "serve",
       "--config",
-      RATEL_GLOBAL,
+      RATEL_USER,
       "--config",
       RATEL_PROJECT,
     ]);
@@ -233,7 +239,7 @@ describe("runImport", () => {
     await runImport(ctx, { bin: BIN });
 
     // Original file untouched; no Ratel global created; no backups.
-    expect(fs.files.has(RATEL_GLOBAL)).toBe(false);
+    expect(fs.files.has(RATEL_USER)).toBe(false);
     expect(JSON.parse(fs.files.get(HOME_CLAUDE) as string).mcpServers.fs).toBeDefined();
     const backupKeys = Array.from(fs.files.keys()).filter((k) =>
       k.startsWith("/home/u/.ratel/backups/"),
@@ -257,7 +263,7 @@ describe("runImport", () => {
     };
     const { ctx } = ctxOf(fs, cancelStub, false);
     await runImport(ctx, { bin: BIN });
-    expect(fs.files.has(RATEL_GLOBAL)).toBe(false);
+    expect(fs.files.has(RATEL_USER)).toBe(false);
   });
 
   it("--dry-run skips execution and logs what would be written", async () => {
@@ -271,7 +277,7 @@ describe("runImport", () => {
     const { ctx, logs } = ctxOf(fs, autoConfirm(), false);
     await runImport(ctx, { bin: BIN, yes: true, dryRun: true });
 
-    expect(fs.files.has(RATEL_GLOBAL)).toBe(false);
+    expect(fs.files.has(RATEL_USER)).toBe(false);
     expect(logs.join("\n")).toMatch(/would write/);
     expect(logs.join("\n")).toMatch(/\/home\/u\/\.ratel\/config\.json/);
   });
@@ -295,7 +301,7 @@ describe("runImport", () => {
     const { ctx } = ctxOf(fs, counted, false);
     await runImport(ctx, { bin: BIN, yes: true });
     expect(confirmCalled).toBe(false);
-    expect(fs.files.has(RATEL_GLOBAL)).toBe(true);
+    expect(fs.files.has(RATEL_USER)).toBe(true);
   });
 
   it("logs an undo hint if executor fails mid-flight", async () => {
@@ -327,10 +333,10 @@ describe("runImport", () => {
     await runImport(ctx, { bin: BIN });
 
     // Stage A applied: Ratel global has the entries.
-    expect(fs.files.has(RATEL_GLOBAL)).toBe(true);
-    const ratelGlobal = JSON.parse(fs.files.get(RATEL_GLOBAL) as string);
-    expect(ratelGlobal.mcpServers.fs).toBeDefined();
-    expect(ratelGlobal.mcpServers.other).toBeDefined();
+    expect(fs.files.has(RATEL_USER)).toBe(true);
+    const ratelUser = JSON.parse(fs.files.get(RATEL_USER) as string);
+    expect(ratelUser.mcpServers.fs).toBeDefined();
+    expect(ratelUser.mcpServers.other).toBeDefined();
 
     // Stage B declined: Claude is untouched.
     const claude = JSON.parse(fs.files.get(HOME_CLAUDE) as string);
@@ -356,9 +362,9 @@ describe("runImport", () => {
     const { ctx } = ctxOf(fs, prompts, false);
     await runImport(ctx, { bin: BIN });
 
-    const ratelGlobal = JSON.parse(fs.files.get(RATEL_GLOBAL) as string);
-    expect(ratelGlobal.mcpServers.fs).toBeDefined();
-    expect(ratelGlobal.mcpServers.other).toBeUndefined();
+    const ratelUser = JSON.parse(fs.files.get(RATEL_USER) as string);
+    expect(ratelUser.mcpServers.fs).toBeDefined();
+    expect(ratelUser.mcpServers.other).toBeUndefined();
 
     const claude = JSON.parse(fs.files.get(HOME_CLAUDE) as string);
     expect(claude.mcpServers.ratel).toBeDefined();
@@ -403,8 +409,159 @@ describe("runImport", () => {
     };
     const { ctx } = ctxOf(fs, prompts, false);
     await runImport(ctx, { bin: BIN });
-    const ratelGlobal = JSON.parse(fs.files.get(RATEL_GLOBAL) as string);
-    expect(ratelGlobal.mcpServers.fs.description).toBe("filesystem stuff");
+    const ratelUser = JSON.parse(fs.files.get(RATEL_USER) as string);
+    expect(ratelUser.mcpServers.fs.description).toBe("filesystem stuff");
+  });
+
+  it("always shows an upstream-instructions note (with an empty marker when none), recommends a brief description, and seeds initialValue with the preview", async () => {
+    const fs = new MemFs();
+    fs.files.set(
+      HOME_CLAUDE,
+      JSON.stringify({
+        mcpServers: {
+          fs: { type: "stdio", command: "echo" },
+          remote: { type: "http", url: "https://x" },
+        },
+      }),
+    );
+    const FS_INSTRUCTIONS = "First line of fs instructions.\nSecond paragraph here.";
+    const seen: Array<{
+      message: string;
+      placeholder: string | undefined;
+      initialValue: string | undefined;
+    }> = [];
+    const notes: Array<{ message: string; title: string | undefined }> = [];
+    const spinnerCalls: string[] = [];
+    const probeCalls: string[] = [];
+    const prompts: PromptAdapter = {
+      ...autoConfirm(),
+      note(m, title) {
+        notes.push({ message: m, title });
+      },
+      spinner() {
+        return {
+          start: (m?: string) => {
+            spinnerCalls.push(`start:${m ?? ""}`);
+          },
+          stop: (m?: string) => {
+            spinnerCalls.push(`stop:${m ?? ""}`);
+          },
+          message: () => {},
+        };
+      },
+      async multiselect(opts) {
+        return opts.options.map((o) => o.value) as unknown as never;
+      },
+      async text(opts) {
+        seen.push({
+          message: opts.message,
+          placeholder: opts.placeholder,
+          initialValue: opts.initialValue,
+        });
+        return "";
+      },
+    };
+    const { ctx } = ctxOf(fs, prompts, false);
+    await runImport(ctx, {
+      bin: BIN,
+      probe: async (name) => {
+        probeCalls.push(name);
+        return name === "fs" ? FS_INSTRUCTIONS : undefined;
+      },
+    });
+
+    expect(probeCalls.sort()).toEqual(["fs", "remote"]);
+    expect(spinnerCalls[0]).toMatch(/^start:Spinning up/);
+    expect(spinnerCalls.at(-1)).toMatch(/^stop:/);
+
+    const fsNote = notes.find((n) => n.title?.includes("fs"));
+    expect(fsNote?.message).toBe(FS_INSTRUCTIONS);
+    const remoteNote = notes.find((n) => n.title?.includes("remote"));
+    expect(remoteNote).toBeDefined();
+    expect(remoteNote?.message).toMatch(/none provided/i);
+
+    const fsPrompt = seen.find((s) => s.message.includes(`"fs"`));
+    const remotePrompt = seen.find((s) => s.message.includes(`"remote"`));
+    expect(fsPrompt?.message).toMatch(/brief.*concise/i);
+    expect(fsPrompt?.initialValue).toBe("First line of fs instructions.");
+    expect(fsPrompt?.placeholder).toBeUndefined();
+    expect(remotePrompt?.initialValue).toBe("");
+    expect(remotePrompt?.placeholder).toMatch(/leave blank/i);
+
+    const ratelUser = JSON.parse(fs.files.get(RATEL_USER) as string);
+    expect(ratelUser.mcpServers.fs.description).toBeUndefined();
+    expect(ratelUser.mcpServers.remote.description).toBeUndefined();
+  });
+
+  it("truncates a long single-line upstream instruction to a ≤120-char editable initialValue", async () => {
+    const fs = new MemFs();
+    fs.files.set(
+      HOME_CLAUDE,
+      JSON.stringify({ mcpServers: { fs: { type: "stdio", command: "echo" } } }),
+    );
+    const long = `${"x ".repeat(200)}END`;
+    const seen: Array<{ initialValue: string | undefined }> = [];
+    const prompts: PromptAdapter = {
+      ...autoConfirm(),
+      async multiselect(opts) {
+        return opts.options.map((o) => o.value) as unknown as never;
+      },
+      async text(opts) {
+        seen.push({ initialValue: opts.initialValue });
+        return "";
+      },
+    };
+    const { ctx } = ctxOf(fs, prompts, false);
+    await runImport(ctx, { bin: BIN, probe: async () => long });
+
+    const iv = seen[0]?.initialValue ?? "";
+    expect(iv.endsWith("…")).toBe(true);
+    expect(iv.length).toBeLessThanOrEqual(120);
+  });
+
+  it("does not call the probe for entries that already have a description in Claude", async () => {
+    const fs = new MemFs();
+    fs.files.set(
+      HOME_CLAUDE,
+      JSON.stringify({
+        mcpServers: {
+          fs: { type: "stdio", command: "echo", description: "user-set" },
+        },
+      }),
+    );
+    const probeCalls: string[] = [];
+    const { ctx } = ctxOf(fs, autoConfirm(), false);
+    await runImport(ctx, {
+      bin: BIN,
+      probe: async (name) => {
+        probeCalls.push(name);
+        return "from upstream";
+      },
+    });
+    expect(probeCalls).toEqual([]);
+    const ratelUser = JSON.parse(fs.files.get(RATEL_USER) as string);
+    expect(ratelUser.mcpServers.fs.description).toBe("user-set");
+  });
+
+  it("--yes skips probing entirely (non-interactive flow)", async () => {
+    const fs = new MemFs();
+    fs.files.set(
+      HOME_CLAUDE,
+      JSON.stringify({ mcpServers: { fs: { type: "stdio", command: "echo" } } }),
+    );
+    const probeCalls: string[] = [];
+    const { ctx } = ctxOf(fs, autoConfirm(), false);
+    await runImport(ctx, {
+      bin: BIN,
+      yes: true,
+      probe: async (name) => {
+        probeCalls.push(name);
+        return "should not be used";
+      },
+    });
+    expect(probeCalls).toEqual([]);
+    const ratelUser = JSON.parse(fs.files.get(RATEL_USER) as string);
+    expect(ratelUser.mcpServers.fs.description).toBeUndefined();
   });
 
   it("re-running after a successful import produces an empty plan (idempotent)", async () => {

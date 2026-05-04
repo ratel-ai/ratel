@@ -23,7 +23,7 @@ The template uses `<REPO_ROOT>` as a placeholder because Claude Code's `--mcp-co
 - One-time setup from the repo root:
   ```bash
   pnpm install
-  pnpm -r build         # builds @ratel-ai/sdk and @ratel-ai/mcp-server
+  pnpm -r build         # builds @ratel-ai/sdk, @ratel-ai/mcp-server, @ratel-ai/cli
   ```
 
 ## Run
@@ -66,4 +66,6 @@ Critical signal: every tool call you see in the UI is `mcp__ratel__*`. If you ev
 
 To aggregate your own MCPs, edit `ratel-config.json`. The shape mirrors Claude Code's `mcpServers` field — for migrating your existing setup, copy the relevant entries from `~/.claude.json` here. Stdio and HTTP transports are supported; SSE and unknown types are skipped at runtime with a stderr warning. If one upstream fails to start, Ratel logs it and continues — the session stays up.
 
-For details on the Ratel server itself (library API, result wrapping, transport boundary adaptations), see [`@ratel-ai/mcp-server`](../../src/integrations/mcp-server/README.md).
+For a non-isolated installation (i.e. you want Ratel to take over your real Claude Code MCP setup, not a sandboxed `--mcp-config` session), use the `ratel mcp import` wizard from [`@ratel-ai/cli`](../../src/integrations/cli/README.md) instead of this template.
+
+For details on the Ratel server library itself (gateway construction, result wrapping, transport boundary adaptations), see [`@ratel-ai/mcp-server`](../../src/integrations/mcp-server/README.md).

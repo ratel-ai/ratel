@@ -2,6 +2,12 @@ import * as clack from "@clack/prompts";
 
 export const CANCEL_SYMBOL = Symbol("ratel.prompt.cancel");
 
+export interface SpinnerHandle {
+  start(message?: string): void;
+  stop(message?: string): void;
+  message(message: string): void;
+}
+
 export interface PromptAdapter {
   intro(message: string): void;
   outro(message: string): void;
@@ -23,6 +29,7 @@ export interface PromptAdapter {
     placeholder?: string;
     initialValue?: string;
   }): Promise<string | symbol>;
+  spinner(): SpinnerHandle;
   isCancel(value: unknown): boolean;
   cancel(message?: string): void;
 }
@@ -36,6 +43,7 @@ export function defaultPromptAdapter(): PromptAdapter {
     select: clack.select as PromptAdapter["select"],
     multiselect: clack.multiselect as PromptAdapter["multiselect"],
     text: clack.text as PromptAdapter["text"],
+    spinner: () => clack.spinner(),
     isCancel: clack.isCancel,
     cancel: clack.cancel,
   };
@@ -58,6 +66,7 @@ export function silentPromptAdapter(): PromptAdapter {
     async text() {
       return "";
     },
+    spinner: () => ({ start() {}, stop() {}, message() {} }),
     isCancel(value) {
       return value === CANCEL_SYMBOL;
     },

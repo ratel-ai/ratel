@@ -11,8 +11,11 @@ interface UpstreamSpec {
   inputSchema?: Record<string, unknown>;
 }
 
-async function startUpstream(tools: UpstreamSpec[]) {
-  const server = new Server({ name: "fake", version: "0.0.0" }, { capabilities: { tools: {} } });
+async function startUpstream(tools: UpstreamSpec[], instructions?: string) {
+  const server = new Server(
+    { name: "fake", version: "0.0.0" },
+    { capabilities: { tools: {} }, ...(instructions ? { instructions } : {}) },
+  );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: tools.map((t) => ({
       name: t.name,
@@ -181,6 +184,53 @@ describe("buildGatewayFromConfig", () => {
 
     await handle.close();
     await ok.server.close();
+  });
+
+  it("falls back to the upstream's `instructions` when no description is set on the config entry", async () => {
+    const fs = await startUpstream(
+      [{ name: "ping", description: "Ping." }],
+      "Use this server for filesystem ops.",
+    );
+    const handle = await buildGatewayFromConfig(
+      { mcpServers: { fs: { type: "stdio", command: "noop" } } },
+      { transportFactory: () => fs.clientTransport },
+    );
+    expect(handle.upstreamServers).toEqual([
+      {
+        name: "fs",
+        description: "Use this server for filesystem ops.",
+        instructions: "Use this server for filesystem ops.",
+        toolCount: 1,
+      },
+    ]);
+    await handle.close();
+    await fs.server.close();
+  });
+
+  it("prefers the config entry's description over the upstream's `instructions` when both are present, but still surfaces the raw instructions separately", async () => {
+    const fs = await startUpstream([{ name: "ping", description: "Ping." }], "from-upstream");
+    const handle = await buildGatewayFromConfig(
+      {
+        mcpServers: { fs: { type: "stdio", command: "noop", description: "from-config" } },
+      },
+      { transportFactory: () => fs.clientTransport },
+    );
+    expect(handle.upstreamServers[0].description).toBe("from-config");
+    expect(handle.upstreamServers[0].instructions).toBe("from-upstream");
+    await handle.close();
+    await fs.server.close();
+  });
+
+  it("omits both description and instructions when neither config nor upstream provide them", async () => {
+    const fs = await startUpstream([{ name: "ping", description: "Ping." }]);
+    const handle = await buildGatewayFromConfig(
+      { mcpServers: { fs: { type: "stdio", command: "noop" } } },
+      { transportFactory: () => fs.clientTransport },
+    );
+    expect(handle.upstreamServers[0].description).toBeUndefined();
+    expect(handle.upstreamServers[0].instructions).toBeUndefined();
+    await handle.close();
+    await fs.server.close();
   });
 
   it("close() tears down every upstream handle even if one rejects", async () => {

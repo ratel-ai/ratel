@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 
-export type RatelScope = "global" | "project" | "local";
+export type RatelScope = "user" | "project" | "local";
 
 export interface HierarchyEnv {
   homeDir: string;
@@ -15,7 +15,7 @@ export class ProjectRootNotFoundError extends Error {
 }
 
 export function ratelConfigPath(scope: RatelScope, env: HierarchyEnv): string {
-  if (scope === "global") {
+  if (scope === "user") {
     return join(env.homeDir, ".ratel", "config.json");
   }
   if (!env.projectRoot) {

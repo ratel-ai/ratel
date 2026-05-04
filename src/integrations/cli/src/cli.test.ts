@@ -19,13 +19,13 @@ async function fakeUpstream() {
   return { server, clientTransport };
 }
 
-describe("runCli", () => {
+describe("runCli — mcp serve", () => {
   it("reads the config, builds the gateway, and exposes search_tools + invoke_tool over the given downstream transport", async () => {
     const upstream = await fakeUpstream();
     const [downstreamServerTransport, downstreamClientTransport] =
       InMemoryTransport.createLinkedPair();
 
-    const { shutdown } = await runCli(["/fake/config.json"], {
+    const { shutdown } = await runCli(["mcp", "serve", "/fake/config.json"], {
       readConfig: async () => ({
         mcpServers: { up: { type: "stdio", command: "noop" } },
       }),
@@ -44,10 +44,14 @@ describe("runCli", () => {
       arguments: { query: "ping" },
     });
     const text = (search.content as Array<{ text: string }>)[0].text;
-    expect(JSON.parse(text)[0].toolId).toBe("up__ping");
+    const parsed = JSON.parse(text) as {
+      groups: Array<{ server: { name: string }; hits: Array<{ toolId: string }> }>;
+    };
+    expect(parsed.groups[0].server.name).toBe("up");
+    expect(parsed.groups[0].hits[0].toolId).toBe("up__ping");
 
     await client.close();
-    await shutdown();
+    await shutdown?.();
     await upstream.server.close();
   });
 
@@ -56,7 +60,7 @@ describe("runCli", () => {
     const [downstreamServerTransport, downstreamClientTransport] =
       InMemoryTransport.createLinkedPair();
 
-    const { shutdown } = await runCli(["/fake/config.json"], {
+    const { shutdown } = await runCli(["mcp", "serve", "/fake/config.json"], {
       readConfig: async () => ({
         mcpServers: {
           up: { type: "stdio", command: "noop", description: "ping server" },
@@ -75,28 +79,30 @@ describe("runCli", () => {
     expect(search?.description).toContain("- up — ping server (1 tools)");
 
     await client.close();
-    if (shutdown) await shutdown();
+    await shutdown?.();
     await upstream.server.close();
   });
 
   it("rejects when no config path is provided, with a usage message", async () => {
-    await expect(runCli([])).rejects.toThrow(/usage/i);
+    await expect(runCli(["mcp", "serve"], { logger: () => {} })).rejects.toThrow(/usage/i);
   });
 
   it("propagates a clear error when the config file cannot be read", async () => {
     await expect(
-      runCli(["/missing.json"], {
+      runCli(["mcp", "serve", "/missing.json"], {
         readConfig: async () => {
           throw new Error("ENOENT");
         },
+        logger: () => {},
       }),
     ).rejects.toThrow(/ENOENT/);
   });
 
   it("propagates parseConfig errors with the field path when the JSON is malformed", async () => {
     await expect(
-      runCli(["/bad.json"], {
+      runCli(["mcp", "serve", "/bad.json"], {
         readConfig: async () => ({ mcpServers: { fs: { type: "stdio" } } }),
+        logger: () => {},
       }),
     ).rejects.toThrow(/mcpServers\.fs\.command/);
   });
@@ -106,7 +112,7 @@ describe("runCli", () => {
     const [serverTransport] = InMemoryTransport.createLinkedPair();
     const logs: string[] = [];
 
-    const { shutdown } = await runCli(["/x"], {
+    const { shutdown } = await runCli(["mcp", "serve", "/x"], {
       readConfig: async () => ({
         mcpServers: { up: { type: "stdio", command: "noop" } },
       }),
@@ -117,7 +123,7 @@ describe("runCli", () => {
 
     expect(logs.some((m) => /ready/i.test(m))).toBe(true);
 
-    if (shutdown) await shutdown();
+    await shutdown?.();
     await upstream.server.close();
   });
 
@@ -126,37 +132,63 @@ describe("runCli", () => {
     const [serverTransport] = InMemoryTransport.createLinkedPair();
     const reads: string[] = [];
 
-    const { shutdown } = await runCli(["--config", "/a.json", "--config", "/b.json"], {
-      readConfig: async (path) => {
-        reads.push(path);
-        if (path === "/a.json") {
-          return { mcpServers: { up: { type: "stdio", command: "from-a" } } };
-        }
-        return { mcpServers: { up: { type: "stdio", command: "from-b" } } };
+    const { shutdown } = await runCli(
+      ["mcp", "serve", "--config", "/a.json", "--config", "/b.json"],
+      {
+        readConfig: async (path) => {
+          reads.push(path);
+          if (path === "/a.json") {
+            return { mcpServers: { up: { type: "stdio", command: "from-a" } } };
+          }
+          return { mcpServers: { up: { type: "stdio", command: "from-b" } } };
+        },
+        transportFactory: () => upstream.clientTransport,
+        serverTransport,
+        logger: () => {},
       },
-      transportFactory: () => upstream.clientTransport,
-      serverTransport,
-      logger: () => {},
-    });
+    );
 
     expect(reads).toEqual(["/a.json", "/b.json"]);
 
-    if (shutdown) await shutdown();
+    await shutdown?.();
     await upstream.server.close();
   });
+});
 
-  it("--help logs usage including every subcommand", async () => {
+describe("runCli — help and routing", () => {
+  it("--help logs a top-level usage that names the mcp and backup groups", async () => {
     const logs: string[] = [];
     await runCli(["--help"], { logger: (m) => logs.push(m) });
     const out = logs.join("\n");
-    expect(out).toMatch(/import/);
-    expect(out).toMatch(/add/);
-    expect(out).toMatch(/remove/);
-    expect(out).toMatch(/list/);
-    expect(out).toMatch(/undo/);
+    expect(out).toMatch(/mcp/);
+    expect(out).toMatch(/backup/);
   });
 
-  it("rejects an unknown subcommand with ArgError", async () => {
-    await expect(runCli(["importt"], { logger: () => {} })).rejects.toThrow(/importt/);
+  it("`ratel mcp` (no verb) logs the mcp group usage", async () => {
+    const logs: string[] = [];
+    await runCli(["mcp"], { logger: (m) => logs.push(m) });
+    const out = logs.join("\n");
+    expect(out).toMatch(/serve/);
+    expect(out).toMatch(/add/);
+    expect(out).toMatch(/import/);
+  });
+
+  it("`ratel backup` (no verb) logs the backup group usage", async () => {
+    const logs: string[] = [];
+    await runCli(["backup"], { logger: (m) => logs.push(m) });
+    const out = logs.join("\n");
+    expect(out).toMatch(/list/);
+  });
+
+  it("rejects an unknown command with ArgError", async () => {
+    await expect(runCli(["mcps"], { logger: () => {} })).rejects.toThrow(/mcps/);
+  });
+
+  it("rejects an unknown mcp verb", async () => {
+    await expect(runCli(["mcp", "fly"], { logger: () => {} })).rejects.toThrow(/fly/);
+  });
+
+  it("rejects an unknown backup verb", async () => {
+    await expect(runCli(["backup", "purge"], { logger: () => {} })).rejects.toThrow(/purge/);
   });
 });

@@ -43,7 +43,9 @@ export async function buildGatewayFromConfig(
       const handle = await registerMcpServer(catalog, { name, transport });
       upstreamHandles.push(handle);
       const info: UpstreamServerInfo = { name, toolCount: handle.toolIds.length };
-      if (entry.description) info.description = entry.description;
+      const description = entry.description ?? handle.serverInstructions;
+      if (description) info.description = description;
+      if (handle.serverInstructions) info.instructions = handle.serverInstructions;
       upstreamServers.push(info);
     } catch (err) {
       log(`[ratel] failed to register ${name}: ${(err as Error).message}`);

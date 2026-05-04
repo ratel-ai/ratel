@@ -22,12 +22,14 @@ A Claude Code session consumes fewer input tokens once Ratel is added, with a be
 src/
 ├── core/lib/                  # ratel-core — Rust crate; the product's heart
 ├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK that bundles ratel-core
-└── integrations/mcp-server/   # @ratel-ai/mcp-server — exposes a catalog as an MCP server
+└── integrations/
+    ├── mcp-server/            # @ratel-ai/mcp-server — library: expose a catalog as an MCP server
+    └── cli/                   # @ratel-ai/cli — `ratel` CLI: scope management, gateway, Claude-Code import
 benchmark/                     # Rust harness for retrieval-quality evaluation
 docs/adr/                      # Architecture decision records
 ```
 
-Future milestones add `src/core/server/` (central server), more entries under `src/integrations/` (CLI, Claude Code import), and `src/sdk/py/` (Python SDK). Not scaffolded until they're being implemented.
+Future milestones add `src/core/server/` (central server), more entries under `src/integrations/`, and `src/sdk/py/` (Python SDK). Not scaffolded until they're being implemented.
 
 ## Build & test
 

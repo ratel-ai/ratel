@@ -17,10 +17,16 @@ interface FakeMcp {
   clientTransport: InMemoryTransport;
 }
 
-async function startFakeMcpServer(tools: ServerToolSpec[]): Promise<FakeMcp> {
+async function startFakeMcpServer(
+  tools: ServerToolSpec[],
+  serverOptions?: { instructions?: string },
+): Promise<FakeMcp> {
   const server = new Server(
     { name: "fake-mcp", version: "0.0.0" },
-    { capabilities: { tools: {} } },
+    {
+      capabilities: { tools: {} },
+      ...(serverOptions?.instructions ? { instructions: serverOptions.instructions } : {}),
+    },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -173,6 +179,30 @@ describe("registerMcpServer", () => {
 
     await handle.close();
     await failing.server.close();
+  });
+
+  it("surfaces the upstream server's `instructions` field on the handle", async () => {
+    const withInstructions = await startFakeMcpServer([{ name: "x", description: "anything" }], {
+      instructions: "Use this server for filesystem ops.",
+    });
+    const catalog = new ToolCatalog();
+    const handle = await registerMcpServer(catalog, {
+      name: "fs",
+      transport: withInstructions.clientTransport,
+    });
+    expect(handle.serverInstructions).toBe("Use this server for filesystem ops.");
+    await handle.close();
+    await withInstructions.server.close();
+  });
+
+  it("returns serverInstructions as undefined when the upstream did not supply any", async () => {
+    const catalog = new ToolCatalog();
+    const handle = await registerMcpServer(catalog, {
+      name: "demo",
+      transport: fake.clientTransport,
+    });
+    expect(handle.serverInstructions).toBeUndefined();
+    await handle.close();
   });
 
   it("invokes the upstream tool via tools/call and returns its structured payload", async () => {
