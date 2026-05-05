@@ -115,7 +115,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.triple }}
-          path: src/sdk/ts/native/ratel-sdk.${{ matrix.triple }}.node
+          path: |
+            src/sdk/ts/native/ratel-sdk.${{ matrix.triple }}.node
+            src/sdk/ts/native/index.cjs
+            src/sdk/ts/native/index.d.cts
           if-no-files-found: error
 
   publish-npm:
@@ -161,6 +164,12 @@ jobs:
             f="src/sdk/ts/npm/$triple/ratel-sdk.$triple.node"
             test -f "$f" || { echo "missing: $f" >&2; exit 1; }
           done
+      - name: Place JS loader + types into native/
+        shell: bash
+        run: |
+          set -e
+          cp src/sdk/ts/artifacts/index.cjs src/sdk/ts/native/index.cjs
+          cp src/sdk/ts/artifacts/index.d.cts src/sdk/ts/native/index.d.cts
       - name: Build TS loader
         run: pnpm --filter @ratel-ai/sdk run build:ts
       - name: Inject optionalDependencies into SDK loader package.json
