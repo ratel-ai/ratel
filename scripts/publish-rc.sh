@@ -124,21 +124,21 @@ if [[ $SKIP_NPM -eq 0 ]]; then
 fi
 
 # ---------- crates.io publish flow ----------
+# crates.io has no `--tag` concept; the version itself (0.1.4-rc.1) is
+# pre-release semver, so consumers won't pick it up unless they ask for it
+# explicitly. The package version is in lockstep with the SDK loader, so we
+# reuse $VERSION for the existence check.
 if [[ $SKIP_CRATE -eq 0 ]]; then
   cd "$REPO_ROOT"
-  echo "==> cargo publish ratel-ai-core"
-  if [[ $DRY_RUN -eq 1 ]]; then
-    cargo publish -p ratel-ai-core --dry-run --allow-dirty
+  echo "----- ratel-ai-core@$VERSION -----"
+  status="$(curl -sS -o /dev/null -w '%{http_code}' \
+    "https://crates.io/api/v1/crates/ratel-ai-core/${VERSION}" || echo 000)"
+  if [[ "$status" == "200" ]]; then
+    echo "    already published, skipping"
+  elif [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] cargo publish -p ratel-ai-core"
   else
-    # crates.io has no `--tag` concept; the version itself (0.1.4-rc.1) is
-    # pre-release semver, so consumers won't pick it up unless they ask for
-    # it explicitly. Idempotency: cargo publish refuses to re-publish, so
-    # re-running after a successful publish is a no-op error we tolerate.
-    cargo publish -p ratel-ai-core || {
-      rc=$?
-      echo "    (if the error above is 'already exists', that's fine — continuing)"
-      [[ $rc -ne 0 ]] && true
-    }
+    cargo publish -p ratel-ai-core
   fi
 fi
 
