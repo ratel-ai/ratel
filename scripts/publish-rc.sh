@@ -111,10 +111,14 @@ if [[ $SKIP_NPM -eq 0 ]]; then
       echo "    already published, skipping"
       continue
     fi
+    # --provenance=false overrides publishConfig.provenance=true on the
+    # SDK loader / mcp-server / cli. Provenance requires GH Actions OIDC,
+    # which a laptop publish doesn't have. CI publishes via release.yml
+    # always go with provenance enabled.
     if [[ $DRY_RUN -eq 1 ]]; then
-      echo "    [dry-run] npm publish $file --access public --tag $TAG"
+      echo "    [dry-run] npm publish $file --access public --tag $TAG --provenance=false"
     else
-      npm publish "$file" --access public --tag "$TAG"
+      npm publish "$file" --access public --tag "$TAG" --provenance=false
     fi
   done
 
