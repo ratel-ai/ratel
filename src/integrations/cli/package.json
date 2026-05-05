@@ -39,6 +39,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepack": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
     "test": "vitest run",
