@@ -67,8 +67,8 @@ How a new version of Ratel is published to npm and crates.io. Read end-to-end be
 (Only run when registering a brand-new package that has never existed on the registry before — Trusted Publishers can't be configured for a package that doesn't exist yet.)
 
 1. Trigger `build-binaries.yml` via `workflow_dispatch` to build the binaries.
-2. Download the `release-tarballs` artifact, extract.
-3. Manually `npm publish <tarball> --access public --tag rc --provenance` for each (subpackages first, then loader, then mcp-server, then cli). Requires `npm login` + 2FA.
-4. `cargo publish -p ratel-ai-core` from local checkout.
-5. Configure Trusted Publishers on each registry name (npm web UI + crates.io web UI) pointing at `release.yml` in this repo, `release` environment.
-6. Bump to next version (e.g. `-rc.2`), tag, push — `release.yml` should now publish via OIDC with no token errors. Validates the trust relationship.
+2. Make sure `npm login` is set on your laptop (npm requires 2FA on the publishing account for first-publish of scoped public packages) and `cargo login` for crates.io.
+3. Run `scripts/publish-rc.sh --from-run <run-id>` — it downloads the `release-tarballs` artifact, verifies all 8 expected tarballs are present, publishes them in dependency order (5 subpackages → loader → mcp-server → cli) with `--access public --tag rc`, then `cargo publish -p ratel-ai-core`. The script is idempotent (skips versions already on the registry), so a partial failure is safe to resume.
+   - First-publish from a laptop ships **without provenance** (provenance requires GH Actions OIDC). That's expected for the bootstrap — once Trusted Publishers are configured, every subsequent release flows through `release.yml` with `--provenance`.
+4. Configure Trusted Publishers on each registry name (npm web UI for the 8 packages + crates.io web UI for `ratel-ai-core`) pointing at `release.yml` in this repo, `release` environment.
+5. Bump to next version (e.g. `-rc.2`), tag, push — `release.yml` should now publish via OIDC with no token errors. Validates the trust relationship.
