@@ -76,7 +76,7 @@ jobs:
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target aarch64-apple-darwin --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
           - triple: darwin-x64
             target: x86_64-apple-darwin
-            runs-on: macos-13
+            runs-on: macos-14
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-apple-darwin --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
           - triple: linux-x64-gnu
             target: x86_64-unknown-linux-gnu
