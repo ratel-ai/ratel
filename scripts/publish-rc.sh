@@ -51,37 +51,36 @@ if [[ -z "$FROM_DIR" && -z "$FROM_RUN" ]] && [[ $SKIP_NPM -eq 0 ]]; then
   exit 2
 fi
 
-# Wrapper around `npm publish` that handles 2FA OTP prompts and treats
-# "previously published" as success (a fallback when the registry's HTTP
-# pre-check missed due to CDN/replication lag).
+# Wrapper around `npm publish` that treats "previously published" as
+# success (fallback when the registry's HTTP pre-check missed due to
+# CDN/replication lag) without breaking npm's 2FA UX.
+#
+# stdout is left flowing to the terminal so npm's TTY-detection picks the
+# right 2FA flow — for WebAuthn/passkey users, that's the browser approval
+# prompt; for TOTP users, an OTP prompt. Capturing stdout would force npm
+# into non-interactive mode and demand --otp=<code>.
+#
+# Only stderr is captured (via `tee` so the user still sees it in real
+# time) — npm prints the "previously published versions" 403 there.
 publish_one() {
   local file="$1"
-  local args=("$file" --access public --tag "$TAG" --provenance=false)
-  local out otp
+  local err_file
+  err_file="$(mktemp)"
 
-  while true; do
-    if out="$(npm publish "${args[@]}" 2>&1)"; then
-      printf '%s\n' "$out"
-      return 0
-    fi
-    if printf '%s' "$out" | grep -q "previously published versions"; then
-      echo "    already published (caught at publish time), continuing"
-      return 0
-    fi
-    if printf '%s' "$out" | grep -qE "EOTP|one-time password"; then
-      if [[ ! -e /dev/tty ]]; then
-        printf '%s\n' "$out" >&2
-        echo "    ERROR: OTP required but no TTY available" >&2
-        return 1
-      fi
-      printf "    OTP required for %s. enter code: " "$(basename "$file")"
-      read -r otp </dev/tty
-      args=("$file" --access public --tag "$TAG" --provenance=false --otp="$otp")
-      continue
-    fi
-    printf '%s\n' "$out" >&2
-    return 1
-  done
+  if npm publish "$file" --access public --tag "$TAG" --provenance=false \
+       2> >(tee "$err_file" >&2); then
+    rm -f "$err_file"
+    return 0
+  fi
+
+  if grep -q "previously published versions" "$err_file"; then
+    rm -f "$err_file"
+    echo "    already published (caught at publish time), continuing"
+    return 0
+  fi
+
+  rm -f "$err_file"
+  return 1
 }
 
 # Read the canonical version from the SDK loader's package.json
