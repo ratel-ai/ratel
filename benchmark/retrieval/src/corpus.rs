@@ -11,7 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// A tool definition. Mirrors `ratel_core::Tool` but adds serde derives so the
+/// A tool definition. Mirrors `ratel_ai_core::Tool` but adds serde derives so the
 /// type can round-trip through JSONL without touching the core lib.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolSpec {
@@ -23,9 +23,9 @@ pub struct ToolSpec {
     pub output_schema: Value,
 }
 
-impl From<ToolSpec> for ratel_core::Tool {
+impl From<ToolSpec> for ratel_ai_core::Tool {
     fn from(spec: ToolSpec) -> Self {
-        ratel_core::Tool {
+        ratel_ai_core::Tool {
             id: spec.id,
             name: spec.name,
             description: spec.description,
@@ -35,9 +35,9 @@ impl From<ToolSpec> for ratel_core::Tool {
     }
 }
 
-impl From<&ToolSpec> for ratel_core::Tool {
+impl From<&ToolSpec> for ratel_ai_core::Tool {
     fn from(spec: &ToolSpec) -> Self {
-        ratel_core::Tool {
+        ratel_ai_core::Tool {
             id: spec.id.clone(),
             name: spec.name.clone(),
             description: spec.description.clone(),
@@ -170,9 +170,9 @@ mod tests {
     }
 
     #[test]
-    fn tool_spec_converts_to_ratel_core_tool() {
+    fn tool_spec_converts_to_ratel_ai_core_tool() {
         let spec = read_file_spec();
-        let tool: ratel_core::Tool = (&spec).into();
+        let tool: ratel_ai_core::Tool = (&spec).into();
         assert_eq!(tool.id, spec.id);
         assert_eq!(tool.name, spec.name);
         assert_eq!(tool.description, spec.description);

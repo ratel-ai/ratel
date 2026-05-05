@@ -15,7 +15,7 @@ name = "ratel-benchmark-retrieval"
 path = "src/main.rs"
 
 [dependencies]
-ratel-core = { workspace = true }
+ratel-ai-core = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 anyhow = "1.0"

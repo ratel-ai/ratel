@@ -1,18 +1,48 @@
 {
   "name": "@ratel-ai/mcp-server",
-  "version": "0.2.0",
+  "version": "0.1.4-rc.1",
+  "description": "MCP server library that exposes a Ratel tool catalog as a Model Context Protocol server. The inverse of @ratel-ai/sdk's registerMcpServer.",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "author": "Agentified",
+  "homepage": "https://github.com/ratel-ai/ratel",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ratel-ai/ratel.git",
+    "directory": "src/integrations/mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/ratel-ai/ratel/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "tool-calling",
+    "ratel",
+    "context-engineering",
+    "gateway"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE.md",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
     "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
@@ -22,6 +52,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@ratel-ai/sdk": "workspace:*"
+    "@ratel-ai/sdk": "workspace:^"
   }
 }

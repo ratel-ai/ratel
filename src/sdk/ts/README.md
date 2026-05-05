@@ -1,6 +1,6 @@
 # `@ratel-ai/sdk`
 
-TypeScript SDK for [Ratel](../../../README.md) — the context engineering platform for AI agents. Bundles `ratel-core` (Rust) via NAPI-RS so JS/TS agents can drop Ratel in with one dependency.
+TypeScript SDK for [Ratel](../../../README.md) — the context engineering platform for AI agents. Bundles `ratel-ai-core` (Rust) via NAPI-RS so JS/TS agents can drop Ratel in with one dependency.
 
 ## Install
 

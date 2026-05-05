@@ -1,10 +1,10 @@
 //! Retrieval-only metrics (BM25 quality vs gold tools).
 //!
 //! No LLM calls — this layer answers "given a query and a candidate pool, does
-//! `ratel-core` rank the gold tool(s) at the top?" Outputs feed the report's
+//! `ratel-ai-core` rank the gold tool(s) at the top?" Outputs feed the report's
 //! retrieval-quality panel.
 
-use ratel_core::ToolRegistry;
+use ratel_ai_core::ToolRegistry;
 use serde::Serialize;
 
 use crate::corpus::ToolSpec;

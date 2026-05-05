@@ -1,4 +1,4 @@
-use ratel_core::{Tool, ToolRegistry};
+use ratel_ai_core::{Tool, ToolRegistry};
 use serde_json::json;
 
 fn empty_schema() -> serde_json::Value {

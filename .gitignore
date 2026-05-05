@@ -40,6 +40,7 @@ src/sdk/ts/dist/
 src/sdk/ts/native/index.cjs
 src/sdk/ts/native/index.d.cts
 src/sdk/ts/native/*.node
+src/sdk/ts/npm/*/*.node
 
 # Logs
 *.log

@@ -1,13 +1,13 @@
-//! Tiny demo of `ratel-core` tool search.
+//! Tiny demo of `ratel-ai-core` tool search.
 //!
 //! Run from the repo root:
 //!
 //! ```bash
-//! cargo run -p ratel-core --example search_demo
-//! cargo run -p ratel-core --example search_demo -- "your query here"
+//! cargo run -p ratel-ai-core --example search_demo
+//! cargo run -p ratel-ai-core --example search_demo -- "your query here"
 //! ```
 
-use ratel_core::{Tool, ToolRegistry};
+use ratel_ai_core::{Tool, ToolRegistry};
 use serde_json::json;
 
 fn main() {

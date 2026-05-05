@@ -1,0 +1,66 @@
+name: Verify install
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to verify (e.g. 0.1.4-rc.2 or 0.1.4)
+        required: true
+      tag:
+        description: npm dist-tag (rc or latest)
+        required: true
+        default: rc
+  schedule:
+    # Daily at 09:00 UTC against whatever is on `latest`.
+    - cron: '0 9 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.version || 'cron' }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: verify (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: darwin-arm64
+            runs-on: macos-14
+          - label: darwin-x64
+            runs-on: macos-13
+          - label: linux-x64-gnu
+            runs-on: ubuntu-latest
+          - label: linux-arm64-gnu
+            runs-on: ubuntu-24.04-arm
+          - label: win32-x64-msvc
+            runs-on: windows-latest
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "spec=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=latest" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install + run @ratel-ai/cli
+        shell: bash
+        run: |
+          set -e
+          npx -y "@ratel-ai/cli@${{ steps.ver.outputs.spec }}" --help
+      - name: Smoke-test SDK native binding load
+        shell: bash
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "@ratel-ai/sdk@${{ steps.ver.outputs.spec }}"
+          node -e "const {ToolRegistry} = require('@ratel-ai/sdk'); const r = new ToolRegistry(); r.register({id:'x',name:'x',description:'x',inputSchema:{},outputSchema:{}}); const hits = r.search('x', 5); if (!Array.isArray(hits) || hits.length === 0) { console.error('search failed'); process.exit(1); } console.log('OK', hits);"

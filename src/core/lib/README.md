@@ -1,11 +1,11 @@
-# `ratel-core`
+# `ratel-ai-core`
 
 The Rust library at the heart of Ratel. Retrieval, auth, and telemetry are implemented here; every other piece of the project (SDKs, benchmark, future server and integrations) is a wrapper around this crate.
 
 ## Library shape
 
-- Crate name: `ratel-core`
-- Library name: `ratel_core`
+- Crate name: `ratel-ai-core`
+- Library name: `ratel_ai_core`
 - In-process; no infra dependencies
 - Member of the root Cargo workspace
 
@@ -14,9 +14,9 @@ The Rust library at the heart of Ratel. Retrieval, auth, and telemetry are imple
 From the repo root:
 
 ```bash
-cargo build -p ratel-core
-cargo test  -p ratel-core
-cargo clippy -p ratel-core --all-targets -- -D warnings
+cargo build -p ratel-ai-core
+cargo test  -p ratel-ai-core
+cargo clippy -p ratel-ai-core --all-targets -- -D warnings
 ```
 
 Or run against the whole workspace from the repo root with `cargo build --workspace` / `cargo test --workspace`.

@@ -6,13 +6,13 @@ The base of the platform is an algorithm and a library. On top of that base sit 
 
 ## What you can use today
 
-### Core: `ratel-core` (Rust library)
+### Core: `ratel-ai-core` (Rust library)
 
 In-process tool retrieval. Register your tool catalog, query it, get a ranked top-K. BM25 today (semantic + re-ranking on the roadmap), no infra to stand up. See [`src/core/lib/README.md`](src/core/lib/README.md). Locked decisions: [ADR-0003](docs/adr/0003-tool-selection-replace-vs-suggest.md) (replace-by-default tool injection), [ADR-0004](docs/adr/0004-bm25-tool-indexing.md) (BM25 indexing strategy).
 
 ### SDK: `@ratel-ai/sdk` (TypeScript)
 
-Bundles `ratel-core` via NAPI-RS ([ADR-0002](docs/adr/0002-ts-rust-binding-strategy.md)) so any JS/TS agent can drop it in. Exposes a framework-neutral `ToolCatalog`, gateway factories (`searchToolsTool`, `invokeToolTool`) usable from any agent loop, and `registerMcpServer(catalog, { name, transport })` to ingest an upstream MCP server's tools straight into a Ratel catalog. See [`src/sdk/ts/README.md`](src/sdk/ts/README.md).
+Bundles `ratel-ai-core` via NAPI-RS ([ADR-0002](docs/adr/0002-ts-rust-binding-strategy.md)) so any JS/TS agent can drop it in. Exposes a framework-neutral `ToolCatalog`, gateway factories (`searchToolsTool`, `invokeToolTool`) usable from any agent loop, and `registerMcpServer(catalog, { name, transport })` to ingest an upstream MCP server's tools straight into a Ratel catalog. See [`src/sdk/ts/README.md`](src/sdk/ts/README.md).
 
 ```bash
 pnpm add @ratel-ai/sdk
@@ -78,8 +78,8 @@ The roadmap lives in [`plan.md`](plan.md) (gitignored, working file). Status of 
 
 ```
 src/
-├── core/lib/                  # ratel-core — Rust crate; the algorithm at the base
-├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK that bundles ratel-core
+├── core/lib/                  # ratel-ai-core — Rust crate; the algorithm at the base
+├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK that bundles ratel-ai-core
 └── integrations/
     ├── mcp-server/            # @ratel-ai/mcp-server — library: expose a catalog as an MCP server
     └── cli/                   # @ratel-ai/cli — `ratel` CLI: scope mgmt, gateway, Claude-Code import, OAuth

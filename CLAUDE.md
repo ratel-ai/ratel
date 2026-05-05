@@ -4,7 +4,7 @@
 
 Context engineering platform for AI agents — a library that decides what ends up in an agent's context window so the model works with less noise and fewer tokens.
 
-Core is a Rust lib (`ratel-core`); language SDKs bundle it. In-process, no infra required.
+Core is a Rust lib (`ratel-ai-core`); language SDKs bundle it. In-process, no infra required.
 
 ## Layout
 

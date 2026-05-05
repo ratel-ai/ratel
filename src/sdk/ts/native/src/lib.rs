@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate napi_derive;
 
-use ratel_core as core;
+use ratel_ai_core as core;
 use serde_json::Value;
 
 #[napi(object)]

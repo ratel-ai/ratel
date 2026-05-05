@@ -1,0 +1,136 @@
+name: Build binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build (branch, tag, or SHA)
+        required: false
+        default: revamp
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.triple }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: darwin-arm64
+            target: aarch64-apple-darwin
+            runs-on: macos-14
+            build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target aarch64-apple-darwin --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+          - triple: darwin-x64
+            target: x86_64-apple-darwin
+            runs-on: macos-13
+            build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-apple-darwin --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+          - triple: linux-x64-gnu
+            target: x86_64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-unknown-linux-gnu --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+          - triple: linux-arm64-gnu
+            target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target aarch64-unknown-linux-gnu --use-napi-cross --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+          - triple: win32-x64-msvc
+            target: x86_64-pc-windows-msvc
+            runs-on: windows-latest
+            build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-pc-windows-msvc --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/ts/native
+          key: ${{ matrix.triple }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build native
+        run: ${{ matrix.build }}
+      - name: List output
+        shell: bash
+        run: ls -la src/sdk/ts/native/
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.triple }}
+          path: src/sdk/ts/native/ratel-sdk.${{ matrix.triple }}.node
+          if-no-files-found: error
+
+  bundle:
+    name: bundle tarballs
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: src/sdk/ts/artifacts
+          pattern: bindings-*
+          merge-multiple: true
+      - name: Inspect downloads
+        run: ls -la src/sdk/ts/artifacts/
+      - name: Distribute binaries into npm/ subpackages
+        run: pnpm --filter @ratel-ai/sdk exec napi artifacts --output-dir artifacts --npm-dir npm
+      - name: Verify each subpackage has its binary
+        shell: bash
+        run: |
+          set -e
+          for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
+            f="src/sdk/ts/npm/$triple/ratel-sdk.$triple.node"
+            if [ ! -f "$f" ]; then
+              echo "missing: $f" >&2
+              exit 1
+            fi
+            echo "ok: $f"
+          done
+      - name: Build TS loader
+        run: pnpm --filter @ratel-ai/sdk run build:ts
+      - name: Pack SDK subpackages
+        shell: bash
+        run: |
+          set -e
+          mkdir -p tarballs
+          for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
+            (cd src/sdk/ts/npm/$triple && npm pack --pack-destination "$GITHUB_WORKSPACE/tarballs")
+          done
+      - name: Pack SDK loader, mcp-server, cli
+        shell: bash
+        run: |
+          set -e
+          pnpm --filter @ratel-ai/sdk pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          pnpm --filter @ratel-ai/mcp-server pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          pnpm --filter @ratel-ai/cli pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+      - name: List final bundle
+        run: ls -la tarballs/
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-tarballs
+          path: tarballs/
+          if-no-files-found: error
+          retention-days: 14

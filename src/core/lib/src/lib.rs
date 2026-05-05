@@ -1,4 +1,4 @@
-//! `ratel-core` — the Rust core of Ratel.
+//! `ratel-ai-core` — the Rust core of Ratel.
 //!
 //! See `README.md` and `docs/adr/` for design.
 

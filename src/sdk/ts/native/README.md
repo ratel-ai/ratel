@@ -1,6 +1,6 @@
-# `native/` — NAPI-RS binding to `ratel-core`
+# `native/` — NAPI-RS binding to `ratel-ai-core`
 
-The Rust crate that produces the native Node.js addon bundled by [`@ratel-ai/sdk`](../README.md). Pure pass-through over the public API of [`ratel-core`](../../../core/lib/README.md); see [ADR 0002](../../../../docs/adr/0002-ts-rust-binding-strategy.md) for the binding-strategy rationale.
+The Rust crate that produces the native Node.js addon bundled by [`@ratel-ai/sdk`](../README.md). Pure pass-through over the public API of [`ratel-ai-core`](../../../core/lib/README.md); see [ADR 0002](../../../../docs/adr/0002-ts-rust-binding-strategy.md) for the binding-strategy rationale.
 
 ## Build
 
@@ -15,7 +15,7 @@ Under the hood this runs `@napi-rs/cli` against this crate's `Cargo.toml`, produ
 ## Layout
 
 ```
-Cargo.toml      cdylib crate; depends on ratel-core via the workspace
+Cargo.toml      cdylib crate; depends on ratel-ai-core via the workspace
 build.rs        napi-build glue
 src/lib.rs      #[napi] wrappers for Tool, SearchHit, ToolRegistry
 ```

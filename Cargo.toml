@@ -7,10 +7,13 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.0"
+version = "0.1.4-rc.1"
 edition = "2024"
 license-file = "LICENSE.md"
 repository = "https://github.com/ratel-ai/ratel"
+homepage = "https://github.com/ratel-ai/ratel"
+documentation = "https://docs.rs/ratel-ai-core"
+authors = ["Agentified"]
 
 [workspace.dependencies]
-ratel-core = { path = "src/core/lib" }
+ratel-ai-core = { path = "src/core/lib" }

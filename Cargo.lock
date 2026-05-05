@@ -974,8 +974,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ratel-ai-core"
+version = "0.1.4-rc.1"
+dependencies = [
+ "bm25",
+ "serde_json",
+]
+
+[[package]]
 name = "ratel-benchmark-retrieval"
-version = "0.0.0"
+version = "0.1.4-rc.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -983,28 +991,20 @@ dependencies = [
  "indicatif",
  "parquet",
  "rand",
- "ratel-core",
+ "ratel-ai-core",
  "serde",
  "serde_json",
  "tempfile",
 ]
 
 [[package]]
-name = "ratel-core"
-version = "0.0.0"
-dependencies = [
- "bm25",
- "serde_json",
-]
-
-[[package]]
 name = "ratel-sdk-ts-native"
-version = "0.0.0"
+version = "0.1.4-rc.1"
 dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
- "ratel-core",
+ "ratel-ai-core",
  "serde_json",
 ]
 

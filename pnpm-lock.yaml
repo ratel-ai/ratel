@@ -107,10 +107,10 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.1)
       '@ratel-ai/mcp-server':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mcp-server
       '@ratel-ai/sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../sdk/ts
     devDependencies:
       '@biomejs/biome':
@@ -132,7 +132,7 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.1)
       '@ratel-ai/sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../sdk/ts
     devDependencies:
       '@biomejs/biome':

@@ -1,6 +1,6 @@
 # `src/integrations/`
 
-External-protocol surfaces for Ratel. Each entry is a workspace package that wraps `@ratel-ai/sdk` (or `ratel-core` directly) and either speaks one specific protocol, hosts one specific runtime, or drives the rest from a user-facing CLI.
+External-protocol surfaces for Ratel. Each entry is a workspace package that wraps `@ratel-ai/sdk` (or `ratel-ai-core` directly) and either speaks one specific protocol, hosts one specific runtime, or drives the rest from a user-facing CLI.
 
 Integrations are independent packages; they don't add functionality to the SDK, they expose it.
 
