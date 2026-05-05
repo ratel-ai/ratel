@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ev": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"]
+    }
+  }
+}

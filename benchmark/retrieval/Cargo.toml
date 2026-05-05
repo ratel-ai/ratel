@@ -1,0 +1,29 @@
+[package]
+name = "ratel-benchmark-retrieval"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "ratel_benchmark_retrieval"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ratel-benchmark-retrieval"
+path = "src/main.rs"
+
+[dependencies]
+ratel-ai-core = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+csv = "1.3"
+indicatif = "0.17"
+parquet = { version = "58", default-features = false, features = ["snap", "zstd"] }
+rand = "0.9"
+
+[dev-dependencies]
+tempfile = "3.10"

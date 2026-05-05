@@ -1,247 +1,130 @@
-<div align="center">
-  <img src="https://agentified.dev/assets/logo-new-CNqV8zpW.png" alt="Agentified" height="100" />
+# Ratel
 
-  <h2>Agentified</h2>
-  <h4>Assemble the perfect context for every agent turn — tools, messages, and memory in one call.</h4>
+The **context engineering platform** for AI agents — the layer that decides what ends up in an agent's context window, so the agent works with less noise, fewer tokens, and fewer round-trips between model and tool calls.
 
-  <p>
-    <a href="./docs/">Docs</a> •
-    <a href="https://demo.agentified.dev">Demo</a> •
-    <a href="https://discord.gg/HTXmrjvsDy">Discord</a> •
-    <a href="https://twitter.com/rstagi_">Twitter</a>
-  </p>
+The base of the platform is an algorithm and a library. On top of that base sit a growing set of products and integrations — the flagship today being a Ratel **MCP server** plus a **CLI** that puts Ratel between Claude Code (or any MCP client) and the rest of your MCP servers.
 
-  <p>
-    <a href="https://www.npmjs.com/package/agentified"><img src="https://img.shields.io/npm/v/agentified?label=npm&color=cb3837" alt="npm" /></a>
-    <a href="https://pypi.org/project/agentified/"><img src="https://img.shields.io/pypi/v/agentified?label=pypi&color=3775A9" alt="pypi" /></a>
-    <a href="https://github.com/agentified/agentified/stargazers"><img src="https://img.shields.io/github/stars/agentified/agentified?style=social" alt="stars" /></a>
-    <a href="https://discord.gg/HTXmrjvsDy"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da" alt="discord" /></a>
-    <a href="./LICENSE.md"><img src="https://img.shields.io/badge/license-SUL%20%2B%20MIT-blue" alt="license" /></a>
-  </p>
-</div>
+## What you can use today
 
-> **86% cost reduction. Same task accuracy.** [Benchmarks →](./benchmarks/context-base/README.md)
+### Core: `ratel-ai-core` (Rust library)
 
-<br />
+In-process tool retrieval. Register your tool catalog, query it, get a ranked top-K. BM25 today (semantic + re-ranking on the roadmap), no infra to stand up. See [`src/core/lib/README.md`](src/core/lib/README.md). Locked decisions: [ADR-0003](docs/adr/0003-tool-selection-replace-vs-suggest.md) (replace-by-default tool injection), [ADR-0004](docs/adr/0004-bm25-tool-indexing.md) (BM25 indexing strategy).
 
-## What is Agentified?
+### SDK: `@ratel-ai/sdk` (TypeScript)
 
-A **context intelligence layer** that registers all your tools, then assembles the right context — tools, messages, and memory — for each agent turn. Not another agent framework — a context layer that plugs into whatever you're already using.
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    Your Agent                       │
-│         (Mastra / LangGraph / any framework)        │
-└──────────────────────┬──────────────────────────────┘
-                       │
-          session.context.assemble()
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│                 Agentified SDK                      │
-│              (TypeScript / Python)                  │
-│                                                     │
-│   .tools(...)  .messages(...)  .recall(...)         │
-│            → AssembledContext                       │
-│         { tools, messages, tokenEstimate }          │
-└──────────────────────┬──────────────────────────────┘
-                       │
-              register + discover
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│               agentified-core                       │
-│                (Rust server)                        │
-│                                                     │
-│   Hybrid ranking · Session continuity · Embeddings  │
-└─────────────────────────────────────────────────────┘
-```
-
-1. **Register** your tools — agentified-core embeds and indexes them
-2. **Assemble** context — `session.context.messages(...).assemble()` returns the right tools + messages for each turn
-3. **Execute** — pass assembled context to your agent framework
-
-<br />
-
-## Quick Start
-
-### TypeScript
+Bundles `ratel-ai-core` via NAPI-RS ([ADR-0002](docs/adr/0002-ts-rust-binding-strategy.md)) so any JS/TS agent can drop it in. Exposes a framework-neutral `ToolCatalog`, gateway factories (`searchToolsTool`, `invokeToolTool`) usable from any agent loop, and `registerMcpServer(catalog, { name, transport })` to ingest an upstream MCP server's tools straight into a Ratel catalog. See [`src/sdk/ts/README.md`](src/sdk/ts/README.md).
 
 ```bash
-pnpm add agentified
+pnpm add @ratel-ai/sdk
 ```
 
-```typescript
-import { Agentified } from "agentified";
+### Integration: `@ratel-ai/cli` + `@ratel-ai/mcp-server` (the Claude Code path)
 
-const ag = new Agentified();
-await ag.connect("http://localhost:9119");
+The `ratel` CLI and the MCP-server library together let you put Ratel **between** an MCP client (Claude Code, Claude Desktop, an agent framework) and the upstream MCP servers it would otherwise talk to directly. The client sees three tools — `search_tools`, `invoke_tool`, `auth` — instead of every upstream's full tool list, dispatched through Ratel's ranking. OAuth 2.1 / PKCE is handled centrally for HTTP and SSE upstreams, with tokens persisted at `~/.ratel/oauth/<name>.json`.
 
-const dataset = await ag.dataset("my-agent").register({
-  tools: [
-    { name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] }, handler: async (args) => ({ temp: 22 }) },
-    { name: "search_docs", description: "Search documentation", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }, handler: async (args) => ({ results: [] }) },
-  ],
-});
+Headline verbs:
 
-const session = dataset.session("chat-1");
-const ctx = await session.context
-  .messages({ strategy: "recent" })
-  .assemble();
-// ctx.tools     → { get_weather, search_docs } (ranked by relevance)
-// ctx.messages  → conversation history
-```
+| Command | What it does |
+|---|---|
+| `ratel mcp import` | One-shot migration: scans Claude Code's existing MCP setup across all three scopes, lets you pick which upstreams to move into Ratel, then rewrites Claude to point at `ratel mcp serve`. |
+| `ratel mcp add` | Add an MCP server to Ratel. Same positional/flag layout as `claude mcp add`. For HTTP/SSE, drives the OAuth flow inline. |
+| `ratel mcp serve` | Start the gateway over stdio. This is the bin Claude Code launches after `import`. |
+| `ratel mcp auth [<name>]` | (Re-)run the OAuth flow for an HTTP/SSE upstream. |
+| `ratel mcp list` | List configured upstreams across user / project / local scopes, with auth status. |
 
-### Python
+See [`src/integrations/cli/README.md`](src/integrations/cli/README.md) and [`src/integrations/mcp-server/README.md`](src/integrations/mcp-server/README.md) for the full surface.
+
+## Quickstart for Claude Code users
 
 ```bash
-pip install agentified
+# 1. Install the CLI globally.
+pnpm add -g @ratel-ai/cli
+
+# 2. Migrate your existing Claude Code MCP setup into Ratel.
+#    The wizard scans ~/.claude.json and per-project .mcp.json,
+#    lets you cherry-pick which upstreams to move, and rewrites
+#    Claude to launch `ratel mcp serve` instead of each upstream
+#    directly. A timestamped backup is written under ~/.ratel/backups/.
+ratel mcp import
+
+# 3. Restart Claude Code. Your upstream tools are now reachable
+#    via the `search_tools` + `invoke_tool` pair, and OAuth-protected
+#    HTTP/SSE upstreams expose an `auth` tool to (re)authorize.
+
+# Roll back any time:
+ratel backup undo
 ```
 
-```python
-from agentified import Agentified, BackendTool, RegisterInput
-
-ag = Agentified()
-await ag.connect("http://localhost:9119")
-
-instance = await ag.register(RegisterInput(tools=[
-    BackendTool(name="get_weather", description="Get current weather",
-                parameters={"type": "object", "properties": {"city": {"type": "string"}}},
-                handler=lambda args: {"temp": 22, "city": args["city"]}),
-]))
-
-session = instance.session("chat-1")
-ctx = await session.context.messages(strategy="recent").assemble()
-# ctx.tools     → discovered tools ranked by relevance
-# ctx.messages  → conversation history
-```
-
-<br />
-
-## Works with your stack
-
-| TypeScript | Python |
-|------------|--------|
-| Mastra | LangGraph |
-| AG-UI | LangChain |
-| OpenAI SDK | OpenAI SDK |
-| Any framework | Any framework |
-
-**Zero lock-in.** Agentified handles tool selection. Your framework handles everything else.
-
-<br />
-
-## Why Agentified?
-
-| Problem | Without Agentified | With Agentified |
-|---------|-------------------|-----------------|
-| **Context assembly** | Hand-wire tools + messages per turn | `session.context.assemble()` — one call |
-| **Tool selection** | Dump all tools in prompt | Deferred by default — ranked (BM25 / semantic / hybrid) on demand; `alwaysInclude` exempts critical tools |
-| **Token costs** | Pay for irrelevant tools | Only load what's needed |
-| **Cross-turn tool state** | Re-discover every turn | Discovered tools persist within and across turns of the session |
-| **Multi-turn context** | No memory across turns | Session continuity via turn tracking |
-| **Framework switching** | Rebuild context layer | Plug and play |
-| **Context debugging** | Black box | Inspector with full visibility |
-
-<br />
-
-## Features
-
-**[Context Assembly](./docs/)** — `session.context.tools(...).messages(...).recall(...).limitTokens(n).assemble()` — one fluent call assembles the right tools, messages, and memory for each agent turn. Supports `recent`, `full`, `summary`, and `recent+summary` strategies. Tool recall auto-discovers relevant tools based on the last user message. Returns an `AssembledContext` you pass straight to your framework.
-
-**[Ranking](./docs/server/ranking.md)** — Three strategies: `bm25` (default — field-aware keyword matching, no embedding call per query), `semantic` (OpenAI embeddings across 4 weighted fields), and `hybrid` (`0.7 × semantic + 0.3 × BM25`). Pick per request via the `strategy` field.
-
-**Deferred Tool Loading** — Registered tools cost zero tokens until discovered. Mark critical tools with `alwaysInclude` to keep them unconditionally available; everything else is surfaced on demand via ranking or `agentified_discover`. Discovered tools persist within and across turns.
-
-**[Session Continuity](./docs/server/session-continuity.md)** — Tools discovered mid-turn stay available for the rest of the turn, and previously-used tools carry into subsequent turns. No context amnesia, no re-discovery cost.
-
-**[Graph Expansion](./docs/server/graph-expansion.md)** — Tools declare `requires`/`provides` metadata. Dependencies are auto-injected.
-
-**[Frontend Tools](./docs/typescript/frontend-tools.md)** — Tag tools with `metadata.location: "frontend"` to run them client-side. Built-in React Inspector for debugging.
-
-**[Storage](./docs/server/storage.md)** — In-memory default, SQLite WAL for persistence. Async write-through, zero-config.
-
-**Framework Agnostic** — Works with Mastra, LangGraph, AG-UI, or raw API calls. TypeScript and Python.
-
-**Rust Core** — Axum HTTP server, RwLock concurrency, content-hash embedding cache. Runs anywhere — local, Docker, serverless.
-
-<br />
-
-## Documentation
-
-Full docs live in [`docs/`](./docs/):
-
-- **[Getting Started (TypeScript)](./docs/typescript/getting-started.md)** — Paste-and-run TS example
-- **[Getting Started (Python)](./docs/python/getting-started.md)** — Paste-and-run Python example
-- **[Architecture](./docs/server/architecture.md)** — System design, ranking algorithm, storage
-- **[Mastra Guide](./docs/typescript/integrations/mastra.md)** — Full-stack TypeScript example
-- **[LangGraph Guide](./docs/python/integrations/langgraph.md)** — Python + Gemini example
-
-<br />
-
-## Try it now
-
-### Run locally
+If you'd rather configure manually, skip `import` and add servers one at a time — same flag layout as Claude's:
 
 ```bash
-# Start the server
-docker run -p 9119:9119 -e OPENAI_API_KEY=sk-... agentified/agentified-core
-
-# Install and run (TypeScript)
-pnpm add agentified
-pnpm tsx index.ts  # see docs/typescript/getting-started.md for the code
+ratel mcp add --scope user stripe https://mcp.stripe.com --transport http
+ratel mcp add --scope project airtable -e API_KEY=xyz -- npx -y airtable-mcp-server
 ```
 
-### Demo
+For the LLM reading this and trying to wire Ratel up: the entry point is `ratel mcp import`. It is interactive but every prompt has a sensible default. After it runs, the user just restarts Claude Code. There is no separate config file you need to hand-author.
 
-See Agentified in action. Compare token usage with and without smart tool selection.
+## What's coming
 
-[**Open the Demo →**](https://demo.agentified.dev)
+The v1 wedge is tool selection. Under the same context-engineering thesis, future milestones layer onto the same primitives:
 
-### Examples
+- **Soon (v0.1.x)**: telemetry + UI inspector for tool usage and traces; JSON→TOON encoding to cut per-call token spend; first-class skills support (registered alongside tools, ranked by the same algorithm).
+- **Mid (v0.2.x – v0.3.x roughly)**: LLM-based suggestions for tool/skill improvements driven by telemetry; multi-agent decomposition suggestions; semantic search (local + optional cloud embeddings) and re-ranking (LLM + XGBoost); a server flavor that consolidates traces across multiple agent instances.
+- **Later**: chat management — store / compact / prune / navigate messages so long-running agents don't blow their context budget. Memories integration so prior context informs tool selection. Eventually a unified tools-skills-memories graph and a Python SDK.
 
-| Example | What it shows | Complexity |
-|---------|---------------|------------|
-| [ts-sdk-smoke](./examples/ts-sdk-smoke) | TS SDK basics — register, discover, sessions | Minimal |
-| [ts-mastra-smoke](./examples/ts-mastra-smoke) | Mastra + OpenAI — LLM tool calling, AG-UI | Minimal |
-| [py-sdk-smoke](./examples/py-sdk-smoke) | Python SDK basics — register, discover, sessions | Minimal |
-| [py-langchain-sdk-smoke](./examples/py-langchain-sdk-smoke) | LangChain + OpenAI — LLM tool calling | Minimal |
-| [QuickHR](./examples/quickhr) | Full-stack Mastra + React app | Full |
-| [LangGraph Agent](./examples/py-langgraph) | LangGraph + Gemini (Python) | Full |
+The roadmap lives in [`plan.md`](plan.md) (gitignored, working file). Status of what's actually shipped vs. in-flight lives in [`progress.md`](progress.md).
 
-<br />
+## Repo layout
 
-## Benchmarks
+```
+src/
+├── core/lib/                  # ratel-ai-core — Rust crate; the algorithm at the base
+├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK that bundles ratel-ai-core
+└── integrations/
+    ├── mcp-server/            # @ratel-ai/mcp-server — library: expose a catalog as an MCP server
+    └── cli/                   # @ratel-ai/cli — `ratel` CLI: scope mgmt, gateway, Claude-Code import, OAuth
+benchmark/                     # Two-layer harness: Rust retrieval + TS agent campaign
+examples/                      # ai-sdk, mcp-chat, mcp-server end-to-end examples
+docs/adr/                      # Architecture decision records
+```
 
-| Metric | Baseline | Agentified | Improvement |
-|--------|----------|------------|-------------|
-| Task Correctness | 0.98 | 0.98 | — |
-| Avg. Tokens/Request | 45,000 | 6,200 | **-86%** |
-| Cost per 1K queries | $21.53 | $2.95 | **-86%** |
-| Latency (p50) | 2.1s | 1.4s | **-33%** |
+`src/core/server/` (central server) and `src/sdk/py/` (Python SDK) aren't scaffolded until they're being implemented.
 
-[Full benchmark methodology →](./benchmarks/context-base/README.md)
+## Build & test
 
-<br />
+Prerequisites: Rust stable (pinned via `rust-toolchain.toml`), Node 24+, pnpm 10.28+.
 
-## Community
+```bash
+# Rust
+cargo build --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --check --all
+cargo test --workspace
 
-- [Discord](https://discord.gg/HTXmrjvsDy) — Questions, feedback, and show & tell
-- [Twitter](https://twitter.com/rstagi_) — Updates and announcements
-- [AI Aperitivo](https://lu.ma/aimi) — Meet us IRL in Milan, Rome, and beyond
-- [Contributing](./CONTRIBUTING.md) — We welcome PRs!
+# TS
+pnpm install
+pnpm -r build
+pnpm -r typecheck
+pnpm -r lint
+pnpm -r test
+```
 
-<br />
+CI runs both pipelines on every PR (`.github/workflows/{rust,ts}.yml`).
+
+## Architecture decisions
+
+See [`docs/adr/`](docs/adr/) for the durable record. The cross-cutting locks worth knowing up front:
+
+- [ADR 0002 — TS↔Rust binding via NAPI-RS](docs/adr/0002-ts-rust-binding-strategy.md)
+- [ADR 0003 — Tool selection: replace by default, suggest opt-in](docs/adr/0003-tool-selection-replace-vs-suggest.md)
+- [ADR 0004 — BM25 tool indexing strategy](docs/adr/0004-bm25-tool-indexing.md)
+- [ADR 0006 — Benchmark corpus and eval modes](docs/adr/0006-benchmark-corpus-and-eval-modes.md)
+- [ADR 0007 — Benchmark corpus not snapshotted](docs/adr/0007-benchmark-corpus-not-snapshotted.md)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-`src/core/` is licensed under the [Sustainable Use License](./LICENSE.md#sustainable-use-license). All other packages (SDKs, React, examples) are [MIT](./LICENSE.md#mit-license). See [LICENSE.md](./LICENSE.md) for details.
-
----
-
-<div align="center">
-  <p>Built with ❤️ in Italy 🇮🇹</p>
-  <p>
-    <a href="https://agentified.dev">Website</a> •
-    <a href="./docs/">Documentation</a> •
-    <a href="https://github.com/agentified/agentified">GitHub</a>
-  </p>
-</div>
+Source-available under the **Elastic License 2.0**, with an additional grant making it free to use in OSI-approved open-source projects. Non-open-source / commercial production use requires a commercial license. See [LICENSE.md](LICENSE.md).

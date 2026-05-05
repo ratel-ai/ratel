@@ -1,0 +1,5 @@
+# Local-only agent files (per ADR/README convention). Drop a file named
+# `ignore.<your-arm>.ts` in this folder to add a private benchmark arm that
+# auto-discovers like the committed ones but never lands in the repo. Useful
+# for prototyping or for arms that depend on closed/preview SDKs.
+ignore.*

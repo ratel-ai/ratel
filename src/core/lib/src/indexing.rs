@@ -1,0 +1,132 @@
+use crate::tool::Tool;
+
+pub(crate) fn searchable_text(tool: &Tool) -> String {
+    let mut tokens: Vec<String> = Vec::new();
+    if !tool.name.is_empty() {
+        push_identifier(&tool.name, &mut tokens);
+    }
+    if !tool.description.is_empty() {
+        tokens.push(tool.description.clone());
+    }
+    flatten(&tool.input_schema, &mut tokens);
+    flatten(&tool.output_schema, &mut tokens);
+    tokens.join(" ")
+}
+
+fn flatten(value: &serde_json::Value, tokens: &mut Vec<String>) {
+    if let Some(properties) = value.get("properties").and_then(|v| v.as_object()) {
+        for (key, sub) in properties {
+            push_identifier(key, tokens);
+            push_field_tokens(sub, tokens);
+            flatten(sub, tokens);
+        }
+    }
+    if let Some(items) = value.get("items") {
+        flatten(items, tokens);
+    }
+}
+
+// Push the original identifier and, if it differs, a space-split form so that
+// the bm25 crate's UAX #29 tokenizer (which keeps `snake_case` and `camelCase`
+// whole) still surfaces the constituent words.
+fn push_identifier(s: &str, tokens: &mut Vec<String>) {
+    tokens.push(s.to_string());
+    let split = split_identifier(s);
+    if split != s {
+        tokens.push(split);
+    }
+}
+
+fn split_identifier(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 4);
+    let mut prev: Option<char> = None;
+    for c in s.chars() {
+        if c == '_' {
+            out.push(' ');
+        } else if c.is_uppercase() && matches!(prev, Some(p) if p.is_lowercase()) {
+            out.push(' ');
+            out.push(c);
+        } else {
+            out.push(c);
+        }
+        prev = Some(c);
+    }
+    out
+}
+
+fn push_field_tokens(sub: &serde_json::Value, tokens: &mut Vec<String>) {
+    if let Some(desc) = sub.get("description").and_then(|v| v.as_str()) {
+        tokens.push(desc.to_string());
+    }
+    if let Some(values) = sub.get("enum").and_then(|v| v.as_array()) {
+        for v in values {
+            if let Some(s) = v.as_str() {
+                tokens.push(s.to_string());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn read_file_tool() -> Tool {
+        Tool {
+            id: "read_file".into(),
+            name: "read_file".into(),
+            description: "Read a file from disk".into(),
+            input_schema: json!({
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "absolute path"
+                    },
+                    "encoding": {
+                        "type": "string",
+                        "enum": ["utf8", "binary"],
+                        "description": "file encoding"
+                    }
+                }
+            }),
+            output_schema: json!({}),
+        }
+    }
+
+    #[test]
+    fn searchable_text_is_deterministic() {
+        let tool = read_file_tool();
+        let first = searchable_text(&tool);
+        let second = searchable_text(&tool);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn searchable_text_preserves_schema_defined_property_order() {
+        let tool = read_file_tool();
+        let text = searchable_text(&tool);
+        let path_idx = text.find("path").expect("path token missing");
+        let encoding_idx = text.find("encoding").expect("encoding token missing");
+        assert!(
+            path_idx < encoding_idx,
+            "expected schema-defined order (path before encoding) in: {text}"
+        );
+    }
+
+    #[test]
+    fn searchable_text_omits_json_structure_keywords() {
+        let tool = read_file_tool();
+        let text = searchable_text(&tool);
+        // Tokens we explicitly skip: type names, structural keys, JSON syntax.
+        assert!(
+            !text.contains("\"type\""),
+            "raw type quoting leaked: {text}"
+        );
+        assert!(
+            !text.contains("\"properties\""),
+            "properties leaked: {text}"
+        );
+        assert!(!text.contains('{'), "JSON braces leaked: {text}");
+    }
+}
