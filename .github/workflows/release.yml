@@ -192,6 +192,12 @@ jobs:
         run: |
           set -e
           (cd src/sdk/ts && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+      # mcp-server and cli have `workspace:^` specifiers for internal deps.
+      # `npm publish` doesn't understand that protocol and ships the literal
+      # string, breaking installs (EUNSUPPORTEDPROTOCOL on `npm install`).
+      # Pack with `pnpm pack` first (rewrites workspace:^ → real semver),
+      # then publish the tarball with `npm publish` so OIDC + provenance
+      # still work.
       - name: Publish mcp-server
         shell: bash
         env:
@@ -199,7 +205,8 @@ jobs:
           DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
         run: |
           set -e
-          (cd src/integrations/mcp-server && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+          pnpm --filter @ratel-ai/mcp-server pack --pack-destination "${RUNNER_TEMP}/mcp-server"
+          npm publish "${RUNNER_TEMP}/mcp-server"/*.tgz --provenance --access public --tag "$DIST_TAG" $DRY_RUN
       - name: Publish cli
         shell: bash
         env:
@@ -207,7 +214,8 @@ jobs:
           DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
         run: |
           set -e
-          (cd src/integrations/cli && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+          pnpm --filter @ratel-ai/cli pack --pack-destination "${RUNNER_TEMP}/cli"
+          npm publish "${RUNNER_TEMP}/cli"/*.tgz --provenance --access public --tag "$DIST_TAG" $DRY_RUN
 
   publish-crate:
     name: Publish ratel-ai-core to crates.io
