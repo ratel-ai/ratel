@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/mcp-server",
-  "version": "0.1.4-rc.1",
+  "version": "0.1.4-rc.2",
   "description": "MCP server library that exposes a Ratel tool catalog as a Model Context Protocol server. The inverse of @ratel-ai/sdk's registerMcpServer.",
   "private": false,
   "type": "module",
