@@ -173,7 +173,7 @@ jobs:
       - name: Build TS loader
         run: pnpm --filter @ratel-ai/sdk run build:ts
       - name: Inject optionalDependencies into SDK loader package.json
-        run: pnpm --filter @ratel-ai/sdk exec napi pre-publish --skip-optional-publish
+        run: node scripts/inject-sdk-optional-deps.mjs
       - name: Publish SDK subpackages
         shell: bash
         env:
