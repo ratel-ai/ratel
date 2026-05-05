@@ -10,7 +10,7 @@ pnpm add @ratel-ai/sdk
 npm install @ratel-ai/sdk
 ```
 
-For v0.1.1 the package builds the native module from source on the host platform; consumers need a Rust toolchain (`rustup`). Per-OS prebuilt binaries land in a follow-up — see [ADR 0002](../../../docs/adr/0002-ts-rust-binding-strategy.md).
+From `0.1.4`, prebuilt native bindings ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc — no Rust toolchain required to install. The right per-platform binary is selected automatically via npm `optionalDependencies`. See [ADR 0002](../../../docs/adr/0002-ts-rust-binding-strategy.md) for the rationale.
 
 ## Usage
 
