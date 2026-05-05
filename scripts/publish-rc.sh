@@ -51,6 +51,39 @@ if [[ -z "$FROM_DIR" && -z "$FROM_RUN" ]] && [[ $SKIP_NPM -eq 0 ]]; then
   exit 2
 fi
 
+# Wrapper around `npm publish` that handles 2FA OTP prompts and treats
+# "previously published" as success (a fallback when the registry's HTTP
+# pre-check missed due to CDN/replication lag).
+publish_one() {
+  local file="$1"
+  local args=("$file" --access public --tag "$TAG" --provenance=false)
+  local out otp
+
+  while true; do
+    if out="$(npm publish "${args[@]}" 2>&1)"; then
+      printf '%s\n' "$out"
+      return 0
+    fi
+    if printf '%s' "$out" | grep -q "previously published versions"; then
+      echo "    already published (caught at publish time), continuing"
+      return 0
+    fi
+    if printf '%s' "$out" | grep -qE "EOTP|one-time password"; then
+      if [[ ! -e /dev/tty ]]; then
+        printf '%s\n' "$out" >&2
+        echo "    ERROR: OTP required but no TTY available" >&2
+        return 1
+      fi
+      printf "    OTP required for %s. enter code: " "$(basename "$file")"
+      read -r otp </dev/tty
+      args=("$file" --access public --tag "$TAG" --provenance=false --otp="$otp")
+      continue
+    fi
+    printf '%s\n' "$out" >&2
+    return 1
+  done
+}
+
 # Read the canonical version from the SDK loader's package.json
 VERSION="$(node -p "require('$REPO_ROOT/src/sdk/ts/package.json').version")"
 echo "==> version: $VERSION"
@@ -131,14 +164,7 @@ if [[ $SKIP_NPM -eq 0 ]]; then
       continue
     fi
 
-    if out="$(npm publish "$file" --access public --tag "$TAG" --provenance=false 2>&1)"; then
-      printf '%s\n' "$out"
-    elif printf '%s' "$out" | grep -q "previously published versions"; then
-      echo "    already published (caught at publish time), continuing"
-    else
-      printf '%s\n' "$out" >&2
-      exit 1
-    fi
+    publish_one "$file" || exit 1
   done
 
   echo
