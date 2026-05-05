@@ -103,22 +103,41 @@ if [[ $SKIP_NPM -eq 0 ]]; then
   [[ $missing -eq 1 ]] && exit 1
 
   # Publish each (skip if already on registry at this version).
+  # Two layers of defense:
+  #  (a) Pre-check via the registry's HTTP API. This bypasses npm CLI cache
+  #      entirely (`npm view` was returning stale "not found" right after a
+  #      sibling publish, causing the next iteration to retry and 403).
+  #  (b) Capture the publish output. If the registry rejects with "previously
+  #      published versions" anyway (CDN lag / replication), treat as already-
+  #      published and continue.
+  # --provenance=false overrides publishConfig.provenance=true on SDK
+  # loader / mcp-server / cli. Provenance requires GH Actions OIDC, which a
+  # laptop doesn't have; release.yml always publishes with provenance.
   for entry in "${PACKAGES[@]}"; do
     file="${entry%%|*}"
     name="${entry##*|}"
     echo "----- $name@$VERSION -----"
-    if npm view "${name}@${VERSION}" version >/dev/null 2>&1; then
+
+    enc_name="${name//\//%2F}"
+    url="https://registry.npmjs.org/${enc_name}/${VERSION}"
+    status="$(curl -sS -o /dev/null -w '%{http_code}' "$url" || echo 000)"
+    if [[ "$status" == "200" ]]; then
       echo "    already published, skipping"
       continue
     fi
-    # --provenance=false overrides publishConfig.provenance=true on the
-    # SDK loader / mcp-server / cli. Provenance requires GH Actions OIDC,
-    # which a laptop publish doesn't have. CI publishes via release.yml
-    # always go with provenance enabled.
+
     if [[ $DRY_RUN -eq 1 ]]; then
       echo "    [dry-run] npm publish $file --access public --tag $TAG --provenance=false"
+      continue
+    fi
+
+    if out="$(npm publish "$file" --access public --tag "$TAG" --provenance=false 2>&1)"; then
+      printf '%s\n' "$out"
+    elif printf '%s' "$out" | grep -q "previously published versions"; then
+      echo "    already published (caught at publish time), continuing"
     else
-      npm publish "$file" --access public --tag "$TAG" --provenance=false
+      printf '%s\n' "$out" >&2
+      exit 1
     fi
   done
 
@@ -142,7 +161,14 @@ if [[ $SKIP_CRATE -eq 0 ]]; then
   elif [[ $DRY_RUN -eq 1 ]]; then
     echo "    [dry-run] cargo publish -p ratel-ai-core"
   else
-    cargo publish -p ratel-ai-core
+    if out="$(cargo publish -p ratel-ai-core 2>&1)"; then
+      printf '%s\n' "$out"
+    elif printf '%s' "$out" | grep -qE "already (exists|uploaded)|crate version .* is already uploaded"; then
+      echo "    already published (caught at publish time), continuing"
+    else
+      printf '%s\n' "$out" >&2
+      exit 1
+    fi
   fi
 fi
 
