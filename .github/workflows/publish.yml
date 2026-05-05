@@ -1,0 +1,324 @@
+name: Publish
+
+on:
+  push:
+    branches: [main]
+    tags: ["core-v*"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  # ── npm (trusted publishing — no NPM_TOKEN) ──────────────────────────
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: src/ts-packages
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: src/ts-packages/pnpm-lock.yaml
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      # Replaced changesets/action — it can't resolve nested workspaces.
+      # See https://github.com/changesets/action/issues/265
+      - name: Version packages (if needed)
+        id: version
+        run: |
+          pnpm changeset version
+          git add -A
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release PR
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: version packages"
+          BRANCH="changeset-release/main"
+          git push origin "HEAD:${BRANCH}" --force
+          if ! gh pr list --head "$BRANCH" --state open | grep -q .; then
+            gh pr create --head "$BRANCH" --base main \
+              --title "chore: version packages" \
+              --body "Automated version bump from changesets."
+          fi
+
+      - name: Publish to npm
+        id: publish
+        if: steps.version.outputs.changed == 'false'
+        run: |
+          OUTPUT=$(pnpm release 2>&1)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "New tag:"; then
+            SDK_VERSION=$(node -p "require('./sdk/package.json').version")
+            echo "sdk-version=${SDK_VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            echo "No packages were published, skipping tag/release"
+          fi
+        env:
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Create npm GitHub release
+        if: steps.publish.outputs.sdk-version != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.publish.outputs.sdk-version }}"
+          TAG="npm-v${VERSION}"
+          git tag "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --title "npm v${VERSION}" \
+            --notes "Published to npm:
+          - \`agentified@${VERSION}\`
+          - \`@agentified/fe-client@${VERSION}\`
+          - \`@agentified/react@${VERSION}\`
+          - \`@agentified/mastra@${VERSION}\`
+          - \`@agentified/ai-sdk@${VERSION}\`"
+
+  # ── PyPI (trusted publishing — no API token) ─────────────────────────
+  pypi-build:
+    runs-on: ubuntu-latest
+    outputs:
+      should-publish: ${{ steps.check.outputs.should-publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - id: check
+        name: Check if version already on PyPI
+        working-directory: src/py-packages/sdk
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VERSION"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/agentified/${VERSION}/json")
+          if [ "$STATUS" = "200" ]; then
+            echo "Version $VERSION already on PyPI, skipping"
+            echo "should-publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $VERSION not on PyPI, will publish"
+            echo "should-publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.should-publish == 'true'
+        run: pip install --upgrade hatchling build
+
+      - if: steps.check.outputs.should-publish == 'true'
+        run: python -m build
+        working-directory: src/py-packages/sdk
+
+      - if: steps.check.outputs.should-publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-dist
+          path: src/py-packages/sdk/dist/*
+
+  pypi-publish:
+    needs: pypi-build
+    if: needs.pypi-build.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/agentified/
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: py-dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Create PyPI GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('src/py-packages/sdk/pyproject.toml','rb'))['project']['version'])")
+          TAG="pypi-v${VERSION}"
+          git tag "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --title "PyPI v${VERSION}" \
+            --notes "Published to PyPI:
+          - [\`agentified==${VERSION}\`](https://pypi.org/project/agentified/${VERSION}/)
+          - [\`agentified-langchain==${VERSION}\`](https://pypi.org/project/agentified-langchain/${VERSION}/)"
+
+  # ── PyPI langchain (trusted publishing — no API token) ──────────────
+  pypi-build-langchain:
+    runs-on: ubuntu-latest
+    outputs:
+      should-publish: ${{ steps.check.outputs.should-publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - id: check
+        name: Check if version already on PyPI
+        working-directory: src/py-packages/langchain
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VERSION"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/agentified-langchain/${VERSION}/json")
+          if [ "$STATUS" = "200" ]; then
+            echo "Version $VERSION already on PyPI, skipping"
+            echo "should-publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $VERSION not on PyPI, will publish"
+            echo "should-publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.should-publish == 'true'
+        run: pip install --upgrade hatchling build
+
+      - if: steps.check.outputs.should-publish == 'true'
+        run: python -m build
+        working-directory: src/py-packages/langchain
+
+      - if: steps.check.outputs.should-publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-dist-langchain
+          path: src/py-packages/langchain/dist/*
+
+  pypi-publish-langchain:
+    needs: [pypi-build-langchain, pypi-publish]
+    if: needs.pypi-build-langchain.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/agentified-langchain/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: py-dist-langchain
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # ── Docker Hub (native multi-arch build) ─────────────────────────────
+  docker-build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/core
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=agentified/agentified-core,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,scope=${{ matrix.platform }},mode=max
+
+      - run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  docker-merge:
+    runs-on: ubuntu-latest
+    needs: docker-build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: agentified/agentified-core
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=match,pattern=core-v(.*),group=1,enable=${{ startsWith(github.ref, 'refs/tags/core-v') }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'agentified/agentified-core@sha256:%s ' *)
+
+      - name: Create Docker GitHub release
+        if: startsWith(github.ref, 'refs/tags/core-v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/core-v}"
+          gh release create "${{ github.ref_name }}" \
+            --title "Docker v${VERSION}" \
+            --notes "Published to Docker Hub:
+          - \`agentified/agentified-core:${VERSION}\`
+          - \`agentified/agentified-core:latest\`
+
+          Multi-arch: \`linux/amd64\`, \`linux/arm64\`"

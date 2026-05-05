@@ -1,0 +1,15 @@
+[project]
+name = "py-langchain-sdk-smoke"
+version = "0.0.1"
+requires-python = ">=3.10"
+dependencies = [
+    "agentified>=0.0.5",
+    "agentified-langchain>=0.0.5",
+    "langgraph>=0.4",
+    "langchain-openai>=0.3",
+    "langchain-core>=0.3",
+]
+
+[tool.uv.sources]
+agentified = { path = "../../src/py-packages/sdk", editable = true }
+agentified-langchain = { path = "../../src/py-packages/langchain", editable = true }

@@ -1,0 +1,14 @@
+{
+  "name": "sdk-smoke",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.ts"
+  },
+  "dependencies": {
+    "agentified": "link:../../src/ts-packages/sdk"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
