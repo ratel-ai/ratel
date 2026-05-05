@@ -35,7 +35,7 @@ How a new version of Ratel is published to npm and crates.io. Read end-to-end be
 
 1. **Bump versions everywhere** to the new value (e.g. `0.1.4-rc.2`, then later `0.1.4`):
    - `Cargo.toml` (workspace `version` field)
-   - `src/sdk/ts/package.json` (`version` + every entry in `optionalDependencies`)
+   - `src/sdk/ts/package.json` (`version` only — `optionalDependencies` is not stored in source; it is injected at pack/publish time by `napi pre-publish`, which reads `napi.targets` and writes the block referencing each `npm/<triple>/package.json` version)
    - `src/integrations/mcp-server/package.json` (`version`)
    - `src/integrations/cli/package.json` (`version`)
 2. **Verify locally** before tagging:
@@ -57,7 +57,7 @@ How a new version of Ratel is published to npm and crates.io. Read end-to-end be
 
 - **`tag-version-check`** in `release.yml` will fail loudly if any manifest disagrees with the tag. If it fails, the rest of the pipeline is short-circuited and nothing publishes — fix the version in the offending manifest, push a new commit, and re-tag.
 - **Never republish a version.** npm and crates.io both reject this. If a release goes wrong after partial publish, bump to the next version (`X.Y.Z+1` or `X.Y.Z-rc.N+1`) and re-tag.
-- **`@ratel-ai/sdk` `optionalDependencies` versions** must match the SDK's own version exactly (not `^X.Y.Z`). The CI subpackage publish step pushes them with the same version, so any drift between the loader's optionalDependencies and the published subpackage versions breaks installs.
+- **`@ratel-ai/sdk` `optionalDependencies` are injected, not committed.** The block does not live in `src/sdk/ts/package.json` in source — `napi pre-publish --skip-optional-publish` writes it into the in-flight package.json right before pack/publish, deriving the entries from `napi.targets`. Keeping it out of source prevents `pnpm install --frozen-lockfile` from failing on subpackages that don't yet exist on the registry. Each `npm/<triple>/package.json`'s `version` must match the loader's; the bump-version step keeps them in sync.
 - **macOS x64 runner** is pinned to `macos-13` because GitHub no longer provides Intel macOS runners on `macos-14`+.
 - **Linux arm64-gnu** uses NAPI-RS's `--use-napi-cross` (its prebuilt sysroot containers). Don't switch to QEMU/`cross` without verifying glibc compatibility.
 - **`workspace:^` rewriting** is handled by `pnpm pack` / `pnpm publish` automatically. Don't pin internal deps to exact versions in `package.json` — that breaks patch-version uptake without a re-release.

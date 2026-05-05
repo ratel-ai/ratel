@@ -58,13 +58,6 @@
     "access": "public",
     "provenance": true
   },
-  "optionalDependencies": {
-    "@ratel-ai/sdk-darwin-arm64": "0.1.4-rc.1",
-    "@ratel-ai/sdk-darwin-x64": "0.1.4-rc.1",
-    "@ratel-ai/sdk-linux-x64-gnu": "0.1.4-rc.1",
-    "@ratel-ai/sdk-linux-arm64-gnu": "0.1.4-rc.1",
-    "@ratel-ai/sdk-win32-x64-msvc": "0.1.4-rc.1"
-  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
     "@napi-rs/cli": "^3.6.0",

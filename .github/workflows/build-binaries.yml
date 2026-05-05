@@ -110,6 +110,8 @@ jobs:
           done
       - name: Build TS loader
         run: pnpm --filter @ratel-ai/sdk run build:ts
+      - name: Inject optionalDependencies into SDK loader package.json
+        run: pnpm --filter @ratel-ai/sdk exec napi pre-publish --skip-optional-publish
       - name: Pack SDK subpackages
         shell: bash
         run: |
