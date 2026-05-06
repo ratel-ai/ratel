@@ -35,14 +35,20 @@ export function mean(xs: number[]): number {
 export interface ArmModelStats {
   arm: Arm;
   model: string;
-  /** Pool size this row aggregates; sweeps emit one row per (arm, model, pool_size). */
-  pool_size: number;
+  /**
+   * Pool size this row aggregates; sweeps emit one row per (arm, model, pool_size).
+   * `null` for pool-size-agnostic arms (e.g. `control-oracle`) — exactly one row
+   * per (arm, model) regardless of `--pool-sizes`.
+   */
+  pool_size: number | null;
   /** Distinct scenarios contributing to this group. */
   scenarios: number;
   /** Total cells (= scenarios × runs_per_scenario_for_this_group). */
   n: number;
   /** Mean across per-scenario success rates (passes / runs, averaged across scenarios). */
   success_rate: number;
+  /** Mean catalog (= tools the agent actually saw) size across cells. The honest "tool count" — for oracle this is the gold count, ~1–2; for sweep arms it equals `pool_size`. */
+  mean_catalog_size: number;
   mean_input_tokens: number;
   mean_total_tokens: number;
   mean_turns: number;
@@ -53,10 +59,11 @@ export interface ArmModelStats {
 interface ScenarioStats {
   arm: Arm;
   model: string;
-  pool_size: number;
+  pool_size: number | null;
   scenario_id: string;
   /** Passes / runs for this scenario in this (arm, model, pool_size). */
   success_rate: number;
+  mean_catalog: number;
   mean_input: number;
   mean_total: number;
   mean_turns: number;
@@ -103,6 +110,7 @@ export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
       pool_size: head.pool_size,
       scenario_id: head.scenario_id,
       success_rate: passes / arr.length,
+      mean_catalog: mean(arr.map((c) => c.catalog_size)),
       mean_input: mean(arr.map((c) => c.input_tokens)),
       mean_total: mean(arr.map((c) => c.total_tokens)),
       mean_turns: mean(arr.map((c) => c.turns)),
@@ -130,6 +138,7 @@ export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
       scenarios: ps.length,
       n: ps.reduce((acc, p) => acc + p.runs, 0),
       success_rate: mean(ps.map((p) => p.success_rate)),
+      mean_catalog_size: mean(ps.map((p) => p.mean_catalog)),
       mean_input_tokens: mean(ps.map((p) => p.mean_input)),
       mean_total_tokens: mean(ps.map((p) => p.mean_total)),
       mean_turns: mean(ps.map((p) => p.mean_turns)),
@@ -139,8 +148,18 @@ export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
   }
   return out.sort(
     (a, b) =>
-      a.model.localeCompare(b.model) || a.arm.localeCompare(b.arm) || a.pool_size - b.pool_size,
+      a.model.localeCompare(b.model) ||
+      a.arm.localeCompare(b.arm) ||
+      comparePoolSizes(a.pool_size, b.pool_size),
   );
+}
+
+/** Sort comparator that puts agnostic rows (`null`) after every numeric pool size. */
+function comparePoolSizes(a: number | null, b: number | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a - b;
 }
 
 export interface SavingsRow {
@@ -173,12 +192,22 @@ function pctSavings(control: number, ratel: number): number {
  * Pair control-baseline vs ratel-full within each (model, pool_size). Sweeps
  * land one row per pool size so each pool's savings story stays intact —
  * collapsing across pool sizes would dilute small-pool wins with large-pool
- * losses (or vice versa).
+ * losses (or vice versa). Oracle is pool-size-agnostic (one row per model),
+ * so its tokens/turns are joined per-model and shown identically across all
+ * pool rows for that model.
  */
 export function savingsByModel(cells: CellResult[]): SavingsRow[] {
   const stats = statsByArmModel(cells);
+  const oracleByModel = new Map<string, ArmModelStats>();
+  for (const s of stats) {
+    if (s.arm === "control-oracle") oracleByModel.set(s.model, s);
+  }
+  // Skip oracle (and any other agnostic arm) when grouping for the per-pool
+  // pairing — its `pool_size` is `null` and would never pair with control/ratel
+  // rows anyway.
   const byGroup = new Map<string, ArmModelStats[]>();
   for (const s of stats) {
+    if (s.pool_size === null) continue;
     const key = `${s.model}::${s.pool_size}`;
     const arr = byGroup.get(key) ?? [];
     arr.push(s);
@@ -188,8 +217,8 @@ export function savingsByModel(cells: CellResult[]): SavingsRow[] {
   for (const arr of byGroup.values()) {
     const control = arr.find((s) => s.arm === "control-baseline");
     const ratel = arr.find((s) => s.arm === "ratel-full");
-    const oracle = arr.find((s) => s.arm === "control-oracle");
-    if (!control || !ratel) continue;
+    if (!control || !ratel || control.pool_size === null) continue;
+    const oracle = oracleByModel.get(control.model);
     out.push({
       model: control.model,
       pool_size: control.pool_size,
@@ -300,7 +329,7 @@ export function retrievalByPoolSize(rows: RetrievalRow[]): RetrievalSummary[] {
 export interface FailureCounts {
   arm: Arm;
   model: string;
-  pool_size: number;
+  pool_size: number | null;
   pass: number;
   fail: number;
   errored: number;
@@ -335,7 +364,9 @@ export function failureTaxonomy(cells: CellResult[]): FailureCounts[] {
   }
   return out.sort(
     (a, b) =>
-      a.model.localeCompare(b.model) || a.arm.localeCompare(b.arm) || a.pool_size - b.pool_size,
+      a.model.localeCompare(b.model) ||
+      a.arm.localeCompare(b.arm) ||
+      comparePoolSizes(a.pool_size, b.pool_size),
   );
 }
 
@@ -355,6 +386,10 @@ function fmtDollars(x: number): string {
 
 function fmtSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function fmtPoolSize(p: number | null): string {
+  return p === null ? "—" : String(p);
 }
 
 export function renderReport(args: {
@@ -377,16 +412,19 @@ export function renderReport(args: {
   lines.push("");
 
   // 1. Headline. Numbers are mean-of-per-scenario-means: every scenario weighs
-  // the same in the headline regardless of how many runs it has.
+  // the same in the headline regardless of how many runs it has. `pool` is the
+  // BM25 universe (= what the agent had to pick from); `catalog` is what the
+  // model actually saw — for sweep arms they're equal, for oracle pool is "—"
+  // and catalog reveals the real gold-tool count (~1–2).
   lines.push("## Headline");
   lines.push("");
   lines.push(
-    "| arm | model | pool | scenarios | n | success | mean input | mean total | mean turns | mean $ | mean wall |",
+    "| arm | model | pool | catalog | scenarios | n | success | mean input | mean total | mean turns | mean $ | mean wall |",
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of stats) {
     lines.push(
-      `| ${s.arm} | ${s.model} | ${s.pool_size} | ${s.scenarios} | ${s.n} | ${fmtPct(s.success_rate * 100)} | ${fmtNum(s.mean_input_tokens)} | ${fmtNum(s.mean_total_tokens)} | ${fmtNum(s.mean_turns)} | ${fmtDollars(s.mean_dollar_cost)} | ${fmtSeconds(s.mean_wall_ms)} |`,
+      `| ${s.arm} | ${s.model} | ${fmtPoolSize(s.pool_size)} | ${fmtNum(s.mean_catalog_size)} | ${s.scenarios} | ${s.n} | ${fmtPct(s.success_rate * 100)} | ${fmtNum(s.mean_input_tokens)} | ${fmtNum(s.mean_total_tokens)} | ${fmtNum(s.mean_turns)} | ${fmtDollars(s.mean_dollar_cost)} | ${fmtSeconds(s.mean_wall_ms)} |`,
     );
   }
   lines.push("");
@@ -451,7 +489,7 @@ export function renderReport(args: {
   lines.push("|---|---|---|---|---|---|---|---|");
   for (const f of failures) {
     lines.push(
-      `| ${f.arm} | ${f.model} | ${f.pool_size} | ${f.pass} | ${f.fail} | ${f.errored} | ${f.missing_gold} | ${f.step_limit} |`,
+      `| ${f.arm} | ${f.model} | ${fmtPoolSize(f.pool_size)} | ${f.pass} | ${f.fail} | ${f.errored} | ${f.missing_gold} | ${f.step_limit} |`,
     );
   }
   lines.push("");

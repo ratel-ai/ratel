@@ -35,6 +35,10 @@ describe("control-oracle descriptor", () => {
     expect(descriptor.id).toBe("control-oracle");
     expect(descriptor.label).toBe("control (oracle)");
   });
+
+  it("opts out of pool-size sweeps — oracle only sees gold tools", () => {
+    expect(descriptor.poolSizeAgnostic).toBe(true);
+  });
 });
 
 describe("buildControlOracleBundle", () => {

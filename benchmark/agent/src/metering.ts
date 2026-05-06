@@ -2,8 +2,18 @@
 // CellResult ready for JSONL persistence. Structural typing on the result lets
 // us swap providers/SDK versions without coupling the meter to a specific shape.
 
+import { createRequire } from "node:module";
 import { INVOKE_TOOL_ID, SEARCH_TOOLS_ID } from "@ratel-ai/sdk";
 import type { Arm, CellResult, ProgrammaticVerdict, ToolCall } from "./types.js";
+
+// Resolve the installed SDK version once. Used as the `ratel_version` row
+// dimension and (downstream) cache-key component, so a campaign run is
+// "ratel v0.1.4 ran on this corpus" rather than "whatever was on the tree".
+export const SDK_VERSION: string = (() => {
+  const requirePkg = createRequire(import.meta.url);
+  const pkg = requirePkg("@ratel-ai/sdk/package.json") as { version: string };
+  return pkg.version;
+})();
 
 /** Loose shape of `agent.generate()` output we depend on. Keeps us decoupled from AI SDK internals. */
 export interface AgentLikeResult {
@@ -97,8 +107,12 @@ export interface MeterContext {
   runIndex: number;
   /** Tools the model directly sees this run (= `ToolBundle.activeToolIds.length`). */
   catalogSize: number;
-  /** Universe the BM25 ranked against this run (gold + distractors). Same across arms in a cell. */
-  poolSize: number;
+  /**
+   * Universe the BM25 ranked against this run (gold + distractors). `null` for
+   * pool-size-agnostic arms (e.g. `control-oracle`), which the runner emits once
+   * per scenario regardless of `--pool-sizes`.
+   */
+  poolSize: number | null;
   seed: number;
   /**
    * Map from AI-SDK function name → canonical tool id for direct (non-gateway)
@@ -147,6 +161,7 @@ export async function meter(
     arm: ctx.arm,
     model: ctx.model,
     run_index: ctx.runIndex,
+    ratel_version: SDK_VERSION,
     catalog_size: ctx.catalogSize,
     pool_size: ctx.poolSize,
     seed: ctx.seed,

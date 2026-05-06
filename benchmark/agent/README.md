@@ -13,7 +13,7 @@ Each arm is an `AgentDescriptor` (`{ id, label, run(input) }`) defined in its ow
 | id | label | path | what it does |
 |---|---|---|---|
 | `control-baseline` | control (baseline) | `agents/control-baseline.ts` | Every tool in the expanded pool, registered directly. Fat-context floor. |
-| `control-oracle`   | control (oracle)   | `agents/control-oracle.ts`   | Only the gold tools. Upper bound on what the model can do given perfect selection. |
+| `control-oracle`   | control (oracle)   | `agents/control-oracle.ts`   | Only the gold tools. Upper bound on what the model can do given perfect selection. **Pool-size-agnostic**: emits one cell per (scenario, model, run) regardless of `--pool-sizes`; the row's `pool_size` is `null` and the report shows it as `—` with the real catalog count (~1–2) in the `catalog` column. |
 | `ratel-full`       | ratel (full)       | `agents/non-control/ratel-full.ts` | BM25 top-K of the prompt pre-fetched as direct tools, **plus** the `search_tools` / `invoke_tool` gateway. The canonical Ratel surface. |
 | `ratel-pre-discovery`  | ratel (pre-discovery only) | `agents/non-control/ratel-pre-discovery.ts` | BM25 top-K only — no gateway. Ablation: did pre-fetch alone suffice? |
 | `ratel-discovery-tool` | ratel (discovery-tool only) | `agents/non-control/ratel-discovery-tool.ts` | Gateway only — no pre-fetch. Ablation: can the agent self-discover with a strong index? |
@@ -97,7 +97,25 @@ Resumable — re-runs skip cells already in `agent.jsonl` unless `--force`. Pass
 
 `--timeout-ms N` (default 60000) sets the per-cell wall-clock timeout. Cloud models rarely need more, but local Ollama models (especially CPU-bound or large 70B+) can comfortably exceed a minute on a 12-step trace — bump to `300000` (5 min) or higher when you see `run timed out after 60000ms` errors in the trace.
 
-`--pool-sizes` controls the per-scenario tool catalog (gold + distractors pulled from other scenarios). Accepts a comma-separated list (e.g. `--pool-sizes 30,100,180`) — each scenario is evaluated at every requested size, and the report breaks the headline / savings / failure tables down per pool. Pass a single value to skip the sweep. The legacy singular form `--pool-size 180` still works as an alias for one value but rejects commas. The default (180) sits at the MetaTool plugin universe ceiling; smaller values stress retrieval less, larger values are clamped at the universe size.
+`--pool-sizes` controls the per-scenario tool catalog (gold + distractors pulled from other scenarios). Accepts a comma-separated list (e.g. `--pool-sizes 30,100,180`) — each scenario is evaluated at every requested size, and the report breaks the headline / savings / failure tables down per pool. Pass a single value to skip the sweep. The legacy singular form `--pool-size 180` still works as an alias for one value but rejects commas. The default (180) sits at the MetaTool plugin universe ceiling; smaller values stress retrieval less, larger values are clamped at the universe size. Pool-size-agnostic arms (currently just `control-oracle`) ignore this flag and emit one cell per (scenario, model, run) regardless of how many sizes are listed.
+
+## Pinned `@ratel-ai/sdk` version
+
+The benchmark consumes `@ratel-ai/sdk` from the npm registry, **not** the local workspace, at a version pinned in `benchmark/agent/package.json` (currently `0.1.4`). The resolved version is stamped on every JSONL row as `ratel_version` and rendered in the report header. To benchmark a new ratel release: bump the pinned version, `pnpm install`, re-run. The previous-version JSONL keeps its rows — they're keyed by version, so they neither collide with nor satisfy the new run.
+
+Workspace edits to `src/sdk/ts/` therefore **don't** flow into the benchmark unless and until they're published. This is deliberate: we want the campaign to measure the same artifact users install, not whatever's on the working tree.
+
+## Cached control runs
+
+`control-baseline` and `control-oracle` cells are cached across invocations — they don't depend on the ratel code path being iterated on, so re-running them per campaign is pure waste. The cache is keyed by `(ratel_version, scenario_id, arm, model, pool_size, run_index)` and backed by the canonical `benchmark/agent/results/agent.jsonl`.
+
+- **Non-ephemeral runs** (default `--output`): control rows already in `agent.jsonl` are skipped via the existing resume path. Same as before, but now version-aware.
+- **Ephemeral runs** (`--ephemeral`): the canonical `agent.jsonl` is opened read-only at start. For each scheduled cell, if its key is in the cache, the cached row is copied verbatim into the ephemeral output and the live agent loop is skipped. Ratel arms (`ratel-full` / `ratel-pre-discovery` / `ratel-discovery-tool`) still run live every time — that's the point of an ephemeral iteration.
+- **`--force`** disables the cache (and truncates the output file in non-ephemeral mode), so the campaign always re-pays.
+
+A run-start stderr line summarizes the hit count: `cache: 47 control cells reused from <path> (ratel 0.1.4), 153 will run`.
+
+The `--output` cell summary at the end now reports `<run> cells run, <cached> cached, <skipped> skipped`.
 
 For a fast local smoke (~$0.20–$1):
 
@@ -151,4 +169,4 @@ Auto-discovers every `*retrieval.jsonl` under `benchmark/results/` if `--retriev
 pnpm -F @ratel-ai/benchmark test
 ```
 
-Unit tests cover the corpus reader, shared agent helpers (sanitization, schema normalization, tool-bundle assembly), per-arm bundle-builders (one test file per agent), agent registry auto-discovery, metering math, both judges (programmatic intersection + LLM prompt-only fallback), pool universe + distractor expansion, runner orchestration (resume / dollar caps / cell iteration / seeded sampling), and report aggregations. Real LLM calls are not exercised in unit tests.
+Unit tests cover the corpus reader, shared agent helpers (sanitization, schema normalization, tool-bundle assembly), per-arm bundle-builders (one test file per agent), agent registry auto-discovery, metering math (incl. `ratel_version` stamping), both judges (programmatic intersection + LLM prompt-only fallback), pool universe + distractor expansion, runner orchestration (resume / dollar caps / cell iteration / seeded sampling / pool-size-agnostic arms / control-row caching across ephemeral runs), and report aggregations (incl. null-`pool_size` handling and the `Catalog` column). Real LLM calls are not exercised in unit tests.

@@ -30,9 +30,19 @@ import { descriptor as controlOracle } from "./agents/control-oracle.js";
 import { loadScenarios } from "./corpus.js";
 import { judgeLLM } from "./judges/llm.js";
 import { judgeProgrammatic } from "./judges/programmatic.js";
-import type { PricingTable } from "./metering.js";
+import { type PricingTable, SDK_VERSION } from "./metering.js";
 import { buildToolUniverse, expandPool } from "./pool.js";
 import type { AgentDescriptor, Arm, CellResult, Scenario, ToolSpec } from "./types.js";
+
+/**
+ * Arms whose cell results don't depend on the ratel-specific code path being
+ * iterated on (they expose tools directly, with no ranking/dispatch in
+ * between). Re-running them per campaign is pure waste once we've measured
+ * them at a given ratel version. The runner reads cached rows from a prior
+ * canonical run's `agent.jsonl` and emits them into the current output without
+ * paying for another live agent loop.
+ */
+const CACHEABLE_ARMS: ReadonlySet<Arm> = new Set(["control-baseline", "control-oracle"]);
 
 export interface RunnerModel {
   /** Stable id used in the JSONL row (e.g. "gpt-5.4-mini"). Must match the pricing table. */
@@ -50,10 +60,12 @@ export interface RunnerConfig {
   runsPerCell: number;
   topK: number;
   /**
-   * Pool sizes to sweep over. Each scenario is evaluated at every value (cells
-   * are duplicated across pool sizes), so a 50-scenario × 4-pool run produces
-   * 200 cells per (arm, model, run). Always non-empty; the CLI defaults to
-   * `[180]` when neither `--pool-size` nor `--pool-sizes` is passed.
+   * Pool sizes to sweep over for non-agnostic arms. Each scenario is evaluated
+   * at every value (cells are duplicated across pool sizes), so a 50-scenario ×
+   * 4-pool sweep produces 200 cells per (sweep arm, model, run). Pool-size-
+   * agnostic arms (e.g. `control-oracle`) ignore this list and emit one cell
+   * per (scenario, model, run). Always non-empty; the CLI defaults to `[180]`
+   * when neither `--pool-size` nor `--pool-sizes` is passed.
    */
   poolSizes: number[];
   maxSteps: number;
@@ -91,6 +103,22 @@ export interface RunnerConfig {
    * registry entirely.
    */
   registry?: Map<string, AgentDescriptor>;
+  /**
+   * `@ratel-ai/sdk` version this campaign is measuring. Embedded in every
+   * row's `ratel_version` field and used as a cache-key dimension so a row
+   * written under v0.1.4 never satisfies a v0.1.5 request. Defaults to the
+   * resolved SDK version at module-load time; tests override.
+   */
+  ratelVersion?: string;
+  /**
+   * Persistent canonical `agent.jsonl` to consult for cached control-arm
+   * rows. When set and different from `outputPath`, the runner reads
+   * cacheable-arm rows whose `ratel_version` matches and emits them into
+   * `outputPath` without re-running the cell. Ephemeral runs set this to the
+   * canonical file so iteration on ratel arms doesn't re-pay for controls.
+   * `force: true` disables the cache.
+   */
+  cacheSourcePath?: string;
 }
 
 export type RunCellFn = (args: {
@@ -99,27 +127,48 @@ export type RunCellFn = (args: {
   model: RunnerModel;
   runIndex: number;
   pool: ToolSpec[];
+  /**
+   * Value to write into the row. `null` for pool-size-agnostic arms (whose
+   * `pool` is empty and whose row is one-per-scenario regardless of `--pool-sizes`).
+   */
+  poolSize: number | null;
   config: RunnerConfig;
 }) => Promise<CellResult>;
 
 export interface RunnerSummary {
   cells_run: number;
   cells_skipped: number;
+  /** Cells served from `cacheSourcePath` (control arms, matching ratel_version) instead of running live. */
+  cells_cached: number;
   scenarios: number;
   total_dollars: number;
   stopped_reason: "completed" | "global_cap";
 }
 
 interface CellKey {
+  ratelVersion: string;
   scenarioId: string;
   arm: Arm;
   model: string;
   runIndex: number;
-  poolSize: number;
+  /** `null` for pool-size-agnostic arms — drops the `::p<n>` suffix from the key. */
+  poolSize: number | null;
 }
 
 function cellKeyString(k: CellKey): string {
-  return `${k.scenarioId}::${k.arm}::${k.model}::${k.runIndex}::p${k.poolSize}`;
+  const base = `${k.ratelVersion}::${k.scenarioId}::${k.arm}::${k.model}::${k.runIndex}`;
+  return k.poolSize === null ? base : `${base}::p${k.poolSize}`;
+}
+
+function cellKeyOf(cell: CellResult): string {
+  return cellKeyString({
+    ratelVersion: cell.ratel_version,
+    scenarioId: cell.scenario_id,
+    arm: cell.arm,
+    model: cell.model,
+    runIndex: cell.run_index,
+    poolSize: cell.pool_size,
+  });
 }
 
 function readCompletedKeys(path: string): Set<string> {
@@ -130,17 +179,37 @@ function readCompletedKeys(path: string): Set<string> {
     if (!line.trim()) continue;
     try {
       const cell = JSON.parse(line) as CellResult;
-      out.add(
-        cellKeyString({
-          scenarioId: cell.scenario_id,
-          arm: cell.arm,
-          model: cell.model,
-          runIndex: cell.run_index,
-          poolSize: cell.pool_size,
-        }),
-      );
+      // Pre-`ratel_version` rows have undefined here and never match a current
+      // task's key — they're effectively ignored, which is the right behavior
+      // (we don't know what code shape produced them).
+      if (typeof cell.ratel_version !== "string") continue;
+      out.add(cellKeyOf(cell));
     } catch {
       // Ignore malformed rows; resumability is best-effort.
+    }
+  }
+  return out;
+}
+
+/**
+ * Build a cache index from a canonical `agent.jsonl` for control-arm rows
+ * matching `ratelVersion`. Used by ephemeral runs to skip re-running controls
+ * (which don't depend on the ratel code path being iterated on).
+ */
+function readControlCacheIndex(path: string, ratelVersion: string): Map<string, CellResult> {
+  if (!existsSync(path)) return new Map();
+  const out = new Map<string, CellResult>();
+  const text = readFileSync(path, "utf-8");
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const cell = JSON.parse(line) as CellResult;
+      if (typeof cell.ratel_version !== "string") continue;
+      if (cell.ratel_version !== ratelVersion) continue;
+      if (!CACHEABLE_ARMS.has(cell.arm)) continue;
+      out.set(cellKeyOf(cell), cell);
+    } catch {
+      // Ignore malformed rows.
     }
   }
   return out;
@@ -279,7 +348,7 @@ export function makeRegistryRunCell(
   registry: Map<string, AgentDescriptor>,
   judgeModel?: LanguageModel,
 ): RunCellFn {
-  return async ({ scenario, arm, model, runIndex, pool, config }) => {
+  return async ({ scenario, arm, model, runIndex, pool, poolSize, config }) => {
     const descriptor = registry.get(arm);
     if (!descriptor) {
       throw new Error(`unknown arm "${arm}" — not in agent registry`);
@@ -288,6 +357,7 @@ export function makeRegistryRunCell(
     const cell = await descriptor.run({
       scenario,
       pool,
+      poolSize,
       model: { id: model.id, model: model.model },
       runIndex,
       topK: config.topK,
@@ -347,7 +417,12 @@ interface PendingTask {
   arm: Arm;
   model: RunnerModel;
   runIndex: number;
+  /** Pool passed to the agent. Empty for pool-size-agnostic arms. */
   expandedPool: ToolSpec[];
+  /** Value written to `CellResult.pool_size`. `null` for pool-size-agnostic arms. */
+  poolSize: number | null;
+  /** Pre-computed cell key (used for cache lookup before dispatching the live worker). */
+  key: string;
 }
 
 /**
@@ -360,20 +435,23 @@ interface PendingTask {
  * `skipForModel(model.id)`, those cells are filtered out at queue-build time
  * (they don't count as "skipped due to resume" and don't write a JSONL row).
  *
- * Iteration order (runs × scenarios × pool_sizes × arms × models): runs are
- * outermost so a partial budget completes one full pass before starting the
- * next, and pool sizes sit just inside scenarios so a budget that runs out
- * mid-pass still spans every pool size — instead of finishing pool=30 and
- * starving pool=180 when `--dollar-global` fires. Arm × model comparisons
- * within a (run, scenario, pool) cell are always either fully present or
- * fully absent, which keeps the per-pool report rows interpretable under
- * partial budgets. Workers pick from the head of the queue, so at
- * concurrency=1 JSONL order is deterministic.
+ * Pool-size-agnostic arms (e.g. `control-oracle`) skip the `--pool-sizes` loop
+ * entirely: each is emitted exactly once per (scenario, model, run) with an
+ * empty `expandedPool` and `poolSize: null`. Their result depends only on the
+ * scenario, so multiplying them by pool size would burn API spend on duplicate
+ * runs and clutter the report with fake pool labels.
+ *
+ * Iteration order (runs × scenarios × [agnostic arms once] × pool_sizes × non-
+ * agnostic arms × models): runs are outermost so a partial budget completes one
+ * full pass before starting the next; agnostic arms come first within a
+ * scenario so they ship even under tight budgets. Workers pick from the head
+ * of the queue, so at concurrency=1 JSONL order is deterministic.
  */
 function buildTaskQueue(
   scenarios: Scenario[],
   universe: ReturnType<typeof buildToolUniverse>,
   config: RunnerConfig,
+  ratelVersion: string,
   completed: Set<string>,
   registry: Map<string, AgentDescriptor> | undefined,
 ): { tasks: PendingTask[]; cellsSkipped: number } {
@@ -388,34 +466,50 @@ function buildTaskQueue(
     return pool;
   };
 
+  const isAgnostic = (arm: Arm): boolean => registry?.get(arm)?.poolSizeAgnostic === true;
+  const agnosticArms = config.arms.filter(isAgnostic);
+  const sweepArms = config.arms.filter((arm) => !isAgnostic(arm));
+
   const tasks: PendingTask[] = [];
   let cellsSkipped = 0;
+  const tryEnqueue = (
+    scenario: Scenario,
+    arm: Arm,
+    model: RunnerModel,
+    runIndex: number,
+    expandedPool: ToolSpec[],
+    poolSize: number | null,
+  ): void => {
+    const descriptor = registry?.get(arm);
+    if (descriptor?.skipForModel?.(model.id)) return;
+    const key = cellKeyString({
+      ratelVersion,
+      scenarioId: scenario.id,
+      arm,
+      model: model.id,
+      runIndex,
+      poolSize,
+    });
+    if (completed.has(key)) {
+      cellsSkipped++;
+      return;
+    }
+    tasks.push({ scenario, arm, model, runIndex, expandedPool, poolSize, key });
+  };
+
   for (let runIndex = 0; runIndex < config.runsPerCell; runIndex++) {
     for (const scenario of scenarios) {
+      // Agnostic arms first: one cell each per (scenario, model, run), no pool dim.
+      for (const arm of agnosticArms) {
+        for (const model of config.models) {
+          tryEnqueue(scenario, arm, model, runIndex, [], null);
+        }
+      }
       for (const poolSize of config.poolSizes) {
         const expandedPool = expand(scenario, poolSize);
-        for (const arm of config.arms) {
-          const descriptor = registry?.get(arm);
+        for (const arm of sweepArms) {
           for (const model of config.models) {
-            if (descriptor?.skipForModel?.(model.id)) continue;
-            const key = cellKeyString({
-              scenarioId: scenario.id,
-              arm,
-              model: model.id,
-              runIndex,
-              poolSize: expandedPool.length,
-            });
-            if (completed.has(key)) {
-              cellsSkipped++;
-              continue;
-            }
-            tasks.push({
-              scenario,
-              arm,
-              model,
-              runIndex,
-              expandedPool,
-            });
+            tryEnqueue(scenario, arm, model, runIndex, expandedPool, expandedPool.length);
           }
         }
       }
@@ -453,13 +547,45 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
     }
   }
 
+  const ratelVersion = config.ratelVersion ?? SDK_VERSION;
+  // Cache only applies when an external source is provided AND it isn't this
+  // run's output (which is already covered by the resume `completed` set).
+  // `--force` disables it.
+  const cacheIndex =
+    !config.force && config.cacheSourcePath && config.cacheSourcePath !== config.outputPath
+      ? readControlCacheIndex(config.cacheSourcePath, ratelVersion)
+      : new Map<string, CellResult>();
+
   const { tasks, cellsSkipped: initialSkipped } = buildTaskQueue(
     scenarios,
     universe,
     config,
+    ratelVersion,
     completed,
     registry,
   );
+
+  // Drain cache hits up front so the worker pool only deals with live cells.
+  // Hits are appended in task-iteration order so JSONL ordering matches a fresh
+  // live run at the same args.
+  let cellsCached = 0;
+  const liveTasks: PendingTask[] = [];
+  for (const task of tasks) {
+    const cached = cacheIndex.get(task.key);
+    if (cached) {
+      appendRow(config.outputPath, cached);
+      cellsCached++;
+    } else {
+      liveTasks.push(task);
+    }
+  }
+
+  if ((config.logLevel ?? "normal") !== "quiet" && (cellsCached > 0 || cacheIndex.size > 0)) {
+    console.error(
+      `cache: ${cellsCached} control cells reused from ${config.cacheSourcePath} ` +
+        `(ratel ${ratelVersion}), ${liveTasks.length} will run`,
+    );
+  }
 
   const concurrency = Math.max(1, Math.floor(config.concurrency ?? 1));
   const runCellFn = config.runCell ?? makeRegistryRunCell(registry ?? new Map(), config.judgeModel);
@@ -480,11 +606,11 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
       stopped = "global_cap";
       return null;
     }
-    if (nextTaskIdx >= tasks.length) return null;
-    return tasks[nextTaskIdx++];
+    if (nextTaskIdx >= liveTasks.length) return null;
+    return liveTasks[nextTaskIdx++];
   };
 
-  const totalToRun = tasks.length;
+  const totalToRun = liveTasks.length;
   const worker = async (): Promise<void> => {
     while (true) {
       const task = pickTask();
@@ -495,6 +621,7 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
         model: task.model,
         runIndex: task.runIndex,
         pool: task.expandedPool,
+        poolSize: task.poolSize,
         config,
       });
       // Synchronous tail: append + counters happen without yielding, so two
@@ -509,12 +636,13 @@ export async function run(config: RunnerConfig): Promise<RunnerSummary> {
     }
   };
 
-  const workerCount = Math.min(concurrency, Math.max(1, tasks.length));
+  const workerCount = Math.min(concurrency, Math.max(1, liveTasks.length));
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   return {
     cells_run: cellsRun,
     cells_skipped: initialSkipped,
+    cells_cached: cellsCached,
     scenarios: scenarios.length,
     total_dollars: totalDollars,
     stopped_reason: stopped,

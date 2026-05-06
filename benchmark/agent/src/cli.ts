@@ -314,15 +314,20 @@ function ephemeralOutputPath(): string {
   return `benchmark/agent/results/ephemeral/agent-${stamp}.jsonl`;
 }
 
+/** Canonical agent.jsonl that ephemeral runs read for cached control rows. */
+const CANONICAL_AGENT_JSONL = "benchmark/agent/results/agent.jsonl";
+
 async function main(): Promise<void> {
   const registry = await loadAgentRegistry();
   const knownArms = [...registry.keys()];
   const parsed = parseArgs(process.argv.slice(2), knownArms);
+  let cacheSourcePath: string | undefined;
   if (parsed.ephemeral) {
     if (parsed.outputExplicit) {
       throw new Error("--ephemeral and --output are mutually exclusive");
     }
     parsed.output = ephemeralOutputPath();
+    cacheSourcePath = resolveRepoPath(CANONICAL_AGENT_JSONL);
   }
   const resolveOpts: ResolveOpts = { ollamaBaseURL: parsed.ollamaBaseURL };
   const models = parsed.models.map((m) => resolveModel(m, resolveOpts));
@@ -353,6 +358,7 @@ async function main(): Promise<void> {
     concurrency: parsed.concurrency,
     logLevel: parsed.logLevel,
     registry,
+    cacheSourcePath,
   };
 
   console.log(
@@ -363,8 +369,9 @@ async function main(): Promise<void> {
   );
   const summary = await run(cfg);
   console.log(
-    `done: ${summary.cells_run} cells run, ${summary.cells_skipped} skipped, ` +
-      `$${summary.total_dollars.toFixed(4)} spent, stopped=${summary.stopped_reason}`,
+    `done: ${summary.cells_run} cells run, ${summary.cells_cached} cached, ` +
+      `${summary.cells_skipped} skipped, $${summary.total_dollars.toFixed(4)} spent, ` +
+      `stopped=${summary.stopped_reason}`,
   );
 }
 

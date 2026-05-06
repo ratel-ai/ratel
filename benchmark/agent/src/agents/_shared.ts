@@ -155,7 +155,7 @@ export async function runMeteredLoop(
       model: input.model.id,
       runIndex: input.runIndex,
       catalogSize: bundle.activeToolIds.length,
-      poolSize: input.pool.length,
+      poolSize: input.poolSize,
       seed: input.seed,
       nameToId: bundle.nameToId,
     },

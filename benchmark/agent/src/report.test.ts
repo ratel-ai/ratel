@@ -43,6 +43,7 @@ function cell(over: Partial<CellResult>): CellResult {
     arm: "control-baseline" as Arm,
     model: "gpt-5.4-mini",
     run_index: 0,
+    ratel_version: "test",
     catalog_size: 5,
     pool_size: 30,
     seed: 42,
@@ -164,6 +165,35 @@ describe("statsByArmModel", () => {
     expect(ratel?.mean_wall_ms).toBeCloseTo(300, 5);
   });
 
+  it("aggregates pool-size-agnostic arms (e.g. oracle) into a single row with pool_size=null", () => {
+    const cells = [
+      // Oracle has pool_size: null and varying catalog sizes (1 or 2 gold tools).
+      cell({
+        scenario_id: "s1",
+        arm: "control-oracle",
+        pool_size: null,
+        catalog_size: 1,
+        input_tokens: 100,
+      }),
+      cell({
+        scenario_id: "s2",
+        arm: "control-oracle",
+        pool_size: null,
+        catalog_size: 2,
+        input_tokens: 200,
+      }),
+      // Baseline parameterized by pool size.
+      cell({ scenario_id: "s1", arm: "control-baseline", pool_size: 30, input_tokens: 1000 }),
+    ];
+    const stats = statsByArmModel(cells);
+    const oracle = stats.find((s) => s.arm === "control-oracle");
+    expect(oracle?.pool_size).toBeNull();
+    expect(oracle?.scenarios).toBe(2);
+    // Catalog column reveals the real per-scenario tool count for oracle (mean(1, 2) = 1.5).
+    expect(oracle?.mean_catalog_size).toBeCloseTo(1.5, 5);
+    expect(oracle?.mean_input_tokens).toBeCloseTo(150, 5);
+  });
+
   it("emits one row per (arm, model, pool_size) so a sweep doesn't average across pools", () => {
     const cells = [
       cell({ arm: "control-baseline", pool_size: 180, input_tokens: 1500 }),
@@ -251,6 +281,22 @@ describe("savingsByModel", () => {
     const r180 = rows.find((s) => s.pool_size === 180);
     expect(r30?.input_savings_pct).toBeCloseTo(50, 5);
     expect(r180?.input_savings_pct).toBeCloseTo(75, 5);
+  });
+
+  it("joins oracle by model alone — its agnostic row appears next to every per-pool savings row", () => {
+    const cells = [
+      // Oracle is pool-size-agnostic — one row per model.
+      cell({ arm: "control-oracle", pool_size: null, catalog_size: 1, input_tokens: 100 }),
+      cell({ arm: "control-baseline", pool_size: 30, input_tokens: 1000 }),
+      cell({ arm: "ratel-full", pool_size: 30, input_tokens: 500 }),
+      cell({ arm: "control-baseline", pool_size: 180, input_tokens: 4000 }),
+      cell({ arm: "ratel-full", pool_size: 180, input_tokens: 1000 }),
+    ];
+    const rows = savingsByModel(cells);
+    expect(rows).toHaveLength(2);
+    // Oracle's mean_input is shown identically next to every pool row for the model.
+    expect(rows[0].oracle_mean_input).toBe(100);
+    expect(rows[1].oracle_mean_input).toBe(100);
   });
 });
 
@@ -524,6 +570,22 @@ describe("renderReport", () => {
     expect(md).toContain("**70.0%**"); // dollar savings
     // Wall time is part of the headline + savings tables now.
     expect(md).toContain("mean wall");
+  });
+
+  it("renders pool-size-agnostic oracle rows with `pool: —` and a real Catalog count", () => {
+    const cells = [
+      // Two scenarios w/ different gold counts → oracle catalog mean = 1.5.
+      cell({ scenario_id: "a", arm: "control-oracle", pool_size: null, catalog_size: 1 }),
+      cell({ scenario_id: "b", arm: "control-oracle", pool_size: null, catalog_size: 2 }),
+      cell({ arm: "control-baseline", pool_size: 30 }),
+    ];
+    const md = renderReport({ cells, retrieval: [], generatedAt: new Date("2026-05-01") });
+    // Headline shows "—" in the pool column for the oracle row, and a real catalog count.
+    expect(md).toMatch(/\| control-oracle \| [^|]+ \| — \|/);
+    // The catalog column carries 1.5 for oracle (mean of gold counts 1 and 2).
+    expect(md).toMatch(/control-oracle.*\| — \| 1\.5/);
+    // Sweep arms keep their literal pool size in the pool column.
+    expect(md).toMatch(/\| control-baseline \| [^|]+ \| 30 \|/);
   });
 
   it("renders one retrieval panel per (corpus, subset) when input spans both", () => {

@@ -4,18 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm -F @ratel-ai/sdk build && tsc --noEmit",
-    "typecheck": "pnpm -F @ratel-ai/sdk build && tsc --noEmit",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "biome check src",
-    "test": "pnpm -F @ratel-ai/sdk build && vitest run",
-    "start": "pnpm -F @ratel-ai/sdk build && tsx src/cli.ts",
+    "test": "vitest run",
+    "start": "tsx src/cli.ts",
     "report": "tsx src/report-cli.ts",
     "run-all": "tsx src/run-all.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
     "@ai-sdk/openai": "^3.0.0",
-    "@ratel-ai/sdk": "workspace:*",
+    "@ratel-ai/sdk": "npm:@ratel-ai/sdk@0.1.4",
     "ai": "^6.0.0",
     "dotenv": "^16.4.0",
     "zod": "^3.24.0"

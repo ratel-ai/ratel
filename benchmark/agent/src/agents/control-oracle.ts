@@ -22,6 +22,9 @@ export function buildControlOracleBundle(input: {
 export const descriptor: AgentDescriptor = {
   id: ID,
   label: "control (oracle)",
+  // Oracle only sees gold tools; the expanded pool is irrelevant. The runner
+  // skips the `--pool-sizes` loop and writes `pool_size: null` in the row.
+  poolSizeAgnostic: true,
   run: async (input: AgentRunInput) => {
     const bundle = buildControlOracleBundle(input);
     return runMeteredLoop(ID, input, bundle);

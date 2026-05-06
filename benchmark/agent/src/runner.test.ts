@@ -3,7 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appendRow, type RunCellFn, type RunnerConfig, run } from "./runner.js";
-import type { CellResult, Scenario } from "./types.js";
+import type { AgentDescriptor, CellResult, Scenario } from "./types.js";
+
+/** Stub descriptor — `runCell` is what the runner actually invokes; this only carries flags (e.g. `poolSizeAgnostic`). */
+function stubDescriptor(over: Partial<AgentDescriptor> & { id: string }): AgentDescriptor {
+  return {
+    label: over.id,
+    run: async () => {
+      throw new Error("stub descriptor not invoked under injected runCell");
+    },
+    ...over,
+  };
+}
 
 const scenario: Scenario = {
   id: "fs-001",
@@ -20,7 +31,7 @@ const scenario: Scenario = {
 };
 
 function makeFakeRunCell(perCellDollars: number, called: string[]): RunCellFn {
-  return async ({ scenario: s, arm, model, runIndex, pool }) => {
+  return async ({ scenario: s, arm, model, runIndex, poolSize }) => {
     const key = `${s.id}::${arm}::${model.id}::${runIndex}`;
     called.push(key);
     const cell: CellResult = {
@@ -28,8 +39,9 @@ function makeFakeRunCell(perCellDollars: number, called: string[]): RunCellFn {
       arm,
       model: model.id,
       run_index: runIndex,
+      ratel_version: "test",
       catalog_size: 1,
-      pool_size: pool.length,
+      pool_size: poolSize,
       seed: 0,
       input_tokens: 100,
       output_tokens: 50,
@@ -78,6 +90,9 @@ function baseConfig(corpusPath: string, outputPath: string): RunnerConfig {
     force: false,
     seed: 42,
     logLevel: "quiet",
+    // Pin a synthetic version so makeFakeRunCell rows (which set ratel_version: "test")
+    // match the keys the runner constructs for resume / cache.
+    ratelVersion: "test",
   };
 }
 
@@ -185,8 +200,94 @@ describe("runner", () => {
     // 1 scenario × 1 arm × 1 model × 1 run × 2 pool sizes = 2 cells.
     expect(summary.cells_run).toBe(2);
     const lines = readFileSync(output, "utf-8").split("\n").filter(Boolean);
-    const pools = lines.map((l) => (JSON.parse(l) as CellResult).pool_size).sort((a, b) => a - b);
+    const pools = lines
+      .map((l) => (JSON.parse(l) as CellResult).pool_size)
+      .filter((p): p is number => p !== null)
+      .sort((a, b) => a - b);
     expect(pools).toEqual([3, 6]);
+  });
+
+  it("emits exactly one cell per (scenario, model, run) for pool-size-agnostic arms regardless of --pool-sizes", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    // Universe big enough that distractor expansion can hit each requested
+    // pool size literally — otherwise all sizes collapse to the universe ceiling.
+    const others: Scenario[] = Array.from({ length: 25 }, (_, i) => ({
+      id: `noise-${i}`,
+      prompt: `do ${i}`,
+      candidate_pool: [
+        {
+          id: `noise.tool-${i}`,
+          name: `noise_tool_${i}`,
+          description: `noise ${i}`,
+          input_schema: {},
+        },
+      ],
+      gold_tools: [`noise.tool-${i}`],
+    }));
+    writeFileSync(corpus, [scenario, ...others].map((s) => JSON.stringify(s)).join("\n"));
+    const output = join(tempDir, "agent.jsonl");
+    const registry = new Map<string, AgentDescriptor>([
+      ["control-baseline", stubDescriptor({ id: "control-baseline" })],
+      ["control-oracle", stubDescriptor({ id: "control-oracle", poolSizeAgnostic: true })],
+    ]);
+
+    const called: string[] = [];
+    const summary = await run({
+      ...baseConfig(corpus, output),
+      poolSizes: [4, 8, 16],
+      arms: ["control-baseline", "control-oracle"],
+      scenarioLimit: 1,
+      registry,
+      runCell: makeFakeRunCell(0.001, called),
+    });
+
+    // baseline runs at every pool size (3) + oracle runs once = 4 cells, not 6.
+    expect(summary.cells_run).toBe(4);
+    const lines = readFileSync(output, "utf-8").split("\n").filter(Boolean);
+    const cells = lines.map((l) => JSON.parse(l) as CellResult);
+    const oracleRows = cells.filter((c) => c.arm === "control-oracle");
+    const baselineRows = cells.filter((c) => c.arm === "control-baseline");
+    expect(oracleRows).toHaveLength(1);
+    expect(oracleRows[0].pool_size).toBeNull();
+    expect(baselineRows).toHaveLength(3);
+    expect(baselineRows.map((c) => c.pool_size).sort((a, b) => Number(a) - Number(b))).toEqual([
+      4, 8, 16,
+    ]);
+  });
+
+  it("resume skips agnostic-arm cells without re-running them when --pool-sizes changes", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    writeFileSync(corpus, `${JSON.stringify(scenario)}\n`);
+    const output = join(tempDir, "agent.jsonl");
+    const registry = new Map<string, AgentDescriptor>([
+      ["control-oracle", stubDescriptor({ id: "control-oracle", poolSizeAgnostic: true })],
+    ]);
+
+    const called1: string[] = [];
+    await run({
+      ...baseConfig(corpus, output),
+      poolSizes: [30],
+      arms: ["control-oracle"],
+      scenarioLimit: 1,
+      registry,
+      runCell: makeFakeRunCell(0.001, called1),
+    });
+    expect(called1).toHaveLength(1);
+
+    // Re-run with a totally different --pool-sizes. The agnostic arm's cell key
+    // doesn't include pool size, so it must dedupe and skip.
+    const called2: string[] = [];
+    const summary = await run({
+      ...baseConfig(corpus, output),
+      poolSizes: [180, 30, 100],
+      arms: ["control-oracle"],
+      scenarioLimit: 1,
+      registry,
+      runCell: makeFakeRunCell(0.001, called2),
+    });
+    expect(called2).toHaveLength(0);
+    expect(summary.cells_run).toBe(0);
+    expect(summary.cells_skipped).toBe(1);
   });
 
   it("interleaves pool sizes so a partial budget spans every pool instead of starving the trailing ones", async () => {
@@ -355,6 +456,91 @@ describe("runner", () => {
     expect(called3.length).toBe(3);
   });
 
+  it("ephemeral runs reuse cached control rows from a canonical agent.jsonl", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    writeFileSync(corpus, `${JSON.stringify(scenario)}\n`);
+    const canonical = join(tempDir, "canonical.jsonl");
+    const ephemeral = join(tempDir, "ephemeral.jsonl");
+
+    // First run: populate the canonical file with all three arms.
+    const calledCanonical: string[] = [];
+    await run({
+      ...baseConfig(corpus, canonical),
+      arms: ["control-baseline", "control-oracle", "ratel-full"],
+      runCell: makeFakeRunCell(0.001, calledCanonical),
+    });
+    expect(calledCanonical).toHaveLength(3);
+
+    // Second run, ephemeral output, pointing at canonical as cache source.
+    // Control arms should hit cache; ratel-full should still run live.
+    const calledEphemeral: string[] = [];
+    const summary = await run({
+      ...baseConfig(corpus, ephemeral),
+      arms: ["control-baseline", "control-oracle", "ratel-full"],
+      cacheSourcePath: canonical,
+      runCell: makeFakeRunCell(0.001, calledEphemeral),
+    });
+
+    expect(summary.cells_cached).toBe(2);
+    expect(summary.cells_run).toBe(1);
+    expect(calledEphemeral).toEqual(["fs-001::ratel-full::fake-model::0"]);
+
+    const ephemeralLines = readFileSync(ephemeral, "utf-8").split("\n").filter(Boolean);
+    expect(ephemeralLines).toHaveLength(3);
+    const arms = ephemeralLines.map((l) => (JSON.parse(l) as CellResult).arm).sort();
+    expect(arms).toEqual(["control-baseline", "control-oracle", "ratel-full"]);
+  });
+
+  it("--force bypasses the cache even when cacheSourcePath is set", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    writeFileSync(corpus, `${JSON.stringify(scenario)}\n`);
+    const canonical = join(tempDir, "canonical.jsonl");
+    const ephemeral = join(tempDir, "ephemeral.jsonl");
+
+    await run({
+      ...baseConfig(corpus, canonical),
+      arms: ["control-baseline"],
+      runCell: makeFakeRunCell(0.001, []),
+    });
+
+    const called: string[] = [];
+    const summary = await run({
+      ...baseConfig(corpus, ephemeral),
+      arms: ["control-baseline"],
+      cacheSourcePath: canonical,
+      force: true,
+      runCell: makeFakeRunCell(0.001, called),
+    });
+    expect(summary.cells_cached).toBe(0);
+    expect(called).toHaveLength(1);
+  });
+
+  it("cache miss when ratel_version doesn't match", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    writeFileSync(corpus, `${JSON.stringify(scenario)}\n`);
+    const canonical = join(tempDir, "canonical.jsonl");
+    const ephemeral = join(tempDir, "ephemeral.jsonl");
+
+    await run({
+      ...baseConfig(corpus, canonical),
+      arms: ["control-baseline"],
+      // Canonical built at "test" version.
+      runCell: makeFakeRunCell(0.001, []),
+    });
+
+    const called: string[] = [];
+    const summary = await run({
+      ...baseConfig(corpus, ephemeral),
+      arms: ["control-baseline"],
+      cacheSourcePath: canonical,
+      // New run at a different ratel version → cache miss, recompute.
+      ratelVersion: "9.9.9",
+      runCell: makeFakeRunCell(0.001, called),
+    });
+    expect(summary.cells_cached).toBe(0);
+    expect(called).toHaveLength(1);
+  });
+
   it("appendRow writes one valid JSON line per call without quadratic rewrites", () => {
     const path = join(tempDir, "appended.jsonl");
     const sample: CellResult = {
@@ -362,6 +548,7 @@ describe("runner", () => {
       arm: "control-baseline",
       model: "m",
       run_index: 0,
+      ratel_version: "test",
       catalog_size: 0,
       pool_size: 0,
       seed: 0,
@@ -418,8 +605,9 @@ describe("runner", () => {
         arm: args.arm,
         model: args.model.id,
         run_index: args.runIndex,
+        ratel_version: "test",
         catalog_size: 1,
-        pool_size: args.pool.length,
+        pool_size: args.poolSize,
         seed: 0,
         input_tokens: 0,
         output_tokens: 0,

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type AgentLikeResult, DEFAULT_PRICING, dollarCost, meter, summarize } from "./metering.js";
+import {
+  type AgentLikeResult,
+  DEFAULT_PRICING,
+  dollarCost,
+  meter,
+  SDK_VERSION,
+  summarize,
+} from "./metering.js";
 
 const fakeResult: AgentLikeResult = {
   text: "done",
@@ -158,6 +165,23 @@ describe("meter", () => {
     expect(cell.wall_ms).toBeGreaterThanOrEqual(0);
     expect(cell.programmatic_verdict).toBe("n/a");
     expect(raw).toBe(fakeResult);
+  });
+
+  it("stamps the resolved @ratel-ai/sdk version on every row", async () => {
+    const { cell } = await meter(
+      {
+        scenarioId: "fs-001",
+        arm: "control-baseline",
+        model: "gpt-5.4-mini",
+        runIndex: 0,
+        catalogSize: 1,
+        poolSize: 30,
+        seed: 0,
+      },
+      async () => fakeResult,
+    );
+    expect(SDK_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    expect(cell.ratel_version).toBe(SDK_VERSION);
   });
 
   it("captures errors into the cell without throwing", async () => {

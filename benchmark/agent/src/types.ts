@@ -58,8 +58,14 @@ export interface UsageTotals {
  */
 export interface AgentRunInput {
   scenario: Scenario;
-  /** Expanded pool (gold + distractors) at config.poolSize. Same across arms in a cell. */
+  /** Expanded pool (gold + distractors) at config.poolSize. Empty for pool-size-agnostic arms. */
   pool: ToolSpec[];
+  /**
+   * Value to write into `CellResult.pool_size`. `null` for pool-size-agnostic arms
+   * (whose row is one-per-scenario regardless of `--pool-sizes`); otherwise equal
+   * to `pool.length`.
+   */
+  poolSize: number | null;
   model: { id: string; model: LanguageModel };
   runIndex: number;
   topK: number;
@@ -75,6 +81,13 @@ export interface AgentDescriptor {
   id: string;
   /** Display label for logs and the report. */
   label: string;
+  /**
+   * When true, the runner emits exactly one cell per (scenario, model, run)
+   * regardless of `--pool-sizes`, the row's `pool_size` is `null`, and the cell
+   * key drops the pool dimension. Use for arms whose tool surface is fixed by
+   * the scenario itself (e.g. `control-oracle`, which only loads `gold_tools`).
+   */
+  poolSizeAgnostic?: boolean;
   skipForModel?: (modelId: string) => boolean;
   run: (input: AgentRunInput) => Promise<CellResult>;
 }
@@ -84,10 +97,16 @@ export interface CellResult {
   arm: Arm;
   model: string;
   run_index: number;
+  /** `@ratel-ai/sdk` version this row was produced against. Cache key dimension. */
+  ratel_version: string;
   /** Tools the model directly sees this run (= what its context pays for). */
   catalog_size: number;
-  /** Universe the BM25 ranked against this run (gold + distractors). Same across arms in a cell. */
-  pool_size: number;
+  /**
+   * Universe the BM25 ranked against this run (gold + distractors). Same across
+   * arms in a cell. `null` for pool-size-agnostic arms (e.g. `control-oracle`),
+   * whose result doesn't depend on the expanded pool.
+   */
+  pool_size: number | null;
   seed: number;
   // Tokens
   input_tokens: number;
