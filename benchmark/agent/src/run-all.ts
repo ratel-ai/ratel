@@ -166,7 +166,7 @@ function agentCampaign(skipAgent: boolean): void {
     "control-baseline,control-oracle,ratel-full,ratel-pre-discovery,ratel-discovery-tool",
     "--models",
     models.join(","),
-    "--pool-size",
+    "--pool-sizes",
     "180",
     "--dollar-global",
     "5",

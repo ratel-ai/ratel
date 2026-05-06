@@ -71,6 +71,43 @@ function parseArms(raw: string, knownArms: readonly string[]): Arm[] {
   return out;
 }
 
+/**
+ * Parse a single positive integer for `--pool-size`. Rejects commas explicitly
+ * so a `--pool-size 30,50,100` typo points the user at `--pool-sizes`
+ * instead of silently flowing `NaN` through to `expandPool` (which would
+ * collapse the catalog to gold-only).
+ */
+function parsePoolSize(flag: string, raw: string): number {
+  if (raw.includes(",")) {
+    throw new Error(
+      `${flag} takes a single integer (got "${raw}"). Use --pool-sizes for a comma-separated sweep.`,
+    );
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+    throw new Error(`${flag} must be a positive integer (got "${raw}")`);
+  }
+  return n;
+}
+
+/** Parse `--pool-sizes 30,50,100` into a deduped, sorted list of positive integers. */
+function parsePoolSizes(raw: string): number[] {
+  const parts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (parts.length === 0) throw new Error("--pool-sizes must list at least one integer");
+  const seen = new Set<number>();
+  for (const p of parts) {
+    const n = Number(p);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+      throw new Error(`--pool-sizes: "${p}" is not a positive integer`);
+    }
+    seen.add(n);
+  }
+  return [...seen].sort((a, b) => a - b);
+}
+
 interface ParsedArgs {
   corpus: string;
   output: string;
@@ -81,7 +118,7 @@ interface ParsedArgs {
   models: string[];
   runs: number;
   topK: number;
-  poolSize: number;
+  poolSizes: number[];
   maxSteps: number;
   timeoutMs: number;
   dollarGlobal: number;
@@ -106,7 +143,7 @@ function parseArgs(argv: string[], knownArms: readonly string[]): ParsedArgs {
     models: ["gpt-5.4-mini", "claude-sonnet-4-6"],
     runs: 1,
     topK: 5,
-    poolSize: 180,
+    poolSizes: [180],
     maxSteps: 12,
     timeoutMs: 60_000,
     dollarGlobal: 25,
@@ -151,7 +188,10 @@ function parseArgs(argv: string[], knownArms: readonly string[]): ParsedArgs {
         args.topK = Number(next());
         break;
       case "--pool-size":
-        args.poolSize = Number(next());
+        args.poolSizes = [parsePoolSize(flag, next())];
+        break;
+      case "--pool-sizes":
+        args.poolSizes = parsePoolSizes(next());
         break;
       case "--max-steps":
         args.maxSteps = Number(next());
@@ -303,7 +343,7 @@ async function main(): Promise<void> {
     models,
     runsPerCell: parsed.runs,
     topK: parsed.topK,
-    poolSize: parsed.poolSize,
+    poolSizes: parsed.poolSizes,
     maxSteps: parsed.maxSteps,
     perRunTimeoutMs: parsed.timeoutMs,
     dollarGlobalCap: parsed.dollarGlobal,
@@ -317,6 +357,7 @@ async function main(): Promise<void> {
 
   console.log(
     `running ${parsed.arms.length} arms × ${models.length} models × ${parsed.runs} runs ` +
+      `× ${parsed.poolSizes.length} pool size(s) [${parsed.poolSizes.join(",")}] ` +
       `over ≤ ${parsed.scenarios ?? "all"} scenarios at concurrency=${parsed.concurrency} ` +
       `→ ${parsed.output}`,
   );

@@ -35,8 +35,8 @@ export function mean(xs: number[]): number {
 export interface ArmModelStats {
   arm: Arm;
   model: string;
-  /** Distinct `pool_size` values seen in this group; multiple values mean the campaign mixed pool sizes. */
-  pool_sizes: number[];
+  /** Pool size this row aggregates; sweeps emit one row per (arm, model, pool_size). */
+  pool_size: number;
   /** Distinct scenarios contributing to this group. */
   scenarios: number;
   /** Total cells (= scenarios × runs_per_scenario_for_this_group). */
@@ -53,21 +53,28 @@ export interface ArmModelStats {
 interface ScenarioStats {
   arm: Arm;
   model: string;
+  pool_size: number;
   scenario_id: string;
-  /** Passes / runs for this scenario in this (arm, model). */
+  /** Passes / runs for this scenario in this (arm, model, pool_size). */
   success_rate: number;
   mean_input: number;
   mean_total: number;
   mean_turns: number;
   mean_dollar: number;
   mean_wall: number;
-  pool_sizes: Set<number>;
   /** Number of runs aggregated for this scenario. */
   runs: number;
 }
 
 /**
- * Two-stage aggregation: cells → per-scenario means → per-(arm, model) means.
+ * Two-stage aggregation: cells → per-scenario means → per-(arm, model, pool_size)
+ * means.
+ *
+ * Pool size is part of the grouping key so a sweep (`--pool-sizes 30,50,180`)
+ * emits one row per pool size instead of collapsing them into a single row
+ * whose averages mix populations. Scenarios whose `candidate_pool` is smaller
+ * than the requested pool size end up with the same actual `pool_size`
+ * (universe ceiling) and dedupe naturally.
  *
  * The per-scenario stage gives every scenario equal weight in the headline,
  * so a high-run-count scenario can't drown out the rest. Concretely: a
@@ -76,10 +83,10 @@ interface ScenarioStats {
  * of "what fraction of scenarios succeed" when runs-per-scenario varies.
  */
 export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
-  // Stage 1: per (scenario, arm, model) → per-scenario means.
+  // Stage 1: per (scenario, arm, model, pool_size) → per-scenario means.
   const byScenario = new Map<string, CellResult[]>();
   for (const c of cells) {
-    const key = `${c.scenario_id}::${c.arm}::${c.model}`;
+    const key = `${c.scenario_id}::${c.arm}::${c.model}::${c.pool_size}`;
     const arr = byScenario.get(key) ?? [];
     arr.push(c);
     byScenario.set(key, arr);
@@ -93,6 +100,7 @@ export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
     perScenario.push({
       arm: head.arm,
       model: head.model,
+      pool_size: head.pool_size,
       scenario_id: head.scenario_id,
       success_rate: passes / arr.length,
       mean_input: mean(arr.map((c) => c.input_tokens)),
@@ -100,28 +108,25 @@ export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
       mean_turns: mean(arr.map((c) => c.turns)),
       mean_dollar: mean(arr.map((c) => c.dollar_cost)),
       mean_wall: mean(arr.map((c) => c.wall_ms)),
-      pool_sizes: new Set(arr.map((c) => c.pool_size)),
       runs: arr.length,
     });
   }
 
-  // Stage 2: per (arm, model) → mean across per-scenario means.
+  // Stage 2: per (arm, model, pool_size) → mean across per-scenario means.
   const byGroup = new Map<string, ScenarioStats[]>();
   for (const p of perScenario) {
-    const key = `${p.arm}::${p.model}`;
+    const key = `${p.arm}::${p.model}::${p.pool_size}`;
     const arr = byGroup.get(key) ?? [];
     arr.push(p);
     byGroup.set(key, arr);
   }
   const out: ArmModelStats[] = [];
-  for (const [key, ps] of byGroup) {
-    const [arm, model] = key.split("::") as [Arm, string];
-    const pools = new Set<number>();
-    for (const p of ps) for (const sz of p.pool_sizes) pools.add(sz);
+  for (const ps of byGroup.values()) {
+    const head = ps[0];
     out.push({
-      arm,
-      model,
-      pool_sizes: [...pools].sort((a, b) => a - b),
+      arm: head.arm,
+      model: head.model,
+      pool_size: head.pool_size,
       scenarios: ps.length,
       n: ps.reduce((acc, p) => acc + p.runs, 0),
       success_rate: mean(ps.map((p) => p.success_rate)),
@@ -132,11 +137,15 @@ export function statsByArmModel(cells: CellResult[]): ArmModelStats[] {
       mean_wall_ms: mean(ps.map((p) => p.mean_wall)),
     });
   }
-  return out.sort((a, b) => a.model.localeCompare(b.model) || a.arm.localeCompare(b.arm));
+  return out.sort(
+    (a, b) =>
+      a.model.localeCompare(b.model) || a.arm.localeCompare(b.arm) || a.pool_size - b.pool_size,
+  );
 }
 
 export interface SavingsRow {
   model: string;
+  pool_size: number;
   control_mean_input: number;
   ratel_mean_input: number;
   oracle_mean_input: number;
@@ -160,22 +169,30 @@ function pctSavings(control: number, ratel: number): number {
   return (1 - ratel / control) * 100;
 }
 
+/**
+ * Pair control-baseline vs ratel-full within each (model, pool_size). Sweeps
+ * land one row per pool size so each pool's savings story stays intact —
+ * collapsing across pool sizes would dilute small-pool wins with large-pool
+ * losses (or vice versa).
+ */
 export function savingsByModel(cells: CellResult[]): SavingsRow[] {
   const stats = statsByArmModel(cells);
-  const byModel = new Map<string, ArmModelStats[]>();
+  const byGroup = new Map<string, ArmModelStats[]>();
   for (const s of stats) {
-    const arr = byModel.get(s.model) ?? [];
+    const key = `${s.model}::${s.pool_size}`;
+    const arr = byGroup.get(key) ?? [];
     arr.push(s);
-    byModel.set(s.model, arr);
+    byGroup.set(key, arr);
   }
   const out: SavingsRow[] = [];
-  for (const [model, arr] of byModel) {
+  for (const arr of byGroup.values()) {
     const control = arr.find((s) => s.arm === "control-baseline");
     const ratel = arr.find((s) => s.arm === "ratel-full");
     const oracle = arr.find((s) => s.arm === "control-oracle");
     if (!control || !ratel) continue;
     out.push({
-      model,
+      model: control.model,
+      pool_size: control.pool_size,
       control_mean_input: control.mean_input_tokens,
       ratel_mean_input: ratel.mean_input_tokens,
       oracle_mean_input: oracle?.mean_input_tokens ?? 0,
@@ -194,7 +211,7 @@ export function savingsByModel(cells: CellResult[]): SavingsRow[] {
       wall_savings_pct: pctSavings(control.mean_wall_ms, ratel.mean_wall_ms),
     });
   }
-  return out;
+  return out.sort((a, b) => a.model.localeCompare(b.model) || a.pool_size - b.pool_size);
 }
 
 export type RetrievalSubset = "single-tool" | "multi-tool";
@@ -283,6 +300,7 @@ export function retrievalByPoolSize(rows: RetrievalRow[]): RetrievalSummary[] {
 export interface FailureCounts {
   arm: Arm;
   model: string;
+  pool_size: number;
   pass: number;
   fail: number;
   errored: number;
@@ -293,17 +311,18 @@ export interface FailureCounts {
 export function failureTaxonomy(cells: CellResult[]): FailureCounts[] {
   const groups = new Map<string, CellResult[]>();
   for (const c of cells) {
-    const key = `${c.arm}::${c.model}`;
+    const key = `${c.arm}::${c.model}::${c.pool_size}`;
     const arr = groups.get(key) ?? [];
     arr.push(c);
     groups.set(key, arr);
   }
   const out: FailureCounts[] = [];
-  for (const [key, arr] of groups) {
-    const [arm, model] = key.split("::") as [Arm, string];
+  for (const arr of groups.values()) {
+    const head = arr[0];
     out.push({
-      arm,
-      model,
+      arm: head.arm,
+      model: head.model,
+      pool_size: head.pool_size,
       pass: arr.filter((c) => c.programmatic_verdict === "pass").length,
       fail: arr.filter((c) => c.programmatic_verdict === "fail").length,
       errored: arr.filter((c) => c.error !== null).length,
@@ -314,7 +333,10 @@ export function failureTaxonomy(cells: CellResult[]): FailureCounts[] {
       ).length,
     });
   }
-  return out.sort((a, b) => a.model.localeCompare(b.model) || a.arm.localeCompare(b.arm));
+  return out.sort(
+    (a, b) =>
+      a.model.localeCompare(b.model) || a.arm.localeCompare(b.arm) || a.pool_size - b.pool_size,
+  );
 }
 
 function fmtPct(x: number): string {
@@ -363,9 +385,8 @@ export function renderReport(args: {
   );
   lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of stats) {
-    const pool = s.pool_sizes.length === 0 ? "—" : s.pool_sizes.join(",");
     lines.push(
-      `| ${s.arm} | ${s.model} | ${pool} | ${s.scenarios} | ${s.n} | ${fmtPct(s.success_rate * 100)} | ${fmtNum(s.mean_input_tokens)} | ${fmtNum(s.mean_total_tokens)} | ${fmtNum(s.mean_turns)} | ${fmtDollars(s.mean_dollar_cost)} | ${fmtSeconds(s.mean_wall_ms)} |`,
+      `| ${s.arm} | ${s.model} | ${s.pool_size} | ${s.scenarios} | ${s.n} | ${fmtPct(s.success_rate * 100)} | ${fmtNum(s.mean_input_tokens)} | ${fmtNum(s.mean_total_tokens)} | ${fmtNum(s.mean_turns)} | ${fmtDollars(s.mean_dollar_cost)} | ${fmtSeconds(s.mean_wall_ms)} |`,
     );
   }
   lines.push("");
@@ -377,13 +398,13 @@ export function renderReport(args: {
     lines.push("_No control + ratel pairs in this run._");
   } else {
     lines.push(
-      "| model | input (ctrl → ratel) | input savings | total (ctrl → ratel) | total savings | $ (ctrl → ratel) | $ savings | wall (ctrl → ratel) | wall savings | oracle input | turns Δ |",
+      "| model | pool | input (ctrl → ratel) | input savings | total (ctrl → ratel) | total savings | $ (ctrl → ratel) | $ savings | wall (ctrl → ratel) | wall savings | oracle input | turns Δ |",
     );
-    lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
+    lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|");
     for (const s of savings) {
       const turnsDelta = s.ratel_mean_turns - s.control_mean_turns;
       lines.push(
-        `| ${s.model} | ${fmtNum(s.control_mean_input)} → ${fmtNum(s.ratel_mean_input)} | **${fmtPct(s.input_savings_pct)}** | ${fmtNum(s.control_mean_total)} → ${fmtNum(s.ratel_mean_total)} | **${fmtPct(s.total_savings_pct)}** | ${fmtDollars(s.control_mean_dollars)} → ${fmtDollars(s.ratel_mean_dollars)} | **${fmtPct(s.dollar_savings_pct)}** | ${fmtSeconds(s.control_mean_wall_ms)} → ${fmtSeconds(s.ratel_mean_wall_ms)} | **${fmtPct(s.wall_savings_pct)}** | ${fmtNum(s.oracle_mean_input)} | ${turnsDelta >= 0 ? "+" : ""}${fmtNum(turnsDelta)} |`,
+        `| ${s.model} | ${s.pool_size} | ${fmtNum(s.control_mean_input)} → ${fmtNum(s.ratel_mean_input)} | **${fmtPct(s.input_savings_pct)}** | ${fmtNum(s.control_mean_total)} → ${fmtNum(s.ratel_mean_total)} | **${fmtPct(s.total_savings_pct)}** | ${fmtDollars(s.control_mean_dollars)} → ${fmtDollars(s.ratel_mean_dollars)} | **${fmtPct(s.dollar_savings_pct)}** | ${fmtSeconds(s.control_mean_wall_ms)} → ${fmtSeconds(s.ratel_mean_wall_ms)} | **${fmtPct(s.wall_savings_pct)}** | ${fmtNum(s.oracle_mean_input)} | ${turnsDelta >= 0 ? "+" : ""}${fmtNum(turnsDelta)} |`,
       );
     }
   }
@@ -426,11 +447,11 @@ export function renderReport(args: {
   // 4. Failure taxonomy
   lines.push("## Failure taxonomy");
   lines.push("");
-  lines.push("| arm | model | pass | fail | errored | missing gold | step-limit |");
-  lines.push("|---|---|---|---|---|---|---|");
+  lines.push("| arm | model | pool | pass | fail | errored | missing gold | step-limit |");
+  lines.push("|---|---|---|---|---|---|---|---|");
   for (const f of failures) {
     lines.push(
-      `| ${f.arm} | ${f.model} | ${f.pass} | ${f.fail} | ${f.errored} | ${f.missing_gold} | ${f.step_limit} |`,
+      `| ${f.arm} | ${f.model} | ${f.pool_size} | ${f.pass} | ${f.fail} | ${f.errored} | ${f.missing_gold} | ${f.step_limit} |`,
     );
   }
   lines.push("");

@@ -49,8 +49,13 @@ export interface RunnerConfig {
   models: RunnerModel[];
   runsPerCell: number;
   topK: number;
-  /** Total tools per scenario (gold + distractors). The catalog size every arm ranks against. */
-  poolSize: number;
+  /**
+   * Pool sizes to sweep over. Each scenario is evaluated at every value (cells
+   * are duplicated across pool sizes), so a 50-scenario × 4-pool run produces
+   * 200 cells per (arm, model, run). Always non-empty; the CLI defaults to
+   * `[180]` when neither `--pool-size` nor `--pool-sizes` is passed.
+   */
+  poolSizes: number[];
   maxSteps: number;
   perRunTimeoutMs: number;
   dollarGlobalCap: number;
@@ -110,10 +115,11 @@ interface CellKey {
   arm: Arm;
   model: string;
   runIndex: number;
+  poolSize: number;
 }
 
 function cellKeyString(k: CellKey): string {
-  return `${k.scenarioId}::${k.arm}::${k.model}::${k.runIndex}`;
+  return `${k.scenarioId}::${k.arm}::${k.model}::${k.runIndex}::p${k.poolSize}`;
 }
 
 function readCompletedKeys(path: string): Set<string> {
@@ -130,6 +136,7 @@ function readCompletedKeys(path: string): Set<string> {
           arm: cell.arm,
           model: cell.model,
           runIndex: cell.run_index,
+          poolSize: cell.pool_size,
         }),
       );
     } catch {
@@ -345,17 +352,18 @@ interface PendingTask {
 
 /**
  * Materializes the full task list ahead of time so the worker pool has a flat
- * queue to consume. Pool expansion is shared across runs of the same scenario
- * (it's a pure derivation of inputs, so sharing is safe and saves repeated
- * work). Already-completed cells are filtered out here.
+ * queue to consume. Pool expansion is shared across runs of the same
+ * (scenario, pool_size) pair (it's a pure derivation of inputs, so sharing is
+ * safe and saves repeated work). Already-completed cells are filtered out here.
  *
  * Skipping logic: when a registry is available and the descriptor declares
  * `skipForModel(model.id)`, those cells are filtered out at queue-build time
  * (they don't count as "skipped due to resume" and don't write a JSONL row).
  *
- * The order is the same as the legacy nested loop (scenarios × arms × models
- * × runs); workers pick from the head of the queue, so at concurrency=1
- * behavior is byte-identical to the pre-parallel runner.
+ * Iteration order (poolSizes × scenarios × arms × models × runs): the pool-size
+ * dimension is outermost so a single-size run (`poolSizes=[X]`) is byte-
+ * identical to the legacy ordering. Workers pick from the head of the queue,
+ * so at concurrency=1 the resulting JSONL order is deterministic.
  */
 function buildTaskQueue(
   scenarios: Scenario[],
@@ -366,30 +374,33 @@ function buildTaskQueue(
 ): { tasks: PendingTask[]; cellsSkipped: number } {
   const tasks: PendingTask[] = [];
   let cellsSkipped = 0;
-  for (const scenario of scenarios) {
-    const expandedPool = expandPool(scenario, universe, config.poolSize, config.seed);
-    for (const arm of config.arms) {
-      const descriptor = registry?.get(arm);
-      for (const model of config.models) {
-        if (descriptor?.skipForModel?.(model.id)) continue;
-        for (let runIndex = 0; runIndex < config.runsPerCell; runIndex++) {
-          const key = cellKeyString({
-            scenarioId: scenario.id,
-            arm,
-            model: model.id,
-            runIndex,
-          });
-          if (completed.has(key)) {
-            cellsSkipped++;
-            continue;
+  for (const poolSize of config.poolSizes) {
+    for (const scenario of scenarios) {
+      const expandedPool = expandPool(scenario, universe, poolSize, config.seed);
+      for (const arm of config.arms) {
+        const descriptor = registry?.get(arm);
+        for (const model of config.models) {
+          if (descriptor?.skipForModel?.(model.id)) continue;
+          for (let runIndex = 0; runIndex < config.runsPerCell; runIndex++) {
+            const key = cellKeyString({
+              scenarioId: scenario.id,
+              arm,
+              model: model.id,
+              runIndex,
+              poolSize: expandedPool.length,
+            });
+            if (completed.has(key)) {
+              cellsSkipped++;
+              continue;
+            }
+            tasks.push({
+              scenario,
+              arm,
+              model,
+              runIndex,
+              expandedPool,
+            });
           }
-          tasks.push({
-            scenario,
-            arm,
-            model,
-            runIndex,
-            expandedPool,
-          });
         }
       }
     }

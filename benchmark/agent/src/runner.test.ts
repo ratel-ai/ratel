@@ -71,7 +71,7 @@ function baseConfig(corpusPath: string, outputPath: string): RunnerConfig {
     models: [{ id: "fake-model", model: {} as never }],
     runsPerCell: 1,
     topK: 3,
-    poolSize: 30,
+    poolSizes: [30],
     maxSteps: 8,
     perRunTimeoutMs: 1000,
     dollarGlobalCap: 100.0,
@@ -111,7 +111,7 @@ describe("runner", () => {
 
     await run({
       ...baseConfig(corpus, output),
-      poolSize: 25,
+      poolSizes: [25],
       arms: ["control-baseline"],
       runCell: makeFakeRunCell(0.001, []),
     });
@@ -143,7 +143,7 @@ describe("runner", () => {
     const called: string[] = [];
     await run({
       ...baseConfig(corpus, output),
-      poolSize: 4,
+      poolSizes: [4],
       arms: ["control-baseline"],
       scenarioLimit: 1,
       runCell: makeFakeRunCell(0.001, called),
@@ -153,6 +153,81 @@ describe("runner", () => {
     // from the other 5 scenarios' tools to reach poolSize=4 (1 gold + 3 distractors).
     const cell = JSON.parse(readFileSync(output, "utf-8").trim()) as CellResult;
     expect(cell.pool_size).toBe(4);
+  });
+
+  it("sweeps every (arm, model, run) cell across each requested pool size", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    const others: Scenario[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `noise-${i}`,
+      prompt: `do ${i}`,
+      candidate_pool: [
+        {
+          id: `noise.tool-${i}`,
+          name: `noise_tool_${i}`,
+          description: `noise ${i}`,
+          input_schema: {},
+        },
+      ],
+      gold_tools: [`noise.tool-${i}`],
+    }));
+    writeFileSync(corpus, [scenario, ...others].map((s) => JSON.stringify(s)).join("\n"));
+    const output = join(tempDir, "agent.jsonl");
+
+    const called: string[] = [];
+    const summary = await run({
+      ...baseConfig(corpus, output),
+      poolSizes: [3, 6],
+      arms: ["control-baseline"],
+      scenarioLimit: 1,
+      runCell: makeFakeRunCell(0.001, called),
+    });
+
+    // 1 scenario × 1 arm × 1 model × 1 run × 2 pool sizes = 2 cells.
+    expect(summary.cells_run).toBe(2);
+    const lines = readFileSync(output, "utf-8").split("\n").filter(Boolean);
+    const pools = lines.map((l) => (JSON.parse(l) as CellResult).pool_size).sort((a, b) => a - b);
+    expect(pools).toEqual([3, 6]);
+  });
+
+  it("resume keys a cell by pool_size — re-running new sizes against an existing JSONL only runs the new sizes", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    const others: Scenario[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `noise-${i}`,
+      prompt: `do ${i}`,
+      candidate_pool: [
+        {
+          id: `noise.tool-${i}`,
+          name: `noise_tool_${i}`,
+          description: `noise ${i}`,
+          input_schema: {},
+        },
+      ],
+      gold_tools: [`noise.tool-${i}`],
+    }));
+    writeFileSync(corpus, [scenario, ...others].map((s) => JSON.stringify(s)).join("\n"));
+    const output = join(tempDir, "agent.jsonl");
+
+    // First pass: pool size 3.
+    await run({
+      ...baseConfig(corpus, output),
+      poolSizes: [3],
+      arms: ["control-baseline"],
+      scenarioLimit: 1,
+      runCell: makeFakeRunCell(0.001, []),
+    });
+
+    // Second pass: pool sizes 3 and 6 — only 6 should run.
+    const called2: string[] = [];
+    const summary = await run({
+      ...baseConfig(corpus, output),
+      poolSizes: [3, 6],
+      arms: ["control-baseline"],
+      scenarioLimit: 1,
+      runCell: makeFakeRunCell(0.001, called2),
+    });
+    expect(summary.cells_run).toBe(1);
+    expect(summary.cells_skipped).toBe(1);
+    expect(called2).toHaveLength(1);
   });
 
   it("seeded sampling picks the same subset across runs with the same seed", async () => {

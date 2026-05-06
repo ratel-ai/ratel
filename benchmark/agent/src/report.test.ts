@@ -164,18 +164,28 @@ describe("statsByArmModel", () => {
     expect(ratel?.mean_wall_ms).toBeCloseTo(300, 5);
   });
 
-  it("surfaces the distinct pool_size values per (arm, model) group", () => {
+  it("emits one row per (arm, model, pool_size) so a sweep doesn't average across pools", () => {
     const cells = [
-      cell({ arm: "control-baseline", pool_size: 180 }),
-      cell({ arm: "control-baseline", pool_size: 180, run_index: 1 }),
-      cell({ arm: "ratel-full", pool_size: 180 }),
-      cell({ arm: "ratel-full", pool_size: 30, run_index: 1 }), // mixed-pool campaign
+      cell({ arm: "control-baseline", pool_size: 180, input_tokens: 1500 }),
+      cell({
+        arm: "control-baseline",
+        pool_size: 180,
+        run_index: 1,
+        input_tokens: 1500,
+      }),
+      cell({ arm: "ratel-full", pool_size: 180, input_tokens: 800 }),
+      cell({ arm: "ratel-full", pool_size: 30, run_index: 1, input_tokens: 200 }),
     ];
     const stats = statsByArmModel(cells);
+    expect(stats).toHaveLength(3);
     const control = stats.find((s) => s.arm === "control-baseline");
-    const ratel = stats.find((s) => s.arm === "ratel-full");
-    expect(control?.pool_sizes).toEqual([180]);
-    expect(ratel?.pool_sizes).toEqual([30, 180]);
+    const ratel180 = stats.find((s) => s.arm === "ratel-full" && s.pool_size === 180);
+    const ratel30 = stats.find((s) => s.arm === "ratel-full" && s.pool_size === 30);
+    expect(control?.pool_size).toBe(180);
+    expect(control?.n).toBe(2);
+    // The 180 and 30 ratel cells live in separate rows, each with its own input mean.
+    expect(ratel180?.mean_input_tokens).toBe(800);
+    expect(ratel30?.mean_input_tokens).toBe(200);
   });
 });
 
@@ -224,6 +234,23 @@ describe("savingsByModel", () => {
   it("skips models without both control and ratel arms", () => {
     const cells = [cell({ arm: "control-baseline" })];
     expect(savingsByModel(cells)).toHaveLength(0);
+  });
+
+  it("pairs control vs ratel within each pool size — sweeps emit one row per pool", () => {
+    const cells = [
+      // pool 30: ratel saves 50%
+      cell({ arm: "control-baseline", pool_size: 30, input_tokens: 1000 }),
+      cell({ arm: "ratel-full", pool_size: 30, input_tokens: 500 }),
+      // pool 180: ratel saves 75%
+      cell({ arm: "control-baseline", pool_size: 180, input_tokens: 4000 }),
+      cell({ arm: "ratel-full", pool_size: 180, input_tokens: 1000 }),
+    ];
+    const rows = savingsByModel(cells);
+    expect(rows).toHaveLength(2);
+    const r30 = rows.find((s) => s.pool_size === 30);
+    const r180 = rows.find((s) => s.pool_size === 180);
+    expect(r30?.input_savings_pct).toBeCloseTo(50, 5);
+    expect(r180?.input_savings_pct).toBeCloseTo(75, 5);
   });
 });
 

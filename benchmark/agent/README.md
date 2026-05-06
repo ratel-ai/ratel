@@ -85,7 +85,7 @@ pnpm -F @ratel-ai/benchmark start \
   --models gpt-5.4-mini,claude-sonnet-4-6 \
   --runs 5 \
   --top-k 5 \
-  --pool-size 180 \
+  --pool-sizes 30,100,180 \
   --max-steps 12 \
   --dollar-global 25 \
   --concurrency 10
@@ -97,7 +97,7 @@ Resumable — re-runs skip cells already in `agent.jsonl` unless `--force`. Pass
 
 `--timeout-ms N` (default 60000) sets the per-cell wall-clock timeout. Cloud models rarely need more, but local Ollama models (especially CPU-bound or large 70B+) can comfortably exceed a minute on a 12-step trace — bump to `300000` (5 min) or higher when you see `run timed out after 60000ms` errors in the trace.
 
-`--pool-size` controls the per-scenario tool catalog (gold + distractors pulled from other scenarios). The default (180) sits at the MetaTool plugin universe ceiling; smaller values stress retrieval less, larger values are clamped at the universe size.
+`--pool-sizes` controls the per-scenario tool catalog (gold + distractors pulled from other scenarios). Accepts a comma-separated list (e.g. `--pool-sizes 30,100,180`) — each scenario is evaluated at every requested size, and the report breaks the headline / savings / failure tables down per pool. Pass a single value to skip the sweep. The legacy singular form `--pool-size 180` still works as an alias for one value but rejects commas. The default (180) sits at the MetaTool plugin universe ceiling; smaller values stress retrieval less, larger values are clamped at the universe size.
 
 For a fast local smoke (~$0.20–$1):
 
@@ -106,7 +106,7 @@ pnpm -F @ratel-ai/benchmark start \
   --scenarios 50 --runs 1 \
   --arms control-baseline,control-oracle,ratel-full \
   --models claude-sonnet-4-6 \
-  --pool-size 180 \
+  --pool-sizes 180 \
   --dollar-global 5 \
   --concurrency 10
 ```
@@ -122,7 +122,7 @@ pnpm -F @ratel-ai/benchmark start \
   --scenarios 50 --runs 1 \
   --arms control-baseline,ratel-full \
   --models ollama:qwen3.5,ollama:gemma4 \
-  --pool-size 180 \
+  --pool-sizes 30,180 \
   --judge-model ollama:qwen3.5 \  # cost-free local judge
   --concurrency 1 \               # local Ollama is single-process
   --timeout-ms 300000             # 5 min — local models often need more than 60s
