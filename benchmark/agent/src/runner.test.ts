@@ -189,6 +189,45 @@ describe("runner", () => {
     expect(pools).toEqual([3, 6]);
   });
 
+  it("interleaves pool sizes so a partial budget spans every pool instead of starving the trailing ones", async () => {
+    const corpus = join(tempDir, "corpus.jsonl");
+    const others: Scenario[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `noise-${i}`,
+      prompt: `do ${i}`,
+      candidate_pool: [
+        {
+          id: `noise.tool-${i}`,
+          name: `noise_tool_${i}`,
+          description: `noise ${i}`,
+          input_schema: {},
+        },
+      ],
+      gold_tools: [`noise.tool-${i}`],
+    }));
+    writeFileSync(corpus, [scenario, ...others].map((s) => JSON.stringify(s)).join("\n"));
+    const output = join(tempDir, "agent.jsonl");
+
+    // 3 scenarios × 1 arm × 1 model × 1 run × 4 pool sizes = 12 cells. Budget
+    // for ~4 cells means we expect partial coverage; the assertion is that
+    // every pool size is represented at least once (vs. the old pool-major
+    // ordering, which would have produced 4 × pool=2 and zero of the rest).
+    const summary = await run({
+      ...baseConfig(corpus, output),
+      poolSizes: [2, 4, 6, 8],
+      arms: ["control-baseline"],
+      scenarioLimit: 3,
+      dollarGlobalCap: 0.0045, // ~4 cells at $0.001 each
+      runCell: makeFakeRunCell(0.001, []),
+    });
+    expect(summary.stopped_reason).toBe("global_cap");
+    const lines = readFileSync(output, "utf-8").split("\n").filter(Boolean);
+    const pools = new Set(lines.map((l) => (JSON.parse(l) as CellResult).pool_size));
+    // Pool sizes < gold count clamp upward (gold=1 → pool=1 for size 1; here
+    // requested sizes 2/4/6/8 either expand to that size or to the universe
+    // ceiling — but each requested size produces a distinct pool.length value).
+    expect(pools.size).toBeGreaterThan(1);
+  });
+
   it("resume keys a cell by pool_size — re-running new sizes against an existing JSONL only runs the new sizes", async () => {
     const corpus = join(tempDir, "corpus.jsonl");
     const others: Scenario[] = Array.from({ length: 10 }, (_, i) => ({

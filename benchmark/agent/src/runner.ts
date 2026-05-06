@@ -352,18 +352,23 @@ interface PendingTask {
 
 /**
  * Materializes the full task list ahead of time so the worker pool has a flat
- * queue to consume. Pool expansion is shared across runs of the same
- * (scenario, pool_size) pair (it's a pure derivation of inputs, so sharing is
- * safe and saves repeated work). Already-completed cells are filtered out here.
+ * queue to consume. Pool expansion is shared across the multiple visits to
+ * the same (scenario, pool_size) pair (one per run × arm × model) via a
+ * memoized cache. Already-completed cells are filtered out here.
  *
  * Skipping logic: when a registry is available and the descriptor declares
  * `skipForModel(model.id)`, those cells are filtered out at queue-build time
  * (they don't count as "skipped due to resume" and don't write a JSONL row).
  *
- * Iteration order (poolSizes × scenarios × arms × models × runs): the pool-size
- * dimension is outermost so a single-size run (`poolSizes=[X]`) is byte-
- * identical to the legacy ordering. Workers pick from the head of the queue,
- * so at concurrency=1 the resulting JSONL order is deterministic.
+ * Iteration order (runs × scenarios × pool_sizes × arms × models): runs are
+ * outermost so a partial budget completes one full pass before starting the
+ * next, and pool sizes sit just inside scenarios so a budget that runs out
+ * mid-pass still spans every pool size — instead of finishing pool=30 and
+ * starving pool=180 when `--dollar-global` fires. Arm × model comparisons
+ * within a (run, scenario, pool) cell are always either fully present or
+ * fully absent, which keeps the per-pool report rows interpretable under
+ * partial budgets. Workers pick from the head of the queue, so at
+ * concurrency=1 JSONL order is deterministic.
  */
 function buildTaskQueue(
   scenarios: Scenario[],
@@ -372,16 +377,27 @@ function buildTaskQueue(
   completed: Set<string>,
   registry: Map<string, AgentDescriptor> | undefined,
 ): { tasks: PendingTask[]; cellsSkipped: number } {
+  const poolCache = new Map<string, ToolSpec[]>();
+  const expand = (scenario: Scenario, poolSize: number): ToolSpec[] => {
+    const key = `${scenario.id}::${poolSize}`;
+    let pool = poolCache.get(key);
+    if (!pool) {
+      pool = expandPool(scenario, universe, poolSize, config.seed);
+      poolCache.set(key, pool);
+    }
+    return pool;
+  };
+
   const tasks: PendingTask[] = [];
   let cellsSkipped = 0;
-  for (const poolSize of config.poolSizes) {
+  for (let runIndex = 0; runIndex < config.runsPerCell; runIndex++) {
     for (const scenario of scenarios) {
-      const expandedPool = expandPool(scenario, universe, poolSize, config.seed);
-      for (const arm of config.arms) {
-        const descriptor = registry?.get(arm);
-        for (const model of config.models) {
-          if (descriptor?.skipForModel?.(model.id)) continue;
-          for (let runIndex = 0; runIndex < config.runsPerCell; runIndex++) {
+      for (const poolSize of config.poolSizes) {
+        const expandedPool = expand(scenario, poolSize);
+        for (const arm of config.arms) {
+          const descriptor = registry?.get(arm);
+          for (const model of config.models) {
+            if (descriptor?.skipForModel?.(model.id)) continue;
             const key = cellKeyString({
               scenarioId: scenario.id,
               arm,
