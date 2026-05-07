@@ -24,7 +24,7 @@ import { runMcpList } from "./handlers/mcp-list.js";
 import { runRemove } from "./handlers/remove.js";
 import type { HandlerCtx } from "./handlers/types.js";
 import { runUndo } from "./handlers/undo.js";
-import { findProjectRoot, type HierarchyEnv } from "./hierarchy.js";
+import { findProjectRoot, type HierarchyEnv, PROJECT_MARKERS } from "./hierarchy.js";
 import { type JsonFs, nodeFs } from "./io.js";
 import { type PromptAdapter, silentPromptAdapter } from "./prompts.js";
 
@@ -217,11 +217,12 @@ async function defaultReadConfig(path: string): Promise<unknown> {
 }
 
 function defaultEnv(): HierarchyEnv {
-  const env: HierarchyEnv = { homeDir: homedir() };
+  const cwd = process.cwd();
+  const env: HierarchyEnv = { homeDir: homedir(), cwd };
   try {
-    env.projectRoot = findProjectRoot(process.cwd(), { existsSync });
+    env.projectRoot = findProjectRoot(cwd, { existsSync });
   } catch {
-    // no project root; project/local scopes will surface a clear error when used
+    env.projectRootError = { searchedFrom: cwd, markers: PROJECT_MARKERS };
   }
   return env;
 }

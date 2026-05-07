@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import type { ServerEntry } from "@ratel-ai/mcp-server";
-import { type HierarchyEnv, ProjectRootNotFoundError } from "./hierarchy.js";
+import { type HierarchyEnv, ProjectRootNotFoundError, walkUp } from "./hierarchy.js";
 
 export type ClaudeScope = "user" | "project" | "local";
 
@@ -13,6 +13,12 @@ export interface ClaudeConfigDoc {
   path: string;
   raw: Record<string, unknown>;
   mcpServers: Record<string, ServerEntry>;
+  /**
+   * For `local` scope only: maps each entry name back to the `projects[<dir>]`
+   * key it was discovered under. Populated even when empty (so callers can
+   * distinguish "no local lookup happened" from "lookup happened, found nothing").
+   */
+  localOriginByName?: Record<string, string>;
 }
 
 export function claudeConfigPath(scope: ClaudeScope, env: HierarchyEnv): string {
@@ -30,8 +36,8 @@ export async function readClaudeConfig(
   env: HierarchyEnv,
   fs: ClaudeFs,
 ): Promise<ClaudeConfigDoc | null> {
-  if (scope === "local" && !env.projectRoot) {
-    throw new ProjectRootNotFoundError(`scope "local" requires a project root`);
+  if (scope === "local" && !env.cwd && !env.projectRoot) {
+    throw new ProjectRootNotFoundError(`scope "local" requires cwd or projectRoot`);
   }
   const path = claudeConfigPath(scope, env);
   const text = await fs.read(path);
@@ -45,24 +51,39 @@ export async function readClaudeConfig(
   if (!isPlainObject(raw)) {
     throw new Error(`${path}: root must be a JSON object`);
   }
-  const mcpServers = readMcpServers(scope, raw, env);
-  return { scope, path, raw, mcpServers };
+  if (scope === "local") {
+    const { entries, originByName } = readLocalMcpServers(raw, env);
+    return { scope, path, raw, mcpServers: entries, localOriginByName: originByName };
+  }
+  return { scope, path, raw, mcpServers: asServerEntries(raw.mcpServers) };
 }
 
-function readMcpServers(
-  scope: ClaudeScope,
+/**
+ * Walks parents from `env.cwd` (or `env.projectRoot` as a fallback) and
+ * collects entries from every `projects[<ancestor>].mcpServers` key found in
+ * `~/.claude.json`. Nearest-ancestor wins on name collisions, mirroring how
+ * Claude Code itself resolves descendant sessions to ancestor `projects[]`
+ * entries.
+ */
+function readLocalMcpServers(
   raw: Record<string, unknown>,
   env: HierarchyEnv,
-): Record<string, ServerEntry> {
-  if (scope === "local") {
-    const projects = raw.projects;
-    if (!isPlainObject(projects)) return {};
-    const root = resolve(env.projectRoot as string);
-    const entry = projects[root];
-    if (!isPlainObject(entry)) return {};
-    return asServerEntries(entry.mcpServers);
+): { entries: Record<string, ServerEntry>; originByName: Record<string, string> } {
+  const entries: Record<string, ServerEntry> = {};
+  const originByName: Record<string, string> = {};
+  const projects = raw.projects;
+  if (!isPlainObject(projects)) return { entries, originByName };
+  const start = resolve((env.cwd ?? env.projectRoot) as string);
+  for (const dir of walkUp(start)) {
+    const projEntry = projects[dir];
+    if (!isPlainObject(projEntry)) continue;
+    for (const [name, entry] of Object.entries(asServerEntries(projEntry.mcpServers))) {
+      if (name in entries) continue;
+      entries[name] = entry;
+      originByName[name] = dir;
+    }
   }
-  return asServerEntries(raw.mcpServers);
+  return { entries, originByName };
 }
 
 function asServerEntries(v: unknown): Record<string, ServerEntry> {

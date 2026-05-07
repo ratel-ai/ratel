@@ -38,7 +38,15 @@ export async function runImport(
   const claudeProject = ctx.env.projectRoot
     ? await readClaudeConfig("project", ctx.env, ctx.fs)
     : null;
-  const claudeLocal = ctx.env.projectRoot ? await readClaudeConfig("local", ctx.env, ctx.fs) : null;
+  const claudeLocal =
+    ctx.env.cwd || ctx.env.projectRoot ? await readClaudeConfig("local", ctx.env, ctx.fs) : null;
+
+  if (!ctx.env.projectRoot && ctx.env.projectRootError) {
+    const e = ctx.env.projectRootError;
+    ctx.log(
+      `[ratel] no project root detected (searched ${e.markers.join(", ")} from ${e.searchedFrom}). Claude project scope and Ratel local target unavailable.`,
+    );
+  }
 
   const candidates = collectCandidates(claudeUser, claudeProject, claudeLocal);
   if (candidates.length === 0) {

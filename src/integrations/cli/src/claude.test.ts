@@ -78,6 +78,82 @@ describe("readClaudeConfig", () => {
     });
     const doc = await readClaudeConfig("local", { homeDir: HOME, projectRoot: ROOT }, fs);
     expect(doc?.mcpServers).toEqual({ local: { type: "stdio", command: "echo" } });
+    expect(doc?.localOriginByName).toEqual({ local: "/r" });
+  });
+
+  it("walks parents from cwd and merges projects[<ancestor>].mcpServers (local scope)", async () => {
+    const fs = fakeFs({
+      "/home/u/.claude.json": JSON.stringify({
+        projects: {
+          "/Users/giacomo": {
+            mcpServers: {
+              slack: { type: "stdio", command: "slk" },
+              notion: { type: "stdio", command: "ntn" },
+            },
+          },
+          "/Users/giacomo/sub": {
+            mcpServers: { local: { type: "stdio", command: "loc" } },
+          },
+          "/elsewhere": { mcpServers: { other: { type: "stdio", command: "x" } } },
+        },
+      }),
+    });
+    const env = { homeDir: HOME, cwd: "/Users/giacomo/sub/deeper" };
+    const doc = await readClaudeConfig("local", env, fs);
+    expect(doc?.mcpServers).toEqual({
+      slack: { type: "stdio", command: "slk" },
+      notion: { type: "stdio", command: "ntn" },
+      local: { type: "stdio", command: "loc" },
+    });
+    expect(doc?.localOriginByName).toEqual({
+      slack: "/Users/giacomo",
+      notion: "/Users/giacomo",
+      local: "/Users/giacomo/sub",
+    });
+  });
+
+  it("nearest-ancestor wins when the same name appears in multiple ancestor projects (local scope)", async () => {
+    const fs = fakeFs({
+      "/home/u/.claude.json": JSON.stringify({
+        projects: {
+          "/Users/giacomo": { mcpServers: { github: { type: "stdio", command: "outer" } } },
+          "/Users/giacomo/sub": { mcpServers: { github: { type: "stdio", command: "inner" } } },
+        },
+      }),
+    });
+    const env = { homeDir: HOME, cwd: "/Users/giacomo/sub/deeper" };
+    const doc = await readClaudeConfig("local", env, fs);
+    expect(doc?.mcpServers.github).toEqual({ type: "stdio", command: "inner" });
+    expect(doc?.localOriginByName?.github).toBe("/Users/giacomo/sub");
+  });
+
+  it("does not require projectRoot when cwd is set (local scope)", async () => {
+    const fs = fakeFs({
+      "/home/u/.claude.json": JSON.stringify({
+        projects: {
+          "/Users/giacomo": { mcpServers: { slack: { type: "stdio", command: "x" } } },
+        },
+      }),
+    });
+    const env = { homeDir: HOME, cwd: "/Users/giacomo/sub" };
+    const doc = await readClaudeConfig("local", env, fs);
+    expect(doc?.mcpServers).toEqual({ slack: { type: "stdio", command: "x" } });
+    expect(doc?.localOriginByName).toEqual({ slack: "/Users/giacomo" });
+  });
+
+  it("prefers cwd over projectRoot as the walk-up origin (local scope)", async () => {
+    const fs = fakeFs({
+      "/home/u/.claude.json": JSON.stringify({
+        projects: {
+          "/p1": { mcpServers: { p1: { type: "stdio", command: "p1" } } },
+          "/p2": { mcpServers: { p2: { type: "stdio", command: "p2" } } },
+        },
+      }),
+    });
+    const env = { homeDir: HOME, projectRoot: "/p1", cwd: "/p2/sub" };
+    const doc = await readClaudeConfig("local", env, fs);
+    expect(doc?.mcpServers).toEqual({ p2: { type: "stdio", command: "p2" } });
+    expect(doc?.localOriginByName).toEqual({ p2: "/p2" });
   });
 
   it("returns empty mcpServers when projects key is missing for local scope", async () => {
@@ -86,6 +162,7 @@ describe("readClaudeConfig", () => {
     });
     const doc = await readClaudeConfig("local", { homeDir: HOME, projectRoot: ROOT }, fs);
     expect(doc?.mcpServers).toEqual({});
+    expect(doc?.localOriginByName).toEqual({});
   });
 
   it("returns empty mcpServers when projects[<root>] has no mcpServers field", async () => {
@@ -96,6 +173,7 @@ describe("readClaudeConfig", () => {
     });
     const doc = await readClaudeConfig("local", { homeDir: HOME, projectRoot: ROOT }, fs);
     expect(doc?.mcpServers).toEqual({});
+    expect(doc?.localOriginByName).toEqual({});
   });
 
   it("preserves the full raw document so non-mcp keys survive a future write", async () => {
@@ -110,7 +188,7 @@ describe("readClaudeConfig", () => {
     expect(doc?.raw).toEqual(raw);
   });
 
-  it("throws when local scope is requested without a project root", async () => {
+  it("throws when local scope is requested without cwd or projectRoot", async () => {
     await expect(readClaudeConfig("local", { homeDir: HOME }, fakeFs({}))).rejects.toThrow(
       ProjectRootNotFoundError,
     );

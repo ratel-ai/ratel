@@ -5,6 +5,13 @@ export type RatelScope = "user" | "project" | "local";
 export interface HierarchyEnv {
   homeDir: string;
   projectRoot?: string;
+  cwd?: string;
+  projectRootError?: ProjectRootError;
+}
+
+export interface ProjectRootError {
+  searchedFrom: string;
+  markers: readonly string[];
 }
 
 export class ProjectRootNotFoundError extends Error {
@@ -50,6 +57,7 @@ export interface ExistsFs {
 
 const WORKSPACE_MARKERS = ["pnpm-workspace.yaml"] as const;
 const FALLBACK_MARKERS = [".git", ".mcp.json", "package.json"] as const;
+export const PROJECT_MARKERS: readonly string[] = [...WORKSPACE_MARKERS, ...FALLBACK_MARKERS];
 
 export function findProjectRoot(startDir: string, fs: ExistsFs): string {
   for (const dir of walkUp(startDir)) {
@@ -65,7 +73,7 @@ export function findProjectRoot(startDir: string, fs: ExistsFs): string {
   throw new ProjectRootNotFoundError(`no project marker found above ${startDir}`);
 }
 
-function* walkUp(dir: string): Generator<string> {
+export function* walkUp(dir: string): Generator<string> {
   let cur = dir;
   while (true) {
     yield cur;

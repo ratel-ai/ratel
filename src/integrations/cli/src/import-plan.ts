@@ -194,6 +194,7 @@ export function buildImportPlan(
       claudeRewriteG.length > 0 ? new Set(claudeRewriteG) : null,
       claudeRewriteL.length > 0 ? new Set(claudeRewriteL) : null,
       inputs.projectRoot ?? deriveProjectRoot(inputs),
+      inputs.claudeLocal?.localOriginByName,
     );
     pushClaudeWrite(claudeChanges, homeDoc.path, homeDoc.raw, newRaw);
   }
@@ -306,6 +307,7 @@ function rewriteHomeClaude(
   removeUser: ReadonlySet<string> | null,
   removeLocal: ReadonlySet<string> | null,
   projectRoot: string | undefined,
+  localOriginByName: Record<string, string> | undefined,
 ): Record<string, unknown> {
   const out = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
   if (removeUser && userRatelEntry) {
@@ -315,13 +317,48 @@ function rewriteHomeClaude(
   if (removeLocal && localRatelEntry && projectRoot) {
     const absRoot = resolve(projectRoot);
     const projects = isPlainObject(out.projects) ? (out.projects as Record<string, unknown>) : {};
+
+    // Group removals by origin path. Names without an entry in
+    // localOriginByName fall back to absRoot (preserves single-key behavior
+    // when no hierarchical discovery happened).
+    const removalsByPath = new Map<string, Set<string>>();
+    for (const name of removeLocal) {
+      const origin = localOriginByName?.[name] ?? absRoot;
+      const set = removalsByPath.get(origin) ?? new Set<string>();
+      set.add(name);
+      removalsByPath.set(origin, set);
+    }
+
+    // Apply removals at every ancestor that contributed entries (no ratel
+    // entry added there — those locations just lose the migrated MCPs).
+    for (const [path, names] of removalsByPath) {
+      if (path === absRoot) continue;
+      const entry = isPlainObject(projects[path])
+        ? { ...(projects[path] as Record<string, unknown>) }
+        : {};
+      const before = isPlainObject(entry.mcpServers)
+        ? (entry.mcpServers as Record<string, unknown>)
+        : {};
+      const next: Record<string, unknown> = {};
+      for (const [n, e] of Object.entries(before)) {
+        if (n === "ratel" || names.has(n)) continue;
+        next[n] = e;
+      }
+      entry.mcpServers = next;
+      projects[path] = entry;
+    }
+
+    // At absRoot: remove any entries that originated here AND add the ratel
+    // entry. The ratel entry always lands here so Claude sessions launched
+    // from absRoot or below pick up Ratel's gateway.
+    const namesAtRoot = removalsByPath.get(absRoot) ?? new Set<string>();
     const entry = isPlainObject(projects[absRoot])
       ? { ...(projects[absRoot] as Record<string, unknown>) }
       : {};
     const before = isPlainObject(entry.mcpServers)
       ? (entry.mcpServers as Record<string, unknown>)
       : {};
-    entry.mcpServers = mergeWithRatel(before, removeLocal, localRatelEntry);
+    entry.mcpServers = mergeWithRatel(before, namesAtRoot, localRatelEntry);
     projects[absRoot] = entry;
     out.projects = projects;
   }

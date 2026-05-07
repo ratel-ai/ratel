@@ -221,6 +221,114 @@ describe("runImport", () => {
     ]);
   });
 
+  it("hierarchical local: ancestor projects[<dir>] entries surface, migrate to Ratel local, and are removed from their origin", async () => {
+    const fs = new MemFs();
+    const PARENT = "/parent";
+    const SUB = "/parent/sub";
+    const RATEL_LOCAL_SUB = `${SUB}/.ratel/config.local.json`;
+    const RATEL_PROJECT_SUB = `${SUB}/.ratel/config.json`;
+    fs.files.set(
+      HOME_CLAUDE,
+      JSON.stringify({
+        projects: {
+          [PARENT]: {
+            mcpServers: {
+              slack: { type: "stdio", command: "slk" },
+              notion: { type: "stdio", command: "ntn" },
+            },
+          },
+        },
+      }),
+    );
+
+    const ctx: HandlerCtx = {
+      argv: { group: "mcp", verb: "import", configPaths: [], rest: [], extras: [], flags: {} },
+      env: { homeDir: HOME, cwd: SUB, projectRoot: SUB },
+      fs,
+      log: () => {},
+      prompts: autoConfirm(),
+    };
+    await runImport(ctx, { bin: BIN, yes: true });
+
+    const ratelLocal = JSON.parse(fs.files.get(RATEL_LOCAL_SUB) as string);
+    expect(ratelLocal.mcpServers.slack).toEqual({ type: "stdio", command: "slk" });
+    expect(ratelLocal.mcpServers.notion).toEqual({ type: "stdio", command: "ntn" });
+
+    const claude = JSON.parse(fs.files.get(HOME_CLAUDE) as string);
+    expect(claude.projects[PARENT].mcpServers.slack).toBeUndefined();
+    expect(claude.projects[PARENT].mcpServers.notion).toBeUndefined();
+    expect(claude.projects[PARENT].mcpServers.ratel).toBeUndefined();
+    expect(claude.projects[SUB].mcpServers.ratel.args).toEqual([
+      "mcp",
+      "serve",
+      "--config",
+      RATEL_USER,
+      "--config",
+      RATEL_PROJECT_SUB,
+      "--config",
+      RATEL_LOCAL_SUB,
+    ]);
+  });
+
+  it("hierarchical local: removes from each origin path when entries span multiple ancestors", async () => {
+    const fs = new MemFs();
+    const A = "/a";
+    const B = "/a/b";
+    const C = "/a/b/c";
+    fs.files.set(
+      HOME_CLAUDE,
+      JSON.stringify({
+        projects: {
+          [A]: { mcpServers: { fromA: { type: "stdio", command: "a" } } },
+          [B]: { mcpServers: { fromB: { type: "stdio", command: "b" } } },
+        },
+      }),
+    );
+    const ctx: HandlerCtx = {
+      argv: { group: "mcp", verb: "import", configPaths: [], rest: [], extras: [], flags: {} },
+      env: { homeDir: HOME, cwd: C, projectRoot: C },
+      fs,
+      log: () => {},
+      prompts: autoConfirm(),
+    };
+    await runImport(ctx, { bin: BIN, yes: true });
+
+    const claude = JSON.parse(fs.files.get(HOME_CLAUDE) as string);
+    expect(claude.projects[A].mcpServers.fromA).toBeUndefined();
+    expect(claude.projects[B].mcpServers.fromB).toBeUndefined();
+    expect(claude.projects[C].mcpServers.ratel).toBeDefined();
+  });
+
+  it("logs a diagnostic when findProjectRoot failed (no project markers above cwd)", async () => {
+    const fs = new MemFs();
+    fs.files.set(
+      HOME_CLAUDE,
+      JSON.stringify({
+        projects: {
+          "/parent": { mcpServers: { slack: { type: "stdio", command: "slk" } } },
+        },
+      }),
+    );
+    const logs: string[] = [];
+    const ctx: HandlerCtx = {
+      argv: { group: "mcp", verb: "import", configPaths: [], rest: [], extras: [], flags: {} },
+      env: {
+        homeDir: HOME,
+        cwd: "/parent/sub",
+        projectRootError: { searchedFrom: "/parent/sub", markers: [".git", "package.json"] },
+      },
+      fs,
+      log: (m) => logs.push(m),
+      prompts: autoConfirm(),
+    };
+    await runImport(ctx, { bin: BIN, yes: true });
+
+    const blob = logs.join("\n");
+    expect(blob).toMatch(/no project root/i);
+    expect(blob).toMatch(/\/parent\/sub/);
+    expect(blob).toMatch(/\.git/);
+  });
+
   it("aborts cleanly when the user cancels the confirm step (no writes, no backup)", async () => {
     const fs = new MemFs();
     fs.files.set(
