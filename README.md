@@ -4,6 +4,8 @@ The **context engineering platform** for AI agents — the layer that decides wh
 
 The base of the platform is an algorithm and a library. On top of that base sit a growing set of products and integrations — the flagship today being a Ratel **MCP server** plus a **CLI** that puts Ratel between Claude Code (or any MCP client) and the rest of your MCP servers.
 
+Latest measured impact: 70–85% input-token reduction at realistic pool sizes; large open-source models gain ~10 pp accuracy at scale, and local `qwen3.5` jumps from 8% → 77% pass rate at pool=100 on a MacBook M4. Full breakdown in [`benchmark/RESULTS.md`](benchmark/RESULTS.md).
+
 ## What you can use today
 
 ### Core: `ratel-ai-core` (Rust library)
@@ -83,7 +85,7 @@ src/
 └── integrations/
     ├── mcp-server/            # @ratel-ai/mcp-server — library: expose a catalog as an MCP server
     └── cli/                   # @ratel-ai/cli — `ratel` CLI: scope mgmt, gateway, Claude-Code import, OAuth
-benchmark/                     # Two-layer harness: Rust retrieval + TS agent campaign
+benchmark/                     # Two-layer harness: Rust retrieval + TS agent campaign — see RESULTS.md
 examples/                      # ai-sdk, mcp-chat, mcp-server end-to-end examples
 docs/adr/                      # Architecture decision records
 ```
