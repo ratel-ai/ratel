@@ -2,6 +2,8 @@
 
 Two-layer harness measuring Ratel's retrieval quality and (eventually) agent-loop token savings. Backs every "Ratel does X better" claim. New product features that touch retrieval or context shape are expected to add a corresponding scenario before being declared done.
 
+**Latest results: [`RESULTS.md`](RESULTS.md)** — narrative breakdown across Claude (Sonnet, Opus), `glm-5.1:cloud`, and local `qwen3.5`.
+
 Locked decisions live in:
 
 - [`docs/adr/0005-benchmark-design.md`](../docs/adr/0005-benchmark-design.md) — overall harness (arms, models, variance, results storage)
