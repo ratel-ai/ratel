@@ -20,13 +20,30 @@ const VerdictSchema = z.object({
   explanation: z.string(),
 });
 
+/**
+ * Selects the no-criteria fallback rubric.
+ * - `strict` (default): requires a substantive attempt at the actual request.
+ *   A polite refusal or redirect to external resources counts as `fail`. This
+ *   is the right rubric for measuring whether the model actually engaged with
+ *   the task and avoids the v0.1.1 issue where lenient coherence-scoring
+ *   rewarded "I don't have a tool, try website X" essays as `pass`.
+ * - `coherence` (legacy v0.1.1 behavior): rewards any on-topic final text.
+ *   Kept available for reproducing v0.1.1 reports; opt in explicitly.
+ *
+ * Has no effect on the criteria path — when `judgeCriteria` is supplied, the
+ * criteria-based system prompt is already strict by design.
+ */
+export type JudgePromptVariant = "coherence" | "strict";
+
 export interface LLMJudgeArgs {
-  /** The user's original prompt — used for the coherence-fallback path when no criteria is provided. */
+  /** The user's original prompt — used for the no-criteria path when no criteria is provided. */
   prompt: string;
-  /** Optional curated success criteria. When empty, the judge scores coherence against `prompt`. */
+  /** Optional curated success criteria. When empty, the judge scores against `prompt`. */
   judgeCriteria?: string;
   finalText: string;
   model: LanguageModel;
+  /** Defaults to `"strict"`. Pass `"coherence"` to reproduce v0.1.1 reports. */
+  promptVariant?: JudgePromptVariant;
 }
 
 export interface LLMJudgeResult {
@@ -47,7 +64,7 @@ const SYSTEM_WITH_CRITERIA = [
   "You do NOT see what tools were called, only the final text.",
 ].join("\n");
 
-const SYSTEM_PROMPT_ONLY = [
+const SYSTEM_PROMPT_ONLY_COHERENCE = [
   "You are an impartial evaluator of an AI assistant's final response.",
   "You will be given:",
   "  1. USER_REQUEST — what the user asked the assistant to do.",
@@ -61,9 +78,27 @@ const SYSTEM_PROMPT_ONLY = [
   "You do NOT see what tools were called, only the final text.",
 ].join("\n");
 
+const SYSTEM_PROMPT_ONLY_STRICT = [
+  "You are a strict evaluator of an AI assistant's final response.",
+  "You will be given:",
+  "  1. USER_REQUEST — a task the user asked the assistant to perform.",
+  "  2. ASSISTANT_OUTPUT — the assistant's final text.",
+  "Decide whether the assistant actually attempted and substantively answered the request:",
+  "  - 'pass'    = the output makes a substantive attempt at the requested task",
+  "                and produces a concrete answer (data, list, computation, etc.).",
+  "  - 'partial' = the output attempts the task but gets only part of it right,",
+  "                or answers a related but narrower question.",
+  "  - 'fail'    = the output refuses, redirects the user to external resources",
+  "                ('I don't have a tool for that, try website X'), gives only",
+  "                generic guidance instead of doing the task, is empty, or is incoherent.",
+  "A polite, on-topic refusal is still a fail — the user wanted the task done.",
+  "You do NOT see what tools were called, only the final text.",
+].join("\n");
+
 export async function judgeLLM(args: LLMJudgeArgs): Promise<LLMJudgeResult> {
   const criteria = args.judgeCriteria?.trim() ?? "";
   const finalText = args.finalText.trim().length === 0 ? "(empty)" : args.finalText;
+  const variant: JudgePromptVariant = args.promptVariant ?? "strict";
 
   const { system, userPrompt } =
     criteria.length > 0
@@ -74,7 +109,7 @@ export async function judgeLLM(args: LLMJudgeArgs): Promise<LLMJudgeResult> {
           ),
         }
       : {
-          system: SYSTEM_PROMPT_ONLY,
+          system: variant === "strict" ? SYSTEM_PROMPT_ONLY_STRICT : SYSTEM_PROMPT_ONLY_COHERENCE,
           userPrompt: ["USER_REQUEST:", args.prompt, "", "ASSISTANT_OUTPUT:", finalText].join("\n"),
         };
 

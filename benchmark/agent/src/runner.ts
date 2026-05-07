@@ -378,6 +378,7 @@ export function makeRegistryRunCell(
         model: judgeModel,
       });
       cell.judge_verdict = judged.verdict;
+      cell.judge_explanation = judged.explanation;
     }
     return cell;
   };

@@ -125,6 +125,13 @@ export interface CellResult {
   // Outcome
   programmatic_verdict: ProgrammaticVerdict;
   judge_verdict: JudgeVerdict;
+  /**
+   * Free-form rationale from the LLM judge for the most recent verdict, kept
+   * so a `rejudge` pass can be inspected without re-running. Optional because
+   * pre-rejudge JSONL rows don't have it and the programmatic-only path never
+   * sets it.
+   */
+  judge_explanation?: string;
   final_text: string;
   finish_reason: string;
   error: string | null;

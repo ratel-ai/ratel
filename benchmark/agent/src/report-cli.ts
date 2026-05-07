@@ -2,22 +2,12 @@
 // retrieval JSONL files, joins them, writes REPORT.md. No state of its own —
 // all logic lives in `report.ts`.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { readJsonl } from "./io.js";
 import { resolveRepoPath } from "./paths.js";
 import { type RetrievalRow, renderReport } from "./report.js";
 import type { CellResult } from "./types.js";
-
-function readJsonl<T>(path: string): T[] {
-  if (!existsSync(path)) return [];
-  const lines = readFileSync(path, "utf-8").split("\n");
-  const out: T[] = [];
-  for (const l of lines) {
-    if (!l.trim()) continue;
-    out.push(JSON.parse(l) as T);
-  }
-  return out;
-}
 
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(name);

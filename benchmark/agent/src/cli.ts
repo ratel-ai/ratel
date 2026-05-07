@@ -13,7 +13,9 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { createOpenAI, openai } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import { config as loadEnv } from "dotenv";
+import type { JudgePromptVariant } from "./judges/llm.js";
 import { resolveRepoPath } from "./paths.js";
+import { rejudge } from "./rejudge.js";
 import { loadAgentRegistry, type RunnerConfig, type RunnerModel, run } from "./runner.js";
 import type { Arm } from "./types.js";
 
@@ -317,7 +319,104 @@ function ephemeralOutputPath(): string {
 /** Canonical agent.jsonl that ephemeral runs read for cached control rows. */
 const CANONICAL_AGENT_JSONL = "benchmark/agent/results/agent.jsonl";
 
-async function main(): Promise<void> {
+interface RejudgeParsedArgs {
+  input: string;
+  corpus: string;
+  judgeModelId?: string;
+  promptVariant: JudgePromptVariant;
+  out?: string;
+  ollamaBaseURL: string;
+}
+
+function parseRejudgeArgs(argv: string[]): RejudgeParsedArgs {
+  const args: RejudgeParsedArgs = {
+    input: "",
+    corpus: "benchmark/test-data/metatool.jsonl",
+    promptVariant: "strict",
+    ollamaBaseURL: process.env.OLLAMA_BASE_URL ?? DEFAULT_OLLAMA_BASE_URL,
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const flag = argv[i];
+    const next = (): string => {
+      const v = argv[++i];
+      if (v === undefined) throw new Error(`missing value for ${flag}`);
+      return v;
+    };
+    switch (flag) {
+      case "--corpus":
+        args.corpus = next();
+        break;
+      case "--judge-model":
+        args.judgeModelId = next();
+        break;
+      case "--judge-prompt": {
+        const v = next();
+        if (v !== "coherence" && v !== "strict") {
+          throw new Error(`--judge-prompt must be "coherence" or "strict", got "${v}"`);
+        }
+        args.promptVariant = v;
+        break;
+      }
+      case "--out":
+        args.out = next();
+        break;
+      case "--ollama-base-url":
+        args.ollamaBaseURL = next();
+        break;
+      default:
+        if (flag.startsWith("-")) {
+          throw new Error(`unknown flag for rejudge: ${flag}`);
+        }
+        if (args.input) {
+          throw new Error(`rejudge takes a single input JSONL (got "${args.input}" and "${flag}")`);
+        }
+        args.input = flag;
+    }
+  }
+  if (!args.input) {
+    throw new Error(
+      "rejudge: missing input JSONL. Usage:\n" +
+        "  pnpm start rejudge <results.jsonl> [--corpus PATH] [--judge-model ID] " +
+        "[--judge-prompt coherence|strict] [--out PATH]",
+    );
+  }
+  return args;
+}
+
+/** Default output path: `<input>.rejudged-<variant>.jsonl`, alongside the source. */
+function defaultRejudgeOutput(input: string, variant: JudgePromptVariant): string {
+  const dotJsonl = input.endsWith(".jsonl") ? input.slice(0, -".jsonl".length) : input;
+  return `${dotJsonl}.rejudged-${variant}.jsonl`;
+}
+
+async function rejudgeMain(argv: string[]): Promise<void> {
+  const parsed = parseRejudgeArgs(argv);
+  const judgeModelId = parsed.judgeModelId ?? "claude-sonnet-4-6";
+  const judgeModel = resolveModel(judgeModelId, { ollamaBaseURL: parsed.ollamaBaseURL }).model;
+
+  const inputPath = resolveRepoPath(parsed.input);
+  const outputPath = resolveRepoPath(
+    parsed.out ?? defaultRejudgeOutput(parsed.input, parsed.promptVariant),
+  );
+  const corpusPath = resolveRepoPath(parsed.corpus);
+
+  console.log(
+    `rejudging ${inputPath} with ${judgeModelId} (${parsed.promptVariant}) → ${outputPath}`,
+  );
+  const summary = await rejudge({
+    inputPath,
+    outputPath,
+    corpusPath,
+    judgeModel,
+    promptVariant: parsed.promptVariant,
+  });
+  console.log(
+    `done: ${summary.total} rows (${summary.rejudged} rejudged, ` +
+      `${summary.skipped_pass} kept as programmatic-pass).`,
+  );
+}
+
+async function runMain(): Promise<void> {
   const registry = await loadAgentRegistry();
   const knownArms = [...registry.keys()];
   const parsed = parseArgs(process.argv.slice(2), knownArms);
@@ -373,6 +472,15 @@ async function main(): Promise<void> {
       `${summary.cells_skipped} skipped, $${summary.total_dollars.toFixed(4)} spent, ` +
       `stopped=${summary.stopped_reason}`,
   );
+}
+
+async function main(): Promise<void> {
+  const subcommand = process.argv[2];
+  if (subcommand === "rejudge") {
+    await rejudgeMain(process.argv.slice(3));
+    return;
+  }
+  await runMain();
 }
 
 main().catch((err) => {

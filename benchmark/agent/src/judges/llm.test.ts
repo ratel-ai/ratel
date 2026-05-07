@@ -108,4 +108,97 @@ describe("judgeLLM", () => {
     const callArgs = mock.mock.calls.at(-1)?.[0];
     expect(callArgs?.prompt).toContain("(empty)");
   });
+
+  it("uses the strict system prompt when promptVariant: 'strict' is passed (no criteria)", async () => {
+    const ai = await import("ai");
+    const mock = vi.mocked(ai.generateObject);
+    mock.mockResolvedValueOnce({
+      object: { verdict: "fail", explanation: "polite refusal, no substantive answer" },
+      // biome-ignore lint/suspicious/noExplicitAny: only `object` matters for this test path
+    } as any);
+
+    await judgeLLM({
+      prompt: "List the top 5 trending repos",
+      finalText: "I don't have a tool for that, try GitHub Trending",
+      // biome-ignore lint/suspicious/noExplicitAny: model call is mocked
+      model: {} as any,
+      promptVariant: "strict",
+    });
+
+    const callArgs = mock.mock.calls.at(-1)?.[0];
+    // Still the no-criteria branch — uses USER_REQUEST framing.
+    expect(callArgs?.system).toContain("USER_REQUEST");
+    // Strict variant must forbid rewarding refusals / redirects.
+    expect(callArgs?.system).toMatch(/refus|redirect|substantive|attempt/i);
+    // And must NOT carry the lenient coherence hedge.
+    expect(callArgs?.system).not.toContain(
+      "Don't penalize the assistant for not naming a particular tool",
+    );
+  });
+
+  it("defaults to the strict prompt when promptVariant is omitted", async () => {
+    const ai = await import("ai");
+    const mock = vi.mocked(ai.generateObject);
+    mock.mockResolvedValueOnce({
+      object: { verdict: "fail", explanation: "polite refusal" },
+      // biome-ignore lint/suspicious/noExplicitAny: only `object` matters for this test path
+    } as any);
+
+    await judgeLLM({
+      prompt: "do something",
+      finalText: "I can't but here are alternatives",
+      // biome-ignore lint/suspicious/noExplicitAny: model call is mocked
+      model: {} as any,
+    });
+
+    const callArgs = mock.mock.calls.at(-1)?.[0];
+    expect(callArgs?.system).toMatch(/refus|redirect|substantive|attempt/i);
+    expect(callArgs?.system).not.toContain(
+      "Don't penalize the assistant for not naming a particular tool",
+    );
+  });
+
+  it("uses the lenient coherence prompt when promptVariant: 'coherence' is explicitly passed", async () => {
+    const ai = await import("ai");
+    const mock = vi.mocked(ai.generateObject);
+    mock.mockResolvedValueOnce({
+      object: { verdict: "pass", explanation: "ok" },
+      // biome-ignore lint/suspicious/noExplicitAny: only `object` matters for this test path
+    } as any);
+
+    await judgeLLM({
+      prompt: "do something",
+      finalText: "I can't but here are alternatives",
+      // biome-ignore lint/suspicious/noExplicitAny: model call is mocked
+      model: {} as any,
+      promptVariant: "coherence",
+    });
+
+    const callArgs = mock.mock.calls.at(-1)?.[0];
+    expect(callArgs?.system).toContain(
+      "Don't penalize the assistant for not naming a particular tool",
+    );
+  });
+
+  it("promptVariant has no effect on the criteria path", async () => {
+    const ai = await import("ai");
+    const mock = vi.mocked(ai.generateObject);
+    mock.mockResolvedValueOnce({
+      object: { verdict: "pass", explanation: "ok" },
+      // biome-ignore lint/suspicious/noExplicitAny: only `object` matters for this test path
+    } as any);
+
+    await judgeLLM({
+      prompt: "p",
+      judgeCriteria: "must mention X",
+      finalText: "X",
+      // biome-ignore lint/suspicious/noExplicitAny: model call is mocked
+      model: {} as any,
+      promptVariant: "strict",
+    });
+
+    const callArgs = mock.mock.calls.at(-1)?.[0];
+    expect(callArgs?.system).toContain("SUCCESS_CRITERIA");
+    expect(callArgs?.system).not.toContain("USER_REQUEST");
+  });
 });
