@@ -29,7 +29,7 @@ Ratel ships in four shapes today, all built on the same Rust core. Pick one — 
 | **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | Anyone running an MCP host (Claude Code, Cursor, ChatGPT) with multiple upstream MCP servers | Anyone migrating an existing Claude Code MCP setup into Ratel |
 | **Install**   | `cargo add ratel-ai-core`                 | `pnpm add @ratel-ai/sdk`              | `pnpm add @ratel-ai/mcp-server`                                                              | `pnpm add -g @ratel-ai/cli`                                   |
 | **Hero call** | `ToolRegistry::search`                    | `searchToolsTool(catalog)`            | `createMcpServer(catalog, …)`                                                                | `ratel mcp import`                                            |
-| **Reference** | `[src/core/lib/](src/core/lib/README.md)` | `[src/sdk/ts/](src/sdk/ts/README.md)` | `[src/integrations/mcp-server/](src/integrations/mcp-server/README.md)`                      | `[src/integrations/cli/](src/integrations/cli/README.md)`     |
+| **Reference** | [src/core/lib/](src/core/lib/README.md) | [src/sdk/ts/](src/sdk/ts/README.md) | [src/integrations/mcp-server/](src/integrations/mcp-server/README.md)                      | [src/integrations/cli/](src/integrations/cli/README.md)     |
 
 
 The SDK and MCP server are layered on the same core; the CLI is the MCP server with config UX on top. Python SDK and Rust HTTP server are on the [roadmap](docs/roadmap.md), not yet shipped.
@@ -61,7 +61,7 @@ const search = searchToolsTool(catalog);
 const invoke = invokeToolTool(catalog);
 ```
 
-End-to-end with the Vercel AI SDK: `[examples/ai-sdk/](examples/ai-sdk/README.md)`. To ingest an upstream MCP server's tools straight into a catalog, see `[registerMcpServer](src/sdk/ts/README.md#registermcpserver--index-an-mcp-servers-tools-into-the-catalog)`. Full SDK reference: `[src/sdk/ts/README.md](src/sdk/ts/README.md)`.
+End-to-end with the Vercel AI SDK: [examples/ai-sdk/](examples/ai-sdk/README.md). To ingest an upstream MCP server's tools straight into a catalog, see [registerMcpServer](src/sdk/ts/README.md#registermcpserver--index-an-mcp-servers-tools-into-the-catalog). Full SDK reference: [src/sdk/ts/README.md](src/sdk/ts/README.md).
 
 **MCP server** — expose a catalog over MCP for Claude / Cursor / ChatGPT
 
@@ -84,7 +84,7 @@ const handle = await createMcpServer(catalog, {
 });
 ```
 
-The connected MCP client sees exactly two tools — `search_tools` and `invoke_tool` — instead of every upstream's full tool list. OAuth 2.1 / PKCE for HTTP and SSE upstreams is handled centrally. Full reference: `[src/integrations/mcp-server/README.md](src/integrations/mcp-server/README.md)`.
+The connected MCP client sees exactly two tools — `search_tools` and `invoke_tool` — instead of every upstream's full tool list. OAuth 2.1 / PKCE for HTTP and SSE upstreams is handled centrally. Full reference: [src/integrations/mcp-server/README.md](src/integrations/mcp-server/README.md).
 
 **CLI** — migrate an existing Claude Code MCP setup into Ratel
 
@@ -98,7 +98,7 @@ ratel mcp import   # interactive: scans ~/.claude.json + per-project .mcp.json,
 ratel backup undo  # roll back any time — every change writes a timestamped backup under ~/.ratel/backups/.
 ```
 
-`ratel mcp add` mirrors `claude mcp add` flag-for-flag. Three-scope hierarchy (user / project / local), OAuth flow, and full verb reference: `[src/integrations/cli/README.md](src/integrations/cli/README.md)`.
+`ratel mcp add` mirrors `claude mcp add` flag-for-flag. Three-scope hierarchy (user / project / local), OAuth flow, and full verb reference: [src/integrations/cli/README.md](src/integrations/cli/README.md).
 
 **Rust library** — direct, no JS in the loop
 
@@ -106,7 +106,7 @@ ratel backup undo  # roll back any time — every change writes a timestamped ba
 cargo add ratel-ai-core
 ```
 
-In-process BM25 retrieval over a schema-aware text projection of each tool. See `[src/core/lib/README.md](src/core/lib/README.md)` and [docs.rs/ratel-ai-core](https://docs.rs/ratel-ai-core).
+In-process BM25 retrieval over a schema-aware text projection of each tool. See [src/core/lib/README.md](src/core/lib/README.md) and [docs.rs/ratel-ai-core](https://docs.rs/ratel-ai-core).
 
 ## How it works
 
@@ -114,17 +114,17 @@ Ratel sits between your agent and its tool catalog. At each turn, instead of dum
 
 The base of all this is `ratel-ai-core`: a Rust BM25 index over a deterministic, schema-aware text projection of each tool. No embeddings, no vector DB, no inference latency on the retrieval path.
 
-For the longer take — context engineering as a thesis, and where Ratel is headed beyond tool retrieval (skills, memories, the context graph) — see `[docs/overview.md](docs/overview.md)`.
+For the longer take — context engineering as a thesis, and where Ratel is headed beyond tool retrieval (skills, memories, the context graph) — see [docs/overview.md](docs/overview.md).
 
 ## Examples
 
-- `[examples/ai-sdk/](examples/ai-sdk/README.md)` — Vercel AI SDK with pre-filter + dynamic gateway
-- `[examples/mcp-chat/](examples/mcp-chat/README.md)` — Vercel AI SDK REPL ingesting an upstream MCP server via `registerMcpServer`
-- `[examples/mcp-server/](examples/mcp-server/README.md)` — Claude Code session fronted by Ratel as the only MCP
+- [examples/ai-sdk/](examples/ai-sdk/README.md) — Vercel AI SDK with pre-filter + dynamic gateway
+- [examples/mcp-chat/](examples/mcp-chat/README.md) — Vercel AI SDK REPL ingesting an upstream MCP server via `registerMcpServer`
+- [examples/mcp-server/](examples/mcp-server/README.md) — Claude Code session fronted by Ratel as the only MCP
 
 ## Roadmap
 
-The full picture lives in `[docs/roadmap.md](docs/roadmap.md)`. The thread:
+The full picture lives in [docs/roadmap.md](docs/roadmap.md). The thread:
 
 - **Soon (v0.1.x)** — telemetry + UI inspector, JSON→TOON encoding, first-class skills support.
 - **Mid (v0.2.x – v0.3.x)** — LLM-driven tool/skill improvements from telemetry, multi-agent decomposition suggestions, semantic search + re-ranking, server flavor for trace consolidation.
@@ -167,7 +167,7 @@ CI runs both pipelines on every PR (`.github/workflows/{rust,ts}.yml`).
 
 ## Architecture decisions
 
-The durable record lives in `[docs/adr/](docs/adr/)`. The cross-cutting locks worth knowing up front:
+The durable record lives in [docs/adr/](docs/adr/). The cross-cutting locks worth knowing up front:
 
 - [ADR 0002 — TS↔Rust binding via NAPI-RS](docs/adr/0002-ts-rust-binding-strategy.md)
 - [ADR 0003 — Tool selection: replace by default, suggest opt-in](docs/adr/0003-tool-selection-replace-vs-suggest.md)
