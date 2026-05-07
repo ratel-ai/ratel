@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/cli",
-  "version": "0.1.4",
+  "version": "0.1.5-rc.1",
   "description": "Ratel CLI — manage MCP servers across scopes, run the Ratel MCP gateway, import Claude Code's MCP setup, drive OAuth flows.",
   "private": false,
   "type": "module",
