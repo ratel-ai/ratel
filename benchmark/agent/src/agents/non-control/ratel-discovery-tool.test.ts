@@ -27,10 +27,12 @@ describe("ratel-discovery-tool descriptor", () => {
 describe("buildRatelDiscoveryToolBundle", () => {
   it("exposes only the search_tools / invoke_tool gateway, no direct tools", () => {
     // The arm's whole point is "agent finds tools on its own"; if direct
-    // tools leak in, we're measuring the wrong thing.
+    // tools leak in, we're measuring the wrong thing. Both gateway tools
+    // count toward `activeToolIds` (the catalog column reflects what the
+    // agent actually saw, gateway included).
     const { bundle } = buildRatelDiscoveryToolBundle({ pool });
     expect(Object.keys(bundle.tools).sort()).toEqual(["invoke_tool", "search_tools"]);
-    expect(bundle.activeToolIds).toEqual([]);
+    expect(bundle.activeToolIds.sort()).toEqual(["invoke_tool", "search_tools"]);
   });
 
   it("backs the gateway with the full pool", () => {

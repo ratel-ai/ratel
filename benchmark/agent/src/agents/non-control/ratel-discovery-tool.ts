@@ -10,7 +10,7 @@
 
 import { invokeToolTool, searchToolsTool, ToolCatalog } from "@ratel-ai/sdk";
 import type { AgentDescriptor, AgentRunInput, ToolSpec } from "../../types.js";
-import { emptyToolBundle, runMeteredLoop, type ToolBundle, toAISDK } from "../_shared.js";
+import { emptyToolBundle, registerGateway, runMeteredLoop, type ToolBundle } from "../_shared.js";
 
 const ID = "ratel-discovery-tool";
 
@@ -38,8 +38,8 @@ export function buildRatelDiscoveryToolBundle(input: { pool: ToolSpec[] }): {
   // `search_tools` to find anything; this is the "BM25 quality + agent
   // self-discovery" probe.
   const bundle = emptyToolBundle();
-  bundle.tools.search_tools = toAISDK(searchToolsTool(catalog));
-  bundle.tools.invoke_tool = toAISDK(invokeToolTool(catalog));
+  registerGateway(searchToolsTool(catalog), bundle);
+  registerGateway(invokeToolTool(catalog), bundle);
 
   return { bundle, catalog };
 }

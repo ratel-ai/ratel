@@ -55,9 +55,16 @@ describe("buildRatelFullBundle", () => {
     });
     // The prompt matches fs.read_file via BM25; that hit must show up in
     // activeToolIds, proving pre-discovery actually ran and isn't a no-op.
+    // activeToolIds also includes the two gateway tools (search_tools,
+    // invoke_tool) — direct tools are bounded above by topK (2 here).
     expect(bundle.activeToolIds).toContain("fs.read_file");
-    expect(bundle.activeToolIds.length).toBeGreaterThan(0);
-    expect(bundle.activeToolIds.length).toBeLessThanOrEqual(2);
+    expect(bundle.activeToolIds).toContain("search_tools");
+    expect(bundle.activeToolIds).toContain("invoke_tool");
+    const directIds = bundle.activeToolIds.filter(
+      (id) => id !== "search_tools" && id !== "invoke_tool",
+    );
+    expect(directIds.length).toBeGreaterThan(0);
+    expect(directIds.length).toBeLessThanOrEqual(2);
   });
 
   it("backs the gateway with the full pool, not just top-K", () => {

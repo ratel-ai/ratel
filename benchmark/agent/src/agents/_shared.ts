@@ -61,7 +61,11 @@ export function normalizeInputSchema(schema: unknown): Record<string, unknown> {
 export interface ToolBundle {
   /** Map of (sanitized) tool name → AI SDK tool, ready for `new ToolLoopAgent({ tools })`. */
   tools: Record<string, AISDKTool>;
-  /** Canonical ids of every direct (non-gateway) tool exposed to the agent. */
+  /**
+   * Canonical ids of every tool exposed to the agent — both direct tools and
+   * gateway tools (`search_tools` / `invoke_tool`). This is the "what did the
+   * agent see" count surfaced as the `catalog` column in the report.
+   */
   activeToolIds: string[];
   /**
    * Sanitized-name → canonical-id, for direct (non-gateway) tools. Provider APIs
@@ -84,6 +88,20 @@ export function registerDirect(spec: ToolSpec, bundle: ToolBundle): void {
   }
   bundle.tools[name] = toAISDK(exec);
   bundle.nameToId.set(name, exec.id);
+  bundle.activeToolIds.push(exec.id);
+}
+
+/**
+ * Register a gateway tool (`search_tools` / `invoke_tool`) into the bundle.
+ * Like `registerDirect` but skips the sanitization+nameToId path (gateway ids
+ * are already provider-safe and don't need invoke-trace unwrapping). Pushes
+ * onto `activeToolIds` so the catalog count includes gateway tools.
+ */
+export function registerGateway(exec: ExecutableTool, bundle: ToolBundle): void {
+  if (Object.hasOwn(bundle.tools, exec.name)) {
+    throw new Error(`gateway tool "${exec.name}" is already registered`);
+  }
+  bundle.tools[exec.name] = toAISDK(exec);
   bundle.activeToolIds.push(exec.id);
 }
 

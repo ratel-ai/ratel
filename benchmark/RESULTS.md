@@ -14,7 +14,7 @@ This document consolidates the agent benchmark across four model families on the
 - **Arms**:
   - `control-baseline` — entire candidate pool exposed to the agent.
   - `control-oracle` — only the gold tool is exposed (upper bound).
-  - `ratel-full` — Ratel discovery + selection, model only sees ~4–5 candidate tools regardless of pool size.
+  - `ratel-full` — Ratel discovery + selection. The model sees ~5 BM25-prefetched tools plus the 2 gateway tools (`search_tools` + `invoke_tool`) — ~7 total — regardless of pool size.
 - **Pool sizes**: 30, 50, 100, 180. Real-world MCP setups land in the 100–200 range.
 - **Hardware**: cloud APIs for Claude / glm-5.1:cloud; local Ollama on **MacBook Pro M4 24 GB** for qwen3.5.
 
@@ -30,7 +30,7 @@ This document consolidates the agent benchmark across four model families on the
 | 50 | 86.7% | 81.7% | -5.0 pp | 6 738 → 2 557 (-62%) | 61.3s → 65.6s |
 | **100** | **8.3%** | **76.7%** | **+68.4 pp** | 6 485 → 2 820 (-57%) | 107.6s → 69.1s (**-36%**) |
 
-What happens at pool=100 is the story. The baseline arm catastrophically degrades — the model is overwhelmed by the tool list and stops calling tools at all (programmatic pass rate drops to 0). With Ratel, the model only sees ~4 well-targeted tools and stays at **76.7%**. This is the difference between "local models can't handle large tool catalogs" and "local models are a real option for large MCP setups."
+What happens at pool=100 is the story. The baseline arm catastrophically degrades — the model is overwhelmed by the tool list and stops calling tools at all (programmatic pass rate drops to 0). With Ratel, the model only sees ~7 well-targeted tools (5 prefetched + 2 gateway) and stays at **76.7%**. This is the difference between "local models can't handle large tool catalogs" and "local models are a real option for large MCP setups."
 
 The wall-clock improvement (107.6s → 69.1s) is a side benefit — fewer tokens means faster inference on memory-constrained hardware.
 

@@ -47,7 +47,13 @@ export interface ArmModelStats {
   n: number;
   /** Mean across per-scenario success rates (passes / runs, averaged across scenarios). */
   success_rate: number;
-  /** Mean catalog (= tools the agent actually saw) size across cells. The honest "tool count" — for oracle this is the gold count, ~1–2; for sweep arms it equals `pool_size`. */
+  /**
+   * Mean catalog (= tools the agent actually saw) size across cells. Counts
+   * direct tools AND gateway tools (`search_tools` / `invoke_tool`) — the
+   * honest "what was visible" tally. For oracle this is the gold count
+   * (~1–2); for control-baseline it equals `pool_size`; for ratel arms it's
+   * direct + 2 gateway tools (so ~5–7 at top-K=5).
+   */
   mean_catalog_size: number;
   mean_input_tokens: number;
   mean_total_tokens: number;
@@ -414,8 +420,9 @@ export function renderReport(args: {
   // 1. Headline. Numbers are mean-of-per-scenario-means: every scenario weighs
   // the same in the headline regardless of how many runs it has. `pool` is the
   // BM25 universe (= what the agent had to pick from); `catalog` is what the
-  // model actually saw — for sweep arms they're equal, for oracle pool is "—"
-  // and catalog reveals the real gold-tool count (~1–2).
+  // model actually saw, gateway tools included — for sweep arms it equals
+  // `pool`, for oracle pool is "—" and catalog reveals the gold-tool count
+  // (~1–2), for ratel arms it's direct top-K plus the 2 gateway tools.
   lines.push("## Headline");
   lines.push("");
   lines.push(

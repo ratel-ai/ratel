@@ -1,6 +1,13 @@
+import type { ExecutableTool } from "@ratel-ai/sdk";
 import { describe, expect, it } from "vitest";
 import type { ToolSpec } from "../types.js";
-import { buildToolBundle, normalizeInputSchema, sanitizeToolName } from "./_shared.js";
+import {
+  buildToolBundle,
+  emptyToolBundle,
+  normalizeInputSchema,
+  registerGateway,
+  sanitizeToolName,
+} from "./_shared.js";
 
 describe("sanitizeToolName", () => {
   it("leaves ids that already match the provider pattern unchanged", () => {
@@ -78,5 +85,33 @@ describe("buildToolBundle", () => {
       inputSchema: { jsonSchema: { type?: string } };
     };
     expect(t.inputSchema.jsonSchema.type).toBe("object");
+  });
+});
+
+describe("registerGateway", () => {
+  const stub: ExecutableTool = {
+    id: "search_tools",
+    name: "search_tools",
+    description: "stub",
+    inputSchema: { type: "object" },
+    outputSchema: { type: "object" },
+    execute: async () => ({}),
+  };
+
+  it("registers the gateway tool and counts it toward activeToolIds", () => {
+    // The catalog column in the report reads activeToolIds.length, and we
+    // want gateway tools (search_tools / invoke_tool) to count there — the
+    // agent really did see them, even though they aren't direct tools.
+    const bundle = emptyToolBundle();
+    registerGateway(stub, bundle);
+    expect(Object.keys(bundle.tools)).toEqual(["search_tools"]);
+    expect(bundle.activeToolIds).toEqual(["search_tools"]);
+    expect(bundle.nameToId.size).toBe(0);
+  });
+
+  it("throws on duplicate registration", () => {
+    const bundle = emptyToolBundle();
+    registerGateway(stub, bundle);
+    expect(() => registerGateway(stub, bundle)).toThrow(/already registered/);
   });
 });

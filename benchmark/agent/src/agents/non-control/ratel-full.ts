@@ -15,9 +15,9 @@ import type { AgentDescriptor, AgentRunInput, Scenario, ToolSpec } from "../../t
 import {
   emptyToolBundle,
   registerDirect,
+  registerGateway,
   runMeteredLoop,
   type ToolBundle,
-  toAISDK,
 } from "../_shared.js";
 
 const ID = "ratel-full";
@@ -54,8 +54,8 @@ export function buildRatelFullBundle(input: {
   //    these mid-loop to find/invoke any tool in the full pool — not just
   //    the pre-discovered top-K — which makes pre-discovery best-effort
   //    rather than load-bearing.
-  bundle.tools.search_tools = toAISDK(searchToolsTool(catalog));
-  bundle.tools.invoke_tool = toAISDK(invokeToolTool(catalog));
+  registerGateway(searchToolsTool(catalog), bundle);
+  registerGateway(invokeToolTool(catalog), bundle);
 
   // 3. Pre-discovery: BM25 top-K of the prompt, registered as direct tools.
   //    Cheap context-window win when retrieval gets it right; the gateway
