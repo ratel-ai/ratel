@@ -4,9 +4,13 @@ export const SEARCH_TOOLS_ID = "search_tools" as const;
 export const INVOKE_TOOL_ID = "invoke_tool" as const;
 
 const SEARCH_TOOLS_BASE_DESCRIPTION =
-  "Search the catalog of available tools by natural-language query. " +
-  "Returns the most relevant tool ids with their descriptions and input schemas. " +
-  "Use this to discover tools that aren't in your direct tool list, then run them via invoke_tool.";
+  "Discover tools beyond the ones already visible in your direct tool list. " +
+  "Call this BEFORE refusing a request, falling back to a generic capability " +
+  "(web fetch, shell, built-in search), or deciding none of the visible tools " +
+  "fits — a purpose-built tool may be in the catalog but not pre-loaded. " +
+  "Pass a natural-language query describing what you want to do; you'll get " +
+  "back the most relevant tool ids with their descriptions and input schemas. " +
+  "Then run the chosen one via invoke_tool.";
 
 export interface UpstreamServerInfo {
   name: string;
