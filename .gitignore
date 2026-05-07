@@ -50,6 +50,10 @@ plan.md
 progress.md
 CLAUDE.local.md
 
+# Claude Code — personal/runtime; commit .claude/skills and .claude/settings.json
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # Ratel local-scope MCP config (per-user, never committed)
 .ratel/config.local.json
 

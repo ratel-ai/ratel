@@ -34,7 +34,8 @@
     "native/index.cjs",
     "native/index.d.cts",
     "LICENSE.md",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build:native": "napi build --platform --release --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts",

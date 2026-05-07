@@ -62,6 +62,24 @@ jobs:
             echo "dist_tag=latest" >> "$GITHUB_OUTPUT"
           fi
           echo "version=$tag_version" >> "$GITHUB_OUTPUT"
+      - name: Verify CHANGELOGs updated
+        shell: bash
+        env:
+          VERSION: ${{ steps.compute.outputs.version }}
+        run: |
+          set -e
+          fail=0
+          for f in \
+            src/core/lib/CHANGELOG.md \
+            src/sdk/ts/CHANGELOG.md \
+            src/integrations/mcp-server/CHANGELOG.md \
+            src/integrations/cli/CHANGELOG.md; do
+            if ! grep -qF "## [${VERSION}]" "$f"; then
+              echo "::error file=$f::missing entry for version ${VERSION} — run /changelog before tagging"
+              fail=1
+            fi
+          done
+          [ "$fail" = "0" ]
 
   build:
     name: build (${{ matrix.triple }})

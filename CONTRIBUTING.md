@@ -46,8 +46,21 @@ For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Statu
 ## Commit messages
 
 - Concise, imperative mood; sacrifice grammar for brevity
-- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful
+- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful — these route into per-package CHANGELOGs (see Releases)
+- Use a scope when the change is package-specific: `feat(sdk):`, `fix(cli):`, `refactor(core):`. Unscoped `feat`/`fix` won't auto-route to a single package's changelog
 - No tool-attribution lines (no `Co-Authored-By` for AI assistants)
+
+## Releases
+
+We publish four artifacts in lockstep: `ratel-ai-core` (crates.io) and `@ratel-ai/sdk` / `@ratel-ai/mcp-server` / `@ratel-ai/cli` (npm). Each has a `CHANGELOG.md` in its package directory.
+
+Before tagging a release:
+
+1. Bump the version in `Cargo.toml`, `src/sdk/ts/package.json`, `src/integrations/mcp-server/package.json`, `src/integrations/cli/package.json` (kept in lockstep — the release workflow validates).
+2. Run the `/changelog` skill (`.claude/skills/changelog/`). It drafts per-package entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the four CHANGELOGs. For GA versions (no `-rc` suffix), it collapses any existing `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]` section.
+3. Commit the version bumps and CHANGELOG updates together (typically `release: vX.Y.Z`), tag, push.
+
+The release workflow's `tag-version-check` job rejects any tag whose CHANGELOGs don't contain a `## [<version>]` heading. See [ADR 0008](docs/adr/0008-per-package-changelogs.md) for the full rationale.
 
 ## Pull requests
 

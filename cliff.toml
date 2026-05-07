@@ -1,0 +1,43 @@
+# git-cliff config — drafts per-package CHANGELOG entries.
+#
+# Path filtering is supplied at invocation time via --include-path,
+# not configured here. See .claude/skills/changelog/draft.sh.
+
+[changelog]
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | split(pat=":") | slice(start=1) | join(sep=":") | trim | upper_first }}{% if commit.scope %} ({{ commit.scope }}){% endif %}
+{%- endfor %}
+{% endfor %}
+"""
+trim = true
+footer = ""
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = false
+filter_commits = true
+topo_order = false
+sort_commits = "newest"
+
+# Map Conventional-Commits types to Keep-a-Changelog sections.
+# Anything matched with `skip = true` never appears in drafts.
+commit_parsers = [
+    { message = "^feat",     group = "Added"   },
+    { message = "^fix",      group = "Fixed"   },
+    { message = "^perf",     group = "Changed" },
+    { message = "^refactor", group = "Changed" },
+    { message = "^revert",   group = "Changed" },
+    { message = "^docs",     skip  = true      },
+    { message = "^test",     skip  = true      },
+    { message = "^chore",    skip  = true      },
+    { message = "^ci",       skip  = true      },
+    { message = "^build",    skip  = true      },
+    { message = "^style",    skip  = true      },
+    { message = "^release",  skip  = true      },
+]
