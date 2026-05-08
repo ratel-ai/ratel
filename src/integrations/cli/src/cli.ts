@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
@@ -10,6 +11,7 @@ import {
   parseConfig,
   type TransportFactory,
 } from "@ratel-ai/mcp-server";
+import type { TraceSinkConfig } from "@ratel-ai/sdk";
 import { ArgError, type ParsedArgs, parseArgs } from "./args.js";
 import type { BackupFs } from "./backup.js";
 import type { ClaudeFs } from "./claude.js";
@@ -25,6 +27,7 @@ import { runRemove } from "./handlers/remove.js";
 import type { HandlerCtx } from "./handlers/types.js";
 import { runUndo } from "./handlers/undo.js";
 import { findProjectRoot, type HierarchyEnv } from "./hierarchy.js";
+import { defaultTelemetryDir, listSessions, summarizeSession } from "./inspect.js";
 import { type JsonFs, nodeFs } from "./io.js";
 import { type PromptAdapter, silentPromptAdapter } from "./prompts.js";
 
@@ -50,6 +53,7 @@ const TOP_USAGE = `usage: ratel <group> <verb> [args...]
 Groups:
   mcp      manage MCP servers (add, remove, list, get, edit, import, link) and serve the gateway
   backup   manage backup snapshots (list)
+  inspect  summarize the most recent telemetry session (or \`ls\` for a file listing)
 
 Run \`ratel <group>\` for the verbs available in a group.`;
 
@@ -71,6 +75,18 @@ const BACKUP_USAGE = `usage: ratel backup <verb> [args...]
 
 Verbs:
   list    list backup sets under ~/.ratel/backups/`;
+
+const INSPECT_USAGE = `usage: ratel inspect [verb] [args...]
+
+Default (no verb) summarizes the most recent telemetry file under
+\`$RATEL_TELEMETRY_DIR\` (default \`~/.ratel/telemetry/\`).
+
+Flags:
+  --from <FILE>   summarize a specific JSONL file
+  --last <N>      restrict the summary to the last N events
+
+Verbs:
+  ls   list telemetry files (most recent first)`;
 
 export async function runCli(argv: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
   const log = options.logger ?? ((m) => console.error(m));
@@ -97,6 +113,10 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
   if (parsed.group === "backup" && parsed.verb === undefined) {
     log(BACKUP_USAGE);
     return {};
+  }
+
+  if (parsed.group === "inspect") {
+    return runInspect(parsed, log);
   }
 
   if (parsed.group === "mcp" && parsed.verb === "serve") {
@@ -178,9 +198,12 @@ async function runServer(
   }
   const config = mergeConfigs(parts);
 
+  const trace = await resolveTraceSink(parsed, log);
+
   const gateway = await buildGatewayFromConfig(config, {
     transportFactory: options.transportFactory,
     logger: log,
+    ...(trace ? { trace } : {}),
   });
 
   const downstream = options.serverTransport ?? new StdioServerTransport();
@@ -202,6 +225,58 @@ async function runServer(
       await gateway.close();
     },
   };
+}
+
+async function runInspect(parsed: ParsedArgs, log: (m: string) => void): Promise<RunCliResult> {
+  if (parsed.flags.help === true) {
+    log(INSPECT_USAGE);
+    return {};
+  }
+  if (parsed.verb === "ls") {
+    log(await listSessions(defaultTelemetryDir()));
+    return {};
+  }
+  const opts: { from?: string; last?: number } = {};
+  const from = parsed.flags.from;
+  if (typeof from === "string") opts.from = from;
+  const last = parsed.flags.last;
+  if (typeof last === "string") {
+    const n = Number.parseInt(last, 10);
+    if (Number.isFinite(n)) opts.last = n;
+  }
+  log(await summarizeSession(opts));
+  return {};
+}
+
+async function resolveTraceSink(
+  parsed: ParsedArgs,
+  log: (m: string) => void,
+): Promise<TraceSinkConfig | undefined> {
+  const flag = parsed.flags.telemetry;
+  const flagFile = parsed.flags["telemetry-file"];
+  const env = process.env.RATEL_TELEMETRY;
+  if (flag === false || flag === "off" || env === "off") {
+    return { kind: "noop" };
+  }
+  const sessionId = newSessionId();
+  if (typeof flagFile === "string" && flagFile.length > 0) {
+    return { kind: "jsonl", sessionId, path: flagFile };
+  }
+  const dir = defaultTelemetryDir();
+  try {
+    await mkdir(dir, { recursive: true });
+  } catch (err) {
+    log(`[ratel] could not create telemetry dir ${dir}: ${(err as Error).message}; disabling`);
+    return { kind: "noop" };
+  }
+  const path = join(dir, `${sessionId}.jsonl`);
+  return { kind: "jsonl", sessionId, path };
+}
+
+function newSessionId(): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${ts}-${rand}`;
 }
 
 async function defaultReadConfig(path: string): Promise<unknown> {

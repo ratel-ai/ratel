@@ -1,4 +1,4 @@
-export type Group = "mcp" | "backup" | "help";
+export type Group = "mcp" | "backup" | "inspect" | "help";
 
 export type McpVerb =
   | "serve"
@@ -13,6 +13,8 @@ export type McpVerb =
 
 export type BackupVerb = "list" | "undo";
 
+export type InspectVerb = "ls";
+
 const MCP_VERBS: ReadonlySet<string> = new Set([
   "serve",
   "add",
@@ -26,6 +28,8 @@ const MCP_VERBS: ReadonlySet<string> = new Set([
 ]);
 
 const BACKUP_VERBS: ReadonlySet<string> = new Set(["list", "undo"]);
+
+const INSPECT_VERBS: ReadonlySet<string> = new Set(["ls"]);
 
 const SHORT_FLAG_ALIASES: Record<string, string> = {
   e: "env",
@@ -103,6 +107,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
       const candidate = argv[1];
       if (!BACKUP_VERBS.has(candidate)) {
         throw new ArgError(`unknown backup verb: ${candidate}`);
+      }
+      verb = candidate;
+      i = 2;
+    }
+  } else if (first === "inspect") {
+    group = "inspect";
+    i = 1;
+    if (argv.length > 1 && !argv[1].startsWith("-")) {
+      const candidate = argv[1];
+      if (!INSPECT_VERBS.has(candidate)) {
+        throw new ArgError(`unknown inspect verb: ${candidate}`);
       }
       verb = candidate;
       i = 2;
