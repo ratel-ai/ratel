@@ -34,6 +34,24 @@ const sendEmail: ExecutableTool = {
   execute: async ({ to }) => ({ messageId: "abc", to }),
 };
 
+describe("searchToolsTool tracing", () => {
+  it("emits gateway_search with origin=agent and the hit count", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    catalog.register(readFile);
+    catalog.drainTraceEvents();
+
+    const tool = searchToolsTool(catalog);
+    await tool.execute({ query: "read a file", topK: 3 });
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const gw = events.find((e) => e.type === "gateway_search");
+    expect(gw).toBeDefined();
+    expect(gw?.origin).toBe("agent");
+    expect(gw?.top_k).toBe(3);
+    expect(typeof gw?.hits).toBe("number");
+  });
+});
+
 describe("searchToolsTool", () => {
   it("uses the canonical id and name", () => {
     const catalog = new ToolCatalog();
@@ -318,6 +336,31 @@ describe("invokeToolTool", () => {
     const tool = invokeToolTool(catalog, { onUnauthorized: (upstream) => seen.push(upstream) });
     await tool.execute({ toolId: "stripe__charges", args: {} });
     expect(seen).toEqual(["stripe"]);
+  });
+
+  it("emits gateway_invoke on success with took_ms", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    catalog.register(readFile);
+    catalog.drainTraceEvents();
+
+    const tool = invokeToolTool(catalog);
+    await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const gw = events.find((e) => e.type === "gateway_invoke");
+    expect(gw?.tool_id).toBe("fs__read_file");
+    expect(typeof gw?.took_ms).toBe("number");
+  });
+
+  it("emits gateway_error with `unknown_tool_id` when the toolId is not registered", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    const tool = invokeToolTool(catalog);
+    await tool.execute({ toolId: "nope", args: {} });
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const err = events.find((e) => e.type === "gateway_error");
+    expect(err?.tool_id).toBe("nope");
+    expect(err?.error).toBe("unknown_tool_id");
   });
 
   it("does not call onUnauthorized for a non-namespaced toolId since the upstream cannot be inferred", async () => {
