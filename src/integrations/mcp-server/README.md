@@ -94,7 +94,12 @@ If any single upstream fails to start, `buildGatewayFromConfig` logs the failure
 
 ## OAuth-protected upstreams
 
-HTTP and SSE upstreams that require OAuth 2.1 authorization run through the library's loopback PKCE flow. `buildGatewayFromConfig` attempts to register every upstream at boot; entries that don't yet have a token file at `~/.ratel/oauth/<name>.json` (or whose stored tokens fail to refresh) are flagged `needsAuth: true` on `gateway.upstreamServers`, retained in the gateway's config map, and wait for an interactive flow. Concurrent `invoke_tool` calls during a 401 are serialized through a per-upstream send-mutex so refresh-token rotation can't race.
+HTTP and SSE upstreams that require OAuth 2.1 authorization run through the library's loopback PKCE flow. `buildGatewayFromConfig` attempts to register every upstream at boot:
+
+- **Proactive refresh.** For each HTTP/SSE upstream with a token file at `~/.ratel/oauth/<name>.json`, the gateway checks `expires_at` and refreshes up front if the access token is expired or near expiry. The refresh runs through the SDK's `refreshAuthorization` helper using the stored refresh token, client information, and authorization-server metadata — no browser involvement.
+- **Cross-process lock.** Refresh is wrapped in a double-checked-locking transaction over a [`proper-lockfile`](https://www.npmjs.com/package/proper-lockfile) file lock keyed on the token-store path. When several Ratel gateways are alive on the same host (e.g. multiple Claude Code sessions, or a CLI overlapping a `serve`) only one performs the network refresh; the rest read the rotated tokens from disk under the same lock. The same lock also protects every `RatelOAuthStore.save()` against the read-modify-write race that previously could drop interleaved partial updates.
+- **Reactive refresh.** During live use, `StreamableHTTPClientTransport` still handles 401s by refreshing through the OAuth provider; in-process concurrency on a single transport is serialized by `transport-mutex.ts`.
+- **Fall-through to `needsAuth`.** If proactive refresh fails (`invalid_grant`, network error, missing client information), or the boot register call throws an SDK auth-shaped error (e.g. the legacy `prepareTokenRequest` failure mode), the upstream is flagged `needsAuth: true` on `gateway.upstreamServers`, retained in the gateway's config map, and waits for an interactive flow. The boot does **not** open a browser autonomously.
 
 The handle exposes:
 
@@ -112,6 +117,8 @@ gateway.setListChangedNotifier(async () => {
 ```
 
 `createMcpServer` wires it for you: pass `runAuthFlow: gateway.runAuthFlow` and call `gateway.setListChangedNotifier(handle.notifyToolListChanged)`. The MCP server then exposes a third `auth` tool whose description recomputes on every list to reflect the live `needsAuth` state, declares the `tools.listChanged` capability, and translates `invoke_tool` 401s into a structured `{ error: "needs_auth", upstream }` payload (no exception out of the tool — the agent can branch on the field and call `auth` to recover).
+
+`runAuthFlow` itself is **refresh-first**: when the upstream's store has a `refresh_token`, it attempts a silent refresh first (sharing the same cross-process lock as the boot path) and reports `mode: "refresh"` on success. Only when refresh is impossible or fails does it spin up the loopback callback server and run PKCE, reporting `mode: "interactive"`.
 
 The CLI surface (`ratel mcp auth`, the OAuth columns in `ratel mcp list`) lives in [`@ratel-ai/cli`](../cli/README.md).
 

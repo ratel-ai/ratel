@@ -1,10 +1,15 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { describe, expect, it } from "vitest";
-import { buildGatewayFromConfig } from "./gateway.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildGatewayFromConfig, redirectUrlFromStoredFile } from "./gateway.js";
+import { RefreshFailedError } from "./oauth/refresh.js";
+import { RatelOAuthStore } from "./oauth/store.js";
 
 interface UpstreamSpec {
   name: string;
@@ -282,6 +287,179 @@ describe("buildGatewayFromConfig", () => {
 
     await handle.close();
     await ok.server.close();
+  });
+
+  describe("OAuth boot path", () => {
+    let oauthDir: string;
+    beforeEach(async () => {
+      oauthDir = await mkdtemp(join(tmpdir(), "ratel-gateway-oauth-"));
+    });
+    afterEach(async () => {
+      await rm(oauthDir, { recursive: true, force: true });
+    });
+
+    function storePath(name: string): string {
+      return join(oauthDir, `${name}.json`);
+    }
+
+    async function seedStoredTokens(name: string, expiresAt: number): Promise<void> {
+      const store = new RatelOAuthStore(storePath(name));
+      await store.save({
+        tokens: {
+          access_token: "old",
+          token_type: "Bearer",
+          expires_in: 3600,
+          refresh_token: "rtk",
+        },
+        client_information: { client_id: "cid", redirect_uris: ["http://127.0.0.1:0/cb"] },
+        discovery_state: {
+          authorizationServerUrl: "https://issuer.example",
+          authorizationServerMetadata: {
+            issuer: "https://issuer.example",
+            token_endpoint: "https://issuer.example/token",
+            response_types_supported: ["code"],
+          },
+        },
+      });
+      const fs = await import("node:fs/promises");
+      const raw = JSON.parse(await fs.readFile(storePath(name), "utf8"));
+      raw.expires_at = expiresAt;
+      await fs.writeFile(storePath(name), JSON.stringify(raw, null, 2));
+    }
+
+    it("calls refreshTokens for HTTP upstreams with stored tokens before register", async () => {
+      const ok = await startUpstream([{ name: "ping", description: "Ping." }]);
+      await seedStoredTokens("locked", Date.now() - 5_000);
+
+      const refreshTokens = vi.fn(async () => undefined);
+
+      const handle = await buildGatewayFromConfig(
+        {
+          mcpServers: {
+            locked: { type: "http", url: "https://locked.example/mcp" },
+          },
+        },
+        {
+          transportFactory: () => ok.clientTransport,
+          oauthStorePath: storePath,
+          refreshTokens,
+        },
+      );
+
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+      expect(handle.upstreamServers).toContainEqual(
+        expect.objectContaining({ name: "locked", toolCount: 1 }),
+      );
+      expect(handle.catalog.has("locked__ping")).toBe(true);
+
+      await handle.close();
+      await ok.server.close();
+    });
+
+    it("marks upstream needsAuth and skips register when refresh fails", async () => {
+      const ok = await startUpstream([{ name: "ping", description: "Ping." }]);
+      await seedStoredTokens("locked", Date.now() - 5_000);
+
+      const refreshTokens = vi.fn(async () => {
+        throw new RefreshFailedError(new Error("invalid_grant"));
+      });
+      const factory = vi.fn(() => ok.clientTransport);
+      const logs: string[] = [];
+
+      const handle = await buildGatewayFromConfig(
+        {
+          mcpServers: {
+            locked: { type: "http", url: "https://locked.example/mcp" },
+          },
+        },
+        {
+          transportFactory: factory,
+          oauthStorePath: storePath,
+          refreshTokens,
+          logger: (m) => logs.push(m),
+        },
+      );
+
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+      expect(factory).not.toHaveBeenCalled();
+      expect(handle.upstreamServers).toContainEqual(
+        expect.objectContaining({ name: "locked", needsAuth: true }),
+      );
+      expect(logs.join("\n")).toMatch(/locked.*re-authoriz/i);
+
+      await handle.close();
+      await ok.server.close();
+    });
+
+    it("skips proactive refresh for HTTP upstreams without stored tokens", async () => {
+      const ok = await startUpstream([{ name: "ping", description: "Ping." }]);
+      const refreshTokens = vi.fn();
+
+      const handle = await buildGatewayFromConfig(
+        {
+          mcpServers: {
+            fresh: { type: "http", url: "https://fresh.example/mcp" },
+          },
+        },
+        {
+          transportFactory: () => ok.clientTransport,
+          oauthStorePath: storePath,
+          refreshTokens,
+        },
+      );
+
+      expect(refreshTokens).not.toHaveBeenCalled();
+      expect(handle.catalog.has("fresh__ping")).toBe(true);
+
+      await handle.close();
+      await ok.server.close();
+    });
+
+    it("redirectUrlFromStoredFile reads client_information.redirect_uris[0] from the OAuth file", async () => {
+      const fs = await import("node:fs/promises");
+      const path = join(oauthDir, "demo.json");
+      await fs.writeFile(
+        path,
+        JSON.stringify({
+          client_information: { redirect_uris: ["http://127.0.0.1:54321/cb", "https://other"] },
+        }),
+      );
+      expect(redirectUrlFromStoredFile(path)).toBe("http://127.0.0.1:54321/cb");
+      expect(redirectUrlFromStoredFile(join(oauthDir, "missing.json"))).toBeUndefined();
+    });
+
+    it("classifies SDK 'prepareTokenRequest' errors as needsAuth instead of dropping the upstream", async () => {
+      await seedStoredTokens("locked", Date.now() - 5_000);
+      const refreshTokens = vi.fn(async () => undefined);
+      const logs: string[] = [];
+
+      const handle = await buildGatewayFromConfig(
+        {
+          mcpServers: {
+            locked: { type: "http", url: "https://locked.example/mcp" },
+          },
+        },
+        {
+          transportFactory: () => ({
+            async start() {
+              throw new Error(
+                "Either provider.prepareTokenRequest() or authorizationCode is required",
+              );
+            },
+            async send() {},
+            async close() {},
+          }),
+          oauthStorePath: storePath,
+          refreshTokens,
+          logger: (m) => logs.push(m),
+        },
+      );
+
+      expect(handle.upstreamServers).toContainEqual(
+        expect.objectContaining({ name: "locked", needsAuth: true }),
+      );
+      await handle.close();
+    });
   });
 
   it("exposes a runAuthFlow function on the handle", async () => {

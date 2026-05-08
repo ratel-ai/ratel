@@ -2,13 +2,17 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ToolCatalog, UpstreamServerInfo } from "@ratel-ai/sdk";
 import { type McpServerHandle, registerMcpServer } from "@ratel-ai/sdk";
 import type { ServerEntry } from "../config.js";
 import { type CallbackHandle, startOAuthCallback } from "./callback-server.js";
 import { RatelOAuthProvider } from "./provider.js";
+import { refreshIfNeeded } from "./refresh.js";
 import { RatelOAuthStore } from "./store.js";
 import { wrapTransportWithSendMutex } from "./transport-mutex.js";
+
+export type AuthMode = "refresh" | "interactive";
 
 export interface AuthFlowOptions {
   /** Restrict the run to a single named upstream. Without it, every upstream marked needsAuth runs. */
@@ -19,6 +23,8 @@ export interface AuthFlowResult {
   name: string;
   status: "authorized" | "skipped" | "failed";
   reason?: string;
+  /** Which path produced this row (only meaningful when status === "authorized"). */
+  mode?: AuthMode;
 }
 
 export interface AuthStepSuccess {
@@ -26,6 +32,8 @@ export interface AuthStepSuccess {
   handle: McpServerHandle;
   description?: string;
   instructions?: string;
+  /** "refresh" if a stored refresh_token was rotated; "interactive" if a PKCE flow ran. */
+  mode: AuthMode;
 }
 
 export interface AuthStepFailure {
@@ -136,7 +144,7 @@ async function runOne(
 
   await onListChanged?.();
 
-  return { name, status: "authorized" };
+  return { name, status: "authorized", mode: result.mode };
 }
 
 /** Default location for per-upstream OAuth state. */
@@ -155,111 +163,220 @@ export interface DefaultAuthStepDeps {
   logger?: (m: string) => void;
   /** Override the timeout for the user to complete the authorization step. */
   callbackTimeoutMs?: number;
+  /** Test seam: refresh stored tokens before falling back to PKCE. Defaults to refreshIfNeeded. */
+  refreshTokens?: (store: RatelOAuthStore, name: string) => Promise<unknown>;
+  /**
+   * Test seam: full body of the interactive PKCE flow. Defaults to runPkceFlow.
+   * Allows tests to assert the refresh-vs-interactive branching without spinning
+   * up real loopback servers and SDK transports.
+   */
+  pkceFlow?: PkceFlowFn;
+  /**
+   * Test seam: replace registerMcpServer when the refresh path succeeds. Defaults to
+   * the real implementation. The full PKCE path uses pkceFlow's own register, not this.
+   */
+  registerMcpServerImpl?: typeof registerMcpServer;
+  /**
+   * Test seam: build the HTTP transport used by the refresh-success path. The default
+   * constructs a StreamableHTTPClientTransport with the OAuth provider attached.
+   */
+  transportFactory?: (entry: ServerEntry, provider: RatelOAuthProvider) => Transport;
 }
 
+export interface PkceFlowDeps {
+  storePath: (name: string) => string;
+  browserLauncher: (url: URL) => void | Promise<void>;
+  callbackFactory: typeof startOAuthCallback;
+  logger: (m: string) => void;
+  callbackTimeoutMs?: number;
+}
+
+export type PkceFlowFn = (
+  name: string,
+  entry: ServerEntry,
+  ctx: AuthStepCtx,
+  deps: PkceFlowDeps,
+) => Promise<AuthStepResult>;
+
 /**
- * Default `AuthStep` implementation: drives the SDK's PKCE flow against an HTTP/SSE upstream
- * with a loopback callback server, opens the browser via the configured launcher, and
- * registers the upstream's tools into the catalog on success.
+ * Default `AuthStep` implementation: refresh-first. Tries `refreshTokens` against the
+ * upstream's stored OAuth state; if that succeeds, registers the upstream's tools
+ * with mode="refresh" — no callback server, no browser pop. Only when refresh is
+ * impossible (no refresh_token) or fails does it fall back to the interactive PKCE
+ * flow against a loopback callback server with mode="interactive".
  */
 export function defaultAuthStep(deps: DefaultAuthStepDeps = {}): AuthStep {
   const storePath = deps.storePath ?? defaultOAuthStorePath;
   const callbackFactory = deps.callbackFactory ?? startOAuthCallback;
   const launcher = deps.browserLauncher ?? defaultBrowserLauncher;
   const log = deps.logger ?? ((m: string) => console.error(m));
+  const refreshTokens = deps.refreshTokens ?? defaultRefreshTokens;
+  const pkceFlow = deps.pkceFlow ?? runPkceFlow;
+  const registerImpl = deps.registerMcpServerImpl ?? registerMcpServer;
+  const transportFactory = deps.transportFactory ?? defaultRefreshTransportFactory;
 
   return async (name, entry, ctx): Promise<AuthStepResult> => {
     if (!entry.url) {
       return { status: "failed", reason: `${name}: http/sse entry has no url` };
     }
 
-    let cb: CallbackHandle | undefined;
-    try {
-      cb = await callbackFactory({
-        port: entry.callbackPort ?? 0,
-        timeoutMs: deps.callbackTimeoutMs,
-      });
-    } catch (err) {
-      return {
-        status: "failed",
-        reason: `${name}: callback server failed: ${(err as Error).message}`,
-      };
-    }
-
-    try {
-      const store = new RatelOAuthStore(storePath(name));
-      const provider = new RatelOAuthProvider({
-        store,
-        redirectUrl: cb.url,
-        scope: entry.scope,
-        staticClientId: entry.clientId,
-        staticClientSecret: entry.clientSecret,
-        onRedirect: async (u) => {
-          log(`[ratel] open ${u} to authorize ${name}`);
-          try {
-            await launcher(u);
-          } catch (err) {
-            log(`[ratel] could not open browser automatically: ${(err as Error).message}`);
-          }
-        },
-      });
-
-      // First connect: either succeeds (existing tokens still valid) or throws UnauthorizedError after redirectToAuthorization fires.
-      const tx1 = wrapTransportWithSendMutex(
-        new StreamableHTTPClientTransport(new URL(entry.url), { authProvider: provider }),
-      );
+    // Refresh-first: attempt a silent refresh with the stored refresh_token. If it
+    // succeeds, connect with fresh credentials and register — no browser involved.
+    const store = new RatelOAuthStore(storePath(name));
+    const tokens = (await store.load()).tokens;
+    const canRefresh = tokens?.refresh_token !== undefined;
+    if (canRefresh) {
       try {
-        const handle = await registerMcpServer(ctx.catalog, { name, transport: tx1 });
-        return successResult(handle, entry);
-      } catch (err) {
-        if (!isUnauthorized(err)) {
-          await safeClose(tx1);
-          return { status: "failed", reason: (err as Error).message };
+        await refreshTokens(store, name);
+        const provider = new RatelOAuthProvider({
+          store,
+          redirectUrl: tokens?.refresh_token
+            ? (await store.load()).client_information?.redirect_uris?.[0]
+            : undefined,
+          scope: entry.scope,
+          staticClientId: entry.clientId,
+          staticClientSecret: entry.clientSecret,
+        });
+        const tx = transportFactory(entry, provider);
+        try {
+          const handle = await registerImpl(ctx.catalog, { name, transport: tx });
+          return successResult(handle, entry, "refresh");
+        } catch (err) {
+          await safeClose(tx);
+          // Register failure after a successful refresh is unexpected — treat as
+          // failed rather than retrying interactively, so the user sees the error.
+          return {
+            status: "failed",
+            reason: `${name}: register after refresh failed: ${(err as Error).message}`,
+          };
         }
-      }
-      await safeClose(tx1);
-
-      // Wait for the authorization code to land on the loopback callback.
-      let code: string;
-      try {
-        const captured = await cb.waitForCode();
-        code = captured.code;
       } catch (err) {
-        return { status: "failed", reason: `${name}: ${(err as Error).message}` };
+        log(`[ratel] ${name}: refresh failed (${(err as Error).message}), falling back to PKCE`);
+        // Fall through to the interactive PKCE path below.
       }
-
-      // Exchange code → tokens. provider.saveTokens persists them for the next connect.
-      const tx2 = new StreamableHTTPClientTransport(new URL(entry.url), { authProvider: provider });
-      try {
-        await tx2.finishAuth(code);
-      } catch (err) {
-        await safeClose(tx2);
-        return {
-          status: "failed",
-          reason: `${name}: token exchange failed: ${(err as Error).message}`,
-        };
-      }
-      await safeClose(tx2);
-
-      // Reconnect with fresh tokens and register the upstream's tools.
-      const tx3 = wrapTransportWithSendMutex(
-        new StreamableHTTPClientTransport(new URL(entry.url), { authProvider: provider }),
-      );
-      try {
-        const handle = await registerMcpServer(ctx.catalog, { name, transport: tx3 });
-        return successResult(handle, entry);
-      } catch (err) {
-        await safeClose(tx3);
-        return { status: "failed", reason: `${name}: register failed: ${(err as Error).message}` };
-      }
-    } finally {
-      if (cb) await cb.close().catch(() => undefined);
     }
+
+    return pkceFlow(name, entry, ctx, {
+      storePath,
+      browserLauncher: launcher,
+      callbackFactory,
+      logger: log,
+      ...(deps.callbackTimeoutMs !== undefined && { callbackTimeoutMs: deps.callbackTimeoutMs }),
+    });
   };
 }
 
-function successResult(handle: McpServerHandle, entry: ServerEntry): AuthStepSuccess {
-  const result: AuthStepSuccess = { status: "authorized", handle };
+const defaultRefreshTokens = async (store: RatelOAuthStore): Promise<void> => {
+  await refreshIfNeeded(store);
+};
+
+const defaultRefreshTransportFactory = (
+  entry: ServerEntry,
+  provider: RatelOAuthProvider,
+): Transport => {
+  if (!entry.url) throw new Error("missing url");
+  return wrapTransportWithSendMutex(
+    new StreamableHTTPClientTransport(new URL(entry.url), { authProvider: provider }),
+  );
+};
+
+/** Interactive PKCE flow against a loopback callback server. */
+export async function runPkceFlow(
+  name: string,
+  entry: ServerEntry,
+  ctx: AuthStepCtx,
+  deps: PkceFlowDeps,
+): Promise<AuthStepResult> {
+  const { storePath, browserLauncher: launcher, callbackFactory, logger: log } = deps;
+  if (!entry.url) {
+    return { status: "failed", reason: `${name}: http/sse entry has no url` };
+  }
+  let cb: CallbackHandle | undefined;
+  try {
+    cb = await callbackFactory({
+      port: entry.callbackPort ?? 0,
+      ...(deps.callbackTimeoutMs !== undefined && { timeoutMs: deps.callbackTimeoutMs }),
+    });
+  } catch (err) {
+    return {
+      status: "failed",
+      reason: `${name}: callback server failed: ${(err as Error).message}`,
+    };
+  }
+
+  try {
+    const store = new RatelOAuthStore(storePath(name));
+    const provider = new RatelOAuthProvider({
+      store,
+      redirectUrl: cb.url,
+      scope: entry.scope,
+      staticClientId: entry.clientId,
+      staticClientSecret: entry.clientSecret,
+      onRedirect: async (u) => {
+        log(`[ratel] open ${u} to authorize ${name}`);
+        try {
+          await launcher(u);
+        } catch (err) {
+          log(`[ratel] could not open browser automatically: ${(err as Error).message}`);
+        }
+      },
+    });
+
+    const tx1 = wrapTransportWithSendMutex(
+      new StreamableHTTPClientTransport(new URL(entry.url), { authProvider: provider }),
+    );
+    try {
+      const handle = await registerMcpServer(ctx.catalog, { name, transport: tx1 });
+      return successResult(handle, entry, "interactive");
+    } catch (err) {
+      if (!isUnauthorized(err)) {
+        await safeClose(tx1);
+        return { status: "failed", reason: (err as Error).message };
+      }
+    }
+    await safeClose(tx1);
+
+    let code: string;
+    try {
+      const captured = await cb.waitForCode();
+      code = captured.code;
+    } catch (err) {
+      return { status: "failed", reason: `${name}: ${(err as Error).message}` };
+    }
+
+    const tx2 = new StreamableHTTPClientTransport(new URL(entry.url), { authProvider: provider });
+    try {
+      await tx2.finishAuth(code);
+    } catch (err) {
+      await safeClose(tx2);
+      return {
+        status: "failed",
+        reason: `${name}: token exchange failed: ${(err as Error).message}`,
+      };
+    }
+    await safeClose(tx2);
+
+    const tx3 = wrapTransportWithSendMutex(
+      new StreamableHTTPClientTransport(new URL(entry.url), { authProvider: provider }),
+    );
+    try {
+      const handle = await registerMcpServer(ctx.catalog, { name, transport: tx3 });
+      return successResult(handle, entry, "interactive");
+    } catch (err) {
+      await safeClose(tx3);
+      return { status: "failed", reason: `${name}: register failed: ${(err as Error).message}` };
+    }
+  } finally {
+    if (cb) await cb.close().catch(() => undefined);
+  }
+}
+
+function successResult(
+  handle: McpServerHandle,
+  entry: ServerEntry,
+  mode: AuthMode,
+): AuthStepSuccess {
+  const result: AuthStepSuccess = { status: "authorized", handle, mode };
   const description = entry.description ?? handle.serverInstructions;
   if (description !== undefined) result.description = description;
   if (handle.serverInstructions !== undefined) result.instructions = handle.serverInstructions;
