@@ -1,4 +1,20 @@
-# `@ratel-ai/cli`
+<div align="center">
+  <h1>@ratel-ai/cli</h1>
+  <h4>The <code>ratel</code> CLI — manage MCP servers across scopes and front Claude Code with Ratel.</h4>
+
+  <p>
+    <a href="../../../docs/">Docs</a> •
+    <a href="../../../docs/roadmap.md">Roadmap</a> •
+    <a href="https://discord.gg/hdKpx69NR">Discord</a>
+  </p>
+
+  <p>
+    <a href="https://www.npmjs.com/package/@ratel-ai/cli"><img src="https://img.shields.io/npm/v/@ratel-ai/cli?label=npm&color=cb3837" alt="npm" /></a>
+    <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
+    <a href="https://discord.gg/hdKpx69NR"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da&label=discord" alt="Discord" /></a>
+    <a href="../../../LICENSE.md"><img src="https://img.shields.io/badge/license-ELv2-blue" alt="license" /></a>
+  </p>
+</div>
 
 The `ratel` CLI: manage MCP servers across Ratel scopes, run the Ratel MCP gateway, and import Claude Code's existing MCP setup. The CLI is a thin orchestrator over [`@ratel-ai/mcp-server`](../mcp-server/README.md) (gateway + config types) and [`@ratel-ai/sdk`](../../sdk/ts/README.md) (catalog + upstream registration).
 

@@ -1,4 +1,21 @@
-# `ratel-ai-core`
+<div align="center">
+  <h1>ratel-ai-core</h1>
+  <h4>Rust core for Ratel — BM25 retrieval over an agent's tool catalog, in-process, no infra.</h4>
+
+  <p>
+    <a href="../../../docs/">Docs</a> •
+    <a href="../../../docs/roadmap.md">Roadmap</a> •
+    <a href="https://discord.gg/hdKpx69NR">Discord</a>
+  </p>
+
+  <p>
+    <a href="https://crates.io/crates/ratel-ai-core"><img src="https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300" alt="crates.io" /></a>
+    <a href="https://docs.rs/ratel-ai-core"><img src="https://img.shields.io/docsrs/ratel-ai-core?label=docs.rs" alt="docs.rs" /></a>
+    <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
+    <a href="https://discord.gg/hdKpx69NR"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da&label=discord" alt="Discord" /></a>
+    <a href="../../../LICENSE.md"><img src="https://img.shields.io/badge/license-ELv2-blue" alt="license" /></a>
+  </p>
+</div>
 
 The Rust library at the heart of Ratel. Retrieval, auth, and telemetry are implemented here; every other piece of the project (SDKs, benchmark, future server and integrations) is a wrapper around this crate.
 

@@ -1,6 +1,22 @@
-# `@ratel-ai/sdk`
+<div align="center">
+  <h1>@ratel-ai/sdk</h1>
+  <h4>TypeScript SDK for Ratel — drop context engineering into any TS / Node agent with one dependency.</h4>
 
-TypeScript SDK for [Ratel](../../../README.md) — the context engineering platform for AI agents. Bundles `ratel-ai-core` (Rust) via NAPI-RS so JS/TS agents can drop Ratel in with one dependency.
+  <p>
+    <a href="../../../docs/">Docs</a> •
+    <a href="../../../docs/roadmap.md">Roadmap</a> •
+    <a href="https://discord.gg/hdKpx69NR">Discord</a>
+  </p>
+
+  <p>
+    <a href="https://www.npmjs.com/package/@ratel-ai/sdk"><img src="https://img.shields.io/npm/v/@ratel-ai/sdk?label=npm&color=cb3837" alt="npm" /></a>
+    <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
+    <a href="https://discord.gg/hdKpx69NR"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da&label=discord" alt="Discord" /></a>
+    <a href="../../../LICENSE.md"><img src="https://img.shields.io/badge/license-ELv2-blue" alt="license" /></a>
+  </p>
+</div>
+
+TypeScript SDK for [Ratel](../../../README.md). Bundles `ratel-ai-core` (Rust) via NAPI-RS so JS/TS agents can drop Ratel in with one dependency — no Rust toolchain, no service to deploy.
 
 ## Install
 

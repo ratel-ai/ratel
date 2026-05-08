@@ -1,4 +1,20 @@
-# `@ratel-ai/mcp-server`
+<div align="center">
+  <h1>@ratel-ai/mcp-server</h1>
+  <h4>Expose a Ratel catalog over MCP — the host sees two tools instead of every upstream's full list.</h4>
+
+  <p>
+    <a href="../../../docs/">Docs</a> •
+    <a href="../../../docs/roadmap.md">Roadmap</a> •
+    <a href="https://discord.gg/hdKpx69NR">Discord</a>
+  </p>
+
+  <p>
+    <a href="https://www.npmjs.com/package/@ratel-ai/mcp-server"><img src="https://img.shields.io/npm/v/@ratel-ai/mcp-server?label=npm&color=cb3837" alt="npm" /></a>
+    <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
+    <a href="https://discord.gg/hdKpx69NR"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da&label=discord" alt="Discord" /></a>
+    <a href="../../../LICENSE.md"><img src="https://img.shields.io/badge/license-ELv2-blue" alt="license" /></a>
+  </p>
+</div>
 
 Library that exposes a Ratel [`ToolCatalog`](../../sdk/ts/README.md) as a Model Context Protocol server. Any MCP-speaking client (Claude Desktop, an agent framework, an `@modelcontextprotocol/sdk` `Client`) can drive Ratel's gateway — `search_tools` to rank the catalog by query, `invoke_tool` to dispatch a hit by id — over stdio, Streamable HTTP, SSE, or any other [transport](https://modelcontextprotocol.io) you wire up.
 

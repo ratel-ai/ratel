@@ -17,7 +17,7 @@
   </p>
 </div>
 
-> Most agent stacks shove the whole tool catalog (and growing piles of skills, memories, message history) into the context window every turn — burning tokens and drifting on the long tail. Ratel sits between the agent and everything it could possibly need, and resolves only what matters for *this* turn.
+> Most agents stuff every tool, skill, and memory into the context window each turn — burning tokens, drifting on the long tail. Ratel sits between the agent and its catalog, and resolves only what matters for *this* turn.
 
 ## What is Ratel
 
