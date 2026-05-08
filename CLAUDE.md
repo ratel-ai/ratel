@@ -41,7 +41,6 @@ CI (`.github/workflows/{rust,ts}.yml`) runs all of the above on every PR; PRs la
 
 - **Plan mode default for non-trivial tasks (3+ steps).** Enter plan mode, agree on the approach, then implement. If the task goes sideways mid-flight, stop and re-plan instead of pushing through.
 - **Verification before "done".** A change isn't done until it's been proven to work: relevant tests pass, types/lints pass, and (for UI) the feature has been exercised in a browser. Don't mark a task complete on "it should work" — demonstrate it.
-- **Read `progress.md` first** when picking up work to know which milestone is in flight.
 
 ## Conventions
 

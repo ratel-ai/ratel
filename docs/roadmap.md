@@ -1,7 +1,5 @@
 # Roadmap
 
-This is the canonical roadmap. It supersedes the old `plan.md` / `progress.md` references in earlier READMEs (those files were gitignored working notes and not visible to external readers).
-
 The wedge today is **tool selection**. Every milestone below layers onto the same primitives — a `ToolCatalog`, a retrieval engine, an in-process runtime — and widens what kinds of context the agent can resolve from.
 
 For the architectural commitments behind each item, see [`docs/adr/`](adr/). For the broader thesis, see [`docs/overview.md`](overview.md).
