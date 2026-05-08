@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.5-rc.3] - 2026-05-08
+
+_No crate-specific changes; released in lockstep with the workspace._
+
 ## [0.1.5-rc.2] - 2026-05-07
 
 _No crate-specific changes; released in lockstep with the workspace._

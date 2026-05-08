@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.5-rc.3] - 2026-05-08
+
+### Added
+
+- `ratel mcp auth --check`: read-only status report per upstream (tokens present, refresh available, time-to-expiry / "expired N ago"). No network calls.
+
+### Changed
+
+- `ratel mcp auth` is now refresh-first — when a `refresh_token` is on disk, rotates silently with no browser. Output annotates each row as `authorized (refreshed)` vs `authorized (re-authed)` so you know which path ran.
+
 ## [0.1.5-rc.2] - 2026-05-07
 
 _No package-specific changes; released in lockstep with the workspace._
