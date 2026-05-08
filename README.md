@@ -1,12 +1,14 @@
 # Ratel
 
-**The context layer for AI agents — register tools once, resolve only what matters.**
+**Context engineering for AI agents — engineer the context your agent actually needs, on every turn.**
 
-> Most agent stacks re-send every tool definition on every turn. Your agent reads 50 schemas, picks one, repeats — burning tokens and drifting on the long tail. Ratel sits between the agent and the catalog: register once, the agent only sees the tools that matter for *this* turn.
+> Most agent stacks shove the whole tool catalog (and growing piles of skills, memories, message history) into the context window every turn — burning tokens and drifting on the long tail. Ratel sits between the agent and everything it could possibly need, and resolves only what matters for *this* turn.
 
 ## What is Ratel
 
-Ratel is an in-process **tool retrieval engine** for AI agents. Register your tool catalog (or ingest an upstream MCP server's tools) into a Ratel catalog; on every turn, Ratel ranks the catalog so the model only sees the handful relevant to the request — not the full list.
+Ratel is an in-process **context engineering platform** for AI agents: a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn — so the agent works with less noise and fewer tokens.
+
+The wedge today is **tool selection**. Register your tool catalog (or ingest an upstream MCP server's tools) into a Ratel `ToolCatalog`, and the model sees the handful of tools that matter for the current request — not the full list. The same primitives extend to skills, memories, and message history as those land on the roadmap; tools are just the first content type. See [`docs/overview.md`](docs/overview.md) for the thesis and [`docs/roadmap.md`](docs/roadmap.md) for what's coming.
 
 The base is a Rust library, `ratel-ai-core`. On top sit a TypeScript SDK, an MCP server library, and a CLI that drops Ratel between an MCP host (Claude Code, Cursor, ChatGPT) and your upstream MCP servers.
 
@@ -14,7 +16,7 @@ No vector DB. No embedding pipeline. No service to deploy.
 
 ## Why Ratel
 
-- **Tool selection is a context problem, not a routing problem.** Ratel runs BM25 over a schema-aware text projection of every tool — deterministic, no embeddings, no inference cost on the retrieval path. Locked in [ADR‑0004](docs/adr/0004-bm25-tool-indexing.md).
+- **What ends up in the context window is a retrieval problem.** Tools are the easiest case to start with — discrete, structured, mid-cardinality. Ratel runs BM25 over a schema-aware text projection of every tool: deterministic, no embeddings, no inference cost on the retrieval path. Locked in [ADR‑0004](docs/adr/0004-bm25-tool-indexing.md). The same primitive carries forward to skills, memories, and chat history as those land on the roadmap.
 - **From a multi-tool catalog to ~2 tools per turn.** Replace-by-default tool injection ([ADR‑0003](docs/adr/0003-tool-selection-replace-vs-suggest.md)) means the agent's tool list at any turn is the top‑K hits, not your whole catalog. Less context. Less drift. Lower cost.
 - **In-process. No infra.** Drop the SDK in. The Rust core ships pre-built native bindings for darwin / linux / win — no Rust toolchain required to install.
 - **Works with any TS framework** `ToolCatalog` returns generic `ExecutableTool` objects (`{id, name, description, inputSchema, outputSchema, execute}`) you wrap into your framework's tool type in a few lines. The repo ships a worked example for the Vercel AI SDK (`examples/ai-sdk`, `examples/mcp-chat`); the same pattern adapts to OpenAI Agents, Mastra, custom loops, anything. Or skip the agent framework entirely and expose the catalog over MCP server
@@ -119,13 +121,13 @@ cargo add ratel-ai-core
 
 In-process BM25 retrieval over a schema-aware text projection of each tool. See [src/core/lib/README.md](src/core/lib/README.md) and [docs.rs/ratel-ai-core](https://docs.rs/ratel-ai-core).
 
-## How it works
+## How it works (today)
 
-Ratel sits between your agent and its tool catalog. At each turn, instead of dumping every tool's full schema into the model's context, the agent either calls `search_tools(query)` or — in pre-filter mode — receives the top‑K hits resolved at message start. The catalog can hold local executables, upstream MCP servers' tools (via `registerMcpServer`), or both. The model sees a unified, ranked surface and never the full list.
+Tool selection is the v0.1.x shipping path. Ratel sits between your agent and its tool catalog. At each turn, instead of dumping every tool's full schema into the model's context, the agent either calls `search_tools(query)` or — in pre-filter mode — receives the top‑K hits resolved at message start. The catalog can hold local executables, upstream MCP servers' tools (via `registerMcpServer`), or both. The model sees a unified, ranked surface and never the full list.
 
-The base of all this is `ratel-ai-core`: a Rust BM25 index over a deterministic, schema-aware text projection of each tool. No embeddings, no vector DB, no inference latency on the retrieval path.
+The base of all this is `ratel-ai-core`: a Rust BM25 index over a deterministic, schema-aware text projection of each tool. No embeddings, no vector DB, no inference latency on the retrieval path. Same primitives — a catalog and a retrieval engine over an in-process runtime — extend to other content types as they land.
 
-For the longer take — context engineering as a thesis, and where Ratel is headed beyond tool retrieval (skills, memories, the context graph) — see [docs/overview.md](docs/overview.md).
+For the longer take — context engineering as a thesis, and where Ratel is headed beyond tool retrieval (skills, telemetry-driven suggestions, memories, the context graph) — see [docs/overview.md](docs/overview.md).
 
 ## Examples
 
@@ -133,13 +135,15 @@ For the longer take — context engineering as a thesis, and where Ratel is head
 - [examples/mcp-chat/](examples/mcp-chat/README.md) — Vercel AI SDK REPL ingesting an upstream MCP server via `registerMcpServer`
 - [examples/mcp-server/](examples/mcp-server/README.md) — Claude Code session fronted by Ratel as the only MCP
 
-## Roadmap
+## Where this is going
 
-The full picture lives in [docs/roadmap.md](docs/roadmap.md). The thread:
+Tool selection is the wedge, not the destination. Same catalog, same retrieval engine, same in-process runtime — widening, milestone by milestone, into the rest of the agent's context surface:
 
-- **Soon (v0.1.x)** — telemetry + UI inspector, JSON→TOON encoding, first-class skills support.
-- **Mid (v0.2.x – v0.3.x)** — LLM-driven tool/skill improvements from telemetry, multi-agent decomposition suggestions, semantic search + re-ranking, server flavor for trace consolidation.
-- **Later** — chat management (store / compact / prune / navigate), memories integration, a unified tools-skills-memories graph, a Python SDK.
+- **Soon (v0.1.x)** — telemetry + UI inspector on tool usage, JSON → TOON encoding for cheaper tool I/O, first-class **skills** ranked alongside tools by the same algorithm.
+- **Mid (v0.2.x – v0.3.x)** — LLM-driven **suggestions** that improve tool / skill catalogs from telemetry, **multi-agent decomposition** hints when one agent's catalog is too broad, semantic search + re-ranking layered over BM25, an opt-in self-hosted server for cross-instance trace consolidation.
+- **Later** — **chat management** (store / compact / prune / navigate long histories), **memories integration** (prior decisions and preferences ranked into the current turn), a unified tools-skills-memories **context graph** as the end state, and a Python SDK.
+
+Dated milestones live in [`docs/roadmap.md`](docs/roadmap.md); the thesis behind the arc is in [`docs/overview.md`](docs/overview.md).
 
 ## Repo layout
 

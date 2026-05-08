@@ -8,7 +8,7 @@ If you're a human, you probably want [README.md](README.md) or [docs/overview.md
 
 ## What Ratel is — in one paragraph
 
-Ratel is an in-process **tool retrieval engine** for AI agents. Register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools). On every turn, Ratel ranks the catalog by relevance to the current request via BM25 over a schema-aware text projection. The agent's tool list at any turn is the top-K hits, not the full catalog — less context, less drift, lower cost. The base is a Rust library (`ratel-ai-core`); on top sit a TypeScript SDK, an MCP server library, and a CLI. No vector DB, no embedding pipeline, no service to deploy.
+Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance via BM25 over a schema-aware text projection — the agent's tool list at any turn is the top-K hits, not the full catalog. Skills, telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are on the roadmap (see [`docs/roadmap.md`](docs/roadmap.md)); the same primitives extend to each. The base is a Rust library (`ratel-ai-core`); on top sit a TypeScript SDK, an MCP server library, and a CLI. No vector DB, no embedding pipeline, no service to deploy.
 
 ## Reality check — what ships, what doesn't (v0.1.4)
 
