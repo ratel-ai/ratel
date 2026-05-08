@@ -140,6 +140,74 @@ describe("runMcpAuth", () => {
     expect(logs.join("\n")).toMatch(/no.*config|nothing to auth/i);
   });
 
+  it("renders the new mode field per row in the summary", async () => {
+    const fs = new MemFs();
+    fs.files.set(
+      RATEL_USER_PATH,
+      JSON.stringify({
+        mcpServers: { stripe: { type: "http", url: "https://x" } },
+      }),
+    );
+    const logs: string[] = [];
+    const ctx = makeCtx(fs, { log: (m) => logs.push(m) });
+
+    const results: AuthFlowResult[] = [
+      { name: "stripe", status: "authorized", mode: "refresh" },
+      { name: "linear", status: "authorized", mode: "interactive" },
+    ];
+    await runMcpAuth(ctx, { authRunner: async () => results });
+
+    const all = logs.join("\n");
+    expect(all).toMatch(/stripe.*authorized.*refreshed/);
+    expect(all).toMatch(/linear.*authorized.*re-authed/);
+  });
+
+  describe("--check mode", () => {
+    it("does not call the runner; reads OAuth stores and prints per-upstream status", async () => {
+      const fs = new MemFs();
+      fs.files.set(
+        RATEL_USER_PATH,
+        JSON.stringify({
+          mcpServers: {
+            linear: { type: "http", url: "https://mcp.linear.example" },
+            local: { type: "stdio", command: "x" },
+            fresh: { type: "http", url: "https://fresh.example" },
+            unconfigured: { type: "http", url: "https://no-tokens.example" },
+          },
+        }),
+      );
+      // linear: expired token, refresh available
+      fs.files.set(
+        "/home/u/.ratel/oauth/linear.json",
+        JSON.stringify({
+          tokens: { access_token: "old", refresh_token: "rtk", token_type: "Bearer" },
+          expires_at: Date.now() - 5 * 60 * 1000,
+        }),
+      );
+      // fresh: comfortably valid
+      fs.files.set(
+        "/home/u/.ratel/oauth/fresh.json",
+        JSON.stringify({
+          tokens: { access_token: "ok", refresh_token: "rtk", token_type: "Bearer" },
+          expires_at: Date.now() + 23 * 3600 * 1000,
+        }),
+      );
+
+      const runner = vi.fn();
+      const logs: string[] = [];
+      const ctx = makeCtx(fs, { flags: { check: true }, log: (m) => logs.push(m) });
+
+      await runMcpAuth(ctx, { authRunner: runner });
+
+      expect(runner).not.toHaveBeenCalled();
+      const all = logs.join("\n");
+      expect(all).toMatch(/linear\s+\[expired\]/);
+      expect(all).toMatch(/local\s+\[n\/a\]/);
+      expect(all).toMatch(/fresh\s+\[ok\]/);
+      expect(all).toMatch(/unconfigured\s+\[needs auth\]/);
+    });
+  });
+
   it("rejects when a positional name is not present in any merged scope", async () => {
     const fs = new MemFs();
     fs.files.set(

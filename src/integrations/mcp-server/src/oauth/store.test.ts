@@ -127,6 +127,92 @@ describe("RatelOAuthStore", () => {
     expect(fileStat.mode & 0o777).toBe(0o600);
   });
 
+  it("withLock serializes overlapping callers on the same path", async () => {
+    const store = newStore();
+    const events: string[] = [];
+    const a = store.withLock(async () => {
+      events.push("a:start");
+      await new Promise((r) => setTimeout(r, 50));
+      events.push("a:end");
+    });
+    const b = store.withLock(async () => {
+      events.push("b:start");
+      await new Promise((r) => setTimeout(r, 10));
+      events.push("b:end");
+    });
+    await Promise.all([a, b]);
+    // Either order is fine; what matters is they don't interleave.
+    const order = events.join(",");
+    expect(order === "a:start,a:end,b:start,b:end" || order === "b:start,b:end,a:start,a:end").toBe(
+      true,
+    );
+  });
+
+  it("withLock releases the lock when fn throws", async () => {
+    const store = newStore();
+    await expect(
+      store.withLock(async () => {
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+    // A subsequent withLock must succeed promptly (no stale held lock).
+    const t0 = Date.now();
+    await store.withLock(async () => undefined);
+    expect(Date.now() - t0).toBeLessThan(500);
+  });
+
+  it("save() inside withLock reuses the held lock without deadlocking", async () => {
+    const store = newStore();
+    await store.withLock(async () => {
+      await store.save({ code_verifier: "inside" });
+    });
+    expect((await store.load()).code_verifier).toBe("inside");
+  });
+
+  it("withLock on different paths runs in parallel", async () => {
+    const a = newStore("a");
+    const b = newStore("b");
+    const events: string[] = [];
+    await Promise.all([
+      a.withLock(async () => {
+        events.push("a:start");
+        await new Promise((r) => setTimeout(r, 50));
+        events.push("a:end");
+      }),
+      b.withLock(async () => {
+        events.push("b:start");
+        await new Promise((r) => setTimeout(r, 50));
+        events.push("b:end");
+      }),
+    ]);
+    // If they ran in parallel, both starts come before either end.
+    const startA = events.indexOf("a:start");
+    const startB = events.indexOf("b:start");
+    const endA = events.indexOf("a:end");
+    const endB = events.indexOf("b:end");
+    expect(startA).toBeLessThan(endB);
+    expect(startB).toBeLessThan(endA);
+  });
+
+  it("concurrent save() calls do not lose updates", async () => {
+    const store = newStore();
+    await store.save({
+      client_information: { client_id: "abc", redirect_uris: ["http://127.0.0.1:0/cb"] },
+    });
+    await Promise.all([
+      store.save({ code_verifier: "verif" }),
+      store.save({ state: "stt" }),
+      store.save({
+        tokens: { access_token: "atk", token_type: "Bearer", expires_in: 60 },
+      }),
+    ]);
+    const state = await store.load();
+    expect(state.client_information?.client_id).toBe("abc");
+    expect(state.code_verifier).toBe("verif");
+    expect(state.state).toBe("stt");
+    expect(state.tokens?.access_token).toBe("atk");
+  });
+
   it("writes atomically: an interrupted write does not corrupt an existing file", async () => {
     const store = newStore();
     await store.save({ tokens: { access_token: "good", token_type: "Bearer" } });

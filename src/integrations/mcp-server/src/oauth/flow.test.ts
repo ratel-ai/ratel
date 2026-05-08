@@ -1,8 +1,12 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { McpServerHandle } from "@ratel-ai/sdk";
 import { ToolCatalog, type UpstreamServerInfo } from "@ratel-ai/sdk";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServerEntry } from "../config.js";
-import { type AuthStep, runAuthFlow } from "./flow.js";
+import { type AuthStep, defaultAuthStep, runAuthFlow } from "./flow.js";
+import { RatelOAuthStore } from "./store.js";
 
 function fakeHandle(toolIds: string[] = []): McpServerHandle {
   return {
@@ -185,6 +189,24 @@ describe("runAuthFlow", () => {
     expect(calls).toEqual(["changed", "changed"]);
   });
 
+  it("propagates the step's mode field through to AuthFlowResult", async () => {
+    const { catalog, upstreams, handles, configEntries } = setup();
+    const step: AuthStep = async () => ({
+      status: "authorized",
+      handle: fakeHandle([]),
+      mode: "refresh",
+    });
+    const results = await runAuthFlow({
+      catalog,
+      upstreams,
+      handles,
+      configEntries,
+      step,
+      opts: { name: "stripe" },
+    });
+    expect(results[0]).toMatchObject({ name: "stripe", status: "authorized", mode: "refresh" });
+  });
+
   it("closes any pre-existing handle for the upstream before installing the new one", async () => {
     const { catalog, upstreams, handles, configEntries } = setup();
     const oldStripe = fakeHandle([]);
@@ -201,5 +223,125 @@ describe("runAuthFlow", () => {
     });
 
     expect(oldStripe.close).toHaveBeenCalled();
+  });
+});
+
+describe("defaultAuthStep", () => {
+  let oauthDir: string;
+  beforeEach(async () => {
+    oauthDir = await mkdtemp(join(tmpdir(), "ratel-flow-oauth-"));
+  });
+  afterEach(async () => {
+    await rm(oauthDir, { recursive: true, force: true });
+  });
+  function storePath(name: string): string {
+    return join(oauthDir, `${name}.json`);
+  }
+
+  async function seedRefreshable(name: string): Promise<void> {
+    const store = new RatelOAuthStore(storePath(name));
+    await store.save({
+      tokens: {
+        access_token: "old",
+        token_type: "Bearer",
+        expires_in: 60,
+        refresh_token: "rtk",
+      },
+      client_information: { client_id: "cid", redirect_uris: ["http://127.0.0.1:0/cb"] },
+      discovery_state: {
+        authorizationServerUrl: "https://issuer.example",
+        authorizationServerMetadata: {
+          issuer: "https://issuer.example",
+          token_endpoint: "https://issuer.example/token",
+          response_types_supported: ["code"],
+        },
+      },
+    });
+    const fs = await import("node:fs/promises");
+    const raw = JSON.parse(await fs.readFile(storePath(name), "utf8"));
+    raw.expires_at = Date.now() - 1_000;
+    await fs.writeFile(storePath(name), JSON.stringify(raw, null, 2));
+  }
+
+  it("refresh-first: skips the callback server when refreshTokens succeeds and returns mode='refresh'", async () => {
+    await seedRefreshable("stripe");
+    const callbackFactory = vi.fn();
+    const refreshTokens = vi.fn(async () => undefined);
+    const registerImpl = vi.fn(
+      async (_catalog: ToolCatalog, opts: { name: string }): Promise<McpServerHandle> =>
+        fakeHandle([`${opts.name}__hello`]),
+    );
+
+    const step = defaultAuthStep({
+      storePath,
+      callbackFactory: callbackFactory as never,
+      refreshTokens,
+      registerMcpServerImpl: registerImpl,
+    });
+
+    const result = await step(
+      "stripe",
+      { type: "http", url: "https://mcp.stripe.example" },
+      { catalog: new ToolCatalog() },
+    );
+
+    expect(refreshTokens).toHaveBeenCalledTimes(1);
+    expect(callbackFactory).not.toHaveBeenCalled();
+    expect(result.status).toBe("authorized");
+    if (result.status === "authorized") {
+      expect(result.mode).toBe("refresh");
+    }
+  });
+
+  it("falls through to PKCE flow when refresh fails, returning mode='interactive'", async () => {
+    await seedRefreshable("stripe");
+    const refreshTokens = vi.fn(async () => {
+      throw new Error("invalid_grant");
+    });
+    const pkceFlow = vi.fn(async () => ({
+      status: "authorized" as const,
+      handle: fakeHandle(["stripe__after-pkce"]),
+      mode: "interactive" as const,
+    }));
+
+    const step = defaultAuthStep({ storePath, refreshTokens, pkceFlow });
+
+    const result = await step(
+      "stripe",
+      { type: "http", url: "https://mcp.stripe.example" },
+      { catalog: new ToolCatalog() },
+    );
+
+    expect(refreshTokens).toHaveBeenCalledTimes(1);
+    expect(pkceFlow).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe("authorized");
+    if (result.status === "authorized") {
+      expect(result.mode).toBe("interactive");
+    }
+  });
+
+  it("uses PKCE directly when no refresh_token is stored", async () => {
+    // Seed with tokens but no refresh_token.
+    const store = new RatelOAuthStore(storePath("stripe"));
+    await store.save({
+      tokens: { access_token: "old", token_type: "Bearer", expires_in: 60 },
+    });
+    const refreshTokens = vi.fn();
+    const pkceFlow = vi.fn(async () => ({
+      status: "authorized" as const,
+      handle: fakeHandle(["stripe__pkce-only"]),
+      mode: "interactive" as const,
+    }));
+
+    const step = defaultAuthStep({ storePath, refreshTokens, pkceFlow });
+    const result = await step(
+      "stripe",
+      { type: "http", url: "https://mcp.stripe.example" },
+      { catalog: new ToolCatalog() },
+    );
+
+    expect(refreshTokens).not.toHaveBeenCalled();
+    expect(pkceFlow).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe("authorized");
   });
 });
