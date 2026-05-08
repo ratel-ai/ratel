@@ -5,6 +5,11 @@
 mod indexing;
 mod registry;
 mod tool;
+mod trace;
 
 pub use registry::{SearchHit, ToolRegistry};
 pub use tool::Tool;
+pub use trace::{
+    ChurnKind, JsonlSink, MemorySink, NoopSink, Origin, SearchHitTrace, SearchStage, TraceEnvelope,
+    TraceEvent, TraceSink,
+};
