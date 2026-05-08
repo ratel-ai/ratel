@@ -1,6 +1,6 @@
 # `src/integrations/`
 
-External-protocol surfaces for Ratel. Each entry is a workspace package that wraps `@ratel-ai/sdk` (or `ratel-ai-core` directly) and either speaks one specific protocol, hosts one specific runtime, or drives the rest from a user-facing CLI.
+External-protocol surfaces for Ratel. Each entry is a workspace package that wraps `@ratel-ai/sdk` (or `ratel-ai-core` directly) and either speaks one specific protocol, hosts one specific runtime, or drives the rest from a user-facing CLI. MCP is the first protocol Ratel ships against because the largest pool of agent hosts already speaks it; nothing in the platform's design ties it to MCP, and additional surfaces land here as the [roadmap](../../docs/roadmap.md) widens.
 
 Integrations are independent packages; they don't add functionality to the SDK, they expose it.
 

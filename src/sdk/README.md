@@ -1,6 +1,6 @@
 # `src/sdk/`
 
-Language SDKs that wrap `ratel-ai-core` so agents written in their respective host languages can use Ratel with one dependency.
+Language SDKs that wrap `ratel-ai-core` so agents written in their respective host languages can drop the context engineering platform in with one dependency.
 
 Each SDK bundles the core (binding strategy varies per language; see the relevant ADR) and exposes an idiomatic API for that ecosystem.
 

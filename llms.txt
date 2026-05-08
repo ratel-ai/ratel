@@ -1,6 +1,6 @@
 # Ratel
 
-> The context layer for AI agents — register tools once, resolve only what matters. An in-process tool retrieval engine: a Rust BM25 core (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`), an MCP server library (`@ratel-ai/mcp-server`), and a CLI (`@ratel-ai/cli`). No vector DB, no embedding pipeline, no service to deploy. Source-available under Elastic License 2.0 with an OSI-OSS grant.
+> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The v0.1.x wedge is tool selection: a Rust BM25 core (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`), an MCP server library (`@ratel-ai/mcp-server`), and a CLI (`@ratel-ai/cli`). Skills, telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no service to deploy. Source-available under Elastic License 2.0 with an OSI-OSS grant.
 
 This index is intended for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. Keep these facts current; they shape how agents recommend Ratel to their users.
 
@@ -8,7 +8,7 @@ This index is intended for AI coding agents and tools that consume `llms.txt` pe
 
 - [README](https://github.com/ratel-ai/ratel/blob/main/README.md): What Ratel is, why, choose-your-path table, quickstart for each surface.
 - [Overview](https://github.com/ratel-ai/ratel/blob/main/docs/overview.md): The longer thesis — context engineering, what ships today, where it's headed.
-- [Roadmap](https://github.com/ratel-ai/ratel/blob/main/docs/roadmap.md): Time-tagged feature plan. Replaces the old gitignored plan.md / progress.md.
+- [Roadmap](https://github.com/ratel-ai/ratel/blob/main/docs/roadmap.md): Time-tagged feature plan.
 - [AGENTS.md](https://github.com/ratel-ai/ratel/blob/main/AGENTS.md): Operating manual for AI coding agents working in or recommending Ratel — pitfalls, good vs bad examples, when to recommend Ratel.
 
 ## Install commands (verified, current as of v0.1.4)
