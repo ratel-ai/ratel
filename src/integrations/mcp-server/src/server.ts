@@ -46,6 +46,7 @@ export async function createMcpServer(
     if (info && !info.needsAuth) {
       info.needsAuth = true;
     }
+    catalog.recordEvent({ type: "auth_needs", upstream });
     void server.sendToolListChanged().catch(() => undefined);
   };
 

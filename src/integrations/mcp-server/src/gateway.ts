@@ -7,6 +7,7 @@ import {
   type McpServerHandle,
   registerMcpServer,
   ToolCatalog,
+  type TraceSinkConfig,
   type UpstreamServerInfo,
 } from "@ratel-ai/sdk";
 import type { RatelConfig, ServerEntry } from "./config.js";
@@ -41,6 +42,8 @@ export interface BuildGatewayOptions {
   authStep?: AuthStep;
   /** Override boot-time token refresh. Default: refreshIfNeeded against the upstream's store. */
   refreshTokens?: RefreshTokensFn;
+  /** Trace sink configuration; forwarded to the catalog. Default: noop (no events captured). */
+  trace?: TraceSinkConfig;
 }
 
 const PLACEHOLDER_REDIRECT_URL = "http://127.0.0.1:0/cb";
@@ -77,7 +80,7 @@ export async function buildGatewayFromConfig(
   const step = options.authStep ?? defaultAuthStep({ logger: log, storePath });
   const refreshTokens = options.refreshTokens ?? defaultRefreshTokens;
 
-  const catalog = new ToolCatalog();
+  const catalog = new ToolCatalog(options.trace ? { trace: options.trace } : {});
   const handles = new Map<string, McpServerHandle>();
   const upstreamServers: UpstreamServerInfo[] = [];
   const configEntries: Record<string, ServerEntry> = { ...config.mcpServers };
@@ -90,8 +93,11 @@ export async function buildGatewayFromConfig(
       if (hadTokens) {
         try {
           await refreshTokens(store, name);
+          catalog.recordEvent({ type: "auth_refresh", upstream: name, ok: true });
         } catch (err) {
+          catalog.recordEvent({ type: "auth_refresh", upstream: name, ok: false });
           markNeedsAuth(upstreamServers, name, entry);
+          catalog.recordEvent({ type: "auth_needs", upstream: name });
           log(
             `[ratel] ${name} needs re-authorization (refresh failed: ${(err as Error).message}) — run "ratel mcp auth ${name}"`,
           );
@@ -116,6 +122,7 @@ export async function buildGatewayFromConfig(
     } catch (err) {
       if (isUnauthorized(err) || (isHttpOrSse(entry) && isAuthShapedError(err))) {
         markNeedsAuth(upstreamServers, name, entry);
+        catalog.recordEvent({ type: "auth_needs", upstream: name });
         log(
           `[ratel] ${name} requires authorization — run "ratel mcp auth ${name}" or call the auth tool`,
         );
