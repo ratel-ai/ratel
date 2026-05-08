@@ -1,5 +1,9 @@
 # Contributing to Ratel
 
+## Code of Conduct
+
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md) v2.1. By participating, you're agreeing to abide by it. Report incidents to `conduct@ratel.sh`.
+
 ## Prerequisites
 
 - **Rust** stable — pinned via `rust-toolchain.toml`; rustup picks it up automatically.
