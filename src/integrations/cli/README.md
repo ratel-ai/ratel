@@ -33,6 +33,7 @@ ratel <group> <verb> [args...]
 ratel --help                 # top-level usage
 ratel mcp                    # mcp group usage
 ratel backup                 # backup group usage
+ratel inspect                # summarize the most recent telemetry session
 ```
 
 ### `ratel mcp`
@@ -56,6 +57,15 @@ ratel backup                 # backup group usage
 | `list` | List backup sets created under `~/.ratel/backups/`. |
 
 (`ratel backup undo` exists and restores the most recent set, but is deliberately hidden from `--help`. Use it when you need to roll back the last `import`/`add`/`edit`/`remove`/`link`.)
+
+### `ratel inspect`
+
+| Verb | Purpose |
+|---|---|
+| `inspect` (no verb) | Summarize the most recent telemetry file under `$RATEL_TELEMETRY_DIR` (default `~/.ratel/telemetry/`) into ASCII tables (session totals, top tools by hit count, gateway-vs-direct invoke split, top errors). |
+| `inspect ls` | List telemetry files newest-first with size and modified time. |
+
+Flags: `--from <FILE>` summarizes a specific JSONL file; `--last <N>` restricts the summary to the last N events.
 
 ## `ratel mcp add` — Claude-compatible
 
@@ -126,6 +136,20 @@ HTTP and SSE upstreams that require OAuth authorization are handled at the gatew
 When the gateway boots, every HTTP/SSE upstream with stored tokens runs through a proactive refresh — expired access tokens are rotated up front so the catalog comes online with fresh credentials. If the auth server rejects the refresh (e.g. revoked refresh token), the upstream is flagged `needsAuth: true` rather than blocking the boot — the agent can call the `auth` MCP tool, or you can run `ratel mcp auth <name>`, to recover. A 401 during a live `invoke_tool` returns `{ error: "needs_auth", upstream }` so the agent can branch and call `auth` itself.
 
 Token state is per-user-per-machine (`~/.ratel/oauth/`), not per-config-scope. Multiple Ratel gateways running on the same host (e.g. several Claude Code sessions, or a CLI invocation overlapping a `serve`) refresh through a cross-process file lock so they cannot race on the same `refresh_token` — only one process performs the network refresh; the rest read the rotated tokens from disk under the same lock.
+
+## Telemetry
+
+`ratel mcp serve` writes one JSON line per event to `~/.ratel/telemetry/<ISO-ts>-<short>.jsonl` by default — every search, invoke, gateway call, upstream MCP call, and OAuth event flows through the same JSONL ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). Best-effort, sampleable, lossy on backpressure — query-log shaped, not oplog.
+
+Flags / env on `ratel mcp serve`:
+
+| Flag | Env | Purpose |
+|---|---|---|
+| `--telemetry off` | `RATEL_TELEMETRY=off` | Disable telemetry for this run. |
+| `--telemetry-file <path>` | — | Override the JSONL path. |
+| — | `RATEL_TELEMETRY_DIR` | Override the default telemetry directory. |
+
+Run `ratel inspect` to summarize the most recent file (or any file via `--from`); `ratel inspect ls` lists what's on disk.
 
 ## Backups & undo
 

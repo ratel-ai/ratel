@@ -107,6 +107,25 @@ await handle.close(); // disconnect on shutdown
 
 Errors from the upstream `tools/call` propagate as rejected promises from `catalog.invoke`, so they slot into the same handling as local executors.
 
+### Telemetry
+
+Pass `trace` to the `ToolCatalog` constructor to capture every search / invoke / gateway / upstream / auth event into a sink owned by the Rust core ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). Default is no-op — nothing is captured unless you opt in.
+
+```ts
+const catalog = new ToolCatalog({
+  trace: { kind: "jsonl", sessionId: "session-1", path: "/tmp/ratel.jsonl" },
+});
+// every catalog.invoke, searchToolsTool, registerMcpServer call now writes
+// one JSON line per event to /tmp/ratel.jsonl.
+```
+
+Sink kinds:
+- `{ kind: "noop" }` — drop everything (default).
+- `{ kind: "memory"; sessionId }` — keep events in memory; drain via `catalog.drainTraceEvents()`. Useful for tests.
+- `{ kind: "jsonl"; sessionId; path }` — append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure — see ADR-0009 for the reliability profile.
+
+`searchToolsTool` tags its emitted `search` event with `origin: "agent"`; pre-fetch helpers (`catalog.search(query, k)`) default to `"user"`. Override per call via `catalog.search(query, k, "agent")`.
+
 ## Package shape
 
 - Package name: `@ratel-ai/sdk`
