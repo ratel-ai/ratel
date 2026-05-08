@@ -4,6 +4,17 @@ Two-layer harness measuring Ratel's retrieval quality and (eventually) agent-loo
 
 **Latest results: [`RESULTS.md`](RESULTS.md)** — narrative breakdown across Claude (Sonnet, Opus), `glm-5.1:cloud`, and local `qwen3.5`.
 
+## Where Ratel is most valuable today
+
+| your situation | Ratel's value today |
+|---|---|
+| Local model + large catalog | **Critical.** qwen3.5 at pool=100 goes from 8% → 77% (-57% input tokens, -36% wall time). |
+| Open-source cloud + large catalog | **Strong win.** glm-5.1 at pool=180: **+12 pp** accuracy and **-85%** input tokens. |
+| Frontier model + large catalog | **Cost-driven win.** Sonnet 4.6 at pool=180: **-82%** input tokens, **-68%** $; -8 pp accuracy. |
+| Any model + tiny catalog (≤30) | Skip Ratel — pool fits in the prompt cleanly. |
+
+Full per-pool breakdown and methodology in [`RESULTS.md`](RESULTS.md).
+
 Locked decisions live in:
 
 - [`docs/adr/0005-benchmark-design.md`](../docs/adr/0005-benchmark-design.md) — overall harness (arms, models, variance, results storage)

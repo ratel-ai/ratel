@@ -2,6 +2,15 @@
 
 This document consolidates the agent benchmark across four model families on the MetaTool corpus and explains what the numbers say about where Ratel helps today and where it's still maturing.
 
+## Where Ratel is most valuable today
+
+| your situation | Ratel's value today |
+|---|---|
+| Local model + large catalog | **Critical.** Without Ratel the model can't function. (qwen3.5 pool=100: 8% → 77%) |
+| Open-source cloud model + large catalog | **Strong win.** Beats baseline on accuracy *and* tokens. (glm-5.1: +12pp, -85% tokens) |
+| Frontier model + large catalog | **Cost-driven win.** ~80% input-token savings, modest accuracy cost; closing now. |
+| Any model + tiny catalog (≤30) | Skip Ratel — pool fits in the prompt cleanly. |
+
 ## Headline takeaways
 
 - **Token savings are universal and large.** Across every model tested, Ratel cuts input tokens by **70–85% at realistic pool sizes (100–180 tools)**. This is true whether the underlying model is a tiny local model or frontier Claude.
@@ -75,15 +84,6 @@ The trade-off Ratel offers a Claude user **today** is:
 > "Pay -8 pp pass rate (Sonnet pool=180) — get **-82% input tokens, -68% dollars, and pool-size-invariant cost**."
 
 For agent platforms running 100s of MCP tools, the cost difference between feeding 17 000 input tokens per turn vs. 3 000 dominates the economics. And the trade-off goes the other way — Ratel's performance drops as the pool *shrinks*. Below ~30 tools you should not use Ratel: the baseline already fits cleanly in the prompt.
-
-## Where Ratel is most valuable today
-
-| your situation | Ratel's value today |
-|---|---|
-| Local model + large catalog | **Critical.** Without Ratel the model can't function. (qwen3.5 pool=100: 8% → 77%) |
-| Open-source cloud model + large catalog | **Strong win.** Beats baseline on accuracy *and* tokens. (glm-5.1: +12pp, -85% tokens) |
-| Frontier model + large catalog | **Cost-driven win.** ~80% input-token savings, modest accuracy cost; closing now. |
-| Any model + tiny catalog (≤30) | Skip Ratel — pool fits in the prompt cleanly. |
 
 ## What's next
 

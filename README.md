@@ -19,6 +19,17 @@ No vector DB. No embedding pipeline. No service to deploy.
 - **In-process. No infra.** Drop the SDK in. The Rust core ships pre-built native bindings for darwin / linux / win — no Rust toolchain required to install.
 - **Works with any TS framework** `ToolCatalog` returns generic `ExecutableTool` objects (`{id, name, description, inputSchema, outputSchema, execute}`) you wrap into your framework's tool type in a few lines. The repo ships a worked example for the Vercel AI SDK (`examples/ai-sdk`, `examples/mcp-chat`); the same pattern adapts to OpenAI Agents, Mastra, custom loops, anything. Or skip the agent framework entirely and expose the catalog over MCP server
 
+## Where Ratel is most valuable today
+
+| your situation | Ratel's value today |
+|---|---|
+| Local model + large catalog | **Critical.** qwen3.5 at pool=100 goes from 8% → 77% — the baseline collapses, Ratel keeps it working. |
+| Open-source cloud + large catalog | **Strong win.** glm-5.1 at pool=180: **+12 pp** accuracy, **-85%** input tokens. |
+| Frontier model + large catalog | **Cost-driven win.** Sonnet 4.6 at pool=180: **-82%** input tokens, **-68%** $; -8 pp accuracy (closing). |
+| Any model + tiny catalog (≤30) | Skip Ratel — pool fits in the prompt cleanly. |
+
+Numbers from the MetaTool agent benchmark — full per-pool breakdown and methodology in [`benchmark/RESULTS.md`](benchmark/RESULTS.md).
+
 ## Choose your path
 
 Ratel ships in four shapes today, all built on the same Rust core. Pick one — or mix them:
