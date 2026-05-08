@@ -9,7 +9,7 @@ body = """
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group | upper_first }}
 {% for commit in commits %}
-- {{ commit.message | split(pat=":") | slice(start=1) | join(sep=":") | trim | upper_first }}{% if commit.scope %} ({{ commit.scope }}){% endif %}
+- {{ commit.message | upper_first }}{% if commit.scope %} ({{ commit.scope }}){% endif %}
 {%- endfor %}
 {% endfor %}
 """
