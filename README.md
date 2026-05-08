@@ -139,9 +139,11 @@ For the longer take — context engineering as a thesis, and where Ratel is head
 
 Tool selection is the wedge, not the destination. Same catalog, same retrieval engine, same in-process runtime — widening, milestone by milestone, into the rest of the agent's context surface:
 
-- **Soon (v0.1.x)** — telemetry + UI inspector on tool usage, JSON → TOON encoding for cheaper tool I/O, first-class **skills** ranked alongside tools by the same algorithm.
-- **Mid (v0.2.x – v0.3.x)** — LLM-driven **suggestions** that improve tool / skill catalogs from telemetry, **multi-agent decomposition** hints when one agent's catalog is too broad, semantic search + re-ranking layered over BM25, an opt-in self-hosted server for cross-instance trace consolidation.
-- **Later** — **chat management** (store / compact / prune / navigate long histories), **memories integration** (prior decisions and preferences ranked into the current turn), a unified tools-skills-memories **context graph** as the end state, and a Python SDK.
+- **v0.1.x** — telemetry + UI inspector on tool usage, JSON → TOON encoding, optional MCP `tools/list_changed`, first-class **skills** ranked alongside tools by the same algorithm, **LLM-driven suggestions** that improve catalogs from telemetry, **multi-agent decomposition** hints, semantic search + re-ranking layered over BM25, an opt-in self-hosted server for cross-instance trace consolidation.
+- **v0.2.x — chat management** — store / compact / prune / navigate long histories.
+- **v0.3.x — memories** — prior decisions, preferences, and artifacts ranked into the current turn.
+- **v0.4.x — context graph** — a unified tools-skills-memories substrate as the end state.
+- **v0.5.x — Python SDK** — second host language binding the Rust core.
 
 Dated milestones live in [`docs/roadmap.md`](docs/roadmap.md); the thesis behind the arc is in [`docs/overview.md`](docs/overview.md).
 

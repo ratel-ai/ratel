@@ -15,38 +15,59 @@ The first public release across all four registry artifacts.
 - **`@ratel-ai/mcp-server`** on npm — library to expose a catalog as an MCP server, with OAuth 2.1 / PKCE for HTTP & SSE upstreams.
 - **`@ratel-ai/cli`** on npm — the `ratel` binary: one-shot import from Claude Code, add / serve / auth / list / edit / remove / link across three scopes.
 
-## Soon (v0.1.x)
+## Next (v0.1.5)
 
-Layering on the v0.1.4 surface — same primitives, more reach.
+The milestone in flight.
 
-- **Telemetry + UI inspector** — observe which tools the agent calls, which `search_tools` queries returned which hits, what the model chose vs. what was offered. The substrate for the LLM-driven suggestions in v0.2.x.
+- **Telemetry + traces** on tool usage, end-to-end through `ratel-ai-core` → `@ratel-ai/sdk` → `@ratel-ai/mcp-server`. The substrate for the LLM-driven suggestions later in v0.1.x.
+- **UI inspector** over the telemetry stream.
+- **Benchmark MCP review** — exercise the published packages end-to-end through MCP, not just direct SDK wiring.
+
+## Soon (rest of v0.1.x)
+
+The catalog grows from tools-only to tools + skills, and the observation → improvement loop closes.
+
 - **JSON → TOON encoding** — token-efficient serialization for tool inputs / outputs on the gateway path. Cuts per-call token spend without changing the catalog or the model contract.
-- **First-class skills** — register skills (composed flows) alongside tools, ranked by the same algorithm, dispatched on demand. The catalog grows from a tools-only object to a tools+skills object; `search_tools` and `invoke_tool` extend without breaking changes.
-
-## Mid (v0.2.x – v0.3.x)
-
-The observation→improvement loop closes.
-
-- **LLM-driven tool / skill suggestions** — telemetry feeds an offline analyzer that proposes catalog improvements (better descriptions, missing parameters, redundant tools to merge, gaps to fill).
+- **Optional `tools/list_changed` notifications** behind a feature flag — so search-driven dispatch can update the live tool list dynamically while we measure which clients honor it reliably.
+- **First-class skills** — register skills (composed flows) alongside tools, ranked by the same algorithm, dispatched on demand. `search_tools` and `invoke_tool` extend without breaking changes.
+- **Atoms / molecules / organisms** — organize skills + tools as a layered composition.
+- **LLM-driven suggestions** — telemetry feeds an offline analyzer that proposes catalog improvements (better descriptions, missing parameters, redundant tools to merge, gaps to fill, brand-new skills to add). Surfaced in the inspector first.
 - **Multi-agent decomposition suggestions** — when a single agent's catalog is too broad, surface the natural split points: which subsets of the catalog cluster around which workflows.
-- **Semantic search + re-ranking** — local + optional cloud embeddings, with LLM and XGBoost re-ranking layered over BM25. BM25 stays the deterministic floor; semantic adds recall.
-- **Server flavor for trace consolidation** — a self-hosted Rust server that aggregates traces across multiple agent instances. The SDK and MCP server stay in-process; the server is opt-in for teams running many agents.
+- **Apply + evaluate suggestions** — land suggested changes back into the registered catalog, with eval coverage so improvements don't regress.
+- **Semantic search + re-ranking** — local embeddings first, then optional cloud; LLM and XGBoost re-rankers layered over BM25. BM25 stays the deterministic floor; semantic adds recall. Benchmark every combination (BM25 only / semantic only / hybrid / each + rerank).
+- **Server flavor for trace consolidation** — opt-in self-hosted Rust server that aggregates traces across multiple agent instances. The SDK and MCP server stay in-process; the server is for teams running many agents.
 
-## Later
+## v0.2.x — chat management
 
-Widening the catalog's content types and integrating with the rest of the agent runtime.
+Long-running agents blow their context budget on past turns. Same retrieval primitive, applied to message history.
 
-- **Chat management** — store / compact / prune / navigate message history. Retrieval over past turns is the same primitive applied to a different content type.
-- **Memories integration** — prior context (decisions, preferences, artifacts) ranked into the current turn alongside tools and skills.
-- **Unified tools-skills-memories graph** — the **context graph**. One substrate, four content types, one retrieval surface.
-- **Python SDK** — currently TS-only on the SDK side. Python is the most-requested target after the v0.1.x release.
+- Store messages and retrieve the last N tokens.
+- Compaction / summarization — local model first, then optional cloud (e.g. Compresr).
+- Chat navigation tools.
+- Smart pruning of tool inputs / outputs (replace with placeholders + a fetch tool).
+
+## v0.3.x — memories
+
+Prior context — decisions, preferences, artifacts — ranked into the current turn alongside tools and skills.
+
+- Basic memory orchestration (mem0 or similar).
+- Memories inform tool / skill selection and the suggestion loop.
+- Chat history feeds memory consolidation (autodream-style).
+
+## v0.4.x — context graph
+
+The end state: tools, skills, and memories live in one graph. One substrate, multiple content types, one retrieval surface. Broader external-server integrations earn their keep here too.
+
+## v0.5.x — Python SDK
+
+Currently TS-only on the SDK side. Python is the next host language to bind the Rust core.
 
 ## Out of scope (for now)
 
-- **Hosted multi-tenant runtime.** Ratel is in-process by design; the v0.2.x–v0.3.x server flavor is opt-in self-hosted, not a SaaS.
+- **Hosted multi-tenant runtime.** Ratel is in-process by design; the v0.1.x server flavor is opt-in self-hosted, not a SaaS.
 - **Custom embedding models.** When semantic search lands, we'll integrate with existing providers (OpenAI, Voyage, local) rather than train our own.
 - **Replacing the MCP protocol.** Ratel sits on either side of MCP boundaries. We're not redesigning the protocol; we're making the catalog primitive better.
 
 ---
 
-This roadmap moves with the project. The README's "What's coming" section mirrors the headlines from each horizon. If you spot a mismatch between this file and what's actually shipped, file an issue — the roadmap should track reality.
+This roadmap moves with the project. The README's "Where this is going" section mirrors the headlines from each horizon. If you spot a mismatch between this file and what's actually shipped, file an issue — the roadmap should track reality.
