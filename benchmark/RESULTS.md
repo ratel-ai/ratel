@@ -85,6 +85,32 @@ The trade-off Ratel offers a Claude user **today** is:
 
 For agent platforms running 100s of MCP tools, the cost difference between feeding 17 000 input tokens per turn vs. 3 000 dominates the economics. And the trade-off goes the other way — Ratel's performance drops as the pool *shrinks*. Below ~30 tools you should not use Ratel: the baseline already fits cleanly in the prompt.
 
+#### `claude-opus-4-6`
+
+| pool | baseline | ratel-discovery-tool | ratel-full | claude-sdk-tool-search | oracle |
+|---|---|---|---|---|---|
+| 50  | 65.0% | **80.0%** (+15 pp)   | 70.0% | 50.0% (-15 pp)   | 91.7% |
+| 100 | 73.3% | 75.0% (+1.7 pp)      | 63.3% | 53.3% (-20 pp)   | 91.7% |
+| 180 | 65.0% | **73.3%** (+8.3 pp)  | 66.7% | 48.3% (-16.7 pp) | 91.7% |
+
+Opus 4.6 is the model where Ratel produces an unambiguous accuracy *win*. The baseline is unusually weak for a frontier model (65% at pool=180) while the oracle is the strongest in the suite (**91.7%**, pool-invariant) — a strong agent loop sitting on top of weak fat-context selection. The `ratel-discovery-tool` arm (gateway only, no pre-fetch) beats baseline at every pool size, peaking **+15 pp at pool=50** and **+8 pp at pool=180**, with **-72% input tokens at pool=180**. `ratel-full` zig-zags around baseline (sample noise) with the same token savings. **Anthropic's [tool-search-tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool)** sits 15–20 pp below baseline across the sweep.
+
+#### `claude-opus-4-7`
+
+Pool=180 only, n=60 per cell:
+
+| arm | accuracy | Δ vs baseline | input savings |
+|---|---|---|---|
+| control-baseline         | 71.7%     | —             | —          |
+| control-oracle           | 83.3%     | +11.7 pp      | —          |
+| **ratel-discovery-tool** | **70.0%** | **-1.7 pp**   | **-80.9%** |
+| ratel-full               | 55.0%     | -16.7 pp      | -79.5%     |
+| claude-sdk-tool-search   | 63.3%     | **-8.4 pp**   | -76.7%     |
+
+Opus 4.7 lifts the baseline (71.7% at pool=180), softening the selection bottleneck that made 4.6 a clear Ratel win. The story shifts to a competitive frame: `ratel-discovery-tool` lands within **-1.7 pp** of baseline while saving **-81% input tokens**, whereas **Anthropic's tool-search-tool drops -8.4 pp on the same pool — roughly 5× the accuracy hit for similar token savings**. The `ratel-full` regression to 55% is an open thread (pre-fetch + gateway underperforming gateway-alone for this model, under investigation).
+
+> **Sample-size caveat.** Opus cells are 20 scenarios × 3 runs (n=60), versus 20 × 5 (n=100) for the Sonnet headline. Treat the per-pool deltas as directional, not headline-grade.
+
 ## What's next
 
 1. **Hybrid retrieval** — replace BM25-only discovery with hybrid (BM25 + dense) to close the "missing gold" gap on Claude models without giving up token savings.

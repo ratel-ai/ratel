@@ -43,7 +43,8 @@ See [`docs/overview.md`](docs/overview.md) for the thesis, [`docs/roadmap.md`](d
 |---|---|
 | Local model + large catalog | **Critical.** qwen3.5 at pool=100 goes from 8% → 77% — the baseline collapses, Ratel keeps it working. |
 | Open-source cloud + large catalog | **Strong win.** glm-5.1 at pool=180: **+12 pp** accuracy, **-85%** input tokens. |
-| Frontier model + large catalog | **Cost-driven win.** Sonnet 4.6 at pool=180: **-82%** input tokens, **-68%** $; -8 pp accuracy (closing). |
+| Frontier (Sonnet) + large catalog | **Cost-driven win.** Sonnet 4.6 at pool=180: **-82%** input tokens, **-68%** $; -8 pp accuracy (closing). |
+| Frontier (Opus) + large catalog | **Competitive win.** Opus 4.6 pool=180: **+8 pp** accuracy and **-72%** tokens (discovery-tool arm). Opus 4.7 pool=180: ≈parity (-1.7 pp) with **-81%** tokens — Anthropic's own tool-search-tool loses **-8 pp** on the same setup. |
 | Any model + tiny catalog (≤30) | Skip Ratel — pool fits in the prompt cleanly. |
 
 Numbers from the MetaTool agent benchmark — full per-pool breakdown and methodology in [`benchmark/RESULTS.md`](benchmark/RESULTS.md).
