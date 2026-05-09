@@ -36,17 +36,20 @@ ratel backup                 # backup group usage
 ratel inspect                # summarize the most recent telemetry session
 ```
 
+### `ratel serve`
+
+Start the gateway over stdio. Pass one or more configs via `--config` (right-most wins on `mcpServers` collisions). See [Telemetry](#telemetry) for the flags that control trace output.
+
 ### `ratel mcp`
 
 | Verb | Purpose |
 |---|---|
-| `serve` | Start the gateway over stdio. Pass one or more configs via `--config`; right-most wins on `mcpServers` collisions. |
 | `add` | Add an MCP server entry to a Ratel scope. **Mirrors `claude mcp add`** (see below). |
 | `remove [--scope <s>] --name <n>` | Remove an entry from a scope. `--scope` defaults to `user`. |
 | `list` | List MCP servers configured across Ratel scopes. |
 | `get <name> [--scope <s>]` | Print one entry's resolved details. Without `--scope`, walks local → project → user. |
 | `edit [--scope <s>] --name <n>` | Edit fields on an existing entry. `--scope` defaults to `user`. Pass any subset of `--description`, `--type`, `--command`, `--arg` (repeatable), `--env KEY=VAL` (repeatable; `KEY=` clears one), `--cwd`, `--url`, `--header KEY=VAL`. `--entry-json '{...}'` does a full replacement. With no flags, prompts interactively. |
-| `import` | Migrate Claude Code's existing MCP servers into Ratel. Two stages: (a) pick which upstreams to migrate, optionally describe each (each prompt is pre-filled with the upstream's MCP `instructions` if it exposes one), then confirm Ratel writes; (b) confirm the Claude rewrite that points Claude at `ratel mcp serve`. Deselected entries stay in Claude untouched. Decline Stage B and re-run `import` (or run `link`) later. |
+| `import` | Migrate Claude Code's existing MCP servers into Ratel. Two stages: (a) pick which upstreams to migrate, optionally describe each (each prompt is pre-filled with the upstream's MCP `instructions` if it exposes one), then confirm Ratel writes; (b) confirm the Claude rewrite that points Claude at `ratel serve`. Deselected entries stay in Claude untouched. Decline Stage B and re-run `import` (or run `link`) later. |
 | `link` | Stage B alone: rewrites Claude's config to point at Ratel for entries already present in Ratel scopes. Useful after a declined Stage B or hand-authored Ratel configs. |
 | `auth [<name>] [--check]` | Refresh-or-reauth HTTP/SSE upstreams. **Refresh-first**: if a `refresh_token` is on disk, rotates silently — no browser pops. Falls back to PKCE only when refresh is impossible or fails. The output annotates each row as `authorized (refreshed)` or `authorized (re-authed)` so you know which path ran. With `--check`, prints expiry status per upstream without touching the network: `[ok] expires in 23h 12m`, `[expired] expired 5h ago, refresh available`, `[needs auth]`, `[n/a]` for stdio. |
 
@@ -92,7 +95,7 @@ ratel mcp add [flags] <name> <url>                       # http / sse
 By default, after the entry is assembled, `mcp add` connects to the upstream and stores its server-level `instructions` (per the MCP spec) as the entry's `description`. Behavior by transport:
 
 - **stdio**: silent connect → read instructions → close.
-- **http / sse**: drives the OAuth 2.1 / PKCE flow against the upstream (browser opens to authorize), persists tokens to `~/.ratel/oauth/<name>.json`, then reads instructions. After this, the entry is fully usable by `ratel mcp serve` — no follow-up `ratel mcp auth` required.
+- **http / sse**: drives the OAuth 2.1 / PKCE flow against the upstream (browser opens to authorize), persists tokens to `~/.ratel/oauth/<name>.json`, then reads instructions. After this, the entry is fully usable by `ratel serve` — no follow-up `ratel mcp auth` required.
 
 Pass `--description` to override the fetched text (the OAuth flow still runs for http/sse so tokens get persisted). Pass `--no-fetch-description` to skip the probe entirely (useful in CI / headless boxes — you can run `ratel mcp auth <name>` from a workstation later). A failed probe / declined authorization is logged with a hint to retry via `ratel mcp auth <name>` and does not fail the add.
 
@@ -118,13 +121,13 @@ Ratel mirrors Claude Code's MCP scoping with three logical configs:
 | project | `<root>/.ratel/config.json` | Committed alongside the repo. |
 | local | `<root>/.ratel/config.local.json` | Per-user-per-project; **add to your project's `.gitignore`**. |
 
-When you run `ratel mcp serve --config a.json --config b.json --config c.json`, the configs are merged in order — last wins on `mcpServers` key collisions. The `import` wizard wires the right `--config` chain into Claude Code at each scope:
+When you run `ratel serve --config a.json --config b.json --config c.json`, the configs are merged in order — last wins on `mcpServers` key collisions. The `import` wizard wires the right `--config` chain into Claude Code at each scope:
 
 | Claude scope | Args of the `ratel` entry written into Claude's config |
 |---|---|
-| user (`~/.claude.json` root `mcpServers`) | `["mcp", "serve", "--config", <user>]` |
-| project (`<root>/.mcp.json`) | `["mcp", "serve", "--config", <user>, "--config", <project>]` |
-| local (`~/.claude.json` `projects[<root>].mcpServers`) | `["mcp", "serve", "--config", <user>, "--config", <project>, "--config", <local>]` |
+| user (`~/.claude.json` root `mcpServers`) | `["serve", "--config", <user>]` |
+| project (`<root>/.mcp.json`) | `["serve", "--config", <user>, "--config", <project>]` |
+| local (`~/.claude.json` `projects[<root>].mcpServers`) | `["serve", "--config", <user>, "--config", <project>, "--config", <local>]` |
 
 ## OAuth flow
 
@@ -141,9 +144,9 @@ Token state is per-user-per-machine (`~/.ratel/oauth/`), not per-config-scope. M
 
 ## Telemetry
 
-`ratel mcp serve` writes one JSON line per event to `~/.ratel/telemetry/<project-slug>/<ISO-ts>-<short>.jsonl` by default — every search, invoke, gateway call, upstream MCP call, and OAuth event flows through the same JSONL ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). The slug is `process.cwd()` at serve time with every `/` and `.` replaced by `-`, mirroring Claude Code's `~/.claude/projects/` convention. Best-effort, sampleable, lossy on backpressure — query-log shaped, not oplog.
+`ratel serve` writes one JSON line per event to `~/.ratel/telemetry/<project-slug>/<ISO-ts>-<short>.jsonl` by default — every search, invoke, gateway call, upstream MCP call, and OAuth event flows through the same JSONL ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). The slug is `process.cwd()` at serve time with every `/` and `.` replaced by `-`, mirroring Claude Code's `~/.claude/projects/` convention. Best-effort, sampleable, lossy on backpressure — query-log shaped, not oplog.
 
-Flags / env on `ratel mcp serve`:
+Flags / env on `ratel serve`:
 
 | Flag | Env | Purpose |
 |---|---|---|

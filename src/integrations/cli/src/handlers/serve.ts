@@ -13,7 +13,7 @@ import type { TraceSinkConfig } from "@ratel-ai/sdk";
 import type { ParsedArgs } from "../args.js";
 import { defaultTelemetryDir, projectBucketDir } from "../inspect.js";
 
-export interface McpServeOptions {
+export interface ServeOptions {
   readConfig?: (path: string) => Promise<unknown>;
   transportFactory?: TransportFactory;
   serverTransport?: Transport;
@@ -21,17 +21,17 @@ export interface McpServeOptions {
   serverVersion?: string;
 }
 
-export interface McpServeResult {
+export interface ServeResult {
   shutdown: () => Promise<void>;
 }
 
-export async function runMcpServe(
+export async function runServe(
   parsed: ParsedArgs,
-  options: McpServeOptions,
+  options: ServeOptions,
   log: (m: string) => void,
-): Promise<McpServeResult> {
+): Promise<ServeResult> {
   if (parsed.configPaths.length === 0) {
-    throw new Error("usage: ratel mcp serve <config.json> [--config <path> ...]");
+    throw new Error("usage: ratel serve <config.json> [--config <path> ...]");
   }
 
   const readConfig = options.readConfig ?? defaultReadConfig;

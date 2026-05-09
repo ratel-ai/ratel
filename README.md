@@ -122,7 +122,7 @@ pnpm add -g @ratel-ai/cli
 
 ratel mcp import   # interactive: scans ~/.claude.json + per-project .mcp.json,
                    # cherry-pick which upstreams to move into Ratel,
-                   # rewrites Claude Code to launch `ratel mcp serve`.
+                   # rewrites Claude Code to launch `ratel serve`.
 
 ratel backup undo  # roll back any time — every change writes a timestamped backup under ~/.ratel/backups/.
 ```

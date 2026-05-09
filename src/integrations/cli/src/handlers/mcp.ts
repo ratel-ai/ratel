@@ -12,7 +12,6 @@ import type { HandlerCtx } from "./types.js";
 export const MCP_USAGE = `usage: ratel mcp <verb> [args...]
 
 Verbs:
-  serve   start the gateway over stdio (use --config <path> to load a Ratel config; repeat for multi-file merge)
   add     add an MCP server entry (Claude-compatible: ratel mcp add [flags] <name> -- <command> [args...]
                                    or ratel mcp add [flags] <name> <url>)
   remove  remove an entry from a Ratel scope
@@ -21,7 +20,9 @@ Verbs:
   edit    edit fields on an existing entry (interactive when no flags supplied)
   import  migrate Claude Code MCP configs into Ratel (two stages: Ratel write, then Claude rewrite)
   link    rewrite Claude Code's config to point at Ratel for entries already in Ratel scopes
-  auth    drive an interactive OAuth flow for one or all http/sse upstreams that need authorization`;
+  auth    drive an interactive OAuth flow for one or all http/sse upstreams that need authorization
+
+To start the gateway, see \`ratel serve\`.`;
 
 export async function runMcp(ctx: HandlerCtx): Promise<void> {
   const { verb, flags } = ctx.argv;

@@ -1,22 +1,12 @@
-export type Group = "mcp" | "backup" | "inspect" | "help";
+export type Group = "mcp" | "backup" | "inspect" | "serve" | "help";
 
-export type McpVerb =
-  | "serve"
-  | "add"
-  | "remove"
-  | "list"
-  | "get"
-  | "edit"
-  | "import"
-  | "link"
-  | "auth";
+export type McpVerb = "add" | "remove" | "list" | "get" | "edit" | "import" | "link" | "auth";
 
 export type BackupVerb = "list" | "undo";
 
 export type InspectVerb = "ls";
 
 const MCP_VERBS: ReadonlySet<string> = new Set([
-  "serve",
   "add",
   "remove",
   "list",
@@ -122,6 +112,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
       verb = candidate;
       i = 2;
     }
+  } else if (first === "serve") {
+    group = "serve";
+    i = 1;
   } else {
     throw new ArgError(`unknown command: ${first}`);
   }
@@ -203,7 +196,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
-    if (group === "mcp" && verb === "serve") {
+    if (group === "serve") {
       configPaths.push(tok);
     } else {
       rest.push(tok);

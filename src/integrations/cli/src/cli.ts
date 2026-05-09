@@ -8,7 +8,7 @@ import type { ClaudeFs } from "./claude.js";
 import { BACKUP_USAGE, runBackup } from "./handlers/backup.js";
 import { runInspect } from "./handlers/inspect.js";
 import { MCP_USAGE, runMcp } from "./handlers/mcp.js";
-import { runMcpServe } from "./handlers/mcp-serve.js";
+import { runServe } from "./handlers/serve.js";
 import type { HandlerCtx } from "./handlers/types.js";
 import { findProjectRoot, type HierarchyEnv } from "./hierarchy.js";
 import { type JsonFs, nodeFs } from "./io.js";
@@ -31,10 +31,11 @@ export interface RunCliResult {
   shutdown?: () => Promise<void>;
 }
 
-const TOP_USAGE = `usage: ratel <group> <verb> [args...]
+const TOP_USAGE = `usage: ratel <command> [args...]
 
-Groups:
-  mcp      manage MCP servers (add, remove, list, get, edit, import, link) and serve the gateway
+Commands:
+  serve    start the gateway over stdio (use --config <path>; repeat for multi-file merge)
+  mcp      manage MCP servers (add, remove, list, get, edit, import, link, auth)
   backup   manage backup snapshots (list)
   inspect  summarize the most recent telemetry session (or \`ls\` for a file listing)
 
@@ -72,8 +73,8 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
     return {};
   }
 
-  if (parsed.group === "mcp" && parsed.verb === "serve") {
-    return runMcpServe(parsed, options, log);
+  if (parsed.group === "serve") {
+    return runServe(parsed, options, log);
   }
 
   const ctx: HandlerCtx = {

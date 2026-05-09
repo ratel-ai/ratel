@@ -147,7 +147,7 @@ describe("runImport", () => {
     expect(claude.mcpServers.ratel).toEqual({
       type: "stdio",
       command: "ratel",
-      args: ["mcp", "serve", "--config", RATEL_USER],
+      args: ["serve", "--config", RATEL_USER],
     });
   });
 
@@ -170,7 +170,6 @@ describe("runImport", () => {
 
     const claudeProj = JSON.parse(fs.files.get(PROJECT_MCP) as string);
     expect(claudeProj.mcpServers.ratel.args).toEqual([
-      "mcp",
       "serve",
       "--config",
       RATEL_USER,
@@ -200,9 +199,8 @@ describe("runImport", () => {
     await runImport(ctx, { bin: BIN, yes: true });
 
     const claude = JSON.parse(fs.files.get(HOME_CLAUDE) as string);
-    expect(claude.mcpServers.ratel.args).toEqual(["mcp", "serve", "--config", RATEL_USER]);
+    expect(claude.mcpServers.ratel.args).toEqual(["serve", "--config", RATEL_USER]);
     expect(claude.projects[ROOT].mcpServers.ratel.args).toEqual([
-      "mcp",
       "serve",
       "--config",
       RATEL_USER,
@@ -212,7 +210,6 @@ describe("runImport", () => {
       RATEL_LOCAL,
     ]);
     expect(JSON.parse(fs.files.get(PROJECT_MCP) as string).mcpServers.ratel.args).toEqual([
-      "mcp",
       "serve",
       "--config",
       RATEL_USER,

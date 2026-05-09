@@ -95,7 +95,7 @@ export interface AuthProbeResult {
  * One-shot OAuth + register pass for an HTTP/SSE entry. Wraps `defaultAuthStep`
  * so `ratel mcp add` can persist tokens and capture the upstream's instructions
  * at add-time. The handle returned by the underlying step is closed before we
- * return — the catalog we register into is discarded; `ratel mcp serve` will
+ * return — the catalog we register into is discarded; `ratel serve` will
  * re-register against fresh transports using the just-persisted tokens.
  */
 export async function authProbeEntry(

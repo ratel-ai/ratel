@@ -30,7 +30,6 @@ describe("parseArgs — group/verb routing", () => {
   });
 
   it.each([
-    "serve",
     "add",
     "remove",
     "list",
@@ -42,6 +41,12 @@ describe("parseArgs — group/verb routing", () => {
     const r = parseArgs(["mcp", verb]);
     expect(r.group).toBe("mcp");
     expect(r.verb).toBe(verb);
+  });
+
+  it("recognizes the top-level serve group", () => {
+    const r = parseArgs(["serve"]);
+    expect(r.group).toBe("serve");
+    expect(r.verb).toBeUndefined();
   });
 
   it.each(["list", "undo"] as const)("recognizes backup %s", (verb) => {
@@ -67,39 +72,38 @@ describe("parseArgs — group/verb routing", () => {
   });
 
   it("does not consume --help in the middle as a group/verb", () => {
-    const r = parseArgs(["mcp", "serve", "--help"]);
-    expect(r.group).toBe("mcp");
-    expect(r.verb).toBe("serve");
+    const r = parseArgs(["serve", "--help"]);
+    expect(r.group).toBe("serve");
     expect(r.flags.help).toBe(true);
   });
 });
 
 describe("parseArgs — flags and config paths", () => {
-  it("collects repeated --config flags in order under mcp serve", () => {
-    const r = parseArgs(["mcp", "serve", "--config", "a.json", "--config", "b.json"]);
+  it("collects repeated --config flags in order under serve", () => {
+    const r = parseArgs(["serve", "--config", "a.json", "--config", "b.json"]);
     expect(r.configPaths).toEqual(["a.json", "b.json"]);
   });
 
-  it("accepts --config=value long form under mcp serve", () => {
-    const r = parseArgs(["mcp", "serve", "--config=a.json", "--config=b.json"]);
+  it("accepts --config=value long form under serve", () => {
+    const r = parseArgs(["serve", "--config=a.json", "--config=b.json"]);
     expect(r.configPaths).toEqual(["a.json", "b.json"]);
   });
 
-  it("treats a positional under mcp serve as a config path", () => {
-    const r = parseArgs(["mcp", "serve", "base.json", "--config", "extra.json"]);
+  it("treats a positional under serve as a config path", () => {
+    const r = parseArgs(["serve", "base.json", "--config", "extra.json"]);
     expect(r.configPaths).toEqual(["base.json", "extra.json"]);
   });
 
-  it("does not treat positionals as config paths under non-serve verbs", () => {
+  it("does not treat positionals as config paths under non-serve commands", () => {
     const r = parseArgs(["mcp", "add", "stripe", "https://example.com"]);
     expect(r.configPaths).toEqual([]);
     expect(r.rest).toEqual(["stripe", "https://example.com"]);
   });
 
   it("throws ArgError when --config has no value", () => {
-    expect(() => parseArgs(["mcp", "serve", "--config"])).toThrow(ArgError);
-    expect(() => parseArgs(["mcp", "serve", "--config", "--other"])).toThrow(ArgError);
-    expect(() => parseArgs(["mcp", "serve", "--config="])).toThrow(ArgError);
+    expect(() => parseArgs(["serve", "--config"])).toThrow(ArgError);
+    expect(() => parseArgs(["serve", "--config", "--other"])).toThrow(ArgError);
+    expect(() => parseArgs(["serve", "--config="])).toThrow(ArgError);
   });
 
   it("collects --key value flag pairs into flags", () => {
