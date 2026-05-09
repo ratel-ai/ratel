@@ -1,20 +1,12 @@
-export type Group = "mcp" | "backup" | "help";
+export type Group = "mcp" | "backup" | "inspect" | "serve" | "help";
 
-export type McpVerb =
-  | "serve"
-  | "add"
-  | "remove"
-  | "list"
-  | "get"
-  | "edit"
-  | "import"
-  | "link"
-  | "auth";
+export type McpVerb = "add" | "remove" | "list" | "get" | "edit" | "import" | "link" | "auth";
 
 export type BackupVerb = "list" | "undo";
 
+export type InspectVerb = "ls";
+
 const MCP_VERBS: ReadonlySet<string> = new Set([
-  "serve",
   "add",
   "remove",
   "list",
@@ -26,6 +18,8 @@ const MCP_VERBS: ReadonlySet<string> = new Set([
 ]);
 
 const BACKUP_VERBS: ReadonlySet<string> = new Set(["list", "undo"]);
+
+const INSPECT_VERBS: ReadonlySet<string> = new Set(["ls"]);
 
 const SHORT_FLAG_ALIASES: Record<string, string> = {
   e: "env",
@@ -107,6 +101,20 @@ export function parseArgs(argv: string[]): ParsedArgs {
       verb = candidate;
       i = 2;
     }
+  } else if (first === "inspect") {
+    group = "inspect";
+    i = 1;
+    if (argv.length > 1 && !argv[1].startsWith("-")) {
+      const candidate = argv[1];
+      if (!INSPECT_VERBS.has(candidate)) {
+        throw new ArgError(`unknown inspect verb: ${candidate}`);
+      }
+      verb = candidate;
+      i = 2;
+    }
+  } else if (first === "serve") {
+    group = "serve";
+    i = 1;
   } else {
     throw new ArgError(`unknown command: ${first}`);
   }
@@ -188,7 +196,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
-    if (group === "mcp" && verb === "serve") {
+    if (group === "serve") {
       configPaths.push(tok);
     } else {
       rest.push(tok);

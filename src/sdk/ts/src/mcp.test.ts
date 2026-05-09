@@ -205,6 +205,69 @@ describe("registerMcpServer", () => {
     await handle.close();
   });
 
+  it("emits upstream_register on connect and upstream_invoke on each call", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    const handle = await registerMcpServer(catalog, {
+      name: "demo",
+      transport: fake.clientTransport,
+    });
+    catalog.drainTraceEvents().filter((e) => (e as { type: string }).type === "upstream_register");
+
+    await catalog.invoke("demo__read_file", { path: "/etc/hosts" });
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const inv = events.find((e) => e.type === "upstream_invoke");
+    expect(inv?.server).toBe("demo");
+    expect(inv?.tool_id).toBe("demo__read_file");
+    expect(typeof inv?.took_ms).toBe("number");
+
+    await handle.close();
+  });
+
+  it("emits upstream_register at connect time with the tool count and a transport label", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    const handle = await registerMcpServer(catalog, {
+      name: "demo",
+      transport: fake.clientTransport,
+    });
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const reg = events.find((e) => e.type === "upstream_register");
+    expect(reg?.server).toBe("demo");
+    expect(reg?.tool_count).toBe(1);
+    expect(typeof reg?.transport).toBe("string");
+
+    await handle.close();
+  });
+
+  it("emits upstream_error and re-throws when the upstream tool handler throws", async () => {
+    const failing = await startFakeMcpServer([
+      {
+        name: "boom",
+        description: "always fails",
+        handler: () => {
+          throw new Error("kaboom");
+        },
+      },
+    ]);
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    const handle = await registerMcpServer(catalog, {
+      name: "demo",
+      transport: failing.clientTransport,
+    });
+    catalog.drainTraceEvents();
+
+    await expect(catalog.invoke("demo__boom", {})).rejects.toThrow();
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const err = events.find((e) => e.type === "upstream_error");
+    expect(err?.server).toBe("demo");
+    expect(err?.tool_id).toBe("demo__boom");
+
+    await handle.close();
+    await failing.server.close();
+  });
+
   it("invokes the upstream tool via tools/call and returns its structured payload", async () => {
     const catalog = new ToolCatalog();
     const handle = await registerMcpServer(catalog, {

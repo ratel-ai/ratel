@@ -123,7 +123,17 @@ export function searchToolsTool(
     },
     execute: async (input) => {
       const { query, topK } = input as { query: string; topK?: number };
-      const hits = catalog.search(query, topK ?? 5);
+      const k = topK ?? 5;
+      const startedAt = Date.now();
+      const hits = catalog.search(query, k, "agent");
+      catalog.recordEvent({
+        type: "gateway_search",
+        query,
+        origin: "agent",
+        top_k: k,
+        hits: hits.length,
+        took_ms: Date.now() - startedAt,
+      });
       const order: string[] = [];
       const groups = new Map<string, SearchToolsGroup>();
       for (const h of hits) {
@@ -197,6 +207,11 @@ export function invokeToolTool(
       const inputObj = input as Record<string, unknown>;
       const toolId = inputObj.toolId as string;
       if (!catalog.has(toolId)) {
+        catalog.recordEvent({
+          type: "gateway_error",
+          tool_id: toolId,
+          error: "unknown_tool_id",
+        });
         return {
           error: `unknown toolId: ${toolId}. Use search_tools to discover available ids.`,
         };
@@ -206,14 +221,26 @@ export function invokeToolTool(
         nested && typeof nested === "object" && !Array.isArray(nested)
           ? (nested as Record<string, unknown>)
           : Object.fromEntries(Object.entries(inputObj).filter(([k]) => k !== "toolId"));
+      const startedAt = Date.now();
       try {
-        return await catalog.invoke(toolId, args);
+        const result = await catalog.invoke(toolId, args);
+        catalog.recordEvent({
+          type: "gateway_invoke",
+          tool_id: toolId,
+          took_ms: Date.now() - startedAt,
+        });
+        return result;
       } catch (err) {
         if (isUnauthorizedError(err)) {
           const upstream = upstreamFromToolId(toolId);
           if (upstream && opts.onUnauthorized) {
             await opts.onUnauthorized(upstream);
           }
+          catalog.recordEvent({
+            type: "gateway_error",
+            tool_id: toolId,
+            error: "needs_auth",
+          });
           const payload: { error: string; upstream?: string; hint: string } = {
             error: "needs_auth",
             hint: `call the auth tool to re-authorize${upstream ? ` ${upstream}` : ""}`,
@@ -221,6 +248,11 @@ export function invokeToolTool(
           if (upstream) payload.upstream = upstream;
           return payload;
         }
+        catalog.recordEvent({
+          type: "gateway_error",
+          tool_id: toolId,
+          error: (err as Error).message ?? String(err),
+        });
         return { error: `tool ${toolId} threw: ${(err as Error).message}` };
       }
     },

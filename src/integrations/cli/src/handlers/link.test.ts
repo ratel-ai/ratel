@@ -100,7 +100,7 @@ describe("runLink", () => {
     expect(claude.mcpServers.ratel).toEqual({
       type: "stdio",
       command: "ratel",
-      args: ["mcp", "serve", "--config", RATEL_USER],
+      args: ["serve", "--config", RATEL_USER],
     });
     // The covered entry was removed from Claude.
     expect(claude.mcpServers.fs).toBeUndefined();
@@ -207,7 +207,6 @@ describe("runLink", () => {
     await runLink(ctx, { bin: BIN, yes: true });
     const claudeProj = JSON.parse(fs.files.get(PROJECT_MCP) as string);
     expect(claudeProj.mcpServers.ratel.args).toEqual([
-      "mcp",
       "serve",
       "--config",
       RATEL_USER,

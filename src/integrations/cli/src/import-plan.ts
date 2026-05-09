@@ -268,7 +268,7 @@ function makeRatelEntry(bin: ResolvedBin, configArgs: string[]): ServerEntry {
   return {
     type: "stdio",
     command: bin.command,
-    args: [...bin.args, "mcp", "serve", ...configArgs],
+    args: [...bin.args, "serve", ...configArgs],
   };
 }
 

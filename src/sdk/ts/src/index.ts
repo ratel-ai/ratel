@@ -1,6 +1,12 @@
 export type { SearchHit, Tool } from "../native/index.cjs";
 export { ToolRegistry } from "../native/index.cjs";
-export type { ExecutableTool, Executor } from "./catalog.js";
+export type {
+  ExecutableTool,
+  Executor,
+  SearchOrigin,
+  ToolCatalogOptions,
+  TraceSinkConfig,
+} from "./catalog.js";
 export { ToolCatalog } from "./catalog.js";
 export type {
   SearchToolHit,

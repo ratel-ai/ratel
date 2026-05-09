@@ -18,7 +18,7 @@ Library function that takes a `ToolCatalog` plus a caller-supplied MCP `Transpor
 ## `cli/` — `@ratel-ai/cli`
 
 The `ratel` binary. Verbs are grouped:
-- `ratel mcp serve` runs the gateway over stdio against one or more Ratel configs.
+- `ratel serve` runs the gateway over stdio against one or more Ratel configs.
 - `ratel mcp add` mirrors `claude mcp add` — copy-pasted invocations behave identically on both sides.
 - `ratel mcp import` / `link` migrate Claude Code's existing MCP setup into Ratel's three-scope (user/project/local) hierarchy.
 

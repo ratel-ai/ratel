@@ -138,6 +138,22 @@ gateway.setListChangedNotifier(async () => {
 
 The CLI surface (`ratel mcp auth`, the OAuth columns in `ratel mcp list`) lives in [`@ratel-ai/cli`](../cli/README.md).
 
+## Telemetry
+
+Pass `trace` to `buildGatewayFromConfig` to forward it to the underlying `ToolCatalog` ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). The catalog emits search / invoke / gateway / upstream events; this library adds `auth_refresh`, `auth_needs`, `auth_flow_start`, and `auth_flow_end` around the OAuth boot and interactive paths.
+
+```ts
+const gateway = await buildGatewayFromConfig(config, {
+  trace: {
+    kind: "jsonl",
+    sessionId: "session-1",
+    path: "/tmp/ratel.jsonl",
+  },
+});
+```
+
+Default is no-op — opt in to capture. The CLI's `ratel serve` defaults to a JSONL sink under `~/.ratel/telemetry/<project-slug>/` (the slug mirrors Claude Code's `~/.claude/projects/` convention); see [`@ratel-ai/cli`](../cli/README.md) for the flags.
+
 ## Result wrapping
 
 Every `tools/call` response carries the gateway's return value as a JSON-serialized text block; plain-object returns are also surfaced as `structuredContent`:

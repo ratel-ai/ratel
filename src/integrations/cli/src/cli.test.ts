@@ -20,13 +20,13 @@ async function fakeUpstream() {
   return { server, clientTransport };
 }
 
-describe("runCli — mcp serve", () => {
+describe("runCli — serve", () => {
   it("reads the config, builds the gateway, and exposes search_tools + invoke_tool over the given downstream transport", async () => {
     const upstream = await fakeUpstream();
     const [downstreamServerTransport, downstreamClientTransport] =
       InMemoryTransport.createLinkedPair();
 
-    const { shutdown } = await runCli(["mcp", "serve", "/fake/config.json"], {
+    const { shutdown } = await runCli(["serve", "/fake/config.json"], {
       readConfig: async () => ({
         mcpServers: { up: { type: "stdio", command: "noop" } },
       }),
@@ -63,7 +63,7 @@ describe("runCli — mcp serve", () => {
     const [downstreamServerTransport, downstreamClientTransport] =
       InMemoryTransport.createLinkedPair();
 
-    const { shutdown } = await runCli(["mcp", "serve", "/fake/config.json"], {
+    const { shutdown } = await runCli(["serve", "/fake/config.json"], {
       readConfig: async () => ({
         mcpServers: {
           up: { type: "stdio", command: "noop", description: "ping server" },
@@ -87,12 +87,12 @@ describe("runCli — mcp serve", () => {
   });
 
   it("rejects when no config path is provided, with a usage message", async () => {
-    await expect(runCli(["mcp", "serve"], { logger: () => {} })).rejects.toThrow(/usage/i);
+    await expect(runCli(["serve"], { logger: () => {} })).rejects.toThrow(/usage/i);
   });
 
   it("propagates a clear error when the config file cannot be read", async () => {
     await expect(
-      runCli(["mcp", "serve", "/missing.json"], {
+      runCli(["serve", "/missing.json"], {
         readConfig: async () => {
           throw new Error("ENOENT");
         },
@@ -103,7 +103,7 @@ describe("runCli — mcp serve", () => {
 
   it("propagates parseConfig errors with the field path when the JSON is malformed", async () => {
     await expect(
-      runCli(["mcp", "serve", "/bad.json"], {
+      runCli(["serve", "/bad.json"], {
         readConfig: async () => ({ mcpServers: { fs: { type: "stdio" } } }),
         logger: () => {},
       }),
@@ -115,7 +115,7 @@ describe("runCli — mcp serve", () => {
     const [serverTransport] = InMemoryTransport.createLinkedPair();
     const logs: string[] = [];
 
-    const { shutdown } = await runCli(["mcp", "serve", "/x"], {
+    const { shutdown } = await runCli(["serve", "/x"], {
       readConfig: async () => ({
         mcpServers: { up: { type: "stdio", command: "noop" } },
       }),
@@ -135,21 +135,18 @@ describe("runCli — mcp serve", () => {
     const [serverTransport] = InMemoryTransport.createLinkedPair();
     const reads: string[] = [];
 
-    const { shutdown } = await runCli(
-      ["mcp", "serve", "--config", "/a.json", "--config", "/b.json"],
-      {
-        readConfig: async (path) => {
-          reads.push(path);
-          if (path === "/a.json") {
-            return { mcpServers: { up: { type: "stdio", command: "from-a" } } };
-          }
-          return { mcpServers: { up: { type: "stdio", command: "from-b" } } };
-        },
-        transportFactory: () => upstream.clientTransport,
-        serverTransport,
-        logger: () => {},
+    const { shutdown } = await runCli(["serve", "--config", "/a.json", "--config", "/b.json"], {
+      readConfig: async (path) => {
+        reads.push(path);
+        if (path === "/a.json") {
+          return { mcpServers: { up: { type: "stdio", command: "from-a" } } };
+        }
+        return { mcpServers: { up: { type: "stdio", command: "from-b" } } };
       },
-    );
+      transportFactory: () => upstream.clientTransport,
+      serverTransport,
+      logger: () => {},
+    });
 
     expect(reads).toEqual(["/a.json", "/b.json"]);
 
@@ -171,7 +168,6 @@ describe("runCli — help and routing", () => {
     const logs: string[] = [];
     await runCli(["mcp"], { logger: (m) => logs.push(m) });
     const out = logs.join("\n");
-    expect(out).toMatch(/serve/);
     expect(out).toMatch(/add/);
     expect(out).toMatch(/import/);
   });

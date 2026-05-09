@@ -391,6 +391,65 @@ describe("buildGatewayFromConfig", () => {
       await ok.server.close();
     });
 
+    it("emits auth_refresh{ok:true} after a successful boot-time refresh", async () => {
+      const ok = await startUpstream([{ name: "ping", description: "Ping." }]);
+      await seedStoredTokens("locked", Date.now() - 5_000);
+
+      const handle = await buildGatewayFromConfig(
+        {
+          mcpServers: {
+            locked: { type: "http", url: "https://locked.example/mcp" },
+          },
+        },
+        {
+          transportFactory: () => ok.clientTransport,
+          oauthStorePath: storePath,
+          refreshTokens: async () => undefined,
+          trace: { kind: "memory", sessionId: "t" },
+        },
+      );
+
+      const events = handle.catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+      const refreshed = events.find((e) => e.type === "auth_refresh");
+      expect(refreshed?.upstream).toBe("locked");
+      expect(refreshed?.ok).toBe(true);
+
+      await handle.close();
+      await ok.server.close();
+    });
+
+    it("emits auth_refresh{ok:false} and auth_needs when refresh fails", async () => {
+      const ok = await startUpstream([{ name: "ping", description: "Ping." }]);
+      await seedStoredTokens("locked", Date.now() - 5_000);
+
+      const handle = await buildGatewayFromConfig(
+        {
+          mcpServers: {
+            locked: { type: "http", url: "https://locked.example/mcp" },
+          },
+        },
+        {
+          transportFactory: () => ok.clientTransport,
+          oauthStorePath: storePath,
+          refreshTokens: async () => {
+            throw new RefreshFailedError(new Error("invalid_grant"));
+          },
+          trace: { kind: "memory", sessionId: "t" },
+        },
+      );
+
+      const events = handle.catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: "auth_refresh", upstream: "locked", ok: false }),
+      );
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: "auth_needs", upstream: "locked" }),
+      );
+
+      await handle.close();
+      await ok.server.close();
+    });
+
     it("skips proactive refresh for HTTP upstreams without stored tokens", async () => {
       const ok = await startUpstream([{ name: "ping", description: "Ping." }]);
       const refreshTokens = vi.fn();

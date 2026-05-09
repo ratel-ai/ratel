@@ -111,16 +111,20 @@ async function runOne(
 ): Promise<AuthFlowResult> {
   const { catalog, upstreams, handles, step, onListChanged, logger } = deps;
 
+  catalog.recordEvent({ type: "auth_flow_start", upstream: name });
   let result: AuthStepResult;
   try {
     result = await step(name, entry, { catalog, logger });
   } catch (err) {
+    catalog.recordEvent({ type: "auth_flow_end", upstream: name, ok: false });
     return { name, status: "failed", reason: (err as Error).message };
   }
 
   if (result.status !== "authorized") {
+    catalog.recordEvent({ type: "auth_flow_end", upstream: name, ok: false });
     return { name, status: result.status, reason: result.reason };
   }
+  catalog.recordEvent({ type: "auth_flow_end", upstream: name, ok: true });
 
   const previous = handles.get(name);
   if (previous) {

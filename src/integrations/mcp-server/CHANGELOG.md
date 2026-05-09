@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `buildGatewayFromConfig` accepts `trace` config and threads it through the catalog ([ADR-0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). The boot path emits `auth_refresh{ok}` for every refresh attempt and `auth_needs` whenever an upstream is flagged. `runAuthFlow` brackets each per-upstream step with `auth_flow_start` / `auth_flow_end{ok}`. `createMcpServer`'s `onUnauthorized` handler emits `auth_needs` when `invoke_tool` surfaces a 401 mid-session.
+
 ## [0.1.5-rc.3] - 2026-05-08
 
 ### Added

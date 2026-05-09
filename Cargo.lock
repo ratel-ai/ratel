@@ -978,7 +978,9 @@ name = "ratel-ai-core"
 version = "0.1.5-rc.3"
 dependencies = [
  "bm25",
+ "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

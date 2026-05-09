@@ -88,7 +88,7 @@ describe("buildImportPlan", () => {
       ratel: {
         type: "stdio",
         command: "ratel",
-        args: ["mcp", "serve", "--config", RATEL_USER],
+        args: ["serve", "--config", RATEL_USER],
       },
     });
   });
@@ -109,7 +109,6 @@ describe("buildImportPlan", () => {
     ]);
     const claudeProject = parseAfter(plan, PROJECT_MCP);
     expect(claudeProject.mcpServers.ratel.args).toEqual([
-      "mcp",
       "serve",
       "--config",
       RATEL_USER,
@@ -140,9 +139,8 @@ describe("buildImportPlan", () => {
     expect(homeWrites).toHaveLength(1);
 
     const merged = parseAfter(plan, HOME_CLAUDE);
-    expect(merged.mcpServers.ratel.args).toEqual(["mcp", "serve", "--config", RATEL_USER]);
+    expect(merged.mcpServers.ratel.args).toEqual(["serve", "--config", RATEL_USER]);
     expect(merged.projects["/r"].mcpServers.ratel.args).toEqual([
-      "mcp",
       "serve",
       "--config",
       RATEL_USER,
@@ -197,7 +195,7 @@ describe("buildImportPlan", () => {
     const ratelStub: ServerEntry = {
       type: "stdio",
       command: "ratel",
-      args: ["mcp", "serve", "--config", RATEL_USER],
+      args: ["serve", "--config", RATEL_USER],
     };
     const plan = buildImportPlan(
       emptyInputs({

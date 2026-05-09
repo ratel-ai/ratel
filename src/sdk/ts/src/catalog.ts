@@ -7,13 +7,27 @@ export interface ExecutableTool extends Tool {
   execute: Executor;
 }
 
+export type TraceSinkConfig =
+  | { kind: "noop" }
+  | { kind: "memory"; sessionId: string }
+  | { kind: "jsonl"; sessionId: string; path: string };
+
+export type SearchOrigin = "direct" | "agent";
+
+export interface ToolCatalogOptions {
+  trace?: TraceSinkConfig;
+}
+
 export class ToolCatalog {
   private readonly registry: ToolRegistry;
   private readonly executors = new Map<string, Executor>();
   private readonly tools = new Map<string, Tool>();
 
-  constructor() {
+  constructor(options: ToolCatalogOptions = {}) {
     this.registry = new ToolRegistry();
+    if (options.trace) {
+      this.registry.setTraceSink(options.trace);
+    }
   }
 
   register(tool: ExecutableTool): void {
@@ -23,8 +37,8 @@ export class ToolCatalog {
     this.tools.set(tool.id, metadata);
   }
 
-  search(query: string, topK: number): SearchHit[] {
-    return this.registry.search(query, topK);
+  search(query: string, topK: number, origin: SearchOrigin = "direct"): SearchHit[] {
+    return this.registry.searchWithOrigin(query, topK, origin);
   }
 
   has(toolId: string): boolean {
@@ -42,11 +56,54 @@ export class ToolCatalog {
     return { ...tool, execute };
   }
 
+  recordEvent(event: object): void {
+    this.registry.recordEvent(event);
+  }
+
+  drainTraceEvents(): unknown[] {
+    return this.registry.drainTraceEvents();
+  }
+
   async invoke(toolId: string, args: Record<string, unknown>): Promise<unknown> {
     const fn = this.executors.get(toolId);
     if (!fn) {
       throw new Error(`unknown toolId: ${toolId}`);
     }
-    return await fn(args);
+    this.registry.recordEvent({
+      type: "invoke_start",
+      tool_id: toolId,
+      args_size_bytes: argsSizeBytes(args),
+    });
+    const started = Date.now();
+    try {
+      const result = await fn(args);
+      this.registry.recordEvent({
+        type: "invoke_end",
+        tool_id: toolId,
+        took_ms: Date.now() - started,
+      });
+      return result;
+    } catch (err) {
+      this.registry.recordEvent({
+        type: "invoke_error",
+        tool_id: toolId,
+        took_ms: Date.now() - started,
+        error: errorMessage(err),
+      });
+      throw err;
+    }
   }
+}
+
+function argsSizeBytes(args: unknown): number {
+  try {
+    return JSON.stringify(args).length;
+  } catch {
+    return 0;
+  }
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
