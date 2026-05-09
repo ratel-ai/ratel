@@ -975,7 +975,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-ai-core"
-version = "0.1.5-rc.3"
+version = "0.1.5-rc.4"
 dependencies = [
  "bm25",
  "serde",
@@ -985,7 +985,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-benchmark-retrieval"
-version = "0.1.5-rc.3"
+version = "0.1.5-rc.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -1001,7 +1001,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-sdk-ts-native"
-version = "0.1.5-rc.3"
+version = "0.1.5-rc.4"
 dependencies = [
  "napi",
  "napi-build",

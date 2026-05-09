@@ -6,14 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.5-rc.4] - 2026-05-09
+
 ### Changed
 
 - **BREAKING**: `ratel mcp serve` is now `ratel serve`. The `mcp` group manages configuration; serving the gateway is its own top-level command (room for future `--as-<protocol>` modes). After upgrading, re-run `ratel mcp import` (or `ratel mcp link`) so Claude Code's config points at `["serve", ...]` instead of `["mcp", "serve", ...]`.
 
 ### Added
 
-- `ratel serve` writes telemetry to `~/.ratel/telemetry/<project-slug>/<ISO-ts>-<short>.jsonl` by default (one JSON line per event, mode `0600` on Unix). Opt out with `--telemetry off` (or `RATEL_TELEMETRY=off`); override the path with `--telemetry-file <path>`; override the directory with `RATEL_TELEMETRY_DIR`.
-- New `ratel inspect` verb — summarizes the most recent telemetry session into ASCII tables (session totals, top tools by hit count, gateway-vs-direct invoke split, top errors). Flags: `--from <FILE>`, `--last <N>`. `ratel inspect ls` lists files newest-first.
+- `ratel serve` writes telemetry to `~/.ratel/telemetry/<project-slug>/<ISO-ts>-<short>.jsonl` by default (one JSON line per event, mode `0600` on Unix). Opt out with `--telemetry off` (or `RATEL_TELEMETRY=off`); override the path with `--telemetry-file <path>`; override the directory with `RATEL_TELEMETRY_DIR`. The slug mirrors Claude Code's `~/.claude/projects/` convention (every `/` and `.` in the absolute path becomes `-`).
+- New `ratel inspect` verb — summarizes the most recent telemetry session into ASCII tables (session totals, top tools by hit count, gateway-vs-direct invoke split, top errors). Flags: `--from <FILE>`, `--last <N>`, `--project <ABS-PATH>` (target another project's bucket), `--all` (scan every bucket). `ratel inspect ls` lists files newest-first.
 
 ## [0.1.5-rc.3] - 2026-05-08
 
