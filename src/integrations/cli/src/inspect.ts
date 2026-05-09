@@ -14,26 +14,64 @@ export interface InspectOptions {
   from?: string;
   /** Restrict the summary to the most recent N events. */
   last?: number;
-  /** Override telemetry directory. Default `$RATEL_TELEMETRY_DIR` or `~/.ratel/telemetry`. */
+  /** Override the telemetry root. Default `$RATEL_TELEMETRY_DIR` or `~/.ratel/telemetry`. */
   dir?: string;
+  /** Absolute project path; selects the bucket. Defaults to `process.cwd()`. */
+  project?: string;
+  /** Scan every bucket under the root, picking the global newest by mtime. */
+  all?: boolean;
 }
 
+export interface ListOptions {
+  project?: string;
+  all?: boolean;
+}
+
+/** Telemetry root. Per-project buckets nest under this. */
 export function defaultTelemetryDir(): string {
   return process.env.RATEL_TELEMETRY_DIR ?? join(homedir(), ".ratel", "telemetry");
 }
 
-export async function listSessions(dir: string = defaultTelemetryDir()): Promise<string> {
+/** Mirror of Claude Code's `~/.claude/projects/<slug>/` rule: every `/` and `.` becomes `-`. */
+export function slugifyProjectPath(absPath: string): string {
+  return absPath.replace(/[/.]/g, "-");
+}
+
+export function projectBucketDir(root: string, absPath: string): string {
+  return join(root, slugifyProjectPath(absPath));
+}
+
+export async function listSessions(
+  dir: string = defaultTelemetryDir(),
+  opts: ListOptions = {},
+): Promise<string> {
+  if (opts.all) {
+    const rows = await collectAcrossBuckets(dir);
+    if (rows.length === 0) return `no telemetry under ${dir}`;
+    rows.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+    const header = `${pad("project", 36)}  ${pad("file", 56)}  ${pad("size", 10, "right")}  modified`;
+    const body = rows
+      .map(
+        (r) =>
+          `${pad(r.slug, 36)}  ${pad(r.name, 56)}  ${pad(formatSize(r.size), 10, "right")}  ${r.mtime.toISOString()}`,
+      )
+      .join("\n");
+    return `${header}\n${body}`;
+  }
+
+  const project = opts.project ?? process.cwd();
+  const bucket = projectBucketDir(dir, project);
   let entries: string[];
   try {
-    entries = await readdir(dir);
+    entries = await readdir(bucket);
   } catch {
-    return `no telemetry under ${dir}`;
+    return `no telemetry for this project (${bucket})`;
   }
   const files = entries.filter((e) => e.endsWith(".jsonl"));
-  if (files.length === 0) return `no telemetry under ${dir}`;
+  if (files.length === 0) return `no telemetry for this project (${bucket})`;
   const rows: Array<{ name: string; size: number; mtime: Date }> = [];
   for (const f of files) {
-    const s = await stat(join(dir, f));
+    const s = await stat(join(bucket, f));
     rows.push({ name: f, size: s.size, mtime: s.mtime });
   }
   rows.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
@@ -49,8 +87,22 @@ export async function listSessions(dir: string = defaultTelemetryDir()): Promise
 
 export async function summarizeSession(opts: InspectOptions = {}): Promise<string> {
   const dir = opts.dir ?? defaultTelemetryDir();
-  const file = opts.from ?? (await mostRecent(dir));
-  if (!file) return `no telemetry under ${dir}`;
+
+  let file: string | undefined;
+  let emptyMessage: string;
+  if (opts.from) {
+    file = opts.from;
+    emptyMessage = `${opts.from}: no events`;
+  } else if (opts.all) {
+    file = await mostRecentAcrossBuckets(dir);
+    emptyMessage = `no telemetry under ${dir}`;
+  } else {
+    const project = opts.project ?? process.cwd();
+    const bucket = projectBucketDir(dir, project);
+    file = await mostRecent(bucket);
+    emptyMessage = `no telemetry for this project (${bucket})`;
+  }
+  if (!file) return emptyMessage;
 
   const events = await readEvents(file, opts.last);
   if (events.length === 0) return `${file}: no events`;
@@ -85,6 +137,60 @@ async function mostRecent(dir: string): Promise<string | undefined> {
   }
   rows.sort((a, b) => b.mtime - a.mtime);
   return rows[0].path;
+}
+
+async function mostRecentAcrossBuckets(root: string): Promise<string | undefined> {
+  const rows = await collectAcrossBuckets(root);
+  if (rows.length === 0) return undefined;
+  rows.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  return rows[0].path;
+}
+
+interface BucketRow {
+  slug: string;
+  name: string;
+  path: string;
+  size: number;
+  mtime: Date;
+}
+
+async function collectAcrossBuckets(root: string): Promise<BucketRow[]> {
+  let buckets: string[];
+  try {
+    buckets = await readdir(root);
+  } catch {
+    return [];
+  }
+  const rows: BucketRow[] = [];
+  for (const slug of buckets) {
+    const bucket = join(root, slug);
+    let bucketStat: Awaited<ReturnType<typeof stat>>;
+    try {
+      bucketStat = await stat(bucket);
+    } catch {
+      continue;
+    }
+    if (!bucketStat.isDirectory()) continue;
+    let entries: string[];
+    try {
+      entries = await readdir(bucket);
+    } catch {
+      continue;
+    }
+    for (const name of entries) {
+      if (!name.endsWith(".jsonl")) continue;
+      const filePath = join(bucket, name);
+      const fileStat = await stat(filePath);
+      rows.push({
+        slug,
+        name,
+        path: filePath,
+        size: fileStat.size,
+        mtime: fileStat.mtime,
+      });
+    }
+  }
+  return rows;
 }
 
 async function readEvents(file: string, last?: number): Promise<BaseEvent[]> {

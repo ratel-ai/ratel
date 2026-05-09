@@ -27,7 +27,12 @@ import { runRemove } from "./handlers/remove.js";
 import type { HandlerCtx } from "./handlers/types.js";
 import { runUndo } from "./handlers/undo.js";
 import { findProjectRoot, type HierarchyEnv } from "./hierarchy.js";
-import { defaultTelemetryDir, listSessions, summarizeSession } from "./inspect.js";
+import {
+  defaultTelemetryDir,
+  listSessions,
+  projectBucketDir,
+  summarizeSession,
+} from "./inspect.js";
 import { type JsonFs, nodeFs } from "./io.js";
 import { type PromptAdapter, silentPromptAdapter } from "./prompts.js";
 
@@ -78,15 +83,19 @@ Verbs:
 
 const INSPECT_USAGE = `usage: ratel inspect [verb] [args...]
 
-Default (no verb) summarizes the most recent telemetry file under
-\`$RATEL_TELEMETRY_DIR\` (default \`~/.ratel/telemetry/\`).
+Default (no verb) summarizes the most recent telemetry file in the bucket for
+the current cwd, under \`$RATEL_TELEMETRY_DIR/<project-slug>/\` (default root
+\`~/.ratel/telemetry/\`). The slug mirrors Claude Code's \`~/.claude/projects/\`
+convention: every \`/\` and \`.\` in the absolute path becomes \`-\`.
 
 Flags:
-  --from <FILE>   summarize a specific JSONL file
-  --last <N>      restrict the summary to the last N events
+  --from <FILE>          summarize a specific JSONL file
+  --last <N>             restrict the summary to the last N events
+  --project <ABS-PATH>   target another project's bucket explicitly
+  --all                  scan every bucket and pick the global newest
 
 Verbs:
-  ls   list telemetry files (most recent first)`;
+  ls   list telemetry files in the cwd's bucket (most recent first; use --all to enumerate every bucket)`;
 
 export async function runCli(argv: string[], options: RunCliOptions = {}): Promise<RunCliResult> {
   const log = options.logger ?? ((m) => console.error(m));
@@ -232,11 +241,17 @@ async function runInspect(parsed: ParsedArgs, log: (m: string) => void): Promise
     log(INSPECT_USAGE);
     return {};
   }
+  const all = parsed.flags.all === true;
+  const projectFlag = parsed.flags.project;
+  const project = typeof projectFlag === "string" ? projectFlag : undefined;
   if (parsed.verb === "ls") {
-    log(await listSessions(defaultTelemetryDir()));
+    const listOpts: { project?: string; all?: boolean } = {};
+    if (all) listOpts.all = true;
+    if (project) listOpts.project = project;
+    log(await listSessions(defaultTelemetryDir(), listOpts));
     return {};
   }
-  const opts: { from?: string; last?: number } = {};
+  const opts: { from?: string; last?: number; project?: string; all?: boolean } = {};
   const from = parsed.flags.from;
   if (typeof from === "string") opts.from = from;
   const last = parsed.flags.last;
@@ -244,6 +259,8 @@ async function runInspect(parsed: ParsedArgs, log: (m: string) => void): Promise
     const n = Number.parseInt(last, 10);
     if (Number.isFinite(n)) opts.last = n;
   }
+  if (all) opts.all = true;
+  if (project) opts.project = project;
   log(await summarizeSession(opts));
   return {};
 }
@@ -262,14 +279,14 @@ async function resolveTraceSink(
   if (typeof flagFile === "string" && flagFile.length > 0) {
     return { kind: "jsonl", sessionId, path: flagFile };
   }
-  const dir = defaultTelemetryDir();
+  const bucket = projectBucketDir(defaultTelemetryDir(), process.cwd());
   try {
-    await mkdir(dir, { recursive: true });
+    await mkdir(bucket, { recursive: true });
   } catch (err) {
-    log(`[ratel] could not create telemetry dir ${dir}: ${(err as Error).message}; disabling`);
+    log(`[ratel] could not create telemetry dir ${bucket}: ${(err as Error).message}; disabling`);
     return { kind: "noop" };
   }
-  const path = join(dir, `${sessionId}.jsonl`);
+  const path = join(bucket, `${sessionId}.jsonl`);
   return { kind: "jsonl", sessionId, path };
 }
 

@@ -152,7 +152,7 @@ const gateway = await buildGatewayFromConfig(config, {
 });
 ```
 
-Default is no-op — opt in to capture. The CLI's `ratel mcp serve` defaults to a JSONL sink under `~/.ratel/telemetry/`; see [`@ratel-ai/cli`](../cli/README.md) for the flags.
+Default is no-op — opt in to capture. The CLI's `ratel mcp serve` defaults to a JSONL sink under `~/.ratel/telemetry/<project-slug>/` (the slug mirrors Claude Code's `~/.claude/projects/` convention); see [`@ratel-ai/cli`](../cli/README.md) for the flags.
 
 ## Result wrapping
 

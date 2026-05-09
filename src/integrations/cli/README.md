@@ -62,10 +62,12 @@ ratel inspect                # summarize the most recent telemetry session
 
 | Verb | Purpose |
 |---|---|
-| `inspect` (no verb) | Summarize the most recent telemetry file under `$RATEL_TELEMETRY_DIR` (default `~/.ratel/telemetry/`) into ASCII tables (session totals, top tools by hit count, gateway-vs-direct invoke split, top errors). |
-| `inspect ls` | List telemetry files newest-first with size and modified time. |
+| `inspect` (no verb) | Summarize the most recent telemetry file in the **bucket for the current cwd**, under `$RATEL_TELEMETRY_DIR/<project-slug>/` (default root `~/.ratel/telemetry/`), into ASCII tables (session totals, top tools by hit count, gateway-vs-direct invoke split, top errors). |
+| `inspect ls` | List telemetry files in the cwd's bucket, newest-first with size and modified time. |
 
-Flags: `--from <FILE>` summarizes a specific JSONL file; `--last <N>` restricts the summary to the last N events.
+Flags: `--from <FILE>` summarizes a specific JSONL file; `--last <N>` restricts the summary to the last N events; `--project <ABS-PATH>` targets another project's bucket explicitly; `--all` falls back to the global "newest mtime overall" semantics across every bucket (and, for `ls`, prefixes each row with the project slug).
+
+The slug mirrors Claude Code's `~/.claude/projects/` convention: every `/` and `.` in the absolute project path becomes `-` (e.g. `/Users/me/.config/foo` → `-Users-me--config-foo`).
 
 ## `ratel mcp add` — Claude-compatible
 
@@ -139,17 +141,17 @@ Token state is per-user-per-machine (`~/.ratel/oauth/`), not per-config-scope. M
 
 ## Telemetry
 
-`ratel mcp serve` writes one JSON line per event to `~/.ratel/telemetry/<ISO-ts>-<short>.jsonl` by default — every search, invoke, gateway call, upstream MCP call, and OAuth event flows through the same JSONL ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). Best-effort, sampleable, lossy on backpressure — query-log shaped, not oplog.
+`ratel mcp serve` writes one JSON line per event to `~/.ratel/telemetry/<project-slug>/<ISO-ts>-<short>.jsonl` by default — every search, invoke, gateway call, upstream MCP call, and OAuth event flows through the same JSONL ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). The slug is `process.cwd()` at serve time with every `/` and `.` replaced by `-`, mirroring Claude Code's `~/.claude/projects/` convention. Best-effort, sampleable, lossy on backpressure — query-log shaped, not oplog.
 
 Flags / env on `ratel mcp serve`:
 
 | Flag | Env | Purpose |
 |---|---|---|
 | `--telemetry off` | `RATEL_TELEMETRY=off` | Disable telemetry for this run. |
-| `--telemetry-file <path>` | — | Override the JSONL path. |
-| — | `RATEL_TELEMETRY_DIR` | Override the default telemetry directory. |
+| `--telemetry-file <path>` | — | Override the JSONL path verbatim (no slugging). |
+| — | `RATEL_TELEMETRY_DIR` | Override the default telemetry root (the per-project slug nests under it). |
 
-Run `ratel inspect` to summarize the most recent file (or any file via `--from`); `ratel inspect ls` lists what's on disk.
+Run `ratel inspect` from the project's directory to summarize that project's most recent session (or any file via `--from`, any project via `--project`, or every bucket via `--all`); `ratel inspect ls` lists what's on disk for the current bucket (`--all` walks every bucket).
 
 ## Backups & undo
 

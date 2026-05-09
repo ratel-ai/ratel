@@ -46,6 +46,10 @@ Because execution lives in the SDK, the SDK records invocation, gateway, and MCP
 
 `@ratel-ai/mcp-server` emits the auth-shaped events (refresh attempts, 401-driven `needs_auth`, OAuth flow start/finish) into the same sink via the same path.
 
+### On-disk layout: per-project buckets
+
+The CLI's default JSONL sink writes each session under `~/.ratel/telemetry/<project-slug>/<session-id>.jsonl`. The slug is `process.cwd()` at serve time with every `/` and `.` replaced by `-`, **mirroring Claude Code's `~/.claude/projects/<slug>/` convention bit-for-bit** so the bucket is recognisable to anyone who's seen CC's project directories. `ratel inspect` defaults to the bucket for the current cwd (strict — refuses to surface another project's telemetry), with `--all` to scan every bucket and `--project <abs-path>` to target one explicitly. The slugging logic lives entirely in the CLI; the core's `JsonlSink` accepts any path. `--telemetry-file` overrides skip slugging and write to the literal path. `RATEL_TELEMETRY_DIR` overrides the root that buckets nest under.
+
 ### Producer responsibilities by layer
 
 | Layer | Events it produces |
