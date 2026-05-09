@@ -12,7 +12,7 @@ export type TraceSinkConfig =
   | { kind: "memory"; sessionId: string }
   | { kind: "jsonl"; sessionId: string; path: string };
 
-export type SearchOrigin = "user" | "agent";
+export type SearchOrigin = "direct" | "agent";
 
 export interface ToolCatalogOptions {
   trace?: TraceSinkConfig;
@@ -37,7 +37,7 @@ export class ToolCatalog {
     this.tools.set(tool.id, metadata);
   }
 
-  search(query: string, topK: number, origin: SearchOrigin = "user"): SearchHit[] {
+  search(query: string, topK: number, origin: SearchOrigin = "direct"): SearchHit[] {
     return this.registry.searchWithOrigin(query, topK, origin);
   }
 

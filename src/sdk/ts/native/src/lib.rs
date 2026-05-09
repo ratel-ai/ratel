@@ -78,7 +78,7 @@ impl ToolRegistry {
     pub fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SearchHit> {
         let parsed = match origin.as_str() {
             "agent" => Origin::Agent,
-            _ => Origin::User,
+            _ => Origin::Direct,
         };
         self.inner
             .search_with_origin(&query, top_k as usize, parsed)

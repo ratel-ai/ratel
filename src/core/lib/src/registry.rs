@@ -62,7 +62,7 @@ impl ToolRegistry {
     }
 
     pub fn search(&self, query: &str, top_k: usize) -> Vec<SearchHit> {
-        self.search_with_origin(query, top_k, Origin::User)
+        self.search_with_origin(query, top_k, Origin::Direct)
     }
 
     pub fn search_with_origin(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SearchHit> {

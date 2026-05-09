@@ -124,7 +124,7 @@ Sink kinds:
 - `{ kind: "memory"; sessionId }` — keep events in memory; drain via `catalog.drainTraceEvents()`. Useful for tests.
 - `{ kind: "jsonl"; sessionId; path }` — append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure — see ADR-0009 for the reliability profile.
 
-`searchToolsTool` tags its emitted `search` event with `origin: "agent"`; pre-fetch helpers (`catalog.search(query, k)`) default to `"user"`. Override per call via `catalog.search(query, k, "agent")`.
+`searchToolsTool` tags its emitted `search` event with `origin: "agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
 
 ## Package shape
 

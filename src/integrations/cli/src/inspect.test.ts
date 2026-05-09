@@ -34,7 +34,7 @@ describe("ratel inspect", () => {
         session_id: "s1",
         type: "search",
         query: "x",
-        origin: "user",
+        origin: "direct",
         top_k: 5,
         hits: [{ tool_id: "t1", score: 1.0 }],
         stages: [],
@@ -155,7 +155,7 @@ describe("ratel inspect — per-project buckets", () => {
   it("summarizes the session for the given project's bucket", async () => {
     const project = "/Users/test/proj-a";
     await writeBucketFixture(project, "trace.jsonl", [
-      { v: 1, ts: 1, session_id: "sA", type: "search", query: "x", origin: "user" },
+      { v: 1, ts: 1, session_id: "sA", type: "search", query: "x", origin: "direct" },
       { v: 1, ts: 2, session_id: "sA", type: "invoke_end", tool_id: "t", took_ms: 1 },
     ]);
 
@@ -172,10 +172,10 @@ describe("ratel inspect — per-project buckets", () => {
 
   it("does not surface another project's session when scoped by project", async () => {
     await writeBucketFixture("/Users/test/proj-a", "a.jsonl", [
-      { v: 1, ts: 100, session_id: "sA", type: "search", query: "x", origin: "user" },
+      { v: 1, ts: 100, session_id: "sA", type: "search", query: "x", origin: "direct" },
     ]);
     await writeBucketFixture("/Users/test/proj-b", "b.jsonl", [
-      { v: 1, ts: 200, session_id: "sB", type: "search", query: "x", origin: "user" },
+      { v: 1, ts: 200, session_id: "sB", type: "search", query: "x", origin: "direct" },
     ]);
 
     const out = await summarizeSession({ dir, project: "/Users/test/proj-a" });
@@ -185,12 +185,12 @@ describe("ratel inspect — per-project buckets", () => {
 
   it("with --all, walks every bucket and picks the global newest", async () => {
     await writeBucketFixture("/Users/test/proj-a", "a.jsonl", [
-      { v: 1, ts: 100, session_id: "sA", type: "search", query: "x", origin: "user" },
+      { v: 1, ts: 100, session_id: "sA", type: "search", query: "x", origin: "direct" },
     ]);
     // Ensure proj-b's file has a newer mtime than proj-a's.
     await new Promise((r) => setTimeout(r, 10));
     await writeBucketFixture("/Users/test/proj-b", "b.jsonl", [
-      { v: 1, ts: 200, session_id: "sB", type: "search", query: "x", origin: "user" },
+      { v: 1, ts: 200, session_id: "sB", type: "search", query: "x", origin: "direct" },
     ]);
 
     const out = await summarizeSession({ dir, all: true });

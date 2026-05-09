@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-/// Distinguishes a query the human typed (pre-fetch helpers) from one the agent
-/// synthesized inside its loop (gateway tool). Used to separate the two paths
-/// in trace consumers (rerankers train on agent calls, inspector shows both).
+/// Distinguishes a direct API call (pre-fetch helpers, library callers,
+/// benchmarks) from one the agent synthesized inside its loop (gateway tool).
+/// Used to separate the two paths in trace consumers (rerankers train on agent
+/// calls, inspector shows both).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Origin {
-    User,
+    Direct,
     Agent,
 }
 

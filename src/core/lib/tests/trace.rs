@@ -74,7 +74,7 @@ fn search_emits_search_event_with_bm25_stage_and_hits() {
             ..
         } => {
             assert_eq!(query, "lookup");
-            assert_eq!(*origin, Origin::User);
+            assert_eq!(*origin, Origin::Direct);
             assert_eq!(*top_k, 5);
             assert_eq!(hits.len(), 1);
             assert_eq!(hits[0].tool_id, "alpha");

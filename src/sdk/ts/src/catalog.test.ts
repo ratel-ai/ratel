@@ -86,7 +86,7 @@ describe("ToolCatalog tracing", () => {
     expect(types).toContain("search");
 
     const search = events.find((e) => e.type === "search");
-    expect(search?.origin).toBe("user");
+    expect(search?.origin).toBe("direct");
     expect((search?.hits as unknown[]).length).toBeGreaterThan(0);
   });
 
@@ -128,7 +128,7 @@ describe("ToolCatalog tracing", () => {
     expect(err?.error).toMatch(/kaboom/);
   });
 
-  it("search() defaults origin=user; explicit origin=agent flows through to the event", () => {
+  it("search() defaults origin=direct; explicit origin=agent flows through to the event", () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
     catalog.register(readFile);
     catalog.drainTraceEvents();
