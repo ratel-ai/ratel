@@ -56,9 +56,3 @@ CLAUDE.local.md
 
 # Ratel local-scope MCP config (per-user, never committed)
 .ratel/config.local.json
-
-# Benchmark outputs
-benchmark/results/
-benchmark/fixtures/
-benchmark/test-data/
-benchmark/agent/results/

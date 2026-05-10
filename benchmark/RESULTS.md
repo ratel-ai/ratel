@@ -1,5 +1,9 @@
 # Ratel benchmark — narrative summary
 
+> **Moved → [ratel-ai/ratel-bench › `RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md)**
+>
+> The benchmark harness has been extracted to its own repo. This file is a stale snapshot kept temporarily for backlinks and will be removed shortly. Latest numbers and methodology live in the new repo.
+
 This document consolidates the agent benchmark across four model families on the MetaTool corpus and explains what the numbers say about where Ratel helps today and where it's still maturing.
 
 ## Where Ratel is most valuable today
@@ -119,15 +123,4 @@ Opus 4.7 lifts the baseline (71.7% at pool=180), softening the selection bottlen
 
 ## Reproducing these numbers
 
-```bash
-# Strict judge is now the default for the no-criteria fallback (v0.1.2).
-# Older results can be re-judged in place without rerunning agents:
-pnpm -F @ratel-ai/benchmark start rejudge \
-  benchmark/agent/results/<run>.jsonl \
-  --judge-prompt strict
-
-# Render the narrative tables:
-pnpm -F @ratel-ai/benchmark report \
-  --agent benchmark/agent/results/<run>.rejudged-strict.jsonl \
-  --output benchmark/results/<NAME>.md
-```
+The harness now lives in [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench). See its [`README.md`](https://github.com/ratel-ai/ratel-bench/blob/main/README.md) and [`agent/README.md`](https://github.com/ratel-ai/ratel-bench/blob/main/agent/README.md) for the up-to-date `pnpm -F @ratel-ai/benchmark start` / `report` / `rejudge` invocations.

@@ -29,7 +29,7 @@ The shape is deliberate:
 3. **Retrieval is deterministic and cheap.** BM25 over a schema-aware text projection of each tool ([ADR‑0004](adr/0004-bm25-tool-indexing.md)). No embeddings, no vector DB, no inference call on the retrieval path. The cost is microseconds per query, in-process.
 4. **The runtime is the user's process.** No service to deploy, no cluster to scale. The Rust core ships as a library; the TS SDK bundles a pre-built native binding so it installs with `pnpm add` and no Rust toolchain.
 
-The trade we made: we don't try to "understand" tools the way an embedding model would. We index their text — names, descriptions, parameter names, enum values — and rank by lexical match. That sounds primitive, until you notice that tool descriptions written for LLMs are already engineered to be lexically informative. BM25 over that surface is competitive with, and often beats, embedding-based retrieval on tool selection. The benchmarks driving this claim live in [`benchmark/`](../benchmark/) and [ADR‑0006](adr/0006-benchmark-corpus-and-eval-modes.md).
+The trade we made: we don't try to "understand" tools the way an embedding model would. We index their text — names, descriptions, parameter names, enum values — and rank by lexical match. That sounds primitive, until you notice that tool descriptions written for LLMs are already engineered to be lexically informative. BM25 over that surface is competitive with, and often beats, embedding-based retrieval on tool selection. The benchmarks driving this claim live in [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) and [ADR‑0006](adr/0006-benchmark-corpus-and-eval-modes.md).
 
 ## What ships today (v0.1.4)
 

@@ -47,7 +47,7 @@ See [`docs/overview.md`](docs/overview.md) for the thesis, [`docs/roadmap.md`](d
 | Frontier (Opus) + large catalog | **Competitive win.** Opus 4.6 pool=180: **+8 pp** accuracy and **-72%** tokens (discovery-tool arm). Opus 4.7 pool=180: ≈parity (-1.7 pp) with **-81%** tokens — Anthropic's own tool-search-tool loses **-8 pp** on the same setup. |
 | Any model + tiny catalog (≤30) | Skip Ratel — pool fits in the prompt cleanly. |
 
-Numbers from the MetaTool agent benchmark — full per-pool breakdown and methodology in [`benchmark/RESULTS.md`](benchmark/RESULTS.md).
+Numbers from the MetaTool agent benchmark — full per-pool breakdown and methodology in [ratel-ai/ratel-bench › `RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md). The benchmark harness lives in its own public repo: [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench).
 
 ## Choose your path
 
@@ -174,10 +174,11 @@ src/
 └── integrations/
     ├── mcp-server/            # @ratel-ai/mcp-server — expose a catalog as an MCP server
     └── cli/                   # @ratel-ai/cli — `ratel` CLI
-benchmark/                     # Two-layer harness: Rust retrieval + TS agent campaign
 examples/                      # Runnable end-to-end examples
 docs/                          # Overview, roadmap, ADRs
 ```
+
+The benchmark harness lives in its own public repo: [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench).
 
 ## Build & test
 

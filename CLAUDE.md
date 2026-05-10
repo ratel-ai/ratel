@@ -12,9 +12,10 @@ Core is a Rust lib (`ratel-ai-core`); language SDKs bundle it. In-process, no in
 src/core/           Rust core
 src/sdk/            language SDKs
 src/integrations/   protocol surfaces (MCP server, ...)
-benchmark/          eval harness
 docs/               ADRs and other docs
 ```
+
+The benchmark harness lives in its own public repo: [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench).
 
 Each folder has its own `README.md` with the details. Cargo + pnpm workspaces are rooted at the repo top level.
 
@@ -47,7 +48,7 @@ CI (`.github/workflows/{rust,ts}.yml`) runs all of the above on every PR; PRs la
 - **IMPORTANT: TDD is mandatory** for backend / business-logic / library code — use the `tdd` skill (red → green → refactor). Frontend code without business logic can skip.
 - **Backend before frontend**: features that aren't frontend-only land on the Rust core (with tests) first, then surface in the SDK.
 - **IMPORTANT: ADRs are immutable once `Accepted` — never edit, always supersede.** New cross-cutting choices go in `docs/adr/`, next number, Nygard format.
-- **Folder READMEs**: every folder under `src/`, plus `benchmark/` and `docs/`, has a `README.md` describing only what's *in that folder* — purpose, layout (children with one-liners), and any folder-specific build/usage commands. Keep them lean and timeless: no roadmap, no status, no version-specific framing. Link to deeper READMEs instead of duplicating their content. When you add a new folder of that kind, add its README in the same change.
+- **Folder READMEs**: every folder under `src/`, plus `docs/`, has a `README.md` describing only what's *in that folder* — purpose, layout (children with one-liners), and any folder-specific build/usage commands. Keep them lean and timeless: no roadmap, no status, no version-specific framing. Link to deeper READMEs instead of duplicating their content. When you add a new folder of that kind, add its README in the same change.
 - **Commits**: concise, imperative; sacrifice grammar for brevity. **MUST NOT** add AI-attribution lines (`Co-Authored-By: Claude`, etc.).
   - Good: `docs: drop CLAUDE.md refs from READMEs, codify folder-README rule`
   - Bad: `updated some documentation files`
