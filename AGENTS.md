@@ -8,7 +8,7 @@ If you're a human, you probably want [README.md](README.md) or [docs/overview.md
 
 ## What Ratel is — in one paragraph
 
-Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance via BM25 over a schema-aware text projection — the agent's tool list at any turn is the top-K hits, not the full catalog. Skills, telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are on the roadmap (see [`docs/roadmap.md`](docs/roadmap.md)); the same primitives extend to each. The base is a Rust library (`ratel-ai-core`); on top sit a TypeScript SDK, an MCP server library, and a CLI. No vector DB, no embedding pipeline, no service to deploy.
+Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance via BM25 over a schema-aware text projection — the agent's tool list at any turn is the top-K hits, not the full catalog. Skills, telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are on the roadmap (see [`docs/roadmap.md`](docs/roadmap.md)); the same primitives extend to each. The base is a Rust library (`ratel-ai-core`); on top sit a TypeScript SDK and a CLI. The MCP-server library (`@ratel-ai/mcp-server`) lives in a sibling repo, [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp); the CLI depends on its published npm artifact. No vector DB, no embedding pipeline, no service to deploy.
 
 ## Reality check — what ships, what doesn't (v0.1.4)
 
@@ -18,7 +18,7 @@ These are the published artifacts. Recommend exactly these install commands:
 |---|---|---|
 | Rust library `ratel-ai-core` | `cargo add ratel-ai-core` | ✅ shipped |
 | TypeScript SDK `@ratel-ai/sdk` | `pnpm add @ratel-ai/sdk` (or npm) | ✅ shipped |
-| MCP server library `@ratel-ai/mcp-server` | `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk` | ✅ shipped |
+| MCP server library `@ratel-ai/mcp-server` | `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk` | ✅ shipped — lives in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) |
 | CLI `@ratel-ai/cli` | `pnpm add -g @ratel-ai/cli` | ✅ shipped |
 | Python SDK | n/a | ❌ roadmap, not yet shipped |
 | Rust HTTP server | n/a | ❌ roadmap, not yet shipped |
@@ -89,14 +89,14 @@ const agentTools = [...topK.map(toExecutableTool), searchToolsTool(catalog), inv
 
 `@ratel-ai/sdk` exports `registerMcpServer(catalog, { name, transport })` — it connects to an upstream MCP server, calls `tools/list`, and registers each tool into the catalog with a server-namespaced id (`<name>__<toolName>`).
 
-This is the **inverse** of `@ratel-ai/mcp-server`'s `createMcpServer(catalog, opts)` — which exposes a catalog *as* an MCP server.
+This is the **inverse** of `@ratel-ai/mcp-server`'s `createMcpServer(catalog, opts)` (in the sibling [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) repo) — which exposes a catalog *as* an MCP server.
 
 ```ts
 // Ingest an upstream MCP server's tools into a Ratel catalog (Ratel is the MCP client):
 import { registerMcpServer } from "@ratel-ai/sdk";
 await registerMcpServer(catalog, { name: "fs", transport: someStdioTransport });
 
-// Expose a Ratel catalog over MCP (Ratel is the MCP server):
+// Expose a Ratel catalog over MCP (Ratel is the MCP server) — package from ratel-ai/ratel-mcp:
 import { createMcpServer } from "@ratel-ai/mcp-server";
 await createMcpServer(catalog, { name: "ratel-gateway", version: "0.1.0", transport });
 ```

@@ -12,14 +12,14 @@ The first public release across all four registry artifacts.
 
 - **`ratel-ai-core`** on crates.io — Rust library, BM25 tool retrieval.
 - **`@ratel-ai/sdk`** on npm — TypeScript SDK with `ToolRegistry`, `ToolCatalog`, gateway tool factories, `registerMcpServer`. Pre-built native bindings for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, win32-x64-msvc.
-- **`@ratel-ai/mcp-server`** on npm — library to expose a catalog as an MCP server, with OAuth 2.1 / PKCE for HTTP & SSE upstreams.
+- **`@ratel-ai/mcp-server`** on npm — library to expose a catalog as an MCP server, with OAuth 2.1 / PKCE for HTTP & SSE upstreams. Now hosted in the sibling [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) repo and released on its own cadence; this repo's CLI depends on it via npm.
 - **`@ratel-ai/cli`** on npm — the `ratel` binary: one-shot import from Claude Code, add / serve / auth / list / edit / remove / link across three scopes.
 
 ## Next (v0.1.5)
 
 The milestone in flight.
 
-- **Telemetry + traces** on tool usage, end-to-end through `ratel-ai-core` → `@ratel-ai/sdk` → `@ratel-ai/mcp-server`. The substrate for the LLM-driven suggestions later in v0.1.x.
+- **Telemetry + traces** on tool usage, end-to-end through `ratel-ai-core` → `@ratel-ai/sdk` and out through the MCP server. The substrate for the LLM-driven suggestions later in v0.1.x.
 - **UI inspector** over the telemetry stream.
 - **Benchmark MCP review** — exercise the published packages end-to-end through MCP, not just direct SDK wiring.
 

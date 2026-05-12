@@ -59,8 +59,6 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
-  examples/mcp-server: {}
-
   src/integrations/cli:
     dependencies:
       '@clack/prompts':
@@ -70,8 +68,8 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.1)
       '@ratel-ai/mcp-server':
-        specifier: workspace:^
-        version: link:../mcp-server
+        specifier: ^0.1.5
+        version: 0.1.5(zod@4.4.1)
       '@ratel-ai/sdk':
         specifier: workspace:^
         version: link:../../sdk/ts
@@ -82,34 +80,6 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.1.5
-        version: 4.1.5(@opentelemetry/api@1.9.0)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(tsx@4.21.0))
-
-  src/integrations/mcp-server:
-    dependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.29.0
-        version: 1.29.0(zod@4.4.1)
-      '@ratel-ai/sdk':
-        specifier: workspace:^
-        version: link:../../sdk/ts
-      proper-lockfile:
-        specifier: ^4.1.2
-        version: 4.1.2
-    devDependencies:
-      '@biomejs/biome':
-        specifier: ^2.4.13
-        version: 2.4.13
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.12.2
-      '@types/proper-lockfile':
-        specifier: ^4.1.4
-        version: 4.1.4
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -955,6 +925,46 @@ packages:
   '@oxc-project/types@0.127.0':
     resolution: {integrity: sha512-aIYXQBo4lCbO4z0R3FHeucQHpF46l2LbMdxRvqvuRuW2OxdnSkcng5B8+K12spgLDj93rtN3+J2Vac/TIO+ciQ==}
 
+  '@ratel-ai/mcp-server@0.1.5':
+    resolution: {integrity: sha512-e7GDPG+GXytIUUXZeFZ0oUrDUpGIT9QDj27mRpHI9kGyJjS5XP3Jfx1Ucb1rjZM5bAzau7rxQv6jjyEWoM7Arw==}
+    engines: {node: '>=20.0.0'}
+
+  '@ratel-ai/sdk-darwin-arm64@0.1.5':
+    resolution: {integrity: sha512-i5iCTDOIcMOvVm5IbNbrl5yPq79B6bOvIRWiGpLIeGh/nUa9kf4GkwHlCVyv9TWJBO7ovS3vpyxbJUV5lk2KsA==}
+    engines: {node: '>=20.0.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@ratel-ai/sdk-darwin-x64@0.1.5':
+    resolution: {integrity: sha512-Yvi9dgTWOd7aSVNJBTPdduIhZGuPouTEFs8e2E0I1p87Vg2Fpu7WlxdxEHY0Uo5BCGBJKlgaJfEPIS+QyvNQXA==}
+    engines: {node: '>=20.0.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@ratel-ai/sdk-linux-arm64-gnu@0.1.5':
+    resolution: {integrity: sha512-rqK2TLxX2sfVdtitYBeSFAoWldE5M8E4eA4E5Bfhi0ro3KrcOVipnLJS3Q3lYoWZuKBNVOvWa2tsnvjb7xAQsg==}
+    engines: {node: '>=20.0.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@ratel-ai/sdk-linux-x64-gnu@0.1.5':
+    resolution: {integrity: sha512-Ygf+Eyn2/gvjyzjTxxFLcLjFJSTUy3ySqJ5OxOv5ysxBD4d9D2TpNIZc6eE62RM75Cu817igIKOyxxlK1TlQ3g==}
+    engines: {node: '>=20.0.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@ratel-ai/sdk-win32-x64-msvc@0.1.5':
+    resolution: {integrity: sha512-m9QVOL7XaU7mkmL1pK1m08jbuv4aa6BPOnYqSbTOAVYmzDdl1n7/sK91Pqyxqkey7wsV6W8LB+FExxd3+SjF/A==}
+    engines: {node: '>=20.0.0'}
+    cpu: [x64]
+    os: [win32]
+
+  '@ratel-ai/sdk@0.1.5':
+    resolution: {integrity: sha512-Zj7ZMbbZOxwhTERZ1fdRaiP0A1oXuSJiLIiBg6XcKo2VeGIx+db3DowJWR+7ouwonszCWoWxBox7RA5WWgdBQA==}
+    engines: {node: '>=20.0.0'}
+
   '@rolldown/binding-android-arm64@1.0.0-rc.17':
     resolution: {integrity: sha512-s70pVGhw4zqGeFnXWvAzJDlvxhlRollagdCCKRgOsgUOH3N1l0LIxf83AtGzmb5SiVM4Hjl5HyarMRfdfj3DaQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1070,12 +1080,6 @@ packages:
 
   '@types/node@24.12.2':
     resolution: {integrity: sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g==}
-
-  '@types/proper-lockfile@4.1.4':
-    resolution: {integrity: sha512-uo2ABllncSqg9F1D4nugVl9v93RmjxF6LJzQLMLDdPaXCUIDPeOJ21Gbqi43xNKzBi/WQ0Q0dICqufzQbMjipQ==}
-
-  '@types/retry@0.12.5':
-    resolution: {integrity: sha512-3xSjTp3v03X/lSQLkczaN9UIEwJMoMCA1+Nb5HfbJEQWogdeQIyVtTvxPXDQjZ5zws8rFQfVfRdz03ARihPJgw==}
 
   '@vercel/oidc@3.2.0':
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
@@ -2489,6 +2493,45 @@ snapshots:
 
   '@oxc-project/types@0.127.0': {}
 
+  '@ratel-ai/mcp-server@0.1.5(zod@4.4.1)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.1)
+      '@ratel-ai/sdk': 0.1.5(zod@4.4.1)
+      proper-lockfile: 4.1.2
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+      - zod
+
+  '@ratel-ai/sdk-darwin-arm64@0.1.5':
+    optional: true
+
+  '@ratel-ai/sdk-darwin-x64@0.1.5':
+    optional: true
+
+  '@ratel-ai/sdk-linux-arm64-gnu@0.1.5':
+    optional: true
+
+  '@ratel-ai/sdk-linux-x64-gnu@0.1.5':
+    optional: true
+
+  '@ratel-ai/sdk-win32-x64-msvc@0.1.5':
+    optional: true
+
+  '@ratel-ai/sdk@0.1.5(zod@4.4.1)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.1)
+    optionalDependencies:
+      '@ratel-ai/sdk-darwin-arm64': 0.1.5
+      '@ratel-ai/sdk-darwin-x64': 0.1.5
+      '@ratel-ai/sdk-linux-arm64-gnu': 0.1.5
+      '@ratel-ai/sdk-linux-x64-gnu': 0.1.5
+      '@ratel-ai/sdk-win32-x64-msvc': 0.1.5
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+      - zod
+
   '@rolldown/binding-android-arm64@1.0.0-rc.17':
     optional: true
 
@@ -2559,12 +2602,6 @@ snapshots:
   '@types/node@24.12.2':
     dependencies:
       undici-types: 7.16.0
-
-  '@types/proper-lockfile@4.1.4':
-    dependencies:
-      '@types/retry': 0.12.5
-
-  '@types/retry@0.12.5': {}
 
   '@vercel/oidc@3.2.0': {}
 

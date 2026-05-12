@@ -59,7 +59,7 @@
   "dependencies": {
     "@clack/prompts": "^1.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@ratel-ai/mcp-server": "workspace:^",
+    "@ratel-ai/mcp-server": "^0.1.5",
     "@ratel-ai/sdk": "workspace:^"
   }
 }

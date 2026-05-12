@@ -7,8 +7,9 @@ Runnable demos of Ratel wired into real agent frameworks and protocol surfaces. 
 ```
 ai-sdk/      Ratel + Vercel AI SDK — top-K tool filtering before generateText
 mcp-chat/    Interactive REPL against an MCP-backed agent (Vercel AI SDK + OpenAI)
-mcp-server/  Claude Code session driven by Ratel as the only MCP, fronting N upstream MCPs
 ```
+
+The MCP-server demo (`mcp-server/` — Claude Code session driven by Ratel as the only MCP) now lives next to the `@ratel-ai/mcp-server` package in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp).
 
 ## Conventions
 

@@ -1,11 +1,11 @@
 ---
 name: changelog
-description: Update per-package CHANGELOG.md files for a Ratel release. Drafts entries with git-cliff (scoped per package), lets you curate, then writes the four CHANGELOGs. Handles both RC entries and GA-graduation collapse (merging X.Y.Z-rc.* sections into a single X.Y.Z section). Invoke before tagging a release.
+description: Update per-package CHANGELOG.md files for a Ratel release. Drafts entries with git-cliff (scoped per package), lets you curate, then writes the three CHANGELOGs. Handles both RC entries and GA-graduation collapse (merging X.Y.Z-rc.* sections into a single X.Y.Z section). Invoke before tagging a release.
 ---
 
 # /changelog
 
-Updates the four published-package `CHANGELOG.md` files in preparation for a release. The CI gate in `.github/workflows/release.yml` will reject any tag whose CHANGELOGs don't contain the version being released, so this skill must run before `git tag`.
+Updates the three published-package `CHANGELOG.md` files in preparation for a release. The CI gate in `.github/workflows/release.yml` will reject any tag whose CHANGELOGs don't contain the version being released, so this skill must run before `git tag`.
 
 ## Packages it touches
 
@@ -13,14 +13,15 @@ Updates the four published-package `CHANGELOG.md` files in preparation for a rel
 |---|---|
 | `ratel-ai-core` | `src/core/lib/CHANGELOG.md` |
 | `@ratel-ai/sdk` | `src/sdk/ts/CHANGELOG.md` |
-| `@ratel-ai/mcp-server` | `src/integrations/mcp-server/CHANGELOG.md` |
 | `@ratel-ai/cli` | `src/integrations/cli/CHANGELOG.md` |
+
+`@ratel-ai/mcp-server` lives in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) and maintains its own CHANGELOG there.
 
 ## Procedure
 
 ### 1. Read the target version
 
-Read `src/sdk/ts/package.json` and extract `.version` — all four manifests are kept in lockstep (enforced by `release.yml`'s `tag-version-check` job). Call this `$TARGET`.
+Read `src/sdk/ts/package.json` and extract `.version` — all three manifests are kept in lockstep (enforced by `release.yml`'s `tag-version-check` job). Call this `$TARGET`.
 
 If the user supplies a different version explicitly, prefer that and warn them their working tree disagrees.
 
@@ -30,7 +31,7 @@ Run `git describe --tags --abbrev=0` to find the previous tag. Call this `$FROM`
 
 ### 3. Generate drafts
 
-Run `bash .claude/skills/changelog/draft.sh "$FROM"`. The script outputs four `### <package-name>` blocks, each containing either Keep-a-Changelog-style sections (`### Added`, `### Fixed`, `### Changed`) or a single line `_No package-specific changes; released in lockstep with workspace._`.
+Run `bash .claude/skills/changelog/draft.sh "$FROM"`. The script outputs three `### <package-name>` blocks, each containing either Keep-a-Changelog-style sections (`### Added`, `### Fixed`, `### Changed`) or a single line `_No package-specific changes; released in lockstep with workspace._`.
 
 If `draft.sh` exits 127, git-cliff is missing. Tell the user how to install it (the script's stderr already does), and stop.
 
@@ -65,13 +66,13 @@ Show each CHANGELOG's pending changes in the conversation. Ask the user to confi
 
 ### 6. Write the files
 
-Once approved, write the four CHANGELOGs using the Edit tool. **Do not commit.** The release commit is the user's responsibility — they typically include the CHANGELOGs alongside the version bumps in a single `release: vX.Y.Z` commit.
+Once approved, write the three CHANGELOGs using the Edit tool. **Do not commit.** The release commit is the user's responsibility — they typically include the CHANGELOGs alongside the version bumps in a single `release: vX.Y.Z` commit.
 
 ### 7. Remind
 
 Tell the user:
 
-- The 4 CHANGELOGs are staged in the working tree (unstaged).
+- The 3 CHANGELOGs are staged in the working tree (unstaged).
 - Next step is the release commit + tag + push.
 - The `release.yml` `tag-version-check` job verifies the CHANGELOGs contain the tag version; if any don't, the release is blocked.
 

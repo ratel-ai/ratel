@@ -37,10 +37,11 @@ Everything below is on `main` and published to crates.io / npm:
 
 - **`ratel-ai-core`** — the Rust library. BM25 tool retrieval, deterministic schema-aware tokenization, in-process. The base everything else wraps.
 - **`@ratel-ai/sdk`** — the TypeScript SDK. Bundles `ratel-ai-core` via NAPI-RS ([ADR‑0002](adr/0002-ts-rust-binding-strategy.md)). Exposes `ToolRegistry`, `ToolCatalog`, gateway tool factories (`searchToolsTool`, `invokeToolTool`), and `registerMcpServer` to ingest an upstream MCP server's tools straight into a catalog.
-- **`@ratel-ai/mcp-server`** — library that exposes a `ToolCatalog` as an MCP server (`createMcpServer`) and builds gateways from a config (`buildGatewayFromConfig`), with OAuth 2.1 / PKCE support for HTTP and SSE upstreams.
 - **`@ratel-ai/cli`** — the `ratel` binary. One-shot import of a Claude Code MCP setup into Ratel, plus `add` / `serve` / `auth` / `list` / `edit` / `remove` / `import` / `link` verbs across user / project / local scopes.
 
-The four ship as one coherent layered product: the SDK and MCP server are wrappers on the same Rust core; the CLI is the MCP server with config UX on top.
+The companion **`@ratel-ai/mcp-server`** library — exposes a `ToolCatalog` as an MCP server (`createMcpServer`) and builds gateways from a config (`buildGatewayFromConfig`), with OAuth 2.1 / PKCE support for HTTP and SSE upstreams — lives in a sibling repo, [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp), and is published independently to npm. `@ratel-ai/cli` consumes it from there.
+
+The artifacts ship as one coherent layered product: the SDK is a wrapper on the Rust core; the CLI fronts the MCP-server library with config UX on top.
 
 ## Where this is going
 

@@ -4,16 +4,13 @@ External-protocol surfaces for Ratel. Each entry is a workspace package that wra
 
 Integrations are independent packages; they don't add functionality to the SDK, they expose it.
 
+The companion **`@ratel-ai/mcp-server`** library — exposes a `ToolCatalog` as an MCP server with OAuth 2.1 / PKCE for HTTP & SSE upstreams — used to live here. It now ships from a sibling repo: [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp). The CLI below depends on its published npm artifact.
+
 ## Layout
 
 ```
-mcp-server/    @ratel-ai/mcp-server — library that exposes a ToolCatalog as a Model Context Protocol server
 cli/           @ratel-ai/cli       — `ratel` CLI: manage MCP scopes, run the gateway, import from Claude Code
 ```
-
-## `mcp-server/` — `@ratel-ai/mcp-server`
-
-Library function that takes a `ToolCatalog` plus a caller-supplied MCP `Transport` and exposes the gateway (`search_tools` + `invoke_tool`) over the protocol. The inverse of `@ratel-ai/sdk`'s `registerMcpServer`. Ships `buildGatewayFromConfig` and `parseConfig` alongside `createMcpServer` for higher-level callers. See [`mcp-server/README.md`](mcp-server/README.md).
 
 ## `cli/` — `@ratel-ai/cli`
 

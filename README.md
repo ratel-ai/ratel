@@ -25,7 +25,7 @@ In-process **context engineering platform** for AI agents — a catalog, a retri
 
 - **Wedge today**: tool selection. Register tools (or ingest an upstream MCP server) into a `ToolCatalog`; the model sees the handful that matter for the current turn, not the full list.
 - **Same primitives** extend to skills, memories, and message history as they land on the roadmap.
-- **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK + MCP server library + CLI that drops Ratel between an MCP host (Claude Code, Cursor, ChatGPT) and upstream MCP servers.
+- **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK + CLI that drops Ratel between an MCP host (Claude Code, Cursor, ChatGPT) and upstream MCP servers.
 - **No vector DB. No embedding pipeline. No service to deploy.**
 
 See [`docs/overview.md`](docs/overview.md) for the thesis, [`docs/roadmap.md`](docs/roadmap.md) for what's coming.
@@ -51,16 +51,16 @@ Numbers from the MetaTool agent benchmark — full per-pool breakdown and method
 
 ## Choose your path
 
-Four shapes, same Rust core. Pick one — or mix them:
+Three shapes, same Rust core. Pick one — or mix them:
 
-|               | **Rust library**                          | **TypeScript SDK**                    | **MCP server**                                                                               | **CLI**                                                       |
-| ------------- | ----------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | MCP host (Claude Code, Cursor, ChatGPT) users with multiple upstream MCP servers             | Migrating an existing Claude Code MCP setup into Ratel        |
-| **Install**   | `cargo add ratel-ai-core`                 | `pnpm add @ratel-ai/sdk`              | `pnpm add @ratel-ai/mcp-server`                                                              | `pnpm add -g @ratel-ai/cli`                                   |
-| **Hero call** | `ToolRegistry::search`                    | `searchToolsTool(catalog)`            | `createMcpServer(catalog, …)`                                                                | `ratel mcp import`                                            |
-| **Reference** | [src/core/lib/](src/core/lib/README.md)   | [src/sdk/ts/](src/sdk/ts/README.md)   | [src/integrations/mcp-server/](src/integrations/mcp-server/README.md)                        | [src/integrations/cli/](src/integrations/cli/README.md)       |
+|               | **Rust library**                          | **TypeScript SDK**                    | **CLI**                                                       |
+| ------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
+| **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | Migrating an existing Claude Code MCP setup into Ratel        |
+| **Install**   | `cargo add ratel-ai-core`                 | `pnpm add @ratel-ai/sdk`              | `pnpm add -g @ratel-ai/cli`                                   |
+| **Hero call** | `ToolRegistry::search`                    | `searchToolsTool(catalog)`            | `ratel mcp import`                                            |
+| **Reference** | [src/core/lib/](src/core/lib/README.md)   | [src/sdk/ts/](src/sdk/ts/README.md)   | [src/integrations/cli/](src/integrations/cli/README.md)       |
 
-Python SDK and Rust HTTP server are on the [roadmap](docs/roadmap.md), not yet shipped.
+The MCP-server library that powers the CLI's gateway lives in a sibling repo: [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp). Python SDK and Rust HTTP server are on the [roadmap](docs/roadmap.md), not yet shipped.
 
 ## Quickstart
 
@@ -95,26 +95,7 @@ const invoke = invokeToolTool(catalog);
 
 **MCP server** — expose a catalog over MCP for Claude / Cursor / ChatGPT
 
-```bash
-pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk
-```
-
-```ts
-import { ToolCatalog } from "@ratel-ai/sdk";
-import { createMcpServer } from "@ratel-ai/mcp-server";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-
-const catalog = new ToolCatalog();
-// register tools — or use buildGatewayFromConfig to ingest upstream MCP servers from a config
-
-const handle = await createMcpServer(catalog, {
-  name: "my-ratel-gateway",
-  version: "0.1.0",
-  transport: new StdioServerTransport(),
-});
-```
-
-The MCP client sees two tools (`search_tools`, `invoke_tool`) instead of every upstream's full list. OAuth 2.1 / PKCE for HTTP and SSE upstreams handled centrally. Full reference: [src/integrations/mcp-server/README.md](src/integrations/mcp-server/README.md).
+The MCP-server library and its `serve` CLI live in a sibling repo: [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp). The published `@ratel-ai/mcp-server` package on npm is unchanged; `@ratel-ai/cli` in this repo depends on it and exposes the same gateway via `ratel serve`.
 
 **CLI** — migrate an existing Claude Code MCP setup into Ratel
 
@@ -151,7 +132,6 @@ Longer take + skills / telemetry / memories / context graph: [docs/overview.md](
 
 - [examples/ai-sdk/](examples/ai-sdk/README.md) — Vercel AI SDK with pre-filter + dynamic gateway
 - [examples/mcp-chat/](examples/mcp-chat/README.md) — Vercel AI SDK REPL ingesting an upstream MCP server via `registerMcpServer`
-- [examples/mcp-server/](examples/mcp-server/README.md) — Claude Code session fronted by Ratel as the only MCP
 
 ## Where this is going
 
@@ -172,7 +152,6 @@ src/
 ├── core/lib/                  # ratel-ai-core — Rust crate; BM25 retrieval engine
 ├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
 └── integrations/
-    ├── mcp-server/            # @ratel-ai/mcp-server — expose a catalog as an MCP server
     └── cli/                   # @ratel-ai/cli — `ratel` CLI
 examples/                      # Runnable end-to-end examples
 docs/                          # Overview, roadmap, ADRs

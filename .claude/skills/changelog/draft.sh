@@ -36,7 +36,6 @@ range="${from_ref}..HEAD"
 declare -a packages=(
   "ratel-ai-core|src/core/lib/**|Cargo.toml"
   "@ratel-ai/sdk|src/sdk/ts/**"
-  "@ratel-ai/mcp-server|src/integrations/mcp-server/**"
   "@ratel-ai/cli|src/integrations/cli/**"
 )
 
