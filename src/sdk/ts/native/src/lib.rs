@@ -14,7 +14,9 @@ pub struct Tool {
     pub id: String,
     pub name: String,
     pub description: String,
+    #[napi(ts_type = "import('json-schema').JSONSchema7")]
     pub input_schema: Value,
+    #[napi(ts_type = "import('json-schema').JSONSchema7")]
     pub output_schema: Value,
 }
 
