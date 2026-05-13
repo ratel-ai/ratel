@@ -21,14 +21,24 @@
 
 ## What is Ratel
 
-In-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn.
+**This repo is the library.** An in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and the runtime hooks that decide what ends up in the model's context window on every turn.
 
 - **Wedge today**: tool selection. Register tools (or ingest an upstream MCP server) into a `ToolCatalog`; the model sees the handful that matter for the current turn, not the full list.
 - **Same primitives** extend to skills, memories, and message history as they land on the roadmap.
-- **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK + CLI that drops Ratel between an MCP host (Claude Code, Cursor, ChatGPT) and upstream MCP servers.
+- **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound) + auxiliary CLI (`@ratel-ai/cli`) for the artifacts the library produces (telemetry today; trace-consolidation server later).
 - **No vector DB. No embedding pipeline. No service to deploy.**
 
 See [`docs/overview.md`](docs/overview.md) for the thesis, [`docs/roadmap.md`](docs/roadmap.md) for what's coming.
+
+## The Ratel project
+
+Three repos, one story:
+
+| | Repo | What it is |
+|---|---|---|
+| **Library** | [`ratel-ai/ratel`](https://github.com/ratel-ai/ratel) (this one) | The engine. Rust core + TS SDK + auxiliary CLI. Embed it in your agent process. |
+| **Showcase** | [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) | The first canonical product on the library — `@ratel-ai/mcp-server` exposes any catalog over MCP, with a `ratel-mcp` CLI that fronts Claude Code / Cursor / ChatGPT and an OAuth-aware gateway for upstream MCP servers. Proof that the library is enough to build a real product on. |
+| **Proof** | [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench) | The benchmark harness — MetaTool agent campaign, ToolRet retrieval, three Ratel ablation arms across local / OSS / frontier models. The numbers in the table below come from here. |
 
 ## Why Ratel
 
@@ -37,7 +47,7 @@ See [`docs/overview.md`](docs/overview.md) for the thesis, [`docs/roadmap.md`](d
 - **In-process, no infra.** Pre-built native bindings for darwin / linux / win — no Rust toolchain to install.
 - **Framework-agnostic.** `ToolCatalog` returns generic `ExecutableTool` objects you wrap in a few lines (Vercel AI SDK example shipped in `examples/ai-sdk`, `examples/mcp-chat`). Or skip the framework and expose the catalog over MCP.
 
-## Where Ratel is most valuable today
+## Proof: where Ratel is most valuable today
 
 | your situation | Ratel's value today |
 |---|---|
@@ -51,16 +61,18 @@ Numbers from the MetaTool agent benchmark — full per-pool breakdown and method
 
 ## Choose your path
 
-Three shapes, same Rust core. Pick one — or mix them:
+If you want to **embed the library** in your own agent or runtime, pick one of these three shapes — same Rust core under each:
 
 |               | **Rust library**                          | **TypeScript SDK**                    | **CLI**                                                       |
 | ------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | Migrating an existing Claude Code MCP setup into Ratel        |
+| **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | Inspecting telemetry the library writes; migrating a Claude Code MCP setup into Ratel (transitional) |
 | **Install**   | `cargo add ratel-ai-core`                 | `pnpm add @ratel-ai/sdk`              | `pnpm add -g @ratel-ai/cli`                                   |
-| **Hero call** | `ToolRegistry::search`                    | `searchToolsTool(catalog)`            | `ratel mcp import`                                            |
+| **Hero call** | `ToolRegistry::search`                    | `searchToolsTool(catalog)`            | `ratel inspect`                                               |
 | **Reference** | [src/core/lib/](src/core/lib/README.md)   | [src/sdk/ts/](src/sdk/ts/README.md)   | [src/integrations/cli/](src/integrations/cli/README.md)       |
 
-The MCP-server library that powers the CLI's gateway lives in a sibling repo: [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp). Python SDK and Rust HTTP server are on the [roadmap](docs/roadmap.md), not yet shipped.
+If instead you want to **drop Ratel between an MCP host and your existing upstream MCP servers** (Claude Code, Cursor, ChatGPT) — the showcase product — use [`@ratel-ai/mcp-server` from `ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp): `npx -y @ratel-ai/mcp-server mcp import`.
+
+Python SDK and Rust HTTP server are on the [roadmap](docs/roadmap.md), not yet shipped.
 
 ## Quickstart
 
@@ -93,23 +105,15 @@ const invoke = invokeToolTool(catalog);
 - Ingest an upstream MCP server: [registerMcpServer](src/sdk/ts/README.md#registermcpserver--index-an-mcp-servers-tools-into-the-catalog)
 - Full SDK reference: [src/sdk/ts/README.md](src/sdk/ts/README.md)
 
-**MCP server** — expose a catalog over MCP for Claude / Cursor / ChatGPT
+**Showcase: drop Ratel between Claude Code and your existing MCP servers**
 
-The MCP-server library and its `serve` CLI live in a sibling repo: [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp). The published `@ratel-ai/mcp-server` package on npm is unchanged; `@ratel-ai/cli` in this repo depends on it and exposes the same gateway via `ratel serve`.
-
-**CLI** — migrate an existing Claude Code MCP setup into Ratel
+For the canonical "Ratel as a product" experience — managing scopes, importing from Claude Code, OAuth for HTTP upstreams, serving over stdio — use the MCP-server showcase repo:
 
 ```bash
-pnpm add -g @ratel-ai/cli
-
-ratel mcp import   # interactive: scans ~/.claude.json + per-project .mcp.json,
-                   # cherry-pick which upstreams to move into Ratel,
-                   # rewrites Claude Code to launch `ratel serve`.
-
-ratel backup undo  # roll back any time — every change writes a timestamped backup under ~/.ratel/backups/.
+npx -y @ratel-ai/mcp-server mcp import   # interactive migration wizard
 ```
 
-`ratel mcp add` mirrors `claude mcp add` flag-for-flag. Three-scope hierarchy (user / project / local), OAuth flow, full verb reference: [src/integrations/cli/README.md](src/integrations/cli/README.md).
+Full CLI reference, install options, and library docs: [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp). `@ratel-ai/cli` in this repo retains the same MCP verbs transitionally (it depends on the same published `@ratel-ai/mcp-server` library); over time those verbs migrate to `ratel-mcp` and the local `ratel` binary focuses on library artifacts (`ratel inspect`, etc.).
 
 **Rust library** — direct, no JS in the loop
 
@@ -147,17 +151,22 @@ Dated milestones: [`docs/roadmap.md`](docs/roadmap.md). Thesis: [`docs/overview.
 
 ## Repo layout
 
+This repo holds the **library** half of the project. The MCP-server showcase and the benchmark harness live in sibling repos.
+
 ```
 src/
 ├── core/lib/                  # ratel-ai-core — Rust crate; BM25 retrieval engine
 ├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
 └── integrations/
-    └── cli/                   # @ratel-ai/cli — `ratel` CLI
-examples/                      # Runnable end-to-end examples
+    └── cli/                   # @ratel-ai/cli — `ratel` CLI (telemetry inspect; transitional MCP verbs)
+examples/                      # Runnable end-to-end examples for the SDK
 docs/                          # Overview, roadmap, ADRs
 ```
 
-The benchmark harness lives in its own public repo: [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench).
+Sibling repos:
+
+- [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) — **showcase**. `@ratel-ai/mcp-server` library + `ratel-mcp` CLI.
+- [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench) — **proof**. Benchmark harness; numbers in [`RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md).
 
 ## Build & test
 

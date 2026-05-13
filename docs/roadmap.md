@@ -4,6 +4,8 @@ The wedge today is **tool selection**. Every milestone below layers onto the sam
 
 For the architectural commitments behind each item, see [`docs/adr/`](adr/). For the broader thesis, see [`docs/overview.md`](overview.md).
 
+This roadmap covers the **library** half of the project (this repo). The MCP-server **showcase** ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)) and the benchmark **proof** ([`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)) maintain their own roadmaps; library milestones below name the showcase / proof surfaces they unblock.
+
 ---
 
 ## Now (v0.1.4 — shipped 2026-05-05)

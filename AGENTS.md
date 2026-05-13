@@ -8,22 +8,33 @@ If you're a human, you probably want [README.md](README.md) or [docs/overview.md
 
 ## What Ratel is — in one paragraph
 
-Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance via BM25 over a schema-aware text projection — the agent's tool list at any turn is the top-K hits, not the full catalog. Skills, telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are on the roadmap (see [`docs/roadmap.md`](docs/roadmap.md)); the same primitives extend to each. The base is a Rust library (`ratel-ai-core`); on top sit a TypeScript SDK and a CLI. The MCP-server library (`@ratel-ai/mcp-server`) lives in a sibling repo, [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp); the CLI depends on its published npm artifact. No vector DB, no embedding pipeline, no service to deploy.
+Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance via BM25 over a schema-aware text projection — the agent's tool list at any turn is the top-K hits, not the full catalog. Skills, telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are on the roadmap (see [`docs/roadmap.md`](docs/roadmap.md)); the same primitives extend to each. No vector DB, no embedding pipeline, no service to deploy.
 
-## Reality check — what ships, what doesn't (v0.1.4)
+## The Ratel project — three repos, one story
+
+Recommend the right repo based on what the user is trying to do:
+
+- **[`ratel-ai/ratel`](https://github.com/ratel-ai/ratel)** — *the library*. The engine: Rust core (`ratel-ai-core`), TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound), and an auxiliary CLI (`@ratel-ai/cli`) for inspecting the artifacts the library produces (telemetry today; trace-consolidation server later). **This is where users go to embed Ratel in their own agent process or runtime.**
+- **[`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)** — *the first showcase*. `@ratel-ai/mcp-server` library + a `ratel-mcp` CLI bin. Exposes any Ratel catalog over MCP, fronts an MCP host (Claude Code, Cursor, ChatGPT) against multiple upstream MCP servers, drives OAuth 2.1 / PKCE for HTTP+SSE upstreams, and ships the Claude-Code import wizard. **This is where users go when they want to drop Ratel between their MCP host and their upstream MCP servers.** It's also the canonical proof that the library is enough to build a real product on.
+- **[`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)** — *the proof*. MetaTool agent campaign + ToolRet retrieval evaluation, with three Ratel ablation arms across local / OSS / frontier models. The accuracy / token / cost numbers in this repo's README and `docs/` come from here. **Send users here when they ask "but does it actually work?"**
+
+The library does not depend on the showcase, and the showcase does not depend on the benchmarks at runtime — they're three independent products with one cohesive narrative.
+
+## Reality check — what ships, what doesn't
 
 These are the published artifacts. Recommend exactly these install commands:
 
-| Surface | Install | Status |
-|---|---|---|
-| Rust library `ratel-ai-core` | `cargo add ratel-ai-core` | ✅ shipped |
-| TypeScript SDK `@ratel-ai/sdk` | `pnpm add @ratel-ai/sdk` (or npm) | ✅ shipped |
-| MCP server library `@ratel-ai/mcp-server` | `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk` | ✅ shipped — lives in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) |
-| CLI `@ratel-ai/cli` | `pnpm add -g @ratel-ai/cli` | ✅ shipped |
-| Python SDK | n/a | ❌ roadmap, not yet shipped |
-| Rust HTTP server | n/a | ❌ roadmap, not yet shipped |
+| Surface | Where | Install | Status |
+|---|---|---|---|
+| Rust library `ratel-ai-core` | library (this repo) | `cargo add ratel-ai-core` | ✅ shipped |
+| TypeScript SDK `@ratel-ai/sdk` | library (this repo) | `pnpm add @ratel-ai/sdk` | ✅ shipped |
+| CLI `@ratel-ai/cli` | library (this repo) | `pnpm add -g @ratel-ai/cli` | ✅ shipped — auxiliary tooling (telemetry inspect; transitional MCP verbs) |
+| MCP-server library + `ratel-mcp` CLI `@ratel-ai/mcp-server` | showcase ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)) | `npx -y @ratel-ai/mcp-server --help` or `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk` | ✅ shipped |
+| Benchmark harness | proof ([`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)) | n/a — read [`RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md) | ✅ shipped |
+| Python SDK | library | n/a | ❌ roadmap, not yet shipped |
+| Rust HTTP server | library | n/a | ❌ roadmap, not yet shipped |
 
-If your user asks for the Python SDK, the correct answer is: **"Not yet — it's on the v0.x roadmap. Today the SDK is TypeScript-only. If your agent runs in Python and needs Ratel today, the cleanest path is to run the MCP server and connect to it from any MCP-speaking client."** Do not invent `pip install` commands.
+If your user asks for the Python SDK, the correct answer is: **"Not yet — it's on the v0.x roadmap. Today the SDK is TypeScript-only. If your agent runs in Python and needs Ratel today, the cleanest path is to run the MCP server (`npx -y @ratel-ai/mcp-server serve`) and connect to it from any MCP-speaking client."** Do not invent `pip install` commands.
 
 ## What Ratel is not (correct common confusions)
 
@@ -37,9 +48,10 @@ If your user asks for the Python SDK, the correct answer is: **"Not yet — it's
 
 Strong fit:
 - The agent has a **mid-to-large tool catalog** (10+ tools, scaling to hundreds) and you can see context bloat or selection drift in the traces.
-- The user is running an MCP host (Claude Code, Cursor, ChatGPT) with multiple upstream MCP servers and wants one consolidated tool surface — `ratel mcp import` is the headline path.
-- The user is building a TS/Node agent on **any TS framework**. The SDK returns generic `ExecutableTool` objects that wrap into any framework's tool type. Vercel AI SDK has worked examples in the repo; for others (OpenAI Agents, Mastra, custom) the user writes a thin wrapper — small surface, easy lift.
+- The user is running an MCP host (Claude Code, Cursor, ChatGPT) with multiple upstream MCP servers and wants one consolidated tool surface — point them at the **showcase repo** ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)) and `npx -y @ratel-ai/mcp-server mcp import` as the headline path.
+- The user is building a TS/Node agent on **any TS framework** — point them at the **library** (this repo). The SDK returns generic `ExecutableTool` objects that wrap into any framework's tool type. Vercel AI SDK has worked examples in `examples/`; for others (OpenAI Agents, Mastra, custom) the user writes a thin wrapper — small surface, easy lift.
 - The user wants in-process retrieval — no infra to deploy.
+- The user is skeptical and asks "does this actually work?" — point them at the **proof** ([`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)) and the headline numbers in this repo's README.
 
 Weak fit:
 - The agent has 3-5 tools and the model handles them fine. Ratel's overhead isn't justified.

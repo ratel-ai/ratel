@@ -4,6 +4,8 @@
 
 This is the longer take on what Ratel is, why it exists, and where it's going. For install commands and quickstarts, start at the [README](../README.md). For the durable architectural decisions, see [`docs/adr/`](adr/). For the time-tagged feature roadmap, see [`docs/roadmap.md`](roadmap.md).
 
+> **Three repos, one story.** This repo (`ratel-ai/ratel`) is the **library** — the engine you embed in your agent. [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) is the **first showcase** — `@ratel-ai/mcp-server`, a real product built on the library, exposing any catalog over MCP and fronting Claude Code / Cursor / ChatGPT against multiple upstream MCP servers. [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench) is the **proof** — the benchmark harness whose numbers anchor every accuracy / cost claim we make. The rest of this document is about the library half.
+
 ---
 
 ## The problem
@@ -31,17 +33,21 @@ The shape is deliberate:
 
 The trade we made: we don't try to "understand" tools the way an embedding model would. We index their text — names, descriptions, parameter names, enum values — and rank by lexical match. That sounds primitive, until you notice that tool descriptions written for LLMs are already engineered to be lexically informative. BM25 over that surface is competitive with, and often beats, embedding-based retrieval on tool selection. The benchmarks driving this claim live in [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) and [ADR‑0006](adr/0006-benchmark-corpus-and-eval-modes.md).
 
-## What ships today (v0.1.4)
+## What ships today
 
-Everything below is on `main` and published to crates.io / npm:
+**Library (this repo).** Everything below is on `main` and published to crates.io / npm:
 
 - **`ratel-ai-core`** — the Rust library. BM25 tool retrieval, deterministic schema-aware tokenization, in-process. The base everything else wraps.
 - **`@ratel-ai/sdk`** — the TypeScript SDK. Bundles `ratel-ai-core` via NAPI-RS ([ADR‑0002](adr/0002-ts-rust-binding-strategy.md)). Exposes `ToolRegistry`, `ToolCatalog`, gateway tool factories (`searchToolsTool`, `invokeToolTool`), and `registerMcpServer` to ingest an upstream MCP server's tools straight into a catalog.
-- **`@ratel-ai/cli`** — the `ratel` binary. One-shot import of a Claude Code MCP setup into Ratel, plus `add` / `serve` / `auth` / `list` / `edit` / `remove` / `import` / `link` verbs across user / project / local scopes.
+- **`@ratel-ai/cli`** — the `ratel` binary. Auxiliary tooling for the artifacts the library writes: `ratel inspect` summarizes telemetry sessions; the transitional `mcp` / `serve` / `backup` verbs are retained but the canonical home for those is the showcase repo's `ratel-mcp` CLI.
 
-The companion **`@ratel-ai/mcp-server`** library — exposes a `ToolCatalog` as an MCP server (`createMcpServer`) and builds gateways from a config (`buildGatewayFromConfig`), with OAuth 2.1 / PKCE support for HTTP and SSE upstreams — lives in a sibling repo, [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp), and is published independently to npm. `@ratel-ai/cli` consumes it from there.
+**Showcase ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)).** The first canonical product on the library:
 
-The artifacts ship as one coherent layered product: the SDK is a wrapper on the Rust core; the CLI fronts the MCP-server library with config UX on top.
+- **`@ratel-ai/mcp-server`** — exposes a `ToolCatalog` as an MCP server (`createMcpServer`) and builds gateways from a config (`buildGatewayFromConfig`), with OAuth 2.1 / PKCE support for HTTP and SSE upstreams. Ships as both a library and a `ratel-mcp` CLI (`mcp` / `serve` / `backup` verbs, Claude-Code import wizard). Released independently to npm. `@ratel-ai/cli` consumes the library half from there.
+
+**Proof ([`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)).** The benchmark harness — MetaTool agent campaign, ToolRet retrieval evaluation, three Ratel ablation arms across local / OSS / frontier models. Every accuracy / token / cost claim in this repo's README traces back to a row in [`RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md).
+
+The library is the substrate; the showcase is the proof-by-construction that the substrate is enough; the benchmarks are the proof-by-measurement that the substrate moves the numbers.
 
 ## Where this is going
 
