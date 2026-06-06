@@ -1,41 +1,21 @@
-Elastic License 2.0 (modified for open-source use)
+MIT License
 
-Copyright © 2026 Agentified
+Copyright (c) 2025 pietrozullo
 
-This software is licensed under the Elastic License 2.0, with the additional grant described below.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-You may not use this file except in compliance with the Elastic License 2.0 and the conditions outlined here.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-You may obtain a copy of the Elastic License 2.0 at:
-
-```
-https://www.elastic.co/licensing/elastic-license
-```
-
-Software distributed under the Elastic License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-
-See the Elastic License 2.0 for the specific language governing permissions and limitations under the license.
-
----
-
-## Additional Grant for Open-Source Projects
-
-In addition to the permissions granted under the Elastic License 2.0:
-
-* **Free Use in Open-Source Projects**:
-  You may use, copy, distribute, and prepare derivative works of the software — in source or object form, with or without modification — freely and without fee, provided the software is incorporated into or used by an **open-source project** licensed under an OSI-approved open-source license.
-
----
-
-## Conditions
-
-1. For **open-source projects**, the software may be used, copied, modified, and distributed without restriction or fee.
-
-2. For **non–open-source or commercial production use**, you may use, copy, distribute, and prepare derivative works of the software only with a commercial license from Agentified.
-
-3. You may not provide the software to third parties as a managed service, such as a hosted or cloud-based service, unless you have a license for that use.
-
-4. The software may not be used to circumvent the license grant limitations.
-
-5. Any permitted use is subject to compliance with the Elastic License 2.0, this additional grant, and applicable law.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
