@@ -1,4 +1,7 @@
 import type { ExecutableTool, ToolCatalog } from "./catalog.js";
+import { compactDescription } from "./compact.js";
+import type { SkillCatalog } from "./skill-catalog.js";
+import { type RelatedSkill, relatedSkillsFor } from "./skill-gateway.js";
 
 export const SEARCH_TOOLS_ID = "search_tools" as const;
 export const INVOKE_TOOL_ID = "invoke_tool" as const;
@@ -23,6 +26,10 @@ export interface UpstreamServerInfo {
 
 export interface SearchToolsToolOptions {
   upstreamServers?: readonly UpstreamServerInfo[];
+  /** When set, search_tools also returns skills relevant to the query. */
+  skillCatalog?: SkillCatalog;
+  /** Max related skills to attach (default 2). */
+  relatedSkillsLimit?: number;
 }
 
 export interface SearchToolHit {
@@ -39,9 +46,9 @@ export interface SearchToolsGroup {
 
 export interface SearchToolsResult {
   groups: SearchToolsGroup[];
+  /** Skills relevant to the query — present only when a skill catalog is wired and matches. */
+  relatedSkills?: RelatedSkill[];
 }
-
-const MAX_DESCRIPTION_LEN = 160;
 
 export function formatUpstreamLine(s: UpstreamServerInfo): string {
   let line = `- ${s.name}`;
@@ -49,15 +56,6 @@ export function formatUpstreamLine(s: UpstreamServerInfo): string {
   if (typeof s.toolCount === "number") line += ` (${s.toolCount} tools)`;
   if (s.needsAuth) line += " (auth required)";
   return line;
-}
-
-function compactDescription(s: string): string {
-  const collapsed = s.trim().replace(/\s+/g, " ");
-  if (collapsed.length <= MAX_DESCRIPTION_LEN) return collapsed;
-  const cut = collapsed.slice(0, MAX_DESCRIPTION_LEN - 1);
-  const lastSpace = cut.lastIndexOf(" ");
-  const head = lastSpace > 80 ? cut.slice(0, lastSpace) : cut;
-  return `${head.trimEnd()}…`;
 }
 
 function buildSearchToolsDescription(opts?: SearchToolsToolOptions): string {
@@ -118,6 +116,18 @@ export function searchToolsTool(
             required: ["server", "hits"],
           },
         },
+        relatedSkills: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              skillId: { type: "string" },
+              description: { type: "string" },
+              hint: { type: "string" },
+            },
+            required: ["skillId", "description", "hint"],
+          },
+        },
       },
       required: ["groups"],
     },
@@ -165,6 +175,12 @@ export function searchToolsTool(
         // biome-ignore lint/style/noNonNullAssertion: order entries are guaranteed by construction
         groups: order.map((n) => groups.get(n)!),
       };
+      if (opts?.skillCatalog) {
+        const related = relatedSkillsFor(opts.skillCatalog, query, {
+          limit: opts.relatedSkillsLimit,
+        });
+        if (related.length > 0) result.relatedSkills = related;
+      }
       return result;
     },
   };
@@ -173,6 +189,10 @@ export function searchToolsTool(
 export interface InvokeToolToolOptions {
   /** Notified when the underlying tool throws UnauthorizedError, with the upstream name inferred from the toolId. */
   onUnauthorized?: (upstream: string) => void | Promise<void>;
+  /** When set, a successful invoke also suggests skills relevant to the tool. */
+  skillCatalog?: SkillCatalog;
+  /** Max related skills to attach (default 2). */
+  relatedSkillsLimit?: number;
 }
 
 export function invokeToolTool(
@@ -185,7 +205,9 @@ export function invokeToolTool(
     description:
       "Invoke a tool from the catalog by its id. Use this to call tools that aren't in your direct tool list — " +
       "first find one via search_tools, then run it here. " +
-      "Pass the tool's arguments nested under the `args` field — do NOT flatten them to the top level.",
+      "Pass the tool's arguments nested under the `args` field — do NOT flatten them to the top level. " +
+      "If the response is shaped `{ result, relatedSkills }`, the tool output is under `result` and a " +
+      "purpose-built skill is suggested — load it with invoke_skill before continuing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -229,6 +251,14 @@ export function invokeToolTool(
           tool_id: toolId,
           took_ms: Date.now() - startedAt,
         });
+        if (opts.skillCatalog) {
+          const related = relatedSkillsFor(opts.skillCatalog, skillQueryForTool(catalog, toolId), {
+            limit: opts.relatedSkillsLimit,
+          });
+          // Wrap only when there's a skill to recommend; otherwise return the raw
+          // result unchanged so existing callers see no difference.
+          if (related.length > 0) return { result, relatedSkills: related };
+        }
         return result;
       } catch (err) {
         if (isUnauthorizedError(err)) {
@@ -268,4 +298,15 @@ function upstreamFromToolId(toolId: string): string | undefined {
   const idx = toolId.indexOf("__");
   if (idx <= 0) return undefined;
   return toolId.slice(0, idx);
+}
+
+/**
+ * Build the skill-search query for a just-invoked tool: the upstream server
+ * name and tool name (the `server__tool` id with the separator as a space),
+ * plus the tool's own description — so "vercel__deploy" surfaces Vercel skills.
+ */
+function skillQueryForTool(catalog: ToolCatalog, toolId: string): string {
+  const idParts = toolId.replace("__", " ");
+  const description = catalog.get(toolId)?.description ?? "";
+  return `${idParts} ${description}`.trim();
 }

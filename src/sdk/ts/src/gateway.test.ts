@@ -3,8 +3,11 @@ import {
   type ExecutableTool,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  relatedSkillsFor,
   SEARCH_TOOLS_ID,
   type SearchToolsResult,
+  type Skill,
+  SkillCatalog,
   searchToolsTool,
   ToolCatalog,
 } from "./index.js";
@@ -391,5 +394,85 @@ describe("invokeToolTool", () => {
     expect(result.error).toBe("needs_auth");
     expect(result.upstream).toBeUndefined();
     expect(seen).toEqual([]);
+  });
+});
+
+const vercelSkill: Skill = {
+  id: "vercel-deploy",
+  name: "vercel-deploy",
+  description: "How to deploy a project to Vercel: env vars, preview vs production, rollbacks.",
+  tags: ["vercel", "deployment"],
+  body: "# Vercel Deploy\n\nUse `vercel --prod` for production.",
+};
+
+function skillCatalogWith(...skills: Skill[]): SkillCatalog {
+  const c = new SkillCatalog();
+  for (const s of skills) c.register(s);
+  return c;
+}
+
+describe("relatedSkillsFor", () => {
+  it("ranks matching skills and returns load-it hints", () => {
+    const related = relatedSkillsFor(skillCatalogWith(vercelSkill), "deploy to vercel");
+    expect(related[0]?.skillId).toBe("vercel-deploy");
+    expect(related[0]?.hint).toContain('invoke_skill("vercel-deploy")');
+  });
+
+  it("respects the limit", () => {
+    const catalog = skillCatalogWith(vercelSkill, {
+      id: "supabase-auth",
+      name: "supabase-auth",
+      description: "Supabase auth patterns.",
+      tags: ["supabase"],
+      body: "x",
+    });
+    expect(relatedSkillsFor(catalog, "deploy", { limit: 1 }).length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("search_tools related skills", () => {
+  it("attaches relatedSkills when a skill catalog is wired and matches the query", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    const tool = searchToolsTool(catalog, { skillCatalog: skillCatalogWith(vercelSkill) });
+    const result = (await tool.execute({ query: "deploy to vercel" })) as SearchToolsResult;
+    expect(result.relatedSkills?.[0]?.skillId).toBe("vercel-deploy");
+  });
+
+  it("omits relatedSkills when no skill catalog is provided", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    const tool = searchToolsTool(catalog);
+    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
+    expect(result.relatedSkills).toBeUndefined();
+  });
+});
+
+describe("invoke_tool related skills", () => {
+  it("wraps the result as { result, relatedSkills } when a tool maps to a skill", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register({
+      id: "vercel__deploy",
+      name: "deploy",
+      description: "Deploy the current project to Vercel.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => ({ url: "https://x.vercel.app" }),
+    });
+    const tool = invokeToolTool(catalog, { skillCatalog: skillCatalogWith(vercelSkill) });
+    const out = (await tool.execute({ toolId: "vercel__deploy", args: {} })) as {
+      result: { url: string };
+      relatedSkills: Array<{ skillId: string }>;
+    };
+    expect(out.result.url).toBe("https://x.vercel.app");
+    expect(out.relatedSkills[0]?.skillId).toBe("vercel-deploy");
+  });
+
+  it("returns the raw result unchanged when no skill is configured", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    const tool = invokeToolTool(catalog);
+    const out = await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });
+    expect(out).toEqual({ contents: "contents of /x" });
   });
 });
