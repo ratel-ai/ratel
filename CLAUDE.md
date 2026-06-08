@@ -34,9 +34,15 @@ pnpm -r build
 pnpm -r typecheck
 pnpm -r lint
 pnpm -r test
+
+# Python (from src/sdk/python/; needs uv)
+uv venv --python 3.11 .venv
+uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy
+.venv/bin/maturin develop
+.venv/bin/ruff check . && .venv/bin/mypy ratel_ai && .venv/bin/pytest
 ```
 
-CI (`.github/workflows/{rust,ts}.yml`) runs all of the above on every PR; PRs land green.
+CI (`.github/workflows/{rust,ts,python}.yml`) runs all of the above on every PR; PRs land green.
 
 ## Workflow
 

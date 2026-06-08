@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "src/core/lib",
     "src/sdk/ts/native",
+    "src/sdk/python/native",
 ]
 
 [workspace.package]

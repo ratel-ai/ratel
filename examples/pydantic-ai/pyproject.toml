@@ -1,0 +1,13 @@
+[project]
+name = "ratel-example-pydantic-ai"
+version = "0.0.0"
+description = "Ratel + Pydantic AI — BM25 tool filtering before the agent run"
+requires-python = ">=3.10"
+dependencies = [
+    "ratel-ai",
+    "pydantic-ai>=1.0",
+]
+
+[tool.uv.sources]
+# Use the local SDK from this monorepo rather than PyPI.
+ratel-ai = { path = "../../src/sdk/python" }

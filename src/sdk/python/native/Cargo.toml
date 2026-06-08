@@ -1,0 +1,28 @@
+[package]
+name = "ratel-sdk-python-native"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+# No Rust unit tests live here (the binding is exercised from the Python test
+# suite). Disabling the test harness keeps `cargo test --workspace` from building
+# a test binary that links libpython and fails to locate it at runtime.
+test = false
+doctest = false
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["abi3-py39"] }
+pythonize = "0.23"
+ratel-ai-core = { workspace = true }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+
+[features]
+# Enabled by maturin when building wheels so the cdylib does not link libpython
+# (symbols resolve against the host interpreter at import time). Left OFF for
+# plain `cargo build --workspace` / `cargo test`, which link libpython and run.
+extension-module = ["pyo3/extension-module"]

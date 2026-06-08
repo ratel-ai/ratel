@@ -74,3 +74,40 @@ jobs:
           npm init -y >/dev/null
           npm install --no-audit --no-fund "@ratel-ai/sdk@${{ steps.ver.outputs.spec }}"
           node -e "const {ToolRegistry} = require('@ratel-ai/sdk'); const r = new ToolRegistry(); r.register({id:'x',name:'x',description:'x',inputSchema:{},outputSchema:{}}); const hits = r.search('x', 5); if (!Array.isArray(hits) || hits.length === 0) { console.error('search failed'); process.exit(1); } console.log('OK', hits);"
+
+  verify-pypi:
+    name: verify-pypi (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: darwin-arm64
+            runs-on: macos-14
+          - label: linux-x64-gnu
+            runs-on: ubuntu-latest
+          - label: linux-arm64-gnu
+            runs-on: ubuntu-24.04-arm
+          - label: win32-x64-msvc
+            runs-on: windows-latest
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Resolve spec
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "spec===${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install + smoke-test the wheel
+        shell: bash
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install "ratel-ai${{ steps.ver.outputs.spec }}"
+          python -c "from ratel_ai import ToolRegistry; r = ToolRegistry(); r.register('x','x','x',{},{}); hits = r.search('x', 5); assert hits and hits[0].tool_id == 'x', hits; print('OK', hits[0].tool_id, hits[0].score)"

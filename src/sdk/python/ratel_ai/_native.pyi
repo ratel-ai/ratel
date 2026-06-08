@@ -1,0 +1,41 @@
+"""Type stubs for the compiled PyO3 extension (`ratel_ai._native`).
+
+Mirrors `src/sdk/python/native/src/lib.rs`. The native layer is a pure
+pass-through over `ratel-ai-core`; the ergonomic SDK surface lives in the pure
+Python modules of this package.
+"""
+
+from typing import Any
+
+class SearchHit:
+    """A single BM25 search result."""
+
+    @property
+    def tool_id(self) -> str: ...
+    @property
+    def score(self) -> float: ...
+
+class ToolRegistry:
+    """Metadata-only BM25 index over `ratel-ai-core`."""
+
+    def __init__(self) -> None: ...
+    def register(
+        self,
+        id: str,
+        name: str,
+        description: str,
+        input_schema: dict[str, Any],
+        output_schema: dict[str, Any],
+    ) -> None: ...
+    def search(self, query: str, top_k: int) -> list[SearchHit]: ...
+    def search_with_origin(
+        self, query: str, top_k: int, origin: str
+    ) -> list[SearchHit]: ...
+    def record_event(self, event: dict[str, Any]) -> None: ...
+    def set_trace_sink(
+        self,
+        kind: str,
+        session_id: str | None = ...,
+        path: str | None = ...,
+    ) -> None: ...
+    def drain_trace_events(self) -> list[dict[str, Any]]: ...
