@@ -54,12 +54,12 @@ const hits = registry.search("read a text file", 5);
 
 ### `ToolCatalog` + gateway tools — register once, dispatch by id
 
-`ToolCatalog` extends the registry with executable handlers (`id → execute`), and `searchToolsTool` / `invokeToolTool` give your agent a self-service gateway over the catalog. Pair them with any agent framework — see [`examples/ai-sdk/`](../../../examples/ai-sdk/README.md) for a Vercel AI SDK wiring.
+`ToolCatalog` extends the registry with executable handlers (`id → execute`), and `searchCapabilitiesTool` / `invokeToolTool` give your agent a self-service gateway over the catalog. Pair them with any agent framework — see [`examples/ai-sdk/`](../../../examples/ai-sdk/README.md) for a Vercel AI SDK wiring.
 
 ```ts
 import {
   ToolCatalog,
-  searchToolsTool,
+  searchCapabilitiesTool,
   invokeToolTool,
   type ExecutableTool,
 } from "@ratel-ai/sdk";
@@ -76,7 +76,7 @@ catalog.register({
 
 // Gateway tools — wrap them into your framework's tool type.
 // Each returns ExecutableTool ({ id, name, description, inputSchema, outputSchema, execute }).
-const search = searchToolsTool(catalog);
+const search = searchCapabilitiesTool(catalog);
 const invoke = invokeToolTool(catalog);
 ```
 
@@ -115,7 +115,7 @@ Pass `trace` to the `ToolCatalog` constructor to capture every search / invoke /
 const catalog = new ToolCatalog({
   trace: { kind: "jsonl", sessionId: "session-1", path: "/tmp/ratel.jsonl" },
 });
-// every catalog.invoke, searchToolsTool, registerMcpServer call now writes
+// every catalog.invoke, searchCapabilitiesTool, registerMcpServer call now writes
 // one JSON line per event to /tmp/ratel.jsonl.
 ```
 
@@ -124,7 +124,7 @@ Sink kinds:
 - `{ kind: "memory"; sessionId }` — keep events in memory; drain via `catalog.drainTraceEvents()`. Useful for tests.
 - `{ kind: "jsonl"; sessionId; path }` — append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure — see ADR-0009 for the reliability profile.
 
-`searchToolsTool` tags its emitted `search` event with `origin: "agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
+`searchCapabilitiesTool` tags its emitted `search` event with `origin: "agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
 
 ## Package shape
 

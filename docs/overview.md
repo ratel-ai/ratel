@@ -38,7 +38,7 @@ The trade we made: we don't try to "understand" tools the way an embedding model
 **Library (this repo).** Everything below is on `main` and published to crates.io / npm:
 
 - **`ratel-ai-core`** — the Rust library. BM25 tool retrieval, deterministic schema-aware tokenization, in-process. The base everything else wraps.
-- **`@ratel-ai/sdk`** — the TypeScript SDK. Bundles `ratel-ai-core` via NAPI-RS ([ADR‑0002](adr/0002-ts-rust-binding-strategy.md)). Exposes `ToolRegistry`, `ToolCatalog`, gateway tool factories (`searchToolsTool`, `invokeToolTool`), and `registerMcpServer` to ingest an upstream MCP server's tools straight into a catalog.
+- **`@ratel-ai/sdk`** — the TypeScript SDK. Bundles `ratel-ai-core` via NAPI-RS ([ADR‑0002](adr/0002-ts-rust-binding-strategy.md)). Exposes `ToolRegistry`, `ToolCatalog`, gateway tool factories (`searchCapabilitiesTool`, `invokeToolTool`), and `registerMcpServer` to ingest an upstream MCP server's tools straight into a catalog.
 - **`@ratel-ai/cli`** — the `ratel` binary. Auxiliary tooling for the artifacts the library writes: `ratel inspect` summarizes telemetry sessions; the transitional `mcp` / `serve` / `backup` verbs are retained but the canonical home for those is the showcase repo's `ratel-mcp` CLI.
 
 **Showcase ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)).** The first canonical product on the library:
@@ -65,7 +65,7 @@ This is the longer arc. Today's product is the foundation: a catalog, a retrieva
 
 - **Not a vector database.** Retrieval is deterministic BM25. No embedding pipeline.
 - **Not a routing layer.** The model still picks the tool from the top‑K. Ratel decides what's *visible*, not what's *called*.
-- **Not an agent framework — it plugs into yours.** Ratel doesn't run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and gateway tools (`searchToolsTool`, `invokeToolTool`) that return generic `ExecutableTool` objects — wrap them into your framework's tool type and drop them in. The repo demonstrates the pattern with the Vercel AI SDK; the same wiring adapts to any TS agent framework you're already using.
+- **Not an agent framework — it plugs into yours.** Ratel doesn't run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and gateway tools (`searchCapabilitiesTool`, `invokeToolTool`) that return generic `ExecutableTool` objects — wrap them into your framework's tool type and drop them in. The repo demonstrates the pattern with the Vercel AI SDK; the same wiring adapts to any TS agent framework you're already using.
 - **Not a hosted service.** Today everything runs in your process. A self-hosted server flavor for telemetry consolidation is on the v0.2.x–v0.3.x roadmap; the SDK and MCP server stay in-process regardless.
 
 ## How Ratel relates to MCP
