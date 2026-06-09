@@ -73,7 +73,7 @@ This is the longer arc. Today's product is the foundation: a catalog, a retrieva
 The Model Context Protocol is a transport / framing standard for tool-use between hosts and servers. Ratel is orthogonal: a retrieval engine that can sit on either side of an MCP boundary.
 
 - **As an MCP client**: `registerMcpServer` lets a Ratel catalog ingest the tools an upstream MCP server advertises, alongside any local executables. The agent in your process gets one unified catalog regardless of where each tool actually runs.
-- **As an MCP server**: `createMcpServer` wraps a catalog and exposes it over MCP — the connecting host (Claude Code, Cursor, ChatGPT) sees exactly two tools, `search_tools` and `invoke_tool`, regardless of catalog size. This is the path the `ratel` CLI uses to put Ratel between Claude Code and your existing MCP servers.
+- **As an MCP server**: `createMcpServer` wraps a catalog and exposes it over MCP — the connecting host (Claude Code, Cursor, ChatGPT) sees a small fixed set of tools (`search_capabilities` + `invoke_tool`, plus `get_skill_content` when skills are present), regardless of catalog size. This is the path the `ratel` CLI uses to put Ratel between Claude Code and your existing MCP servers.
 
 You can use Ratel without MCP at all — register tools directly into a `ToolCatalog` from your TS / Rust agent and never touch the protocol.
 

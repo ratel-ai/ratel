@@ -9,33 +9,23 @@ export type {
 } from "./catalog.js";
 export { ToolCatalog } from "./catalog.js";
 export type {
-  SearchToolHit,
-  SearchToolsGroup,
-  SearchToolsResult,
-  SearchToolsToolOptions,
+  CapabilitySkillHit,
+  CapabilityToolGroup,
+  CapabilityToolHit,
+  InvokeToolToolOptions,
+  SearchCapabilitiesOptions,
+  SearchCapabilitiesResult,
   UpstreamServerInfo,
 } from "./gateway.js";
 export {
   formatUpstreamLine,
   INVOKE_TOOL_ID,
   invokeToolTool,
-  SEARCH_TOOLS_ID,
-  searchToolsTool,
+  SEARCH_CAPABILITIES_ID,
+  searchCapabilitiesTool,
 } from "./gateway.js";
 export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
 export { registerMcpServer } from "./mcp.js";
 export type { SkillCatalogOptions } from "./skill-catalog.js";
 export { SkillCatalog } from "./skill-catalog.js";
-export type {
-  RelatedSkill,
-  RelatedSkillsOptions,
-  SearchSkillHit,
-  SearchSkillsResult,
-} from "./skill-gateway.js";
-export {
-  INVOKE_SKILL_ID,
-  invokeSkillTool,
-  relatedSkillsFor,
-  SEARCH_SKILLS_ID,
-  searchSkillsTool,
-} from "./skill-gateway.js";
+export { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-gateway.js";

@@ -20,6 +20,13 @@ pub(crate) fn searchable_text(skill: &Skill) -> String {
             push_identifier(tag, &mut tokens);
         }
     }
+    // Triggers are natural-language task phrases ("login form"); push verbatim so
+    // a terse intent prompt ("add a login form") matches lexically.
+    for trigger in &skill.triggers {
+        if !trigger.is_empty() {
+            tokens.push(trigger.clone());
+        }
+    }
     tokens.join(" ")
 }
 
@@ -33,6 +40,8 @@ mod tests {
             name: "frontend-slides".into(),
             description: "Build animation-rich HTML presentations".into(),
             tags: vec!["frontend".into(), "presentations".into()],
+            triggers: vec!["slide deck".into()],
+            stacks: vec!["react".into()],
             body: "# Frontend Slides\n\nLong body that must not affect ranking…".into(),
         }
     }
@@ -73,9 +82,29 @@ mod tests {
             name: "code_review".into(),
             description: String::new(),
             tags: vec![],
+            triggers: vec![],
+            stacks: vec![],
             body: String::new(),
         };
         let text = searchable_text(&skill);
         assert!(text.contains("code review"), "snake_case not split: {text}");
+    }
+
+    #[test]
+    fn searchable_text_includes_triggers() {
+        let skill = slides_skill();
+        let text = searchable_text(&skill);
+        assert!(
+            text.contains("slide deck"),
+            "trigger phrase missing: {text}"
+        );
+    }
+
+    #[test]
+    fn searchable_text_excludes_stacks() {
+        // Stacks bias the push ranker by project context; they are not query terms.
+        let skill = slides_skill();
+        let text = searchable_text(&skill);
+        assert!(!text.contains("react"), "stack leaked into index: {text}");
     }
 }

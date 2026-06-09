@@ -160,6 +160,11 @@ pub struct Skill {
     pub name: String,
     pub description: String,
     pub tags: Vec<String>,
+    /// Author-declared task phrases that trigger the skill; indexed for ranking.
+    pub triggers: Option<Vec<String>>,
+    /// Project stacks the skill applies to (e.g. ["react"]); used by the push
+    /// ranker to boost by context — not indexed as query terms.
+    pub stacks: Option<Vec<String>>,
     pub body: String,
 }
 
@@ -193,6 +198,8 @@ impl SkillRegistry {
             name: skill.name,
             description: skill.description,
             tags: skill.tags,
+            triggers: skill.triggers.unwrap_or_default(),
+            stacks: skill.stacks.unwrap_or_default(),
             body: skill.body,
         });
     }

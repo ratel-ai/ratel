@@ -110,6 +110,8 @@ mod tests {
             name: name.into(),
             description: description.into(),
             tags: tags.iter().map(|t| (*t).into()).collect(),
+            triggers: vec![],
+            stacks: vec![],
             body: format!("# {name}\n\nbody"),
         }
     }
