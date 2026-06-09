@@ -20,40 +20,29 @@
 
 > Most agents stuff every tool, skill, and memory into the context window each turn — burning tokens, drifting on the long tail. Ratel sits between the agent and its catalog, and resolves only what matters for *this* turn.
 
-## Get a Ratel assessment of your agent in 60 seconds
+## Integrate Ratel in 60 seconds
 
-The fastest way to see what Ratel would do for your agent — and where else your agent is leaking tokens, accuracy, or cost — is the **Ratel skills suite**. Five Claude Code / Cursor / Codex skills that audit your codebase, plan observability, design dashboards, integrate Ratel, and analyse live traces. No engagement required; the assessment runs static against your repo.
+The fastest way to get Ratel into your agent is the **Ratel skills suite** — five Claude Code / Cursor / Codex skills that integrate Ratel, plan observability, design dashboards, audit your codebase, and analyse live traces.
 
 Install all five:
 
 ```bash
-npx skills add ratel-ai/skills -y -g
+npx skills add ratel-ai/skills --all
 ```
 
-Or paste this into your coding agent — it installs the suite, audits this repository, and then walks you through the integration plan:
+Or paste this into your coding agent — it installs the suite and walks you through a concrete Ratel integration plan:
 
 ```text
-I want you to assess my agent codebase and produce a Ratel-flavored
-report so we can see what's weak and where Ratel would help.
-
-Step 1 — install the Ratel skills suite:
-
-  npx skills add ratel-ai/skills -y -g
-
-Step 2 — run the `ratel-assessment` skill on this repository. It
-will produce a markdown report at `docs/ratel-assessment-<date>.md`
-with a 10-dimension scorecard, evidence-backed findings, and a
-"Where Ratel fits" section.
-
-Once we've reviewed the report together, run the `ratel-integrate`
-skill to produce a concrete rollout plan (integration mode, pilot
-scope, A/B test design, Langfuse metrics) at
-`docs/ratel-integrate.md`.
-
-Show me the scorecard inline and link to the report file.
+Run npx skills add ratel-ai/skills --all and use the skills to integrate Ratel in this project.
 ```
 
-Full skills suite: [`ratel-ai/skills`](https://github.com/ratel-ai/skills) · skill discovery: [`skills.sh`](https://skills.sh) · the CLI: [`vercel-labs/skills`](https://github.com/vercel-labs/skills) (compatible with Claude Code, Cursor, Codex, OpenCode, Gemini CLI, and 40+ other coding agents).
+Want a read on the rest of your agent first? The same suite ships a free, static `ratel-assessment` — no engagement required. Paste this instead:
+
+```text
+Run npx skills add ratel-ai/skills --all and use the skills to assess the agents in this codebase and show me where Ratel would help.
+```
+
+Full skills suite: [`ratel-ai/skills`](https://github.com/ratel-ai/skills)
 
 ## What is Ratel
 
@@ -75,6 +64,7 @@ Three repos, one story:
 | **Library** | [`ratel-ai/ratel`](https://github.com/ratel-ai/ratel) (this one) | The engine. Rust core + TS SDK + auxiliary CLI. Embed it in your agent process. |
 | **Showcase** | [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) | The first canonical product on the library — `@ratel-ai/mcp-server` exposes any catalog over MCP, with a `ratel-mcp` CLI that fronts Claude Code / Cursor / ChatGPT and an OAuth-aware gateway for upstream MCP servers. Proof that the library is enough to build a real product on. |
 | **Proof** | [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench) | The benchmark harness — MetaTool agent campaign, ToolRet retrieval, three Ratel ablation arms across local / OSS / frontier models. The numbers in the table below come from here. |
+
 
 ## Why Ratel
 
