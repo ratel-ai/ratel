@@ -83,17 +83,29 @@ jobs:
         include:
           - label: darwin-arm64
             runs-on: macos-14
+            python_arch: arm64
+          # darwin-x64 runs under Rosetta on Apple Silicon (same trick as the npm
+          # `verify` job): setup-python fetches an x64 interpreter, so pip installs
+          # the x86_64-apple-darwin wheel and loads it via Rosetta. Avoids the long
+          # macos-13 (Intel) runner queue while still smoke-testing the x64 wheel.
+          - label: darwin-x64
+            runs-on: macos-14
+            python_arch: x64
           - label: linux-x64-gnu
             runs-on: ubuntu-latest
+            python_arch: x64
           - label: linux-arm64-gnu
             runs-on: ubuntu-24.04-arm
+            python_arch: arm64
           - label: win32-x64-msvc
             runs-on: windows-latest
+            python_arch: x64
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          architecture: ${{ matrix.python_arch }}
       - name: Resolve spec
         id: ver
         shell: bash

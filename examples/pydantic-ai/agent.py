@@ -11,6 +11,7 @@ so the same schema the model sees is the same one Ratel ranks.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,7 +28,12 @@ class AgentResult:
 
 def _tool_from_executable(execute, name: str, description: str, schema: dict[str, Any]) -> Tool:
     async def fn(**kwargs: Any) -> Any:
-        return await execute(kwargs)
+        # Catalog executors may be sync (plain dict-returning lambdas) or async
+        # (`async def`); mirror `ToolCatalog.invoke` and only await awaitables.
+        result = execute(kwargs)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
 
     fn.__name__ = name
     # `Tool.from_schema` defines a tool purely from a JSON schema — no Python

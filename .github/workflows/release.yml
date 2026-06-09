@@ -48,12 +48,20 @@ jobs:
           echo "workspace=$ws_version sdk=$sdk_version cli=$cli_version py=$py_version"
 
           fail=0
-          for v in "$ws_version" "$sdk_version" "$cli_version" "$py_version"; do
+          for v in "$ws_version" "$sdk_version" "$cli_version"; do
             if [ "$v" != "$tag_version" ]; then
               echo "::error::Version mismatch — expected $tag_version, got $v"
               fail=1
             fi
           done
+          # PyPI/PEP 440 normalizes pre-release tags (e.g. `0.1.5-rc.4` -> `0.1.5rc4`),
+          # so the version that lands on PyPI differs from the npm/crate string. Accept
+          # either the npm-style tag or its PEP 440 form in pyproject.toml.
+          py_expected=$(printf '%s' "$tag_version" | sed -E 's/-?rc\.?([0-9]+)/rc\1/')
+          if [ "$py_version" != "$tag_version" ] && [ "$py_version" != "$py_expected" ]; then
+            echo "::error::Python version mismatch — expected $tag_version (or PEP 440 $py_expected), got $py_version"
+            fail=1
+          fi
           if [ "$fail" = "1" ]; then exit 1; fi
 
           if [[ "$tag_version" == *-rc.* ]]; then
@@ -334,6 +342,12 @@ jobs:
           merge-multiple: true
       - name: List artifacts
         run: ls -la dist/
+      - name: Validate packaging (metadata + README rendering)
+        # Mirrors the npm/crate `--dry-run` publishes: exercise the PyPI path on
+        # dry runs too, so a broken wheel/sdist or bad metadata fails before a real tag.
+        run: |
+          python -m pip install --upgrade twine
+          twine check dist/*
       - name: Publish
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

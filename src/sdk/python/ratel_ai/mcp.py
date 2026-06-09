@@ -2,8 +2,8 @@
 
 `register_mcp_server` lists an upstream MCP server's tools, registers each into a
 `ToolCatalog` under a namespaced id (`<server>__<tool>`), and wires each executor
-to the upstream `call_tool`. The same `upstream_*` trace events the TS SDK emits
-are emitted here (ADR-0009).
+to the upstream `call_tool`. It emits the same `upstream_*` trace **event types**
+the TS SDK emits (ADR-0009).
 
 The `mcp` package is an optional dependency (`pip install ratel-ai[mcp]`) and is
 imported lazily, so the base SDK installs without it.
@@ -11,8 +11,15 @@ imported lazily, so the base SDK installs without it.
 Divergence from the TS SDK, by design: the Python MCP client is built around
 async context managers, so the **caller owns the `ClientSession` lifecycle**
 (set up the transport + session with `async with`) and passes the initialized
-session in. The returned handle's `close()` exists for symmetry and defaults to a
-no-op; pass `on_close` if you want the handle to tear something down.
+session in. A consequence of that ownership split: unlike the TS SDK — which reads
+`server_instructions` from the live handshake and derives the `transport` label
+from the transport class — those two fields are *caller-supplied* here
+(`transport_label`, `instructions`). They default to `"unknown"` / `None`; pass the
+values from your `await session.initialize()` result to make the emitted
+`upstream_register` payload byte-identical to the TS SDK's.
+
+The returned handle's `close()` exists for symmetry and defaults to a no-op; pass
+`on_close` if you want the handle to tear something down.
 """
 
 from __future__ import annotations

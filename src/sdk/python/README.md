@@ -88,9 +88,30 @@ handle = await register_mcp_server(
 # handle.tool_ids -> ["github__create_issue", ...]
 ```
 
+### Telemetry
+
+Pass `trace` to `ToolCatalog` to capture every search / invoke / gateway / upstream / auth event into a sink owned by the Rust core ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). Default is no-op — nothing is captured unless you opt in.
+
+```python
+from ratel_ai import ToolCatalog, TraceSinkConfig
+
+catalog = ToolCatalog(
+    trace=TraceSinkConfig(kind="jsonl", session_id="session-1", path="/tmp/ratel.jsonl"),
+)
+# every catalog.invoke, search_tools_tool, register_mcp_server call now writes
+# one JSON line per event to /tmp/ratel.jsonl.
+```
+
+Sink kinds:
+- `kind="noop"` — drop everything (default).
+- `kind="memory"`, `session_id` — keep events in memory; drain via `catalog.drain_trace_events()`. Useful for tests.
+- `kind="jsonl"`, `session_id`, `path` — append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure — see ADR-0009 for the reliability profile.
+
+`search_tools_tool` tags its emitted `search` event with `origin="agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
+
 ## Develop
 
-This package is part of the Cargo + (uv) workspace at the repo root. From `src/sdk/python/`:
+This package is part of the Cargo workspace at the repo root and builds into a local venv. From `src/sdk/python/`:
 
 ```bash
 uv venv --python 3.11 .venv
