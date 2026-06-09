@@ -27,10 +27,13 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
       },
       required: ["skillId"],
     },
+    // `body` on success, `error` when the id is unknown. Both are valid output,
+    // so neither field is required: an MCP client validates structured content
+    // against this schema, and requiring `body` would make the error path throw
+    // a protocol error instead of returning the declared `{ error }`.
     outputSchema: {
       type: "object",
-      properties: { body: { type: "string" } },
-      required: ["body"],
+      properties: { body: { type: "string" }, error: { type: "string" } },
     },
     execute: async (input) => {
       const { skillId } = input as { skillId: string };

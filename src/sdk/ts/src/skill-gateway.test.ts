@@ -35,6 +35,19 @@ describe("getSkillContentTool", () => {
     expect(result.error).toMatch(/unknown skillId: nope/);
   });
 
+  it("declares an output schema that accepts the error shape, not just body", () => {
+    // An MCP client validates structured content against outputSchema. The error
+    // branch returns { error } with no body, so `body` must NOT be required —
+    // otherwise the error path throws a protocol error instead of returning it.
+    const schema = getSkillContentTool(new SkillCatalog()).outputSchema as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+    expect(schema.required ?? []).not.toContain("body");
+    expect(schema.properties).toHaveProperty("body");
+    expect(schema.properties).toHaveProperty("error");
+  });
+
   it("emits gateway_error with unknown_skill_id for an unknown id", async () => {
     const catalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
     const tool = getSkillContentTool(catalog);
