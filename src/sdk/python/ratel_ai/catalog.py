@@ -127,6 +127,11 @@ class ToolCatalog:
         )
         started = time.monotonic()
         try:
+            # Executors may be sync (a plain dict-returning function) or async
+            # (`async def`, e.g. MCP/HTTP tools) — so call first, then await only
+            # if awaitable. Never bare-`await fn(args)`: in Python that raises on a
+            # sync result. (See docs/lessons.md — this is the canonical place that
+            # absorbs the difference; callers must route here, not re-derive it.)
             result = fn(args)
             if inspect.isawaitable(result):
                 result = await result
