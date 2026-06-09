@@ -4,6 +4,7 @@
 
   <p>
     <a href="./docs/">Docs</a> •
+    <a href="https://github.com/ratel-ai/skills">Skills</a> •
     <a href="./docs/roadmap.md">Roadmap</a> •
     <a href="https://discord.gg/hdKpx69NR">Discord</a>
   </p>
@@ -13,11 +14,46 @@
     <a href="https://crates.io/crates/ratel-ai-core"><img src="https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300" alt="crates.io" /></a>
     <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
     <a href="https://discord.gg/hdKpx69NR"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da&label=discord" alt="Discord" /></a>
-    <a href="./LICENSE.md"><img src="https://img.shields.io/badge/license-ELv2-blue" alt="license" /></a>
+    <a href="./LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license" /></a>
   </p>
 </div>
 
 > Most agents stuff every tool, skill, and memory into the context window each turn — burning tokens, drifting on the long tail. Ratel sits between the agent and its catalog, and resolves only what matters for *this* turn.
+
+## Get a Ratel assessment of your agent in 60 seconds
+
+The fastest way to see what Ratel would do for your agent — and where else your agent is leaking tokens, accuracy, or cost — is the **Ratel skills suite**. Five Claude Code / Cursor / Codex skills that audit your codebase, plan observability, design dashboards, integrate Ratel, and analyse live traces. No engagement required; the assessment runs static against your repo.
+
+Install all five:
+
+```bash
+npx skills add ratel-ai/skills -y -g
+```
+
+Or paste this into your coding agent — it installs the suite, audits this repository, and then walks you through the integration plan:
+
+```text
+I want you to assess my agent codebase and produce a Ratel-flavored
+report so we can see what's weak and where Ratel would help.
+
+Step 1 — install the Ratel skills suite:
+
+  npx skills add ratel-ai/skills -y -g
+
+Step 2 — run the `ratel-assessment` skill on this repository. It
+will produce a markdown report at `docs/ratel-assessment-<date>.md`
+with a 10-dimension scorecard, evidence-backed findings, and a
+"Where Ratel fits" section.
+
+Once we've reviewed the report together, run the `ratel-integrate`
+skill to produce a concrete rollout plan (integration mode, pilot
+scope, A/B test design, Langfuse metrics) at
+`docs/ratel-integrate.md`.
+
+Show me the scorecard inline and link to the report file.
+```
+
+Full skills suite: [`ratel-ai/skills`](https://github.com/ratel-ai/skills) · skill discovery: [`skills.sh`](https://skills.sh) · the CLI: [`vercel-labs/skills`](https://github.com/vercel-labs/skills) (compatible with Claude Code, Cursor, Codex, OpenCode, Gemini CLI, and 40+ other coding agents).
 
 ## What is Ratel
 
@@ -206,4 +242,4 @@ Full record in [docs/adr/](docs/adr/). Cross-cutting locks worth knowing up fron
 
 ## License
 
-**Elastic License 2.0**, with a grant making it free for OSI-approved open-source projects. Non-OSS / commercial production use requires a commercial license. See [LICENSE.md](LICENSE.md).
+**MIT**. Free to use, modify, and redistribute. See [LICENSE.md](LICENSE.md).
