@@ -24,7 +24,7 @@ A Rust HTTP server is on the roadmap, **not yet shipped.** The Rust core is a li
 ## Components
 
 - [Rust core (`ratel-ai-core`)](https://github.com/ratel-ai/ratel/blob/main/src/core/lib/README.md): BM25 retrieval over a schema-aware text projection of each tool. In-process, no infra. The base everything else wraps.
-- [TypeScript SDK (`@ratel-ai/sdk`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/README.md): NAPI-bound wrapper. Exposes `ToolRegistry`, `ToolCatalog`, `searchToolsTool`, `invokeToolTool`, `registerMcpServer`. Ships pre-built natives — no Rust toolchain required to install.
+- [TypeScript SDK (`@ratel-ai/sdk`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/README.md): NAPI-bound wrapper. Exposes `ToolRegistry`, `ToolCatalog`, `searchCapabilitiesTool`, `invokeToolTool`, `registerMcpServer`. Ships pre-built natives — no Rust toolchain required to install.
 - [MCP server (`@ratel-ai/mcp-server`)](https://github.com/ratel-ai/ratel/blob/main/src/integrations/mcp-server/README.md): `createMcpServer(catalog, opts)` to expose a catalog over MCP; `buildGatewayFromConfig(config)` to spin up a gateway from a Claude-Code-shaped `mcpServers` config; OAuth 2.1 / PKCE for HTTP & SSE upstreams.
 - [CLI (`@ratel-ai/cli`)](https://github.com/ratel-ai/ratel/blob/main/src/integrations/cli/README.md): `ratel mcp import|add|serve|auth|list|edit|remove|link` across user / project / local scopes. `ratel backup list|undo` for rollback.
 
@@ -37,7 +37,7 @@ A Rust HTTP server is on the roadmap, **not yet shipped.** The Rust core is a li
 
 ## Examples
 
-- [`examples/ai-sdk`](https://github.com/ratel-ai/ratel/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic gateway (`search_tools` / `invoke_tool`). Pure-SDK, no MCP.
+- [`examples/ai-sdk`](https://github.com/ratel-ai/ratel/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic gateway (`search_capabilities` / `invoke_tool`). Pure-SDK, no MCP.
 - [`examples/mcp-chat`](https://github.com/ratel-ai/ratel/blob/main/examples/mcp-chat/README.md): REPL agent ingesting an upstream MCP server via `registerMcpServer`.
 - [`examples/mcp-server`](https://github.com/ratel-ai/ratel/blob/main/examples/mcp-server/README.md): Claude Code session fronted by Ratel as the only MCP.
 
