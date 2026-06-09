@@ -3,9 +3,14 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { AUTH_TOOL_ID } from "@ratel-ai/mcp-server";
-import { INVOKE_TOOL_ID, SEARCH_TOOLS_ID } from "@ratel-ai/sdk";
+import { INVOKE_TOOL_ID } from "@ratel-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
+
+// This CLI serves via the published `@ratel-ai/mcp-server`, which still exposes
+// `search_tools`. It moves to `search_capabilities` once mcp-server is
+// republished on the unified surface and this package bumps the dependency.
+const SEARCH_TOOL_NAME = "search_tools";
 
 async function fakeUpstream() {
   const server = new Server({ name: "fake", version: "0.0.0" }, { capabilities: { tools: {} } });
@@ -39,11 +44,11 @@ describe("runCli — serve", () => {
     await client.connect(downstreamClientTransport);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      [SEARCH_TOOLS_ID, INVOKE_TOOL_ID, AUTH_TOOL_ID].sort(),
+      [SEARCH_TOOL_NAME, INVOKE_TOOL_ID, AUTH_TOOL_ID].sort(),
     );
 
     const search = await client.callTool({
-      name: SEARCH_TOOLS_ID,
+      name: SEARCH_TOOL_NAME,
       arguments: { query: "ping" },
     });
     const text = (search.content as Array<{ text: string }>)[0].text;
@@ -77,7 +82,7 @@ describe("runCli — serve", () => {
     const client = new Client({ name: "test", version: "0.0.0" });
     await client.connect(downstreamClientTransport);
     const { tools } = await client.listTools();
-    const search = tools.find((t) => t.name === SEARCH_TOOLS_ID);
+    const search = tools.find((t) => t.name === SEARCH_TOOL_NAME);
     expect(search?.description).toContain("upstream MCP servers");
     expect(search?.description).toContain("- up — ping server (1 tools)");
 
