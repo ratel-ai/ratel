@@ -11,7 +11,6 @@ so the same schema the model sees is the same one Ratel ranks.
 
 from __future__ import annotations
 
-import inspect
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,19 +25,39 @@ class AgentResult:
     active_tools: list[str]
 
 
-def _tool_from_executable(execute, name: str, description: str, schema: dict[str, Any]) -> Tool:
-    async def fn(**kwargs: Any) -> Any:
-        # Catalog executors may be sync (plain dict-returning lambdas) or async
-        # (`async def`); mirror `ToolCatalog.invoke` and only await awaitables.
-        result = execute(kwargs)
-        if inspect.isawaitable(result):
-            result = await result
-        return result
-
+def _tool_from_fn(fn: Any, name: str, description: str, schema: dict[str, Any]) -> Tool:
     fn.__name__ = name
     # `Tool.from_schema` defines a tool purely from a JSON schema — no Python
     # signature introspection — which is exactly what a dynamic catalog needs.
     return Tool.from_schema(fn, name=name, description=description, json_schema=schema)
+
+
+def _catalog_tool(catalog: ToolCatalog, tool_id: str, description: str, schema: dict[str, Any]) -> Tool:
+    """Dispatch a real catalog tool through `ToolCatalog.invoke`.
+
+    `invoke` is the SDK's tested entry point: it handles sync *and* async
+    executors and emits the `invoke_*` trace events. The example deliberately
+    does NOT re-implement that — re-wrapping the raw `execute` is how a sync
+    executor ends up wrongly `await`-ed.
+    """
+
+    async def fn(**kwargs: Any) -> Any:
+        return await catalog.invoke(tool_id, kwargs)
+
+    return _tool_from_fn(fn, tool_id, description, schema)
+
+
+def _gateway_tool(execute: Any, name: str, description: str, schema: dict[str, Any]) -> Tool:
+    """Wrap a gateway meta-tool (`search_tools` / `invoke_tool`).
+
+    These are not catalog entries; they own `async def` `execute` handlers, so
+    they're awaited directly rather than routed through `catalog.invoke`.
+    """
+
+    async def fn(**kwargs: Any) -> Any:
+        return await execute(kwargs)
+
+    return _tool_from_fn(fn, name, description, schema)
 
 
 def build_tools(catalog: ToolCatalog, prompt: str, initial_top_k: int = 3) -> list[Tool]:
@@ -46,19 +65,15 @@ def build_tools(catalog: ToolCatalog, prompt: str, initial_top_k: int = 3) -> li
     invoke = invoke_tool_tool(catalog)
 
     tools: dict[str, Tool] = {
-        search.id: _tool_from_executable(
-            search.execute, search.id, search.description, search.input_schema
-        ),
-        invoke.id: _tool_from_executable(
-            invoke.execute, invoke.id, invoke.description, invoke.input_schema
-        ),
+        search.id: _gateway_tool(search.execute, search.id, search.description, search.input_schema),
+        invoke.id: _gateway_tool(invoke.execute, invoke.id, invoke.description, invoke.input_schema),
     }
 
     for hit in catalog.search(prompt, initial_top_k):
         executable = catalog.get_executable(hit.tool_id)
         if executable is not None:
-            tools[executable.id] = _tool_from_executable(
-                executable.execute,
+            tools[executable.id] = _catalog_tool(
+                catalog,
                 executable.id,
                 executable.description,
                 executable.input_schema,
