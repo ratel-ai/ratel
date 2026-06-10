@@ -48,13 +48,13 @@ hits = registry.search("read a text file", 5)
 ### `ToolCatalog` + gateway tools — register once, dispatch by id
 
 `ToolCatalog` extends the registry with executable handlers (`id → execute`), and
-`search_tools_tool` / `invoke_tool_tool` give your agent a self-service gateway
+`search_capabilities_tool` / `invoke_tool_tool` give your agent a self-service gateway
 over the catalog. Pair them with any agent framework — see
 [`examples/pydantic-ai/`](../../../examples/pydantic-ai/README.md) for a Pydantic AI wiring.
 
 ```python
 import asyncio
-from ratel_ai import ToolCatalog, ExecutableTool, search_tools_tool, invoke_tool_tool
+from ratel_ai import ToolCatalog, ExecutableTool, search_capabilities_tool, invoke_tool_tool
 
 catalog = ToolCatalog()
 catalog.register(
@@ -68,11 +68,36 @@ catalog.register(
     )
 )
 
-search = search_tools_tool(catalog)   # id == "search_tools"
+search = search_capabilities_tool(catalog)   # id == "search_capabilities"
 invoke = invoke_tool_tool(catalog)    # id == "invoke_tool"
 ```
 
 Executors may be sync or async; `ToolCatalog.invoke` awaits coroutines automatically.
+
+### `SkillCatalog` + `get_skill_content_tool` — reusable playbooks, on demand
+
+Skills are Markdown playbooks ranked by a *separate* BM25 corpus. When a `SkillCatalog`
+is passed to `search_capabilities_tool`, the search returns a `skills` bucket alongside
+`tools` — each with its own result budget, so a relevant skill is never crowded out by
+matching tools. The agent loads a skill's full body on demand via `get_skill_content_tool`.
+
+```python
+from ratel_ai import Skill, SkillCatalog, get_skill_content_tool, search_capabilities_tool
+
+skills = SkillCatalog()
+skills.register(
+    Skill(
+        id="vercel-deploy",
+        name="vercel-deploy",
+        description="How to deploy to Vercel: env vars, preview vs production, rollbacks.",
+        triggers=["deploy", "ship to production"],
+        stacks=["next", "vercel"],
+    )
+)
+
+search = search_capabilities_tool(catalog, skills)  # result: {"tools": {...}, "skills": [...]}
+load = get_skill_content_tool(skills)               # id == "get_skill_content"
+```
 
 ### `register_mcp_server` — ingest an upstream MCP server
 
@@ -98,7 +123,7 @@ from ratel_ai import ToolCatalog, TraceSinkConfig
 catalog = ToolCatalog(
     trace=TraceSinkConfig(kind="jsonl", session_id="session-1", path="/tmp/ratel.jsonl"),
 )
-# every catalog.invoke, search_tools_tool, register_mcp_server call now writes
+# every catalog.invoke, search_capabilities_tool, register_mcp_server call now writes
 # one JSON line per event to /tmp/ratel.jsonl.
 ```
 
@@ -107,7 +132,7 @@ Sink kinds:
 - `kind="memory"`, `session_id` — keep events in memory; drain via `catalog.drain_trace_events()`. Useful for tests.
 - `kind="jsonl"`, `session_id`, `path` — append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure — see ADR-0009 for the reliability profile.
 
-`search_tools_tool` tags its emitted `search` event with `origin="agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
+`search_capabilities_tool` tags its emitted `search` event with `origin="agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
 
 ## Develop
 

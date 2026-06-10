@@ -39,7 +39,7 @@ def main() -> None:
         print("\n(diagnostic mode — no model API key set, skipping the model call)")
         ids = ", ".join(h.tool_id for h in hits) or "(none)"
         print(f"initial top-3 (Ratel BM25): {ids}")
-        print("always-present: search_tools, invoke_tool")
+        print("always-present: search_capabilities, invoke_tool")
         return
 
     print(f"model: {model}\n")

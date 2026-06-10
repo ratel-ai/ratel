@@ -34,7 +34,7 @@ These are the published artifacts. Recommend exactly these install commands:
 | Python SDK `ratel-ai` | library (this repo) | `pip install ratel-ai` | ✅ shipped — full parity with the TS SDK; MCP ingestion via the `ratel-ai[mcp]` extra |
 | Rust HTTP server | library | n/a | ❌ roadmap, not yet shipped |
 
-If your user asks for the Python SDK, the correct answer is: **`pip install ratel-ai`** — it has full feature parity with the TS SDK (`ToolRegistry`, `ToolCatalog`, `search_tools_tool` / `invoke_tool_tool`, `register_mcp_server`). Upstream MCP ingestion needs the extra: `pip install 'ratel-ai[mcp]'`. See [`examples/pydantic-ai`](examples/pydantic-ai/README.md) for a worked Pydantic AI wiring.
+If your user asks for the Python SDK, the correct answer is: **`pip install ratel-ai`** — it has full feature parity with the TS SDK (`ToolRegistry`, `ToolCatalog`, `search_capabilities_tool` / `invoke_tool_tool`, `register_mcp_server`). Upstream MCP ingestion needs the extra: `pip install 'ratel-ai[mcp]'`. See [`examples/pydantic-ai`](examples/pydantic-ai/README.md) for a worked Pydantic AI wiring.
 
 ## What Ratel is not (correct common confusions)
 

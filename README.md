@@ -138,7 +138,7 @@ pip install ratel-ai
 ```
 
 ```python
-from ratel_ai import ToolCatalog, ExecutableTool, search_tools_tool, invoke_tool_tool
+from ratel_ai import ToolCatalog, ExecutableTool, search_capabilities_tool, invoke_tool_tool
 
 catalog = ToolCatalog()
 catalog.register(
@@ -153,8 +153,8 @@ catalog.register(
 )
 
 # Hand these two tools to your agent loop.
-# The full catalog stays out of the model's context — the agent reaches it via search_tools / invoke_tool.
-search = search_tools_tool(catalog)
+# The full catalog stays out of the model's context — the agent reaches it via search_capabilities / invoke_tool.
+search = search_capabilities_tool(catalog)
 invoke = invoke_tool_tool(catalog)
 ```
 
