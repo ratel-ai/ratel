@@ -345,8 +345,11 @@ jobs:
       - name: Validate packaging (metadata + README rendering)
         # Mirrors the npm/crate `--dry-run` publishes: exercise the PyPI path on
         # dry runs too, so a broken wheel/sdist or bad metadata fails before a real tag.
+        # `packaging>=24.2` is required to understand maturin's `Metadata-Version: 2.4`
+        # wheels (PEP 639 `License-File`); the runner's preinstalled system `packaging`
+        # is older and otherwise rejects the field as "unrecognized or malformed".
         run: |
-          python -m pip install --upgrade twine
+          python -m pip install --upgrade twine 'packaging>=24.2'
           twine check dist/*
       - name: Publish
         uses: pypa/gh-action-pypi-publish@release/v1
