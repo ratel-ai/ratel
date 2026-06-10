@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-10
+
+### Changed
+
+- Version bump to stay in lockstep with the coordinated `0.2.0` SDK release (first-class skills). No CLI behaviour change.
+
 ## [0.1.6] - 2026-06-10
 
 ### Changed

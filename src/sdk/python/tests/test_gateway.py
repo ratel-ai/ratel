@@ -2,13 +2,15 @@
 
 from ratel_ai import (
     INVOKE_TOOL_ID,
-    SEARCH_TOOLS_ID,
+    SEARCH_CAPABILITIES_ID,
     ExecutableTool,
+    Skill,
+    SkillCatalog,
     ToolCatalog,
     TraceSinkConfig,
     UpstreamServerInfo,
     invoke_tool_tool,
-    search_tools_tool,
+    search_capabilities_tool,
 )
 from ratel_ai.gateway import format_upstream_line
 
@@ -26,49 +28,87 @@ def _tool(tool_id: str, description: str, execute=lambda args: {}) -> Executable
 
 def test_factories_set_ids_and_descriptions() -> None:
     catalog = ToolCatalog()
-    search = search_tools_tool(catalog)
+    search = search_capabilities_tool(catalog)
     invoke = invoke_tool_tool(catalog)
-    assert search.id == SEARCH_TOOLS_ID
+    assert search.id == SEARCH_CAPABILITIES_ID
     assert invoke.id == INVOKE_TOOL_ID
-    assert "Discover tools" in search.description
+    assert "Discover capabilities" in search.description
     assert search.input_schema["required"] == ["query"]
 
 
-async def test_search_tools_groups_hits_by_upstream() -> None:
+async def test_search_capabilities_groups_tool_hits_by_upstream() -> None:
     catalog = ToolCatalog()
     catalog.register(_tool("github__create_issue", "Create a GitHub issue on a repo."))
     catalog.register(_tool("github__list_issues", "List GitHub issues on a repo."))
     catalog.register(_tool("local_read", "Read a file from disk."))
-    search = search_tools_tool(
+    search = search_capabilities_tool(
         catalog,
         upstream_servers=[
             UpstreamServerInfo(name="github", description="GitHub API", instructions="be nice")
         ],
     )
-    result = await search.execute({"query": "create a github issue", "topK": 5})
-    servers = {g["server"]["name"] for g in result["groups"]}
+    result = await search.execute({"query": "create a github issue", "topKTools": 5})
+    groups = result["tools"]["groups"]
+    servers = {g["server"]["name"] for g in groups}
     assert "github" in servers
-    gh_group = next(g for g in result["groups"] if g["server"]["name"] == "github")
+    gh_group = next(g for g in groups if g["server"]["name"] == "github")
     assert gh_group["server"]["description"] == "GitHub API"
     assert gh_group["server"]["instructions"] == "be nice"
-    # hit shape mirrors the TS SearchToolHit
     hit = gh_group["hits"][0]
     assert set(hit) == {"toolId", "score", "description", "inputSchema"}
+    # no skill catalog wired → empty skills bucket
+    assert result["skills"] == []
 
 
-async def test_search_tools_records_gateway_search_event() -> None:
+async def test_search_capabilities_returns_skills_bucket_when_wired() -> None:
+    tools = ToolCatalog()
+    tools.register(_tool("local_read", "Read a file from disk."))
+    skills = SkillCatalog()
+    skills.register(
+        Skill(
+            id="vercel-deploy",
+            name="vercel-deploy",
+            description="How to deploy to Vercel: env vars, preview vs production, rollbacks.",
+            tags=["vercel", "deployment"],
+        )
+    )
+    search = search_capabilities_tool(tools, skills)
+    result = await search.execute({"query": "deploy to vercel"})
+    assert result["skills"][0]["skillId"] == "vercel-deploy"
+    assert "Vercel" in result["skills"][0]["description"]
+
+
+async def test_search_capabilities_never_starves_skills() -> None:
+    # Many matching tools must not crowd the skill out of its own bucket.
+    tools = ToolCatalog()
+    for i in range(8):
+        tools.register(_tool(f"deploy__tool_{i}", "deploy the project to production"))
+    skills = SkillCatalog()
+    skills.register(
+        Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel.")
+    )
+    search = search_capabilities_tool(tools, skills)
+    result = await search.execute(
+        {"query": "deploy to production", "topKTools": 5, "topKSkills": 3}
+    )
+    tool_count = sum(len(g["hits"]) for g in result["tools"]["groups"])
+    assert tool_count <= 5
+    assert any(s["skillId"] == "vercel-deploy" for s in result["skills"])
+
+
+async def test_search_capabilities_records_gateway_search_event() -> None:
     catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
     catalog.register(_tool("local_read", "Read a file from disk."))
     catalog.drain_trace_events()
-    search = search_tools_tool(catalog)
-    await search.execute({"query": "read", "topK": 3})
+    search = search_capabilities_tool(catalog)
+    await search.execute({"query": "read", "topKTools": 3})
     events = [e for e in catalog.drain_trace_events() if e["type"] == "gateway_search"]
     assert events and events[0]["origin"] == "agent" and events[0]["top_k"] == 3
 
 
 def test_search_description_lists_upstreams() -> None:
     catalog = ToolCatalog()
-    search = search_tools_tool(
+    search = search_capabilities_tool(
         catalog,
         upstream_servers=[UpstreamServerInfo(name="github", description="GitHub", tool_count=12)],
     )
@@ -96,6 +136,7 @@ async def test_invoke_tool_unknown_id_returns_error_payload() -> None:
     invoke = invoke_tool_tool(catalog)
     result = await invoke.execute({"toolId": "missing", "args": {}})
     assert "unknown toolId" in result["error"]
+    assert result["isError"] is True
 
 
 async def test_invoke_tool_accepts_flattened_args() -> None:
@@ -105,6 +146,16 @@ async def test_invoke_tool_accepts_flattened_args() -> None:
     # args not nested under "args" — fall back to top-level minus toolId
     result = await invoke.execute({"toolId": "echo", "msg": "flat"})
     assert result == {"echo": "flat"}
+
+
+async def test_invoke_tool_rejects_non_object_args() -> None:
+    catalog = ToolCatalog()
+    catalog.register(_tool("echo", "Echo back.", execute=lambda args: {"echo": args.get("msg")}))
+    invoke = invoke_tool_tool(catalog)
+    # `args` present but a string → reject rather than forwarding stray keys
+    result = await invoke.execute({"toolId": "echo", "args": "oops", "msg": "x"})
+    assert "must be an object" in result["error"]
+    assert result["isError"] is True
 
 
 async def test_invoke_tool_unauthorized_triggers_callback_and_needs_auth() -> None:
@@ -137,3 +188,4 @@ async def test_invoke_tool_generic_error_is_reported() -> None:
     invoke = invoke_tool_tool(catalog)
     result = await invoke.execute({"toolId": "flaky", "args": {}})
     assert "threw: nope" in result["error"]
+    assert result["isError"] is True

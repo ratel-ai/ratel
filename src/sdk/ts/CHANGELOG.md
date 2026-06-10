@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-10
+
+### Changed
+
+- **BREAKING:** the discovery gateway tool is renamed `search_tools` → `search_capabilities`. It now returns two independently-ranked, separately-budgeted buckets — `{ tools, skills }` — so a relevant skill is never crowded out by matching tools. `searchToolsTool`/`SEARCH_TOOLS_ID` → `searchCapabilitiesTool`/`SEARCH_CAPABILITIES_ID`.
+
+### Added
+
+- First-class **skills**: `SkillCatalog`, `getSkillContentTool` (`get_skill_content`), and `Skill`/`SkillHit`/`SkillRegistry`. Skills are reusable playbooks ranked by a separate BM25 corpus and loaded on demand.
+
+### Fixed
+
+- Gateway error payloads (`invoke_tool`, `get_skill_content`) carry `isError: true`, so a host can flag a failed call rather than read it as content.
+- `invoke_tool` rejects a non-object `args` instead of forwarding stray top-level keys.
+
 ## [0.1.6] - 2026-06-10
 
 ### Fixed

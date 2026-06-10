@@ -1,8 +1,9 @@
 """Gateway tools — the Python mirror of `src/sdk/ts/src/gateway.ts`.
 
-`search_tools_tool` and `invoke_tool_tool` give an agent a self-service surface
-over a `ToolCatalog`: discover tools by natural-language query, then invoke the
-chosen one by id. The tool descriptions and JSON schemas here are a product
+`search_capabilities_tool` and `invoke_tool_tool` give an agent a self-service
+surface over a `ToolCatalog` (and an optional `SkillCatalog`): discover tools and
+skills by natural-language query, then run a tool by id (or load a skill's body
+via `get_skill_content`). Tool descriptions and JSON schemas here are a product
 contract shown to the model — kept verbatim with the TS SDK.
 """
 
@@ -15,18 +16,24 @@ from dataclasses import dataclass
 from typing import Any, Callable, Union
 
 from .catalog import ExecutableTool, ToolCatalog
+from .skill_catalog import SkillCatalog
 
-SEARCH_TOOLS_ID = "search_tools"
+SEARCH_CAPABILITIES_ID = "search_capabilities"
 INVOKE_TOOL_ID = "invoke_tool"
 
-SEARCH_TOOLS_BASE_DESCRIPTION = (
-    "Discover tools beyond the ones already visible in your direct tool list. "
-    "Call this BEFORE refusing a request, falling back to a generic capability "
-    "(web fetch, shell, built-in search), or deciding none of the visible tools "
-    "fits — a purpose-built tool may be in the catalog but not pre-loaded. "
-    "Pass a natural-language query describing what you want to do; you'll get "
-    "back the most relevant tool ids with their descriptions and input schemas. "
-    "Then run the chosen one via invoke_tool."
+_DEFAULT_TOP_K_TOOLS = 5
+_DEFAULT_TOP_K_SKILLS = 3
+
+SEARCH_BASE_DESCRIPTION = (
+    "Discover capabilities — tools (executable) and skills (reusable playbooks) — "
+    "beyond the ones already in your direct tool list. Call this BEFORE refusing a "
+    "request, falling back to a generic capability (web fetch, shell, built-in "
+    "search), or improvising a multi-step task: a purpose-built tool or skill may "
+    "be in the catalog but not pre-loaded. Pass a natural-language query describing "
+    "what you want to do. You get back two independent buckets: `tools` (run one "
+    "via invoke_tool) and `skills` (load one's instructions via get_skill_content, "
+    "then follow it). Skills have their own result budget, so they are never "
+    "crowded out by tools."
 )
 
 _MAX_DESCRIPTION_LEN = 160
@@ -63,45 +70,60 @@ def _compact_description(s: str) -> str:
     return f"{head.rstrip()}…"
 
 
-def _build_search_tools_description(
-    upstreams: Sequence[UpstreamServerInfo],
-) -> str:
+def _build_search_description(upstreams: Sequence[UpstreamServerInfo]) -> str:
     if not upstreams:
-        return SEARCH_TOOLS_BASE_DESCRIPTION
+        return SEARCH_BASE_DESCRIPTION
     listing = "\n".join(format_upstream_line(u) for u in upstreams)
     return (
-        f"{SEARCH_TOOLS_BASE_DESCRIPTION}\n\n"
+        f"{SEARCH_BASE_DESCRIPTION}\n\n"
         f"This catalog aggregates tools from these upstream MCP servers:\n{listing}"
     )
 
 
-def search_tools_tool(
+def search_capabilities_tool(
     catalog: ToolCatalog,
+    skill_catalog: SkillCatalog | None = None,
     *,
     upstream_servers: Sequence[UpstreamServerInfo] | None = None,
 ) -> ExecutableTool:
+    """Unified discovery over tools AND skills.
+
+    Returns two independently-ranked buckets, each with its own top-K budget — so a
+    relevant skill is never starved out of the results by a large number of matching
+    tools (and the two BM25 corpora are never score-compared).
+    """
     upstreams = list(upstream_servers or [])
     upstream_by_name = {u.name: u for u in upstreams}
 
     async def execute(input: dict[str, Any]) -> dict[str, Any]:
         query = input["query"]
-        top_k = input.get("topK")
-        k = top_k if isinstance(top_k, int) and top_k > 0 else 5
+        top_k_tools = input.get("topKTools")
+        k_tools = (
+            top_k_tools
+            if isinstance(top_k_tools, int) and top_k_tools > 0
+            else _DEFAULT_TOP_K_TOOLS
+        )
+        top_k_skills = input.get("topKSkills")
+        k_skills = (
+            top_k_skills
+            if isinstance(top_k_skills, int) and top_k_skills > 0
+            else _DEFAULT_TOP_K_SKILLS
+        )
         started_at = time.monotonic()
-        hits = catalog.search(query, k, "agent")
+        tool_hits = catalog.search(query, k_tools, "agent")
         catalog.record_event(
             {
                 "type": "gateway_search",
                 "query": query,
                 "origin": "agent",
-                "top_k": k,
-                "hits": len(hits),
+                "top_k": k_tools,
+                "hits": len(tool_hits),
                 "took_ms": int((time.monotonic() - started_at) * 1000),
             }
         )
         order: list[str] = []
         groups: dict[str, dict[str, Any]] = {}
-        for h in hits:
+        for h in tool_hits:
             sep = h.tool_id.find("__")
             server_name = h.tool_id[:sep] if sep > 0 else h.tool_id
             group = groups.get(server_name)
@@ -124,58 +146,89 @@ def search_tools_tool(
                     "inputSchema": tool.input_schema if tool else {},
                 }
             )
-        return {"groups": [groups[n] for n in order]}
+
+        # Skills are ranked in their own bucket against the same query (reserved
+        # budget → never starved by tools).
+        skills: list[dict[str, Any]] = []
+        if skill_catalog is not None:
+            for sh in skill_catalog.search(query, k_skills, "agent"):
+                sk = skill_catalog.get(sh.skill_id)
+                skills.append(
+                    {
+                        "skillId": sh.skill_id,
+                        "score": sh.score,
+                        "description": _compact_description(sk.description) if sk else "",
+                    }
+                )
+
+        return {"tools": {"groups": [groups[n] for n in order]}, "skills": skills}
 
     return ExecutableTool(
-        id=SEARCH_TOOLS_ID,
-        name=SEARCH_TOOLS_ID,
-        description=_build_search_tools_description(upstreams),
+        id=SEARCH_CAPABILITIES_ID,
+        name=SEARCH_CAPABILITIES_ID,
+        description=_build_search_description(upstreams),
         input_schema={
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "describe what you want to do"},
-                "topK": {
-                    "type": "number",
-                    "description": "max number of tool ids to return (default 5)",
-                },
+                "topKTools": {"type": "number", "description": "max tools to return (default 5)"},
+                "topKSkills": {"type": "number", "description": "max skills to return (default 3)"},
             },
             "required": ["query"],
         },
         output_schema={
             "type": "object",
             "properties": {
-                "groups": {
+                "tools": {
+                    "type": "object",
+                    "properties": {
+                        "groups": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "server": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": "string"},
+                                            "description": {"type": "string"},
+                                            "instructions": {"type": "string"},
+                                        },
+                                        "required": ["name"],
+                                    },
+                                    "hits": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "toolId": {"type": "string"},
+                                                "score": {"type": "number"},
+                                                "description": {"type": "string"},
+                                                "inputSchema": {"type": "object"},
+                                            },
+                                        },
+                                    },
+                                },
+                                "required": ["server", "hits"],
+                            },
+                        },
+                    },
+                    "required": ["groups"],
+                },
+                "skills": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "server": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {"type": "string"},
-                                    "description": {"type": "string"},
-                                    "instructions": {"type": "string"},
-                                },
-                                "required": ["name"],
-                            },
-                            "hits": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "toolId": {"type": "string"},
-                                        "score": {"type": "number"},
-                                        "description": {"type": "string"},
-                                        "inputSchema": {"type": "object"},
-                                    },
-                                },
-                            },
+                            "skillId": {"type": "string"},
+                            "score": {"type": "number"},
+                            "description": {"type": "string"},
                         },
-                        "required": ["server", "hits"],
+                        "required": ["skillId", "score", "description"],
                     },
                 },
             },
-            "required": ["groups"],
+            "required": ["tools", "skills"],
         },
         execute=execute,
     )
@@ -199,15 +252,26 @@ def invoke_tool_tool(
             )
             return {
                 "error": (
-                    f"unknown toolId: {tool_id}. "
-                    "Use search_tools to discover available ids."
-                )
+                    f"unknown toolId: {tool_id}. Use search_capabilities to discover available ids."
+                ),
+                "isError": True,
             }
         nested = input.get("args")
-        if isinstance(nested, dict):
+        if nested is None:
+            # No `args` given — tolerate a flattened call.
+            args = {k: v for k, v in input.items() if k != "toolId"}
+        elif isinstance(nested, dict):
             args = nested
         else:
-            args = {k: v for k, v in input.items() if k != "toolId"}
+            # `args` present but not an object — reject rather than forwarding
+            # stray top-level keys as arguments.
+            return {
+                "error": (
+                    f"invalid args for {tool_id}: "
+                    "`args` must be an object containing the tool's arguments."
+                ),
+                "isError": True,
+            }
         started_at = time.monotonic()
         try:
             result = await catalog.invoke(tool_id, args)
@@ -237,19 +301,17 @@ def invoke_tool_tool(
                 if upstream:
                     payload["upstream"] = upstream
                 return payload
-            catalog.record_event(
-                {"type": "gateway_error", "tool_id": tool_id, "error": str(err)}
-            )
-            return {"error": f"tool {tool_id} threw: {err}"}
+            catalog.record_event({"type": "gateway_error", "tool_id": tool_id, "error": str(err)})
+            return {"error": f"tool {tool_id} threw: {err}", "isError": True}
 
     return ExecutableTool(
         id=INVOKE_TOOL_ID,
         name=INVOKE_TOOL_ID,
         description=(
             "Invoke a tool from the catalog by its id. Use this to call tools that "
-            "aren't in your direct tool list — first find one via search_tools, then "
-            "run it here. Pass the tool's arguments nested under the `args` field — "
-            "do NOT flatten them to the top level."
+            "aren't in your direct tool list — first find one via "
+            "search_capabilities, then run it here. Pass the tool's arguments nested "
+            "under the `args` field — do NOT flatten them to the top level."
         ),
         input_schema={
             "type": "object",
@@ -257,8 +319,7 @@ def invoke_tool_tool(
                 "toolId": {
                     "type": "string",
                     "description": (
-                        "id of the tool to invoke "
-                        "(use search_tools to find available ids)"
+                        "id of the tool to invoke (use search_capabilities to find available ids)"
                     ),
                 },
                 "args": {

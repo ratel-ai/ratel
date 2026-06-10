@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-10
+
+### Added
+
+- First-class **skills**: a `Skill` type (with `triggers` indexed for ranking and `stacks` carried for context-boosting, not indexed) and a separate `SkillRegistry` BM25 index — ranked independently of tools. Plus `skill_search` / `skill_churn` / `skill_invoke` trace events for the retrieval funnel.
+
 ## [0.1.6] - 2026-06-10
 
 ### Changed

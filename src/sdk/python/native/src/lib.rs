@@ -32,6 +32,26 @@ impl SearchHit {
     }
 }
 
+/// A single skill search result: the matched skill id and its BM25 score. The
+/// skill analogue of [`SearchHit`] (`tool_id` → `skill_id`).
+#[pyclass(frozen)]
+pub struct SkillHit {
+    #[pyo3(get)]
+    pub skill_id: String,
+    #[pyo3(get)]
+    pub score: f64,
+}
+
+#[pymethods]
+impl SkillHit {
+    fn __repr__(&self) -> String {
+        format!(
+            "SkillHit(skill_id={:?}, score={})",
+            self.skill_id, self.score
+        )
+    }
+}
+
 /// Metadata-only BM25 index over `ratel-ai-core`. Executors and the gateway /
 /// MCP layers live in the pure-Python `ratel_ai` package above this binding.
 #[pyclass]
@@ -160,9 +180,140 @@ impl ToolRegistry {
     }
 }
 
+/// Metadata-only BM25 index over the skill corpus — the on-demand analogue of
+/// [`ToolRegistry`]. A separate index, so skills are ranked independently of
+/// tools (own corpus statistics, own top-K).
+#[pyclass]
+pub struct SkillRegistry {
+    inner: core::SkillRegistry,
+    memory_sink: Option<Arc<MemorySink>>,
+}
+
+#[pymethods]
+impl SkillRegistry {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: core::SkillRegistry::new(),
+            memory_sink: None,
+        }
+    }
+
+    // Mirrors `ToolRegistry::register`'s flat-param style (PyO3 has no by-value
+    // object arg like the TS NAPI `Skill`); a skill simply has more fields.
+    #[allow(clippy::too_many_arguments)]
+    fn register(
+        &mut self,
+        id: String,
+        name: String,
+        description: String,
+        tags: Vec<String>,
+        triggers: Vec<String>,
+        stacks: Vec<String>,
+        body: String,
+    ) {
+        self.inner.register(core::Skill {
+            id,
+            name,
+            description,
+            tags,
+            triggers,
+            stacks,
+            body,
+        });
+    }
+
+    fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
+        self.inner
+            .search(&query, top_k as usize)
+            .into_iter()
+            .map(|hit| SkillHit {
+                skill_id: hit.skill_id,
+                score: hit.score as f64,
+            })
+            .collect()
+    }
+
+    fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SkillHit> {
+        let parsed = match origin.as_str() {
+            "agent" => Origin::Agent,
+            _ => Origin::Direct,
+        };
+        self.inner
+            .search_with_origin(&query, top_k as usize, parsed)
+            .into_iter()
+            .map(|hit| SkillHit {
+                skill_id: hit.skill_id,
+                score: hit.score as f64,
+            })
+            .collect()
+    }
+
+    fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
+        let value: Value = pythonize::depythonize(event)
+            .map_err(|e| PyValueError::new_err(format!("invalid trace event: {e}")))?;
+        let event: TraceEvent = serde_json::from_value(value)
+            .map_err(|e| PyValueError::new_err(format!("invalid trace event: {e}")))?;
+        self.inner.record_event(event);
+        Ok(())
+    }
+
+    #[pyo3(signature = (kind, session_id=None, path=None))]
+    fn set_trace_sink(
+        &mut self,
+        kind: String,
+        session_id: Option<String>,
+        path: Option<String>,
+    ) -> PyResult<()> {
+        match kind.as_str() {
+            "noop" => {
+                self.memory_sink = None;
+                self.inner.set_trace_sink(Arc::new(NoopSink));
+            }
+            "memory" => {
+                let session_id = session_id
+                    .ok_or_else(|| PyValueError::new_err("memory sink requires session_id"))?;
+                let sink = Arc::new(MemorySink::new(session_id));
+                self.memory_sink = Some(sink.clone());
+                self.inner.set_trace_sink(sink);
+            }
+            "jsonl" => {
+                let session_id = session_id
+                    .ok_or_else(|| PyValueError::new_err("jsonl sink requires session_id"))?;
+                let path = path.ok_or_else(|| PyValueError::new_err("jsonl sink requires path"))?;
+                let sink = JsonlSink::new(session_id, &path)
+                    .map_err(|e| PyValueError::new_err(format!("open jsonl sink: {e}")))?;
+                self.memory_sink = None;
+                self.inner.set_trace_sink(Arc::new(sink));
+            }
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown trace sink kind: {other}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn drain_trace_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        let Some(sink) = self.memory_sink.as_ref() else {
+            return Ok(out);
+        };
+        for env in sink.drain() {
+            let obj = pythonize::pythonize(py, &env)
+                .map_err(|e| PyValueError::new_err(format!("serialize trace envelope: {e}")))?;
+            out.append(obj)?;
+        }
+        Ok(out)
+    }
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ToolRegistry>()?;
     m.add_class::<SearchHit>()?;
+    m.add_class::<SkillRegistry>()?;
+    m.add_class::<SkillHit>()?;
     Ok(())
 }
