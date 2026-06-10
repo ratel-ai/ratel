@@ -5,12 +5,11 @@ Project documentation that doesn't belong in a code folder.
 ## Layout
 
 ```
-adr/          Architecture decision records
-lessons.md    Accumulated rules from past mistakes
-overview.md   The thesis — what Ratel is and why
-releasing.md  How to cut a coordinated SDK release (core + TS + Python + CLI)
-roadmap.md    Dated milestones
-skills.md     Pointer to the Ratel skills suite (ratel-ai/skills)
+adr/         Architecture decision records
+lessons.md   Accumulated rules from past mistakes
+overview.md  The thesis — what Ratel is and why
+roadmap.md   Dated milestones
+skills.md    Pointer to the Ratel skills suite (ratel-ai/skills)
 ```
 
 ## `skills.md`
