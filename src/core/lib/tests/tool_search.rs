@@ -365,3 +365,52 @@ fn search_matches_tool_name() {
     assert_eq!(hits[0].tool_id, "read_file");
     assert!(hits[0].score > 0.0);
 }
+
+#[test]
+fn tied_scores_are_ordered_by_tool_id() {
+    // Two tools with identical searchable text score identically for any
+    // matching query. The bm25 crate collects candidates through a HashSet,
+    // so on equal scores the order falls back to hash-seed iteration order
+    // and flips between processes. The registry must break ties stably.
+    let mut registry = ToolRegistry::new();
+    for id in ["zeta_tool", "alpha_tool"] {
+        registry.register(Tool {
+            id: id.into(),
+            name: id.into(),
+            description: "send a notification message to a channel".into(),
+            input_schema: empty_schema(),
+            output_schema: empty_schema(),
+        });
+    }
+
+    let hits = registry.search("notification message", 5);
+
+    assert_eq!(hits.len(), 2);
+    assert_eq!(hits[0].score, hits[1].score, "fixture must produce a tie");
+    assert_eq!(hits[0].tool_id, "alpha_tool");
+    assert_eq!(hits[1].tool_id, "zeta_tool");
+}
+
+#[test]
+fn tied_scores_keep_top_k_membership_stable() {
+    // Regression for the flicker observed while reproducing issue #56:
+    // with a tie at the top_k boundary, which tool made the cut depended
+    // on hash-seed iteration order, so top-K membership changed across
+    // process runs. With a stable tie-break the cut is always the same.
+    let mut registry = ToolRegistry::new();
+    for id in ["zeta_tool", "mid_tool", "alpha_tool"] {
+        registry.register(Tool {
+            id: id.into(),
+            name: id.into(),
+            description: "send a notification message to a channel".into(),
+            input_schema: empty_schema(),
+            output_schema: empty_schema(),
+        });
+    }
+
+    let hits = registry.search("notification message", 2);
+
+    assert_eq!(hits.len(), 2);
+    assert_eq!(hits[0].tool_id, "alpha_tool");
+    assert_eq!(hits[1].tool_id, "mid_tool");
+}
