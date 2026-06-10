@@ -1,0 +1,58 @@
+name: Python
+
+on:
+  push:
+    branches: [main, revamp]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/sdk/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/python/native
+      - uses: astral-sh/setup-uv@v5
+      - name: Create venv + install dev tools
+        run: |
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy
+      - name: Build native extension
+        run: .venv/bin/maturin develop
+      - name: Lint
+        run: .venv/bin/ruff check .
+      - name: Typecheck
+        run: .venv/bin/mypy ratel_ai
+      - name: Test
+        run: .venv/bin/pytest
+
+  example:
+    # The example wires the SDK into pydantic-ai. `main.py` diagnostic mode never
+    # invokes a tool, so a model-free `TestModel` run is the only thing that
+    # exercises the BM25 top-K -> tool-call path in CI (no API key needed).
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/pydantic-ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/python/native
+      - uses: astral-sh/setup-uv@v5
+      - name: Install example (local ratel-ai + pydantic-ai) + test deps
+        # `uv sync` builds the local ratel-ai wheel (maturin) and installs
+        # pydantic-ai + the dev group (pytest, pytest-asyncio).
+        run: uv sync --python 3.11
+      - name: Test the wiring
+        run: uv run pytest

@@ -7,7 +7,14 @@ Project documentation that doesn't belong in a code folder.
 ```
 adr/         Architecture decision records
 lessons.md   Accumulated rules from past mistakes
+overview.md  The thesis — what Ratel is and why
+roadmap.md   Dated milestones
+skills.md    Pointer to the Ratel skills suite (ratel-ai/skills)
 ```
+
+## `skills.md`
+
+One-page index of the [Ratel skills suite](https://github.com/ratel-ai/skills) — five Claude Code / Cursor / Codex skills for partner-engagement work on agent codebases. Install with `npx skills add ratel-ai/skills`. The full suite docs live in the [ratel-ai/skills](https://github.com/ratel-ai/skills) repo; this file is the in-repo entry point.
 
 ## `adr/` — Architecture decision records
 

@@ -1,0 +1,12 @@
+# Virtualenv + build/test tool caches
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Compiled extension produced by `maturin develop` (editable install)
+ratel_ai/*.so
+ratel_ai/*.pyd
+
+# Wheel/sdist output
+dist/

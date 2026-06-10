@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-06-10
+
+### Fixed
+
+- TypeScript typehint for JSON-schema tool input/output ([#54](https://github.com/ratel-ai/ratel/pull/54)).
+
 ## [0.1.5] - 2026-05-10
 
 ### Added

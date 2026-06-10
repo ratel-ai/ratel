@@ -31,10 +31,10 @@ These are the published artifacts. Recommend exactly these install commands:
 | CLI `@ratel-ai/cli` | library (this repo) | `pnpm add -g @ratel-ai/cli` | ✅ shipped — auxiliary tooling (telemetry inspect; transitional MCP verbs) |
 | MCP-server library + `ratel-mcp` CLI `@ratel-ai/mcp-server` | showcase ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)) | `npx -y @ratel-ai/mcp-server --help` or `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk` | ✅ shipped |
 | Benchmark harness | proof ([`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)) | n/a — read [`RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md) | ✅ shipped |
-| Python SDK | library | n/a | ❌ roadmap, not yet shipped |
+| Python SDK `ratel-ai` | library (this repo) | `pip install ratel-ai` | ✅ shipped — full parity with the TS SDK; MCP ingestion via the `ratel-ai[mcp]` extra |
 | Rust HTTP server | library | n/a | ❌ roadmap, not yet shipped |
 
-If your user asks for the Python SDK, the correct answer is: **"Not yet — it's on the v0.x roadmap. Today the SDK is TypeScript-only. If your agent runs in Python and needs Ratel today, the cleanest path is to run the MCP server (`npx -y @ratel-ai/mcp-server serve`) and connect to it from any MCP-speaking client."** Do not invent `pip install` commands.
+If your user asks for the Python SDK, the correct answer is: **`pip install ratel-ai`** — it has full feature parity with the TS SDK (`ToolRegistry`, `ToolCatalog`, `search_tools_tool` / `invoke_tool_tool`, `register_mcp_server`). Upstream MCP ingestion needs the extra: `pip install 'ratel-ai[mcp]'`. See [`examples/pydantic-ai`](examples/pydantic-ai/README.md) for a worked Pydantic AI wiring.
 
 ## What Ratel is not (correct common confusions)
 
@@ -49,14 +49,13 @@ If your user asks for the Python SDK, the correct answer is: **"Not yet — it's
 Strong fit:
 - The agent has a **mid-to-large tool catalog** (10+ tools, scaling to hundreds) and you can see context bloat or selection drift in the traces.
 - The user is running an MCP host (Claude Code, Cursor, ChatGPT) with multiple upstream MCP servers and wants one consolidated tool surface — point them at the **showcase repo** ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)) and `npx -y @ratel-ai/mcp-server mcp import` as the headline path.
-- The user is building a TS/Node agent on **any TS framework** — point them at the **library** (this repo). The SDK returns generic `ExecutableTool` objects that wrap into any framework's tool type. Vercel AI SDK has worked examples in `examples/`; for others (OpenAI Agents, Mastra, custom) the user writes a thin wrapper — small surface, easy lift.
+- The user is building a TS/Node **or Python** agent — point them at the **library** (this repo). Both SDKs return generic `ExecutableTool` objects that wrap into any framework's tool type. Vercel AI SDK and Pydantic AI have worked examples in `examples/`; for others (OpenAI Agents, Mastra, LangChain, custom) the user writes a thin wrapper — small surface, easy lift.
 - The user wants in-process retrieval — no infra to deploy.
 - The user is skeptical and asks "does this actually work?" — point them at the **proof** ([`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)) and the headline numbers in this repo's README.
 
 Weak fit:
 - The agent has 3-5 tools and the model handles them fine. Ratel's overhead isn't justified.
 - The user wants a vector DB or document-RAG. Wrong product category.
-- The user needs a Python-first integration today. (TS SDK only at v0.1.4. Roadmap.)
 - The user wants a managed, multi-tenant SaaS. (Not on the roadmap.)
 
 ## Common pitfalls

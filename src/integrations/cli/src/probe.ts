@@ -114,7 +114,14 @@ export async function authProbeEntry(
   const catalog = new ToolCatalog();
   let result: Awaited<ReturnType<AuthStep>>;
   try {
-    result = await step(name, entry, { catalog, logger: options.logger });
+    // `@ratel-ai/mcp-server` is still consumed from npm (transitional, until the CLI
+    // refactor lands) and bundles its own pinned `@ratel-ai/sdk` copy. Once the
+    // workspace SDK version moves ahead of that copy, the two `ToolCatalog`
+    // declarations differ only by nominal (private-field) identity, so `tsc` rejects
+    // the assignment. The instance is structurally identical and used here purely as a
+    // throwaway probe vessel, so bridge the version skew explicitly at this one seam.
+    const ctxCatalog = catalog as unknown as Parameters<AuthStep>[2]["catalog"];
+    result = await step(name, entry, { catalog: ctxCatalog, logger: options.logger });
   } catch (err) {
     return { status: "failed", reason: (err as Error).message };
   }

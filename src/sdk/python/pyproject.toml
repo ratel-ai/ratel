@@ -1,0 +1,76 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "ratel-ai"
+version = "0.1.6"
+description = "Python SDK for Ratel — context engineering platform for AI agents. BM25 tool retrieval, MCP ingestion, framework-neutral gateway tools."
+readme = "README.md"
+license = { file = "LICENSE.md" }
+authors = [{ name = "Agentified" }]
+requires-python = ">=3.9"
+keywords = [
+    "mcp",
+    "ai-agents",
+    "tool-calling",
+    "bm25",
+    "retrieval",
+    "context-engineering",
+    "ratel",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# Base SDK (ToolRegistry, ToolCatalog, gateway tools) has no runtime deps.
+dependencies = []
+
+[project.optional-dependencies]
+# register_mcp_server() ingests upstream MCP servers via the official client.
+# Lazily imported, so the base SDK installs without it. Requires Python >=3.10.
+mcp = ["mcp>=1.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "maturin>=1.7,<2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ratel-ai/ratel"
+Repository = "https://github.com/ratel-ai/ratel"
+Issues = "https://github.com/ratel-ai/ratel/issues"
+
+[tool.maturin]
+# Mixed Rust/Python layout: the `ratel_ai/` package lives beside this file and
+# the compiled extension is placed at `ratel_ai._native`.
+manifest-path = "native/Cargo.toml"
+module-name = "ratel_ai._native"
+python-source = "."
+features = ["extension-module"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+# Runtime floor is 3.9 (via `from __future__ import annotations`); mypy's minimum
+# supported target is 3.10, so we type-check against that.
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["ratel_ai._native", "mcp", "mcp.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

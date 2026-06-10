@@ -1,0 +1,85 @@
+name: Build wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build (branch, tag, or SHA)
+        required: false
+        default: revamp
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+# abi3 wheels: one wheel per platform serves all CPython >= 3.9 (see ADR-0011).
+# Targets mirror the TS SDK's native matrix (build-binaries.yml).
+jobs:
+  wheels:
+    name: wheel (${{ matrix.triple }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: darwin-arm64
+            target: aarch64-apple-darwin
+            runs-on: macos-14
+            manylinux: ''
+          - triple: darwin-x64
+            target: x86_64-apple-darwin
+            runs-on: macos-14
+            manylinux: ''
+          - triple: linux-x64-gnu
+            target: x86_64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            manylinux: auto
+          - triple: linux-arm64-gnu
+            target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            manylinux: auto
+          - triple: win32-x64-msvc
+            target: x86_64-pc-windows-msvc
+            runs-on: windows-latest
+            manylinux: ''
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: src/sdk/python
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+          sccache: 'true'
+      - name: List output
+        shell: bash
+        run: ls -la src/sdk/python/dist/
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.triple }}
+          path: src/sdk/python/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: src/sdk/python
+          command: sdist
+          args: --out dist
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: src/sdk/python/dist/*.tar.gz
+          if-no-files-found: error

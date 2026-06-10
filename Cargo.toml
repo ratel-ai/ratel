@@ -3,10 +3,11 @@ resolver = "3"
 members = [
     "src/core/lib",
     "src/sdk/ts/native",
+    "src/sdk/python/native",
 ]
 
 [workspace.package]
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 license-file = "LICENSE.md"
 repository = "https://github.com/ratel-ai/ratel"
