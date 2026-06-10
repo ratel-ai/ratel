@@ -27,13 +27,18 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
       },
       required: ["skillId"],
     },
-    // `body` on success, `error` when the id is unknown. Both are valid output,
-    // so neither field is required: an MCP client validates structured content
-    // against this schema, and requiring `body` would make the error path throw
-    // a protocol error instead of returning the declared `{ error }`.
+    // `body` on success, `{ error, isError }` when the id is unknown. Both are
+    // valid output, so no field is required: an MCP client validates structured
+    // content against this schema, and requiring `body` would make the error path
+    // throw a protocol error instead of returning the declared error. `isError`
+    // lets the host flag the call as failed (see the server's wrapResult).
     outputSchema: {
       type: "object",
-      properties: { body: { type: "string" }, error: { type: "string" } },
+      properties: {
+        body: { type: "string" },
+        error: { type: "string" },
+        isError: { type: "boolean" },
+      },
     },
     execute: async (input) => {
       const { skillId } = input as { skillId: string };
@@ -45,6 +50,7 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
         });
         return {
           error: `unknown skillId: ${skillId}. Use search_capabilities to discover available ids.`,
+          isError: true,
         };
       }
       const body = catalog.invoke(skillId);

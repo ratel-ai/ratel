@@ -20,8 +20,11 @@ pub(crate) fn searchable_text(skill: &Skill) -> String {
             push_identifier(tag, &mut tokens);
         }
     }
-    // Triggers are natural-language task phrases ("login form"); push verbatim so
-    // a terse intent prompt ("add a login form") matches lexically.
+    // Triggers are author-declared task phrases ("login form"), added to the
+    // indexed text so a terse intent prompt ("add a login form") matches the
+    // skill. Like all indexed text they are tokenized at index *and* query time
+    // (lowercased, stemmed, stop-words removed) — not matched verbatim — so a
+    // trigger made only of stop-words contributes no terms.
     for trigger in &skill.triggers {
         if !trigger.is_empty() {
             tokens.push(trigger.clone());

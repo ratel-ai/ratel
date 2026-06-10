@@ -147,10 +147,27 @@ describe("invokeToolTool", () => {
     expect(out).toEqual({ contents: "contents of /x" });
   });
 
-  it("returns an error object for unknown toolId", async () => {
+  it("returns an error object (with isError) for unknown toolId", async () => {
     const tool = invokeToolTool(new ToolCatalog());
-    const result = (await tool.execute({ toolId: "nope", args: {} })) as { error: string };
+    const result = (await tool.execute({ toolId: "nope", args: {} })) as {
+      error: string;
+      isError?: boolean;
+    };
     expect(result.error).toMatch(/unknown toolId: nope/);
+    expect(result.isError).toBe(true);
+  });
+
+  it("rejects non-object args instead of forwarding stray top-level keys", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = invokeToolTool(tools);
+    // `args` present but a string → reject, don't silently flatten.
+    const result = (await tool.execute({ toolId: "fs__read_file", args: "oops", path: "/x" })) as {
+      error: string;
+      isError?: boolean;
+    };
+    expect(result.error).toMatch(/must be an object/);
+    expect(result.isError).toBe(true);
   });
 
   it("returns a needs_auth payload + calls onUnauthorized on UnauthorizedError", async () => {

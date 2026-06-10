@@ -261,13 +261,25 @@ export function invokeToolTool(
         });
         return {
           error: `unknown toolId: ${toolId}. Use search_capabilities to discover available ids.`,
+          isError: true,
         };
       }
       const nested = inputObj.args;
-      const args =
-        nested && typeof nested === "object" && !Array.isArray(nested)
-          ? (nested as Record<string, unknown>)
-          : Object.fromEntries(Object.entries(inputObj).filter(([k]) => k !== "toolId"));
+      let args: Record<string, unknown>;
+      if (nested === undefined || nested === null) {
+        // No `args` given — tolerate a flattened call by treating the remaining
+        // top-level keys as the arguments.
+        args = Object.fromEntries(Object.entries(inputObj).filter(([k]) => k !== "toolId"));
+      } else if (typeof nested === "object" && !Array.isArray(nested)) {
+        args = nested as Record<string, unknown>;
+      } else {
+        // `args` is present but not an object (string/array/number) — reject
+        // rather than silently forwarding stray top-level keys as arguments.
+        return {
+          error: `invalid args for ${toolId}: \`args\` must be an object containing the tool's arguments.`,
+          isError: true,
+        };
+      }
       const startedAt = Date.now();
       try {
         const result = await catalog.invoke(toolId, args);
@@ -300,7 +312,7 @@ export function invokeToolTool(
           tool_id: toolId,
           error: (err as Error).message ?? String(err),
         });
-        return { error: `tool ${toolId} threw: ${(err as Error).message}` };
+        return { error: `tool ${toolId} threw: ${(err as Error).message}`, isError: true };
       }
     },
   };

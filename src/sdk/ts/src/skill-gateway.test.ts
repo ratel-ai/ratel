@@ -29,10 +29,15 @@ describe("getSkillContentTool", () => {
     expect(result.body).toContain("Use nouns for resources");
   });
 
-  it("returns a structured error for an unknown skill id", async () => {
+  it("returns a structured error (with isError) for an unknown skill id", async () => {
     const tool = getSkillContentTool(new SkillCatalog());
-    const result = (await tool.execute({ skillId: "nope" })) as { error: string };
+    const result = (await tool.execute({ skillId: "nope" })) as {
+      error: string;
+      isError?: boolean;
+    };
     expect(result.error).toMatch(/unknown skillId: nope/);
+    // isError lets the host flag the call as failed rather than read it as content.
+    expect(result.isError).toBe(true);
   });
 
   it("declares an output schema that accepts the error shape, not just body", () => {
