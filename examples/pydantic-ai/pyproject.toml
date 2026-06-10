@@ -1,0 +1,24 @@
+[project]
+name = "ratel-example-pydantic-ai"
+version = "0.0.0"
+description = "Ratel + Pydantic AI — BM25 tool filtering before the agent run"
+requires-python = ">=3.10"
+dependencies = [
+    "ratel-ai",
+    "pydantic-ai>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.uv.sources]
+# Use the local SDK from this monorepo rather than PyPI.
+ratel-ai = { path = "../../src/sdk/python" }
+
+[tool.pytest.ini_options]
+# `test_agent.py` drives the agent with an async `run`; auto mode runs the
+# coroutine tests without per-test markers.
+asyncio_mode = "auto"

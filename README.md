@@ -50,7 +50,7 @@ Full skills suite: [`ratel-ai/skills`](https://github.com/ratel-ai/skills)
 
 - **Wedge today**: tool selection. Register tools (or ingest an upstream MCP server) into a `ToolCatalog`; the model sees the handful that matter for the current turn, not the full list.
 - **Same primitives** extend to skills, memories, and message history as they land on the roadmap.
-- **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound) + auxiliary CLI (`@ratel-ai/cli`) for the artifacts the library produces (telemetry today; trace-consolidation server later).
+- **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound) + Python SDK (`ratel-ai`, PyO3-bound) + auxiliary CLI (`@ratel-ai/cli`) for the artifacts the library produces (telemetry today; trace-consolidation server later).
 - **No vector DB. No embedding pipeline. No service to deploy.**
 
 See [`docs/overview.md`](docs/overview.md) for the thesis, [`docs/roadmap.md`](docs/roadmap.md) for what's coming.
@@ -87,18 +87,18 @@ Numbers from the MetaTool agent benchmark — full per-pool breakdown and method
 
 ## Choose your path
 
-If you want to **embed the library** in your own agent or runtime, pick one of these three shapes — same Rust core under each:
+If you want to **embed the library** in your own agent or runtime, pick one of these shapes — same Rust core under each:
 
-|               | **Rust library**                          | **TypeScript SDK**                    | **CLI**                                                       |
-| ------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | Inspecting telemetry the library writes; migrating a Claude Code MCP setup into Ratel (transitional) |
-| **Install**   | `cargo add ratel-ai-core`                 | `pnpm add @ratel-ai/sdk`              | `pnpm add -g @ratel-ai/cli`                                   |
-| **Hero call** | `ToolRegistry::search`                    | `searchToolsTool(catalog)`            | `ratel inspect`                                               |
-| **Reference** | [src/core/lib/](src/core/lib/README.md)   | [src/sdk/ts/](src/sdk/ts/README.md)   | [src/integrations/cli/](src/integrations/cli/README.md)       |
+|               | **Rust library**                          | **TypeScript SDK**                    | **Python SDK**                        | **CLI**                                                       |
+| ------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
+| **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | Python agents                         | Inspecting telemetry the library writes; migrating a Claude Code MCP setup into Ratel (transitional) |
+| **Install**   | `cargo add ratel-ai-core`                 | `pnpm add @ratel-ai/sdk`              | `pip install ratel-ai`                | `pnpm add -g @ratel-ai/cli`                                   |
+| **Hero call** | `ToolRegistry::search`                    | `searchToolsTool(catalog)`            | `search_tools_tool(catalog)`          | `ratel inspect`                                               |
+| **Reference** | [src/core/lib/](src/core/lib/README.md)   | [src/sdk/ts/](src/sdk/ts/README.md)   | [src/sdk/python/](src/sdk/python/README.md) | [src/integrations/cli/](src/integrations/cli/README.md) |
 
 If instead you want to **drop Ratel between an MCP host and your existing upstream MCP servers** (Claude Code, Cursor, ChatGPT) — the showcase product — use [`@ratel-ai/mcp-server` from `ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp): `npx -y @ratel-ai/mcp-server mcp import`.
 
-Python SDK and Rust HTTP server are on the [roadmap](docs/roadmap.md), not yet shipped.
+The Rust HTTP server is on the [roadmap](docs/roadmap.md), not yet shipped.
 
 ## Quickstart
 
@@ -131,6 +131,36 @@ const invoke = invokeToolTool(catalog);
 - Ingest an upstream MCP server: [registerMcpServer](src/sdk/ts/README.md#registermcpserver--index-an-mcp-servers-tools-into-the-catalog)
 - Full SDK reference: [src/sdk/ts/README.md](src/sdk/ts/README.md)
 
+**Python SDK** — embed Ratel in a Python agent
+
+```bash
+pip install ratel-ai
+```
+
+```python
+from ratel_ai import ToolCatalog, ExecutableTool, search_tools_tool, invoke_tool_tool
+
+catalog = ToolCatalog()
+catalog.register(
+    ExecutableTool(
+        id="read_file",
+        name="read_file",
+        description="Read a file from local disk.",
+        input_schema={"properties": {"path": {"type": "string"}}},
+        output_schema={"properties": {"contents": {"type": "string"}}},
+        execute=lambda args: {"contents": open(args["path"]).read()},
+    )
+)
+
+# Hand these two tools to your agent loop.
+# The full catalog stays out of the model's context — the agent reaches it via search_tools / invoke_tool.
+search = search_tools_tool(catalog)
+invoke = invoke_tool_tool(catalog)
+```
+
+- End-to-end Pydantic AI: [examples/pydantic-ai/](examples/pydantic-ai/README.md)
+- Full SDK reference: [src/sdk/python/README.md](src/sdk/python/README.md)
+
 **Showcase: drop Ratel between Claude Code and your existing MCP servers**
 
 For the canonical "Ratel as a product" experience — managing scopes, importing from Claude Code, OAuth for HTTP upstreams, serving over stdio — use the MCP-server showcase repo:
@@ -162,6 +192,7 @@ Longer take + skills / telemetry / memories / context graph: [docs/overview.md](
 
 - [examples/ai-sdk/](examples/ai-sdk/README.md) — Vercel AI SDK with pre-filter + dynamic gateway
 - [examples/mcp-chat/](examples/mcp-chat/README.md) — Vercel AI SDK REPL ingesting an upstream MCP server via `registerMcpServer`
+- [examples/pydantic-ai/](examples/pydantic-ai/README.md) — Pydantic AI (Python) with pre-filter + dynamic gateway
 
 ## Where this is going
 
@@ -171,7 +202,8 @@ Tool selection is the wedge, not the destination. Same catalog, same retrieval e
 - **v0.2.x — chat management** — store / compact / prune / navigate long histories.
 - **v0.3.x — memories** — prior decisions, preferences, and artifacts ranked into the current turn.
 - **v0.4.x — context graph** — unified tools-skills-memories substrate.
-- **v0.5.x — Python SDK** — second host language on the Rust core.
+
+The **Python SDK** (`pip install ratel-ai`) shipped early — a second host language on the same Rust core, at full parity with the TS SDK.
 
 Dated milestones: [`docs/roadmap.md`](docs/roadmap.md). Thesis: [`docs/overview.md`](docs/overview.md).
 
@@ -183,6 +215,7 @@ This repo holds the **library** half of the project. The MCP-server showcase and
 src/
 ├── core/lib/                  # ratel-ai-core — Rust crate; BM25 retrieval engine
 ├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
+├── sdk/python/                # ratel-ai — Python SDK (PyO3-bound)
 └── integrations/
     └── cli/                   # @ratel-ai/cli — `ratel` CLI (telemetry inspect; transitional MCP verbs)
 examples/                      # Runnable end-to-end examples for the SDK
@@ -196,7 +229,7 @@ Sibling repos:
 
 ## Build & test
 
-Prerequisites: Rust stable (pinned via `rust-toolchain.toml`), Node 24+, pnpm 10.28+.
+Prerequisites: Rust stable (pinned via `rust-toolchain.toml`), Node 24+, pnpm 10.28+. For the Python SDK: Python 3.9+ and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 # Rust
@@ -211,9 +244,15 @@ pnpm -r build
 pnpm -r typecheck
 pnpm -r lint
 pnpm -r test
+
+# Python (from src/sdk/python/)
+uv venv --python 3.11 .venv
+uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy
+.venv/bin/maturin develop
+.venv/bin/ruff check . && .venv/bin/mypy ratel_ai && .venv/bin/pytest
 ```
 
-CI runs both pipelines on every PR (`.github/workflows/{rust,ts}.yml`).
+CI runs all three pipelines on every PR (`.github/workflows/{rust,ts,python}.yml`).
 
 ## Architecture decisions
 
@@ -223,6 +262,7 @@ Full record in [docs/adr/](docs/adr/). Cross-cutting locks worth knowing up fron
 - [ADR 0003 — Tool selection: replace by default, suggest opt-in](docs/adr/0003-tool-selection-replace-vs-suggest.md)
 - [ADR 0004 — BM25 tool indexing strategy](docs/adr/0004-bm25-tool-indexing.md)
 - [ADR 0006 — Benchmark corpus and eval modes](docs/adr/0006-benchmark-corpus-and-eval-modes.md)
+- [ADR 0011 — Python↔Rust binding via PyO3](docs/adr/0011-python-rust-binding-strategy.md)
 
 ## Contributing
 
