@@ -179,15 +179,18 @@ jobs:
           twine check src/sdk/python/dist/*
       - name: Crate publish --dry-run
         run: cargo publish -p ratel-ai-core --dry-run
-      - name: npm optionalDeps injection + cli pack (workspace dep rewrite)
+      - name: npm optionalDeps injection (loader/subpackage version match)
         run: |
           set -e
-          # validates the inject script + that every subpackage version matches the loader
+          # Validates the inject script + that every subpackage version matches the loader.
+          # Reads/writes only package.json, so it needs nothing built.
+          #
+          # The CLI's tsc build + `workspace:^ -> semver` pack rewrite is intentionally NOT
+          # done here: tsc would need @ratel-ai/sdk's generated .d.ts (dist/ + native/),
+          # which only exist after the SDK's native+ts build — pulling a full native compile
+          # into this platform-independent job. The verify jobs already build the SDK first,
+          # then build+pack+install the CLI on every platform, so that path is covered there.
           node scripts/inject-sdk-optional-deps.mjs
-          # validates cli's workspace:^ -> semver rewrite at pack time
-          pnpm --filter @ratel-ai/cli build
-          pnpm --filter @ratel-ai/cli pack --pack-destination "$RUNNER_TEMP/cli-pack"
-          ls -la "$RUNNER_TEMP/cli-pack"
 
   # Single required check.
   pr-gate:
