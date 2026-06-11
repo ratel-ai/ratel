@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "pnpm -F @ratel-ai/sdk build && tsx src/index.ts"
+    "start": "pnpm -F @ratel-ai/sdk build && tsx src/index.ts",
+    "typecheck": "tsc",
+    "test:integration": "pnpm -F @ratel-ai/sdk build && tsx test/agent.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",
