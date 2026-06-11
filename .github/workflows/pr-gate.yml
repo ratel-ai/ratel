@@ -1,0 +1,385 @@
+name: PR Gate
+
+# Release-readiness gate. Heavy artifact builds + cross-SDK end-to-end tests that
+# build the REAL distributables (wheels, npm tarballs + native bindings, sdist, crate)
+# from this PR, install them into clean environments, and exercise every SDK + the CLI.
+#
+# Opt-in to save CI: the heavy jobs only run when a PR carries the `ready-to-merge`
+# label (and re-run on every new commit while it stays on). The terminal `pr-gate` job
+# is the single required check — it FAILS an unlabeled PR (blocking merge) and reflects
+# the pipeline result on a labeled PR. `rstagi` bypasses via the branch ruleset
+# (see scripts/setup-branch-ruleset.sh).
+#
+# Cost control — the 5-platform native matrix is slow (Windows, linux-arm64 cross,
+# darwin-x64 Rosetta). So:
+#   - armed PR commits run a REDUCED matrix (linux-x64 + darwin-arm64) — the two fast
+#     native runners that catch the vast majority of breakage;
+#   - push to main + nightly run the FULL 5-platform matrix (the safety net, mirroring
+#     verify-install.yml's role). A platform-specific break therefore surfaces right
+#     after merge / overnight rather than on every PR commit.
+
+on:
+  pull_request:
+    types: [opened, labeled, unlabeled, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    name: Arm + matrix
+    runs-on: ubuntu-latest
+    outputs:
+      armed: ${{ steps.c.outputs.armed }}
+      tier: ${{ steps.c.outputs.tier }}
+      matrix_wheels: ${{ steps.c.outputs.matrix_wheels }}
+      matrix_npm: ${{ steps.c.outputs.matrix_npm }}
+      matrix_e2e: ${{ steps.c.outputs.matrix_e2e }}
+      matrix_cli: ${{ steps.c.outputs.matrix_cli }}
+    steps:
+      - id: c
+        env:
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+        run: |
+          set -e
+          # armed: run the heavy jobs at all
+          armed=false
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            armed=true
+          elif [ "$HAS_LABEL" = "true" ]; then
+            armed=true
+          fi
+          # tier: PRs get the reduced matrix; main/nightly/manual get the full one
+          tier=reduced
+          if [ "${{ github.event_name }}" != "pull_request" ]; then tier=full; fi
+
+          WHEELS_FULL='[{"triple":"darwin-arm64","target":"aarch64-apple-darwin","os":"macos-14","manylinux":""},{"triple":"darwin-x64","target":"x86_64-apple-darwin","os":"macos-14","manylinux":""},{"triple":"linux-x64-gnu","target":"x86_64-unknown-linux-gnu","os":"ubuntu-latest","manylinux":"auto"},{"triple":"linux-arm64-gnu","target":"aarch64-unknown-linux-gnu","os":"ubuntu-latest","manylinux":"auto"},{"triple":"win32-x64-msvc","target":"x86_64-pc-windows-msvc","os":"windows-latest","manylinux":""}]'
+          WHEELS_RED='[{"triple":"linux-x64-gnu","target":"x86_64-unknown-linux-gnu","os":"ubuntu-latest","manylinux":"auto"},{"triple":"darwin-arm64","target":"aarch64-apple-darwin","os":"macos-14","manylinux":""}]'
+
+          NPM_FULL='[{"triple":"darwin-arm64","target":"aarch64-apple-darwin","os":"macos-14","cross":""},{"triple":"darwin-x64","target":"x86_64-apple-darwin","os":"macos-14","cross":""},{"triple":"linux-x64-gnu","target":"x86_64-unknown-linux-gnu","os":"ubuntu-latest","cross":""},{"triple":"linux-arm64-gnu","target":"aarch64-unknown-linux-gnu","os":"ubuntu-latest","cross":"--use-napi-cross"},{"triple":"win32-x64-msvc","target":"x86_64-pc-windows-msvc","os":"windows-latest","cross":""}]'
+          NPM_RED='[{"triple":"linux-x64-gnu","target":"x86_64-unknown-linux-gnu","os":"ubuntu-latest","cross":""},{"triple":"darwin-arm64","target":"aarch64-apple-darwin","os":"macos-14","cross":""}]'
+
+          E2E_FULL='[{"triple":"darwin-arm64","os":"macos-14","arch":"arm64"},{"triple":"darwin-x64","os":"macos-14","arch":"x64"},{"triple":"linux-x64-gnu","os":"ubuntu-latest","arch":"x64"},{"triple":"linux-arm64-gnu","os":"ubuntu-24.04-arm","arch":"arm64"},{"triple":"win32-x64-msvc","os":"windows-latest","arch":"x64"}]'
+          E2E_RED='[{"triple":"linux-x64-gnu","os":"ubuntu-latest","arch":"x64"},{"triple":"darwin-arm64","os":"macos-14","arch":"arm64"}]'
+
+          CLI_FULL='[{"triple":"darwin-arm64","os":"macos-14"},{"triple":"linux-x64-gnu","os":"ubuntu-latest"},{"triple":"linux-arm64-gnu","os":"ubuntu-24.04-arm"},{"triple":"win32-x64-msvc","os":"windows-latest"}]'
+          CLI_RED='[{"triple":"linux-x64-gnu","os":"ubuntu-latest"},{"triple":"darwin-arm64","os":"macos-14"}]'
+
+          if [ "$tier" = "full" ]; then
+            mw="$WHEELS_FULL"; mn="$NPM_FULL"; me="$E2E_FULL"; mc="$CLI_FULL"
+          else
+            mw="$WHEELS_RED"; mn="$NPM_RED"; me="$E2E_RED"; mc="$CLI_RED"
+          fi
+          {
+            echo "armed=$armed"
+            echo "tier=$tier"
+            echo "matrix_wheels=$mw"
+            echo "matrix_npm=$mn"
+            echo "matrix_e2e=$me"
+            echo "matrix_cli=$mc"
+          } >> "$GITHUB_OUTPUT"
+          echo "event=${{ github.event_name }} has_label=$HAS_LABEL armed=$armed tier=$tier"
+
+  # ---- Python wheels --------------------------------------------------------
+  build-wheels:
+    name: wheel (${{ matrix.triple }})
+    needs: setup
+    if: needs.setup.outputs.armed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix_wheels) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: src/sdk/python
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+          sccache: 'true'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.triple }}
+          path: src/sdk/python/dist/*.whl
+          if-no-files-found: error
+
+  build-sdist:
+    name: sdist + twine check
+    needs: setup
+    if: needs.setup.outputs.armed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: src/sdk/python
+          command: sdist
+          args: --out dist
+      - name: Validate packaging metadata
+        # `packaging>=24.2` understands maturin's Metadata-Version 2.4 (PEP 639).
+        run: |
+          python -m pip install --upgrade twine 'packaging>=24.2'
+          twine check src/sdk/python/dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: src/sdk/python/dist/*.tar.gz
+          if-no-files-found: error
+
+  # ---- TS native bindings ---------------------------------------------------
+  build-npm-native:
+    name: napi build (${{ matrix.triple }})
+    needs: setup
+    if: needs.setup.outputs.armed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix_npm) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/ts/native
+          key: ${{ matrix.triple }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build native
+        run: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target ${{ matrix.target }} ${{ matrix.cross }} --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.triple }}
+          path: |
+            src/sdk/ts/native/ratel-sdk.${{ matrix.triple }}.node
+            src/sdk/ts/native/index.cjs
+            src/sdk/ts/native/index.d.cts
+          if-no-files-found: error
+
+  # ---- Assemble npm tarballs (loader + per-platform subpackages + cli) ------
+  pack-npm:
+    name: pack npm tarballs
+    needs: [setup, build-npm-native]
+    if: needs.setup.outputs.armed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Download native bindings (this tier)
+        uses: actions/download-artifact@v4
+        with:
+          path: src/sdk/ts/artifacts
+          pattern: bindings-*
+          merge-multiple: true
+      - name: Distribute binaries into npm/ subpackages
+        run: pnpm --filter @ratel-ai/sdk exec napi artifacts --output-dir artifacts --npm-dir npm
+      - name: Place JS loader + types into native/
+        run: |
+          set -e
+          cp src/sdk/ts/artifacts/index.cjs src/sdk/ts/native/index.cjs
+          cp src/sdk/ts/artifacts/index.d.cts src/sdk/ts/native/index.d.cts
+      - name: Build TS loader
+        run: pnpm --filter @ratel-ai/sdk run build:ts
+      - name: Inject optionalDependencies into SDK loader
+        run: node scripts/inject-sdk-optional-deps.mjs
+      - name: Pack loader + present subpackages + cli
+        run: |
+          set -e
+          mkdir -p out/loader out/cli
+          # loader (pnpm pack rewrites workspace deps -> real semver)
+          pnpm --filter @ratel-ai/sdk pack --pack-destination "$PWD/out/loader"
+          # only the subpackages whose native binary was actually built this tier
+          packed=0
+          for dir in src/sdk/ts/npm/*/; do
+            triple="$(basename "$dir")"
+            if [ -f "$dir/ratel-sdk.$triple.node" ]; then
+              mkdir -p "out/sub/$triple"
+              npm pack "./$dir" --pack-destination "$PWD/out/sub/$triple"
+              packed=$((packed + 1))
+            fi
+          done
+          test "$packed" -gt 0 || { echo "no native subpackages were built" >&2; exit 1; }
+          echo "packed $packed subpackage(s)"
+          # cli (pnpm pack rewrites workspace:^ -> semver)
+          pnpm --filter @ratel-ai/cli pack --pack-destination "$PWD/out/cli"
+          find out -name '*.tgz' | sort
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarballs
+          path: out/**
+          if-no-files-found: error
+
+  # ---- Rust crate packaging --------------------------------------------------
+  crate-dryrun:
+    name: crate publish --dry-run
+    needs: setup
+    if: needs.setup.outputs.armed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish -p ratel-ai-core --dry-run
+
+  # ---- E2E: Python wheel ----------------------------------------------------
+  e2e-python:
+    name: e2e python (${{ matrix.triple }})
+    needs: [setup, build-wheels]
+    if: needs.setup.outputs.armed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix_e2e) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.arch }}
+      - name: Download wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-${{ matrix.triple }}
+          path: wheel
+      - name: Install wheel + run E2E
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install wheel/*.whl
+          python e2e/python/run_e2e.py
+
+  # ---- E2E: TS SDK (loader + matching native subpackage) --------------------
+  e2e-ts:
+    name: e2e ts (${{ matrix.triple }})
+    needs: [setup, pack-npm]
+    if: needs.setup.outputs.armed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix_e2e) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: ${{ matrix.arch }}
+      - name: Download npm tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-tarballs
+          path: npm-tarballs
+      - name: Install artifact + run E2E
+        run: |
+          set -e
+          work="$(mktemp -d)"
+          cd "$work"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund \
+            "$GITHUB_WORKSPACE"/npm-tarballs/loader/*.tgz \
+            "$GITHUB_WORKSPACE"/npm-tarballs/sub/${{ matrix.triple }}/*.tgz
+          cp "$GITHUB_WORKSPACE"/e2e/ts/run_e2e.mjs ./run_e2e.mjs
+          RATEL_E2E_DIR="$GITHUB_WORKSPACE/e2e" node run_e2e.mjs
+
+  # ---- E2E: CLI (against the PR-built SDK, not the registry) ----------------
+  e2e-cli:
+    name: e2e cli (${{ matrix.triple }})
+    needs: [setup, pack-npm]
+    if: needs.setup.outputs.armed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix_cli) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Download npm tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-tarballs
+          path: npm-tarballs
+      - name: Install CLI + run E2E
+        # Install the locally-built SDK loader + native subpackage too, so the CLI's
+        # `@ratel-ai/sdk` dep resolves to the PR build (not the registry). This is what
+        # makes the gate correct on release-prep PRs, where the bumped SDK isn't published.
+        run: |
+          set -e
+          work="$(mktemp -d)"
+          cd "$work"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund \
+            "$GITHUB_WORKSPACE"/npm-tarballs/cli/*.tgz \
+            "$GITHUB_WORKSPACE"/npm-tarballs/loader/*.tgz \
+            "$GITHUB_WORKSPACE"/npm-tarballs/sub/${{ matrix.triple }}/*.tgz
+          RATEL_BIN="$work/node_modules/.bin/ratel" bash "$GITHUB_WORKSPACE"/e2e/cli/run_e2e.sh
+
+  # ---- Single required check -------------------------------------------------
+  pr-gate:
+    name: pr-gate
+    needs: [setup, build-wheels, build-sdist, build-npm-native, pack-npm, crate-dryrun, e2e-python, e2e-ts, e2e-cli]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate gate
+        run: |
+          set -e
+          armed="${{ needs.setup.outputs.armed }}"
+          echo "event=${{ github.event_name }} armed=$armed tier=${{ needs.setup.outputs.tier }}"
+
+          # Unlabeled PR: block merge, but no heavy compute was spent.
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$armed" != "true" ]; then
+            echo "::error::PR not mergeable: add the 'ready-to-merge' label to run the release gate (artifact build + cross-SDK E2E) before merging."
+            exit 1
+          fi
+
+          # Armed PR / push / schedule: every heavy job must have succeeded.
+          fail=0
+          check() {
+            echo "  $1: $2"
+            if [ "$2" != "success" ]; then echo "::error::$1 did not succeed ($2)"; fail=1; fi
+          }
+          check build-wheels      "${{ needs.build-wheels.result }}"
+          check build-sdist       "${{ needs.build-sdist.result }}"
+          check build-npm-native  "${{ needs.build-npm-native.result }}"
+          check pack-npm          "${{ needs.pack-npm.result }}"
+          check crate-dryrun      "${{ needs.crate-dryrun.result }}"
+          check e2e-python        "${{ needs.e2e-python.result }}"
+          check e2e-ts            "${{ needs.e2e-ts.result }}"
+          check e2e-cli           "${{ needs.e2e-cli.result }}"
+          if [ "$fail" = "1" ]; then
+            echo "::error::PR gate failed — see the jobs above."
+            exit 1
+          fi
+          echo "PR gate passed: all artifact builds + cross-SDK E2E green (tier=${{ needs.setup.outputs.tier }})."

@@ -23,6 +23,40 @@ How a new version of Ratel is published to npm and crates.io. Read end-to-end be
 - **`release.yml`** — fires on every `v*` tag push (and supports `workflow_dispatch` with `dry_run: true` for rehearsal). Builds the matrix, publishes every artifact with provenance, creates a GitHub Release. Authentication is via Trusted Publishers (OIDC) — no `NPM_TOKEN` / `CARGO_REGISTRY_TOKEN` secrets stored in the repo. `*-rc.*` tags publish under the `rc` dist-tag; un-suffixed tags become `latest`.
 - **`verify-install.yml`** — workflow_dispatch + daily cron. Installs the published packages on each of the five platforms with no Rust toolchain present and exercises the binding loader. Run after every release.
 
+## Pre-merge gate (catch breakage before it lands)
+
+`release.yml` only builds the real distributables at tag time, and `verify-install.yml`
+only smoke-tests them *after* publishing. To catch packaging breaks (missing `files`,
+`optionalDependencies` injection, sdist/twine metadata, native-binding load, cross-SDK
+drift) **before** they reach `main`, `pr-gate.yml` shifts that validation onto the PR.
+
+- **Opt-in to save CI.** The heavy jobs only run when a PR carries the **`ready-to-merge`**
+  label (and re-run on every new commit while it stays on). Unlabeled PRs spend zero
+  build minutes — the jobs are skipped.
+- **Mandatory to merge.** The terminal `pr-gate` check is required on `main`. It **fails**
+  any PR without the `ready-to-merge` label (so unlabeled PRs cannot merge), and on a
+  labeled PR it goes green only when the whole pipeline is green. `rstagi` bypasses via the
+  branch ruleset.
+- **What it runs:** build wheels + sdist (`twine check`), build the per-platform native
+  bindings + pack the npm tarballs (loader + subpackages + cli), `cargo publish --dry-run`,
+  then **install each artifact into a clean environment and run the cross-SDK E2E** (`e2e/` —
+  Python wheel, TS loader+native, CLI; the CLI installs the PR-built SDK, not the registry,
+  so it stays correct on version-bump PRs). The Python and TS runners assert the same
+  `e2e/scenario.json`, so a behavior divergence fails exactly one.
+- **Matrix (cost control):** armed-PR commits run a **reduced** matrix (`linux-x64` +
+  `darwin-arm64` — the fast native runners). The **full 5-platform** matrix (adding Windows,
+  `linux-arm64` cross-compile, `darwin-x64` Rosetta) runs on **push to `main` + nightly** —
+  the same safety-net role `verify-install.yml` plays. So a platform-specific break surfaces
+  right after merge / overnight, not on every PR commit. (`workflow_dispatch` runs the full
+  matrix on demand.)
+
+Developer flow: open a PR → fast `rust/ts/python` checks run as usual → when ready to land,
+add the `ready-to-merge` label → the gate runs on every commit → merge once `pr-gate` is green.
+
+Enable the required check + label once (repo-admin): `scripts/setup-branch-ruleset.sh`
+(see its header for scoping bypass to rstagi via a single-member team). Run the E2E locally
+per `e2e/README.md`.
+
 ## Cutting a release
 
 ### Once-per-repo prep (already done; do not redo)

@@ -1,0 +1,24 @@
+{
+  "$comment": "Single source of truth for the cross-SDK E2E. Every runner (Python, TS) loads e2e/fixtures/catalog.json, registers all tools, and asserts the behavior below. Because the Python and TS SDKs wrap the same Rust BM25 core, identical assertions here enforce cross-SDK parity: a divergence makes exactly one runner fail. Queries are written so each has an unambiguous top-1 match; assertions intentionally check top-1 (not full ordering) to stay robust to score ties while still catching real regressions, packaging breaks, and binding-load failures.",
+  "searches": [
+    { "query": "read a file from local disk", "topK": 5, "expectTop1": "fs__read_file" },
+    { "query": "list the entries of a directory", "topK": 5, "expectTop1": "fs__list_directory" },
+    { "query": "create a new github issue", "topK": 5, "expectTop1": "github__create_issue" },
+    { "query": "merge a github pull request", "topK": 5, "expectTop1": "github__merge_pull_request" },
+    { "query": "run a sql query against the postgres database", "topK": 5, "expectTop1": "db__run_query" },
+    { "query": "weather forecast for a city", "topK": 5, "expectTop1": "weather__get_forecast" }
+  ],
+  "invoke": {
+    "toolId": "db__run_query",
+    "args": { "sql": "SELECT 1" }
+  },
+  "gatewaySearch": {
+    "query": "read a file from local disk",
+    "topK": 3,
+    "expectToolId": "fs__read_file"
+  },
+  "gatewayInvoke": {
+    "toolId": "fs__read_file",
+    "args": { "path": "/tmp/x" }
+  }
+}
