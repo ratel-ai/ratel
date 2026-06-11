@@ -78,14 +78,27 @@ impl ToolRegistry {
                 .k1(BM25_K1)
                 .b(BM25_B)
                 .build();
-            engine
-                .search(query, top_k)
+            // The bm25 crate sorts by score only and collects candidates through
+            // a HashSet, so equal scores fall back to hash-seed iteration order
+            // and flip between processes: tied hits at the top_k boundary make
+            // top-K membership nondeterministic. Rank the full match set, break
+            // ties by tool_id, then cut.
+            let mut ranked: Vec<SearchHit> = engine
+                .search(query, self.tools.len())
                 .into_iter()
                 .map(|r| SearchHit {
                     tool_id: r.document.id,
                     score: r.score,
                 })
-                .collect()
+                .collect();
+            ranked.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| a.tool_id.cmp(&b.tool_id))
+            });
+            ranked.truncate(top_k);
+            ranked
         };
         let took_ms = started.elapsed().as_millis() as u64;
         let top_score = hits.first().map(|h| h.score as f64);
