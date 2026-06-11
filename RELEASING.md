@@ -37,12 +37,15 @@ drift) **before** they reach `main`, `pr-gate.yml` shifts that validation onto t
   any PR without the `ready-to-merge` label (so unlabeled PRs cannot merge), and on a
   labeled PR it goes green only when the whole pipeline is green. `rstagi` bypasses via the
   branch ruleset.
-- **What it runs:** build wheels + sdist (`twine check`), build the per-platform native
-  bindings + pack the npm tarballs (loader + subpackages + cli), `cargo publish --dry-run`,
-  then **install each artifact into a clean environment and run the cross-SDK E2E** (`e2e/` —
-  Python wheel, TS loader+native, CLI; the CLI installs the PR-built SDK, not the registry,
-  so it stays correct on version-bump PRs). The Python and TS runners assert the same
-  `e2e/scenario.json`, so a behavior divergence fails exactly one.
+- **What it runs:** one **`verify` job per platform** that builds the real distributables
+  (wheel, npm loader + native binding, CLI tarball) and **installs each into a clean
+  environment and runs the cross-SDK E2E** (`e2e/` — Python wheel, TS loader+native, CLI;
+  the CLI installs the PR-built SDK, not the registry, so it stays correct on version-bump
+  PRs), plus a single **`packaging` job** for the platform-independent checks (sdist +
+  `twine check`, `cargo publish --dry-run`, npm `optionalDependencies` injection + cli
+  pack). The Python and TS runners assert the same `e2e/scenario.json`, so a behavior
+  divergence fails exactly one. (Kept to few check rows: each platform is one row;
+  platforms run in parallel.)
 - **Matrix (cost control):** armed-PR commits run a **reduced** matrix (`linux-x64` +
   `darwin-arm64` — the fast native runners). The **full 5-platform** matrix (adding Windows,
   `linux-arm64` cross-compile, `darwin-x64` Rosetta) runs on **push to `main` + nightly** —
