@@ -11,9 +11,9 @@ name: PR Gate
 # labeled PR. `rstagi` bypasses via the branch ruleset (scripts/setup-branch-ruleset.sh).
 #
 # Layout (kept to few check rows): one `verify` job PER PLATFORM does Python + Node + CLI
-# build+install+e2e in sequence (platforms run in parallel); a single `packaging` job does
-# the platform-independent packaging checks (sdist+twine, crate dry-run, npm optionalDeps
-# integrity). Reduced matrix (linux-x64 + darwin-arm64) on PR commits; full 5-platform on
+# build+install+e2e in sequence (platforms run in parallel), and the platform-independent
+# packaging checks (sdist+twine, crate dry-run, npm optionalDeps integrity) run once on the
+# linux leg. Reduced matrix (linux-x64 + darwin-arm64) on PR commits; full 5-platform on
 # push to main + nightly.
 
 on:
@@ -150,52 +150,25 @@ jobs:
             "$RUNNER_TEMP"/tgz/sub/*.tgz
           RATEL_BIN="$work/node_modules/.bin/ratel" bash "$GITHUB_WORKSPACE/e2e/cli/run_e2e.sh"
 
-  # Platform-independent packaging integrity (no per-OS execution).
-  packaging:
-    name: packaging
-    needs: setup
-    if: needs.setup.outputs.armed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: pnpm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install JS deps
-        run: pnpm install --frozen-lockfile
-      - name: Python sdist + twine check
-        # `packaging>=24.2` understands maturin's Metadata-Version 2.4 (PEP 639).
+      # Platform-independent packaging integrity — folded into the gate's linux leg so
+      # it's one fewer check row; runs once (linux-x64 is always in both matrices).
+      - name: Packaging integrity (sdist + twine, crate dry-run, optionalDeps inject)
+        if: matrix.triple == 'linux-x64-gnu'
         run: |
           set -e
-          python -m pip install --upgrade pip maturin twine 'packaging>=24.2'
+          # maturin is already installed by the Python SDK step above.
+          python -m pip install --upgrade twine 'packaging>=24.2'
           ( cd src/sdk/python && maturin sdist --out dist )
           twine check src/sdk/python/dist/*
-      - name: Crate publish --dry-run
-        run: cargo publish -p ratel-ai-core --dry-run
-      - name: npm optionalDeps injection (loader/subpackage version match)
-        run: |
-          set -e
-          # Validates the inject script + that every subpackage version matches the loader.
-          # Reads/writes only package.json, so it needs nothing built.
-          #
-          # The CLI's tsc build + `workspace:^ -> semver` pack rewrite is intentionally NOT
-          # done here: tsc would need @ratel-ai/sdk's generated .d.ts (dist/ + native/),
-          # which only exist after the SDK's native+ts build — pulling a full native compile
-          # into this platform-independent job. The verify jobs already build the SDK first,
-          # then build+pack+install the CLI on every platform, so that path is covered there.
+          cargo publish -p ratel-ai-core --dry-run
+          # inject script + loader/subpackage version match (reads package.json only;
+          # the CLI's workspace:^ pack rewrite is already covered by the CLI step above)
           node scripts/inject-sdk-optional-deps.mjs
 
   # Single required check.
   pr-gate:
     name: pr-gate
-    needs: [setup, verify, packaging]
+    needs: [setup, verify]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -211,9 +184,8 @@ jobs:
             exit 1
           fi
 
-          # Always surface the real results, even when overriding.
-          echo "  verify:    ${{ needs.verify.result }}"
-          echo "  packaging: ${{ needs.packaging.result }}"
+          # Always surface the real result, even when overriding.
+          echo "  verify: ${{ needs.verify.result }}"
 
           # Manual escape hatch: the override-checks label forces a green gate regardless
           # of the results above. Convention: rstagi only, for emergencies. main/nightly
@@ -223,14 +195,8 @@ jobs:
             exit 0
           fi
 
-          fail=0
-          check() {
-            if [ "$2" != "success" ]; then echo "::error::$1 did not succeed ($2)"; fail=1; fi
-          }
-          check verify    "${{ needs.verify.result }}"
-          check packaging "${{ needs.packaging.result }}"
-          if [ "$fail" = "1" ]; then
-            echo "::error::PR gate failed — fix the jobs above, or add the 'override-checks' label to merge anyway (rstagi only)."
+          if [ "${{ needs.verify.result }}" != "success" ]; then
+            echo "::error::PR gate failed — fix the verify job(s) above, or add the 'override-checks' label to merge anyway (rstagi only)."
             exit 1
           fi
-          echo "PR gate passed: all per-platform verify + packaging green (tier=${{ needs.setup.outputs.tier }})."
+          echo "PR gate passed: all per-platform verify (build + install + cross-SDK E2E + packaging) green (tier=${{ needs.setup.outputs.tier }})."

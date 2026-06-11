@@ -34,25 +34,14 @@ jobs:
         run: .venv/bin/mypy ratel_ai
       - name: Test
         run: .venv/bin/pytest
-
-  example:
-    # The example wires the SDK into pydantic-ai. `main.py` diagnostic mode never
-    # invokes a tool, so a model-free `TestModel` run is the only thing that
-    # exercises the BM25 top-K -> tool-call path in CI (no API key needed).
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: examples/pydantic-ai
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src/sdk/python/native
-      - uses: astral-sh/setup-uv@v5
+      # Example wiring (pydantic-ai) — folded in here to keep one Python check row.
+      # `main.py` diagnostic mode never invokes a tool, so a model-free `TestModel`
+      # run is the only thing that exercises the BM25 top-K -> tool-call path in CI
+      # (no API key needed). `uv sync` builds the local ratel-ai wheel (maturin) and
+      # installs pydantic-ai + the dev group (pytest, pytest-asyncio).
       - name: Install example (local ratel-ai + pydantic-ai) + test deps
-        # `uv sync` builds the local ratel-ai wheel (maturin) and installs
-        # pydantic-ai + the dev group (pytest, pytest-asyncio).
+        working-directory: examples/pydantic-ai
         run: uv sync --python 3.11
-      - name: Test the wiring
+      - name: Test the example wiring
+        working-directory: examples/pydantic-ai
         run: uv run pytest

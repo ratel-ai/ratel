@@ -46,11 +46,10 @@ drift) **before** they reach `main`, `pr-gate.yml` shifts that validation onto t
   (wheel, npm loader + native binding, CLI tarball) and **installs each into a clean
   environment and runs the cross-SDK E2E** (`e2e/` — Python wheel, TS loader+native, CLI;
   the CLI installs the PR-built SDK, not the registry, so it stays correct on version-bump
-  PRs), plus a single **`packaging` job** for the platform-independent checks (sdist +
-  `twine check`, `cargo publish --dry-run`, npm `optionalDependencies` injection — the
-  CLI's `workspace:^` pack rewrite is covered by the verify jobs). The Python and TS
-  runners assert the same `e2e/scenario.json`, so a behavior
-  divergence fails exactly one. (Kept to few check rows: each platform is one row;
+  PRs). The platform-independent packaging checks (sdist + `twine check`, `cargo publish
+  --dry-run`, npm `optionalDependencies` injection) run once, folded into the linux leg.
+  The Python and TS runners assert the same `e2e/scenario.json`, so a behavior divergence
+  fails exactly one. (Kept to few check rows: `setup` + one row per platform + `pr-gate`;
   platforms run in parallel.)
 - **Matrix (cost control):** armed-PR commits run a **reduced** matrix (`linux-x64` +
   `darwin-arm64` — the fast native runners). The **full 5-platform** matrix (adding Windows,
