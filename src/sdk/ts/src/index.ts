@@ -24,6 +24,15 @@ export {
   SEARCH_CAPABILITIES_ID,
   searchCapabilitiesTool,
 } from "./gateway.js";
+// Deprecated pre-0.2.0 surface (see gateway-compat.ts) — kept so `@ratel-ai/sdk@0.1.x`
+// callers keep compiling and running after upgrading to 0.2.0. Slated for removal (RAT-250).
+export type {
+  SearchToolHit,
+  SearchToolsGroup,
+  SearchToolsResult,
+  SearchToolsToolOptions,
+} from "./gateway-compat.js";
+export { SEARCH_TOOLS_ID, searchToolsTool } from "./gateway-compat.js";
 export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
 export { registerMcpServer } from "./mcp.js";
 export type { SkillCatalogOptions } from "./skill-catalog.js";

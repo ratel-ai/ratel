@@ -189,3 +189,45 @@ async def test_invoke_tool_generic_error_is_reported() -> None:
     result = await invoke.execute({"toolId": "flaky", "args": {}})
     assert "threw: nope" in result["error"]
     assert result["isError"] is True
+
+
+def _skill_catalog() -> SkillCatalog:
+    c = SkillCatalog()
+    c.register(Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel."))
+    return c
+
+
+async def test_search_capabilities_clamps_non_positive_top_k() -> None:
+    catalog = ToolCatalog()
+    catalog.register(_tool("a__read", "read a file from disk"))
+    catalog.register(_tool("a__send", "send an email message"))
+    search = search_capabilities_tool(catalog)
+
+    async def count(extra: dict) -> int:
+        result = await search.execute({"query": "read a file or send an email", **extra})
+        return sum(len(g["hits"]) for g in result["tools"]["groups"])
+
+    baseline = await count({})  # default top-K
+    # 0 / negative / bool / float all fall back to the default — never zero hits,
+    # and never an unbounded set. Mirrors the TS clampTopK behaviour exactly.
+    assert await count({"topKTools": 0}) == baseline
+    assert await count({"topKTools": -3}) == baseline
+    assert await count({"topKTools": True}) == baseline
+    assert await count({"topKTools": 1.5}) == baseline
+    assert await count({"topKTools": 1}) == 1
+
+
+def test_search_capabilities_description_mentions_skills_only_when_wired() -> None:
+    catalog = ToolCatalog()
+    catalog.register(_tool("a__read", "read a file"))
+
+    tools_only = search_capabilities_tool(catalog)
+    assert "get_skill_content" not in tools_only.description
+    assert "skill" not in tools_only.description.lower()
+
+    with_skills = search_capabilities_tool(catalog, _skill_catalog())
+    assert "get_skill_content" in with_skills.description
+
+    # an empty skill catalog is treated as no skills
+    empty = search_capabilities_tool(catalog, SkillCatalog())
+    assert "get_skill_content" not in empty.description

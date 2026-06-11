@@ -119,6 +119,41 @@ describe("searchCapabilitiesTool", () => {
     const gw = events.find((e) => e.type === "gateway_search");
     expect(gw?.top_k).toBe(3);
   });
+
+  it("clamps a non-positive / non-integer topK back to the default", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    tools.register(sendEmail);
+    const tool = searchCapabilitiesTool(tools);
+    const count = async (input: object): Promise<number> => {
+      const r = (await tool.execute(input)) as SearchCapabilitiesResult;
+      return r.tools.groups.reduce((n, g) => n + g.hits.length, 0);
+    };
+    const q = "read a file or send an email";
+    const baseline = await count({ query: q }); // default top-K
+    // 0 / negative / fractional must fall back to the default, never return zero
+    // tools (TS) or an unbounded set (negative wrapping to u32 in the native layer).
+    expect(await count({ query: q, topKTools: 0 })).toBe(baseline);
+    expect(await count({ query: q, topKTools: -3 })).toBe(baseline);
+    expect(await count({ query: q, topKTools: 1.5 })).toBe(baseline);
+    expect(await count({ query: q, topKTools: 1 })).toBe(1); // a valid positive int is honored
+  });
+
+  it("advertises skills in its description only when a non-empty skill catalog is wired", () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+
+    const toolsOnly = searchCapabilitiesTool(tools);
+    expect(toolsOnly.description).not.toContain("get_skill_content");
+    expect(toolsOnly.description.toLowerCase()).not.toContain("skill");
+
+    const withSkills = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill));
+    expect(withSkills.description).toContain("get_skill_content");
+
+    // an empty catalog is treated as no skills
+    const emptyCatalog = searchCapabilitiesTool(tools, new SkillCatalog());
+    expect(emptyCatalog.description).not.toContain("get_skill_content");
+  });
 });
 
 describe("invokeToolTool", () => {

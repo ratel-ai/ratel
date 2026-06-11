@@ -63,7 +63,7 @@ export class SkillCatalog {
       throw new Error(`unknown skillId: ${skillId}`);
     }
     const started = Date.now();
-    const body = skill.body;
+    const body = skill.body ?? "";
     this.registry.recordEvent({
       type: "skill_invoke",
       skill_id: skillId,

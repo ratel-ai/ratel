@@ -159,13 +159,16 @@ pub struct Skill {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub tags: Vec<String>,
+    /// Optional (defaults to `[]`) — kept in parity with the Python SDK, where
+    /// a minimal `Skill(id, name, description)` is valid.
+    pub tags: Option<Vec<String>>,
     /// Author-declared task phrases that trigger the skill; indexed for ranking.
     pub triggers: Option<Vec<String>>,
     /// Project stacks the skill applies to (e.g. ["react"]); used by the push
     /// ranker to boost by context — not indexed as query terms.
     pub stacks: Option<Vec<String>>,
-    pub body: String,
+    /// Optional (defaults to `""`) — parity with the Python SDK's default body.
+    pub body: Option<String>,
 }
 
 #[napi(object)]
@@ -197,10 +200,10 @@ impl SkillRegistry {
             id: skill.id,
             name: skill.name,
             description: skill.description,
-            tags: skill.tags,
+            tags: skill.tags.unwrap_or_default(),
             triggers: skill.triggers.unwrap_or_default(),
             stacks: skill.stacks.unwrap_or_default(),
-            body: skill.body,
+            body: skill.body.unwrap_or_default(),
         });
     }
 

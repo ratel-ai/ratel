@@ -49,6 +49,21 @@ describe("SkillCatalog", () => {
     const catalog = new SkillCatalog();
     expect(() => catalog.invoke("nope")).toThrow(/unknown skillId: nope/);
   });
+
+  it("accepts a minimal skill with no tags or body (parity with the Python SDK)", () => {
+    const catalog = new SkillCatalog();
+    // `tags` and `body` are optional — this object must type-check and register.
+    const minimal: Skill = {
+      id: "min",
+      name: "min",
+      description: "a minimal skill, no tags or body",
+    };
+    catalog.register(minimal);
+
+    expect(catalog.has("min")).toBe(true);
+    expect(catalog.invoke("min")).toBe(""); // missing body resolves to "", never undefined
+    expect(catalog.search("minimal", 5)[0]?.skillId).toBe("min");
+  });
 });
 
 describe("SkillCatalog tracing", () => {

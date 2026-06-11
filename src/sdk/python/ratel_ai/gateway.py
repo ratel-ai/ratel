@@ -23,15 +23,35 @@ INVOKE_TOOL_ID = "invoke_tool"
 
 _DEFAULT_TOP_K_TOOLS = 5
 _DEFAULT_TOP_K_SKILLS = 3
+_MAX_TOP_K = 50
 
-SEARCH_BASE_DESCRIPTION = (
-    "Discover capabilities — tools (executable) and skills (reusable playbooks) — "
-    "beyond the ones already in your direct tool list. Call this BEFORE refusing a "
-    "request, falling back to a generic capability (web fetch, shell, built-in "
-    "search), or improvising a multi-step task: a purpose-built tool or skill may "
-    "be in the catalog but not pre-loaded. Pass a natural-language query describing "
-    "what you want to do. You get back two independent buckets: `tools` (run one "
-    "via invoke_tool) and `skills` (load one's instructions via get_skill_content, "
+
+def _clamp_top_k(value: Any, fallback: int) -> int:
+    """Clamp a model-supplied top-K to a positive int in [1, _MAX_TOP_K].
+
+    Falls back to `fallback` for anything else (None, 0, negative, bool, float).
+    Mirrors the TS SDK's `clampTopK` so the two SDKs treat the same input the same
+    way (`bool` is excluded even though it subclasses `int`).
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return fallback
+    return min(value, _MAX_TOP_K)
+
+
+# The discovery prompt shown to the model. The skills clause is only included
+# when a non-empty skill catalog is wired in — otherwise the tool would advertise
+# a `skills` bucket and `get_skill_content` that don't exist (always `skills: []`).
+_SEARCH_INTRO = (
+    "Discover capabilities beyond the ones already in your direct tool list. Call "
+    "this BEFORE refusing a request, falling back to a generic capability (web "
+    "fetch, shell, built-in search), or improvising a multi-step task: a "
+    "purpose-built capability may be in the catalog but not pre-loaded. Pass a "
+    "natural-language query describing what you want to do."
+)
+_RESULT_TOOLS_ONLY = " You get back a `tools` bucket (executable) — run one via invoke_tool."
+_RESULT_TOOLS_AND_SKILLS = (
+    " You get back two independent buckets: `tools` (run one via invoke_tool) and "
+    "`skills` (reusable playbooks — load one's instructions via get_skill_content, "
     "then follow it). Skills have their own result budget, so they are never "
     "crowded out by tools."
 )
@@ -70,12 +90,13 @@ def _compact_description(s: str) -> str:
     return f"{head.rstrip()}…"
 
 
-def _build_search_description(upstreams: Sequence[UpstreamServerInfo]) -> str:
+def _build_search_description(has_skills: bool, upstreams: Sequence[UpstreamServerInfo]) -> str:
+    base = _SEARCH_INTRO + (_RESULT_TOOLS_AND_SKILLS if has_skills else _RESULT_TOOLS_ONLY)
     if not upstreams:
-        return SEARCH_BASE_DESCRIPTION
+        return base
     listing = "\n".join(format_upstream_line(u) for u in upstreams)
     return (
-        f"{SEARCH_BASE_DESCRIPTION}\n\n"
+        f"{base}\n\n"
         f"This catalog aggregates tools from these upstream MCP servers:\n{listing}"
     )
 
@@ -94,21 +115,12 @@ def search_capabilities_tool(
     """
     upstreams = list(upstream_servers or [])
     upstream_by_name = {u.name: u for u in upstreams}
+    has_skills = skill_catalog is not None and skill_catalog.size() > 0
 
     async def execute(input: dict[str, Any]) -> dict[str, Any]:
         query = input["query"]
-        top_k_tools = input.get("topKTools")
-        k_tools = (
-            top_k_tools
-            if isinstance(top_k_tools, int) and top_k_tools > 0
-            else _DEFAULT_TOP_K_TOOLS
-        )
-        top_k_skills = input.get("topKSkills")
-        k_skills = (
-            top_k_skills
-            if isinstance(top_k_skills, int) and top_k_skills > 0
-            else _DEFAULT_TOP_K_SKILLS
-        )
+        k_tools = _clamp_top_k(input.get("topKTools"), _DEFAULT_TOP_K_TOOLS)
+        k_skills = _clamp_top_k(input.get("topKSkills"), _DEFAULT_TOP_K_SKILLS)
         started_at = time.monotonic()
         tool_hits = catalog.search(query, k_tools, "agent")
         catalog.record_event(
@@ -166,13 +178,21 @@ def search_capabilities_tool(
     return ExecutableTool(
         id=SEARCH_CAPABILITIES_ID,
         name=SEARCH_CAPABILITIES_ID,
-        description=_build_search_description(upstreams),
+        description=_build_search_description(has_skills, upstreams),
         input_schema={
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "describe what you want to do"},
-                "topKTools": {"type": "number", "description": "max tools to return (default 5)"},
-                "topKSkills": {"type": "number", "description": "max skills to return (default 3)"},
+                "topKTools": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "max tools to return (default 5)",
+                },
+                "topKSkills": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "max skills to return (default 3)",
+                },
             },
             "required": ["query"],
         },

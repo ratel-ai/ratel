@@ -40,3 +40,12 @@ def test_invoke_unknown_id_raises() -> None:
     catalog = SkillCatalog()
     with pytest.raises(ValueError, match="unknown skillId"):
         catalog.invoke("nope")
+
+
+def test_minimal_skill_without_tags_or_body() -> None:
+    # A minimal skill (no tags/body) is valid in both SDKs; body defaults to "".
+    catalog = SkillCatalog()
+    catalog.register(Skill(id="min", name="min", description="a minimal skill, no tags or body"))
+    assert catalog.has("min")
+    assert catalog.invoke("min") == ""
+    assert catalog.search("minimal", 5)[0].skill_id == "min"

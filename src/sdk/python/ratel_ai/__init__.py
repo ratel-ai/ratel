@@ -28,6 +28,10 @@ from .gateway import (
     invoke_tool_tool,
     search_capabilities_tool,
 )
+
+# Deprecated pre-0.2.0 surface (see gateway_compat.py) — kept so `ratel-ai==0.1.x`
+# callers keep working after upgrading to 0.2.0. Slated for removal (RAT-250).
+from .gateway_compat import SEARCH_TOOLS_ID, search_tools_tool
 from .mcp import McpServerHandle, register_mcp_server
 from .skill_catalog import Skill, SkillCatalog
 from .skill_gateway import GET_SKILL_CONTENT_ID, get_skill_content_tool
@@ -36,6 +40,7 @@ __all__ = [
     "GET_SKILL_CONTENT_ID",
     "INVOKE_TOOL_ID",
     "SEARCH_CAPABILITIES_ID",
+    "SEARCH_TOOLS_ID",
     "ExecutableTool",
     "Executor",
     "McpServerHandle",
@@ -56,4 +61,5 @@ __all__ = [
     "invoke_tool_tool",
     "register_mcp_server",
     "search_capabilities_tool",
+    "search_tools_tool",
 ]

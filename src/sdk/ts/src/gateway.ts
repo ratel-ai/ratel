@@ -7,14 +7,33 @@ export const INVOKE_TOOL_ID = "invoke_tool" as const;
 
 const DEFAULT_TOP_K_TOOLS = 5;
 const DEFAULT_TOP_K_SKILLS = 3;
+const MAX_TOP_K = 50;
 
-const SEARCH_BASE_DESCRIPTION =
-  "Discover capabilities — tools (executable) and skills (reusable playbooks) — beyond the ones " +
-  "already in your direct tool list. Call this BEFORE refusing a request, falling back to a generic " +
-  "capability (web fetch, shell, built-in search), or improvising a multi-step task: a purpose-built " +
-  "tool or skill may be in the catalog but not pre-loaded. Pass a natural-language query describing " +
-  "what you want to do. You get back two independent buckets: `tools` (run one via invoke_tool) and " +
-  "`skills` (load one's instructions via get_skill_content, then follow it). Skills have their own " +
+/**
+ * Clamp a model-supplied top-K to a positive integer in [1, MAX_TOP_K], falling
+ * back to `fallback` for anything else (undefined, 0, negative, non-integer,
+ * NaN). Tools and skills — and the TS and Python SDKs — run the same input
+ * through this, so a stray `topK` can't silently return zero results (or, via a
+ * negative wrapping to u32 in the native layer, an unbounded set).
+ */
+function clampTopK(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
+  return Math.min(value, MAX_TOP_K);
+}
+
+// The discovery prompt the model sees. The skills clause is only included when a
+// non-empty skill catalog is wired in — otherwise the tool would advertise a
+// `skills` bucket and `get_skill_content` that don't exist (the result would
+// always be `skills: []`).
+const SEARCH_INTRO =
+  "Discover capabilities beyond the ones already in your direct tool list. Call this BEFORE refusing " +
+  "a request, falling back to a generic capability (web fetch, shell, built-in search), or improvising " +
+  "a multi-step task: a purpose-built capability may be in the catalog but not pre-loaded. Pass a " +
+  "natural-language query describing what you want to do.";
+const RESULT_TOOLS_ONLY = " You get back a `tools` bucket (executable) — run one via invoke_tool.";
+const RESULT_TOOLS_AND_SKILLS =
+  " You get back two independent buckets: `tools` (run one via invoke_tool) and `skills` (reusable " +
+  "playbooks — load one's instructions via get_skill_content, then follow it). Skills have their own " +
   "result budget, so they are never crowded out by tools.";
 
 export interface UpstreamServerInfo {
@@ -61,11 +80,12 @@ export function formatUpstreamLine(s: UpstreamServerInfo): string {
   return line;
 }
 
-function buildSearchDescription(opts?: SearchCapabilitiesOptions): string {
+function buildSearchDescription(hasSkills: boolean, opts?: SearchCapabilitiesOptions): string {
+  const base = SEARCH_INTRO + (hasSkills ? RESULT_TOOLS_AND_SKILLS : RESULT_TOOLS_ONLY);
   const upstreams = opts?.upstreamServers ?? [];
-  if (upstreams.length === 0) return SEARCH_BASE_DESCRIPTION;
+  if (upstreams.length === 0) return base;
   const list = upstreams.map(formatUpstreamLine).join("\n");
-  return `${SEARCH_BASE_DESCRIPTION}\n\nThis catalog aggregates tools from these upstream MCP servers:\n${list}`;
+  return `${base}\n\nThis catalog aggregates tools from these upstream MCP servers:\n${list}`;
 }
 
 /**
@@ -81,16 +101,21 @@ export function searchCapabilitiesTool(
 ): ExecutableTool {
   const upstreams = opts?.upstreamServers ?? [];
   const upstreamByName = new Map(upstreams.map((u) => [u.name, u]));
+  const hasSkills = skillCatalog !== undefined && skillCatalog.size() > 0;
   return {
     id: SEARCH_CAPABILITIES_ID,
     name: SEARCH_CAPABILITIES_ID,
-    description: buildSearchDescription(opts),
+    description: buildSearchDescription(hasSkills, opts),
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string", description: "describe what you want to do" },
-        topKTools: { type: "number", description: "max tools to return (default 5)" },
-        topKSkills: { type: "number", description: "max skills to return (default 3)" },
+        topKTools: { type: "integer", minimum: 1, description: "max tools to return (default 5)" },
+        topKSkills: {
+          type: "integer",
+          minimum: 1,
+          description: "max skills to return (default 3)",
+        },
       },
       required: ["query"],
     },
@@ -154,8 +179,8 @@ export function searchCapabilitiesTool(
         topKTools?: number;
         topKSkills?: number;
       };
-      const kTools = topKTools ?? DEFAULT_TOP_K_TOOLS;
-      const kSkills = topKSkills ?? DEFAULT_TOP_K_SKILLS;
+      const kTools = clampTopK(topKTools, DEFAULT_TOP_K_TOOLS);
+      const kSkills = clampTopK(topKSkills, DEFAULT_TOP_K_SKILLS);
       const startedAt = Date.now();
 
       const toolHits = toolCatalog.search(query, kTools, "agent");
