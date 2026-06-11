@@ -42,18 +42,28 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       armed: ${{ steps.c.outputs.armed }}
+      override: ${{ steps.c.outputs.override }}
       tier: ${{ steps.c.outputs.tier }}
       matrix: ${{ steps.c.outputs.matrix }}
     steps:
       - id: c
         env:
           HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ready-to-merge') }}
+          HAS_OVERRIDE: ${{ contains(github.event.pull_request.labels.*.name, 'override-checks') }}
         run: |
           set -e
+          # override-checks is the manual escape hatch: it forces pr-gate green even on
+          # red checks (PRs only; main/nightly always enforce).
+          override=false
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$HAS_OVERRIDE" = "true" ]; then
+            override=true
+          fi
+          # armed = run the heavy jobs. Either label arms it, so the override path still
+          # shows the real (red) results the merger is choosing to bypass.
           armed=false
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             armed=true
-          elif [ "$HAS_LABEL" = "true" ]; then
+          elif [ "$HAS_LABEL" = "true" ] || [ "$override" = "true" ]; then
             armed=true
           fi
           tier=reduced
@@ -65,10 +75,11 @@ jobs:
           if [ "$tier" = "full" ]; then m="$FULL"; else m="$REDUCED"; fi
           {
             echo "armed=$armed"
+            echo "override=$override"
             echo "tier=$tier"
             echo "matrix=$m"
           } >> "$GITHUB_OUTPUT"
-          echo "event=${{ github.event_name }} has_label=$HAS_LABEL armed=$armed tier=$tier"
+          echo "event=${{ github.event_name }} has_label=$HAS_LABEL override=$override armed=$armed tier=$tier"
 
   # One job per platform: build each real distributable and exercise it on this runner.
   verify:
@@ -189,22 +200,34 @@ jobs:
         run: |
           set -e
           armed="${{ needs.setup.outputs.armed }}"
-          echo "event=${{ github.event_name }} armed=$armed tier=${{ needs.setup.outputs.tier }}"
+          override="${{ needs.setup.outputs.override }}"
+          echo "event=${{ github.event_name }} armed=$armed override=$override tier=${{ needs.setup.outputs.tier }}"
 
           if [ "${{ github.event_name }}" = "pull_request" ] && [ "$armed" != "true" ]; then
             echo "::error::PR not mergeable: add the 'ready-to-merge' label to run the release gate (artifact build + cross-SDK E2E) before merging."
             exit 1
           fi
 
+          # Always surface the real results, even when overriding.
+          echo "  verify:    ${{ needs.verify.result }}"
+          echo "  packaging: ${{ needs.packaging.result }}"
+
+          # Manual escape hatch: the override-checks label forces a green gate regardless
+          # of the results above. Convention: rstagi only, for emergencies. main/nightly
+          # never honor it (override is computed only on pull_request events).
+          if [ "$override" = "true" ]; then
+            echo "::warning::'override-checks' label present — pr-gate is PASSING despite the results above. This is the manual merge escape hatch (intended for rstagi only). Remove the label to require green checks."
+            exit 0
+          fi
+
           fail=0
           check() {
-            echo "  $1: $2"
             if [ "$2" != "success" ]; then echo "::error::$1 did not succeed ($2)"; fail=1; fi
           }
           check verify    "${{ needs.verify.result }}"
           check packaging "${{ needs.packaging.result }}"
           if [ "$fail" = "1" ]; then
-            echo "::error::PR gate failed — see the jobs above."
+            echo "::error::PR gate failed — fix the jobs above, or add the 'override-checks' label to merge anyway (rstagi only)."
             exit 1
           fi
           echo "PR gate passed: all per-platform verify + packaging green (tier=${{ needs.setup.outputs.tier }})."

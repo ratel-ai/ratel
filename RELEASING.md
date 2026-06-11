@@ -35,8 +35,13 @@ drift) **before** they reach `main`, `pr-gate.yml` shifts that validation onto t
   build minutes — the jobs are skipped.
 - **Mandatory to merge.** The terminal `pr-gate` check is required on `main`. It **fails**
   any PR without the `ready-to-merge` label (so unlabeled PRs cannot merge), and on a
-  labeled PR it goes green only when the whole pipeline is green. `rstagi` bypasses via the
-  branch ruleset.
+  labeled PR it goes green only when the whole pipeline is green.
+- **Emergency override.** Adding the **`override-checks`** label forces `pr-gate` green even
+  when the checks are RED, so the PR can be merged anyway. The gate still runs and shows the
+  real (red) results, and emits a loud warning. By **convention this is rstagi-only and for
+  emergencies** — GitHub can't restrict who applies a label or who merges, so it's a process
+  rule, not a hard control. There are deliberately **no ruleset bypass actors**: the override
+  is the label, not a privileged user (so "even rstagi has a block" — he must add the label).
 - **What it runs:** one **`verify` job per platform** that builds the real distributables
   (wheel, npm loader + native binding, CLI tarball) and **installs each into a clean
   environment and runs the cross-SDK E2E** (`e2e/` — Python wheel, TS loader+native, CLI;
@@ -54,11 +59,12 @@ drift) **before** they reach `main`, `pr-gate.yml` shifts that validation onto t
   matrix on demand.)
 
 Developer flow: open a PR → fast `rust/ts/python` checks run as usual → when ready to land,
-add the `ready-to-merge` label → the gate runs on every commit → merge once `pr-gate` is green.
+add the `ready-to-merge` label → the gate runs on every commit → merge once `pr-gate` is
+green. If the gate is red and the merge truly can't wait, rstagi adds `override-checks` to
+force it green and merges (sparingly).
 
-Enable the required check + label once (repo-admin): `scripts/setup-branch-ruleset.sh`
-(see its header for scoping bypass to rstagi via a single-member team). Run the E2E locally
-per `e2e/README.md`.
+Enable the required check + create both labels once (repo-admin):
+`scripts/setup-branch-ruleset.sh`. Run the E2E locally per `e2e/README.md`.
 
 ## Cutting a release
 
