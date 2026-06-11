@@ -1,0 +1,571 @@
+name: Release (staged + resumable)
+
+# A safer sibling of release.yml. Instead of publishing to crates.io, npm, and
+# PyPI in three independent parallel jobs (where a partial failure permanently
+# burns a version on some registries but not others), this workflow runs in
+# ordered phases:
+#
+#   1. preflight   — validate everything; NO network writes.
+#   2. build       — build every native binary + wheel + sdist.
+#   3. stage       — pack every publishable tarball, validate them, park the
+#                    binaries in a DRAFT GitHub Release (a private, discardable
+#                    buffer). Still NO registry writes.
+#   4. publish     — publish in dependency order (crate -> native subpackages ->
+#                    loader -> PyPI -> cli). Every step is idempotent: it checks
+#                    the registry first and skips anything already published, so
+#                    a re-run after a partial failure FINISHES THE SAME VERSION
+#                    instead of forcing a version bump.
+#   5. verify      — install the just-published packages from the live registries
+#                    on all 5 platforms, with no toolchain present.
+#   6. announce    — only now flip the draft Release public.
+#
+# It is workflow_dispatch only and DEFAULTS TO A REHEARSAL (confirm_publish=false):
+# it builds, packs, and validates everything but writes to no registry and
+# creates no release. Flip confirm_publish=true for a real release. Because it
+# never triggers on a tag push, it cannot collide with release.yml during the
+# trial period. See docs/adr/0012-staged-resumable-release-pipeline.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, matching the manifests (e.g. 0.2.0 or 0.2.0-rc.1)
+        required: true
+      ref:
+        description: Git ref to build and tag
+        required: false
+        default: main
+      confirm_publish:
+        description: "Actually publish + announce. Leave UNCHECKED for a safe rehearsal (build + stage + validate only)."
+        type: boolean
+        default: false
+
+concurrency:
+  # Never cancel a half-finished publish; let it run so a re-run can resume it.
+  group: release-staged-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # PHASE 1 — PREFLIGHT. No network writes. Fails fast and loudly.
+  # ---------------------------------------------------------------------------
+  preflight:
+    name: Preflight (no writes)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      dist_tag: ${{ steps.compute.outputs.dist_tag }}
+      prerelease: ${{ steps.compute.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: All manifests must match the requested version
+        id: compute
+        shell: bash
+        run: |
+          set -e
+          want="${{ inputs.version }}"
+          ws_version=$(grep -E '^version' Cargo.toml | head -1 | sed -E 's/version *= *"([^"]+)"/\1/')
+          sdk_version=$(node -p "require('./src/sdk/ts/package.json').version")
+          cli_version=$(node -p "require('./src/integrations/cli/package.json').version")
+          py_version=$(grep -E '^version' src/sdk/python/pyproject.toml | head -1 | sed -E 's/version *= *"([^"]+)"/\1/')
+          echo "want=$want workspace=$ws_version sdk=$sdk_version cli=$cli_version py=$py_version"
+          fail=0
+          for v in "$ws_version" "$sdk_version" "$cli_version"; do
+            if [ "$v" != "$want" ]; then
+              echo "::error::version mismatch — expected $want, got $v"
+              fail=1
+            fi
+          done
+          # PyPI/PEP 440 normalizes pre-release tags (0.2.0-rc.1 -> 0.2.0rc1), so the
+          # pyproject string can differ from the npm/crate string. Accept either form.
+          py_expected=$(printf '%s' "$want" | sed -E 's/-?rc\.?([0-9]+)/rc\1/')
+          if [ "$py_version" != "$want" ] && [ "$py_version" != "$py_expected" ]; then
+            echo "::error::python version mismatch — expected $want (or PEP 440 $py_expected), got $py_version"
+            fail=1
+          fi
+          [ "$fail" = "0" ] || exit 1
+          if [[ "$want" == *-rc.* ]]; then
+            echo "dist_tag=rc" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dist_tag=latest" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$want" >> "$GITHUB_OUTPUT"
+      - name: Every CHANGELOG must mention this version
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -e
+          fail=0
+          for f in \
+            src/core/lib/CHANGELOG.md \
+            src/sdk/ts/CHANGELOG.md \
+            src/sdk/python/CHANGELOG.md \
+            src/integrations/cli/CHANGELOG.md; do
+            if ! grep -qF "## [${VERSION}]" "$f"; then
+              echo "::error file=$f::missing entry for version ${VERSION} — run /changelog before releasing"
+              fail=1
+            fi
+          done
+          [ "$fail" = "0" ]
+      - name: Dry-run the crate publish (builds + packages, uploads nothing)
+        run: cargo publish -p ratel-ai-core --dry-run
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+      - name: CLI tarball must rewrite its workspace dependency to a real range
+        shell: bash
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          pnpm --filter @ratel-ai/cli pack --pack-destination "$tmp"
+          tar -xzf "$tmp"/*.tgz -C "$tmp"
+          dep=$(node -p "require('$tmp/package/package.json').dependencies['@ratel-ai/sdk'] || ''")
+          echo "cli depends on @ratel-ai/sdk: '$dep'"
+          case "$dep" in
+            workspace:*|"")
+              echo "::error::CLI tarball did not rewrite @ratel-ai/sdk to a real version range (got '$dep'); npm publish would ship a broken dependency"
+              exit 1
+              ;;
+          esac
+
+  # ---------------------------------------------------------------------------
+  # PHASE 2 — BUILD. Native binaries (npm) + wheels + sdist (PyPI).
+  # Identical build steps to release.yml so the matrix stays known-good.
+  # ---------------------------------------------------------------------------
+  build-native:
+    name: build native (${{ matrix.triple }})
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: darwin-arm64
+            target: aarch64-apple-darwin
+            runs-on: macos-14
+            extra: ''
+          - triple: darwin-x64
+            target: x86_64-apple-darwin
+            runs-on: macos-14
+            extra: ''
+          - triple: linux-x64-gnu
+            target: x86_64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            extra: ''
+          - triple: linux-arm64-gnu
+            target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            extra: '--use-napi-cross'
+          - triple: win32-x64-msvc
+            target: x86_64-pc-windows-msvc
+            runs-on: windows-latest
+            extra: ''
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/ts/native
+          key: ${{ matrix.triple }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build native
+        run: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target ${{ matrix.target }} ${{ matrix.extra }} --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.triple }}
+          path: |
+            src/sdk/ts/native/ratel-sdk.${{ matrix.triple }}.node
+            src/sdk/ts/native/index.cjs
+            src/sdk/ts/native/index.d.cts
+          if-no-files-found: error
+
+  build-wheels:
+    name: build wheel (${{ matrix.triple }})
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: darwin-arm64
+            target: aarch64-apple-darwin
+            runs-on: macos-14
+            manylinux: ''
+          - triple: darwin-x64
+            target: x86_64-apple-darwin
+            runs-on: macos-14
+            manylinux: ''
+          - triple: linux-x64-gnu
+            target: x86_64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            manylinux: auto
+          - triple: linux-arm64-gnu
+            target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            manylinux: auto
+          - triple: win32-x64-msvc
+            target: x86_64-pc-windows-msvc
+            runs-on: windows-latest
+            manylinux: ''
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: src/sdk/python
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+          sccache: 'true'
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.triple }}
+          path: src/sdk/python/dist/*.whl
+          if-no-files-found: error
+
+  build-sdist:
+    name: build sdist
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: src/sdk/python
+          command: sdist
+          args: --out dist
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: src/sdk/python/dist/*.tar.gz
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # PHASE 3 — STAGE. Assemble + validate every publishable artifact. The only
+  # side effect (and only on a real release) is creating a *draft* Release as a
+  # discardable staging buffer. No registry writes.
+  # ---------------------------------------------------------------------------
+  stage:
+    name: Pack + stage all artifacts
+    needs: [preflight, build-native, build-wheels, build-sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create/update the draft GitHub Release
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+      - name: Download native binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: src/sdk/ts/artifacts
+          pattern: bindings-*
+          merge-multiple: true
+      - name: Download wheels + sdist
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+      - name: Distribute binaries into npm/ subpackages
+        run: pnpm --filter @ratel-ai/sdk exec napi artifacts --output-dir artifacts --npm-dir npm
+      - name: Every subpackage must have its binary
+        shell: bash
+        run: |
+          set -e
+          for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
+            f="src/sdk/ts/npm/$triple/ratel-sdk.$triple.node"
+            test -f "$f" || { echo "::error::missing native binary: $f"; exit 1; }
+          done
+      - name: Place JS loader + types into native/
+        shell: bash
+        run: |
+          set -e
+          cp src/sdk/ts/artifacts/index.cjs src/sdk/ts/native/index.cjs
+          cp src/sdk/ts/artifacts/index.d.cts src/sdk/ts/native/index.d.cts
+      - name: Build the TS loader
+        run: pnpm --filter @ratel-ai/sdk run build:ts
+      - name: Inject exact-pinned optionalDependencies into the loader
+        run: node scripts/inject-sdk-optional-deps.mjs
+      - name: Pack all 7 npm tarballs (workspace:^ rewritten by pnpm pack)
+        shell: bash
+        run: |
+          set -e
+          dest="$GITHUB_WORKSPACE/stage-npm"
+          mkdir -p "$dest"
+          for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
+            (cd "src/sdk/ts/npm/$triple" && npm pack --pack-destination "$dest")
+          done
+          pnpm --filter @ratel-ai/sdk pack --pack-destination "$dest"
+          pnpm --filter @ratel-ai/cli pack --pack-destination "$dest"
+          echo "staged tarballs:"
+          ls -1 "$dest"
+      - name: All 7 tarballs must be present
+        shell: bash
+        run: |
+          set -e
+          dest="$GITHUB_WORKSPACE/stage-npm"
+          expected=(
+            "ratel-ai-sdk-darwin-arm64-${VERSION}.tgz"
+            "ratel-ai-sdk-darwin-x64-${VERSION}.tgz"
+            "ratel-ai-sdk-linux-x64-gnu-${VERSION}.tgz"
+            "ratel-ai-sdk-linux-arm64-gnu-${VERSION}.tgz"
+            "ratel-ai-sdk-win32-x64-msvc-${VERSION}.tgz"
+            "ratel-ai-sdk-${VERSION}.tgz"
+            "ratel-ai-cli-${VERSION}.tgz"
+          )
+          fail=0
+          for f in "${expected[@]}"; do
+            test -f "$dest/$f" || { echo "::error::missing tarball: $f"; fail=1; }
+          done
+          [ "$fail" = "0" ]
+      - name: Validate PyPI metadata
+        shell: bash
+        run: |
+          set -e
+          python -m pip install --upgrade twine 'packaging>=24.2'
+          twine check dist/*
+      - name: Upload staged npm tarballs
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-tarballs
+          path: stage-npm/*.tgz
+          if-no-files-found: error
+      - name: Create / refresh the DRAFT GitHub Release (real releases only)
+        if: ${{ inputs.confirm_publish }}
+        shell: bash
+        run: |
+          set -e
+          flags=""
+          [ "$PRERELEASE" = "true" ] && flags="--prerelease"
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "release v$VERSION exists — ensuring it is a draft"
+            gh release edit "v$VERSION" --draft $flags
+          else
+            gh release create "v$VERSION" \
+              --draft \
+              --target "${{ inputs.ref }}" \
+              --title "v$VERSION" \
+              --generate-notes \
+              $flags
+          fi
+          gh release upload "v$VERSION" \
+            src/sdk/ts/artifacts/*.node \
+            dist/*.whl \
+            dist/*.tar.gz \
+            --clobber
+
+  # ---------------------------------------------------------------------------
+  # PHASE 4 — PUBLISH. The ONLY phase that writes to a registry. Runs only on a
+  # real release, in dependency order, and every step is idempotent: re-running
+  # skips whatever already landed and completes the SAME version.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publish (idempotent, in order)
+    needs: [preflight, stage]
+    if: ${{ inputs.confirm_publish }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # OIDC trusted publishing on all three registries
+      contents: read
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      DIST_TAG: ${{ needs.preflight.outputs.dist_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Upgrade npm (Trusted Publishing needs >= 11.5.1)
+        run: npm install -g npm@latest
+      - name: Download staged npm tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: release-tarballs
+          path: stage-npm
+      - name: Download wheels + sdist
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+
+      # --- 4a. crates.io (independent; least user-facing, so first) ---
+      - name: Authenticate to crates.io (OIDC)
+        uses: rust-lang/crates-io-auth-action@v1
+        id: cratesio-auth
+      - name: Publish ratel-ai-core (skip if already on crates.io)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.cratesio-auth.outputs.token }}
+        shell: bash
+        run: |
+          set -e
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            "https://crates.io/api/v1/crates/ratel-ai-core/${VERSION}" || echo 000)
+          if [ "$code" = "200" ]; then
+            echo "ratel-ai-core@${VERSION} already on crates.io — skipping"
+            exit 0
+          fi
+          if out=$(cargo publish -p ratel-ai-core 2>&1); then
+            printf '%s\n' "$out"
+          elif printf '%s' "$out" | grep -qE "already (exists|uploaded)|is already uploaded"; then
+            echo "ratel-ai-core@${VERSION} already published (caught at publish) — continuing"
+          else
+            printf '%s\n' "$out" >&2
+            exit 1
+          fi
+
+      # --- 4b. npm native subpackages, then the loader (order matters) ---
+      - name: Publish npm subpackages + loader (skip any already published)
+        shell: bash
+        run: |
+          set -e
+          dir="$GITHUB_WORKSPACE/stage-npm"
+          # Order: the 5 per-OS native packages first (the loader's
+          # optionalDependencies reference them), then the loader.
+          packages=(
+            "ratel-ai-sdk-darwin-arm64-${VERSION}.tgz|@ratel-ai/sdk-darwin-arm64"
+            "ratel-ai-sdk-darwin-x64-${VERSION}.tgz|@ratel-ai/sdk-darwin-x64"
+            "ratel-ai-sdk-linux-x64-gnu-${VERSION}.tgz|@ratel-ai/sdk-linux-x64-gnu"
+            "ratel-ai-sdk-linux-arm64-gnu-${VERSION}.tgz|@ratel-ai/sdk-linux-arm64-gnu"
+            "ratel-ai-sdk-win32-x64-msvc-${VERSION}.tgz|@ratel-ai/sdk-win32-x64-msvc"
+            "ratel-ai-sdk-${VERSION}.tgz|@ratel-ai/sdk"
+          )
+          for entry in "${packages[@]}"; do
+            file="${entry%%|*}"
+            name="${entry##*|}"
+            enc="${name//\//%2F}"
+            echo "----- $name@$VERSION -----"
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              "https://registry.npmjs.org/${enc}/${VERSION}" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "    already published — skipping"
+              continue
+            fi
+            err=$(mktemp)
+            if npm publish "$dir/$file" --provenance --access public --tag "$DIST_TAG" 2> >(tee "$err" >&2); then
+              rm -f "$err"
+            elif grep -q "previously published versions" "$err"; then
+              echo "    already published (caught at publish) — continuing"
+              rm -f "$err"
+            else
+              rm -f "$err"
+              exit 1
+            fi
+          done
+
+      # --- 4c. PyPI (natively idempotent via skip-existing) ---
+      - name: Publish ratel-ai to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+
+      # --- 4d. @ratel-ai/cli LAST (most user-visible install surface) ---
+      - name: Publish @ratel-ai/cli (skip if already published)
+        shell: bash
+        run: |
+          set -e
+          dir="$GITHUB_WORKSPACE/stage-npm"
+          file="ratel-ai-cli-${VERSION}.tgz"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            "https://registry.npmjs.org/%40ratel-ai%2Fcli/${VERSION}" || echo 000)
+          if [ "$code" = "200" ]; then
+            echo "@ratel-ai/cli@${VERSION} already published — skipping"
+            exit 0
+          fi
+          err=$(mktemp)
+          if npm publish "$dir/$file" --provenance --access public --tag "$DIST_TAG" 2> >(tee "$err" >&2); then
+            rm -f "$err"
+          elif grep -q "previously published versions" "$err"; then
+            echo "already published (caught at publish) — continuing"
+            rm -f "$err"
+          else
+            rm -f "$err"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # PHASE 5 — VERIFY. Install from the live registries on all 5 platforms with
+  # no toolchain present. Reuses verify-install.yml. Gates the announce.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Verify install
+    needs: [preflight, publish]
+    if: ${{ inputs.confirm_publish }}
+    uses: ./.github/workflows/verify-install.yml
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      tag: ${{ needs.preflight.outputs.dist_tag }}
+
+  # ---------------------------------------------------------------------------
+  # PHASE 6 — ANNOUNCE. Only now flip the draft Release public. Reaching here
+  # means all three registries published and all 5 platforms verified.
+  # ---------------------------------------------------------------------------
+  announce:
+    name: Announce (undraft the Release)
+    needs: [preflight, verify]
+    if: ${{ inputs.confirm_publish }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Undraft the GitHub Release
+        shell: bash
+        run: |
+          set -e
+          flags=""
+          [ "$PRERELEASE" = "true" ] && flags="--prerelease"
+          gh release edit "v$VERSION" --draft=false $flags

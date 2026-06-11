@@ -1,6 +1,18 @@
 name: Verify install
 
 on:
+  # Callable from release-staged.yml as the post-publish verify gate.
+  workflow_call:
+    inputs:
+      version:
+        description: Version to verify (e.g. 0.1.4-rc.2 or 0.1.4)
+        required: true
+        type: string
+      tag:
+        description: npm dist-tag (rc or latest)
+        required: false
+        type: string
+        default: rc
   workflow_dispatch:
     inputs:
       version:
