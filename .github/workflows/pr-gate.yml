@@ -14,15 +14,13 @@ name: PR Gate
 # build+install+e2e in sequence (platforms run in parallel), and the platform-independent
 # packaging checks (sdist+twine, crate dry-run, npm optionalDeps integrity) run once on the
 # linux leg. Reduced matrix (linux-x64 + darwin-arm64) on PR commits; full 5-platform on
-# push to main + nightly.
+# every push to main (so each merge is fully validated). workflow_dispatch runs full on demand.
 
 on:
   pull_request:
     types: [opened, labeled, unlabeled, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
-  schedule:
-    - cron: '0 7 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -51,7 +49,7 @@ jobs:
         run: |
           set -e
           # armed = run the heavy jobs. The ready-to-merge label arms it (opt-in to save CI);
-          # main/nightly always run.
+          # pushes to main (and workflow_dispatch) always run the full matrix.
           armed=false
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             armed=true

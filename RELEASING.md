@@ -53,10 +53,10 @@ drift) **before** they reach `main`, `pr-gate.yml` shifts that validation onto t
   platforms run in parallel.)
 - **Matrix (cost control):** armed-PR commits run a **reduced** matrix (`linux-x64` +
   `darwin-arm64` — the fast native runners). The **full 5-platform** matrix (adding Windows,
-  `linux-arm64` cross-compile, `darwin-x64` Rosetta) runs on **push to `main` + nightly** —
-  the same safety-net role `verify-install.yml` plays. So a platform-specific break surfaces
-  right after merge / overnight, not on every PR commit. (`workflow_dispatch` runs the full
-  matrix on demand.)
+  `linux-arm64` cross-compile, `darwin-x64` Rosetta) runs on **every push to `main`**, so each
+  merge is fully validated. A platform-specific break that slipped through the reduced PR matrix
+  surfaces right after merge, not on every PR commit. (`workflow_dispatch` runs the full matrix
+  on demand.)
 
 Developer flow: open a PR → fast `rust/ts/python` checks run as usual → when ready to land,
 add the `ready-to-merge` label → the gate runs on every commit → merge once `pr-gate` is
