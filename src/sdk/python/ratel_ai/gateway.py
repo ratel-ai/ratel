@@ -265,21 +265,29 @@ def invoke_tool_tool(
     on_unauthorized: OnUnauthorized | None = None,
 ) -> ExecutableTool:
     async def execute(input: dict[str, Any]) -> Any:
-        tool_id = input["toolId"]
-        if not catalog.has(tool_id):
+        tool_id = input.get("toolId")
+        if not isinstance(tool_id, str) or not catalog.has(tool_id):
+            # Missing/non-string id: structured error, not a KeyError — a malformed
+            # model call must be recoverable, not crash the host (TS parity).
             catalog.record_event(
-                {"type": "gateway_error", "tool_id": tool_id, "error": "unknown_tool_id"}
+                {
+                    "type": "gateway_error",
+                    "tool_id": tool_id if isinstance(tool_id, str) else "",
+                    "error": "unknown_tool_id",
+                }
             )
             return {
                 "error": (
-                    f"unknown toolId: {tool_id}. Use search_capabilities to discover available ids."
+                    f"unknown toolId: {tool_id}. "
+                    "Use the catalog's search tool to discover available ids."
                 ),
                 "isError": True,
             }
         nested = input.get("args")
         if nested is None:
-            # No `args` given — tolerate a flattened call.
-            args = {k: v for k, v in input.items() if k != "toolId"}
+            # No `args` given — tolerate a flattened call. Drop `args` too, so an
+            # explicit `args: None` can't forward a stray `args` key to the tool.
+            args = {k: v for k, v in input.items() if k not in ("toolId", "args")}
         elif isinstance(nested, dict):
             args = nested
         else:
@@ -315,6 +323,7 @@ def invoke_tool_tool(
                 )
                 payload: dict[str, Any] = {
                     "error": "needs_auth",
+                    "isError": True,
                     "hint": "call the auth tool to re-authorize"
                     + (f" {upstream}" if upstream else ""),
                 }
@@ -329,8 +338,8 @@ def invoke_tool_tool(
         name=INVOKE_TOOL_ID,
         description=(
             "Invoke a tool from the catalog by its id. Use this to call tools that "
-            "aren't in your direct tool list — first find one via "
-            "search_capabilities, then run it here. Pass the tool's arguments nested "
+            "aren't in your direct tool list — first find one via the catalog's "
+            "search tool, then run it here. Pass the tool's arguments nested "
             "under the `args` field — do NOT flatten them to the top level."
         ),
         input_schema={
@@ -339,7 +348,8 @@ def invoke_tool_tool(
                 "toolId": {
                     "type": "string",
                     "description": (
-                        "id of the tool to invoke (use search_capabilities to find available ids)"
+                        "id of the tool to invoke "
+                        "(use the catalog's search tool to find available ids)"
                     ),
                 },
                 "args": {

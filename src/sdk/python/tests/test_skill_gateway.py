@@ -32,6 +32,14 @@ async def test_unknown_id_returns_structured_error_with_is_error() -> None:
     assert result["isError"] is True
 
 
+async def test_missing_skill_id_returns_error_not_keyerror() -> None:
+    tool = get_skill_content_tool(SkillCatalog())
+    # No "skillId" key at all — recoverable structured error, not a KeyError (TS parity).
+    result = await tool.execute({})
+    assert "unknown skillId" in result["error"]
+    assert result["isError"] is True
+
+
 def test_output_schema_accepts_error_shape_not_just_body() -> None:
     # An MCP client validates structured content against outputSchema; the error
     # branch returns { error } with no body, so body must NOT be required.

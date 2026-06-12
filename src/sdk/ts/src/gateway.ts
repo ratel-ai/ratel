@@ -256,14 +256,15 @@ export function invokeToolTool(
     name: INVOKE_TOOL_ID,
     description:
       "Invoke a tool from the catalog by its id. Use this to call tools that aren't in your direct tool list — " +
-      "first find one via search_capabilities, then run it here. " +
+      "first find one via the catalog's search tool, then run it here. " +
       "Pass the tool's arguments nested under the `args` field — do NOT flatten them to the top level.",
     inputSchema: {
       type: "object",
       properties: {
         toolId: {
           type: "string",
-          description: "id of the tool to invoke (use search_capabilities to find available ids)",
+          description:
+            "id of the tool to invoke (use the catalog's search tool to find available ids)",
         },
         args: {
           type: "object",
@@ -285,7 +286,7 @@ export function invokeToolTool(
           error: "unknown_tool_id",
         });
         return {
-          error: `unknown toolId: ${toolId}. Use search_capabilities to discover available ids.`,
+          error: `unknown toolId: ${toolId}. Use the catalog's search tool to discover available ids.`,
           isError: true,
         };
       }
@@ -293,8 +294,11 @@ export function invokeToolTool(
       let args: Record<string, unknown>;
       if (nested === undefined || nested === null) {
         // No `args` given — tolerate a flattened call by treating the remaining
-        // top-level keys as the arguments.
-        args = Object.fromEntries(Object.entries(inputObj).filter(([k]) => k !== "toolId"));
+        // top-level keys as the arguments. Drop `args` too, so an explicit
+        // `args: null` can't forward a stray `args` key to the tool.
+        args = Object.fromEntries(
+          Object.entries(inputObj).filter(([k]) => k !== "toolId" && k !== "args"),
+        );
       } else if (typeof nested === "object" && !Array.isArray(nested)) {
         args = nested as Record<string, unknown>;
       } else {
@@ -325,8 +329,9 @@ export function invokeToolTool(
             tool_id: toolId,
             error: "needs_auth",
           });
-          const payload: { error: string; upstream?: string; hint: string } = {
+          const payload: { error: string; isError: true; upstream?: string; hint: string } = {
             error: "needs_auth",
+            isError: true,
             hint: `call the auth tool to re-authorize${upstream ? ` ${upstream}` : ""}`,
           };
           if (upstream) payload.upstream = upstream;

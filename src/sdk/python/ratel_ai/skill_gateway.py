@@ -20,10 +20,16 @@ __all__ = ["GET_SKILL_CONTENT_ID", "get_skill_content_tool"]
 
 def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
     async def execute(input: dict[str, Any]) -> dict[str, Any]:
-        skill_id = input["skillId"]
-        if not catalog.has(skill_id):
+        skill_id = input.get("skillId")
+        if not isinstance(skill_id, str) or not catalog.has(skill_id):
+            # Missing/non-string id: structured error, not a KeyError — recoverable
+            # rather than crashing the host (mirrors invoke_tool / the TS SDK).
             catalog.record_event(
-                {"type": "gateway_error", "tool_id": skill_id, "error": "unknown_skill_id"}
+                {
+                    "type": "gateway_error",
+                    "tool_id": skill_id if isinstance(skill_id, str) else "",
+                    "error": "unknown_skill_id",
+                }
             )
             return {
                 "error": (

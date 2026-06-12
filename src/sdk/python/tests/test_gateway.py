@@ -175,6 +175,8 @@ async def test_invoke_tool_unauthorized_triggers_callback_and_needs_auth() -> No
     invoke = invoke_tool_tool(catalog, on_unauthorized=on_unauthorized)
     result = await invoke.execute({"toolId": "github__create_issue", "args": {}})
     assert result["error"] == "needs_auth"
+    # needs_auth is a failed call (the tool didn't run) — host promotes on isError.
+    assert result["isError"] is True
     assert result["upstream"] == "github"
     assert seen == ["github"]
 
@@ -189,6 +191,37 @@ async def test_invoke_tool_generic_error_is_reported() -> None:
     result = await invoke.execute({"toolId": "flaky", "args": {}})
     assert "threw: nope" in result["error"]
     assert result["isError"] is True
+
+
+async def test_invoke_tool_explicit_none_args_is_not_forwarded() -> None:
+    catalog = ToolCatalog()
+    # Echo returns exactly the args dict it was invoked with.
+    catalog.register(_tool("x__echo", "Echo args.", execute=lambda args: dict(args)))
+    invoke = invoke_tool_tool(catalog)
+    # explicit None → {} (no leftover "args" key), not {"args": None}
+    assert await invoke.execute({"toolId": "x__echo", "args": None}) == {}
+    # a genuinely flattened call still passes its keys through (minus toolId/args)
+    assert await invoke.execute({"toolId": "x__echo", "foo": 1, "args": None}) == {"foo": 1}
+
+
+async def test_invoke_tool_missing_tool_id_returns_error_not_keyerror() -> None:
+    catalog = ToolCatalog()
+    invoke = invoke_tool_tool(catalog)
+    # No "toolId" key at all — must be a recoverable structured error, not a KeyError.
+    result = await invoke.execute({"args": {}})
+    assert "unknown toolId" in result["error"]
+    assert result["isError"] is True
+
+
+async def test_invoke_tool_guidance_is_discovery_tool_neutral() -> None:
+    # invoke_tool is shared by the deprecated search_tools and search_capabilities;
+    # its guidance must name neither, or it misdirects a compat-only deployment.
+    invoke = invoke_tool_tool(ToolCatalog())
+    tool_id_desc = invoke.input_schema["properties"]["toolId"]["description"]
+    assert "search_capabilities" not in invoke.description
+    assert "search_capabilities" not in tool_id_desc
+    result = await invoke.execute({"toolId": "nope", "args": {}})
+    assert "search_capabilities" not in result["error"]
 
 
 def _skill_catalog() -> SkillCatalog:

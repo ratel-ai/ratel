@@ -205,6 +205,36 @@ describe("invokeToolTool", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("treats explicit args: null as no args, not a stray `args` key", async () => {
+    const tools = new ToolCatalog();
+    // Echo tool returns exactly the args object it was invoked with.
+    tools.register({
+      id: "x__echo",
+      name: "echo",
+      description: "echoes its args",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async (a) => a,
+    });
+    const tool = invokeToolTool(tools);
+    // explicit null → {} (no leftover `args` key), not { args: null }
+    expect(await tool.execute({ toolId: "x__echo", args: null })).toEqual({});
+    // a genuinely flattened call still passes its keys through (minus toolId/args)
+    expect(await tool.execute({ toolId: "x__echo", foo: 1, args: null })).toEqual({ foo: 1 });
+  });
+
+  it("keeps invoke_tool guidance neutral about the discovery tool (compat-safe)", async () => {
+    // invoke_tool is shared by the deprecated `search_tools` and the new
+    // `search_capabilities`; naming either would misdirect the other deployment.
+    const tool = invokeToolTool(new ToolCatalog());
+    expect(tool.description).not.toContain("search_capabilities");
+    const toolIdDesc = (tool.inputSchema as { properties: { toolId: { description: string } } })
+      .properties.toolId.description;
+    expect(toolIdDesc).not.toContain("search_capabilities");
+    const result = (await tool.execute({ toolId: "nope", args: {} })) as { error: string };
+    expect(result.error).not.toContain("search_capabilities");
+  });
+
   it("returns a needs_auth payload + calls onUnauthorized on UnauthorizedError", async () => {
     const tools = new ToolCatalog();
     class UnauthorizedError extends Error {
@@ -227,9 +257,12 @@ describe("invokeToolTool", () => {
     const tool = invokeToolTool(tools, { onUnauthorized: (u) => seen.push(u) });
     const result = (await tool.execute({ toolId: "stripe__charges", args: {} })) as {
       error: string;
+      isError?: boolean;
       upstream?: string;
     };
     expect(result.error).toBe("needs_auth");
+    // needs_auth is a failed call (the tool didn't run) — host promotes on isError.
+    expect(result.isError).toBe(true);
     expect(result.upstream).toBe("stripe");
     expect(seen).toEqual(["stripe"]);
   });
