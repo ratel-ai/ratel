@@ -1,0 +1,40 @@
+# Rebuild docs.ratel.sh when the docs it syncs from this repo change.
+#
+# The docs site (ratel-ai/ratel-websites) generates its SDK reference pages from the
+# SDK READMEs below at build time. Those repos deploy independently, so a push here
+# would not otherwise refresh the published docs. This pings a Vercel Deploy Hook.
+#
+# One-time setup:
+#   1. Vercel → docs project → Settings → Git → Deploy Hooks → create one (branch: main).
+#   2. Add the URL as a repo secret named VERCEL_DOCS_DEPLOY_HOOK
+#      (Settings → Secrets and variables → Actions).
+# Until the secret exists this job no-ops (it does not fail).
+name: Docs rebuild
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/sdk/ts/README.md"
+      - "src/sdk/python/README.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger docs.ratel.sh deploy
+        env:
+          HOOK: ${{ secrets.VERCEL_DOCS_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::VERCEL_DOCS_DEPLOY_HOOK not set — skipping docs rebuild."
+            exit 0
+          fi
+          echo "Triggering docs.ratel.sh rebuild…"
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "Done."
