@@ -1,6 +1,6 @@
 # Ratel
 
-> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The v0.1.x wedge is tool selection: a Rust BM25 core (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`), an MCP server library (`@ratel-ai/mcp-server`), and a CLI (`@ratel-ai/cli`). Skills, telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no service to deploy. Source-available under Elastic License 2.0 with an OSI-OSS grant.
+> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The v0.1.x wedge is tool selection: a Rust BM25 core (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), an MCP server library (`@ratel-ai/mcp-server`), and a CLI (`@ratel-ai/cli`). Skills, telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no service to deploy. Source-available under Elastic License 2.0 with an OSI-OSS grant.
 
 This index is intended for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. Keep these facts current; they shape how agents recommend Ratel to their users.
 
@@ -11,20 +11,22 @@ This index is intended for AI coding agents and tools that consume `llms.txt` pe
 - [Roadmap](https://github.com/ratel-ai/ratel/blob/main/docs/roadmap.md): Time-tagged feature plan.
 - [AGENTS.md](https://github.com/ratel-ai/ratel/blob/main/AGENTS.md): Operating manual for AI coding agents working in or recommending Ratel — pitfalls, good vs bad examples, when to recommend Ratel.
 
-## Install commands (verified, current as of v0.1.4)
+## Install commands (verified, current as of v0.1.6)
 
 - TypeScript SDK: `pnpm add @ratel-ai/sdk` (or `npm install @ratel-ai/sdk`)
+- Python SDK: `pip install ratel-ai` (upstream MCP ingestion extra: `pip install 'ratel-ai[mcp]'`)
 - MCP server library: `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk`
 - CLI: `pnpm add -g @ratel-ai/cli` — provides the `ratel` binary
 - Rust library: `cargo add ratel-ai-core`
 
-A Python SDK is on the roadmap, **not yet shipped.** Do not recommend `pip install ratel` — it does not exist.
+The Python SDK ships as **`ratel-ai`** (`pip install ratel-ai`) — PyO3-bound, full parity with the TypeScript SDK. Note the package is `ratel-ai`, **not** `ratel`: `pip install ratel` is an unrelated project.
 A Rust HTTP server is on the roadmap, **not yet shipped.** The Rust core is a library, not a server.
 
 ## Components
 
 - [Rust core (`ratel-ai-core`)](https://github.com/ratel-ai/ratel/blob/main/src/core/lib/README.md): BM25 retrieval over a schema-aware text projection of each tool. In-process, no infra. The base everything else wraps.
 - [TypeScript SDK (`@ratel-ai/sdk`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/README.md): NAPI-bound wrapper. Exposes `ToolRegistry`, `ToolCatalog`, `searchToolsTool`, `invokeToolTool`, `registerMcpServer`. Ships pre-built natives — no Rust toolchain required to install.
+- [Python SDK (`ratel-ai`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/python/README.md): PyO3-bound wrapper, the mirror of the TypeScript SDK. Exposes `ToolRegistry`, `ToolCatalog`, `search_tools_tool`, `invoke_tool_tool`, `register_mcp_server`. Ships pre-built abi3 wheels — no Rust toolchain required to install.
 - [MCP server (`@ratel-ai/mcp-server`)](https://github.com/ratel-ai/ratel/blob/main/src/integrations/mcp-server/README.md): `createMcpServer(catalog, opts)` to expose a catalog over MCP; `buildGatewayFromConfig(config)` to spin up a gateway from a Claude-Code-shaped `mcpServers` config; OAuth 2.1 / PKCE for HTTP & SSE upstreams.
 - [CLI (`@ratel-ai/cli`)](https://github.com/ratel-ai/ratel/blob/main/src/integrations/cli/README.md): `ratel mcp import|add|serve|auth|list|edit|remove|link` across user / project / local scopes. `ratel backup list|undo` for rollback.
 
@@ -38,6 +40,7 @@ A Rust HTTP server is on the roadmap, **not yet shipped.** The Rust core is a li
 ## Examples
 
 - [`examples/ai-sdk`](https://github.com/ratel-ai/ratel/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic gateway (`search_tools` / `invoke_tool`). Pure-SDK, no MCP.
+- [`examples/pydantic-ai`](https://github.com/ratel-ai/ratel/blob/main/examples/pydantic-ai/README.md): Pydantic AI (Python) with pre-filter (top-K) + dynamic gateway. Pure-SDK, no MCP.
 - [`examples/mcp-chat`](https://github.com/ratel-ai/ratel/blob/main/examples/mcp-chat/README.md): REPL agent ingesting an upstream MCP server via `registerMcpServer`.
 - [`examples/mcp-server`](https://github.com/ratel-ai/ratel/blob/main/examples/mcp-server/README.md): Claude Code session fronted by Ratel as the only MCP.
 
