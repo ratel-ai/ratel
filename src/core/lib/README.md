@@ -42,7 +42,7 @@ Or run against the whole workspace from the repo root with `cargo build --worksp
 
 Tools are the first content type indexed by the core. Tool search is BM25 over a deterministic flat-text projection of each `Tool`: its `name`, `description`, and a walk of both `input_schema` and `output_schema`. Only semantic tokens (property names, descriptions, enum values) are emitted; JSON Schema structure (`type`, `required`, `$ref`, braces, quotes) is skipped. See [ADR‑0004](../../../docs/adr/0004-bm25-tool-indexing.md) for the algorithm and rationale.
 
-`Skill` is the second content type, ranked by the same BM25 engine through `SkillRegistry`. A skill is indexed over its `name`, `description`, `tags`, and `triggers` (author-declared task phrases); its `stacks` (project context, used to boost by the push-path ranker) and `body` (the dispatch payload) are not indexed. See [ADR‑0011](../../../docs/adr/0011-first-class-skills.md). The same retrieval primitive carries forward to memories and message history as those land on the [roadmap](../../../docs/roadmap.md).
+`Skill` is the second content type, ranked by the same BM25 engine through `SkillRegistry`. A skill is indexed over its `name`, `description`, `tags`, and `triggers` (author-declared task phrases); its `stacks` (project context, used to boost by the push-path ranker) and `body` (the dispatch payload) are not indexed. See [ADR‑0012](../../../docs/adr/0012-first-class-skills.md). The same retrieval primitive carries forward to memories and message history as those land on the [roadmap](../../../docs/roadmap.md).
 
 ## Trace stream
 

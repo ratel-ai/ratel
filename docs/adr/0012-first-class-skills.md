@@ -1,4 +1,4 @@
-# 11. First-class skills — unified capability search + two-path methodology
+# 12. First-class skills — unified capability search + two-path methodology
 
 Date: 2026-06-09
 
