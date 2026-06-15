@@ -112,6 +112,7 @@ mod tests {
             tags: tags.iter().map(|t| (*t).into()).collect(),
             triggers: vec![],
             stacks: vec![],
+            tools: vec![],
             body: format!("# {name}\n\nbody"),
         }
     }

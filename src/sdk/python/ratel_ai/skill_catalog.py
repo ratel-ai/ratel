@@ -30,6 +30,9 @@ class Skill:
     # Project stacks the skill applies to ("react"); carried for the push-path
     # ranker to boost by context — not indexed as query terms.
     stacks: list[str] = field(default_factory=list)
+    # Ids of tools this skill's instructions call; surfaced into the
+    # search_capabilities tools bucket — not indexed as query terms.
+    tools: list[str] = field(default_factory=list)
     body: str = ""
 
 
@@ -50,6 +53,7 @@ class SkillCatalog:
             skill.tags,
             skill.triggers,
             skill.stacks,
+            skill.tools,
             skill.body,
         )
         self._skills[skill.id] = skill

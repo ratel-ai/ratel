@@ -7,6 +7,8 @@ use crate::skill::Skill;
 /// both whole and identifier-split, then the description and each tag. The
 /// `body` is intentionally excluded — it is the dispatch payload, not a ranking
 /// signal (a 15 KB body would otherwise drown the description's term weights).
+/// `stacks` and `tools` are likewise excluded: `stacks` bias the push ranker and
+/// `tools` are a dependency edge surfaced at the gateway — neither is a query term.
 pub(crate) fn searchable_text(skill: &Skill) -> String {
     let mut tokens: Vec<String> = Vec::new();
     if !skill.name.is_empty() {
@@ -45,6 +47,7 @@ mod tests {
             tags: vec!["frontend".into(), "presentations".into()],
             triggers: vec!["slide deck".into()],
             stacks: vec!["react".into()],
+            tools: vec!["fs__write_file".into()],
             body: "# Frontend Slides\n\nLong body that must not affect ranking…".into(),
         }
     }
@@ -87,6 +90,7 @@ mod tests {
             tags: vec![],
             triggers: vec![],
             stacks: vec![],
+            tools: vec![],
             body: String::new(),
         };
         let text = searchable_text(&skill);
@@ -109,5 +113,16 @@ mod tests {
         let skill = slides_skill();
         let text = searchable_text(&skill);
         assert!(!text.contains("react"), "stack leaked into index: {text}");
+    }
+
+    #[test]
+    fn searchable_text_excludes_tools() {
+        // Declared tool deps are surfaced at the gateway, not matched as terms.
+        let skill = slides_skill();
+        let text = searchable_text(&skill);
+        assert!(
+            !text.contains("write_file"),
+            "tool dep leaked into index: {text}"
+        );
     }
 }

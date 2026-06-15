@@ -81,6 +81,10 @@ is passed to `search_capabilities_tool`, the search returns a `skills` bucket al
 `tools` — each with its own result budget, so a relevant skill is never crowded out by
 matching tools. The agent loads a skill's full body on demand via `get_skill_content_tool`.
 
+A skill can also declare the `tools` its instructions call: when the skill matches, those
+tools are pulled into the `tools` bucket (additively, deduped), so the agent gets the
+playbook and the tools it needs in a single turn instead of a second search.
+
 ```python
 from ratel_ai import Skill, SkillCatalog, get_skill_content_tool, search_capabilities_tool
 
@@ -92,6 +96,7 @@ skills.register(
         description="How to deploy to Vercel: env vars, preview vs production, rollbacks.",
         triggers=["deploy", "ship to production"],
         stacks=["next", "vercel"],
+        tools=["vercel__deploy", "fs__read_file"],  # surfaced with the skill
     )
 )
 

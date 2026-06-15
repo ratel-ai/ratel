@@ -97,6 +97,40 @@ describe("searchCapabilitiesTool", () => {
     expect(result.skills.map((s) => s.skillId)).toContain("vercel-deploy");
   });
 
+  it("pulls a matched skill's declared tools into the tools bucket, additively and deduped", async () => {
+    const deployPush: ExecutableTool = {
+      id: "vercel__push",
+      name: "push",
+      description: "Deploy the project to Vercel production.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => ({}),
+    };
+    const tools = new ToolCatalog();
+    tools.register(deployPush); // matches the query "deploy to vercel"
+    tools.register(readFile); // declared by the skill but does NOT match the query
+    const deployWithDeps: Skill = {
+      ...vercelSkill,
+      // one dep already query-matched (vercel__push), one not (fs__read_file), one absent
+      tools: ["vercel__push", "fs__read_file", "ghost__missing"],
+    };
+    const tool = searchCapabilitiesTool(tools, skillCatalogWith(deployWithDeps));
+
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      topKTools: 5,
+      topKSkills: 3,
+    })) as SearchCapabilitiesResult;
+
+    const toolIds = result.tools.groups.flatMap((g) => g.hits.map((h) => h.toolId));
+    // read_file rode in on the skill even though it never matched the query…
+    expect(toolIds).toContain("fs__read_file");
+    // …vercel__push appears exactly once (query hit + dep must not double it)…
+    expect(toolIds.filter((id) => id === "vercel__push")).toHaveLength(1);
+    // …and a declared id the catalog doesn't have is silently skipped.
+    expect(toolIds).not.toContain("ghost__missing");
+  });
+
   it("includes upstream server description in the tool group", async () => {
     const tools = new ToolCatalog();
     tools.register(readFile);

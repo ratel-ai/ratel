@@ -167,6 +167,9 @@ pub struct Skill {
     /// Project stacks the skill applies to (e.g. ["react"]); used by the push
     /// ranker to boost by context — not indexed as query terms.
     pub stacks: Option<Vec<String>>,
+    /// Ids of tools this skill's instructions call; surfaced into the
+    /// `search_capabilities` tools bucket — not indexed as query terms.
+    pub tools: Option<Vec<String>>,
     /// Optional (defaults to `""`) — parity with the Python SDK's default body.
     pub body: Option<String>,
 }
@@ -203,6 +206,7 @@ impl SkillRegistry {
             tags: skill.tags.unwrap_or_default(),
             triggers: skill.triggers.unwrap_or_default(),
             stacks: skill.stacks.unwrap_or_default(),
+            tools: skill.tools.unwrap_or_default(),
             body: skill.body.unwrap_or_default(),
         });
     }

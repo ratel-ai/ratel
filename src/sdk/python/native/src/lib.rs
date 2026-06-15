@@ -210,6 +210,7 @@ impl SkillRegistry {
         tags: Vec<String>,
         triggers: Vec<String>,
         stacks: Vec<String>,
+        tools: Vec<String>,
         body: String,
     ) {
         self.inner.register(core::Skill {
@@ -219,6 +220,7 @@ impl SkillRegistry {
             tags,
             triggers,
             stacks,
+            tools,
             body,
         });
     }

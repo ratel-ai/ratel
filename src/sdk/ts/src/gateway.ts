@@ -195,9 +195,17 @@ export function searchCapabilitiesTool(
 
       const order: string[] = [];
       const groups = new Map<string, CapabilityToolGroup>();
-      for (const h of toolHits) {
-        const sep = h.toolId.indexOf("__");
-        const serverName = sep > 0 ? h.toolId.slice(0, sep) : h.toolId;
+      const seenTools = new Set<string>();
+      // Add a tool to its server group, deduped. `score` is the BM25 query score
+      // for a real match, or 0 for a skill-declared dependency (it rode in on the
+      // skill, it was never matched by the query).
+      const addTool = (toolId: string, score: number): void => {
+        if (seenTools.has(toolId)) return;
+        const tool = toolCatalog.get(toolId);
+        if (!tool) return; // a declared id the catalog doesn't have: skip
+        seenTools.add(toolId);
+        const sep = toolId.indexOf("__");
+        const serverName = sep > 0 ? toolId.slice(0, sep) : toolId;
         let group = groups.get(serverName);
         if (!group) {
           const meta = upstreamByName.get(serverName);
@@ -212,14 +220,14 @@ export function searchCapabilitiesTool(
           groups.set(serverName, group);
           order.push(serverName);
         }
-        const tool = toolCatalog.get(h.toolId);
         group.hits.push({
-          toolId: h.toolId,
-          score: h.score,
-          description: tool?.description ?? "",
-          inputSchema: (tool?.inputSchema ?? {}) as Record<string, unknown>,
+          toolId,
+          score,
+          description: tool.description ?? "",
+          inputSchema: (tool.inputSchema ?? {}) as Record<string, unknown>,
         });
-      }
+      };
+      for (const h of toolHits) addTool(h.toolId, h.score);
 
       // Skills are ranked in their own bucket against the same query (reserved
       // budget → never starved by tools). SkillCatalog.search emits its own
@@ -231,6 +239,17 @@ export function searchCapabilitiesTool(
             description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),
           }))
         : [];
+
+      // A matched skill's instructions name the tools they call. Pull those into
+      // the tools bucket so the agent gets the playbook and its toolkit in one
+      // turn — additively (score 0), beyond topKTools, deduped against query hits.
+      if (skillCatalog) {
+        for (const s of skills) {
+          for (const toolId of skillCatalog.get(s.skillId)?.tools ?? []) {
+            addTool(toolId, 0);
+          }
+        }
+      }
 
       const result: SearchCapabilitiesResult = {
         // biome-ignore lint/style/noNonNullAssertion: order entries are guaranteed by construction

@@ -78,6 +78,32 @@ async def test_search_capabilities_returns_skills_bucket_when_wired() -> None:
     assert "Vercel" in result["skills"][0]["description"]
 
 
+async def test_search_capabilities_pulls_skill_declared_tools() -> None:
+    # A matched skill's declared tools ride into the tools bucket, additively
+    # and deduped against query hits; an unknown declared id is skipped.
+    tools = ToolCatalog()
+    tools.register(_tool("vercel__push", "Deploy the project to Vercel production."))
+    tools.register(_tool("fs__read_file", "Read a file from local disk."))
+    skills = SkillCatalog()
+    skills.register(
+        Skill(
+            id="vercel-deploy",
+            name="vercel-deploy",
+            description="How to deploy to Vercel: env vars, preview vs production, rollbacks.",
+            # one dep also a query hit, one not, one absent from the catalog
+            tools=["vercel__push", "fs__read_file", "ghost__missing"],
+        )
+    )
+    search = search_capabilities_tool(tools, skills)
+    result = await search.execute(
+        {"query": "deploy to vercel", "topKTools": 5, "topKSkills": 3}
+    )
+    tool_ids = [h["toolId"] for g in result["tools"]["groups"] for h in g["hits"]]
+    assert "fs__read_file" in tool_ids  # rode in on the skill
+    assert tool_ids.count("vercel__push") == 1  # query hit + dep, not doubled
+    assert "ghost__missing" not in tool_ids  # absent from catalog, skipped
+
+
 async def test_search_capabilities_never_starves_skills() -> None:
     # Many matching tools must not crowd the skill out of its own bucket.
     tools = ToolCatalog()

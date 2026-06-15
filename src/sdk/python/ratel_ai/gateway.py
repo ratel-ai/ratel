@@ -135,9 +135,20 @@ def search_capabilities_tool(
         )
         order: list[str] = []
         groups: dict[str, dict[str, Any]] = {}
-        for h in tool_hits:
-            sep = h.tool_id.find("__")
-            server_name = h.tool_id[:sep] if sep > 0 else h.tool_id
+        seen_tools: set[str] = set()
+
+        # Add a tool to its server group, deduped. `score` is the BM25 query score
+        # for a real match, or 0 for a skill-declared dependency (it rode in on the
+        # skill, it was never matched by the query).
+        def add_tool(tool_id: str, score: float) -> None:
+            if tool_id in seen_tools:
+                return
+            tool = catalog.get(tool_id)
+            if tool is None:  # a declared id the catalog doesn't have: skip
+                return
+            seen_tools.add(tool_id)
+            sep = tool_id.find("__")
+            server_name = tool_id[:sep] if sep > 0 else tool_id
             group = groups.get(server_name)
             if group is None:
                 meta = upstream_by_name.get(server_name)
@@ -149,15 +160,17 @@ def search_capabilities_tool(
                 group = {"server": server, "hits": []}
                 groups[server_name] = group
                 order.append(server_name)
-            tool = catalog.get(h.tool_id)
             group["hits"].append(
                 {
-                    "toolId": h.tool_id,
-                    "score": h.score,
-                    "description": tool.description if tool else "",
-                    "inputSchema": tool.input_schema if tool else {},
+                    "toolId": tool_id,
+                    "score": score,
+                    "description": tool.description,
+                    "inputSchema": tool.input_schema,
                 }
             )
+
+        for h in tool_hits:
+            add_tool(h.tool_id, h.score)
 
         # Skills are ranked in their own bucket against the same query (reserved
         # budget → never starved by tools).
@@ -172,6 +185,14 @@ def search_capabilities_tool(
                         "description": _compact_description(sk.description) if sk else "",
                     }
                 )
+
+            # A matched skill's instructions name the tools they call. Pull those
+            # into the tools bucket so the agent gets the playbook and its toolkit
+            # in one turn — additively (score 0), beyond topKTools, deduped.
+            for s in skills:
+                sk = skill_catalog.get(s["skillId"])
+                for tool_id in sk.tools if sk else []:
+                    add_tool(tool_id, 0)
 
         return {"tools": {"groups": [groups[n] for n in order]}, "skills": skills}
 
