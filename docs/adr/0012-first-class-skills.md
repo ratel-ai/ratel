@@ -72,7 +72,7 @@ edge), and `metadata` (e.g. `stacks` — project context) are **not** indexed.
    still selects *which* skill. Context narrows; intent picks.
 3. **Clear-winner gate** — the push path fires only when the top skill clearly beats the runner-up; vague
    prompts and ties fire nothing.
-4. **Engine staged, benchmark-gated** — BM25 + triggers + boost + gate ships first; semantic embeddings or an
+4. **Engine staged, benchmark-gated** — BM25 + tags + boost + gate ships first; semantic embeddings or an
    LLM router are added only if the retrieval benchmark shows BM25 underperforms.
 
 ### Telemetry
