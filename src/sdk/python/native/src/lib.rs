@@ -3,6 +3,7 @@
 //! API of `ratel-ai-core`; see ADR-0011 for the binding-strategy rationale and
 //! ADR-0009 for the core-owned trace schema this emits into.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use pyo3::exceptions::PyValueError;
@@ -208,9 +209,8 @@ impl SkillRegistry {
         name: String,
         description: String,
         tags: Vec<String>,
-        triggers: Vec<String>,
-        stacks: Vec<String>,
         tools: Vec<String>,
+        metadata: HashMap<String, Vec<String>>,
         body: String,
     ) {
         self.inner.register(core::Skill {
@@ -218,9 +218,8 @@ impl SkillRegistry {
             name,
             description,
             tags,
-            triggers,
-            stacks,
             tools,
+            metadata,
             body,
         });
     }

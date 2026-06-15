@@ -24,15 +24,15 @@ class Skill:
     id: str
     name: str
     description: str
+    # Author-declared labels and task phrases ("frontend", "login form");
+    # indexed for ranking.
     tags: list[str] = field(default_factory=list)
-    # Author-declared task phrases ("login form"); indexed for ranking.
-    triggers: list[str] = field(default_factory=list)
-    # Project stacks the skill applies to ("react"); carried for the push-path
-    # ranker to boost by context — not indexed as query terms.
-    stacks: list[str] = field(default_factory=list)
     # Ids of tools this skill's instructions call; surfaced into the
     # search_capabilities tools bucket — not indexed as query terms.
     tools: list[str] = field(default_factory=list)
+    # Free-form, non-indexed context for higher layers — e.g.
+    # {"stacks": ["react"]} for the push ranker to boost by project context.
+    metadata: dict[str, list[str]] = field(default_factory=dict)
     body: str = ""
 
 
@@ -51,9 +51,8 @@ class SkillCatalog:
             skill.name,
             skill.description,
             skill.tags,
-            skill.triggers,
-            skill.stacks,
             skill.tools,
+            skill.metadata,
             skill.body,
         )
         self._skills[skill.id] = skill

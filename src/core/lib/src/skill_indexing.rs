@@ -4,11 +4,15 @@ use crate::skill::Skill;
 /// Flatten a skill into the text the BM25 index scores against.
 ///
 /// Mirrors [`crate::indexing::searchable_text`] for tools: the name is pushed
-/// both whole and identifier-split, then the description and each tag. The
-/// `body` is intentionally excluded — it is the dispatch payload, not a ranking
-/// signal (a 15 KB body would otherwise drown the description's term weights).
-/// `stacks` and `tools` are likewise excluded: `stacks` bias the push ranker and
-/// `tools` are a dependency edge surfaced at the gateway — neither is a query term.
+/// both whole and identifier-split, then the description and each tag. Tags are
+/// author-declared labels and task phrases ("frontend", "login form") so a terse
+/// intent prompt matches the skill; like all indexed text they are tokenized at
+/// index *and* query time (lowercased, stemmed, stop-words removed), not matched
+/// verbatim. The `body` is intentionally excluded — it is the dispatch payload,
+/// not a ranking signal (a 15 KB body would otherwise drown the description's
+/// term weights). `tools` and `metadata` are likewise excluded: `tools` are a
+/// dependency edge surfaced at the gateway and `metadata` (e.g. `stacks`) biases
+/// the push ranker — neither is a query term.
 pub(crate) fn searchable_text(skill: &Skill) -> String {
     let mut tokens: Vec<String> = Vec::new();
     if !skill.name.is_empty() {
@@ -22,32 +26,26 @@ pub(crate) fn searchable_text(skill: &Skill) -> String {
             push_identifier(tag, &mut tokens);
         }
     }
-    // Triggers are author-declared task phrases ("login form"), added to the
-    // indexed text so a terse intent prompt ("add a login form") matches the
-    // skill. Like all indexed text they are tokenized at index *and* query time
-    // (lowercased, stemmed, stop-words removed) — not matched verbatim — so a
-    // trigger made only of stop-words contributes no terms.
-    for trigger in &skill.triggers {
-        if !trigger.is_empty() {
-            tokens.push(trigger.clone());
-        }
-    }
     tokens.join(" ")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     fn slides_skill() -> Skill {
         Skill {
             id: "frontend-slides".into(),
             name: "frontend-slides".into(),
             description: "Build animation-rich HTML presentations".into(),
-            tags: vec!["frontend".into(), "presentations".into()],
-            triggers: vec!["slide deck".into()],
-            stacks: vec!["react".into()],
+            tags: vec![
+                "frontend".into(),
+                "presentations".into(),
+                "slide deck".into(),
+            ],
             tools: vec!["fs__write_file".into()],
+            metadata: HashMap::from([("stacks".into(), vec!["react".into()])]),
             body: "# Frontend Slides\n\nLong body that must not affect ranking…".into(),
         }
     }
@@ -88,9 +86,8 @@ mod tests {
             name: "code_review".into(),
             description: String::new(),
             tags: vec![],
-            triggers: vec![],
-            stacks: vec![],
             tools: vec![],
+            metadata: HashMap::new(),
             body: String::new(),
         };
         let text = searchable_text(&skill);
@@ -98,21 +95,24 @@ mod tests {
     }
 
     #[test]
-    fn searchable_text_includes_triggers() {
+    fn searchable_text_includes_tag_phrases() {
+        // Tags carry author task phrases ("slide deck"); they are indexed so a
+        // terse intent prompt matches the skill.
         let skill = slides_skill();
         let text = searchable_text(&skill);
-        assert!(
-            text.contains("slide deck"),
-            "trigger phrase missing: {text}"
-        );
+        assert!(text.contains("slide deck"), "tag phrase missing: {text}");
     }
 
     #[test]
-    fn searchable_text_excludes_stacks() {
-        // Stacks bias the push ranker by project context; they are not query terms.
+    fn searchable_text_excludes_metadata() {
+        // Metadata (e.g. stacks) biases the push ranker by project context; its
+        // values are not query terms.
         let skill = slides_skill();
         let text = searchable_text(&skill);
-        assert!(!text.contains("react"), "stack leaked into index: {text}");
+        assert!(
+            !text.contains("react"),
+            "metadata leaked into index: {text}"
+        );
     }
 
     #[test]

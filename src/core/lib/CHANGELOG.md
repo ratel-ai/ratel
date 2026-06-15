@@ -10,8 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- First-class **skills**: a `Skill` type (with `triggers` indexed for ranking and `stacks` carried for context-boosting, not indexed) and a separate `SkillRegistry` BM25 index — ranked independently of tools. Plus `skill_search` / `skill_churn` / `skill_invoke` trace events for the retrieval funnel.
-- `Skill.tools` — ids of tools the skill's instructions call, an explicit dependency edge. Not indexed; carried for the SDK gateway to surface alongside the skill.
+- First-class **skills**: a `Skill { id, name, description, tags, tools, metadata, body }` type and a separate `SkillRegistry` BM25 index — ranked independently of tools. Only `name`/`description`/`tags` are indexed; `tools` (a declared dependency edge surfaced at the gateway), `metadata` (non-indexed context such as `stacks`), and `body` are not. Plus `skill_search` / `skill_churn` / `skill_invoke` trace events for the retrieval funnel.
 
 ## [0.1.6] - 2026-06-10
 

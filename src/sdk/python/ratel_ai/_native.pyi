@@ -56,9 +56,8 @@ class SkillRegistry:
         name: str,
         description: str,
         tags: list[str],
-        triggers: list[str],
-        stacks: list[str],
         tools: list[str],
+        metadata: dict[str, list[str]],
         body: str,
     ) -> None: ...
     def search(self, query: str, top_k: int) -> list[SkillHit]: ...

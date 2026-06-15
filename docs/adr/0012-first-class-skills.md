@@ -32,7 +32,9 @@ host's native skill directory.)
 - **`search_capabilities(query, topKTools?, topKSkills?)`** → `{ tools: { groups }, skills: [...] }`. One
   discovery call returns **two independently-ranked buckets**, each with its own top-K budget. Skills can
   never be starved by a large number of matching tools, and we never compare BM25 scores across the two
-  different text shapes (tool text carries an input schema; skill text carries tags/triggers).
+  different text shapes (tool text carries an input schema; skill text carries tags). A matched skill also
+  contributes its declared `tools` to the tools bucket (see *Skill data model* below), so the agent gets a
+  playbook and the tools it calls in one turn.
 - **`invoke_tool(toolId, args)`** — runs a tool.
 - **`get_skill_content(skillId)`** → `{ body }` — loads a skill's instructions; registered only when the
   skill catalog is non-empty.
@@ -47,15 +49,27 @@ skill-search tool.
 - **Push — a `UserPromptSubmit` preload hook.** No-tool work from a terse intent prompt. Distinct
   methodology (below); experimental and non-load-bearing.
 
+### Skill data model
+A `Skill` is `{ id, name, description, tags, tools, metadata, body }`. Three buckets carry everything beyond
+identity and body, split by *how the system uses them* rather than by author intent:
+- **`tags`** — indexed. Author-declared labels **and** task phrases ("frontend", "login form"); folded into
+  the BM25 text so a terse intent prompt matches. (This subsumes the earlier separate `triggers` field —
+  mechanically a trigger was just an indexed phrase, so it is a tag.)
+- **`tools`** — a typed dependency edge, **not** indexed. The ids of tools the body's instructions call;
+  the gateway surfaces them in the `search_capabilities` tools bucket (additive, deduped) so a matched skill
+  carries its toolkit.
+- **`metadata`** (`map<string, string[]>`) — free-form, **not** indexed. Non-query context for higher layers
+  — e.g. `{"stacks": ["react"]}` for the push-path ranker to boost/filter by project context.
+
 ### What is indexed
-A skill is ranked over `name`, `description`, `tags`, and **`triggers`** (author-declared task phrases like
-"dashboard", "login form"). The `body` (dispatch payload) and `stacks` (project context) are **not** indexed.
+A skill is ranked over `name`, `description`, and `tags`. `body` (dispatch payload), `tools` (a dependency
+edge), and `metadata` (e.g. `stacks` — project context) are **not** indexed.
 
 ### Push-path ranking methodology
-1. **Triggers** bridge a lexically-sparse prompt to the skill — the highest-leverage signal.
+1. **Task-phrase tags** bridge a lexically-sparse prompt to the skill — the highest-leverage signal.
 2. **Project context is a boost, not a query term.** Detected project stacks (`package.json`,
-   `pyproject.toml`, `Cargo.toml`, …) *boost* skills whose declared `stacks` match; the prompt still selects
-   *which* skill. Context narrows; intent picks.
+   `pyproject.toml`, `Cargo.toml`, …) *boost* skills whose declared `metadata["stacks"]` match; the prompt
+   still selects *which* skill. Context narrows; intent picks.
 3. **Clear-winner gate** — the push path fires only when the top skill clearly beats the runner-up; vague
    prompts and ties fire nothing.
 4. **Engine staged, benchmark-gated** — BM25 + triggers + boost + gate ships first; semantic embeddings or an
@@ -70,8 +84,9 @@ Tool and skill activity stay distinguishable on the core-owned stream: the unifi
 
 - One discovery call for the agent, with skills guaranteed a reserved slot — starvation is impossible by
   construction.
-- `Skill` gains `triggers` (indexed) and `stacks` (boost-only); both are optional at the SDK/loader boundary,
-  so existing skills load unchanged.
+- `Skill` carries `tags` (indexed), `tools` (a dependency edge surfaced at the gateway), and `metadata`
+  (non-indexed context, e.g. `stacks`); all are optional at the SDK/loader boundary, so a minimal
+  `{ id, name, description }` skill loads unchanged.
 - The push path's quality is a *measurable* target: an offline retrieval benchmark (recall@K plus an
   over-fire rate on negative prompts) tunes thresholds and decides whether semantic layers are worth their
   cost. We do not ship the push path blind.

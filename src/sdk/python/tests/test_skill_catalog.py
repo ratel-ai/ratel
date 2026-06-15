@@ -18,15 +18,15 @@ def test_ranks_by_relevance_and_round_trips_metadata() -> None:
             id="supabase-auth",
             name="supabase-auth",
             description="Supabase auth: sessions, RLS, SSR client.",
-            triggers=["login", "sign in"],
-            stacks=["supabase"],
+            tags=["login", "sign in"],
+            metadata={"stacks": ["supabase"]},
         ),
         Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel."),
     )
     hits = catalog.search("set up login", 5, "agent")
     assert hits[0].skill_id == "supabase-auth"
     assert catalog.has("supabase-auth")
-    assert catalog.get("supabase-auth").stacks == ["supabase"]
+    assert catalog.get("supabase-auth").metadata == {"stacks": ["supabase"]}
     assert catalog.size() == 2
 
 

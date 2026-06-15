@@ -94,9 +94,9 @@ skills.register(
         id="vercel-deploy",
         name="vercel-deploy",
         description="How to deploy to Vercel: env vars, preview vs production, rollbacks.",
-        triggers=["deploy", "ship to production"],
-        stacks=["next", "vercel"],
+        tags=["deploy", "ship to production"],     # indexed for ranking
         tools=["vercel__deploy", "fs__read_file"],  # surfaced with the skill
+        metadata={"stacks": ["next", "vercel"]},   # non-indexed context (push ranker)
     )
 )
 

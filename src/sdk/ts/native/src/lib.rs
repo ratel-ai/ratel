@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate napi_derive;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use ratel_ai_core as core;
@@ -159,17 +160,16 @@ pub struct Skill {
     pub id: String,
     pub name: String,
     pub description: String,
-    /// Optional (defaults to `[]`) — kept in parity with the Python SDK, where
-    /// a minimal `Skill(id, name, description)` is valid.
+    /// Author-declared labels and task phrases ("frontend", "login form");
+    /// indexed for ranking. Optional (defaults to `[]`) — a minimal
+    /// `Skill(id, name, description)` is valid, in parity with the Python SDK.
     pub tags: Option<Vec<String>>,
-    /// Author-declared task phrases that trigger the skill; indexed for ranking.
-    pub triggers: Option<Vec<String>>,
-    /// Project stacks the skill applies to (e.g. ["react"]); used by the push
-    /// ranker to boost by context — not indexed as query terms.
-    pub stacks: Option<Vec<String>>,
     /// Ids of tools this skill's instructions call; surfaced into the
     /// `search_capabilities` tools bucket — not indexed as query terms.
     pub tools: Option<Vec<String>>,
+    /// Free-form, non-indexed context for higher layers — e.g.
+    /// `{ stacks: ["react"] }` for the push ranker to boost by project context.
+    pub metadata: Option<HashMap<String, Vec<String>>>,
     /// Optional (defaults to `""`) — parity with the Python SDK's default body.
     pub body: Option<String>,
 }
@@ -204,9 +204,8 @@ impl SkillRegistry {
             name: skill.name,
             description: skill.description,
             tags: skill.tags.unwrap_or_default(),
-            triggers: skill.triggers.unwrap_or_default(),
-            stacks: skill.stacks.unwrap_or_default(),
             tools: skill.tools.unwrap_or_default(),
+            metadata: skill.metadata.unwrap_or_default(),
             body: skill.body.unwrap_or_default(),
         });
     }

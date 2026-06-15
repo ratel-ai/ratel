@@ -110,9 +110,8 @@ mod tests {
             name: name.into(),
             description: description.into(),
             tags: tags.iter().map(|t| (*t).into()).collect(),
-            triggers: vec![],
-            stacks: vec![],
             tools: vec![],
+            metadata: std::collections::HashMap::new(),
             body: format!("# {name}\n\nbody"),
         }
     }
