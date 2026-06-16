@@ -49,7 +49,7 @@ Full skills suite: [`ratel-ai/skills`](https://github.com/ratel-ai/skills)
 **This repo is the library.** An in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and the runtime hooks that decide what ends up in the model's context window on every turn.
 
 - **Wedge today**: tool selection. Register tools (or ingest an upstream MCP server) into a `ToolCatalog`; the model sees the handful that matter for the current turn, not the full list.
-- **Same primitives** extend to skills, memories, and message history as they land on the roadmap.
+- **Same primitives** now rank skills too — reusable playbooks alongside tools; memories and message history extend them as they land on the roadmap.
 - **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound) + Python SDK (`ratel-ai`, PyO3-bound) + auxiliary CLI (`@ratel-ai/cli`) for the artifacts the library produces (telemetry today; trace-consolidation server later).
 - **No vector DB. No embedding pipeline. No service to deploy.**
 
@@ -93,7 +93,7 @@ If you want to **embed the library** in your own agent or runtime, pick one of t
 | ------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
 | **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | Python agents                         | Inspecting telemetry the library writes; migrating a Claude Code MCP setup into Ratel (transitional) |
 | **Install**   | `cargo add ratel-ai-core`                 | `pnpm add @ratel-ai/sdk`              | `pip install ratel-ai`                | `pnpm add -g @ratel-ai/cli`                                   |
-| **Hero call** | `ToolRegistry::search`                    | `searchToolsTool(catalog)`            | `search_tools_tool(catalog)`          | `ratel inspect`                                               |
+| **Hero call** | `ToolRegistry::search`                    | `searchCapabilitiesTool(catalog)`     | `search_capabilities_tool(catalog)`   | `ratel inspect`                                               |
 | **Reference** | [src/core/lib/](src/core/lib/README.md)   | [src/sdk/ts/](src/sdk/ts/README.md)   | [src/sdk/python/](src/sdk/python/README.md) | [src/integrations/cli/](src/integrations/cli/README.md) |
 
 If instead you want to **drop Ratel between an MCP host and your existing upstream MCP servers** (Claude Code, Cursor, ChatGPT) — the showcase product — use [`@ratel-ai/mcp-server` from `ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp): `npx -y @ratel-ai/mcp-server mcp import`.
@@ -109,7 +109,7 @@ pnpm add @ratel-ai/sdk
 ```
 
 ```ts
-import { ToolCatalog, searchToolsTool, invokeToolTool } from "@ratel-ai/sdk";
+import { ToolCatalog, searchCapabilitiesTool, invokeToolTool } from "@ratel-ai/sdk";
 
 const catalog = new ToolCatalog();
 catalog.register({
@@ -122,8 +122,8 @@ catalog.register({
 });
 
 // Hand these two tools to your agent loop.
-// The full catalog stays out of the model's context — the agent reaches it via search_tools / invoke_tool.
-const search = searchToolsTool(catalog);
+// The full catalog stays out of the model's context — the agent reaches it via search_capabilities / invoke_tool.
+const search = searchCapabilitiesTool(catalog);
 const invoke = invokeToolTool(catalog);
 ```
 
@@ -138,7 +138,7 @@ pip install ratel-ai
 ```
 
 ```python
-from ratel_ai import ToolCatalog, ExecutableTool, search_tools_tool, invoke_tool_tool
+from ratel_ai import ToolCatalog, ExecutableTool, search_capabilities_tool, invoke_tool_tool
 
 catalog = ToolCatalog()
 catalog.register(
@@ -153,8 +153,8 @@ catalog.register(
 )
 
 # Hand these two tools to your agent loop.
-# The full catalog stays out of the model's context — the agent reaches it via search_tools / invoke_tool.
-search = search_tools_tool(catalog)
+# The full catalog stays out of the model's context — the agent reaches it via search_capabilities / invoke_tool.
+search = search_capabilities_tool(catalog)
 invoke = invoke_tool_tool(catalog)
 ```
 
@@ -182,7 +182,7 @@ In-process BM25 retrieval over a schema-aware text projection of each tool. See 
 ## How it works (today)
 
 - **Tool selection** is the v0.1.x shipping path. Ratel sits between agent and catalog.
-- Each turn, the agent either calls `search_tools(query)` or — in pre-filter mode — receives the top‑K hits resolved at message start. The full list never enters context.
+- Each turn, the agent either calls `search_capabilities(query)` or — in pre-filter mode — receives the top‑K hits resolved at message start. The full list never enters context.
 - The catalog holds local executables, upstream MCP servers' tools (via `registerMcpServer`), or both — the model sees a unified, ranked surface.
 - Under the hood: `ratel-ai-core`, a Rust BM25 index over a deterministic, schema-aware text projection of each tool. No embeddings, no vector DB, no inference latency on the retrieval path.
 

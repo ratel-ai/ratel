@@ -26,7 +26,7 @@ Ratel is an in-process retrieval engine for tools, with one job today: **decide 
 
 The shape is deliberate:
 
-1. **A catalog is a first-class object.** You register tools once — local executables, MCP server tools, skills (coming) — into a `ToolCatalog`. The catalog is the substrate; everything else operates on it.
+1. **A catalog is a first-class object.** You register tools once — local executables, MCP server tools — and skills alongside them, into a `ToolCatalog` / `SkillCatalog`. The catalog is the substrate; everything else operates on it.
 2. **The agent never sees the full catalog.** Replace-by-default tool injection ([ADR‑0003](adr/0003-tool-selection-replace-vs-suggest.md)) means the model's tool list at any turn is the top‑K hits for the current request, not the catalog itself.
 3. **Retrieval is deterministic and cheap.** BM25 over a schema-aware text projection of each tool ([ADR‑0004](adr/0004-bm25-tool-indexing.md)). No embeddings, no vector DB, no inference call on the retrieval path. The cost is microseconds per query, in-process.
 4. **The runtime is the user's process.** No service to deploy, no cluster to scale. The Rust core ships as a library; the TS SDK bundles a pre-built native binding so it installs with `pnpm add` and no Rust toolchain.
@@ -38,7 +38,7 @@ The trade we made: we don't try to "understand" tools the way an embedding model
 **Library (this repo).** Everything below is on `main` and published to crates.io / npm:
 
 - **`ratel-ai-core`** — the Rust library. BM25 tool retrieval, deterministic schema-aware tokenization, in-process. The base everything else wraps.
-- **`@ratel-ai/sdk`** — the TypeScript SDK. Bundles `ratel-ai-core` via NAPI-RS ([ADR‑0002](adr/0002-ts-rust-binding-strategy.md)). Exposes `ToolRegistry`, `ToolCatalog`, gateway tool factories (`searchToolsTool`, `invokeToolTool`), and `registerMcpServer` to ingest an upstream MCP server's tools straight into a catalog.
+- **`@ratel-ai/sdk`** — the TypeScript SDK. Bundles `ratel-ai-core` via NAPI-RS ([ADR‑0002](adr/0002-ts-rust-binding-strategy.md)). Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, gateway tool factories (`searchCapabilitiesTool`, `invokeToolTool`, `getSkillContentTool`), and `registerMcpServer` to ingest an upstream MCP server's tools straight into a catalog.
 - **`@ratel-ai/cli`** — the `ratel` binary. Auxiliary tooling for the artifacts the library writes: `ratel inspect` summarizes telemetry sessions; the transitional `mcp` / `serve` / `backup` verbs are retained but the canonical home for those is the showcase repo's `ratel-mcp` CLI.
 
 **Showcase ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)).** The first canonical product on the library:
@@ -51,9 +51,9 @@ The library is the substrate; the showcase is the proof-by-construction that the
 
 ## Where this is going
 
-The wedge today is tool selection. The thesis is broader: **everything that ends up in an agent's context window is a retrieval problem.** Tools are the easiest case to start with — they're discrete, structured, and mid-cardinality. The same primitive extends to:
+The wedge today is tool selection. The thesis is broader: **everything that ends up in an agent's context window is a retrieval problem.** Tools are the easiest case to start with — they're discrete, structured, and mid-cardinality. Skills are the first step beyond them; the same primitive continues into memories and message history:
 
-- **Skills** — registered alongside tools, ranked by the same algorithm, dispatched on demand. Skills are the "compose multiple tools to do X" abstraction; they belong on the same retrieval surface as the tools themselves. *(v0.1.x roadmap.)*
+- **Skills** — registered alongside tools, ranked by the same algorithm, dispatched on demand. Skills are the "compose multiple tools to do X" abstraction; they belong on the same retrieval surface as the tools themselves. *(Shipped — see [ADR‑0012](adr/0012-first-class-skills.md).)*
 - **Memories** — prior context that should inform the current turn (a previous decision, a user preference, a saved artifact). Same retrieval question — what subset belongs in this turn's context — different content type. *(v0.2.x–v0.3.x.)*
 - **Chat history** — long-running agents blow their context budget on past turns. Store, compact, prune, navigate. Retrieval over message history is the same primitive applied to a fourth content type. *(Later.)*
 
@@ -65,7 +65,7 @@ This is the longer arc. Today's product is the foundation: a catalog, a retrieva
 
 - **Not a vector database.** Retrieval is deterministic BM25. No embedding pipeline.
 - **Not a routing layer.** The model still picks the tool from the top‑K. Ratel decides what's *visible*, not what's *called*.
-- **Not an agent framework — it plugs into yours.** Ratel doesn't run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and gateway tools (`searchToolsTool`, `invokeToolTool`) that return generic `ExecutableTool` objects — wrap them into your framework's tool type and drop them in. The repo demonstrates the pattern with the Vercel AI SDK; the same wiring adapts to any TS agent framework you're already using.
+- **Not an agent framework — it plugs into yours.** Ratel doesn't run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and gateway tools (`searchCapabilitiesTool`, `invokeToolTool`) that return generic `ExecutableTool` objects — wrap them into your framework's tool type and drop them in. The repo demonstrates the pattern with the Vercel AI SDK; the same wiring adapts to any TS agent framework you're already using.
 - **Not a hosted service.** Today everything runs in your process. A self-hosted server flavor for telemetry consolidation is on the v0.2.x–v0.3.x roadmap; the SDK and MCP server stay in-process regardless.
 
 ## How Ratel relates to MCP
@@ -73,7 +73,7 @@ This is the longer arc. Today's product is the foundation: a catalog, a retrieva
 The Model Context Protocol is a transport / framing standard for tool-use between hosts and servers. Ratel is orthogonal: a retrieval engine that can sit on either side of an MCP boundary.
 
 - **As an MCP client**: `registerMcpServer` lets a Ratel catalog ingest the tools an upstream MCP server advertises, alongside any local executables. The agent in your process gets one unified catalog regardless of where each tool actually runs.
-- **As an MCP server**: `createMcpServer` wraps a catalog and exposes it over MCP — the connecting host (Claude Code, Cursor, ChatGPT) sees exactly two tools, `search_tools` and `invoke_tool`, regardless of catalog size. This is the path the `ratel` CLI uses to put Ratel between Claude Code and your existing MCP servers.
+- **As an MCP server**: `createMcpServer` wraps a catalog and exposes it over MCP — the connecting host (Claude Code, Cursor, ChatGPT) sees a small fixed set of tools (`search_capabilities` + `invoke_tool`, plus `get_skill_content` when skills are present), regardless of catalog size. This is the path the `ratel` CLI uses to put Ratel between Claude Code and your existing MCP servers.
 
 You can use Ratel without MCP at all — register tools directly into a `ToolCatalog` from your TS / Rust agent and never touch the protocol.
 

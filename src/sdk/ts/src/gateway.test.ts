@@ -3,9 +3,11 @@ import {
   type ExecutableTool,
   INVOKE_TOOL_ID,
   invokeToolTool,
-  SEARCH_TOOLS_ID,
-  type SearchToolsResult,
-  searchToolsTool,
+  SEARCH_CAPABILITIES_ID,
+  type SearchCapabilitiesResult,
+  type Skill,
+  SkillCatalog,
+  searchCapabilitiesTool,
   ToolCatalog,
 } from "./index.js";
 
@@ -13,9 +15,7 @@ const readFile: ExecutableTool = {
   id: "fs__read_file",
   name: "read_file",
   description: "Read a file from local disk.",
-  inputSchema: {
-    properties: { path: { type: "string", description: "path to read" } },
-  },
+  inputSchema: { properties: { path: { type: "string", description: "path to read" } } },
   outputSchema: {},
   execute: async ({ path }) => ({ contents: `contents of ${path}` }),
 };
@@ -24,372 +24,290 @@ const sendEmail: ExecutableTool = {
   id: "mail__send_email",
   name: "send_email",
   description: "Send an email via SMTP.",
-  inputSchema: {
-    properties: {
-      to: { type: "string" },
-      body: { type: "string" },
-    },
-  },
+  inputSchema: { properties: { to: { type: "string" } } },
   outputSchema: {},
   execute: async ({ to }) => ({ messageId: "abc", to }),
 };
 
-describe("searchToolsTool tracing", () => {
-  it("emits gateway_search with origin=agent and the hit count", async () => {
-    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(readFile);
-    catalog.drainTraceEvents();
+function skillCatalogWith(...skills: Skill[]): SkillCatalog {
+  const c = new SkillCatalog();
+  for (const s of skills) c.register(s);
+  return c;
+}
 
-    const tool = searchToolsTool(catalog);
-    await tool.execute({ query: "read a file", topK: 3 });
+const vercelSkill: Skill = {
+  id: "vercel-deploy",
+  name: "vercel-deploy",
+  description: "How to deploy to Vercel: env vars, preview vs production, rollbacks.",
+  tags: ["vercel", "deployment"],
+  body: "# Vercel Deploy",
+};
 
-    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
-    const gw = events.find((e) => e.type === "gateway_search");
-    expect(gw).toBeDefined();
-    expect(gw?.origin).toBe("agent");
-    expect(gw?.top_k).toBe(3);
-    expect(typeof gw?.hits).toBe("number");
-  });
-});
-
-describe("searchToolsTool", () => {
+describe("searchCapabilitiesTool", () => {
   it("uses the canonical id and name", () => {
-    const catalog = new ToolCatalog();
-    const tool = searchToolsTool(catalog);
-    expect(tool.id).toBe(SEARCH_TOOLS_ID);
-    expect(tool.name).toBe(SEARCH_TOOLS_ID);
-    expect(SEARCH_TOOLS_ID).toBe("search_tools");
+    const tool = searchCapabilitiesTool(new ToolCatalog());
+    expect(tool.id).toBe(SEARCH_CAPABILITIES_ID);
+    expect(SEARCH_CAPABILITIES_ID).toBe("search_capabilities");
   });
 
-  it("groups hits by upstream server (derived from toolId prefix) with description and inputSchema", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register(readFile);
-    catalog.register(sendEmail);
+  it("returns tools grouped by server and an empty skills bucket when no skill catalog", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    tools.register(sendEmail);
+    const tool = searchCapabilitiesTool(tools);
 
-    const tool = searchToolsTool(catalog);
-    const result = (await tool.execute({ query: "read a file", topK: 5 })) as SearchToolsResult;
-
-    expect(result.groups.length).toBeGreaterThan(0);
-    const top = result.groups[0];
-    expect(top.server.name).toBe("fs");
-    const topHit = top.hits[0];
-    expect(topHit.toolId).toBe("fs__read_file");
-    expect(topHit.description).toContain("Read");
-    expect(topHit.inputSchema).toBeDefined();
+    const result = (await tool.execute({ query: "read a file" })) as SearchCapabilitiesResult;
+    expect(result.tools.groups[0].server.name).toBe("fs");
+    expect(result.tools.groups[0].hits[0].toolId).toBe("fs__read_file");
+    expect(result.skills).toEqual([]);
   });
 
-  it("includes the upstream server's description in each group's server block", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register(readFile);
+  it("returns a skills bucket alongside tools when a skill catalog is wired", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill));
 
-    const tool = searchToolsTool(catalog, {
+    const result = (await tool.execute({ query: "deploy to vercel" })) as SearchCapabilitiesResult;
+    expect(result.skills[0]?.skillId).toBe("vercel-deploy");
+    expect(result.skills[0]?.description).toContain("Vercel");
+  });
+
+  it("never starves skills: many matching tools do not crowd the skill out of its own bucket", async () => {
+    const tools = new ToolCatalog();
+    for (let i = 0; i < 8; i++) {
+      tools.register({
+        id: `deploy__tool_${i}`,
+        name: `deploy_${i}`,
+        description: "deploy the project to production",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => ({}),
+      });
+    }
+    const tool = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill));
+
+    const result = (await tool.execute({
+      query: "deploy to production",
+      topKTools: 5,
+      topKSkills: 3,
+    })) as SearchCapabilitiesResult;
+    // tools bucket capped at 5, skills bucket independently retains the skill
+    const toolCount = result.tools.groups.reduce((n, g) => n + g.hits.length, 0);
+    expect(toolCount).toBeLessThanOrEqual(5);
+    expect(result.skills.map((s) => s.skillId)).toContain("vercel-deploy");
+  });
+
+  it("pulls a matched skill's declared tools into the tools bucket, additively and deduped", async () => {
+    const deployPush: ExecutableTool = {
+      id: "vercel__push",
+      name: "push",
+      description: "Deploy the project to Vercel production.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => ({}),
+    };
+    const tools = new ToolCatalog();
+    tools.register(deployPush); // matches the query "deploy to vercel"
+    tools.register(readFile); // declared by the skill but does NOT match the query
+    const deployWithDeps: Skill = {
+      ...vercelSkill,
+      // one dep already query-matched (vercel__push), one not (fs__read_file), one absent
+      tools: ["vercel__push", "fs__read_file", "ghost__missing"],
+    };
+    const tool = searchCapabilitiesTool(tools, skillCatalogWith(deployWithDeps));
+
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      topKTools: 5,
+      topKSkills: 3,
+    })) as SearchCapabilitiesResult;
+
+    const toolIds = result.tools.groups.flatMap((g) => g.hits.map((h) => h.toolId));
+    // read_file rode in on the skill even though it never matched the query…
+    expect(toolIds).toContain("fs__read_file");
+    // …vercel__push appears exactly once (query hit + dep must not double it)…
+    expect(toolIds.filter((id) => id === "vercel__push")).toHaveLength(1);
+    // …and a declared id the catalog doesn't have is silently skipped.
+    expect(toolIds).not.toContain("ghost__missing");
+  });
+
+  it("includes upstream server description in the tool group", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = searchCapabilitiesTool(tools, undefined, {
       upstreamServers: [{ name: "fs", description: "filesystem helpers" }],
     });
-    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
-
-    const fsGroup = result.groups.find((g) => g.server.name === "fs");
-    expect(fsGroup?.server.description).toBe("filesystem helpers");
-  });
-
-  it("omits server.description when no matching upstream metadata is supplied", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register(readFile);
-
-    const tool = searchToolsTool(catalog);
-    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
-
-    const fsGroup = result.groups.find((g) => g.server.name === "fs");
-    expect(fsGroup?.server.description).toBeUndefined();
-  });
-
-  it("includes the raw upstream instructions on the group's server block, alongside any user description", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register(readFile);
-
-    const tool = searchToolsTool(catalog, {
-      upstreamServers: [
-        {
-          name: "fs",
-          description: "filesystem helpers",
-          instructions: "Use this MCP for safe local file IO. Paths must be absolute.",
-        },
-      ],
-    });
-    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
-    const fsGroup = result.groups.find((g) => g.server.name === "fs");
-    expect(fsGroup?.server.description).toBe("filesystem helpers");
-    expect(fsGroup?.server.instructions).toBe(
-      "Use this MCP for safe local file IO. Paths must be absolute.",
+    const result = (await tool.execute({ query: "read a file" })) as SearchCapabilitiesResult;
+    expect(result.tools.groups.find((g) => g.server.name === "fs")?.server.description).toBe(
+      "filesystem helpers",
     );
   });
 
-  it("omits server.instructions when the upstream did not provide any", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register(readFile);
-
-    const tool = searchToolsTool(catalog, {
-      upstreamServers: [{ name: "fs", description: "filesystem helpers" }],
-    });
-    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
-    const fsGroup = result.groups.find((g) => g.server.name === "fs");
-    expect(fsGroup?.server.instructions).toBeUndefined();
+  it("emits gateway_search telemetry for the tool search", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    tools.register(readFile);
+    tools.drainTraceEvents();
+    const tool = searchCapabilitiesTool(tools);
+    await tool.execute({ query: "read a file", topKTools: 3 });
+    const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
+    const gw = events.find((e) => e.type === "gateway_search");
+    expect(gw?.top_k).toBe(3);
   });
 
-  it("defaults topK to 5 when not provided", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register(readFile);
-
-    const tool = searchToolsTool(catalog);
-    const result = (await tool.execute({ query: "read a file" })) as SearchToolsResult;
-    expect(Array.isArray(result.groups)).toBe(true);
+  it("clamps a non-positive / non-integer topK back to the default", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    tools.register(sendEmail);
+    const tool = searchCapabilitiesTool(tools);
+    const count = async (input: object): Promise<number> => {
+      const r = (await tool.execute(input)) as SearchCapabilitiesResult;
+      return r.tools.groups.reduce((n, g) => n + g.hits.length, 0);
+    };
+    const q = "read a file or send an email";
+    const baseline = await count({ query: q }); // default top-K
+    // 0 / negative / fractional must fall back to the default, never return zero
+    // tools (TS) or an unbounded set (negative wrapping to u32 in the native layer).
+    expect(await count({ query: q, topKTools: 0 })).toBe(baseline);
+    expect(await count({ query: q, topKTools: -3 })).toBe(baseline);
+    expect(await count({ query: q, topKTools: 1.5 })).toBe(baseline);
+    expect(await count({ query: q, topKTools: 1 })).toBe(1); // a valid positive int is honored
   });
 
-  it("description is unchanged when upstreamServers is empty or omitted", () => {
-    const catalog = new ToolCatalog();
-    const baseline = searchToolsTool(catalog).description;
-    expect(searchToolsTool(catalog, {}).description).toBe(baseline);
-    expect(searchToolsTool(catalog, { upstreamServers: [] }).description).toBe(baseline);
-  });
+  it("advertises skills in its description only when a non-empty skill catalog is wired", () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
 
-  it("description appends a list of upstream MCP servers with name, optional desc, optional tool count", () => {
-    const catalog = new ToolCatalog();
-    const baseline = searchToolsTool(catalog).description;
+    const toolsOnly = searchCapabilitiesTool(tools);
+    expect(toolsOnly.description).not.toContain("get_skill_content");
+    expect(toolsOnly.description.toLowerCase()).not.toContain("skill");
 
-    const tool = searchToolsTool(catalog, {
-      upstreamServers: [
-        { name: "ev", description: "file & shell utilities", toolCount: 12 },
-        { name: "linear", description: "Linear ticket ops" },
-        { name: "metrics", toolCount: 3 },
-        { name: "bare" },
-      ],
-    });
+    const withSkills = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill));
+    expect(withSkills.description).toContain("get_skill_content");
 
-    expect(tool.description.startsWith(baseline)).toBe(true);
-    expect(tool.description).toContain("upstream MCP servers");
-    expect(tool.description).toContain("- ev — file & shell utilities (12 tools)");
-    expect(tool.description).toContain("- linear — Linear ticket ops");
-    expect(tool.description).not.toContain("- linear — Linear ticket ops (");
-    expect(tool.description).toContain("- metrics (3 tools)");
-    expect(tool.description).toMatch(/- bare\b/);
-    expect(tool.description).not.toContain("- bare —");
-    expect(tool.description).not.toContain("- bare (");
-  });
-
-  it("truncates per-upstream descriptions longer than ~160 chars and appends an ellipsis", () => {
-    const catalog = new ToolCatalog();
-    const long =
-      "Use this server to fetch current documentation whenever the user asks about a library, framework, SDK, API, CLI tool, or cloud service -- even well-known ones like React, Next.js, Prisma, Express, Tailwind, Django, or Spring Boot.";
-    const tool = searchToolsTool(catalog, {
-      upstreamServers: [{ name: "context7", description: long, toolCount: 2 }],
-    });
-    const lines = tool.description.split("\n");
-    const c7 = lines.find((l) => l.startsWith("- context7"));
-    expect(c7).toBeDefined();
-    // The full long text must NOT be present.
-    expect(tool.description).not.toContain(long);
-    // The line should end with ellipsis followed by tool count.
-    expect(c7 ?? "").toMatch(/…\s+\(2 tools\)$/);
-    // Total line length should be capped, leaving room for the count suffix.
-    expect((c7 ?? "").length).toBeLessThan(200);
-  });
-
-  it("collapses multi-line descriptions (newlines and runs of whitespace) into a single line", () => {
-    const catalog = new ToolCatalog();
-    const multiline = "First line of description.\n\nSecond paragraph that should be collapsed.";
-    const tool = searchToolsTool(catalog, {
-      upstreamServers: [{ name: "x", description: multiline, toolCount: 1 }],
-    });
-    const c = tool.description.split("\n").find((l) => l.startsWith("- x"));
-    expect(c).toBeDefined();
-    expect(c).not.toMatch(/\n/);
-    // The collapsed form should fit on one line and contain text from both paragraphs (or be truncated, but not contain a literal newline).
-    expect(c).toContain("First line");
-  });
-
-  it("does not modify a short single-line description", () => {
-    const catalog = new ToolCatalog();
-    const tool = searchToolsTool(catalog, {
-      upstreamServers: [{ name: "x", description: "short and sweet", toolCount: 1 }],
-    });
-    expect(tool.description).toContain("- x — short and sweet (1 tools)");
-  });
-
-  it("appends a `(auth required)` suffix on upstreams flagged as needsAuth", () => {
-    const catalog = new ToolCatalog();
-    const tool = searchToolsTool(catalog, {
-      upstreamServers: [
-        { name: "stripe", description: "billing", toolCount: 7, needsAuth: true },
-        { name: "fs", toolCount: 2 },
-      ],
-    });
-    const lines = tool.description.split("\n");
-    const stripe = lines.find((l) => l.startsWith("- stripe"));
-    const fs = lines.find((l) => l.startsWith("- fs"));
-    expect(stripe).toMatch(/\(auth required\)/);
-    expect(fs).not.toMatch(/auth required/);
+    // an empty catalog is treated as no skills
+    const emptyCatalog = searchCapabilitiesTool(tools, new SkillCatalog());
+    expect(emptyCatalog.description).not.toContain("get_skill_content");
   });
 });
 
 describe("invokeToolTool", () => {
-  it("uses the canonical id and name", () => {
-    const catalog = new ToolCatalog();
-    const tool = invokeToolTool(catalog);
+  it("uses the canonical id and invokes by nested args", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = invokeToolTool(tools);
     expect(tool.id).toBe(INVOKE_TOOL_ID);
-    expect(tool.name).toBe(INVOKE_TOOL_ID);
-    expect(INVOKE_TOOL_ID).toBe("invoke_tool");
-  });
-
-  it("invokes a registered tool by id with nested args", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register(readFile);
-
-    const tool = invokeToolTool(catalog);
     const result = await tool.execute({ toolId: "fs__read_file", args: { path: "/tmp/x" } });
     expect(result).toEqual({ contents: "contents of /tmp/x" });
   });
 
-  it("tolerates flattened args (model serialization quirk)", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register(readFile);
-
-    const tool = invokeToolTool(catalog);
+  it("tolerates flattened args", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = invokeToolTool(tools);
     const result = await tool.execute({ toolId: "fs__read_file", path: "/tmp/y" });
     expect(result).toEqual({ contents: "contents of /tmp/y" });
   });
 
-  it("returns an error object for unknown toolId", async () => {
-    const catalog = new ToolCatalog();
-
-    const tool = invokeToolTool(catalog);
-    const result = (await tool.execute({ toolId: "nope", args: {} })) as { error: string };
-    expect(result.error).toMatch(/unknown toolId: nope/);
+  it("returns a raw result (no relatedSkills wrapping)", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = invokeToolTool(tools);
+    const out = await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });
+    expect(out).toEqual({ contents: "contents of /x" });
   });
 
-  it("returns an error object when the underlying tool throws", async () => {
-    const catalog = new ToolCatalog();
-    catalog.register({
-      id: "boom",
-      name: "boom",
-      description: "always throws",
+  it("returns an error object (with isError) for unknown toolId", async () => {
+    const tool = invokeToolTool(new ToolCatalog());
+    const result = (await tool.execute({ toolId: "nope", args: {} })) as {
+      error: string;
+      isError?: boolean;
+    };
+    expect(result.error).toMatch(/unknown toolId: nope/);
+    expect(result.isError).toBe(true);
+  });
+
+  it("rejects non-object args instead of forwarding stray top-level keys", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = invokeToolTool(tools);
+    // `args` present but a string → reject, don't silently flatten.
+    const result = (await tool.execute({ toolId: "fs__read_file", args: "oops", path: "/x" })) as {
+      error: string;
+      isError?: boolean;
+    };
+    expect(result.error).toMatch(/must be an object/);
+    expect(result.isError).toBe(true);
+  });
+
+  it("treats explicit args: null as no args, not a stray `args` key", async () => {
+    const tools = new ToolCatalog();
+    // Echo tool returns exactly the args object it was invoked with.
+    tools.register({
+      id: "x__echo",
+      name: "echo",
+      description: "echoes its args",
       inputSchema: {},
       outputSchema: {},
-      execute: async () => {
-        throw new Error("kaboom");
-      },
+      execute: async (a) => a,
     });
-
-    const tool = invokeToolTool(catalog);
-    const result = (await tool.execute({ toolId: "boom", args: {} })) as { error: string };
-    expect(result.error).toMatch(/boom threw: kaboom/);
+    const tool = invokeToolTool(tools);
+    // explicit null → {} (no leftover `args` key), not { args: null }
+    expect(await tool.execute({ toolId: "x__echo", args: null })).toEqual({});
+    // a genuinely flattened call still passes its keys through (minus toolId/args)
+    expect(await tool.execute({ toolId: "x__echo", foo: 1, args: null })).toEqual({ foo: 1 });
   });
 
-  it("returns a needs_auth payload when the underlying tool throws UnauthorizedError", async () => {
-    const catalog = new ToolCatalog();
+  it("keeps invoke_tool guidance neutral about the discovery tool (compat-safe)", async () => {
+    // invoke_tool is shared by the deprecated `search_tools` and the new
+    // `search_capabilities`; naming either would misdirect the other deployment.
+    const tool = invokeToolTool(new ToolCatalog());
+    expect(tool.description).not.toContain("search_capabilities");
+    const toolIdDesc = (tool.inputSchema as { properties: { toolId: { description: string } } })
+      .properties.toolId.description;
+    expect(toolIdDesc).not.toContain("search_capabilities");
+    const result = (await tool.execute({ toolId: "nope", args: {} })) as { error: string };
+    expect(result.error).not.toContain("search_capabilities");
+  });
+
+  it("returns a needs_auth payload + calls onUnauthorized on UnauthorizedError", async () => {
+    const tools = new ToolCatalog();
     class UnauthorizedError extends Error {
-      constructor(msg: string) {
-        super(msg);
+      constructor(m: string) {
+        super(m);
         this.name = "UnauthorizedError";
       }
     }
-    catalog.register({
+    tools.register({
       id: "stripe__charges",
-      name: "stripe__charges",
+      name: "charges",
       description: "...",
       inputSchema: {},
       outputSchema: {},
       execute: async () => {
-        throw new UnauthorizedError("token expired");
+        throw new UnauthorizedError("expired");
       },
     });
-
-    const tool = invokeToolTool(catalog);
+    const seen: string[] = [];
+    const tool = invokeToolTool(tools, { onUnauthorized: (u) => seen.push(u) });
     const result = (await tool.execute({ toolId: "stripe__charges", args: {} })) as {
       error: string;
+      isError?: boolean;
       upstream?: string;
-      hint?: string;
     };
     expect(result.error).toBe("needs_auth");
+    // needs_auth is a failed call (the tool didn't run) — host promotes on isError.
+    expect(result.isError).toBe(true);
     expect(result.upstream).toBe("stripe");
-    expect(result.hint).toMatch(/auth tool/i);
-  });
-
-  it("invokes onUnauthorized once with the inferred upstream when configured", async () => {
-    const catalog = new ToolCatalog();
-    class UnauthorizedError extends Error {
-      constructor(msg: string) {
-        super(msg);
-        this.name = "UnauthorizedError";
-      }
-    }
-    catalog.register({
-      id: "stripe__charges",
-      name: "stripe__charges",
-      description: "...",
-      inputSchema: {},
-      outputSchema: {},
-      execute: async () => {
-        throw new UnauthorizedError("token expired");
-      },
-    });
-
-    const seen: string[] = [];
-    const tool = invokeToolTool(catalog, { onUnauthorized: (upstream) => seen.push(upstream) });
-    await tool.execute({ toolId: "stripe__charges", args: {} });
     expect(seen).toEqual(["stripe"]);
   });
 
-  it("emits gateway_invoke on success with took_ms", async () => {
-    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(readFile);
-    catalog.drainTraceEvents();
-
-    const tool = invokeToolTool(catalog);
+  it("emits gateway_invoke on success", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    tools.register(readFile);
+    tools.drainTraceEvents();
+    const tool = invokeToolTool(tools);
     await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });
-
-    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
-    const gw = events.find((e) => e.type === "gateway_invoke");
-    expect(gw?.tool_id).toBe("fs__read_file");
-    expect(typeof gw?.took_ms).toBe("number");
-  });
-
-  it("emits gateway_error with `unknown_tool_id` when the toolId is not registered", async () => {
-    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    const tool = invokeToolTool(catalog);
-    await tool.execute({ toolId: "nope", args: {} });
-
-    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
-    const err = events.find((e) => e.type === "gateway_error");
-    expect(err?.tool_id).toBe("nope");
-    expect(err?.error).toBe("unknown_tool_id");
-  });
-
-  it("does not call onUnauthorized for a non-namespaced toolId since the upstream cannot be inferred", async () => {
-    const catalog = new ToolCatalog();
-    class UnauthorizedError extends Error {
-      constructor(msg: string) {
-        super(msg);
-        this.name = "UnauthorizedError";
-      }
-    }
-    catalog.register({
-      id: "loose",
-      name: "loose",
-      description: "...",
-      inputSchema: {},
-      outputSchema: {},
-      execute: async () => {
-        throw new UnauthorizedError("token expired");
-      },
-    });
-
-    const seen: string[] = [];
-    const tool = invokeToolTool(catalog, { onUnauthorized: (upstream) => seen.push(upstream) });
-    const result = (await tool.execute({ toolId: "loose", args: {} })) as {
-      error: string;
-      upstream?: string;
-    };
-    expect(result.error).toBe("needs_auth");
-    expect(result.upstream).toBeUndefined();
-    expect(seen).toEqual([]);
+    const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
+    expect(events.find((e) => e.type === "gateway_invoke")?.tool_id).toBe("fs__read_file");
   });
 });

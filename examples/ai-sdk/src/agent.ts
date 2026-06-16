@@ -1,4 +1,4 @@
-import { invokeToolTool, searchToolsTool, type ToolCatalog } from "@ratel-ai/sdk";
+import { invokeToolTool, searchCapabilitiesTool, type ToolCatalog } from "@ratel-ai/sdk";
 import { type LanguageModel, stepCountIs, type Tool, ToolLoopAgent } from "ai";
 import { toAISDKTool } from "./tools.js";
 
@@ -21,7 +21,7 @@ export async function runAgent(args: {
   const maxSteps = args.maxSteps ?? 8;
 
   const tools: Record<string, Tool> = {
-    search_tools: toAISDKTool(searchToolsTool(catalog)),
+    search_capabilities: toAISDKTool(searchCapabilitiesTool(catalog)),
     invoke_tool: toAISDKTool(invokeToolTool(catalog)),
   };
   for (const hit of catalog.search(prompt, initialTopK)) {

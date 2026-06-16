@@ -1,4 +1,4 @@
-import { invokeToolTool, searchToolsTool, type ToolCatalog } from "@ratel-ai/sdk";
+import { invokeToolTool, searchCapabilitiesTool, type ToolCatalog } from "@ratel-ai/sdk";
 import {
   type LanguageModel,
   type ModelMessage,
@@ -11,7 +11,7 @@ import { toAISDKTool } from "./tools.js";
 const SYSTEM_PROMPT =
   "You are a helpful assistant with access to tools from one or more MCP servers. " +
   "When useful, call tools by name; otherwise answer directly. " +
-  "If the requested capability isn't in your direct tool list, use search_tools to find it, then invoke_tool to call it.";
+  "If the requested capability isn't in your direct tool list, use search_capabilities to find it, then invoke_tool to call it.";
 
 const TRUNCATE = 280;
 function truncate(s: string): string {
@@ -36,7 +36,7 @@ export class Chat {
     const maxSteps = this.opts.maxSteps ?? 8;
 
     const tools: Record<string, Tool> = {
-      search_tools: toAISDKTool(searchToolsTool(catalog)),
+      search_capabilities: toAISDKTool(searchCapabilitiesTool(catalog)),
       invoke_tool: toAISDKTool(invokeToolTool(catalog)),
     };
     const directHits = catalog.search(userText, initialTopK);
@@ -47,7 +47,7 @@ export class Chat {
 
     const direct = directHits.map((h) => h.toolId);
     console.log(
-      `\n[ratel] loaded tools for this turn: ${[...direct, "search_tools", "invoke_tool"].join(", ")}`,
+      `\n[ratel] loaded tools for this turn: ${[...direct, "search_capabilities", "invoke_tool"].join(", ")}`,
     );
 
     this.history.push({ role: "user", content: userText });

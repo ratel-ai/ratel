@@ -29,7 +29,7 @@ fn flatten(value: &serde_json::Value, tokens: &mut Vec<String>) {
 // Push the original identifier and, if it differs, a space-split form so that
 // the bm25 crate's UAX #29 tokenizer (which keeps `snake_case` and `camelCase`
 // whole) still surfaces the constituent words.
-fn push_identifier(s: &str, tokens: &mut Vec<String>) {
+pub(crate) fn push_identifier(s: &str, tokens: &mut Vec<String>) {
     tokens.push(s.to_string());
     let split = split_identifier(s);
     if split != s {
@@ -37,7 +37,7 @@ fn push_identifier(s: &str, tokens: &mut Vec<String>) {
     }
 }
 
-fn split_identifier(s: &str) -> String {
+pub(crate) fn split_identifier(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 4);
     let mut prev: Option<char> = None;
     for c in s.chars() {

@@ -57,9 +57,7 @@ async def test_register_mcp_server_namespaces_and_wires(monkeypatch) -> None:
     assert handle.server_instructions == "be nice"
     assert catalog.has("github__create_issue")
 
-    register_events = [
-        e for e in catalog.drain_trace_events() if e["type"] == "upstream_register"
-    ]
+    register_events = [e for e in catalog.drain_trace_events() if e["type"] == "upstream_register"]
     assert register_events[0]["server"] == "github"
     assert register_events[0]["tool_count"] == 1
     assert register_events[0]["transport"] == "memory"
@@ -68,9 +66,7 @@ async def test_register_mcp_server_namespaces_and_wires(monkeypatch) -> None:
     assert result == {"ok": True, "name": "create_issue"}
     assert session.calls == [("create_issue", {"title": "bug"})]
 
-    invoke_events = [
-        e for e in catalog.drain_trace_events() if e["type"] == "upstream_invoke"
-    ]
+    invoke_events = [e for e in catalog.drain_trace_events() if e["type"] == "upstream_invoke"]
     assert invoke_events[0]["tool_id"] == "github__create_issue"
 
     await handle.close()  # default no-op close is awaitable

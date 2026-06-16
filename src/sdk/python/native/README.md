@@ -17,7 +17,7 @@ Under the hood `maturin` compiles this crate (with the `extension-module` featur
 
 ```
 Cargo.toml      cdylib crate; depends on ratel-ai-core via the workspace
-src/lib.rs      #[pyclass] / #[pymethods] wrappers for ToolRegistry, SearchHit
+src/lib.rs      #[pyclass] / #[pymethods] wrappers for ToolRegistry, SearchHit, SkillRegistry, SkillHit
 ```
 
 The crate is a member of the top-level Cargo workspace, so `cargo build --workspace` picks it up automatically. Plain `cargo build` / `cargo test` build *without* the `extension-module` feature, so the cdylib links libpython and a standalone workspace build/test doesn't fail resolving Python symbols at runtime; `maturin` enables the feature for wheels. The crate ships no Rust tests of its own — `Cargo.toml` sets `test = false` / `doctest = false`, and the binding is exercised from the Python test suite — so `cargo test` builds, but runs zero tests here.

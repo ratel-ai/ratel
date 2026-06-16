@@ -31,6 +31,12 @@ pub struct SearchStage {
     pub top_score: Option<f64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SkillHitTrace {
+    pub skill_id: String,
+    pub score: f64,
+}
+
 /// Every event produced by any layer of Ratel. New variants are additive;
 /// renames or removals are breaking — see ADR-0009.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -47,6 +53,22 @@ pub enum TraceEvent {
     IndexChurn {
         kind: ChurnKind,
         tool_id: String,
+    },
+    SkillSearch {
+        query: String,
+        origin: Origin,
+        top_k: u32,
+        hits: Vec<SkillHitTrace>,
+        stages: Vec<SearchStage>,
+        took_ms: u64,
+    },
+    SkillChurn {
+        kind: ChurnKind,
+        skill_id: String,
+    },
+    SkillInvoke {
+        skill_id: String,
+        took_ms: u64,
     },
     InvokeStart {
         tool_id: String,

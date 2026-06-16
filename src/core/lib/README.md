@@ -40,7 +40,9 @@ Or run against the whole workspace from the repo root with `cargo build --worksp
 
 ## What gets indexed
 
-Tools are the first content type indexed by the core. Tool search is BM25 over a deterministic flat-text projection of each `Tool`: its `name`, `description`, and a walk of both `input_schema` and `output_schema`. Only semantic tokens (property names, descriptions, enum values) are emitted; JSON Schema structure (`type`, `required`, `$ref`, braces, quotes) is skipped. See [ADR‑0004](../../../docs/adr/0004-bm25-tool-indexing.md) for the algorithm and rationale. The same retrieval primitive carries forward to skills, memories, and message history as those land on the [roadmap](../../../docs/roadmap.md).
+Tools are the first content type indexed by the core. Tool search is BM25 over a deterministic flat-text projection of each `Tool`: its `name`, `description`, and a walk of both `input_schema` and `output_schema`. Only semantic tokens (property names, descriptions, enum values) are emitted; JSON Schema structure (`type`, `required`, `$ref`, braces, quotes) is skipped. See [ADR‑0004](../../../docs/adr/0004-bm25-tool-indexing.md) for the algorithm and rationale.
+
+`Skill` is the second content type, ranked by the same BM25 engine through `SkillRegistry`. A skill is indexed over its `name`, `description`, and `tags` (author-declared labels and task phrases); its `tools` (declared tool-id dependencies, surfaced at the gateway), `metadata` (non-indexed context such as `{"stacks": ["react"]}` for the push-path ranker), and `body` (the dispatch payload) are not indexed. See [ADR‑0012](../../../docs/adr/0012-first-class-skills.md). The same retrieval primitive carries forward to memories and message history as those land on the [roadmap](../../../docs/roadmap.md).
 
 ## Trace stream
 
@@ -62,6 +64,6 @@ Built-in sinks:
 - `MemorySink` — `Vec`-backed for tests and embedder assertions (`snapshot()`, `drain()`).
 - `JsonlSink` — synchronous `O_APPEND` per event, mode `0600` on Unix.
 
-Schema: `TraceEvent` is a tagged enum (search, index_churn, invoke_*, gateway_*, upstream_*, auth_*) wrapped in `TraceEnvelope { v, ts, session_id, ...event }`. The reliability profile is **query-log shaped** — best-effort, sampleable, lossy on backpressure. See ADR-0009 for the full rationale.
+Schema: `TraceEvent` is a tagged enum (search, index_churn, skill_search, skill_churn, skill_invoke, invoke_*, gateway_*, upstream_*, auth_*) wrapped in `TraceEnvelope { v, ts, session_id, ...event }`. The reliability profile is **query-log shaped** — best-effort, sampleable, lossy on backpressure. See ADR-0009 for the full rationale.
 
 The custom `TraceSink` trait lets embedders forward events to their own pipeline (HTTP, structured logger, ring buffer). The trait carries a `sample_rate()` knob (defaulting to `1.0`); the rate-limiter implementation is deferred to a later release.

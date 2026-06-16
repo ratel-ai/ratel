@@ -83,9 +83,7 @@ class ToolCatalog:
             output_schema=tool.output_schema,
         )
 
-    def search(
-        self, query: str, top_k: int, origin: SearchOrigin = "direct"
-    ) -> list[SearchHit]:
+    def search(self, query: str, top_k: int, origin: SearchOrigin = "direct") -> list[SearchHit]:
         return self._registry.search_with_origin(query, top_k, origin)
 
     def has(self, tool_id: str) -> bool:
