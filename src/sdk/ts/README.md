@@ -82,6 +82,38 @@ const invoke = invokeToolTool(catalog);
 
 Tool injection (replace vs suggest, [ADR 0003](../../../docs/adr/0003-tool-selection-replace-vs-suggest.md)) is layered on later when the SDK exposes a higher-level adapter.
 
+### `SkillCatalog` + `getSkillContentTool` — reusable playbooks, on demand
+
+Skills are Markdown playbooks ranked by a *separate* BM25 corpus. Pass a `SkillCatalog` as the second argument to `searchCapabilitiesTool` and the search returns a `skills` bucket alongside `tools` — each with its own result budget, so a relevant skill is never crowded out by matching tools. The agent loads a skill's full body on demand via `getSkillContentTool`.
+
+A skill can also declare the `tools` its instructions call: when the skill matches, those tools are pulled into the `tools` bucket (additively, deduped), so the agent gets the playbook and the tools it needs in a single turn instead of a second search.
+
+```ts
+import {
+  SkillCatalog,
+  searchCapabilitiesTool,
+  getSkillContentTool,
+  type Skill,
+} from "@ratel-ai/sdk";
+
+const skills = new SkillCatalog();
+skills.register({
+  id: "vercel-deploy",
+  name: "vercel-deploy",
+  description: "How to deploy to Vercel: env vars, preview vs production, rollbacks.",
+  tags: ["deploy", "ship to production"],     // indexed for ranking
+  tools: ["vercel__deploy", "fs__read_file"], // surfaced with the skill
+  metadata: { stacks: ["next", "vercel"] },   // non-indexed context (push ranker)
+  body: "## Deploying to Vercel\n1. ...",      // returned by getSkillContentTool
+});
+
+// Pass the skill catalog as the 2nd arg → result: { tools: {...}, skills: [...] }
+const search = searchCapabilitiesTool(catalog, skills);
+const load = getSkillContentTool(skills); // id == "get_skill_content"
+```
+
+Only `id`, `name`, and `description` are required; `tags`, `tools`, `metadata`, and `body` are optional (parity with the Python SDK).
+
 ### `registerMcpServer` — index an MCP server's tools into the catalog
 
 Hand the catalog a connected MCP transport and Ratel will call `tools/list`, register each upstream tool with a server-namespaced id (`<name>__<toolName>`), and wire its executor to `tools/call` over the same connection. Use any [transport from `@modelcontextprotocol/sdk`](https://modelcontextprotocol.io) — stdio, Streamable HTTP, or SSE.

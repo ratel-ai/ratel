@@ -26,7 +26,7 @@ Ratel is an in-process retrieval engine for tools, with one job today: **decide 
 
 The shape is deliberate:
 
-1. **A catalog is a first-class object.** You register tools once — local executables, MCP server tools, skills (coming) — into a `ToolCatalog`. The catalog is the substrate; everything else operates on it.
+1. **A catalog is a first-class object.** You register tools once — local executables, MCP server tools — and skills alongside them, into a `ToolCatalog` / `SkillCatalog`. The catalog is the substrate; everything else operates on it.
 2. **The agent never sees the full catalog.** Replace-by-default tool injection ([ADR‑0003](adr/0003-tool-selection-replace-vs-suggest.md)) means the model's tool list at any turn is the top‑K hits for the current request, not the catalog itself.
 3. **Retrieval is deterministic and cheap.** BM25 over a schema-aware text projection of each tool ([ADR‑0004](adr/0004-bm25-tool-indexing.md)). No embeddings, no vector DB, no inference call on the retrieval path. The cost is microseconds per query, in-process.
 4. **The runtime is the user's process.** No service to deploy, no cluster to scale. The Rust core ships as a library; the TS SDK bundles a pre-built native binding so it installs with `pnpm add` and no Rust toolchain.
@@ -38,7 +38,7 @@ The trade we made: we don't try to "understand" tools the way an embedding model
 **Library (this repo).** Everything below is on `main` and published to crates.io / npm:
 
 - **`ratel-ai-core`** — the Rust library. BM25 tool retrieval, deterministic schema-aware tokenization, in-process. The base everything else wraps.
-- **`@ratel-ai/sdk`** — the TypeScript SDK. Bundles `ratel-ai-core` via NAPI-RS ([ADR‑0002](adr/0002-ts-rust-binding-strategy.md)). Exposes `ToolRegistry`, `ToolCatalog`, gateway tool factories (`searchCapabilitiesTool`, `invokeToolTool`), and `registerMcpServer` to ingest an upstream MCP server's tools straight into a catalog.
+- **`@ratel-ai/sdk`** — the TypeScript SDK. Bundles `ratel-ai-core` via NAPI-RS ([ADR‑0002](adr/0002-ts-rust-binding-strategy.md)). Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, gateway tool factories (`searchCapabilitiesTool`, `invokeToolTool`, `getSkillContentTool`), and `registerMcpServer` to ingest an upstream MCP server's tools straight into a catalog.
 - **`@ratel-ai/cli`** — the `ratel` binary. Auxiliary tooling for the artifacts the library writes: `ratel inspect` summarizes telemetry sessions; the transitional `mcp` / `serve` / `backup` verbs are retained but the canonical home for those is the showcase repo's `ratel-mcp` CLI.
 
 **Showcase ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)).** The first canonical product on the library:
@@ -51,9 +51,9 @@ The library is the substrate; the showcase is the proof-by-construction that the
 
 ## Where this is going
 
-The wedge today is tool selection. The thesis is broader: **everything that ends up in an agent's context window is a retrieval problem.** Tools are the easiest case to start with — they're discrete, structured, and mid-cardinality. The same primitive extends to:
+The wedge today is tool selection. The thesis is broader: **everything that ends up in an agent's context window is a retrieval problem.** Tools are the easiest case to start with — they're discrete, structured, and mid-cardinality. Skills are the first step beyond them; the same primitive continues into memories and message history:
 
-- **Skills** — registered alongside tools, ranked by the same algorithm, dispatched on demand. Skills are the "compose multiple tools to do X" abstraction; they belong on the same retrieval surface as the tools themselves. *(v0.1.x roadmap.)*
+- **Skills** — registered alongside tools, ranked by the same algorithm, dispatched on demand. Skills are the "compose multiple tools to do X" abstraction; they belong on the same retrieval surface as the tools themselves. *(Shipped — see [ADR‑0012](adr/0012-first-class-skills.md).)*
 - **Memories** — prior context that should inform the current turn (a previous decision, a user preference, a saved artifact). Same retrieval question — what subset belongs in this turn's context — different content type. *(v0.2.x–v0.3.x.)*
 - **Chat history** — long-running agents blow their context budget on past turns. Store, compact, prune, navigate. Retrieval over message history is the same primitive applied to a fourth content type. *(Later.)*
 

@@ -1,6 +1,6 @@
 # `examples/ai-sdk` — Ratel + Vercel AI SDK + dynamic tool gateway
 
-Demonstrates the v0.1.1 Ratel SDK wired into the [Vercel AI SDK](https://ai-sdk.dev/) with two layers of context engineering:
+Demonstrates the Ratel SDK wired into the [Vercel AI SDK](https://ai-sdk.dev/) with two layers of context engineering:
 
 1. **Pre-filter** ([ADR 0003](../../docs/adr/0003-tool-selection-replace-vs-suggest.md) `replace` mode) — at boot, the catalog is registered in a `ToolRegistry`; before the model call, BM25 narrows it to the top-K most relevant tools for the user's prompt. Those tools land directly in the AI SDK tool list with full schemas.
 2. **Dynamic gateway** — two always-present tools, `search_capabilities` and `invoke_tool`, give the agent reach into the rest of the catalog when the top-K isn't enough. `search_capabilities` returns a `tools` bucket of matching `{toolId, description, inputSchema}` hits (grouped by server) plus a `skills` bucket (empty here — this example registers no skills); `invoke_tool` then executes a tool by id.

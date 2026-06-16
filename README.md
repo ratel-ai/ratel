@@ -49,7 +49,7 @@ Full skills suite: [`ratel-ai/skills`](https://github.com/ratel-ai/skills)
 **This repo is the library.** An in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and the runtime hooks that decide what ends up in the model's context window on every turn.
 
 - **Wedge today**: tool selection. Register tools (or ingest an upstream MCP server) into a `ToolCatalog`; the model sees the handful that matter for the current turn, not the full list.
-- **Same primitives** extend to skills, memories, and message history as they land on the roadmap.
+- **Same primitives** now rank skills too — reusable playbooks alongside tools; memories and message history extend them as they land on the roadmap.
 - **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound) + Python SDK (`ratel-ai`, PyO3-bound) + auxiliary CLI (`@ratel-ai/cli`) for the artifacts the library produces (telemetry today; trace-consolidation server later).
 - **No vector DB. No embedding pipeline. No service to deploy.**
 
