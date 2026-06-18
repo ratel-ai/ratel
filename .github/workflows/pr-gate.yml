@@ -95,6 +95,7 @@ jobs:
           architecture: ${{ matrix.arch }}
           cache: pnpm
       - uses: actions/setup-python@v5
+        id: setup-python
         with:
           python-version: '3.11'
           architecture: ${{ matrix.arch }}
@@ -104,6 +105,13 @@ jobs:
       - name: Python SDK — build wheel, install, e2e
         run: |
           set -e
+          # Use the interpreter setup-python installed, not bare `python`. On the
+          # arm64 macos-14 runner the darwin-x64 leg needs the Rosetta x64 CPython
+          # (so the x86_64 wheel installs + loads), but the framework python on
+          # PATH shadows it — pip then runs arm64 and rejects the x86_64 wheel
+          # ("not a supported wheel on this platform"). Pinning PATH to the
+          # setup-python bin makes python/pip/maturin all the right interpreter.
+          export PATH="$(dirname '${{ steps.setup-python.outputs.python-path }}'):$PATH"
           python -m pip install --upgrade pip maturin
           ( cd src/sdk/python && maturin build --release --target ${{ matrix.target }} --out dist )
           python -m pip install src/sdk/python/dist/*.whl
@@ -145,6 +153,7 @@ jobs:
         if: matrix.triple == 'linux-x64-gnu'
         run: |
           set -e
+          export PATH="$(dirname '${{ steps.setup-python.outputs.python-path }}'):$PATH"
           # maturin is already installed by the Python SDK step above.
           python -m pip install --upgrade twine 'packaging>=24.2'
           ( cd src/sdk/python && maturin sdist --out dist )
