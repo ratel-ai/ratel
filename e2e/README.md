@@ -12,13 +12,17 @@ so a behavior divergence between SDKs (they all wrap the same Rust BM25 core) ma
 exactly one runner fail:
 
 - `fixtures/catalog.json` — the shared tool catalog (the input).
-- `scenario.json` — the assertions (the source of truth): per-query top-1 ranking,
-  direct invoke, and the gateway `search_tools` / `invoke_tool` surfaces.
+- `fixtures/skills.json` — the shared skill catalog (the on-demand analogue, added in 0.2.0).
+- `scenario.json` — the assertions (the source of truth): per-query top-1 ranking for
+  tools and skills, direct invoke, the gateway `search_tools` / `invoke_tool` surfaces,
+  `get_skill_content`, the unified `search_capabilities` (tools + skills) surface, and the
+  skill→tool cross-pollination (a matched skill's declared `tools` ride into the tools
+  bucket at score 0).
 
 | Runner | Package under test | Surface exercised |
 |--------|--------------------|-------------------|
-| `python/run_e2e.py` | `ratel-ai` wheel | `ToolCatalog` search/invoke + `search_tools_tool` / `invoke_tool_tool` |
-| `ts/run_e2e.mjs` | `@ratel-ai/sdk` (+ native binary) | `ToolCatalog` search/invoke + `searchToolsTool` / `invokeToolTool` |
+| `python/run_e2e.py` | `ratel-ai` wheel | `ToolCatalog` + `SkillCatalog` search/invoke; `search_tools_tool` / `invoke_tool_tool` / `get_skill_content_tool` / `search_capabilities_tool` |
+| `ts/run_e2e.mjs` | `@ratel-ai/sdk` (+ native binary) | `ToolCatalog` + `SkillCatalog` search/invoke; `searchToolsTool` / `invokeToolTool` / `getSkillContentTool` / `searchCapabilitiesTool` |
 | `cli/run_e2e.sh` | `@ratel-ai/cli` | binary loads + `mcp add/list/get/remove` round-trip (sandboxed `HOME`) |
 
 The CLI runner deliberately avoids spawning live MCP servers (passing `--description`
@@ -35,13 +39,27 @@ python -m venv /tmp/ratel-e2e-py && /tmp/ratel-e2e-py/bin/pip install -U pip mat
 /tmp/ratel-e2e-py/bin/python ../../../e2e/python/run_e2e.py
 ```
 
-**TS** — pack the SDK, install the tarball into a temp dir, then run:
+**TS** — this mirrors the `pr-gate.yml` "Node SDK" step exactly, and you must follow it:
+the loader package alone is **not** runnable (its `optionalDependencies` are injected
+only at publish time and it ships no `.node`, so installing it alone fails with
+`Cannot find native binding`). You build the host's native binary, copy it into the
+matching `npm/<triple>/` subpackage, then pack **and install both** the loader and the
+subpackage. The runner is copied next to the install (so the bare `@ratel-ai/sdk` import
+resolves against the artifact, not the workspace source) and `RATEL_E2E_DIR` points it at
+the repo's fixtures:
 ```bash
-pnpm --filter @ratel-ai/sdk build
-TGZ="$(cd src/sdk/ts && pnpm pack --pack-destination /tmp/ratel-tgz | tail -1)"
+repo="$PWD"
+pnpm --filter @ratel-ai/sdk build            # builds the host native binary + tsc
+node_file="$(ls src/sdk/ts/native/ratel-sdk.*.node | head -1)"
+triple="$(basename "$node_file" .node | sed 's/^ratel-sdk\.//')"   # e.g. darwin-arm64
+cp "$node_file" "src/sdk/ts/npm/$triple/"
+rm -rf /tmp/ratel-tgz && mkdir -p /tmp/ratel-tgz
+pnpm --filter @ratel-ai/sdk pack --pack-destination /tmp/ratel-tgz   # loader
+npm pack "./src/sdk/ts/npm/$triple" --pack-destination /tmp/ratel-tgz # native subpackage
 mkdir -p /tmp/ratel-e2e-ts && cd /tmp/ratel-e2e-ts && npm init -y >/dev/null
-npm install "$TGZ"
-node <repo>/e2e/ts/run_e2e.mjs
+npm install /tmp/ratel-tgz/*.tgz             # install loader + subpackage together
+cp "$repo/e2e/ts/run_e2e.mjs" ./run_e2e.mjs
+RATEL_E2E_DIR="$repo/e2e" node run_e2e.mjs
 ```
 
 **CLI** — pack & install the CLI, point `RATEL_BIN` at the installed bin:
@@ -54,11 +72,16 @@ RATEL_BIN="$PWD/node_modules/.bin/ratel" bash <repo>/e2e/cli/run_e2e.sh
 
 ## Extending
 
-When you add product surface (new tools, a new SDK method, a new CLI command):
+When you add product surface (new tools, new skills, a new SDK method, a new CLI command):
 
-1. Add the tool(s) to `fixtures/catalog.json`.
-2. Add a query with an unambiguous expected top-1 to `scenario.json` (write the tool's
-   description so the query's terms clearly match it; assertions check top-1, not full
-   ordering, to stay robust to score ties).
+1. Add the tool(s) to `fixtures/catalog.json`, or the skill(s) to `fixtures/skills.json`
+   (give each a distinctive description; the current skills set only `id`/`name`/`description`/`body`
+   to stay minimal — the TS and Python `Skill` types are in parity, so `tags`/`tools`/`metadata`
+   work identically on both if a scenario needs them).
+2. Add a query with an unambiguous expected top-1 to `scenario.json` — `searches` for tools,
+   `skillSearches` for skills (write the description so the query's terms clearly match it;
+   assertions check top-1 / membership, not full ordering, to stay robust to score ties).
+   For a `search_capabilities` case, pick a query whose terms match both the expected tool
+   and the expected skill (the two corpora are ranked independently).
 3. If you exercise a new method/command, extend the relevant runner(s) — and keep the
    Python and TS runners in lockstep so parity stays enforced.
