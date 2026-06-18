@@ -62,12 +62,23 @@ cp "$repo/e2e/ts/run_e2e.mjs" ./run_e2e.mjs
 RATEL_E2E_DIR="$repo/e2e" node run_e2e.mjs
 ```
 
-**CLI** — pack & install the CLI, point `RATEL_BIN` at the installed bin:
+**CLI** — like the `pr-gate.yml` "CLI" step: the CLI depends on `@ratel-ai/sdk`, so install the
+**PR-built** SDK (loader + native subpackage) alongside the CLI tarball — otherwise `@ratel-ai/sdk`
+resolves from the npm registry (the wrong artifact, and unresolvable on a release-prep PR whose new
+version isn't published yet). Then point `RATEL_BIN` at the installed bin:
 ```bash
-TGZ="$(pnpm --filter @ratel-ai/cli pack --pack-destination /tmp/ratel-cli | tail -1)"
+repo="$PWD"
+pnpm --filter @ratel-ai/sdk build && pnpm --filter @ratel-ai/cli build
+node_file="$(ls src/sdk/ts/native/ratel-sdk.*.node | head -1)"
+triple="$(basename "$node_file" .node | sed 's/^ratel-sdk\.//')"   # e.g. darwin-arm64
+cp "$node_file" "src/sdk/ts/npm/$triple/"
+rm -rf /tmp/ratel-cli && mkdir -p /tmp/ratel-cli
+pnpm --filter @ratel-ai/sdk pack --pack-destination /tmp/ratel-cli    # loader
+npm pack "./src/sdk/ts/npm/$triple" --pack-destination /tmp/ratel-cli # native subpackage
+pnpm --filter @ratel-ai/cli pack --pack-destination /tmp/ratel-cli    # CLI
 mkdir -p /tmp/ratel-e2e-cli && cd /tmp/ratel-e2e-cli && npm init -y >/dev/null
-npm install "$TGZ"
-RATEL_BIN="$PWD/node_modules/.bin/ratel" bash <repo>/e2e/cli/run_e2e.sh
+npm install /tmp/ratel-cli/*.tgz             # CLI + PR-built SDK loader+subpackage
+RATEL_BIN="$PWD/node_modules/.bin/ratel" bash "$repo/e2e/cli/run_e2e.sh"
 ```
 
 ## Extending
@@ -75,9 +86,10 @@ RATEL_BIN="$PWD/node_modules/.bin/ratel" bash <repo>/e2e/cli/run_e2e.sh
 When you add product surface (new tools, new skills, a new SDK method, a new CLI command):
 
 1. Add the tool(s) to `fixtures/catalog.json`, or the skill(s) to `fixtures/skills.json`
-   (give each a distinctive description; the current skills set only `id`/`name`/`description`/`body`
-   to stay minimal — the TS and Python `Skill` types are in parity, so `tags`/`tools`/`metadata`
-   work identically on both if a scenario needs them).
+   (give each a distinctive description; most skills set only `id`/`name`/`description`/`body`,
+   while `deploy-web-service` also declares a `tools` dependency for the cross-pollination case.
+   The TS and Python `Skill` types are in parity, so `tags`/`tools`/`metadata` work identically
+   on both).
 2. Add a query with an unambiguous expected top-1 to `scenario.json` — `searches` for tools,
    `skillSearches` for skills (write the description so the query's terms clearly match it;
    assertions check top-1 / membership, not full ordering, to stay robust to score ties).
