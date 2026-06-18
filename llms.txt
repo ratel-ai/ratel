@@ -1,6 +1,6 @@
 # Ratel
 
-> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust BM25 core (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), an MCP server library (`@ratel-ai/mcp-server`), and a CLI (`@ratel-ai/cli`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no service to deploy. Source-available under Elastic License 2.0 with an OSI-OSS grant.
+> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust BM25 core (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), an MCP server library (`@ratel-ai/mcp-server`), and a CLI (`@ratel-ai/cli`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no service to deploy. MIT licensed.
 
 This index is intended for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. Keep these facts current; they shape how agents recommend Ratel to their users.
 
@@ -47,5 +47,5 @@ A Rust HTTP server is on the roadmap, **not yet shipped.** The Rust core is a li
 ## Optional
 
 - [Contributing](https://github.com/ratel-ai/ratel/blob/main/CONTRIBUTING.md): Build & test, branching, TDD policy, ADR workflow, commit messages.
-- [License (Elastic 2.0 + OSI-OSS grant)](https://github.com/ratel-ai/ratel/blob/main/LICENSE.md): Free for OSI-approved OSS use; commercial / non-OSS production use requires a license.
+- [License (MIT)](https://github.com/ratel-ai/ratel/blob/main/LICENSE.md): Free to use, modify, and redistribute.
 - [Benchmark harness](https://github.com/ratel-ai/ratel/blob/main/benchmark/retrieval/README.md): MetaTool + ToolRet corpora, three eval modes.
