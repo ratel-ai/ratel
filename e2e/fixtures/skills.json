@@ -1,0 +1,30 @@
+{
+  "$comment": "Shared, language-neutral SKILL catalog for the cross-SDK E2E — the on-demand analogue of fixtures/catalog.json. Skills are ranked by the native SkillRegistry (a separate BM25 corpus from tools), surfaced in the `skills` bucket of search_capabilities, and loaded by id via get_skill_content. Descriptions are distinctive so each scenario query has an unambiguous top-1 within the skill corpus. Most skills set only id/name/description/body; `deploy-web-service` also declares a `tools` dependency, which search_capabilities surfaces into the tools bucket (score 0) when the skill matches — the cross-pollination case. The TS and Python Skill types are in parity (id, name, description, tags, tools, metadata, body — all mirror the same Rust core struct, and `tools`/`metadata` are dependency/ranking signals, NOT indexed query terms), so these fields behave identically across SDKs. Extend alongside e2e/scenario.json. See e2e/README.md.",
+  "skills": [
+    {
+      "id": "deploy-web-service",
+      "name": "deploy-web-service",
+      "description": "Playbook for safely deploying the web service to the production environment, with health checks and a rollback procedure.",
+      "tools": ["github__merge_pull_request"],
+      "body": "# Deploy the web service\n1. Tag the release.\n2. Roll out behind a health check.\n3. If the health check fails, roll back.\n"
+    },
+    {
+      "id": "debug-flaky-tests",
+      "name": "debug-flaky-tests",
+      "description": "How to diagnose and stabilize flaky, intermittently failing automated tests in continuous integration.",
+      "body": "# Stabilize flaky tests\n1. Reproduce under load.\n2. Quarantine the offending test.\n3. Remove the source of nondeterminism.\n"
+    },
+    {
+      "id": "speed-up-slow-query",
+      "name": "speed-up-slow-query",
+      "description": "Playbook for speeding up a slow Postgres query by adding the right index, run safely in production.",
+      "body": "# Speed up a slow query\n1. EXPLAIN the query.\n2. Add a covering index concurrently.\n3. Re-check the query plan.\n"
+    },
+    {
+      "id": "onboard-new-engineer",
+      "name": "onboard-new-engineer",
+      "description": "Checklist for onboarding a newly hired engineer: provisioning accounts, granting repository access, and assigning a first task.",
+      "body": "# Onboard a new engineer\n1. Provision accounts.\n2. Grant repository access.\n3. Assign a starter task.\n"
+    }
+  ]
+}

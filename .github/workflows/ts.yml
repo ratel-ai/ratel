@@ -33,3 +33,10 @@ jobs:
         run: pnpm -r lint
       - name: Test
         run: pnpm -r test
+      # Example wiring (Vercel AI SDK) — folded in here to keep one TS check row.
+      # Drives the real ToolLoopAgent loop with a scripted MockLanguageModel (no API
+      # key), catching framework-integration drift the SDK-level tests can't see. The
+      # SDK is already built by `pnpm -r build` above, so run the test directly.
+      # See examples/ai-sdk/test/agent.test.ts.
+      - name: Test the AI SDK example wiring
+        run: pnpm --filter @ratel-ai/example-ai-sdk exec tsx test/agent.test.ts
