@@ -3,7 +3,7 @@
   <h4>Context engineering for AI agents — engineer the context your agent actually needs, on every turn.</h4>
 
   <p>
-    <a href="./docs/">Docs</a> •
+    <a href="https://docs.ratel.sh">Docs</a> •
     <a href="https://github.com/ratel-ai/skills">Skills</a> •
     <a href="./docs/roadmap.md">Roadmap</a> •
     <a href="https://discord.gg/hdKpx69NR">Discord</a>
@@ -13,7 +13,6 @@
     <a href="https://www.npmjs.com/package/@ratel-ai/sdk"><img src="https://img.shields.io/npm/v/@ratel-ai/sdk?label=npm&color=cb3837" alt="npm" /></a>
     <a href="https://crates.io/crates/ratel-ai-core"><img src="https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300" alt="crates.io" /></a>
     <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
-    <a href="https://discord.gg/hdKpx69NR"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da&label=discord" alt="Discord" /></a>
     <a href="./LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license" /></a>
   </p>
 </div>
