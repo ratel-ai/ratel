@@ -3,7 +3,7 @@
 // scripted MockLanguageModelV3 — no API key, no network — so it exercises the parts
 // that break on SDK/AI-SDK drift but the SDK-level e2e can't see:
 //   - toAISDKTool bridging the SDK's JSON-Schema tool defs into `tool()`/`jsonSchema()`
-//   - the gateway tools (search_tools / invoke_tool) registering + being invoked
+//   - the gateway tools (search_capabilities / invoke_tool) registering + being invoked
 //   - argument marshaling + result flow through the agent's tool loop
 //
 // Run: `tsx test/agent.test.ts` (the `example` CI job builds @ratel-ai/sdk first).
@@ -45,7 +45,7 @@ async function main() {
   const model = new MockLanguageModelV3({
     // one provider result per agent step; consumed in order
     doGenerate: [
-      toolCall("search_tools", { query: "read a file from local disk", topK: 3 }),
+      toolCall("search_capabilities", { query: "read a file from local disk", topKTools: 3 }),
       toolCall("invoke_tool", { toolId: "read_file", args: { path: "/tmp/x" } }),
       finalText("done: read the file"),
     ] as unknown as ConstructorParameters<typeof MockLanguageModelV3>[0]["doGenerate"],
@@ -60,7 +60,7 @@ async function main() {
   });
 
   // The gateway tools must have been wired in...
-  assert.ok(result.activeTools.includes("search_tools"), "search_tools not registered");
+  assert.ok(result.activeTools.includes("search_capabilities"), "search_capabilities not registered");
   assert.ok(result.activeTools.includes("invoke_tool"), "invoke_tool not registered");
   // ...the model must have driven at least the two tool steps...
   assert.ok(result.steps >= 2, `expected >=2 steps, got ${result.steps}`);
