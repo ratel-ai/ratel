@@ -9,7 +9,7 @@ members = [
 [workspace.package]
 version = "0.2.0"
 edition = "2024"
-license-file = "LICENSE.md"
+license = "MIT"
 repository = "https://github.com/ratel-ai/ratel"
 homepage = "https://github.com/ratel-ai/ratel"
 documentation = "https://docs.rs/ratel-ai-core"
