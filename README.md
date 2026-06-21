@@ -17,6 +17,10 @@
   </p>
 </div>
 
+<div align="center">
+  <img src="./docs/assets/hero.webp" width="960" alt="Ratel hero animation" />
+</div>
+
 > Most agents stuff every tool, skill, and memory into the context window each turn — burning tokens, drifting on the long tail. Ratel sits between the agent and its catalog, and resolves only what matters for *this* turn.
 
 ## Integrate Ratel in 60 seconds
