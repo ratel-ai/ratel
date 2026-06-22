@@ -1,6 +1,6 @@
 <div align="center">
-  <h1>Ratel</h1>
-  <h4>Context engineering for AI agents — engineer the context your agent actually needs, on every turn.</h4>
+  <h1>Ratel — Dynamic MCP Tool Selection & Context Engineering for AI Agents</h1>
+  <p>Fix MCP tool overload. Cut LLM token usage by up to 82%. No vector DB, no embeddings.</p>
 
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
@@ -18,94 +18,27 @@
 </div>
 
 <div align="center">
-  <img src="./docs/assets/hero.webp" width="960" alt="Ratel hero animation" />
+  <img src="./docs/assets/hero.webp" width="960" alt="Ratel — dynamic MCP tool selection and context engineering for AI agents" />
 </div>
 
-> Most agents stuff every tool, skill, and memory into the context window each turn — burning tokens, drifting on the long tail. Ratel sits between the agent and its catalog, and resolves only what matters for *this* turn.
+> **MCP tool overload is costing you tokens and accuracy.** Most agents stuff every tool into context on every turn. Ratel sits between your agent and its catalog — dynamically selecting only the tools that matter for *this* turn via in-process BM25 retrieval. No vector DB. No embeddings. No service to deploy.
 
-## Integrate Ratel in 60 seconds
+## Proof: what the numbers say
 
-The fastest way to get Ratel into your agent is the **Ratel skills suite** — five Claude Code / Cursor / Codex skills that integrate Ratel, plan observability, design dashboards, audit your codebase, and analyse live traces.
+| Model + catalog size | Accuracy | Token reduction | Cost reduction |
+|---|---|---|---|
+| Local model (qwen3.5), pool=100 | **8% → 77%** (+69 pp) | — | — |
+| OSS cloud (glm-5.1), pool=180 | **+12 pp** | **−85%** | — |
+| Frontier (Sonnet 4.6), pool=180 | ≈parity | **−82%** | **−68%** |
+| Frontier (Opus 4.6), pool=180 | **+8 pp** | **−72%** | — |
 
-Install all five:
-
-```bash
-npx skills add ratel-ai/skills --all
-```
-
-Or paste this into your coding agent — it installs the suite and walks you through a concrete Ratel integration plan:
-
-```text
-Run npx skills add ratel-ai/skills --all and use the skills to integrate Ratel in this project.
-```
-
-Want a read on the rest of your agent first? The same suite ships a free, static `ratel-assessment` — no engagement required. Paste this instead:
-
-```text
-Run npx skills add ratel-ai/skills --all and use the skills to assess the agents in this codebase and show me where Ratel would help.
-```
-
-Full skills suite: [`ratel-ai/skills`](https://github.com/ratel-ai/skills)
-
-## What is Ratel
-
-**This repo is the library.** An in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and the runtime hooks that decide what ends up in the model's context window on every turn.
-
-- **Wedge today**: tool selection. Register tools (or ingest an upstream MCP server) into a `ToolCatalog`; the model sees the handful that matter for the current turn, not the full list.
-- **Same primitives** now rank skills too — reusable playbooks alongside tools; memories and message history extend them as they land on the roadmap.
-- **Stack**: Rust core (`ratel-ai-core`) + TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound) + Python SDK (`ratel-ai`, PyO3-bound) + auxiliary CLI (`@ratel-ai/cli`) for the artifacts the library produces (telemetry today; trace-consolidation server later).
-- **No vector DB. No embedding pipeline. No service to deploy.**
-
-See [`docs/overview.md`](docs/overview.md) for the thesis, [`docs/roadmap.md`](docs/roadmap.md) for what's coming.
-
-## The Ratel project
-
-Three repos, one story:
-
-| | Repo | What it is |
-|---|---|---|
-| **Library** | [`ratel-ai/ratel`](https://github.com/ratel-ai/ratel) (this one) | The engine. Rust core + TS SDK + auxiliary CLI. Embed it in your agent process. |
-| **Showcase** | [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) | The first canonical product on the library — `@ratel-ai/mcp-server` exposes any catalog over MCP, with a `ratel-mcp` CLI that fronts Claude Code / Cursor / ChatGPT and an OAuth-aware gateway for upstream MCP servers. Proof that the library is enough to build a real product on. |
-| **Proof** | [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench) | The benchmark harness — MetaTool agent campaign, ToolRet retrieval, three Ratel ablation arms across local / OSS / frontier models. The numbers in the table below come from here. |
-
-
-## Why Ratel
-
-- **Retrieval, not stuffing.** BM25 over a schema-aware text projection of every tool — deterministic, no embeddings, no inference cost on the retrieval path ([ADR‑0004](docs/adr/0004-bm25-tool-indexing.md)).
-- **~2 tools per turn.** Replace-by-default tool injection ([ADR‑0003](docs/adr/0003-tool-selection-replace-vs-suggest.md)): the agent's tool list at any turn is the top‑K hits. Less context, less drift, lower cost.
-- **In-process, no infra.** Pre-built native bindings for darwin / linux / win — no Rust toolchain to install.
-- **Framework-agnostic.** `ToolCatalog` returns generic `ExecutableTool` objects you wrap in a few lines (Vercel AI SDK example shipped in `examples/ai-sdk`, `examples/mcp-chat`). Or skip the framework and expose the catalog over MCP.
-
-## Proof: where Ratel is most valuable today
-
-| your situation | Ratel's value today |
-|---|---|
-| Local model + large catalog | **Critical.** qwen3.5 at pool=100 goes from 8% → 77% — the baseline collapses, Ratel keeps it working. |
-| Open-source cloud + large catalog | **Strong win.** glm-5.1 at pool=180: **+12 pp** accuracy, **-85%** input tokens. |
-| Frontier (Sonnet) + large catalog | **Cost-driven win.** Sonnet 4.6 at pool=180: **-82%** input tokens, **-68%** $; -8 pp accuracy (closing). |
-| Frontier (Opus) + large catalog | **Competitive win.** Opus 4.6 pool=180: **+8 pp** accuracy and **-72%** tokens (discovery-tool arm). Opus 4.7 pool=180: ≈parity (-1.7 pp) with **-81%** tokens — Anthropic's own tool-search-tool loses **-8 pp** on the same setup. |
-| Any model + tiny catalog (≤30) | Skip Ratel — pool fits in the prompt cleanly. |
-
-Numbers from the MetaTool agent benchmark — full per-pool breakdown and methodology in [ratel-ai/ratel-bench › `RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md). The benchmark harness lives in its own public repo: [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench).
-
-## Choose your path
-
-If you want to **embed the library** in your own agent or runtime, pick one of these shapes — same Rust core under each:
-
-|               | **Rust library**                          | **TypeScript SDK**                    | **Python SDK**                        | **CLI**                                                       |
-| ------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| **For**       | Rust agents and downstream SDKs           | TS / Node agents                      | Python agents                         | Inspecting telemetry the library writes; migrating a Claude Code MCP setup into Ratel (transitional) |
-| **Install**   | `cargo add ratel-ai-core`                 | `pnpm add @ratel-ai/sdk`              | `pip install ratel-ai`                | `pnpm add -g @ratel-ai/cli`                                   |
-| **Hero call** | `ToolRegistry::search`                    | `searchCapabilitiesTool(catalog)`     | `search_capabilities_tool(catalog)`   | `ratel inspect`                                               |
-| **Reference** | [src/core/lib/](src/core/lib/README.md)   | [src/sdk/ts/](src/sdk/ts/README.md)   | [src/sdk/python/](src/sdk/python/README.md) | [src/integrations/cli/](src/integrations/cli/README.md) |
-
-If instead you want to **drop Ratel between an MCP host and your existing upstream MCP servers** (Claude Code, Cursor, ChatGPT) — the showcase product — use [`@ratel-ai/mcp-server` from `ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp): `npx -y @ratel-ai/mcp-server mcp import`.
-
-The Rust HTTP server is on the [roadmap](docs/roadmap.md), not yet shipped.
+Full methodology and per-pool breakdown in [ratel-ai/ratel-bench › RESULTS.md](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md).
 
 ## Quickstart
 
-**TypeScript SDK** — embed Ratel in a TS / Node agent
+Pick your language — same Rust core under each:
+
+**TypeScript**
 
 ```bash
 pnpm add @ratel-ai/sdk
@@ -124,8 +57,8 @@ catalog.register({
   execute: async ({ path }) => ({ contents: await fs.readFile(path, "utf8") }),
 });
 
-// Hand these two tools to your agent loop.
-// The full catalog stays out of the model's context — the agent reaches it via search_capabilities / invoke_tool.
+// Two tools replace your full catalog in the agent loop.
+// The agent calls search_capabilities to find tools, invoke_tool to run them.
 const search = searchCapabilitiesTool(catalog);
 const invoke = invokeToolTool(catalog);
 ```
@@ -134,7 +67,7 @@ const invoke = invokeToolTool(catalog);
 - Ingest an upstream MCP server: [registerMcpServer](src/sdk/ts/README.md#registermcpserver--index-an-mcp-servers-tools-into-the-catalog)
 - Full SDK reference: [src/sdk/ts/README.md](src/sdk/ts/README.md)
 
-**Python SDK** — embed Ratel in a Python agent
+**Python**
 
 ```bash
 pip install ratel-ai
@@ -155,8 +88,6 @@ catalog.register(
     )
 )
 
-# Hand these two tools to your agent loop.
-# The full catalog stays out of the model's context — the agent reaches it via search_capabilities / invoke_tool.
 search = search_capabilities_tool(catalog)
 invoke = invoke_tool_tool(catalog)
 ```
@@ -164,115 +95,174 @@ invoke = invoke_tool_tool(catalog)
 - End-to-end Pydantic AI: [examples/pydantic-ai/](examples/pydantic-ai/README.md)
 - Full SDK reference: [src/sdk/python/README.md](src/sdk/python/README.md)
 
-**Showcase: drop Ratel between Claude Code and your existing MCP servers**
-
-For the canonical "Ratel as a product" experience — managing scopes, importing from Claude Code, OAuth for HTTP upstreams, serving over stdio — use the MCP-server showcase repo:
-
-```bash
-npx -y @ratel-ai/mcp-server mcp import   # interactive migration wizard
-```
-
-Full CLI reference, install options, and library docs: [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp). `@ratel-ai/cli` in this repo retains the same MCP verbs transitionally (it depends on the same published `@ratel-ai/mcp-server` library); over time those verbs migrate to `ratel-mcp` and the local `ratel` binary focuses on library artifacts (`ratel inspect`, etc.).
-
-**Rust library** — direct, no JS in the loop
+**Rust**
 
 ```bash
 cargo add ratel-ai-core
 ```
 
-In-process BM25 retrieval over a schema-aware text projection of each tool. See [src/core/lib/README.md](src/core/lib/README.md) and [docs.rs/ratel-ai-core](https://docs.rs/ratel-ai-core).
+See [src/core/lib/README.md](src/core/lib/README.md) and [docs.rs/ratel-ai-core](https://docs.rs/ratel-ai-core).
 
-## How it works (today)
+## What is MCP tool selection?
 
-- **Tool selection** is the v0.1.x shipping path. Ratel sits between agent and catalog.
-- Each turn, the agent either calls `search_capabilities(query)` or — in pre-filter mode — receives the top‑K hits resolved at message start. The full list never enters context.
-- The catalog holds local executables, upstream MCP servers' tools (via `registerMcpServer`), or both — the model sees a unified, ranked surface.
-- Under the hood: `ratel-ai-core`, a Rust BM25 index over a deterministic, schema-aware text projection of each tool. No embeddings, no vector DB, no inference latency on the retrieval path.
+When you give an AI agent a large MCP tool catalog, every tool's schema lands in the context window on every turn. At 30+ tools you're burning thousands of tokens per call. At 100+ tools, local models begin failing to select correctly — accuracy degrades to near zero.
 
-Longer take + skills / telemetry / memories / context graph: [docs/overview.md](docs/overview.md).
+**MCP tool selection** means the agent only sees the tools relevant to its current task — resolved dynamically at inference time, not hardcoded. Ratel does this with an in-process BM25 index over a schema-aware text projection of every tool in your catalog. The agent calls `search_capabilities(query)` and gets back the top-K hits. The full catalog never enters the model's context.
+
+This is also called **tool RAG** — retrieval-augmented generation applied to the tool layer rather than the document layer. Like RAG for MCP, but without the vector database.
+
+## Reduce LLM token usage and fix MCP tool overload
+
+Ratel addresses **context rot** — the gradual degradation of agent quality as irrelevant tools, stale history, and accumulated context crowd out what actually matters for the current turn.
+
+- **No vector DB.** BM25 is deterministic — same query, same results, every time. No embedding model, no inference latency on the retrieval path, no service to run.
+- **~2 tools per turn** in replace-by-default mode. The agent's tool list at any turn is the top-K hits only ([ADR-0003](docs/adr/0003-tool-selection-replace-vs-suggest.md)).
+- **In-process.** Pre-built native bindings for macOS, Linux, and Windows — no Rust toolchain to install.
+- **Framework-agnostic.** Works with Vercel AI SDK, Pydantic AI, or any agent loop. Or expose the catalog over MCP.
+
+## When to use Ratel
+
+| Your situation | Ratel's value |
+|---|---|
+| Local model + large catalog (30+ tools) | **Critical.** Baseline collapses at scale — Ratel keeps it working. |
+| Open-source cloud + large catalog | **Strong win.** +12 pp accuracy, −85% tokens. |
+| Frontier model + large catalog | **Cost-driven win.** −82% tokens, −68% cost at near-parity accuracy. |
+| Claude Code / Cursor + many MCP servers | **Drop-in proxy.** Use `@ratel-ai/mcp-server` as a gateway. No code changes. |
+| Any model + small catalog (≤30 tools) | Skip Ratel — the pool fits in the prompt cleanly. |
+
+## Drop Ratel between Claude Code and your existing MCP servers
+
+No agent code changes. Ratel acts as a proxy that selects which upstream tools to forward for each turn:
+
+```bash
+npx -y @ratel-ai/mcp-server mcp import   # interactive migration wizard
+```
+
+Full docs, install options, and OAuth gateway setup: [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)
+
+## Integrate via the skills suite (fastest path)
+
+Five Claude Code / Cursor / Codex skills that integrate Ratel, set up observability, and audit your codebase:
+
+```bash
+npx skills add ratel-ai/skills --all
+```
+
+Or paste this into your coding agent:
+
+```text
+Run npx skills add ratel-ai/skills --all and use the skills to integrate Ratel in this project.
+```
+
+Want a free, static assessment first — no engagement required?
+
+```text
+Run npx skills add ratel-ai/skills --all and use the skills to assess the agents in this codebase and show me where Ratel would help.
+```
+
+Full suite: [`ratel-ai/skills`](https://github.com/ratel-ai/skills)
+
+## How it works
+
+```
+Agent turn
+  │
+  ├─ search_capabilities("write tests for the auth module")
+  │    └─ BM25 over schema-aware text projections of 200 tools
+  │         └─ returns top-3: [run_tests, read_file, write_file]
+  │
+  └─ invoke_tool("run_tests", { path: "auth/" })
+       └─ executes locally or proxies to upstream MCP server
+```
+
+- **BM25 retrieval** over a deterministic, schema-aware text projection of each tool. No embeddings, no model on the retrieval path ([ADR-0004](docs/adr/0004-bm25-tool-indexing.md)).
+- **Replace-by-default.** The agent's tool list at every turn is the top-K hits, nothing else.
+- **Unified catalog.** Local executables + upstream MCP servers' tools share the same ranked surface. The model sees one coherent interface.
+
+## The Ratel project
+
+Three repos, one story:
+
+| | Repo | What it is |
+|---|---|---|
+| **Library** | [`ratel-ai/ratel`](https://github.com/ratel-ai/ratel) (this one) | The engine. Rust core + TS SDK + Python SDK. Embed in your agent process. |
+| **Showcase** | [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) | `@ratel-ai/mcp-server` — MCP proxy with OAuth gateway, Claude Code / Cursor / ChatGPT support. |
+| **Proof** | [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench) | MetaTool agent benchmark + ToolRet retrieval harness. Source of all numbers above. |
+
+## SDKs
+
+| | Rust | TypeScript | Python | CLI |
+|---|---|---|---|---|
+| **Install** | `cargo add ratel-ai-core` | `pnpm add @ratel-ai/sdk` | `pip install ratel-ai` | `pnpm add -g @ratel-ai/cli` |
+| **Hero call** | `ToolRegistry::search` | `searchCapabilitiesTool(catalog)` | `search_capabilities_tool(catalog)` | `ratel inspect` |
+| **Docs** | [src/core/lib/](src/core/lib/README.md) | [src/sdk/ts/](src/sdk/ts/README.md) | [src/sdk/python/](src/sdk/python/README.md) | [src/integrations/cli/](src/integrations/cli/README.md) |
 
 ## Examples
 
 - [examples/ai-sdk/](examples/ai-sdk/README.md) — Vercel AI SDK with pre-filter + dynamic gateway
-- [examples/mcp-chat/](examples/mcp-chat/README.md) — Vercel AI SDK REPL ingesting an upstream MCP server via `registerMcpServer`
+- [examples/mcp-chat/](examples/mcp-chat/README.md) — Vercel AI SDK REPL ingesting an upstream MCP server
 - [examples/pydantic-ai/](examples/pydantic-ai/README.md) — Pydantic AI (Python) with pre-filter + dynamic gateway
 
-## Where this is going
+## Roadmap
 
-Tool selection is the wedge, not the destination. Same catalog, same retrieval engine, same in-process runtime — widening into the rest of the agent's context surface:
+Tool selection is the wedge, not the destination. Same catalog, same retrieval engine, same in-process runtime — expanding across the full context surface:
 
-- **v0.1.x** — telemetry + UI inspector, JSON→TOON encoding, MCP `tools/list_changed`, first-class **skills**, LLM-driven catalog suggestions, multi-agent decomposition hints, semantic re-ranking over BM25, opt-in self-hosted trace server.
-- **v0.2.x — chat management** — store / compact / prune / navigate long histories.
-- **v0.3.x — memories** — prior decisions, preferences, and artifacts ranked into the current turn.
-- **v0.4.x — context graph** — unified tools-skills-memories substrate.
+- **v0.1.x** (now) — tool selection, BM25 retrieval, MCP proxy, TypeScript + Python SDKs, telemetry, skills
+- **v0.2.x** — chat management: store, compact, prune, and navigate long histories
+- **v0.3.x** — memories: prior decisions, preferences, and artifacts ranked into the current turn
+- **v0.4.x** — context graph: unified tools-skills-memories substrate
 
-The **Python SDK** (`pip install ratel-ai`) shipped early — a second host language on the same Rust core, at full parity with the TS SDK.
-
-Dated milestones: [`docs/roadmap.md`](docs/roadmap.md). Thesis: [`docs/overview.md`](docs/overview.md).
+Dated milestones: [docs/roadmap.md](docs/roadmap.md) · Full thesis: [docs/overview.md](docs/overview.md)
 
 ## Repo layout
 
-This repo holds the **library** half of the project. The MCP-server showcase and the benchmark harness live in sibling repos.
-
 ```
 src/
-├── core/lib/                  # ratel-ai-core — Rust crate; BM25 retrieval engine
-├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
-├── sdk/python/                # ratel-ai — Python SDK (PyO3-bound)
+├── core/lib/           # ratel-ai-core — Rust crate; BM25 retrieval engine
+├── sdk/ts/             # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
+├── sdk/python/         # ratel-ai — Python SDK (PyO3-bound)
 └── integrations/
-    └── cli/                   # @ratel-ai/cli — `ratel` CLI (telemetry inspect; transitional MCP verbs)
-examples/                      # Runnable end-to-end examples for the SDK
-docs/                          # Overview, roadmap, ADRs
+    └── cli/            # @ratel-ai/cli — ratel CLI (telemetry; transitional MCP verbs)
+examples/               # Runnable end-to-end examples
+docs/                   # Overview, roadmap, ADRs
 ```
 
-Sibling repos:
-
-- [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) — **showcase**. `@ratel-ai/mcp-server` library + `ratel-mcp` CLI.
-- [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench) — **proof**. Benchmark harness; numbers in [`RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md).
+Sibling repos: [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) · [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)
 
 ## Build & test
 
-Prerequisites: Rust stable (pinned via `rust-toolchain.toml`), Node 24+, pnpm 10.28+. For the Python SDK: Python 3.9+ and [`uv`](https://docs.astral.sh/uv/).
+Prerequisites: Rust stable (pinned via `rust-toolchain.toml`), Node 24+, pnpm 10.28+. Python SDK: Python 3.9+ and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 # Rust
 cargo build --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --check --all
 cargo test --workspace
 
-# TS
-pnpm install
-pnpm -r build
-pnpm -r typecheck
-pnpm -r lint
-pnpm -r test
+# TypeScript
+pnpm install && pnpm -r build && pnpm -r test
 
 # Python (from src/sdk/python/)
 uv venv --python 3.11 .venv
 uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy
-.venv/bin/maturin develop
-.venv/bin/ruff check . && .venv/bin/mypy ratel_ai && .venv/bin/pytest
+.venv/bin/maturin develop && .venv/bin/pytest
 ```
 
 CI runs all three pipelines on every PR (`.github/workflows/{rust,ts,python}.yml`).
 
 ## Architecture decisions
 
-Full record in [docs/adr/](docs/adr/). Cross-cutting locks worth knowing up front:
-
-- [ADR 0002 — TS↔Rust binding via NAPI-RS](docs/adr/0002-ts-rust-binding-strategy.md)
-- [ADR 0003 — Tool selection: replace by default, suggest opt-in](docs/adr/0003-tool-selection-replace-vs-suggest.md)
-- [ADR 0004 — BM25 tool indexing strategy](docs/adr/0004-bm25-tool-indexing.md)
-- [ADR 0006 — Benchmark corpus and eval modes](docs/adr/0006-benchmark-corpus-and-eval-modes.md)
-- [ADR 0011 — Python↔Rust binding via PyO3](docs/adr/0011-python-rust-binding-strategy.md)
+- [ADR-0002 — TS↔Rust binding via NAPI-RS](docs/adr/0002-ts-rust-binding-strategy.md)
+- [ADR-0003 — Tool selection: replace by default, suggest opt-in](docs/adr/0003-tool-selection-replace-vs-suggest.md)
+- [ADR-0004 — BM25 tool indexing strategy](docs/adr/0004-bm25-tool-indexing.md)
+- [ADR-0006 — Benchmark corpus and eval modes](docs/adr/0006-benchmark-corpus-and-eval-modes.md)
+- [ADR-0011 — Python↔Rust binding via PyO3](docs/adr/0011-python-rust-binding-strategy.md)
 
 ## Contributing
 
 - Humans: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Coding agents in this repo: [AGENTS.md](AGENTS.md)
-- LLM index of the docs: [llms.txt](llms.txt)
+- Coding agents: [AGENTS.md](AGENTS.md)
+- LLM index of docs: [llms.txt](llms.txt)
 
 ## License
 
-**MIT**. Free to use, modify, and redistribute. See [LICENSE.md](LICENSE.md).
+MIT. Free to use, modify, and redistribute. See [LICENSE.md](LICENSE.md).
