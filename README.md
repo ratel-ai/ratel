@@ -30,6 +30,8 @@ The context engineering layer for AI agents. Dynamically selects only the tools 
 - **Accuracy:** Models get worse as tool lists grow. Some drop from 77% to 8% accuracy just from having too many options.
 - **Ratel fixes both:** by indexing your full catalog and injecting only the tools that match the current task, keeping the rest out of context entirely.
 
+**Try it in 60 seconds** with the [Ratel skill suite](https://github.com/ratel-ai/skills#quickstart----paste-this-into-your-coding-agent).
+
 | Setup | Accuracy | Token reduction | Cost reduction |
 |---|---|---|---|
 | Local model, 100+ tools | 8% to 77% | n/a | n/a |
