@@ -1,6 +1,6 @@
 <div align="center">
   <h1>ratel-ai</h1>
-  <h4>Python SDK for Ratel — drop context engineering into any Python agent with one dependency.</h4>
+  <h4>Context engineering & observability for any Python agent — one dependency.</h4>
 
   <p>
     <a href="../../../docs/">Docs</a> •
@@ -16,9 +16,12 @@
   </p>
 </div>
 
-As an agent runs, its context window fills with tool definitions it will never call this turn. A model staring at 100 tools picks the wrong one, burns tokens on schemas it ignores, and drifts. **Ratel** keeps the full toolset out of the prompt and surfaces only the handful that matter for the current turn.
+`ratel-ai` ([Ratel](../../../README.md)'s Python SDK) does two things for an agent, each one dependency away, in-process, with no service to deploy:
 
-`ratel-ai` is the Python surface of [Ratel](../../../README.md). It bundles the Rust core (`ratel-ai-core`) via [PyO3](https://pyo3.rs), so a Python agent gets ranked tool selection by adding one dependency, **in-process, no API key, no service to deploy, no Rust toolchain.** Retrieval is BM25 over a schema-aware text projection of each tool: deterministic, with no embeddings, no vector DB, and no inference cost on the retrieval path. The API mirrors the [TypeScript SDK](../ts/README.md) one-to-one; the binding strategy is locked in [ADR 0011](../../../docs/adr/0011-python-rust-binding-strategy.md).
+- **Engineers its context** — ranks your tools (and skills) so only the handful relevant to *this* turn enter the prompt, instead of a wall of 100 definitions the model has to wade through. Fewer input tokens, sharper tool choice. Ranking is BM25 over a schema-aware projection of each tool: deterministic, no embeddings, no vector DB, no inference cost.
+- **Measures it** — captures every LLM call, tool call, and token to your dashboard (and on to Langfuse), Langfuse-style, with a one-line import.
+
+Adopt either, at the depth you want — **[Get started](#get-started)** shows the three levels, smallest first. It bundles the Rust core (`ratel-ai-core`) via [PyO3](https://pyo3.rs); the binding strategy is locked in [ADR 0011](../../../docs/adr/0011-python-rust-binding-strategy.md).
 
 ## Install
 
@@ -32,7 +35,72 @@ pip install 'ratel-ai[observability]'
 
 Prebuilt `abi3` wheels ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc, so there is nothing to compile. The base SDK runs on CPython ≥ 3.9; the `mcp` extra requires ≥ 3.10.
 
+## Get started
+
+Ratel meets your agent at three levels. They **compose** — start at the top and go deeper only when you need to. Levels 1 and 2 work on *any* existing agent with no Ratel data structures; Level 3 is the deepest integration.
+
+### 1 · See what your agent does — change one import
+
+Already have a Python agent? Swap the provider import; every LLM call is now captured (model, prompt, output, tokens, tool calls):
+
+```python
+# from openai import OpenAI
+from ratel_ai.openai import OpenAI          # ← the only change
+
+client = OpenAI()
+client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
+```
+
+`pip install 'ratel-ai[observability]'`, then set `RATEL_API_KEY` to ship to your dashboard (no key → silent no-op, never raises). Anthropic users: `from ratel_ai.anthropic import Anthropic`. More → [Observability & analytics](#observability--analytics).
+
+### 2 · Cut token costs — add one flag
+
+Passing a big `tools=[...]` list to the model on every turn? Let Ratel BM25-rank it and send only the most relevant — no catalog, no restructuring:
+
+```python
+from ratel_ai.openai import OpenAI
+
+client = OpenAI(select_tools=True)          # off by default; opt in here or RATEL_TOOL_SELECTION=on
+client.chat.completions.create(model="gpt-4o", messages=[...], tools=my_50_tools)
+# Ratel trims `tools` to the top-K before the call → fewer input tokens, every call.
+```
+
+More → [Transparent tool selection](#transparent-tool-selection-no-catalog).
+
+### 3 · Own tool & skill selection — register a catalog
+
+Want full control — a gateway the agent can search on demand, skills, MCP servers, per-tool dispatch and telemetry? Register a `ToolCatalog` and Ratel ranks it for you:
+
+```python
+from ratel_ai import ToolCatalog, ExecutableTool
+
+catalog = ToolCatalog()
+catalog.register(ExecutableTool(
+    id="read_file",
+    name="read_file",
+    description="Read a file from local disk and return its contents.",
+    input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+    execute=lambda args: {"contents": open(args["path"]).read()},
+))
+# ...register your other tools, then pre-filter the top-K each turn or hand the agent
+# search_capabilities + invoke_tool. See "How it works" below.
+```
+
+More → [How it works](#how-it-works) · [`ToolCatalog`](#toolcatalog).
+
+### Which level do I want?
+
+| You want… | Use | Code change |
+|---|---|---|
+| Analytics on an agent you already have | **1** — drop-in wrappers / `@observe` | one import |
+| Lower token cost, no restructuring | **2** — `select_tools=True` | one flag |
+| Full control: gateway, skills, MCP, dispatch | **3** — `ToolCatalog` | register tools |
+
+They stack: register a catalog (3) *and* wrap your client (1) to measure it; or run 1 + 2 with no catalog at all. The rest of this README is the reference for each.
+
 ## How it works
+
+*This section is **Level 3** — the full `ToolCatalog`. For the one-import (analytics) and one-flag (token savings) paths, see [Get started](#get-started).*
 
 Everything starts with a **`ToolCatalog`**: register each of your tools once, pairing its metadata (id, description, JSON schemas) with the handler that runs it. From there you reach the model in one of two ways, and most agents use both at once:
 
@@ -243,7 +311,7 @@ Sink kinds:
 
 ## Observability & analytics
 
-A Langfuse-style layer captures your whole agent stack — LLM calls, function traces, and tool usage — and ships structured events to Ratel's cloud, where you can also forward them to Langfuse. Needs the `observability` extra (`pip install 'ratel-ai[observability]'`) and an API key from the dashboard. Design: [ADR-0013](../../../docs/adr/0013-python-observability-layer.md) (the layer) and [ADR-0014](../../../docs/adr/0014-cloud-ingestion-contract.md) (the wire contract).
+This is **Level 1**: a Langfuse-style layer that captures your whole agent stack — LLM calls, function traces, and tool usage — and ships structured events to Ratel's cloud, where you can also forward them to Langfuse. Needs the `observability` extra (`pip install 'ratel-ai[observability]'`) and an API key from the dashboard. Design: [ADR-0013](../../../docs/adr/0013-python-observability-layer.md) (the layer) and [ADR-0014](../../../docs/adr/0014-cloud-ingestion-contract.md) (the wire contract).
 
 ```bash
 export RATEL_API_KEY="rk-..."     # from the Ratel dashboard; absent → no-op, never raises
@@ -285,7 +353,9 @@ catalog = ToolCatalog(observe=True)
 catalog.search("read a file from disk", top_k=2)   # emits a tokens_saved event
 ```
 
-**Transparent tool selection (no catalog).** Opt in and the wrapper BM25-ranks the `tools` you already pass to the model and keeps only the top-K per call — Ratel's token savings with zero registration ([ADR-0015](../../../docs/adr/0015-transparent-tool-selection.md)). It's **off by default** (it changes which tools the model can call), threshold-gated, pins any `tool_choice`, and fails open to the original tools:
+## Transparent tool selection (no catalog)
+
+This is **Level 2**: opt in and the drop-in wrapper BM25-ranks the `tools` you already pass to the model and keeps only the top-K per call — Ratel's token savings with zero registration ([ADR-0015](../../../docs/adr/0015-transparent-tool-selection.md)). It's **off by default** (it changes which tools the model can call), threshold-gated, pins any `tool_choice`, and fails open to the original tools:
 
 ```python
 from ratel_ai.openai import OpenAI, ToolSelection
@@ -296,7 +366,7 @@ client.chat.completions.create(model="gpt-4o", messages=[...], tools=my_50_tools
 # Ratel prunes `tools` to the most relevant before the call and reports the saving.
 ```
 
-Pruning works even without an API key (you save provider tokens locally); with a key, each prune also emits a `ratel.tokens_saved` event. The explicit `ToolCatalog` / `search_capabilities` path stays the higher-control option (gateway escape hatch, skills, full dispatch) — both share the same ranking engine.
+Pruning works even without an API key (you save provider tokens locally); with a key, each prune also emits a `ratel.tokens_saved` event. The explicit `ToolCatalog` / `search_capabilities` path (Level 3) stays the higher-control option — gateway escape hatch, skills, full dispatch — and both share the same ranking engine.
 
 ## Develop
 

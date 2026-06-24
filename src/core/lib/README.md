@@ -64,6 +64,6 @@ Built-in sinks:
 - `MemorySink` — `Vec`-backed for tests and embedder assertions (`snapshot()`, `drain()`).
 - `JsonlSink` — synchronous `O_APPEND` per event, mode `0600` on Unix.
 
-Schema: `TraceEvent` is a tagged enum (search, index_churn, skill_search, skill_churn, skill_invoke, invoke_*, gateway_*, upstream_*, auth_*) wrapped in `TraceEnvelope { v, ts, session_id, ...event }`. The reliability profile is **query-log shaped** — best-effort, sampleable, lossy on backpressure. See ADR-0009 for the full rationale.
+Schema: `TraceEvent` is a tagged enum (search, index_churn, skill_search, skill_churn, skill_invoke, invoke_*, gateway_*, upstream_*, auth_*, plus the observability variants trace_root, observation_start, observation_end, generation, tokens_saved) wrapped in `TraceEnvelope { v, ts, session_id, ...event }`. The observability variants carry trace-tree identity and coarse token usage only — no prompt/output text and no `user_id` — so the on-disk JSONL stays PII-free ([ADR-0013](../../../docs/adr/0013-python-observability-layer.md)); the rich payload lives in the host SDK's cloud stream. The reliability profile is **query-log shaped** — best-effort, sampleable, lossy on backpressure. See ADR-0009 for the full rationale.
 
 The custom `TraceSink` trait lets embedders forward events to their own pipeline (HTTP, structured logger, ring buffer). The trait carries a `sample_rate()` knob (defaulting to `1.0`); the rate-limiter implementation is deferred to a later release.
