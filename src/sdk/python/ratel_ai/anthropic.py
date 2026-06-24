@@ -9,5 +9,6 @@ trace a client you already built.
 from __future__ import annotations
 
 from .integrations.anthropic import Anthropic, AsyncAnthropic, wrap_anthropic
+from .integrations.selection import ToolSelection
 
-__all__ = ["Anthropic", "AsyncAnthropic", "wrap_anthropic"]
+__all__ = ["Anthropic", "AsyncAnthropic", "ToolSelection", "wrap_anthropic"]

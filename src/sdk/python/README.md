@@ -285,6 +285,19 @@ catalog = ToolCatalog(observe=True)
 catalog.search("read a file from disk", top_k=2)   # emits a tokens_saved event
 ```
 
+**Transparent tool selection (no catalog).** Opt in and the wrapper BM25-ranks the `tools` you already pass to the model and keeps only the top-K per call — Ratel's token savings with zero registration ([ADR-0015](../../../docs/adr/0015-transparent-tool-selection.md)). It's **off by default** (it changes which tools the model can call), threshold-gated, pins any `tool_choice`, and fails open to the original tools:
+
+```python
+from ratel_ai.openai import OpenAI, ToolSelection
+
+client = OpenAI(select_tools=True)                       # or RATEL_TOOL_SELECTION=on
+client = OpenAI(select_tools=ToolSelection(top_k=12))    # tune the working set
+client.chat.completions.create(model="gpt-4o", messages=[...], tools=my_50_tools)
+# Ratel prunes `tools` to the most relevant before the call and reports the saving.
+```
+
+Pruning works even without an API key (you save provider tokens locally); with a key, each prune also emits a `ratel.tokens_saved` event. The explicit `ToolCatalog` / `search_capabilities` path stays the higher-control option (gateway escape hatch, skills, full dispatch) — both share the same ranking engine.
+
 ## Develop
 
 This package is part of the Cargo workspace at the repo root and builds into a local venv. From `src/sdk/python/`:

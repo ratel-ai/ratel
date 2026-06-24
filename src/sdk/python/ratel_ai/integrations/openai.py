@@ -16,6 +16,7 @@ import logging
 from typing import Any
 
 from ._wrap import ProviderSpec, patch_method
+from .selection import ToolAdapter, ToolSelection
 
 logger = logging.getLogger("ratel_ai.observability")
 
@@ -71,6 +72,59 @@ def _finish_reasons(response: Any) -> list[str] | None:
     return reasons or None
 
 
+# --- Tool selection adapter (ADR-0015): OpenAI chat-completions tool shape. ---
+
+
+def _tool_descriptor(tool: Any) -> tuple[str, str, dict[str, Any]] | None:
+    if not isinstance(tool, dict):
+        return None
+    function = tool.get("function")
+    if not isinstance(function, dict):
+        return None  # non-function tool (built-in) — keep always
+    name = function.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+    params = function.get("parameters")
+    return (name, function.get("description") or "", params if isinstance(params, dict) else {})
+
+
+def _forced_names(kwargs: dict[str, Any]) -> list[str]:
+    choice = kwargs.get("tool_choice")
+    if isinstance(choice, dict):
+        function = choice.get("function")
+        if isinstance(function, dict) and isinstance(function.get("name"), str):
+            return [function["name"]]
+    return []
+
+
+def _tool_calls(response: Any) -> list[str] | None:
+    try:
+        choices = getattr(response, "choices", None)
+        if not choices:
+            return None
+        message = getattr(choices[0], "message", None)
+        calls = getattr(message, "tool_calls", None)
+        if not calls:
+            return None
+        names = [
+            name
+            for name in (getattr(getattr(c, "function", None), "name", None) for c in calls)
+            if name
+        ]
+        return names or None
+    except Exception:
+        return None
+
+
+OPENAI_TOOLS = ToolAdapter(
+    get_tools=lambda kw: kw.get("tools"),
+    with_tools=lambda kw, tools: {**kw, "tools": tools},
+    descriptor=_tool_descriptor,
+    forced_names=_forced_names,
+    tool_calls_of=_tool_calls,
+)
+
+
 OPENAI_SPEC = ProviderSpec(
     provider="openai",
     name="openai.chat.completions",
@@ -81,14 +135,19 @@ OPENAI_SPEC = ProviderSpec(
     output_of=_output,
     response_model_of=lambda resp: getattr(resp, "model", None),
     finish_reasons_of=_finish_reasons,
+    tool_adapter=OPENAI_TOOLS,
 )
 
 
-def wrap_openai(client: Any) -> Any:
-    """Trace `client.chat.completions.create` in place; returns the client."""
+def wrap_openai(client: Any, *, select_tools: bool | ToolSelection | None = None) -> Any:
+    """Trace `client.chat.completions.create` in place; returns the client.
+
+    Pass `select_tools=True` (or a `ToolSelection`) to also transparently
+    BM25-prune the `tools` array to the top-K per call (ADR-0015)."""
+    selection = ToolSelection.resolve(select_tools)
     try:
         completions = client.chat.completions
-        if not patch_method(completions, "create", OPENAI_SPEC):
+        if not patch_method(completions, "create", OPENAI_SPEC, selection):
             logger.debug("ratel: could not patch openai client; tracing disabled for it")
     except Exception as exc:
         logger.debug("ratel: wrap_openai failed (%s); returning client untouched", exc)
@@ -105,11 +164,13 @@ def _load() -> Any:
     return openai
 
 
-def OpenAI(*args: Any, **kwargs: Any) -> Any:
+def OpenAI(*args: Any, select_tools: bool | ToolSelection | None = None, **kwargs: Any) -> Any:
     """Construct a traced OpenAI client (drop-in for `openai.OpenAI`)."""
-    return wrap_openai(_load().OpenAI(*args, **kwargs))
+    return wrap_openai(_load().OpenAI(*args, **kwargs), select_tools=select_tools)
 
 
-def AsyncOpenAI(*args: Any, **kwargs: Any) -> Any:
+def AsyncOpenAI(
+    *args: Any, select_tools: bool | ToolSelection | None = None, **kwargs: Any
+) -> Any:
     """Construct a traced AsyncOpenAI client (drop-in for `openai.AsyncOpenAI`)."""
-    return wrap_openai(_load().AsyncOpenAI(*args, **kwargs))
+    return wrap_openai(_load().AsyncOpenAI(*args, **kwargs), select_tools=select_tools)

@@ -22,6 +22,7 @@ from typing import Any
 from ..observability.client import RatelClient, get_client
 from ..observability.models import OBSERVATION_GENERATION
 from ..observability.trace import Observation
+from .selection import SelectionResult, ToolAdapter, ToolSelection, last_user_text, rank_tools
 
 _UNSET: Any = object()
 
@@ -42,6 +43,9 @@ class ProviderSpec:
     # Request-param keys that carry content (e.g. Anthropic's `system` prompt) —
     # dropped from the captured params when input capture is disabled.
     sensitive_params: frozenset[str] = frozenset()
+    # Provider-specific reading/writing of the `tools` array — enables transparent
+    # BM25 tool selection (ADR-0015). None disables selection for the provider.
+    tool_adapter: ToolAdapter | None = None
 
 
 def _safe_client() -> RatelClient | None:
@@ -75,10 +79,65 @@ def _start(spec: ProviderSpec, kwargs: dict[str, Any]) -> Observation | None:
         return None
 
 
+def _maybe_select(
+    spec: ProviderSpec, kwargs: dict[str, Any], selection: ToolSelection
+) -> tuple[dict[str, Any], SelectionResult | None]:
+    """Prune the request's tools via BM25 when enabled. Fails open to the
+    original kwargs; also reports the saving to the cloud."""
+    adapter = spec.tool_adapter
+    if adapter is None or not selection.enabled:
+        return kwargs, None
+    try:
+        query = last_user_text(spec.input_of_request(kwargs))
+        result = rank_tools(kwargs, adapter, selection, query=query)
+        if result is None:
+            return kwargs, None
+        _report_savings(spec, result)
+        return result.kwargs, result
+    except Exception:
+        return kwargs, None
+
+
+def _report_savings(spec: ProviderSpec, result: SelectionResult) -> None:
+    client = _safe_client()
+    if client is None:
+        return
+    try:
+        metadata: dict[str, Any] = dict(result.savings.as_metadata())
+        metadata.update(
+            {
+                "tools_offered": result.tools_offered,
+                "tools_selected": result.tools_selected,
+                "source": spec.name,
+            }
+        )
+        client.event("ratel.tokens_saved", metadata=metadata)
+    except Exception:
+        pass
+
+
+def _annotate_selection(obs: Observation | None, result: SelectionResult) -> None:
+    if obs is None:
+        return
+    try:
+        block = obs.metadata.setdefault("ratel", {})
+        block["tools_offered"] = result.tools_offered
+        block["tools_selected"] = result.tools_selected
+        block["selected_tools"] = result.selected_names[:50]
+    except Exception:
+        pass
+
+
 def _finalize(obs: Observation | None, spec: ProviderSpec, response: Any) -> None:
     if obs is None:
         return
     try:
+        adapter = spec.tool_adapter
+        if adapter is not None:
+            calls = adapter.tool_calls_of(response)
+            if calls:
+                with contextlib.suppress(Exception):
+                    obs.metadata.setdefault("ratel", {})["tool_calls"] = calls[:50]
         obs.update(
             output=spec.output_of(response),
             usage=spec.usage_of(response),
@@ -184,15 +243,23 @@ class _TracedAsyncStream:
 
 
 def make_traced(
-    original: Callable[..., Any], spec: ProviderSpec, *, is_async: bool
+    original: Callable[..., Any],
+    spec: ProviderSpec,
+    *,
+    is_async: bool,
+    selection: ToolSelection,
 ) -> Callable[..., Any]:
-    """Wrap a provider `create` method with generation tracing."""
+    """Wrap a provider `create` method with generation tracing and (when enabled)
+    transparent BM25 tool selection."""
 
     if is_async:
 
         @functools.wraps(original)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            kwargs, picked = _maybe_select(spec, kwargs, selection)
             obs = _start(spec, kwargs)
+            if picked is not None:
+                _annotate_selection(obs, picked)
             try:
                 result = await original(*args, **kwargs)
             except BaseException as exc:
@@ -207,7 +274,10 @@ def make_traced(
 
     @functools.wraps(original)
     def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+        kwargs, picked = _maybe_select(spec, kwargs, selection)
         obs = _start(spec, kwargs)
+        if picked is not None:
+            _annotate_selection(obs, picked)
         try:
             result = original(*args, **kwargs)
         except BaseException as exc:
@@ -221,7 +291,9 @@ def make_traced(
     return sync_wrapper
 
 
-def patch_method(owner: Any, attr: str, spec: ProviderSpec) -> bool:
+def patch_method(
+    owner: Any, attr: str, spec: ProviderSpec, selection: ToolSelection | None = None
+) -> bool:
     """Wrap `owner.attr` in place. Returns False if it couldn't be patched."""
     try:
         original = getattr(owner, attr)
@@ -230,7 +302,9 @@ def patch_method(owner: Any, attr: str, spec: ProviderSpec) -> bool:
     if getattr(original, "__ratel_wrapped__", False):
         return True
     is_async = asyncio.iscoroutinefunction(original)
-    wrapped = make_traced(original, spec, is_async=is_async)
+    wrapped = make_traced(
+        original, spec, is_async=is_async, selection=selection or ToolSelection()
+    )
     try:
         wrapped.__ratel_wrapped__ = True  # type: ignore[attr-defined]
         setattr(owner, attr, wrapped)

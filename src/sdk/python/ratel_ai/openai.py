@@ -9,5 +9,6 @@ a client you already built.
 from __future__ import annotations
 
 from .integrations.openai import AsyncOpenAI, OpenAI, wrap_openai
+from .integrations.selection import ToolSelection
 
-__all__ = ["AsyncOpenAI", "OpenAI", "wrap_openai"]
+__all__ = ["AsyncOpenAI", "OpenAI", "ToolSelection", "wrap_openai"]

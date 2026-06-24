@@ -16,6 +16,7 @@ import logging
 from typing import Any
 
 from ._wrap import ProviderSpec, patch_method
+from .selection import ToolAdapter, ToolSelection
 
 logger = logging.getLogger("ratel_ai.observability")
 
@@ -55,6 +56,60 @@ def _finish_reasons(response: Any) -> list[str] | None:
     return [stop] if stop else None
 
 
+# --- Tool selection adapter (ADR-0015): Anthropic messages tool shape. ---
+
+
+def _tool_descriptor(tool: Any) -> tuple[str, str, dict[str, Any]] | None:
+    if not isinstance(tool, dict):
+        return None
+    name = tool.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+    schema = tool.get("input_schema")
+    return (name, tool.get("description") or "", schema if isinstance(schema, dict) else {})
+
+
+def _forced_names(kwargs: dict[str, Any]) -> list[str]:
+    choice = kwargs.get("tool_choice")
+    if (
+        isinstance(choice, dict)
+        and choice.get("type") == "tool"
+        and isinstance(choice.get("name"), str)
+    ):
+        return [choice["name"]]
+    return []
+
+
+def _tool_calls(response: Any) -> list[str] | None:
+    try:
+        content = getattr(response, "content", None)
+        if not content:
+            return None
+        names: list[str] = []
+        for block in content:
+            block_type = getattr(block, "type", None)
+            if block_type is None and isinstance(block, dict):
+                block_type = block.get("type")
+            if block_type == "tool_use":
+                name = getattr(block, "name", None)
+                if name is None and isinstance(block, dict):
+                    name = block.get("name")
+                if name:
+                    names.append(name)
+        return names or None
+    except Exception:
+        return None
+
+
+ANTHROPIC_TOOLS = ToolAdapter(
+    get_tools=lambda kw: kw.get("tools"),
+    with_tools=lambda kw, tools: {**kw, "tools": tools},
+    descriptor=_tool_descriptor,
+    forced_names=_forced_names,
+    tool_calls_of=_tool_calls,
+)
+
+
 ANTHROPIC_SPEC = ProviderSpec(
     provider="anthropic",
     name="anthropic.messages",
@@ -67,14 +122,19 @@ ANTHROPIC_SPEC = ProviderSpec(
     finish_reasons_of=_finish_reasons,
     # The system prompt is content — suppress it when input capture is off.
     sensitive_params=frozenset({"system"}),
+    tool_adapter=ANTHROPIC_TOOLS,
 )
 
 
-def wrap_anthropic(client: Any) -> Any:
-    """Trace `client.messages.create` in place; returns the client."""
+def wrap_anthropic(client: Any, *, select_tools: bool | ToolSelection | None = None) -> Any:
+    """Trace `client.messages.create` in place; returns the client.
+
+    Pass `select_tools=True` (or a `ToolSelection`) to also transparently
+    BM25-prune the `tools` array to the top-K per call (ADR-0015)."""
+    selection = ToolSelection.resolve(select_tools)
     try:
         messages = client.messages
-        if not patch_method(messages, "create", ANTHROPIC_SPEC):
+        if not patch_method(messages, "create", ANTHROPIC_SPEC, selection):
             logger.debug("ratel: could not patch anthropic client; tracing disabled for it")
     except Exception as exc:
         logger.debug("ratel: wrap_anthropic failed (%s); returning client untouched", exc)
@@ -92,11 +152,13 @@ def _load() -> Any:
     return anthropic
 
 
-def Anthropic(*args: Any, **kwargs: Any) -> Any:
+def Anthropic(*args: Any, select_tools: bool | ToolSelection | None = None, **kwargs: Any) -> Any:
     """Construct a traced Anthropic client (drop-in for `anthropic.Anthropic`)."""
-    return wrap_anthropic(_load().Anthropic(*args, **kwargs))
+    return wrap_anthropic(_load().Anthropic(*args, **kwargs), select_tools=select_tools)
 
 
-def AsyncAnthropic(*args: Any, **kwargs: Any) -> Any:
+def AsyncAnthropic(
+    *args: Any, select_tools: bool | ToolSelection | None = None, **kwargs: Any
+) -> Any:
     """Construct a traced AsyncAnthropic client (drop-in for `anthropic.AsyncAnthropic`)."""
-    return wrap_anthropic(_load().AsyncAnthropic(*args, **kwargs))
+    return wrap_anthropic(_load().AsyncAnthropic(*args, **kwargs), select_tools=select_tools)
