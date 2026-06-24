@@ -26,6 +26,16 @@ from .gateway import (
     search_tools_tool,
 )
 from .mcp import McpServerHandle, register_mcp_server
+from .observability import (
+    ObservabilityConfig,
+    Observation,
+    RatelClient,
+    Trace,
+    configure,
+    get_client,
+    observe,
+    set_global_client,
+)
 
 __all__ = [
     "INVOKE_TOOL_ID",
@@ -33,16 +43,24 @@ __all__ = [
     "ExecutableTool",
     "Executor",
     "McpServerHandle",
+    "Observation",
+    "ObservabilityConfig",
     "OnUnauthorized",
+    "RatelClient",
     "SearchHit",
     "SearchOrigin",
     "Tool",
     "ToolCatalog",
+    "Trace",
     "TraceSinkConfig",
     "UpstreamServerInfo",
+    "configure",
     "format_upstream_line",
+    "get_client",
     "invoke_tool_tool",
+    "observe",
     "register_mcp_server",
     "search_tools_tool",
+    "set_global_client",
     "ToolRegistry",
 ]

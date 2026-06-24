@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Observability & analytics layer** (Langfuse-style), behind the `observability` extra (`pip install 'ratel-ai[observability]'`). Captures LLM calls, function traces, and tool usage and ships structured events to Ratel's cloud; designed so the cloud can forward to Langfuse. Locked in [ADR-0012](../../../docs/adr/0012-python-observability-layer.md) (the layer) and [ADR-0013](../../../docs/adr/0013-cloud-ingestion-contract.md) (the SDK→cloud wire contract).
+  - `@observe` decorator (sync + async) builds a nested trace tree; manual `start_as_current_span` / `start_as_current_generation` context managers; `RatelClient` / `get_client()` with `update_current_trace` for user/session/tags/metadata/version.
+  - Drop-in provider wrappers `ratel_ai.openai` (`OpenAI` / `AsyncOpenAI` / `wrap_openai`) and `ratel_ai.anthropic` (`Anthropic` / `AsyncAnthropic` / `wrap_anthropic`) auto-capture model, prompt, output, and provider-reported token usage, including a basic streaming path. Provider SDKs stay optional (lazily imported).
+  - Background, batched, best-effort cloud exporter (`httpx`): non-blocking enqueue, size/interval flush, retry-with-backoff on 5xx, drop on 4xx/overflow, `atexit` flush, fork-safe. Never raises into application code; no-op mode when no API key is set.
+  - `ToolCatalog(observe=...)` reports a **tokens-saved** metric per search (full catalog vs selected top-K, pluggable `TokenEstimator`; `tiktoken` via the `observability-tiktoken` extra) and traces each tool invocation as a cloud span. Existing `ToolCatalog` behavior is unchanged when `observe` is omitted.
+- Core trace schema gains additive observability variants — `trace_root`, `observation_start`, `observation_end`, `generation`, `tokens_saved` — carrying trace-tree identity and coarse token usage only (no prompt/output content), extending [ADR-0009](../../../docs/adr/0009-trace-events-core-owned-schema.md).
+
 ## [0.1.6] - 2026-06-10
 
 ### Added

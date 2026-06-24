@@ -6,5 +6,8 @@
 mod event;
 mod sink;
 
-pub use event::{ChurnKind, Origin, SearchHitTrace, SearchStage, TraceEnvelope, TraceEvent};
+pub use event::{
+    ChurnKind, ObservationKind, ObservationStatus, Origin, SearchHitTrace, SearchStage,
+    TraceEnvelope, TraceEvent,
+};
 pub use sink::{JsonlSink, MemorySink, NoopSink, TraceSink};

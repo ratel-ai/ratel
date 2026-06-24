@@ -75,6 +75,71 @@ def test_record_event_rejects_invalid_event() -> None:
         reg.record_event({"type": "not_a_real_event"})
 
 
+def test_record_event_accepts_observability_variants() -> None:
+    """The ADR-0012 variants must deserialize through the binding (the path the
+    Python observability layer mirrors core events through)."""
+    reg = ToolRegistry()
+    reg.set_trace_sink("memory", "sess-obs")
+    reg.record_event(
+        {
+            "type": "trace_root",
+            "trace_id": "trc",
+            "name": "root",
+            "tags": ["prod"],
+            "version": None,
+        }
+    )
+    reg.record_event(
+        {
+            "type": "observation_start",
+            "trace_id": "trc",
+            "observation_id": "obs",
+            "parent_observation_id": None,
+            "name": "llm",
+            "kind": "generation",
+        }
+    )
+    reg.record_event(
+        {
+            "type": "generation",
+            "trace_id": "trc",
+            "observation_id": "obs",
+            "parent_observation_id": None,
+            "provider": "openai",
+            "model": "gpt-4o",
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "total_tokens": 15,
+        }
+    )
+    reg.record_event(
+        {
+            "type": "tokens_saved",
+            "trace_id": "trc",
+            "full_catalog_tokens": 4200,
+            "selected_tokens": 380,
+            "top_k": 5,
+        }
+    )
+    types = [e["type"] for e in reg.drain_trace_events()]
+    assert types == ["trace_root", "observation_start", "generation", "tokens_saved"]
+
+
+def test_record_event_rejects_bad_observation_kind() -> None:
+    reg = ToolRegistry()
+    with pytest.raises(ValueError, match="invalid trace event"):
+        reg.record_event(
+            {
+                "type": "observation_start",
+                "trace_id": "t",
+                "observation_id": "o",
+                "parent_observation_id": None,
+                "name": "n",
+                "kind": "not_a_kind",
+            }
+        )
+
+
 def test_memory_sink_requires_session_id() -> None:
     reg = ToolRegistry()
     with pytest.raises(ValueError, match="session_id"):

@@ -25,7 +25,7 @@ jobs:
       - name: Create venv + install dev tools
         run: |
           uv venv --python 3.11 .venv
-          uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy
+          uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy httpx pytest-httpx
       - name: Build native extension
         run: .venv/bin/maturin develop
       - name: Lint
