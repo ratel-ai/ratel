@@ -2,8 +2,8 @@
 
 Langfuse-style observability & analytics for the Python SDK: capture LLM
 generations, function traces, and tool usage, and ship them to Ratel's cloud.
-Design is locked in [ADR-0012](../../../../../docs/adr/0012-python-observability-layer.md)
-(the layer) and [ADR-0013](../../../../../docs/adr/0013-cloud-ingestion-contract.md)
+Design is locked in [ADR-0013](../../../../../docs/adr/0013-python-observability-layer.md)
+(the layer) and [ADR-0014](../../../../../docs/adr/0014-cloud-ingestion-contract.md)
 (the SDK→cloud wire contract). Identity/usage facts also flow into the core trace
 stream ([ADR-0009](../../../../../docs/adr/0009-trace-events-core-owned-schema.md)).
 

@@ -1,6 +1,6 @@
 """Emission plumbing shared by the client and handles.
 
-Two independent destinations (ADR-0012):
+Two independent destinations (ADR-0013):
   * the **cloud exporter** — receives the rich `models.py` wire payloads;
   * the **core recorder** — optionally mirrors coarse identity/usage events into
     the local `ratel-ai-core` trace stream (ADR-0009) for `ratel inspect`.

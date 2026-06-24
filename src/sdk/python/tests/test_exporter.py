@@ -1,4 +1,4 @@
-"""Cloud exporter: batching, flush, overflow, retries, fail-open (ADR-0013)."""
+"""Cloud exporter: batching, flush, overflow, retries, fail-open (ADR-0014)."""
 
 from __future__ import annotations
 

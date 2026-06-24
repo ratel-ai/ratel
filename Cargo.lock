@@ -618,7 +618,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "ratel-ai-core"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "bm25",
  "serde",
@@ -628,7 +628,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-sdk-python-native"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "pyo3",
  "pythonize",
@@ -638,7 +638,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-sdk-ts-native"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "napi",
  "napi-build",

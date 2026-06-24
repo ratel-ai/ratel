@@ -1,5 +1,5 @@
 """Observability & analytics for Ratel — Langfuse-style tracing that ships to
-Ratel's cloud (ADR-0012).
+Ratel's cloud (ADR-0013).
 
 Quick start:
 

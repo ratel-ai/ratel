@@ -20,7 +20,7 @@ pub enum ChurnKind {
 
 /// The shape of an observation node in a trace tree. Mirrors the
 /// observation taxonomy the Python observability layer ships to the cloud
-/// (ADR-0012) — a `span` is a generic step, a `generation` is an LLM call, an
+/// (ADR-0013) — a `span` is a generic step, a `generation` is an LLM call, an
 /// `event` is a point-in-time marker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -51,6 +51,12 @@ pub struct SearchStage {
     pub top_score: Option<f64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SkillHitTrace {
+    pub skill_id: String,
+    pub score: f64,
+}
+
 /// Every event produced by any layer of Ratel. New variants are additive;
 /// renames or removals are breaking — see ADR-0009.
 ///
@@ -58,7 +64,7 @@ pub struct SearchStage {
 /// `Generation`, `TokensSaved`) carry only trace-tree identity and coarse usage
 /// facts — never prompt/output text or free-form payload. The rich payload lives
 /// in the host SDK and is joined cloud-side by `trace_id`/`observation_id`, so
-/// PII never enters the core or its on-disk JSONL (ADR-0012).
+/// PII never enters the core or its on-disk JSONL (ADR-0013).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TraceEvent {
@@ -73,6 +79,22 @@ pub enum TraceEvent {
     IndexChurn {
         kind: ChurnKind,
         tool_id: String,
+    },
+    SkillSearch {
+        query: String,
+        origin: Origin,
+        top_k: u32,
+        hits: Vec<SkillHitTrace>,
+        stages: Vec<SearchStage>,
+        took_ms: u64,
+    },
+    SkillChurn {
+        kind: ChurnKind,
+        skill_id: String,
+    },
+    SkillInvoke {
+        skill_id: String,
+        took_ms: u64,
     },
     InvokeStart {
         tool_id: String,
@@ -132,10 +154,10 @@ pub enum TraceEvent {
         ok: bool,
     },
 
-    // --- Observability (ADR-0012): trace-tree identity + coarse usage, no PII. ---
+    // --- Observability (ADR-0013): trace-tree identity + coarse usage, no PII. ---
     /// Root of a trace tree opened by the host SDK. Carries only non-PII trace
     /// identity/attributes — `user_id` and any rich payload stay in the host SDK's
-    /// cloud stream, never the core or its on-disk JSONL (ADR-0012).
+    /// cloud stream, never the core or its on-disk JSONL (ADR-0013).
     TraceRoot {
         trace_id: String,
         name: String,

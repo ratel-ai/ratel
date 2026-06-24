@@ -1,5 +1,5 @@
 """Configuration for the observability layer — resolved from explicit kwargs
-then environment, with safe defaults (see ADR-0012).
+then environment, with safe defaults (see ADR-0013).
 
 The guiding rule: absent an API key and explicit config, the client runs in
 no-op mode — it captures nothing and never raises.

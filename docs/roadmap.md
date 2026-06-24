@@ -31,7 +31,7 @@ The catalog grows from tools-only to tools + skills, and the observation → imp
 
 - **JSON → TOON encoding** — token-efficient serialization for tool inputs / outputs on the gateway path. Cuts per-call token spend without changing the catalog or the model contract.
 - **Optional `tools/list_changed` notifications** behind a feature flag — so search-driven dispatch can update the live tool list dynamically while we measure which clients honor it reliably.
-- **First-class skills** — register skills (composed flows) alongside tools, ranked by the same algorithm, dispatched on demand. `search_tools` and `invoke_tool` extend without breaking changes.
+- **First-class skills** — register skills alongside tools, ranked by the same algorithm, dispatched on demand. The gateway unifies discovery into `search_capabilities` (a `tools` and a `skills` bucket) with `get_skill_content` to load a skill ([ADR‑0012](adr/0012-first-class-skills.md)).
 - **Atoms / molecules / organisms** — organize skills + tools as a layered composition.
 - **LLM-driven suggestions** — telemetry feeds an offline analyzer that proposes catalog improvements (better descriptions, missing parameters, redundant tools to merge, gaps to fill, brand-new skills to add). Surfaced in the inspector first.
 - **Multi-agent decomposition suggestions** — when a single agent's catalog is too broad, surface the natural split points: which subsets of the catalog cluster around which workflows.
@@ -66,7 +66,7 @@ The end state: tools, skills, and memories live in one graph. One substrate, mul
 
 ## Python observability & analytics — shipped
 
-A Langfuse-style observability layer on the Python SDK (`ratel-ai[observability]`): an `@observe` decorator, manual span/generation context managers, and drop-in `ratel_ai.openai` / `ratel_ai.anthropic` wrappers that auto-capture model, prompt, output, and token usage. A background, best-effort exporter ships structured events to Ratel's cloud ingestion API (built separately) for analytics and optional forwarding to Langfuse. `ToolCatalog(observe=...)` adds a tokens-saved metric per search. The core trace schema gained additive identity/usage variants; the layer and the SDK→cloud contract are locked in [ADR 0012](adr/0012-python-observability-layer.md) and [ADR 0013](adr/0013-cloud-ingestion-contract.md).
+A Langfuse-style observability layer on the Python SDK (`ratel-ai[observability]`): an `@observe` decorator, manual span/generation context managers, and drop-in `ratel_ai.openai` / `ratel_ai.anthropic` wrappers that auto-capture model, prompt, output, and token usage. A background, best-effort exporter ships structured events to Ratel's cloud ingestion API (built separately) for analytics and optional forwarding to Langfuse. `ToolCatalog(observe=...)` adds a tokens-saved metric per search. The core trace schema gained additive identity/usage variants; the layer and the SDK→cloud contract are locked in [ADR 0013](adr/0013-python-observability-layer.md) and [ADR 0014](adr/0014-cloud-ingestion-contract.md).
 
 ## Out of scope (for now)
 

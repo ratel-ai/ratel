@@ -339,7 +339,7 @@ fn trace_event_round_trips_through_json() {
     }
 }
 
-/// The Python observability layer (ADR-0012) emits these events via the PyO3
+/// The Python observability layer (ADR-0013) emits these events via the PyO3
 /// `record_event(dict)` path, which deserializes into `TraceEvent`. This test
 /// locks the wire shape — `type` tags and field names — that the SDK depends on.
 #[test]

@@ -1,4 +1,4 @@
-# 13. Cloud ingestion contract — the SDK→cloud wire interface
+# 14. Cloud ingestion contract — the SDK→cloud wire interface
 
 Date: 2026-06-24
 
@@ -8,14 +8,14 @@ Accepted
 
 ## Context
 
-ADR-0012 puts the rich observation payload and the cloud exporter in the Python SDK, shipping to
+ADR-0013 puts the rich observation payload and the cloud exporter in the Python SDK, shipping to
 Ratel's cloud. The cloud platform is built in a **separate repository** and is not yet implemented.
 For the SDK to be built and tested now, the SDK↔cloud boundary needs a contract that exists
 independently of the cloud's implementation.
 
 Two paths: let the cloud team define the endpoint and have the SDK conform, or define the contract in
 this repo as the interface the cloud must implement. The SDK is the side that emits, the payload model
-is already owned here (ADR-0012's dataclass models), and the SDK must be testable against a fixed shape
+is already owned here (ADR-0013's dataclass models), and the SDK must be testable against a fixed shape
 before the cloud exists. So the contract is defined here.
 
 ## Decision
@@ -119,4 +119,4 @@ overflow. Idempotency keys make any retry safe to dedupe cloud-side.
   here; defining the contract SDK-side unblocks development and keeps one source of truth.
 - **Per-event POSTs.** N requests per agent turn; batching amortizes egress and matches the queue-log
   reliability profile.
-- **Cost in the payload.** See ADR-0012 — price tables go stale in a pip-installed SDK.
+- **Cost in the payload.** See ADR-0013 — price tables go stale in a pip-installed SDK.

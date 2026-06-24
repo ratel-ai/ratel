@@ -1,6 +1,6 @@
 # `src/core/`
 
-The product's heart. The retrieval engine, auth, and telemetry primitives that every other piece of Ratel wraps live here. Tools are the first content type the engine indexes; skills, memories, and message history land on top of the same primitives as the [roadmap](../../docs/roadmap.md) widens.
+The product's heart. The retrieval engine, auth, and telemetry primitives that every other piece of Ratel wraps live here. Tools and skills are the content types the engine indexes today; memories and message history land on top of the same primitives as the [roadmap](../../docs/roadmap.md) widens.
 
 ## Layout
 

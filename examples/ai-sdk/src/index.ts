@@ -15,7 +15,7 @@ if (!process.env.OPENAI_API_KEY) {
   const hits = catalog.search(prompt, 3);
   console.log("\n(diagnostic mode — OPENAI_API_KEY not set, skipping the model call)");
   console.log(`initial top-3 (Ratel BM25): ${hits.map((h) => h.toolId).join(", ") || "(none)"}`);
-  console.log("always-present: search_tools, invoke_tool");
+  console.log("always-present: search_capabilities, invoke_tool");
   process.exit(0);
 }
 

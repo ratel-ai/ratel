@@ -200,6 +200,24 @@ jobs:
         run: pnpm --filter @ratel-ai/sdk run build:ts
       - name: Inject optionalDependencies into SDK loader package.json
         run: node scripts/inject-sdk-optional-deps.mjs
+      # Preflight: dry-run every npm publish BEFORE any real push, so a packaging
+      # error fails the job before a single (immutable) version goes live. The
+      # subpackages → loader → cli order is the install-time dependency order.
+      - name: Preflight — dry-run all npm publishes
+        shell: bash
+        env:
+          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
+        run: |
+          set -e
+          for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
+            (cd src/sdk/ts/npm/$triple && npm publish --access public --tag "$DIST_TAG" --dry-run)
+          done
+          (cd src/sdk/ts && npm publish --access public --tag "$DIST_TAG" --dry-run)
+          pnpm --filter @ratel-ai/cli pack --pack-destination "${RUNNER_TEMP}/cli-preflight"
+          npm publish "${RUNNER_TEMP}/cli-preflight"/*.tgz --access public --tag "$DIST_TAG" --dry-run
+      # Real publishes are idempotent: each skips if that exact name@version is
+      # already on the registry, so re-running this job after a partial/transient
+      # failure resumes instead of erroring with E409 (npm versions are immutable).
       - name: Publish SDK subpackages
         shell: bash
         env:
@@ -208,7 +226,14 @@ jobs:
         run: |
           set -e
           for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
-            (cd src/sdk/ts/npm/$triple && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+            dir="src/sdk/ts/npm/$triple"
+            name=$(node -p "require('./$dir/package.json').name")
+            ver=$(node -p "require('./$dir/package.json').version")
+            if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
+              echo "::notice::$name@$ver already published — skipping"
+              continue
+            fi
+            (cd "$dir" && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
           done
       - name: Publish SDK loader
         shell: bash
@@ -217,7 +242,13 @@ jobs:
           DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
         run: |
           set -e
-          (cd src/sdk/ts && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+          name=$(node -p "require('./src/sdk/ts/package.json').name")
+          ver=$(node -p "require('./src/sdk/ts/package.json').version")
+          if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
+            echo "::notice::$name@$ver already published — skipping"
+          else
+            (cd src/sdk/ts && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+          fi
       # cli has `workspace:^` specifiers for its internal SDK dep.
       # `npm publish` doesn't understand that protocol and ships the literal
       # string, breaking installs (EUNSUPPORTEDPROTOCOL on `npm install`).
@@ -231,12 +262,22 @@ jobs:
           DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
         run: |
           set -e
-          pnpm --filter @ratel-ai/cli pack --pack-destination "${RUNNER_TEMP}/cli"
-          npm publish "${RUNNER_TEMP}/cli"/*.tgz --provenance --access public --tag "$DIST_TAG" $DRY_RUN
+          name=$(node -p "require('./src/integrations/cli/package.json').name")
+          ver=$(node -p "require('./src/integrations/cli/package.json').version")
+          if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
+            echo "::notice::$name@$ver already published — skipping"
+          else
+            pnpm --filter @ratel-ai/cli pack --pack-destination "${RUNNER_TEMP}/cli"
+            npm publish "${RUNNER_TEMP}/cli"/*.tgz --provenance --access public --tag "$DIST_TAG" $DRY_RUN
+          fi
 
   publish-crate:
     name: Publish ratel-ai-core to crates.io
-    needs: tag-version-check
+    # crates.io is the least-reversible registry (a version can't be re-published
+    # and `cargo yank` doesn't free it), so publish it LAST — only once npm and
+    # PyPI have both succeeded. Avoids burning the crate version if an earlier
+    # registry fails.
+    needs: [tag-version-check, publish-npm, publish-pypi]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -247,6 +288,9 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
+      # Preflight: package + verify before the irreversible upload.
+      - name: Preflight — cargo publish --dry-run
+        run: cargo publish -p ratel-ai-core --dry-run
       - name: Authenticate to crates.io via Trusted Publishing
         uses: rust-lang/crates-io-auth-action@v1
         id: cratesio-auth
@@ -254,7 +298,20 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.cratesio-auth.outputs.token }}
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-        run: cargo publish -p ratel-ai-core $DRY_RUN
+        run: |
+          set -e
+          # Idempotent: a re-run after a partial release treats an
+          # already-uploaded version as success instead of failing.
+          if out=$(cargo publish -p ratel-ai-core $DRY_RUN 2>&1); then
+            echo "$out"
+          else
+            echo "$out"
+            echo "$out" | grep -qiE 'already (exists|uploaded)' && {
+              echo "::warning::ratel-ai-core for this version is already on crates.io — idempotent skip"
+              exit 0
+            }
+            exit 1
+          fi
 
   build-wheels:
     name: build wheel (${{ matrix.triple }})
@@ -326,7 +383,10 @@ jobs:
 
   publish-pypi:
     name: Publish ratel-ai to PyPI
-    needs: [tag-version-check, build-wheels, build-sdist]
+    # Sequenced after npm so a partial multi-registry release fails forward in a
+    # fixed order (npm → PyPI → crates) rather than three registries racing
+    # independently. `twine check` below + `skip-existing` keep this idempotent.
+    needs: [tag-version-check, build-wheels, build-sdist, publish-npm]
     runs-on: ubuntu-latest
     environment: release
     permissions:

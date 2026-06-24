@@ -1,12 +1,12 @@
 {
   "name": "@ratel-ai/cli",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Ratel CLI — manage MCP servers across scopes, run the Ratel MCP gateway, import Claude Code's MCP setup, drive OAuth flows.",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "MIT",
   "author": "Agentified",
   "homepage": "https://github.com/ratel-ai/ratel",
   "repository": {

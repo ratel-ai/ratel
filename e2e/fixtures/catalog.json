@@ -1,0 +1,174 @@
+{
+  "$comment": "Shared, language-neutral tool catalog used by every SDK/CLI E2E runner. Tools use distinctive descriptions so each scenario query has an unambiguous top-1 BM25 match. Keys are camelCase on the wire; the Python runner maps inputSchema->input_schema. Extend this alongside e2e/scenario.json when product surface grows. See e2e/README.md.",
+  "tools": [
+    {
+      "server": "fs",
+      "id": "fs__read_file",
+      "name": "read_file",
+      "description": "Read a file from local disk and return its textual contents.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "path": { "type": "string", "description": "absolute path to the file" } },
+        "required": ["path"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "contents": { "type": "string" } }
+      }
+    },
+    {
+      "server": "fs",
+      "id": "fs__write_file",
+      "name": "write_file",
+      "description": "Write textual contents to a file on local disk, creating it if needed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "contents": { "type": "string" }
+        },
+        "required": ["path", "contents"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "bytesWritten": { "type": "number" } }
+      }
+    },
+    {
+      "server": "fs",
+      "id": "fs__list_directory",
+      "name": "list_directory",
+      "description": "List the entries of a directory on the local filesystem.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "path": { "type": "string" } },
+        "required": ["path"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "entries": { "type": "array", "items": { "type": "string" } } }
+      }
+    },
+    {
+      "server": "github",
+      "id": "github__create_issue",
+      "name": "create_issue",
+      "description": "Create a new issue in a GitHub repository with a title and body.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "title": { "type": "string" },
+          "body": { "type": "string" }
+        },
+        "required": ["repo", "title"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "number": { "type": "number" } }
+      }
+    },
+    {
+      "server": "github",
+      "id": "github__list_pull_requests",
+      "name": "list_pull_requests",
+      "description": "List the open pull requests for a GitHub repository.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "repo": { "type": "string" } },
+        "required": ["repo"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "pullRequests": { "type": "array" } }
+      }
+    },
+    {
+      "server": "github",
+      "id": "github__merge_pull_request",
+      "name": "merge_pull_request",
+      "description": "Merge an open GitHub pull request into its base branch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "number": { "type": "number" }
+        },
+        "required": ["repo", "number"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "merged": { "type": "boolean" } }
+      }
+    },
+    {
+      "server": "db",
+      "id": "db__run_query",
+      "name": "run_query",
+      "description": "Execute a read-only SQL query against the Postgres database and return the resulting rows.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "sql": { "type": "string" } },
+        "required": ["sql"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "rows": { "type": "array" } }
+      }
+    },
+    {
+      "server": "db",
+      "id": "db__insert_row",
+      "name": "insert_row",
+      "description": "Insert a new row into a Postgres database table.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table": { "type": "string" },
+          "values": { "type": "object" }
+        },
+        "required": ["table", "values"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "inserted": { "type": "boolean" } }
+      }
+    },
+    {
+      "server": "db",
+      "id": "db__create_index",
+      "name": "create_index",
+      "description": "Create an index on a Postgres table column to speed up future queries.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table": { "type": "string" },
+          "column": { "type": "string" }
+        },
+        "required": ["table", "column"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "created": { "type": "boolean" } }
+      }
+    },
+    {
+      "server": "weather",
+      "id": "weather__get_forecast",
+      "name": "get_forecast",
+      "description": "Get the weather forecast for a given city and date.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string" },
+          "date": { "type": "string" }
+        },
+        "required": ["city"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "forecast": { "type": "string" } }
+      }
+    }
+  ]
+}

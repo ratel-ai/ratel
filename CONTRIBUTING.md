@@ -74,4 +74,4 @@ The release workflow's `tag-version-check` job rejects any tag whose CHANGELOGs 
 
 ## License
 
-Contributions are licensed under the project's [Elastic License 2.0](LICENSE.md). By submitting a PR you agree your contribution is licensed accordingly.
+Contributions are licensed under the project's [MIT License](LICENSE.md). By submitting a PR you agree your contribution is licensed accordingly.

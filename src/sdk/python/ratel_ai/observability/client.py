@@ -5,7 +5,7 @@ is the single place observations are opened and finished. A process-wide
 singleton (`get_client()`) backs the `@observe` decorator and the provider
 wrappers; explicit construction is for advanced/multi-tenant use.
 
-Hard rule (ADR-0012): nothing here may raise into customer code. Every emission
+Hard rule (ADR-0013): nothing here may raise into customer code. Every emission
 path is wrapped; on any internal failure the wrapped work proceeds untouched.
 """
 
@@ -182,7 +182,7 @@ class RatelClient:
         )
         self._enqueue(event.to_wire())
         # user_id is intentionally NOT mirrored into the core stream — it's PII and
-        # the core's on-disk JSONL must stay PII-free (ADR-0012). It rides the
+        # the core's on-disk JSONL must stay PII-free (ADR-0013). It rides the
         # cloud TraceCreate above only.
         self._core.record(
             {

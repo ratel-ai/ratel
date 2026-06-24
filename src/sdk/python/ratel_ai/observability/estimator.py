@@ -1,4 +1,4 @@
-"""Token estimators for the savings metric (ADR-0012).
+"""Token estimators for the savings metric (ADR-0013).
 
 Savings is a *ratio/delta* signal (full catalog vs selected top-K), so a cheap
 `len // 4` heuristic is the dependency-free default — its bias largely cancels.

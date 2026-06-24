@@ -2,7 +2,7 @@
 
 The pattern mirrors `examples/ai-sdk/src/agent.ts`:
 1. BM25-prefilter the catalog for the prompt and expose the top-K directly.
-2. Always expose the two gateway tools (`search_tools`, `invoke_tool`) so the
+2. Always expose the two gateway tools (`search_capabilities`, `invoke_tool`) so the
    agent can discover and call anything else in the catalog on demand.
 
 Pydantic AI tools are built from the catalog's JSON schemas via `Tool.from_schema`,
@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic_ai import Agent, Tool
 
-from ratel_ai import ToolCatalog, invoke_tool_tool, search_tools_tool
+from ratel_ai import ToolCatalog, invoke_tool_tool, search_capabilities_tool
 
 
 @dataclass
@@ -48,7 +48,7 @@ def _catalog_tool(catalog: ToolCatalog, tool_id: str, description: str, schema: 
 
 
 def _gateway_tool(execute: Any, name: str, description: str, schema: dict[str, Any]) -> Tool:
-    """Wrap a gateway meta-tool (`search_tools` / `invoke_tool`).
+    """Wrap a gateway meta-tool (`search_capabilities` / `invoke_tool`).
 
     These are not catalog entries; they own `async def` `execute` handlers, so
     they're awaited directly rather than routed through `catalog.invoke`.
@@ -61,7 +61,7 @@ def _gateway_tool(execute: Any, name: str, description: str, schema: dict[str, A
 
 
 def build_tools(catalog: ToolCatalog, prompt: str, initial_top_k: int = 3) -> list[Tool]:
-    search = search_tools_tool(catalog)
+    search = search_capabilities_tool(catalog)
     invoke = invoke_tool_tool(catalog)
 
     tools: dict[str, Tool] = {

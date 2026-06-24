@@ -76,7 +76,7 @@ def test_record_event_rejects_invalid_event() -> None:
 
 
 def test_record_event_accepts_observability_variants() -> None:
-    """The ADR-0012 variants must deserialize through the binding (the path the
+    """The ADR-0013 variants must deserialize through the binding (the path the
     Python observability layer mirrors core events through)."""
     reg = ToolRegistry()
     reg.set_trace_sink("memory", "sess-obs")

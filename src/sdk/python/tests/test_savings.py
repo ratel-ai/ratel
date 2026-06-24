@@ -1,4 +1,4 @@
-"""Tool-selection savings metric (ADR-0012)."""
+"""Tool-selection savings metric (ADR-0013)."""
 
 from __future__ import annotations
 

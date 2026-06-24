@@ -1,4 +1,4 @@
-"""Wire models for the SDK→cloud ingestion contract (ADR-0013).
+"""Wire models for the SDK→cloud ingestion contract (ADR-0014).
 
 These dataclasses are the source of truth for the JSON shape the exporter ships
 to `POST {host}/v1/ingest`. Each carries a `to_wire()` that produces the exact
@@ -14,7 +14,7 @@ from typing import Any
 SCHEMA_VERSION = 1
 SDK_NAME = "ratel-ai-python"
 
-# Observation kinds and statuses — mirror the core schema (ADR-0012).
+# Observation kinds and statuses — mirror the core schema (ADR-0013).
 OBSERVATION_SPAN = "span"
 OBSERVATION_GENERATION = "generation"
 OBSERVATION_EVENT = "event"

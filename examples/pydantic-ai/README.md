@@ -3,7 +3,7 @@
 The Python mirror of [`examples/ai-sdk`](../ai-sdk/README.md): the [`ratel-ai`](../../src/sdk/python/README.md) SDK wired into [Pydantic AI](https://ai.pydantic.dev/) with two layers of context engineering:
 
 1. **Pre-filter** ([ADR 0003](../../docs/adr/0003-tool-selection-replace-vs-suggest.md) `replace` mode) — the catalog is registered in a `ToolCatalog`; before the model call, BM25 narrows it to the top-K most relevant tools for the prompt. Those land directly in the agent's tool list with full schemas.
-2. **Dynamic gateway** — two always-present tools, `search_tools` and `invoke_tool`, give the agent reach into the rest of the catalog when the top-K isn't enough. `search_tools` returns hits **grouped by upstream server** (`{groups: [{server, hits: [{toolId, score, description, inputSchema}]}]}`); `invoke_tool` executes any of those by id.
+2. **Dynamic gateway** — two always-present tools, `search_capabilities` and `invoke_tool`, give the agent reach into the rest of the catalog when the top-K isn't enough. `search_capabilities` returns a `tools` bucket (hits grouped by upstream server) plus a `skills` bucket — `{tools: {groups: [{server, hits: [{toolId, score, description, inputSchema}]}]}, skills: [...]}` (the skills bucket is empty here — this example registers no skills); `invoke_tool` executes a tool by id.
 
 Tools are built from the catalog's JSON schemas via Pydantic AI's `Tool.from_schema`, so the schema the model sees is the same one Ratel ranks.
 
@@ -35,10 +35,10 @@ Splitting `tools.py` and `agent.py` keeps the catalog declarative and the loop r
 The agent's tool list at the start of the run is:
 
 - The **top-K** Ratel hits for the initial prompt — direct call, full schema visibility
-- **`search_tools(query, topK)`** — returns hits grouped by upstream server: `{groups: [{server: {name, ...}, hits: [{toolId, score, description, inputSchema}, ...]}, ...]}`
+- **`search_capabilities(query, topKTools?, topKSkills?)`** — returns `{tools: {groups: [{server: {name, ...}, hits: [{toolId, score, description, inputSchema}, ...]}]}, skills: [...]}`
 - **`invoke_tool(toolId, args)`** — runs `catalog[toolId].execute(args)`; returns `{"error": "..."}` if the id is unknown or the call throws
 
-When the top-K covers the request, the model calls one directly and answers. When it doesn't, the model calls `search_tools` to discover candidates, then `invoke_tool` with the chosen id and args. Pydantic AI's agent loop auto-executes tools and threads their results back to the model until it emits final text.
+When the top-K covers the request, the model calls one directly and answers. When it doesn't, the model calls `search_capabilities` to discover candidates, then `invoke_tool` with the chosen id and args. Pydantic AI's agent loop auto-executes tools and threads their results back to the model until it emits final text.
 
 ## Why it's a separate package
 

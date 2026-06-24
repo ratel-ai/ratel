@@ -1,4 +1,4 @@
-# 12. Python observability layer — hybrid core/Python schema, background exporter
+# 13. Python observability layer — hybrid core/Python schema, background exporter
 
 Date: 2026-06-24
 
@@ -77,7 +77,7 @@ The cloud envelope is structurally isomorphic to Langfuse's trace/observation/ge
 cloud-side Langfuse forwarding is a near-mechanical field map), while LLM attributes are named after
 OpenTelemetry GenAI semantic conventions (`gen_ai.system`, `gen_ai.request.model`,
 `gen_ai.usage.input_tokens`, …) inside a `gen_ai` sub-object. No `opentelemetry-sdk` dependency in v1;
-an optional OTel exporter is a possible v2 addition. The exact batch envelope is ADR-0013.
+an optional OTel exporter is a possible v2 addition. The exact batch envelope is ADR-0014.
 
 ### Token usage and savings
 

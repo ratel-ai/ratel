@@ -1,4 +1,4 @@
-"""Wire-model shape tests (ADR-0013)."""
+"""Wire-model shape tests (ADR-0014)."""
 
 from __future__ import annotations
 

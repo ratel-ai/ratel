@@ -11,14 +11,21 @@ def test_public_exports_present() -> None:
         "ExecutableTool",
         "Tool",
         "TraceSinkConfig",
-        "SEARCH_TOOLS_ID",
+        "SEARCH_CAPABILITIES_ID",
         "INVOKE_TOOL_ID",
-        "search_tools_tool",
+        "search_capabilities_tool",
         "invoke_tool_tool",
         "format_upstream_line",
         "UpstreamServerInfo",
         "register_mcp_server",
         "McpServerHandle",
+        # skills surface
+        "SkillRegistry",
+        "SkillHit",
+        "SkillCatalog",
+        "Skill",
+        "GET_SKILL_CONTENT_ID",
+        "get_skill_content_tool",
     }
     assert expected.issubset(set(ratel_ai.__all__))
     for name in expected:

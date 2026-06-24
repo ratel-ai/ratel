@@ -1,12 +1,12 @@
 {
   "name": "@ratel-ai/sdk",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "TypeScript SDK for Ratel — context engineering platform for AI agents. BM25 tool retrieval, MCP ingestion, framework-neutral gateway tools.",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "MIT",
   "author": "Agentified",
   "homepage": "https://github.com/ratel-ai/ratel",
   "repository": {

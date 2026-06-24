@@ -8,6 +8,6 @@ mod sink;
 
 pub use event::{
     ChurnKind, ObservationKind, ObservationStatus, Origin, SearchHitTrace, SearchStage,
-    TraceEnvelope, TraceEvent,
+    SkillHitTrace, TraceEnvelope, TraceEvent,
 };
 pub use sink::{JsonlSink, MemorySink, NoopSink, TraceSink};

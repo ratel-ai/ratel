@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/sdk-darwin-x64",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "cpu": [
     "x64"
   ],
@@ -20,7 +20,7 @@
   ],
   "author": "Agentified",
   "homepage": "https://github.com/ratel-ai/ratel",
-  "license": "SEE LICENSE IN LICENSE.md",
+  "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
   },

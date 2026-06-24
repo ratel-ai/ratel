@@ -145,7 +145,7 @@ class Observation:
                 self.status = STATUS_ERROR
                 raw = error if isinstance(error, str) else str(error)
                 # Provider exception text can echo back request bodies / partial
-                # credentials — bound what we ship to the cloud (ADR-0012).
+                # credentials — bound what we ship to the cloud (ADR-0013).
                 self.status_message = raw[:_MAX_STATUS_MESSAGE]
             if status is not None:
                 self.status = status
