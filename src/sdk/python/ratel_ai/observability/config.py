@@ -133,7 +133,7 @@ class ObservabilityConfig:
 
     @property
     def events_url(self) -> str:
-        """The lean analytics rollup endpoint the dashboard reads (ADR-0016)."""
+        """The lean analytics rollup endpoint the dashboard reads (ADR-0013)."""
         return f"{self.host}/api/v1/events"
 
     def __repr__(self) -> str:

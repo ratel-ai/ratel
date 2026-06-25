@@ -1,6 +1,6 @@
 //! Per-interaction usage rollup — the analytics payload Ratel ships to its cloud.
 //!
-//! Pure and network-free (ADR-0016): this module owns the *logic* of cloud
+//! Pure and network-free (ADR-0013): this module owns the *logic* of cloud
 //! analytics — token estimation, full-catalog-vs-selected savings, cost, and the
 //! rollup envelope with its on-the-wire serialization. The host SDKs (Python, TS)
 //! add only transport, so they stay thin bindings over one shared implementation
@@ -261,5 +261,19 @@ mod tests {
         // Unset optionals are omitted, not null.
         assert!(parsed.get("saved_by_category").is_none());
         assert!(parsed.get("cost_usd").is_none());
+    }
+
+    #[test]
+    fn rollup_new_defaults_input_tokens_to_the_source_sum() {
+        let rollup = Rollup::new(SourceTokens {
+            skills: 10,
+            tools: 20,
+            history: 30,
+            memory: 5,
+            user_input: 15,
+        });
+        assert_eq!(rollup.input_tokens, Some(80));
+        let parsed: serde_json::Value = serde_json::from_str(&rollup.to_json()).unwrap();
+        assert_eq!(parsed["input_tokens"], 80);
     }
 }

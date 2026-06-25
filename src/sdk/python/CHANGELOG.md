@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- **Lean cloud analytics** behind the `observability` extra (`pip install 'ratel-ai[observability]'`): one *usage rollup* per agent interaction, shipped to `POST {host}/api/v1/events` — the exact shape Ratel's dashboard renders. A rollup carries token spend broken down by the five context sources (`skills`, `tools`, `history`, `memory`, `user_input`), plus what selection saved and what it could save — counts and identity only, never prompt/output text. Locked in [ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md).
+- **Lean cloud analytics** behind the `observability` extra (`pip install 'ratel-ai[observability]'`): one *usage rollup* per agent interaction, shipped to `POST {host}/api/v1/events` — the exact shape Ratel's dashboard renders. A rollup carries token spend broken down by the five context sources (`skills`, `tools`, `history`, `memory`, `user_input`), plus what selection saved and what it could save — counts and identity only, never prompt/output text. Locked in [ADR-0013](../../../docs/adr/0013-observability-and-analytics.md).
   - `RatelClient.track(...)` assembles and enqueues a rollup; `get_client()` returns a process-wide, env-configured client (`RATEL_API_KEY`, `RATEL_HOST`, default `https://cloud.ratel.sh`). Also exported: `build_rollup`, `CONTEXT_SOURCES`.
   - The token / savings / cost maths live in `ratel-ai-core` and are reached through the native binding (`estimate_tokens`, `estimate_cost_usd`, `tokens_saved`), so Python and TypeScript get identical numbers from one Rust implementation.
   - Background, batched, best-effort exporter (`httpx`): bounded-queue enqueue (drops oldest on overflow), size/interval flush, retry-with-backoff on 5xx, drop on 4xx, `atexit` flush, fork-safe. Never raises into application code; no-op mode when no API key is set.
@@ -17,12 +17,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
-- The cloud contract is now a single lean endpoint, `POST {host}/api/v1/events`, accepting one rollup or a JSON array of them — replacing the Langfuse-shaped `POST /v1/ingest` batch ([ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md), superseding ADR-0013/0014).
+- The cloud contract is now a single lean endpoint, `POST {host}/api/v1/events`, accepting one rollup or a JSON array of them — replacing the Langfuse-shaped `POST /v1/ingest` batch ([ADR-0013](../../../docs/adr/0013-observability-and-analytics.md)).
 
 ### Removed
 
-- The Langfuse-style observability layer ([ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md) supersedes ADR-0013/0014): the `/v1/ingest` batch, the rich trace/observation/generation tree, the `@observe` decorator and span/generation context managers, and the modules `models.py`, `trace.py`, `decorator.py`, `estimator.py`, `savings.py`.
-- The drop-in OpenAI/Anthropic provider wrappers (`ratel_ai.openai` / `ratel_ai.anthropic`, `wrap_openai` / `wrap_anthropic`) and the transparent in-call tool selection they carried (`select_tools=` / `ToolSelection` / `RATEL_TOOL_SELECTION`, ADR-0015), along with the `integrations/` package. Catalog-based selection (`ToolCatalog`, `search_capabilities`) is unaffected. The prior implementation is preserved on branch `feat/python-observability`.
+- The Langfuse-style observability layer ([ADR-0013](../../../docs/adr/0013-observability-and-analytics.md)): the `/v1/ingest` batch, the rich trace/observation/generation tree, the `@observe` decorator and span/generation context managers, and the modules `models.py`, `trace.py`, `decorator.py`, `estimator.py`, `savings.py`.
+- The drop-in OpenAI/Anthropic provider wrappers (`ratel_ai.openai` / `ratel_ai.anthropic`, `wrap_openai` / `wrap_anthropic`) and the transparent in-call tool selection they carried (`select_tools=` / `ToolSelection` / `RATEL_TOOL_SELECTION`), along with the `integrations/` package. Catalog-based selection (`ToolCatalog`, `search_capabilities`) is unaffected. The prior implementation is preserved on branch `feat/python-observability`.
 
 ## [0.2.0] - 2026-06-16
 

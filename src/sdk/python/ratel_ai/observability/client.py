@@ -1,4 +1,4 @@
-"""`RatelClient` — the lean cloud analytics client (ADR-0016).
+"""`RatelClient` — the lean cloud analytics client (ADR-0013).
 
 Records one usage *rollup* per agent interaction and ships it to
 `POST {host}/api/v1/events` — the exact shape Ratel's dashboard renders.

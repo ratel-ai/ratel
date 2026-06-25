@@ -1,4 +1,4 @@
-"""Cloud exporter: batching, flush, overflow, retries, fail-open (ADR-0016).
+"""Cloud exporter: batching, flush, overflow, retries, fail-open (ADR-0013).
 
 The wire payload is a plain JSON array of usage rollups (no envelope) — the body
 `POST /api/v1/events` accepts.

@@ -208,7 +208,7 @@ Tool selection is the wedge, not the destination. Same catalog, same retrieval e
 - **v0.3.x — memories** — prior decisions, preferences, and artifacts ranked into the current turn.
 - **v0.4.x — context graph** — unified tools-skills-memories substrate.
 
-The **Python SDK** (`pip install ratel-ai`) shipped early — a second host language on the same Rust core, at parity with the TS SDK, **plus a Python-only observability layer**: Langfuse-style tracing, drop-in OpenAI/Anthropic wrappers, and transparent tool selection ([ADR 0013](docs/adr/0013-python-observability-layer.md)–[0015](docs/adr/0015-transparent-tool-selection.md)).
+The **Python SDK** (`pip install ratel-ai`) shipped early — a second host language on the same Rust core, at parity with the TS SDK. Both SDKs also carry a **lean usage-analytics client**: one `track()` per interaction ships a usage rollup to Ratel's cloud, with the token / savings / cost maths in the Rust core ([ADR 0013](docs/adr/0013-observability-and-analytics.md)).
 
 Dated milestones: [`docs/roadmap.md`](docs/roadmap.md). Thesis: [`docs/overview.md`](docs/overview.md).
 

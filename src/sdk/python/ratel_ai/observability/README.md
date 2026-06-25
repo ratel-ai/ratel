@@ -5,8 +5,8 @@ interaction to Ratel's cloud, the exact shape the dashboard renders. A rollup
 carries token spend broken down by the five context sources (`skills`, `tools`,
 `history`, `memory`, `user_input`), plus what Ratel selection saved and what it
 *could* save — counts and identity only, never prompt or output text. Design is
-locked in [ADR-0016](../../../../../docs/adr/0016-lean-usage-rollups-rust-core.md)
-(Rust-core analytics, one cloud endpoint), which supersedes ADR-0013/0014 and
+locked in [ADR-0013](../../../../../docs/adr/0013-observability-and-analytics.md)
+(Rust-core analytics, one cloud endpoint) and
 extends [ADR-0009](../../../../../docs/adr/0009-trace-events-core-owned-schema.md)
 (the core-owned trace schema).
 

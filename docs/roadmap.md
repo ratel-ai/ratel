@@ -66,7 +66,7 @@ The end state: tools, skills, and memories live in one graph. One substrate, mul
 
 ## Usage analytics — shipped
 
-A lean cloud-analytics client in both SDKs (`ratel-ai`, `@ratel-ai/sdk`): one `track()` per agent interaction ships a *usage rollup* — token spend by context source (skills / tools / history / memory / user_input), realized and potential Ratel savings, model, latency, cost — to Ratel's cloud at `POST /api/v1/events`, the exact shape the dashboard renders. Background, best-effort, never blocks or breaks the host app; absent an API key it is a no-op. The token / savings / cost maths live in the Rust core (`ratel-ai-core`) and bind identically into Python and TS, so the SDKs stay thin. `ToolCatalog(observe=True)` records the full-catalog-vs-top-K saving per search. Locked in [ADR 0016](adr/0016-lean-usage-rollups-rust-core.md), which supersedes the earlier Langfuse-shaped design ([ADR 0013](adr/0013-python-observability-layer.md) / [0014](adr/0014-cloud-ingestion-contract.md)).
+A lean cloud-analytics client in both SDKs (`ratel-ai`, `@ratel-ai/sdk`): one `track()` per agent interaction ships a *usage rollup* — token spend by context source (skills / tools / history / memory / user_input), realized and potential Ratel savings, model, latency, cost — to Ratel's cloud at `POST /api/v1/events`, the exact shape the dashboard renders. Background, best-effort, never blocks or breaks the host app; absent an API key it is a no-op. The token / savings / cost maths live in the Rust core (`ratel-ai-core`) and bind identically into Python and TS, so the SDKs stay thin. `ToolCatalog(observe=True)` records the full-catalog-vs-top-K saving per search. Locked in [ADR 0013](adr/0013-observability-and-analytics.md).
 
 ## Out of scope (for now)
 

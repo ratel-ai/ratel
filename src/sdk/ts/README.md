@@ -243,7 +243,7 @@ Sink kinds:
 
 ## Usage analytics
 
-Beyond shrinking the prompt, ship one *usage rollup* per agent interaction to Ratel's cloud — the exact shape the dashboard renders. A rollup carries token spend broken down by the five context sources (`skills, tools, history, memory, user_input`), plus what Ratel selection saved and what it *could* save. The token / savings / cost maths live in `ratel-ai-core` (native); the SDK is a thin client that assembles and ships. Design: [ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md).
+Beyond shrinking the prompt, ship one *usage rollup* per agent interaction to Ratel's cloud — the exact shape the dashboard renders. A rollup carries token spend broken down by the five context sources (`skills, tools, history, memory, user_input`), plus what Ratel selection saved and what it *could* save. The token / savings / cost maths live in `ratel-ai-core` (native); the SDK is a thin client that assembles and ships. Design: [ADR-0013](../../../docs/adr/0013-observability-and-analytics.md).
 
 `RatelClient` is env-configured (`RATEL_API_KEY`, `RATEL_HOST` — default `https://cloud.ratel.sh`) and a no-op without an API key. Call `track(...)` once per interaction with the per-source token spend; everything but `tokensByCategory` is optional. `inputTokens` defaults to the per-source sum, and `costUsd` is estimated in-core from `model` + tokens when omitted:
 

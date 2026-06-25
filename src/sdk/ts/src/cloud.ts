@@ -24,7 +24,7 @@ function onBeforeExit(handler: () => void): (() => void) | undefined {
 
 /**
  * Lean cloud analytics client — the TypeScript mirror of the Python SDK's
- * `RatelClient` (ADR-0016). Records one usage *rollup* per agent interaction and
+ * `RatelClient` (ADR-0013). Records one usage *rollup* per agent interaction and
  * ships it to `POST {host}/api/v1/events` — the exact shape Ratel's dashboard
  * renders. Best-effort and batched; never throws into caller code, and absent an
  * API key it is a no-op. Token/cost maths come from `ratel-ai-core` (native).

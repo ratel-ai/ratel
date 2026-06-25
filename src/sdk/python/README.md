@@ -299,7 +299,7 @@ Sink kinds:
 
 ## Usage analytics
 
-This is **Level 2**: ship one *usage rollup* per agent interaction to Ratel's cloud — the exact shape the dashboard renders. A rollup carries token spend broken down by the five context sources, plus what Ratel selection saved and what it *could* save. The token / savings / cost maths live in `ratel-ai-core` (native); the SDK is a thin client that assembles and ships. Needs the `observability` extra (`pip install 'ratel-ai[observability]'`) and an API key from the dashboard. Design: [ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md).
+This is **Level 2**: ship one *usage rollup* per agent interaction to Ratel's cloud — the exact shape the dashboard renders. A rollup carries token spend broken down by the five context sources, plus what Ratel selection saved and what it *could* save. The token / savings / cost maths live in `ratel-ai-core` (native); the SDK is a thin client that assembles and ships. Needs the `observability` extra (`pip install 'ratel-ai[observability]'`) and an API key from the dashboard. Design: [ADR-0013](../../../docs/adr/0013-observability-and-analytics.md).
 
 ```bash
 export RATEL_API_KEY="rtl-..."                  # from the dashboard; absent → no-op, never raises

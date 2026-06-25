@@ -1,4 +1,4 @@
-"""Background, batched, best-effort cloud exporter (ADR-0016).
+"""Background, batched, best-effort cloud exporter (ADR-0013).
 
 The hot path only enqueues onto a bounded queue (O(1), drops oldest on overflow).
 A daemon thread batches by size or interval and POSTs a JSON array of usage

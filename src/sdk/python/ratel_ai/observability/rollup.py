@@ -1,4 +1,4 @@
-"""Usage-rollup assembly for the lean cloud client (ADR-0016).
+"""Usage-rollup assembly for the lean cloud client (ADR-0013).
 
 A *rollup* is one agent interaction's token accounting — exactly the body the
 cloud's `POST /api/v1/events` accepts and the dashboard renders. The numbers
@@ -30,7 +30,9 @@ def normalize_sources(value: SourceMap | None) -> dict[str, int] | None:
     out = {key: 0 for key in CONTEXT_SOURCES}
     for key in CONTEXT_SOURCES:
         raw = value.get(key, 0)
-        out[key] = int(raw) if raw else 0
+        # Clamp to non-negative — the cloud rejects negative counts, and this keeps
+        # parity with the TS client's `raw > 0 ? trunc : 0`.
+        out[key] = int(raw) if raw and raw > 0 else 0
     return out
 
 

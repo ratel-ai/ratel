@@ -1,4 +1,4 @@
-"""Tool-selection savings + native usage maths (ADR-0016).
+"""Tool-selection savings + native usage maths (ADR-0013).
 
 The token/cost/savings maths live in `ratel-ai-core`; these tests pin the native
 surface and the `ToolCatalog(observe=True)` recording that builds on it.

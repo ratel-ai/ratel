@@ -1,4 +1,4 @@
-"""Lean cloud client + rollup builder (ADR-0016)."""
+"""Lean cloud client + rollup builder (ADR-0013)."""
 
 from __future__ import annotations
 
@@ -96,3 +96,20 @@ def test_sample_rate_zero_drops_everything() -> None:
     for _ in range(20):
         client.track(tokens_by_category={"tools": 1})
     assert exporter.events == []
+
+
+def test_build_rollup_serializes_occurred_at() -> None:
+    from datetime import datetime, timezone
+
+    rollup = build_rollup(
+        tokens_by_category={"tools": 1},
+        occurred_at=datetime(2026, 6, 25, 0, 0, tzinfo=timezone.utc),
+    )
+    assert rollup["occurred_at"] == "2026-06-25T00:00:00+00:00"
+
+
+def test_normalize_sources_clamps_negatives_to_zero() -> None:
+    normalized = normalize_sources({"tools": -5, "skills": 3})
+    assert normalized is not None
+    assert normalized["tools"] == 0
+    assert normalized["skills"] == 3

@@ -21,6 +21,6 @@ Binding strategy and tool-injection mode are locked in [ADR 0002](../../docs/adr
 
 ## `python/` — `ratel-ai`
 
-The Python SDK. Bundles `ratel-ai-core` via a [PyO3](https://pyo3.rs) native binding under [`python/native/`](python/native/README.md), distributed as prebuilt `abi3` wheels. Feature parity with the TS SDK on the catalog / gateway / skills surface and the **lean usage-analytics client** — one `track()` per interaction ships a usage rollup to Ratel's cloud, with the token / savings / cost maths in the Rust core ([ADR 0016](../../docs/adr/0016-lean-usage-rollups-rust-core.md)). See [`python/README.md`](python/README.md) for usage.
+The Python SDK. Bundles `ratel-ai-core` via a [PyO3](https://pyo3.rs) native binding under [`python/native/`](python/native/README.md), distributed as prebuilt `abi3` wheels. Feature parity with the TS SDK on the catalog / gateway / skills surface and the **lean usage-analytics client** — one `track()` per interaction ships a usage rollup to Ratel's cloud, with the token / savings / cost maths in the Rust core ([ADR 0013](../../docs/adr/0013-observability-and-analytics.md)). See [`python/README.md`](python/README.md) for usage.
 
 Binding strategy is locked in [ADR 0011](../../docs/adr/0011-python-rust-binding-strategy.md).

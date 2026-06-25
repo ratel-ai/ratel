@@ -1,4 +1,4 @@
-"""Lean cloud analytics for Ratel — usage rollups shipped to Ratel's cloud (ADR-0016).
+"""Lean cloud analytics for Ratel — usage rollups shipped to Ratel's cloud (ADR-0013).
 
 One `track()` call per agent interaction reports its token spend (broken down by
 context source), what Ratel selection saved, and what it *could* save. The
