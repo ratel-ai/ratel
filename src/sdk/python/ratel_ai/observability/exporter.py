@@ -1,10 +1,11 @@
-"""Background, batched, best-effort cloud exporter (ADR-0013/0014).
+"""Background, batched, best-effort cloud exporter (ADR-0016).
 
 The hot path only enqueues onto a bounded queue (O(1), drops oldest on overflow).
-A daemon thread batches by size or interval and POSTs to `{host}/v1/ingest`. The
-whole send path is wrapped so the customer's app is never blocked or broken: on
-overflow events are dropped, on 4xx the batch is dropped, on 5xx/network it
-retries with capped backoff, and every failure is logged at most once per class.
+A daemon thread batches by size or interval and POSTs a JSON array of usage
+rollups to `{host}/api/v1/events`. The whole send path is wrapped so the
+customer's app is never blocked or broken: on overflow events are dropped, on 4xx
+the batch is dropped, on 5xx/network it retries with capped backoff, and every
+failure is logged at most once per class.
 
 `httpx` is imported lazily so the tracing core works without it installed.
 """
@@ -22,12 +23,24 @@ from collections.abc import Callable
 from typing import Any
 
 from .config import ObservabilityConfig
-from .models import build_batch
 
 logger = logging.getLogger("ratel_ai.observability")
 
 _MAX_ATTEMPTS = 3
 _BACKOFF_BASE = 0.2  # seconds
+
+
+def _sdk_version() -> str:
+    """Best-effort installed package version for the User-Agent; never raises."""
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        try:
+            return version("ratel-ai")
+        except PackageNotFoundError:
+            return "0.0.0"
+    except Exception:
+        return "0.0.0"
 
 
 class _Control:
@@ -46,7 +59,7 @@ class BatchProcessor:
     def __init__(
         self,
         config: ObservabilityConfig,
-        sender: Callable[[dict[str, Any]], None] | None = None,
+        sender: Callable[[list[dict[str, Any]]], None] | None = None,
     ) -> None:
         self.config = config
         # `sender` overrides the default httpx transport — used in tests to drive
@@ -156,7 +169,7 @@ class BatchProcessor:
 
     def _send(self, batch: list[dict[str, Any]]) -> None:
         try:
-            payload = build_batch(list(batch))
+            payload = list(batch)
             if self._sender is not None:
                 self._sender(payload)
             else:
@@ -172,19 +185,19 @@ class BatchProcessor:
         self._http = httpx.Client(timeout=self.config.timeout)
         return self._http
 
-    def _post(self, payload: dict[str, Any]) -> None:
+    def _post(self, payload: list[dict[str, Any]]) -> None:
         import httpx
 
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
-            "User-Agent": f"ratel-ai-python/{payload['sdk']['version']}",
+            "User-Agent": f"ratel-ai-python/{_sdk_version()}",
         }
         client = self._client()
         delay = _BACKOFF_BASE
         for attempt in range(_MAX_ATTEMPTS):
             try:
-                resp = client.post(self.config.ingest_url, json=payload, headers=headers)
+                resp = client.post(self.config.events_url, json=payload, headers=headers)
                 status = resp.status_code
                 if status < 300:
                     return

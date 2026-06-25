@@ -35,12 +35,9 @@ from .gateway_compat import SEARCH_TOOLS_ID, search_tools_tool
 from .mcp import McpServerHandle, register_mcp_server
 from .observability import (
     ObservabilityConfig,
-    Observation,
     RatelClient,
-    Trace,
     configure,
     get_client,
-    observe,
     set_global_client,
 )
 from .skill_catalog import Skill, SkillCatalog
@@ -54,7 +51,6 @@ __all__ = [
     "ExecutableTool",
     "Executor",
     "McpServerHandle",
-    "Observation",
     "ObservabilityConfig",
     "OnUnauthorized",
     "RatelClient",
@@ -67,7 +63,6 @@ __all__ = [
     "Tool",
     "ToolCatalog",
     "ToolRegistry",
-    "Trace",
     "TraceSinkConfig",
     "UpstreamServerInfo",
     "configure",
@@ -75,7 +70,6 @@ __all__ = [
     "get_client",
     "get_skill_content_tool",
     "invoke_tool_tool",
-    "observe",
     "register_mcp_server",
     "search_capabilities_tool",
     "search_tools_tool",

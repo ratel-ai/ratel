@@ -97,6 +97,21 @@ impl SkillRegistry {
         });
         hits
     }
+
+    /// Total context-token footprint of the full registered skill corpus.
+    pub fn catalog_tokens(&self) -> u64 {
+        self.skills.iter().map(crate::usage::skill_tokens).sum()
+    }
+
+    /// Footprint of the skills with the given ids — typically a search's hits.
+    pub fn tokens_for(&self, ids: &[String]) -> u64 {
+        let want: std::collections::HashSet<&str> = ids.iter().map(String::as_str).collect();
+        self.skills
+            .iter()
+            .filter(|s| want.contains(s.id.as_str()))
+            .map(crate::usage::skill_tokens)
+            .sum()
+    }
 }
 
 #[cfg(test)]

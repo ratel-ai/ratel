@@ -61,7 +61,7 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class ObservabilityConfig:
     """Immutable, fully-resolved configuration for a `RatelClient`."""
 
@@ -132,8 +132,18 @@ class ObservabilityConfig:
         return self.enabled and bool(self.api_key)
 
     @property
-    def ingest_url(self) -> str:
-        return f"{self.host}/v1/ingest"
+    def events_url(self) -> str:
+        """The lean analytics rollup endpoint the dashboard reads (ADR-0016)."""
+        return f"{self.host}/api/v1/events"
+
+    def __repr__(self) -> str:
+        # Never echo the API key — a config (or its client) reached by a logger or
+        # a traceback frame must not leak the credential.
+        masked = "***" if self.api_key else None
+        return (
+            f"ObservabilityConfig(api_key={masked!r}, host={self.host!r}, "
+            f"enabled={self.enabled})"
+        )
 
     def with_overrides(self, **changes: object) -> ObservabilityConfig:
         return replace(self, **changes)  # type: ignore[arg-type]

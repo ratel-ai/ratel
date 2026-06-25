@@ -1,5 +1,5 @@
 export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
-export { SkillRegistry, ToolRegistry } from "../native/index.cjs";
+export { estimateCostUsd, estimateTokens, SkillRegistry, ToolRegistry } from "../native/index.cjs";
 export type {
   ExecutableTool,
   Executor,
@@ -8,6 +8,16 @@ export type {
   TraceSinkConfig,
 } from "./catalog.js";
 export { ToolCatalog } from "./catalog.js";
+export type {
+  ContextSource,
+  PartialSources,
+  RatelClientOptions,
+  Rollup,
+  SourceTokens,
+  TrackInput,
+  Transport,
+} from "./cloud.js";
+export { buildRollup, CONTEXT_SOURCES, RatelClient } from "./cloud.js";
 export type {
   CapabilitySkillHit,
   CapabilityToolGroup,

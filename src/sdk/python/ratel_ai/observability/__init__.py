@@ -1,45 +1,42 @@
-"""Observability & analytics for Ratel — Langfuse-style tracing that ships to
-Ratel's cloud (ADR-0013).
+"""Lean cloud analytics for Ratel — usage rollups shipped to Ratel's cloud (ADR-0016).
+
+One `track()` call per agent interaction reports its token spend (broken down by
+context source), what Ratel selection saved, and what it *could* save. The
+payload is the exact shape `POST /api/v1/events` accepts and the dashboard reads.
 
 Quick start:
 
-    from ratel_ai import observe, get_client
+    from ratel_ai import get_client
 
-    @observe()
-    def handle(task: str) -> str:
-        ...
+    get_client().track(
+        tokens_by_category={"skills": 120, "tools": 2000, "history": 3400,
+                            "memory": 260, "user_input": 340},
+        saved_by_category={"tools": 7200},
+        model="claude-sonnet-4-6",
+        output_tokens=180,
+    )
+    get_client().flush()  # also auto-flushed at exit
 
-    get_client().update_current_trace(user_id="u1", session_id="s1")
-    get_client().flush()
-
-Drop-in provider wrappers live at `ratel_ai.openai` / `ratel_ai.anthropic`.
-Configuration is read from the environment (`RATEL_API_KEY`, `RATEL_HOST`, …);
-absent a key, the client runs in no-op mode and never raises.
+Absent a key (`RATEL_API_KEY`), the client is a no-op and never raises.
 """
 
 from __future__ import annotations
 
 from ._emit import CaptureExporter, Exporter, NoopExporter
-from .client import (
-    RatelClient,
-    configure,
-    get_client,
-    set_global_client,
-)
+from .client import RatelClient, configure, get_client, set_global_client
 from .config import ObservabilityConfig
-from .decorator import observe
-from .trace import Observation, Trace
+from .rollup import CONTEXT_SOURCES, build_rollup, normalize_sources
 
 __all__ = [
+    "CONTEXT_SOURCES",
     "CaptureExporter",
     "Exporter",
     "NoopExporter",
-    "Observation",
     "ObservabilityConfig",
     "RatelClient",
-    "Trace",
+    "build_rollup",
     "configure",
     "get_client",
-    "observe",
+    "normalize_sources",
     "set_global_client",
 ]

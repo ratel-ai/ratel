@@ -8,13 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- **Observability & analytics layer** (Langfuse-style), behind the `observability` extra (`pip install 'ratel-ai[observability]'`). Captures LLM calls, function traces, and tool usage and ships structured events to Ratel's cloud; designed so the cloud can forward to Langfuse. Locked in [ADR-0013](../../../docs/adr/0013-python-observability-layer.md) (the layer) and [ADR-0014](../../../docs/adr/0014-cloud-ingestion-contract.md) (the SDK→cloud wire contract).
-  - `@observe` decorator (sync + async) builds a nested trace tree; manual `start_as_current_span` / `start_as_current_generation` context managers; `RatelClient` / `get_client()` with `update_current_trace` for user/session/tags/metadata/version.
-  - Drop-in provider wrappers `ratel_ai.openai` (`OpenAI` / `AsyncOpenAI` / `wrap_openai`) and `ratel_ai.anthropic` (`Anthropic` / `AsyncAnthropic` / `wrap_anthropic`) auto-capture model, prompt, output, and provider-reported token usage, including a basic streaming path. Provider SDKs stay optional (lazily imported).
-  - Background, batched, best-effort cloud exporter (`httpx`): non-blocking enqueue, size/interval flush, retry-with-backoff on 5xx, drop on 4xx/overflow, `atexit` flush, fork-safe. Never raises into application code; no-op mode when no API key is set.
-  - `ToolCatalog(observe=...)` reports a **tokens-saved** metric per search (full catalog vs selected top-K, pluggable `TokenEstimator`; `tiktoken` via the `observability-tiktoken` extra) and traces each tool invocation as a cloud span. Existing `ToolCatalog` behavior is unchanged when `observe` is omitted.
-- **Transparent tool selection** ([ADR-0015](../../../docs/adr/0015-transparent-tool-selection.md)): `wrap_openai`/`wrap_anthropic` and the `OpenAI`/`Anthropic` constructors accept `select_tools=True` (or a `ToolSelection`, or `RATEL_TOOL_SELECTION=on`) to BM25-prune the `tools` array a caller already passes to the model down to the top-K per call — Ratel's token savings with no `ToolCatalog` registration, using the same native ranking engine. Off by default (behavior-changing), threshold-gated, pins `tool_choice`, keeps provider built-ins, and fails open to the original tools. Pruning works without an API key; with one, each prune emits a `ratel.tokens_saved` event. The wrappers also capture offered-tool counts and the model's `tool_calls` into the generation's metadata.
-- Core trace schema gains additive observability variants — `trace_root`, `observation_start`, `observation_end`, `generation`, `tokens_saved` — carrying trace-tree identity and coarse token usage only (no prompt/output content), extending [ADR-0009](../../../docs/adr/0009-trace-events-core-owned-schema.md).
+- **Lean cloud analytics** behind the `observability` extra (`pip install 'ratel-ai[observability]'`): one *usage rollup* per agent interaction, shipped to `POST {host}/api/v1/events` — the exact shape Ratel's dashboard renders. A rollup carries token spend broken down by the five context sources (`skills`, `tools`, `history`, `memory`, `user_input`), plus what selection saved and what it could save — counts and identity only, never prompt/output text. Locked in [ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md).
+  - `RatelClient.track(...)` assembles and enqueues a rollup; `get_client()` returns a process-wide, env-configured client (`RATEL_API_KEY`, `RATEL_HOST`, default `https://cloud.ratel.sh`). Also exported: `build_rollup`, `CONTEXT_SOURCES`.
+  - The token / savings / cost maths live in `ratel-ai-core` and are reached through the native binding (`estimate_tokens`, `estimate_cost_usd`, `tokens_saved`), so Python and TypeScript get identical numbers from one Rust implementation.
+  - Background, batched, best-effort exporter (`httpx`): bounded-queue enqueue (drops oldest on overflow), size/interval flush, retry-with-backoff on 5xx, drop on 4xx, `atexit` flush, fork-safe. Never raises into application code; no-op mode when no API key is set.
+  - `ToolCatalog(observe=True)` records savings from the native registry (full catalog vs selected top-K) onto `last_savings` and the local trace stream ([ADR-0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)), ready to fold into a `track()` call. Existing `ToolCatalog` behavior is unchanged when `observe` is omitted.
+  - A runnable demo, `examples/observability_demo.py`, drives the layer end-to-end (BM25 suggestions plus a backfilled adoption story shipped via `track()`).
+
+### Changed
+
+- The cloud contract is now a single lean endpoint, `POST {host}/api/v1/events`, accepting one rollup or a JSON array of them — replacing the Langfuse-shaped `POST /v1/ingest` batch ([ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md), superseding ADR-0013/0014).
+
+### Removed
+
+- The Langfuse-style observability layer ([ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md) supersedes ADR-0013/0014): the `/v1/ingest` batch, the rich trace/observation/generation tree, the `@observe` decorator and span/generation context managers, and the modules `models.py`, `trace.py`, `decorator.py`, `estimator.py`, `savings.py`.
+- The drop-in OpenAI/Anthropic provider wrappers (`ratel_ai.openai` / `ratel_ai.anthropic`, `wrap_openai` / `wrap_anthropic`) and the transparent in-call tool selection they carried (`select_tools=` / `ToolSelection` / `RATEL_TOOL_SELECTION`, ADR-0015), along with the `integrations/` package. Catalog-based selection (`ToolCatalog`, `search_capabilities`) is unaffected. The prior implementation is preserved on branch `feat/python-observability`.
 
 ## [0.2.0] - 2026-06-16
 

@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Lean cloud analytics**: `RatelClient` ships one *usage rollup* per agent interaction to `POST {host}/api/v1/events` — the exact shape Ratel's dashboard renders. A rollup carries token spend broken down by the five context sources (`skills`, `tools`, `history`, `memory`, `user_input`), plus what selection saved and what it could save — counts and identity only, never prompt/output text. Locked in [ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md).
+  - `client.track(input)` assembles and buffers a rollup, auto-flushing at `flushAt`; `client.flush()` sends the rest. Env-configured (`RATEL_API_KEY`, `RATEL_HOST`, default `https://cloud.ratel.sh`); a no-op without an API key, best-effort, never throws.
+  - The token / savings / cost maths come from `ratel-ai-core` via the NAPI binding (`estimateTokens`, `estimateCostUsd`), so TypeScript and Python get identical numbers from one Rust implementation.
+  - Also exported: `buildRollup`, `CONTEXT_SOURCES`, and the types `TrackInput` / `SourceTokens` / `RatelClientOptions` (plus `ContextSource` / `PartialSources` / `Rollup` / `Transport`).
+
+### Changed
+
+- The SDK→cloud contract is a single lean endpoint, `POST {host}/api/v1/events`, accepting one rollup or a JSON array of them — the shape the dashboard reads directly. The analytics logic lives in the Rust core, bound identically into both SDKs ([ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md), superseding ADR-0013/0014).
+
+### Removed
+
+- The never-shipped Langfuse-style design (ADR-0013/0014) is retired in favor of the lean rollup above ([ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md)): the TypeScript SDK carries no Langfuse `POST /v1/ingest` batch, no observation tree, and no OpenAI/Anthropic drop-in wrappers — only `RatelClient`. Catalog-based selection (`ToolCatalog`, `searchCapabilitiesTool`) is unaffected.
+
 ## [0.2.0] - 2026-06-16
 
 ### Changed

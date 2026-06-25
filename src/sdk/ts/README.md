@@ -20,6 +20,8 @@ As an agent runs, its context window fills with tool definitions it will never c
 
 `@ratel-ai/sdk` is the TypeScript surface of [Ratel](../../../README.md). It bundles the Rust core (`ratel-ai-core`) via [NAPI-RS](https://napi.rs), so a JS / TS agent gets ranked tool selection by adding one dependency, **in-process, no API key, no service to deploy, no Rust toolchain.** Retrieval is BM25 over a schema-aware text projection of each tool: deterministic, with no embeddings, no vector DB, and no inference cost on the retrieval path.
 
+Once the prompt is trimmed, **measure it**: ship one *usage rollup* per agent interaction to your dashboard — token spend per context source plus what selection saved (best-effort, never throws, no-op without a key). See [Usage analytics](#usage-analytics).
+
 ## Install
 
 ```bash
@@ -238,6 +240,31 @@ Sink kinds:
 - `{ kind: "jsonl"; sessionId; path }`, append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure; see [ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md) for the reliability profile.
 
 `searchCapabilitiesTool` tags its emitted `search` event with `origin: "agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
+
+## Usage analytics
+
+Beyond shrinking the prompt, ship one *usage rollup* per agent interaction to Ratel's cloud — the exact shape the dashboard renders. A rollup carries token spend broken down by the five context sources (`skills, tools, history, memory, user_input`), plus what Ratel selection saved and what it *could* save. The token / savings / cost maths live in `ratel-ai-core` (native); the SDK is a thin client that assembles and ships. Design: [ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md).
+
+`RatelClient` is env-configured (`RATEL_API_KEY`, `RATEL_HOST` — default `https://cloud.ratel.sh`) and a no-op without an API key. Call `track(...)` once per interaction with the per-source token spend; everything but `tokensByCategory` is optional. `inputTokens` defaults to the per-source sum, and `costUsd` is estimated in-core from `model` + tokens when omitted:
+
+```ts
+import { RatelClient } from "@ratel-ai/sdk";
+
+const client = new RatelClient(); // env-configured; no-op without RATEL_API_KEY
+
+client.track({
+  tokensByCategory: { skills: 120, tools: 2000, history: 3400, memory: 260, user_input: 340 },
+  savedByCategory: { tools: 7200 }, // optional: kept out of the prompt this run
+  model: "claude-sonnet-4-6",
+  outputTokens: 180,
+});
+
+await client.flush(); // send everything buffered
+```
+
+`track()` buffers and auto-flushes once `flushAt` rollups accrue; `flush()` sends the rest. The send is best-effort — a failed POST is dropped, never surfaced into your code.
+
+Also exported from `@ratel-ai/sdk`: `buildRollup` (assemble a wire rollup without a client), `CONTEXT_SOURCES`, the native `estimateTokens` / `estimateCostUsd`, and the types `TrackInput` / `SourceTokens` / `RatelClientOptions`.
 
 ## Package shape
 

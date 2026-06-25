@@ -4,7 +4,7 @@ Date: 2026-06-24
 
 ## Status
 
-Accepted
+Superseded by [ADR-0016](0016-lean-usage-rollups-rust-core.md)
 
 ## Context
 

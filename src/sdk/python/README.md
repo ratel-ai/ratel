@@ -1,6 +1,6 @@
 <div align="center">
   <h1>ratel-ai</h1>
-  <h4>Context engineering & observability for any Python agent — one dependency.</h4>
+  <h4>Context engineering & usage analytics for any Python agent — one dependency.</h4>
 
   <p>
     <a href="../../../docs/">Docs</a> •
@@ -19,9 +19,9 @@
 `ratel-ai` ([Ratel](../../../README.md)'s Python SDK) does two things for an agent, each one dependency away, in-process, with no service to deploy:
 
 - **Engineers its context** — ranks your tools (and skills) so only the handful relevant to *this* turn enter the prompt, instead of a wall of 100 definitions the model has to wade through. Fewer input tokens, sharper tool choice. Ranking is BM25 over a schema-aware projection of each tool: deterministic, no embeddings, no vector DB, no inference cost.
-- **Measures it** — captures every LLM call, tool call, and token to your dashboard (and on to Langfuse), Langfuse-style, with a one-line import.
+- **Measures it** — ships one *usage rollup* per agent interaction to your dashboard: token spend per context source, plus what Ratel selection saved. Best-effort, batched, never throws; no API key → no-op.
 
-Adopt either, at the depth you want — **[Get started](#get-started)** shows the three levels, smallest first. It bundles the Rust core (`ratel-ai-core`) via [PyO3](https://pyo3.rs); the binding strategy is locked in [ADR 0011](../../../docs/adr/0011-python-rust-binding-strategy.md).
+Adopt either, at the depth you want — **[Get started](#get-started)** shows the two levels, smallest first. It bundles the Rust core (`ratel-ai-core`) via [PyO3](https://pyo3.rs); the binding strategy is locked in [ADR 0011](../../../docs/adr/0011-python-rust-binding-strategy.md).
 
 ## Install
 
@@ -37,39 +37,11 @@ Prebuilt `abi3` wheels ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-a
 
 ## Get started
 
-Ratel meets your agent at three levels. They **compose** — start at the top and go deeper only when you need to. Levels 1 and 2 work on *any* existing agent with no Ratel data structures; Level 3 is the deepest integration.
+Ratel meets your agent at two levels, and they **compose** — engineer the context, then measure it.
 
-### 1 · See what your agent does — change one import
+### 1 · Engineer the context — register a catalog
 
-Already have a Python agent? Swap the provider import; every LLM call is now captured (model, prompt, output, tokens, tool calls):
-
-```python
-# from openai import OpenAI
-from ratel_ai.openai import OpenAI          # ← the only change
-
-client = OpenAI()
-client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
-```
-
-`pip install 'ratel-ai[observability]'`, then set `RATEL_API_KEY` to ship to your dashboard (no key → silent no-op, never raises). Anthropic users: `from ratel_ai.anthropic import Anthropic`. More → [Observability & analytics](#observability--analytics).
-
-### 2 · Cut token costs — add one flag
-
-Passing a big `tools=[...]` list to the model on every turn? Let Ratel BM25-rank it and send only the most relevant — no catalog, no restructuring:
-
-```python
-from ratel_ai.openai import OpenAI
-
-client = OpenAI(select_tools=True)          # off by default; opt in here or RATEL_TOOL_SELECTION=on
-client.chat.completions.create(model="gpt-4o", messages=[...], tools=my_50_tools)
-# Ratel trims `tools` to the top-K before the call → fewer input tokens, every call.
-```
-
-More → [Transparent tool selection](#transparent-tool-selection-no-catalog).
-
-### 3 · Own tool & skill selection — register a catalog
-
-Want full control — a gateway the agent can search on demand, skills, MCP servers, per-tool dispatch and telemetry? Register a `ToolCatalog` and Ratel ranks it for you:
+Passing a big tool list to the model on every turn? Register a `ToolCatalog` and Ratel ranks it: pre-filter the top-K most relevant tools each turn, hand the agent a `search_capabilities` + `invoke_tool` gateway for the rest, add skills and MCP servers — the full catalog never enters the prompt.
 
 ```python
 from ratel_ai import ToolCatalog, ExecutableTool
@@ -88,19 +60,35 @@ catalog.register(ExecutableTool(
 
 More → [How it works](#how-it-works) · [`ToolCatalog`](#toolcatalog).
 
+### 2 · Measure it — ship a usage rollup
+
+Once you know what each turn costs, ship one *usage rollup* per interaction to your dashboard: token spend per context source, plus what Ratel selection saved. Best-effort, batched, never throws.
+
+```python
+from ratel_ai import get_client
+
+get_client().track(
+    tokens_by_category={"skills": 120, "tools": 2000, "history": 3400,
+                        "memory": 260, "user_input": 340},
+    saved_by_category={"tools": 7200},   # optional: what selection kept out of the prompt
+    model="claude-sonnet-4-6", output_tokens=180,
+)
+```
+
+`pip install 'ratel-ai[observability]'`, then set `RATEL_API_KEY` to ship to your dashboard (no key → silent no-op, never raises). More → [Usage analytics](#usage-analytics).
+
 ### Which level do I want?
 
 | You want… | Use | Code change |
 |---|---|---|
-| Analytics on an agent you already have | **1** — drop-in wrappers / `@observe` | one import |
-| Lower token cost, no restructuring | **2** — `select_tools=True` | one flag |
-| Full control: gateway, skills, MCP, dispatch | **3** — `ToolCatalog` | register tools |
+| Lower token cost: gateway, skills, MCP, dispatch | **1** — `ToolCatalog` | register tools |
+| Usage analytics on your dashboard | **2** — `get_client().track(...)` | one call per interaction |
 
-They stack: register a catalog (3) *and* wrap your client (1) to measure it; or run 1 + 2 with no catalog at all. The rest of this README is the reference for each.
+They stack: register a catalog (1) to shrink the prompt, then `track()` (2) the result so the dashboard shows the saving. The rest of this README is the reference for each.
 
 ## How it works
 
-*This section is **Level 3** — the full `ToolCatalog`. For the one-import (analytics) and one-flag (token savings) paths, see [Get started](#get-started).*
+*This section is **Level 1** — the full `ToolCatalog`. For the usage-analytics path, see [Usage analytics](#usage-analytics).*
 
 Everything starts with a **`ToolCatalog`**: register each of your tools once, pairing its metadata (id, description, JSON schemas) with the handler that runs it. From there you reach the model in one of two ways, and most agents use both at once:
 
@@ -309,64 +297,41 @@ Sink kinds:
 
 `search_capabilities_tool` tags its emitted `search` event with `origin="agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
 
-## Observability & analytics
+## Usage analytics
 
-This is **Level 1**: a Langfuse-style layer that captures your whole agent stack — LLM calls, function traces, and tool usage — and ships structured events to Ratel's cloud, where you can also forward them to Langfuse. Needs the `observability` extra (`pip install 'ratel-ai[observability]'`) and an API key from the dashboard. Design: [ADR-0013](../../../docs/adr/0013-python-observability-layer.md) (the layer) and [ADR-0014](../../../docs/adr/0014-cloud-ingestion-contract.md) (the wire contract).
+This is **Level 2**: ship one *usage rollup* per agent interaction to Ratel's cloud — the exact shape the dashboard renders. A rollup carries token spend broken down by the five context sources, plus what Ratel selection saved and what it *could* save. The token / savings / cost maths live in `ratel-ai-core` (native); the SDK is a thin client that assembles and ships. Needs the `observability` extra (`pip install 'ratel-ai[observability]'`) and an API key from the dashboard. Design: [ADR-0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md).
 
 ```bash
-export RATEL_API_KEY="rk-..."     # from the Ratel dashboard; absent → no-op, never raises
+export RATEL_API_KEY="rtl-..."                  # from the dashboard; absent → no-op, never raises
+export RATEL_HOST="https://cloud.ratel.sh"      # optional; this is the default
 ```
 
-**Drop-in LLM wrappers** auto-capture model, prompt, output, and token usage:
+Call `track(...)` once per interaction with the per-source token spend; everything but `tokens_by_category` is optional. `input_tokens` defaults to the sum of the per-source spend, and `cost_usd` is estimated in-core from `model` + tokens when omitted:
 
 ```python
-from ratel_ai.openai import OpenAI        # drop-in for `from openai import OpenAI`
-from ratel_ai.anthropic import Anthropic  # drop-in for `from anthropic import Anthropic`
+from ratel_ai import get_client, RatelClient
 
-client = OpenAI()
-client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
-# already have a client? trace it in place: wrap_openai(client) / wrap_anthropic(client)
-```
-
-**`@observe`** turns any function into a nested trace node; **context managers** give manual spans/generations; **trace attributes** thread user/session through:
-
-```python
-from ratel_ai import observe, get_client
-
-@observe()
-def handle_ticket(text: str) -> str:
-    get_client().update_current_trace(user_id="u1", session_id="s1", tags=["prod"])
-    with get_client().start_as_current_generation("summarize", model="gpt-4o") as gen:
-        ...
-        gen.update(output="...", usage={"input_tokens": 800, "output_tokens": 90})
-    return "done"
-
+get_client().track(
+    tokens_by_category={"skills": 120, "tools": 2000, "history": 3400,
+                        "memory": 260, "user_input": 340},
+    saved_by_category={"tools": 7200},      # optional: kept out of the prompt this run
+    saveable_by_category={"tools": 7000},   # optional: could save in observe-only mode
+    model="claude-sonnet-4-6", output_tokens=180, latency_ms=420,  # cost_usd auto-estimated
+)
 get_client().flush()   # also auto-flushed at process exit
 ```
 
-Export is background, batched, and best-effort — it never blocks or breaks your app (overflow drops, retries on 5xx, gives up quietly when the cloud is unreachable). Content capture is on by default; disable per call (`capture_input=False`) or globally (`RATEL_CAPTURE_INPUT=0`).
+The five context sources are exactly `skills, tools, history, memory, user_input`. Export is background, batched, and best-effort — it never blocks or breaks your app (overflow drops, retries on 5xx, gives up quietly when the cloud is unreachable). `get_client()` returns a process-wide, env-configured `RatelClient`; construct your own `RatelClient(...)` to override config.
 
-**Ratel savings metric.** Pass `observe=True` (or a client) to `ToolCatalog` and every search reports estimated tokens saved (full catalog vs selected top-K) plus per-tool-call spans:
+**Ratel savings from the catalog.** Pass `observe=True` to `ToolCatalog` and every search records the tokens its top-K selection keeps out of the prompt (full catalog vs selected) onto `last_savings` and the local trace stream — ready to fold into a `track()` call as `saved_by_category` / `saveable_by_category`:
 
 ```python
 catalog = ToolCatalog(observe=True)
-catalog.search("read a file from disk", top_k=2)   # emits a tokens_saved event
+catalog.search("read a file from disk", top_k=2)
+catalog.last_savings   # → {"full_catalog_tokens": ..., "selected_tokens": ..., "tokens_saved": ...}
 ```
 
-## Transparent tool selection (no catalog)
-
-This is **Level 2**: opt in and the drop-in wrapper BM25-ranks the `tools` you already pass to the model and keeps only the top-K per call — Ratel's token savings with zero registration ([ADR-0015](../../../docs/adr/0015-transparent-tool-selection.md)). It's **off by default** (it changes which tools the model can call), threshold-gated, pins any `tool_choice`, and fails open to the original tools:
-
-```python
-from ratel_ai.openai import OpenAI, ToolSelection
-
-client = OpenAI(select_tools=True)                       # or RATEL_TOOL_SELECTION=on
-client = OpenAI(select_tools=ToolSelection(top_k=12))    # tune the working set
-client.chat.completions.create(model="gpt-4o", messages=[...], tools=my_50_tools)
-# Ratel prunes `tools` to the most relevant before the call and reports the saving.
-```
-
-Pruning works even without an API key (you save provider tokens locally); with a key, each prune also emits a `ratel.tokens_saved` event. The explicit `ToolCatalog` / `search_capabilities` path (Level 3) stays the higher-control option — gateway escape hatch, skills, full dispatch — and both share the same ranking engine.
+A runnable end-to-end demo — BM25 suggestions plus a backfilled adoption story shipped via `track()` — lives in [`examples/observability_demo.py`](examples/README.md).
 
 ## Develop
 
@@ -386,8 +351,8 @@ uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy
 ```
 native/         PyO3 binding to ratel-ai-core (cdylib Cargo workspace member)
 ratel_ai/       pure-Python SDK: catalog, gateway tools, skills, MCP ingestion
-  observability/  Langfuse-style tracing + cloud exporter (@observe, RatelClient)
-  integrations/   drop-in provider wrappers (openai, anthropic)
+  observability/  lean cloud analytics — usage rollups via RatelClient.track
+examples/       runnable demos (observability_demo.py)
 tests/          pytest suite
 pyproject.toml  maturin build backend + tooling config
 ```

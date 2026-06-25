@@ -1,4 +1,8 @@
-"""Cloud exporter: batching, flush, overflow, retries, fail-open (ADR-0014)."""
+"""Cloud exporter: batching, flush, overflow, retries, fail-open (ADR-0016).
+
+The wire payload is a plain JSON array of usage rollups (no envelope) — the body
+`POST /api/v1/events` accepts.
+"""
 
 from __future__ import annotations
 
@@ -18,15 +22,15 @@ class _Recorder:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self.payloads: list[dict[str, Any]] = []
+        self.payloads: list[list[dict[str, Any]]] = []
 
-    def __call__(self, payload: dict[str, Any]) -> None:
+    def __call__(self, payload: list[dict[str, Any]]) -> None:
         with self._lock:
             self.payloads.append(payload)
 
     def total_events(self) -> int:
         with self._lock:
-            return sum(len(p["batch"]) for p in self.payloads)
+            return sum(len(p) for p in self.payloads)
 
 
 def _cfg(**kw: Any) -> ObservabilityConfig:
@@ -51,7 +55,11 @@ def _wait_for(predicate: Any, timeout: float = 2.0) -> bool:
 
 
 def _event(i: int) -> dict[str, Any]:
-    return {"id": f"evt_{i}", "type": "observation-create"}
+    return {"tokens_by_category": {"tools": i}}
+
+
+def _rollups(n: int = 1) -> list[dict[str, Any]]:
+    return [_event(i) for i in range(n)]
 
 
 def test_flush_drains_pending_events() -> None:
@@ -72,7 +80,7 @@ def test_batches_by_size() -> None:
     assert _wait_for(lambda: rec.total_events() == 3)
     # One full-size batch, not three singletons.
     assert len(rec.payloads) == 1
-    assert len(rec.payloads[0]["batch"]) == 3
+    assert len(rec.payloads[0]) == 3
     proc.shutdown()
 
 
@@ -84,10 +92,21 @@ def test_batches_by_interval() -> None:
     proc.shutdown()
 
 
+def test_payload_is_a_plain_array() -> None:
+    rec = _Recorder()
+    proc = BatchProcessor(_cfg(flush_at=1), sender=rec)
+    proc.enqueue(_event(0))
+    assert _wait_for(lambda: len(rec.payloads) == 1)
+    payload = rec.payloads[0]
+    assert isinstance(payload, list)
+    assert payload[0]["tokens_by_category"]["tools"] == 0
+    proc.shutdown()
+
+
 def test_overflow_drops_without_raising() -> None:
     release = threading.Event()
 
-    def blocking_sender(payload: dict[str, Any]) -> None:
+    def blocking_sender(payload: list[dict[str, Any]]) -> None:
         release.wait(2.0)
 
     proc = BatchProcessor(_cfg(flush_at=1, max_queue=2), sender=blocking_sender)
@@ -101,7 +120,7 @@ def test_overflow_drops_without_raising() -> None:
 
 
 def test_send_failure_never_raises() -> None:
-    def boom(payload: dict[str, Any]) -> None:
+    def boom(payload: list[dict[str, Any]]) -> None:
         raise RuntimeError("sender exploded")
 
     proc = BatchProcessor(_cfg(flush_at=1), sender=boom)
@@ -110,39 +129,35 @@ def test_send_failure_never_raises() -> None:
     proc.shutdown()
 
 
-def test_envelope_shape_is_versioned() -> None:
-    rec = _Recorder()
-    proc = BatchProcessor(_cfg(flush_at=1), sender=rec)
-    proc.enqueue(_event(0))
-    assert _wait_for(lambda: len(rec.payloads) == 1)
-    payload = rec.payloads[0]
-    assert payload["schema_version"] == 1
-    assert payload["sdk"]["name"] == "ratel-ai-python"
-    proc.shutdown()
-
-
 # -- HTTP transport (_post), driven synchronously via pytest-httpx ----------
+
+
+def test_post_targets_the_events_endpoint(httpx_mock: Any) -> None:
+    httpx_mock.add_response(status_code=202)
+    proc = BatchProcessor(_cfg(host="https://cloud.ratel.sh"))
+    proc._post(_rollups())
+    assert httpx_mock.get_requests()[0].url.path == "/api/v1/events"
 
 
 def test_post_retries_on_5xx_then_succeeds(httpx_mock: Any) -> None:
     httpx_mock.add_response(status_code=500)
-    httpx_mock.add_response(status_code=200)
+    httpx_mock.add_response(status_code=202)
     proc = BatchProcessor(_cfg())
-    proc._post({"schema_version": 1, "sdk": {"version": "0.0.0"}, "batch": []})
+    proc._post(_rollups())
     assert len(httpx_mock.get_requests()) == 2
 
 
 def test_post_drops_on_4xx_without_retry(httpx_mock: Any) -> None:
     httpx_mock.add_response(status_code=401)
     proc = BatchProcessor(_cfg())
-    proc._post({"schema_version": 1, "sdk": {"version": "0.0.0"}, "batch": []})
+    proc._post(_rollups())
     assert len(httpx_mock.get_requests()) == 1  # no retry on client error
 
 
 def test_post_sends_bearer_auth(httpx_mock: Any) -> None:
-    httpx_mock.add_response(status_code=200)
+    httpx_mock.add_response(status_code=202)
     proc = BatchProcessor(_cfg(api_key="rk-secret"))
-    proc._post({"schema_version": 1, "sdk": {"version": "0.0.0"}, "batch": []})
+    proc._post(_rollups())
     request = httpx_mock.get_requests()[0]
     assert request.headers["Authorization"] == "Bearer rk-secret"
 
@@ -152,12 +167,12 @@ def test_post_never_raises_when_network_down(httpx_mock: Any) -> None:
         httpx_mock.add_exception(httpx.ConnectError("connection refused"))
     proc = BatchProcessor(_cfg())
     # Must swallow the network error entirely.
-    proc._post({"schema_version": 1, "sdk": {"version": "0.0.0"}, "batch": []})
+    proc._post(_rollups())
 
 
-@pytest.mark.parametrize("status", [200, 204])
+@pytest.mark.parametrize("status", [200, 202, 204])
 def test_post_treats_2xx_as_success(httpx_mock: Any, status: int) -> None:
     httpx_mock.add_response(status_code=status)
     proc = BatchProcessor(_cfg())
-    proc._post({"schema_version": 1, "sdk": {"version": "0.0.0"}, "batch": []})
+    proc._post(_rollups())
     assert len(httpx_mock.get_requests()) == 1

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "ratel-ai"
-version = "0.2.0"
+version = "0.2.0rc1"
 description = "Python SDK for Ratel — context engineering platform for AI agents. BM25 tool retrieval, MCP ingestion, framework-neutral gateway tools."
 readme = "README.md"
 license = { file = "LICENSE.md" }
@@ -67,6 +67,10 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# Example data tables (the tool/skill catalogs) read better unwrapped.
+"examples/*" = ["E501"]
 
 # Runtime floor is 3.9 (via `from __future__ import annotations`); mypy's minimum
 # supported target is 3.10, so we type-check against that.
