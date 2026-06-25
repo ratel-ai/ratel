@@ -86,6 +86,15 @@ class ToolCatalog:
     def search(self, query: str, top_k: int, origin: SearchOrigin = "direct") -> list[SearchHit]:
         return self._registry.search_with_origin(query, top_k, origin)
 
+    def search_dense(
+        self, query: str, top_k: int, origin: SearchOrigin = "direct"
+    ) -> list[SearchHit]:
+        """Dense (semantic) retrieval — ranks by embedding cosine instead of BM25.
+
+        Only available in dense-enabled builds (the published wheels); see ADR-0013.
+        """
+        return self._registry.search_dense(query, top_k, origin)
+
     def has(self, tool_id: str) -> bool:
         return tool_id in self._executors
 

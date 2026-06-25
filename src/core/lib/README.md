@@ -44,6 +44,16 @@ Tools are the first content type indexed by the core. Tool search is BM25 over a
 
 `Skill` is the second content type, ranked by the same BM25 engine through `SkillRegistry`. A skill is indexed over its `name`, `description`, and `tags` (author-declared labels and task phrases); its `tools` (declared tool-id dependencies, surfaced at the gateway), `metadata` (non-indexed context such as `{"stacks": ["react"]}` for the push-path ranker), and `body` (the dispatch payload) are not indexed. See [ADR‑0012](../../../docs/adr/0012-first-class-skills.md). The same retrieval primitive carries forward to memories and message history as those land on the [roadmap](../../../docs/roadmap.md).
 
+## Dense (semantic) retrieval
+
+Behind the optional, non-default **`dense-search`** feature, `ToolRegistry` also exposes `search_dense` — semantic retrieval that embeds each tool's flat text (the same projection BM25 indexes) with a local `bge-small-en-v1.5` model run in-process via [Candle](https://github.com/huggingface/candle), and cosine-ranks an embedded query against it. Vectors are precomputed at `register()`. The model is **downloaded on first use** (via `hf-hub`, at a pinned revision) into the shared HuggingFace cache (`~/.cache/huggingface`) and loaded from cache thereafter — offline after the first fetch, deterministic because the revision is pinned. It is loaded once per process and serves both registration and queries. BM25 stays the deterministic floor and is unchanged — dense is additive, and emits the same trace schema with a `"dense"` stage. See [ADR‑0013](../../../docs/adr/0013-dense-semantic-retrieval.md).
+
+```bash
+cargo test -p ratel-ai-core --features dense-search   # first run downloads the model (~130 MB) into the HF cache
+```
+
+The feature is off by default, so the crate and the SDK wheels stay lean (the model is fetched at runtime, not packaged). `search_dense` is surfaced as `searchDense` (TS) / `search_dense` (Python).
+
 ## Trace stream
 
 Every layer of Ratel — core, SDK, mcp-server — emits into a single tagged event stream owned by this crate ([ADR‑0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). One stream, multiple consumers (inspector, suggestion analyzer, future rerankers and consolidation server), filtered at the consumer.

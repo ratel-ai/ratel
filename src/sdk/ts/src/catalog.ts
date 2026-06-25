@@ -41,6 +41,15 @@ export class ToolCatalog {
     return this.registry.searchWithOrigin(query, topK, origin);
   }
 
+  /**
+   * Dense (semantic) retrieval — ranks by embedding cosine instead of BM25.
+   * Only available in dense-enabled builds (the published wheels/addons); see
+   * ADR-0013.
+   */
+  searchDense(query: string, topK: number, origin: SearchOrigin = "direct"): SearchHit[] {
+    return this.registry.searchDense(query, topK, origin);
+  }
+
   has(toolId: string): boolean {
     return this.executors.has(toolId);
   }

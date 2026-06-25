@@ -119,6 +119,25 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// Dense (semantic) retrieval — mirrors [`Self::search_with_origin`] but
+    /// ranks by embedding cosine. Only present in dense-enabled builds.
+    #[cfg(feature = "dense-search")]
+    #[pyo3(signature = (query, top_k, origin=None))]
+    fn search_dense(&self, query: String, top_k: u32, origin: Option<String>) -> Vec<SearchHit> {
+        let parsed = match origin.as_deref() {
+            Some("agent") => Origin::Agent,
+            _ => Origin::Direct,
+        };
+        self.inner
+            .search_dense_with_origin(&query, top_k as usize, parsed)
+            .into_iter()
+            .map(|hit| SearchHit {
+                tool_id: hit.tool_id,
+                score: hit.score as f64,
+            })
+            .collect()
+    }
+
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
         let value: Value = pythonize::depythonize(event)
             .map_err(|e| PyValueError::new_err(format!("invalid trace event: {e}")))?;

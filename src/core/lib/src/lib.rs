@@ -2,6 +2,10 @@
 //!
 //! See `README.md` and `docs/adr/` for design.
 
+#[cfg(feature = "dense-search")]
+mod dense_search;
+#[cfg(feature = "dense-search")]
+mod embedding;
 mod indexing;
 mod search;
 mod skill;

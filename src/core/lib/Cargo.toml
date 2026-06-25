@@ -1,6 +1,8 @@
 [package]
 name = "ratel-ai-core"
-version.workspace = true
+# Prerelease for the dense (semantic) retrieval milestone (ADR-0013). Scoped to
+# this crate; the SDK crates stay on the workspace version.
+version = "0.3.0-semantic.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -12,10 +14,33 @@ description = "Tool retrieval and ranking for AI agents — BM25 over tool catal
 keywords = ["mcp", "ai-agents", "tool-calling", "bm25", "retrieval"]
 categories = ["text-processing", "algorithms"]
 
+[features]
+# Off by default: BM25-only consumers keep the lean three-dependency build.
+# The SDK native crates enable this so their wheels/addons expose `search_dense`.
+# The embedding model is downloaded on first use and cached, not bundled. See
+# ADR-0013.
+dense-search = [
+    "dep:candle-core",
+    "dep:candle-nn",
+    "dep:candle-transformers",
+    "dep:tokenizers",
+    "dep:hf-hub",
+]
+
 [dependencies]
 bm25 = "2.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
+
+# Dense (semantic) retrieval — pure-Rust Candle inference, no C++/ONNX native
+# dep. Optional; pulled in only by the `dense-search` feature. `hf-hub` fetches
+# the model on first use into the shared HuggingFace cache (sync `ureq` backend,
+# rustls — no OpenSSL/native-tls, so wheels stay clean cross-platform).
+candle-core = { version = "0.9", optional = true }
+candle-nn = { version = "0.9", optional = true }
+candle-transformers = { version = "0.9", optional = true }
+tokenizers = { version = "0.21", optional = true, default-features = false, features = ["onig"] }
+hf-hub = { version = "0.5", optional = true, default-features = false, features = ["ureq"] }
 
 [dev-dependencies]
 tempfile = "3"

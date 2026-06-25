@@ -38,7 +38,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build:native": "napi build --platform --release --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts",
+    "build:native": "napi build --platform --release --manifest-path native/Cargo.toml --features dense-search --output-dir native --js index.cjs --dts index.d.cts",
     "build:ts": "tsc",
     "build": "pnpm build:native && pnpm build:ts",
     "typecheck": "pnpm build:native && tsc --noEmit",

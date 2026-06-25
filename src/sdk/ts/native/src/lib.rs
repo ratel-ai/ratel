@@ -155,6 +155,31 @@ impl ToolRegistry {
     }
 }
 
+// Separate impl block so the whole thing (and its `#[napi]` codegen) is stripped
+// when `dense-search` is off — a method-level `#[cfg]` inside a `#[napi] impl`
+// leaves a dangling callback registration (napi-rs limitation).
+#[cfg(feature = "dense-search")]
+#[napi]
+impl ToolRegistry {
+    /// Dense (semantic) retrieval — mirrors `searchWithOrigin` but ranks by
+    /// embedding cosine. Only present in dense-enabled builds.
+    #[napi]
+    pub fn search_dense(&self, query: String, top_k: u32, origin: String) -> Vec<SearchHit> {
+        let parsed = match origin.as_str() {
+            "agent" => Origin::Agent,
+            _ => Origin::Direct,
+        };
+        self.inner
+            .search_dense_with_origin(&query, top_k as usize, parsed)
+            .into_iter()
+            .map(|hit| SearchHit {
+                tool_id: hit.tool_id,
+                score: hit.score as f64,
+            })
+            .collect()
+    }
+}
+
 #[napi(object)]
 pub struct Skill {
     pub id: String,
