@@ -88,3 +88,11 @@ def test_config_repr_masks_api_key() -> None:
     rendered = repr(ObservabilityConfig.resolve(api_key="rk-secret-123"))
     assert "rk-secret-123" not in rendered
     assert "***" in rendered
+
+
+def test_sample_rate_zero_drops_everything() -> None:
+    exporter = CaptureExporter()
+    client = RatelClient(api_key="rk-test", enabled=True, exporter=exporter, sample_rate=0.0)
+    for _ in range(20):
+        client.track(tokens_by_category={"tools": 1})
+    assert exporter.events == []

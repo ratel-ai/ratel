@@ -122,6 +122,8 @@ export interface RatelClientOptions {
   apiKey?: string;
   host?: string;
   enabled?: boolean;
+  /** Fraction of interactions to record, 0..1 (default 1 = all). */
+  sampleRate?: number;
   /** Flush automatically once this many rollups are buffered (default 50). */
   flushAt?: number;
   /** Flush automatically this long after the last `track()` (default 1000ms). */
@@ -136,11 +138,13 @@ export class RatelClient {
   private readonly apiKey: string | undefined;
   private readonly eventsUrl: string;
   private readonly enabled: boolean;
+  private readonly sampleRate: number;
   private readonly flushAt: number;
   private readonly flushIntervalMs: number;
   private readonly timeoutMs: number;
   private readonly transport: Transport | undefined;
   private buffer: Rollup[] = [];
+  private readonly warned = new Set<string>();
   private scheduled: ReturnType<typeof setTimeout> | undefined;
   private removeExitHandler: (() => void) | undefined;
 
@@ -152,6 +156,7 @@ export class RatelClient {
     );
     this.eventsUrl = `${host}/api/v1/events`;
     this.enabled = options.enabled ?? Boolean(this.apiKey);
+    this.sampleRate = options.sampleRate ?? 1;
     this.flushAt = options.flushAt ?? 50;
     this.flushIntervalMs = options.flushIntervalMs ?? 1000;
     this.timeoutMs = options.timeoutMs ?? 5000;
@@ -173,6 +178,7 @@ export class RatelClient {
   /** Record one interaction's usage rollup. Best-effort; never throws. */
   track(input: TrackInput): void {
     if (!this.canExport) return;
+    if (this.sampleRate < 1 && Math.random() >= this.sampleRate) return;
     try {
       this.buffer.push(buildRollup(input));
       if (this.buffer.length >= this.flushAt) {
@@ -226,21 +232,51 @@ export class RatelClient {
       await this.transport(batch);
       return;
     }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      await fetch(this.eventsUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(batch),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
+    const body = JSON.stringify(batch);
+    const headers = {
+      Authorization: `Bearer ${this.apiKey}`,
+      "Content-Type": "application/json",
+    };
+    let delay = 200;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const response = await fetch(this.eventsUrl, {
+          method: "POST",
+          headers,
+          body,
+          signal: controller.signal,
+        });
+        if (response.ok) return;
+        if (response.status >= 400 && response.status < 500) {
+          // Bad key/payload — retrying won't help. Drop and warn once.
+          this.warnOnce(
+            `http_${response.status}`,
+            `ratel: ingest rejected (${response.status}); dropping batch`,
+          );
+          return;
+        }
+        // 5xx — fall through to retry.
+      } catch {
+        if (attempt === 2) {
+          this.warnOnce("network", "ratel: ingest unreachable; dropping batch");
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, delay + Math.random() * 200));
+        delay *= 2;
+      }
     }
+    this.warnOnce("retries", "ratel: ingest failed after retries; dropping batch");
+  }
+
+  private warnOnce(key: string, message: string): void {
+    if (this.warned.has(key)) return;
+    this.warned.add(key);
+    console.warn(message);
   }
 }
 

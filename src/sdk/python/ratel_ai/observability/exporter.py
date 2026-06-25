@@ -121,6 +121,7 @@ class BatchProcessor:
                 # Forked: the inherited queue/thread belong to the parent.
                 self._queue = queue.Queue(maxsize=self.config.max_queue)
                 self._http = None
+                self._warned = set()
                 self._pid = os.getpid()
             self._worker = threading.Thread(
                 target=self._run, name="ratel-exporter", daemon=True

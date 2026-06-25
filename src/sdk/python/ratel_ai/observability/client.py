@@ -14,6 +14,7 @@ from __future__ import annotations
 import atexit
 import contextlib
 import logging
+import random
 import threading
 from datetime import datetime
 from typing import Any
@@ -104,6 +105,8 @@ class RatelClient:
         `saveable_by_category` is what it *could* save in observe-only mode.
         """
         try:
+            if self.config.sample_rate < 1.0 and random.random() >= self.config.sample_rate:
+                return
             rollup = build_rollup(
                 tokens_by_category=tokens_by_category,
                 saved_by_category=saved_by_category,
@@ -151,12 +154,15 @@ def configure(**kwargs: Any) -> RatelClient:
     connection don't leak (e.g. when rotating the API key or host mid-process).
     """
     global _singleton
+    # Build outside the lock — RatelClient construction can lazily import httpx,
+    # and we must not hold the singleton lock across that.
+    new_client = RatelClient(**kwargs)
     with _singleton_lock:
         old = _singleton
-        _singleton = RatelClient(**kwargs)
+        _singleton = new_client
     if old is not None:
         old.shutdown()
-    return _singleton
+    return new_client
 
 
 def set_global_client(client: RatelClient | None) -> None:

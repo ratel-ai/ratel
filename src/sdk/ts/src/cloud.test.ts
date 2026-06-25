@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildRollup,
   configure,
@@ -156,5 +156,49 @@ describe("RatelClient background flush", () => {
     await client.shutdown();
     expect(batches).toHaveLength(1);
     expect(batches[0]).toHaveLength(1);
+  });
+});
+
+describe("RatelClient transport reliability", () => {
+  it("drops everything at sampleRate 0", async () => {
+    const batches: Rollup[][] = [];
+    const client = new RatelClient({
+      transport: (batch) => {
+        batches.push([...batch]);
+      },
+      sampleRate: 0,
+    });
+    client.track({ tokensByCategory: { tools: 1 } });
+    await client.flush();
+    expect(batches).toHaveLength(0);
+  });
+
+  it("retries on 5xx then succeeds (default fetch path)", async () => {
+    let calls = 0;
+    const fetchMock = vi.fn(async () => {
+      calls += 1;
+      return { ok: calls >= 2, status: calls >= 2 ? 202 : 500 } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new RatelClient({ apiKey: "rk-test", flushIntervalMs: 10_000, timeoutMs: 100 });
+    client.track({ tokensByCategory: { tools: 1 } });
+    await client.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await client.shutdown();
+    vi.unstubAllGlobals();
+  });
+
+  it("drops on 4xx without retry and warns once (default fetch path)", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 401 }) as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const client = new RatelClient({ apiKey: "rk-test", flushIntervalMs: 10_000 });
+    client.track({ tokensByCategory: { tools: 1 } });
+    await client.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+    await client.shutdown();
+    vi.unstubAllGlobals();
   });
 });

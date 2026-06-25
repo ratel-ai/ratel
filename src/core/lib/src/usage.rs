@@ -151,11 +151,12 @@ pub struct Rollup {
 impl Rollup {
     /// A rollup carrying only the per-source spend; enrich via the field setters.
     pub fn new(tokens_by_category: SourceTokens) -> Self {
+        let input_tokens = Some(tokens_by_category.total());
         Self {
             tokens_by_category,
             saved_by_category: None,
             saveable_by_category: None,
-            input_tokens: None,
+            input_tokens,
             output_tokens: None,
             model: None,
             latency_ms: None,
