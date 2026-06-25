@@ -51,10 +51,7 @@ Issues = "https://github.com/ratel-ai/ratel/issues"
 manifest-path = "native/Cargo.toml"
 module-name = "ratel_ai._native"
 python-source = "."
-# `dense-search` adds the Candle embedder so the wheel exposes `search_dense`
-# (the model is downloaded on first use, not packaged; see ADR-0013). Drop it
-# to build a BM25-only wheel without the Candle/hf-hub dependencies.
-features = ["extension-module", "dense-search"]
+features = ["extension-module"]
 
 [tool.ruff]
 line-length = 100

@@ -1,6 +1,6 @@
 //! Dense (semantic) ranking over precomputed embeddings.
 //!
-//! The cosine-similarity analog of [`crate::search::bm25_search`]. Vectors are
+//! Cosine-similarity ranking over precomputed embeddings. Vectors are
 //! assumed L2-normalized (the embedder normalizes both documents and the query),
 //! so cosine reduces to a dot product. Ordering mirrors the BM25 path exactly —
 //! best score first, ties broken by `id` — so top-K membership is stable across
@@ -15,7 +15,7 @@ pub(crate) fn dense_search<'a, I>(docs: I, query_vec: &[f32], top_k: usize) -> V
 where
     I: IntoIterator<Item = (String, &'a [f32])>,
 {
-    // Mirror `bm25_search`: rank the full corpus, then truncate — never let a
+    // Rank the full corpus, then truncate — never let a
     // tie straddling the `top_k` boundary make membership depend on input
     // order. The (score desc, id asc) sort fixes both order and membership.
     let mut ranked: Vec<(String, f32)> = docs
@@ -76,8 +76,7 @@ mod tests {
     fn tied_scores_break_by_id_with_stable_top_k_membership() {
         // Identical vectors → identical cosine for any query. The (score desc,
         // id asc) order must fix both the returned order AND which docs survive
-        // the top_k cut, independent of input order — same contract bm25_search
-        // guarantees (see search.rs).
+        // the top_k cut, independent of input order.
         let docs = vec![
             ("zeta".to_string(), vec![0.0, 1.0]),
             ("alpha".to_string(), vec![0.0, 1.0]),

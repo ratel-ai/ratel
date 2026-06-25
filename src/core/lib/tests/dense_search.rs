@@ -1,16 +1,17 @@
-//! Dense retrieval over `ToolRegistry`. Only built with the `dense-search`
-//! feature; a no-op otherwise.
-#![cfg(feature = "dense-search")]
+//! Dense (semantic) retrieval over the registries. In this version `.search()`
+//! IS dense (ADR-0013), so these assert the semantic behaviour directly.
 
 use std::sync::Arc;
 
 use ratel_ai_core::{MemorySink, Skill, SkillRegistry, Tool, ToolRegistry, TraceEvent};
 use serde_json::json;
 
-fn tool(id: &str, name: &str, description: &str) -> Tool {
+// ---- Tools ----
+
+fn tool(id: &str, description: &str) -> Tool {
     Tool {
         id: id.into(),
-        name: name.into(),
+        name: id.into(),
         description: description.into(),
         input_schema: json!({}),
         output_schema: json!({}),
@@ -19,52 +20,42 @@ fn tool(id: &str, name: &str, description: &str) -> Tool {
 
 fn catalog() -> ToolRegistry {
     let mut r = ToolRegistry::new();
+    r.register(tool("delete_path", "erase a directory entry permanently"));
     r.register(tool(
-        "delete_file",
-        "delete_file",
-        "delete a path from the filesystem",
-    ));
-    r.register(tool(
-        "weather",
         "weather",
         "get the current weather forecast for a city",
     ));
-    r.register(tool(
-        "send_email",
-        "send_email",
-        "compose and send an email message",
-    ));
+    r.register(tool("send_email", "compose and send an email message"));
     r
 }
 
 #[test]
-fn dense_search_surfaces_a_synonym_match_bm25_would_miss() {
-    let registry = catalog();
-    // "remove a file" shares no content words with "delete a path…" — the
-    // "missing gold" case. Dense should still rank delete_file first.
-    let hits = registry.search_dense("remove a file", 3);
+fn search_surfaces_a_synonym_match() {
+    // "remove a file" shares no content words with "erase a directory entry" —
+    // the lexical "missing gold" case dense closes.
+    let hits = catalog().search("remove a file", 3);
     assert_eq!(
         hits.first().map(|h| h.tool_id.as_str()),
-        Some("delete_file")
+        Some("delete_path")
     );
 }
 
 #[test]
-fn registering_for_dense_leaves_bm25_search_intact() {
-    let registry = catalog();
-    // The lexical path is unchanged: a literal term still ranks its tool first.
-    let hits = registry.search("weather forecast", 3);
-    assert_eq!(hits.first().map(|h| h.tool_id.as_str()), Some("weather"));
+fn search_respects_top_k() {
+    assert!(catalog().search("anything", 2).len() <= 2);
 }
 
 #[test]
-fn dense_search_emits_a_dense_trace_stage() {
+fn empty_registry_returns_no_hits() {
+    assert!(ToolRegistry::new().search("anything", 5).is_empty());
+}
+
+#[test]
+fn search_emits_a_dense_trace_stage() {
     let sink = Arc::new(MemorySink::new("test-session"));
     let mut registry = ToolRegistry::with_trace_sink(sink.clone());
-    registry.register(tool("delete_file", "delete_file", "delete a path"));
-    let _ = registry.search_dense("remove a file", 1);
-    // The emitted Search event must carry a stage named "dense" (not "bm25"),
-    // so telemetry can tell the retrieval paths apart.
+    registry.register(tool("delete_path", "delete a path"));
+    let _ = registry.search("remove a file", 1);
     let saw_dense = sink.snapshot().into_iter().any(|env| match env.event {
         TraceEvent::Search { stages, .. } => stages.iter().any(|s| s.name == "dense"),
         _ => false,
@@ -72,7 +63,7 @@ fn dense_search_emits_a_dense_trace_stage() {
     assert!(saw_dense, "expected a Search event with a dense stage");
 }
 
-// ---- Skills (SR-Agents-style skill retrieval) ----
+// ---- Skills ----
 
 fn skill(id: &str, description: &str) -> Skill {
     Skill {
@@ -98,9 +89,8 @@ fn skill_catalog() -> SkillRegistry {
 }
 
 #[test]
-fn skill_dense_search_surfaces_a_synonym_match() {
-    let registry = skill_catalog();
-    let hits = registry.search_dense("remove a file", 3);
+fn skill_search_surfaces_a_synonym_match() {
+    let hits = skill_catalog().search("remove a file", 3);
     assert_eq!(
         hits.first().map(|h| h.skill_id.as_str()),
         Some("delete_path")
@@ -108,18 +98,11 @@ fn skill_dense_search_surfaces_a_synonym_match() {
 }
 
 #[test]
-fn skill_registering_for_dense_leaves_bm25_search_intact() {
-    let registry = skill_catalog();
-    let hits = registry.search("weather forecast", 3);
-    assert_eq!(hits.first().map(|h| h.skill_id.as_str()), Some("weather"));
-}
-
-#[test]
-fn skill_dense_search_emits_a_dense_trace_stage() {
+fn skill_search_emits_a_dense_trace_stage() {
     let sink = Arc::new(MemorySink::new("test-session"));
     let mut registry = SkillRegistry::with_trace_sink(sink.clone());
     registry.register(skill("delete_path", "delete a path"));
-    let _ = registry.search_dense("remove a file", 1);
+    let _ = registry.search("remove a file", 1);
     let saw_dense = sink.snapshot().into_iter().any(|env| match env.event {
         TraceEvent::SkillSearch { stages, .. } => stages.iter().any(|s| s.name == "dense"),
         _ => false,

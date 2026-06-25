@@ -50,7 +50,7 @@ fn register_emits_index_churn_add() {
 }
 
 #[test]
-fn search_emits_search_event_with_bm25_stage_and_hits() {
+fn search_emits_search_event_with_dense_stage_and_hits() {
     let sink = Arc::new(MemorySink::new("session-2"));
     let mut registry = ToolRegistry::with_trace_sink(sink.clone());
     registry.register(lookup_tool("alpha"));
@@ -80,7 +80,7 @@ fn search_emits_search_event_with_bm25_stage_and_hits() {
             assert_eq!(hits[0].tool_id, "alpha");
             assert!(hits[0].score > 0.0);
             assert_eq!(stages.len(), 1);
-            assert_eq!(stages[0].name, "bm25");
+            assert_eq!(stages[0].name, "dense");
             assert_eq!(stages[0].top_score, Some(hits[0].score));
         }
         _ => unreachable!(),
@@ -118,7 +118,7 @@ fn empty_registry_search_still_emits_event() {
         TraceEvent::Search { hits, stages, .. } => {
             assert!(hits.is_empty());
             assert_eq!(stages.len(), 1);
-            assert_eq!(stages[0].name, "bm25");
+            assert_eq!(stages[0].name, "dense");
             assert!(stages[0].top_score.is_none());
         }
         _ => panic!("expected Search event"),
