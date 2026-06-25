@@ -130,4 +130,4 @@ client.flush()  # also auto-flushed at exit
 
 ## Why this exists
 
-The lean observability layer and its wire contract are recorded in [ADR 0013](../../../docs/adr/0013-python-observability-layer.md) (the layer) and [ADR 0014](../../../docs/adr/0014-cloud-ingestion-contract.md) (the `POST /api/v1/events` contract). A runnable end-to-end demo — live skill/tool suggestions plus an SDK-driven "Ratel off → on" adoption story — lives at [`src/sdk/python/examples/observability_demo.py`](../../../src/sdk/python/examples/README.md).
+The lean observability layer and its `POST /api/v1/events` wire contract are recorded in [ADR 0016](../../../docs/adr/0016-lean-usage-rollups-rust-core.md) (which supersedes the earlier ADR 0013/0014 design). A runnable end-to-end demo — live skill/tool suggestions plus an SDK-driven "Ratel off → on" adoption story — lives at [`src/sdk/python/examples/observability_demo.py`](../../../src/sdk/python/examples/README.md).
