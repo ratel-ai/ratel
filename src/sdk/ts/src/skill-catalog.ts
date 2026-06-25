@@ -32,6 +32,14 @@ export class SkillCatalog {
     return this.registry.searchWithOrigin(query, topK, origin);
   }
 
+  /**
+   * Dense (semantic) skill retrieval — ranks by embedding cosine instead of
+   * BM25. Only available in dense-enabled builds; see ADR-0013.
+   */
+  searchDense(query: string, topK: number, origin: SearchOrigin = "direct"): SkillHit[] {
+    return this.registry.searchDense(query, topK, origin);
+  }
+
   has(skillId: string): boolean {
     return this.skills.has(skillId);
   }

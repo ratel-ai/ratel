@@ -18,6 +18,10 @@ pub struct SkillHit {
 /// the tool path untouched and lets skill telemetry stand on its own.
 pub struct SkillRegistry {
     skills: Vec<Skill>,
+    /// Precomputed embeddings, index-aligned with `skills` (one per `register`).
+    /// Mirrors [`crate::ToolRegistry`]'s dense path.
+    #[cfg(feature = "dense-search")]
+    embeddings: Vec<Vec<f32>>,
     sink: Arc<dyn TraceSink>,
 }
 
@@ -31,6 +35,8 @@ impl SkillRegistry {
     pub fn new() -> Self {
         Self {
             skills: Vec::new(),
+            #[cfg(feature = "dense-search")]
+            embeddings: Vec::new(),
             sink: Arc::new(NoopSink),
         }
     }
@@ -38,6 +44,8 @@ impl SkillRegistry {
     pub fn with_trace_sink(sink: Arc<dyn TraceSink>) -> Self {
         Self {
             skills: Vec::new(),
+            #[cfg(feature = "dense-search")]
+            embeddings: Vec::new(),
             sink,
         }
     }
@@ -52,7 +60,13 @@ impl SkillRegistry {
 
     pub fn register(&mut self, skill: Skill) {
         let skill_id = skill.id.clone();
+        // Embed the same name+description+tags text BM25 indexes, once, before
+        // the skill is moved into the corpus. Index-aligned with `skills`.
+        #[cfg(feature = "dense-search")]
+        let embedding = crate::embedding::embedder().embed_doc(&searchable_text(&skill));
         self.skills.push(skill);
+        #[cfg(feature = "dense-search")]
+        self.embeddings.push(embedding);
         self.sink.record(TraceEvent::SkillChurn {
             kind: ChurnKind::Add,
             skill_id,
@@ -90,6 +104,62 @@ impl SkillRegistry {
                 .collect(),
             stages: vec![SearchStage {
                 name: "bm25".into(),
+                took_ms,
+                top_score,
+            }],
+            took_ms,
+        });
+        hits
+    }
+
+    /// Dense (semantic) skill retrieval — the skill analog of
+    /// [`crate::ToolRegistry::search_dense`]. Same `(query, top_k)` contract as
+    /// [`Self::search`]; ranks by embedding cosine. BM25 is untouched.
+    #[cfg(feature = "dense-search")]
+    pub fn search_dense(&self, query: &str, top_k: usize) -> Vec<SkillHit> {
+        self.search_dense_with_origin(query, top_k, Origin::Direct)
+    }
+
+    #[cfg(feature = "dense-search")]
+    pub fn search_dense_with_origin(
+        &self,
+        query: &str,
+        top_k: usize,
+        origin: Origin,
+    ) -> Vec<SkillHit> {
+        use std::collections::HashMap;
+
+        let started = Instant::now();
+        let query_vec = crate::embedding::embedder().embed_query(query);
+        // Collapse duplicate ids to the latest embedding — mirrors BM25's
+        // id-keyed last-wins so re-registering a skill replaces it here too.
+        let mut latest: HashMap<&str, &[f32]> = HashMap::new();
+        for (skill, embedding) in self.skills.iter().zip(self.embeddings.iter()) {
+            latest.insert(skill.id.as_str(), embedding.as_slice());
+        }
+        let hits: Vec<SkillHit> = crate::dense_search::dense_search(
+            latest.into_iter().map(|(id, v)| (id.to_string(), v)),
+            &query_vec,
+            top_k,
+        )
+        .into_iter()
+        .map(|(skill_id, score)| SkillHit { skill_id, score })
+        .collect();
+        let took_ms = started.elapsed().as_millis() as u64;
+        let top_score = hits.first().map(|h| h.score as f64);
+        self.sink.record(TraceEvent::SkillSearch {
+            query: query.to_string(),
+            origin,
+            top_k: top_k as u32,
+            hits: hits
+                .iter()
+                .map(|h| SkillHitTrace {
+                    skill_id: h.skill_id.clone(),
+                    score: h.score as f64,
+                })
+                .collect(),
+            stages: vec![SearchStage {
+                name: "dense".into(),
                 took_ms,
                 top_score,
             }],

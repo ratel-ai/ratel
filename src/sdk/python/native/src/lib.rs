@@ -269,6 +269,25 @@ impl SkillRegistry {
             .collect()
     }
 
+    /// Dense (semantic) skill retrieval — the skill analog of
+    /// `ToolRegistry.search_dense`. Only present in dense-enabled builds.
+    #[cfg(feature = "dense-search")]
+    #[pyo3(signature = (query, top_k, origin=None))]
+    fn search_dense(&self, query: String, top_k: u32, origin: Option<String>) -> Vec<SkillHit> {
+        let parsed = match origin.as_deref() {
+            Some("agent") => Origin::Agent,
+            _ => Origin::Direct,
+        };
+        self.inner
+            .search_dense_with_origin(&query, top_k as usize, parsed)
+            .into_iter()
+            .map(|hit| SkillHit {
+                skill_id: hit.skill_id,
+                score: hit.score as f64,
+            })
+            .collect()
+    }
+
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
         let value: Value = pythonize::depythonize(event)
             .map_err(|e| PyValueError::new_err(format!("invalid trace event: {e}")))?;
