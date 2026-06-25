@@ -7,6 +7,21 @@ function envVar(name: string): string | undefined {
   return env?.[name];
 }
 
+/** Register a best-effort process-exit flush without depending on Node's `process` types. */
+function onBeforeExit(handler: () => void): (() => void) | undefined {
+  const proc = (
+    globalThis as {
+      process?: {
+        on?: (event: string, handler: () => void) => void;
+        off?: (event: string, handler: () => void) => void;
+      };
+    }
+  ).process;
+  if (!proc?.on) return undefined;
+  proc.on("beforeExit", handler);
+  return () => proc.off?.("beforeExit", handler);
+}
+
 /**
  * Lean cloud analytics client — the TypeScript mirror of the Python SDK's
  * `RatelClient` (ADR-0016). Records one usage *rollup* per agent interaction and
@@ -109,6 +124,8 @@ export interface RatelClientOptions {
   enabled?: boolean;
   /** Flush automatically once this many rollups are buffered (default 50). */
   flushAt?: number;
+  /** Flush automatically this long after the last `track()` (default 1000ms). */
+  flushIntervalMs?: number;
   /** Per-request timeout for the default fetch transport (default 5000ms). */
   timeoutMs?: number;
   /** Override the network transport — primarily for tests. */
@@ -120,9 +137,12 @@ export class RatelClient {
   private readonly eventsUrl: string;
   private readonly enabled: boolean;
   private readonly flushAt: number;
+  private readonly flushIntervalMs: number;
   private readonly timeoutMs: number;
   private readonly transport: Transport | undefined;
   private buffer: Rollup[] = [];
+  private scheduled: ReturnType<typeof setTimeout> | undefined;
+  private removeExitHandler: (() => void) | undefined;
 
   constructor(options: RatelClientOptions = {}) {
     this.apiKey = options.apiKey ?? envVar("RATEL_API_KEY");
@@ -133,8 +153,16 @@ export class RatelClient {
     this.eventsUrl = `${host}/api/v1/events`;
     this.enabled = options.enabled ?? Boolean(this.apiKey);
     this.flushAt = options.flushAt ?? 50;
+    this.flushIntervalMs = options.flushIntervalMs ?? 1000;
     this.timeoutMs = options.timeoutMs ?? 5000;
     this.transport = options.transport;
+    // For real (network) usage, ship whatever is buffered when the process winds
+    // down. Skipped under a custom transport so tests don't accumulate listeners.
+    if (this.canExport && this.transport == null) {
+      this.removeExitHandler = onBeforeExit(() => {
+        void this.flush();
+      });
+    }
   }
 
   /** True when the client should ship: a transport is set, or it's enabled with a key. */
@@ -147,7 +175,11 @@ export class RatelClient {
     if (!this.canExport) return;
     try {
       this.buffer.push(buildRollup(input));
-      if (this.buffer.length >= this.flushAt) void this.flush();
+      if (this.buffer.length >= this.flushAt) {
+        void this.flush();
+      } else {
+        this.scheduleFlush();
+      }
     } catch {
       // assembling/buffering must never break the caller
     }
@@ -155,6 +187,10 @@ export class RatelClient {
 
   /** Send everything buffered. Resolves once the send settles (or is swallowed). */
   async flush(): Promise<void> {
+    if (this.scheduled !== undefined) {
+      clearTimeout(this.scheduled);
+      this.scheduled = undefined;
+    }
     if (this.buffer.length === 0) return;
     const batch = this.buffer;
     this.buffer = [];
@@ -163,6 +199,26 @@ export class RatelClient {
     } catch {
       // best-effort: a failed send is dropped, never surfaced
     }
+  }
+
+  /** Stop background flushing and ship anything still buffered. */
+  async shutdown(): Promise<void> {
+    if (this.removeExitHandler) {
+      this.removeExitHandler();
+      this.removeExitHandler = undefined;
+    }
+    await this.flush();
+  }
+
+  private scheduleFlush(): void {
+    if (this.scheduled !== undefined) return;
+    const handle = setTimeout(() => {
+      this.scheduled = undefined;
+      void this.flush();
+    }, this.flushIntervalMs);
+    // An unref'd timer never keeps the process alive on its own.
+    (handle as unknown as { unref?: () => void }).unref?.();
+    this.scheduled = handle;
   }
 
   private async send(batch: ReadonlyArray<Rollup>): Promise<void> {
@@ -186,4 +242,27 @@ export class RatelClient {
       clearTimeout(timer);
     }
   }
+}
+
+let globalClient: RatelClient | null = null;
+
+/** The process-wide client, created from the environment on first use. */
+export function getClient(): RatelClient {
+  if (globalClient === null) {
+    globalClient = new RatelClient();
+  }
+  return globalClient;
+}
+
+/** Replace the process-wide client with one built from `options`, shutting down the old. */
+export function configure(options: RatelClientOptions): RatelClient {
+  const previous = globalClient;
+  globalClient = new RatelClient(options);
+  if (previous) void previous.shutdown();
+  return globalClient;
+}
+
+/** Install (or clear) the process-wide client. Primarily for tests. */
+export function setGlobalClient(client: RatelClient | null): void {
+  globalClient = client;
 }

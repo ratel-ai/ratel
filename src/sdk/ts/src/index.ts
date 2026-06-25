@@ -5,6 +5,7 @@ export type {
   Executor,
   SearchOrigin,
   ToolCatalogOptions,
+  ToolSavings,
   TraceSinkConfig,
 } from "./catalog.js";
 export { ToolCatalog } from "./catalog.js";
@@ -17,7 +18,14 @@ export type {
   TrackInput,
   Transport,
 } from "./cloud.js";
-export { buildRollup, CONTEXT_SOURCES, RatelClient } from "./cloud.js";
+export {
+  buildRollup,
+  CONTEXT_SOURCES,
+  configure,
+  getClient,
+  RatelClient,
+  setGlobalClient,
+} from "./cloud.js";
 export type {
   CapabilitySkillHit,
   CapabilityToolGroup,

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildRollup, RatelClient, type Rollup } from "./cloud.js";
+import {
+  buildRollup,
+  configure,
+  getClient,
+  RatelClient,
+  type Rollup,
+  setGlobalClient,
+} from "./cloud.js";
 
 describe("buildRollup", () => {
   it("fills all five sources and defaults input tokens to the sum", () => {
@@ -102,5 +109,52 @@ describe("RatelClient", () => {
     });
     client.track({ tokensByCategory: { tools: 1 } });
     await expect(client.flush()).resolves.toBeUndefined();
+  });
+});
+
+describe("getClient / configure / setGlobalClient", () => {
+  it("getClient returns a process-wide singleton", () => {
+    setGlobalClient(null);
+    expect(getClient()).toBe(getClient());
+    setGlobalClient(null);
+  });
+
+  it("configure replaces the global client", () => {
+    setGlobalClient(null);
+    const first = getClient();
+    const second = configure({ apiKey: "rk-test" });
+    expect(second).not.toBe(first);
+    expect(getClient()).toBe(second);
+    setGlobalClient(null);
+  });
+});
+
+describe("RatelClient background flush", () => {
+  it("auto-flushes shortly after track, with no explicit flush", async () => {
+    const batches: Rollup[][] = [];
+    const client = new RatelClient({
+      transport: (batch) => {
+        batches.push([...batch]);
+      },
+      flushIntervalMs: 10,
+    });
+    client.track({ tokensByCategory: { tools: 1 } });
+    expect(batches).toHaveLength(0);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(batches).toHaveLength(1);
+  });
+
+  it("shutdown ships what is still buffered", async () => {
+    const batches: Rollup[][] = [];
+    const client = new RatelClient({
+      transport: (batch) => {
+        batches.push([...batch]);
+      },
+      flushIntervalMs: 10_000,
+    });
+    client.track({ tokensByCategory: { tools: 5 } });
+    await client.shutdown();
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toHaveLength(1);
   });
 });
