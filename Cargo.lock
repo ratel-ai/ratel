@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-ai-core"
-version = "0.3.0-semantic.1"
+version = "0.3.0-semantic.2"
 dependencies = [
  "candle-core",
  "candle-nn",
