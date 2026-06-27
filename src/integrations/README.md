@@ -6,6 +6,7 @@ Auxiliary tooling that sits on top of the library (`@ratel-ai/sdk` / `ratel-ai-c
 
 ```
 cli/           @ratel-ai/cli       — `ratel` CLI: inspect telemetry, manage MCP scopes (transitional), front Claude Code
+cloud/         @ratel-ai/cloud     — cloud analytics client: batch + ship usage rollups to the Ratel dashboard
 ```
 
 ## `cli/` — `@ratel-ai/cli`
@@ -16,3 +17,7 @@ The `ratel` binary. Two roles:
 2. **Showcase-adjacent, transitional.** `ratel serve` / `ratel mcp …` / `ratel backup …` keep working — they consume the same published `@ratel-ai/mcp-server` that the showcase repo's `ratel-mcp` CLI uses. Over time these verbs migrate to `ratel-mcp`; the local `ratel` binary narrows to library artifacts.
 
 For the canonical MCP UX (`mcp import` / `add` / `auth` / `serve`), reach for `npx -y @ratel-ai/mcp-server` from [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp). See [`cli/README.md`](cli/README.md) for the full verb reference of `@ratel-ai/cli` as it stands today.
+
+## `cloud/` — `@ratel-ai/cloud`
+
+The cloud analytics client. Batches the *usage rollups* `@ratel-ai/sdk` assembles (`buildRollup`) and ships them to `{host}/api/v1/events` — the shape the Ratel dashboard renders. Env-configured (`RATEL_API_KEY`, `RATEL_HOST`), best-effort, a no-op without an API key. See [`cloud/README.md`](cloud/README.md). Design: [ADR-0013](../../docs/adr/0013-observability-and-analytics.md).
