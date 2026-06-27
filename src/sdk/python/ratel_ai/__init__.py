@@ -33,6 +33,13 @@ from .gateway import (
 # callers keep working after upgrading to 0.2.0. Slated for removal (RAT-250).
 from .gateway_compat import SEARCH_TOOLS_ID, search_tools_tool
 from .mcp import McpServerHandle, register_mcp_server
+from .observability import (
+    ObservabilityConfig,
+    RatelClient,
+    configure,
+    get_client,
+    set_global_client,
+)
 from .skill_catalog import Skill, SkillCatalog
 from .skill_gateway import GET_SKILL_CONTENT_ID, get_skill_content_tool
 
@@ -44,7 +51,9 @@ __all__ = [
     "ExecutableTool",
     "Executor",
     "McpServerHandle",
+    "ObservabilityConfig",
     "OnUnauthorized",
+    "RatelClient",
     "SearchHit",
     "SearchOrigin",
     "Skill",
@@ -56,10 +65,13 @@ __all__ = [
     "ToolRegistry",
     "TraceSinkConfig",
     "UpstreamServerInfo",
+    "configure",
     "format_upstream_line",
+    "get_client",
     "get_skill_content_tool",
     "invoke_tool_tool",
     "register_mcp_server",
     "search_capabilities_tool",
     "search_tools_tool",
+    "set_global_client",
 ]
