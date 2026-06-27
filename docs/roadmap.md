@@ -64,6 +64,10 @@ The end state: tools, skills, and memories live in one graph. One substrate, mul
 
 `ratel-ai` on PyPI — the Python SDK binds the same Rust core via PyO3 (prebuilt `abi3` wheels), at full feature parity with `@ratel-ai/sdk`: `ToolRegistry`, `ToolCatalog`, gateway tool factories, `register_mcp_server`, and the core-owned trace schema. Binding strategy is locked in [ADR 0011](adr/0011-python-rust-binding-strategy.md). Originally slated for v0.5.x; landed early because the Rust core was already multi-language-ready — the FFI-binding strategy proven by the TS SDK ([ADR 0002](adr/0002-ts-rust-binding-strategy.md)) ported to PyO3 ([ADR 0011](adr/0011-python-rust-binding-strategy.md)).
 
+## Usage analytics — shipped
+
+A lean cloud-analytics client in both SDKs (`ratel-ai`, `@ratel-ai/sdk`): one `track()` per agent interaction ships a *usage rollup* — token spend by context source (skills / tools / history / memory / user_input), realized and potential Ratel savings, model, latency, cost — to Ratel's cloud at `POST /api/v1/events`, the exact shape the dashboard renders. Background, best-effort, never blocks or breaks the host app; absent an API key it is a no-op. The token / savings / cost maths live in the Rust core (`ratel-ai-core`) and bind identically into Python and TS, so the SDKs stay thin. `ToolCatalog(observe=True)` records the full-catalog-vs-top-K saving per search. Locked in [ADR 0013](adr/0013-observability-and-analytics.md).
+
 ## Out of scope (for now)
 
 - **Hosted multi-tenant runtime.** Ratel is in-process by design; the v0.1.x server flavor is opt-in self-hosted, not a SaaS.

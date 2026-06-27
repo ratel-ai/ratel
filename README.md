@@ -164,6 +164,8 @@ invoke = invoke_tool_tool(catalog)
 - End-to-end Pydantic AI: [examples/pydantic-ai/](examples/pydantic-ai/README.md)
 - Full SDK reference: [src/sdk/python/README.md](src/sdk/python/README.md)
 
+The Python SDK also **measures** your agent, no catalog required: Langfuse-style observability via drop-in wrappers (`from ratel_ai.openai import OpenAI`, ships traces to your dashboard / Langfuse) and transparent token-saving tool selection (`OpenAI(select_tools=True)` BM25-prunes the `tools` you already pass). See [Observability & analytics](src/sdk/python/README.md#observability--analytics) and [Transparent tool selection](src/sdk/python/README.md#transparent-tool-selection-no-catalog).
+
 **Showcase: drop Ratel between Claude Code and your existing MCP servers**
 
 For the canonical "Ratel as a product" experience — managing scopes, importing from Claude Code, OAuth for HTTP upstreams, serving over stdio — use the MCP-server showcase repo:
@@ -206,7 +208,7 @@ Tool selection is the wedge, not the destination. Same catalog, same retrieval e
 - **v0.3.x — memories** — prior decisions, preferences, and artifacts ranked into the current turn.
 - **v0.4.x — context graph** — unified tools-skills-memories substrate.
 
-The **Python SDK** (`pip install ratel-ai`) shipped early — a second host language on the same Rust core, at full parity with the TS SDK.
+The **Python SDK** (`pip install ratel-ai`) shipped early — a second host language on the same Rust core, at parity with the TS SDK. Both SDKs also carry a **lean usage-analytics client**: one `track()` per interaction ships a usage rollup to Ratel's cloud, with the token / savings / cost maths in the Rust core ([ADR 0013](docs/adr/0013-observability-and-analytics.md)).
 
 Dated milestones: [`docs/roadmap.md`](docs/roadmap.md). Thesis: [`docs/overview.md`](docs/overview.md).
 
