@@ -4,6 +4,7 @@
 
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
+    <a href="https://github.com/ratel-ai/skills">Skills</a> •
     <a href="https://discord.gg/hdKpx69NR">Discord</a>
   </p>
 
@@ -21,7 +22,7 @@
 
 ## Introduction
 
-The context engineering layer for AI agents. Selects only the tools relevant to each turn, recovering accuracy lost to tool overload and cutting what you pay per call. No vector DB, no embeddings.
+The context engineering layer for AI agents. Selects only the tools and skills relevant to each turn, recovering accuracy lost to tool overload and cutting what you pay per call. No vector DB, no embeddings.
 
 ## Why
 
@@ -36,8 +37,14 @@ Across local, open-source, and frontier model setups, Ratel cuts token usage and
 **Building an agent in TypeScript or Python?** Add the SDK:
 
 ```bash
-pnpm add @ratel-ai/sdk    # or: pip install ratel-ai
+pnpm add @ratel-ai/sdk
 ```
+```bash
+pip install ratel-ai
+```
+
+<details>
+<summary>TypeScript example</summary>
 
 ```ts
 import { ToolCatalog, searchCapabilitiesTool, invokeToolTool } from "@ratel-ai/sdk";
@@ -54,6 +61,29 @@ catalog.register({
 const search = searchCapabilitiesTool(catalog);
 const invoke = invokeToolTool(catalog);
 ```
+
+</details>
+
+<details>
+<summary>Python example</summary>
+
+```python
+from ratel_ai import ToolCatalog, ExecutableTool, search_capabilities_tool, invoke_tool_tool
+
+catalog = ToolCatalog()
+catalog.register(ExecutableTool(
+  id="read_file",
+  name="read_file",
+  description="Read a file from local disk.",
+  input_schema={"properties": {"path": {"type": "string"}}},
+  execute=lambda args: {"contents": open(args["path"]).read()},
+))
+
+search = search_capabilities_tool(catalog)
+invoke = invoke_tool_tool(catalog)
+```
+
+</details>
 
 Examples: [Vercel AI SDK](examples/ai-sdk/README.md) · [Pydantic AI](examples/pydantic-ai/README.md)
 
@@ -80,8 +110,6 @@ The index uses BM25, the same algorithm behind most search engines, applied to e
 | | Repo | What it is |
 |---|---|---|
 | **Library** | [ratel-ai/ratel](https://github.com/ratel-ai/ratel) (this one) | The engine. Embed it in your agent. |
-| **Server** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | MCP proxy for Claude Code, Cursor, and ChatGPT. No code changes needed. |
-| **Proof** | [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) | The benchmark harness. Full results at [benchmark.ratel.sh](https://benchmark.ratel.sh). |
 
 ## Repo layout
 
