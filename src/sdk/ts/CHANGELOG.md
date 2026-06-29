@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Usage rollups + export seam** (locked in [ADR-0013](../../../docs/adr/0013-observability-and-analytics.md)): `buildRollup(input)` turns one agent interaction into the snake_case *rollup* Ratel's dashboard ingests at `POST {host}/api/v1/events` — token spend across the five context sources (`skills`, `tools`, `history`, `memory`, `user_input`) plus what selection saved and could save, counts and identity only (never prompt/output text).
+  - The token / savings / cost maths come from `ratel-ai-core` via the NAPI binding (`estimateTokens`, `estimateCostUsd`), so TypeScript and Python get identical numbers from one Rust implementation.
+  - Automatic token counting: pass a raw `context` (`TrackInput.context`) — the system/skills text, the tools array, the prior messages, the retrieved memory, the user's turn, each as-is — and the SDK counts the tokens for you via the core estimator, no manual tokenization. Explicit `tokensByCategory` still wins when both are supplied.
+  - `Transport` — the interface a shipper implements — plus `CONTEXT_SOURCES` and the types `TrackInput` / `SourceTokens` / `Rollup` / `ContextSource` / `PartialSources`.
+  - The concrete batching cloud client (`RatelClient`, `track`, `getClient`, `RatelClientOptions`) ships in the new **`@ratel-ai/cloud`** package, which builds on this seam.
+
+### Changed
+
+- The SDK→cloud contract is a single lean endpoint, `POST {host}/api/v1/events`, accepting one rollup or a JSON array of them — the shape the dashboard reads directly. The analytics logic lives in the Rust core, bound identically into both SDKs ([ADR-0013](../../../docs/adr/0013-observability-and-analytics.md)).
+
+### Removed
+
+- The never-shipped Langfuse-style design is retired in favor of the lean rollup above ([ADR-0013](../../../docs/adr/0013-observability-and-analytics.md)): no Langfuse `POST /v1/ingest` batch, no observation tree, and no OpenAI/Anthropic drop-in wrappers. Catalog-based selection (`ToolCatalog`, `searchCapabilitiesTool`) is unaffected.
+
 ## [0.2.0] - 2026-06-16
 
 ### Changed

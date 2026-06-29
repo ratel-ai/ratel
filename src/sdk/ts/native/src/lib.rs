@@ -10,6 +10,24 @@ use ratel_ai_core as core;
 use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
 use serde_json::Value;
 
+/// Estimate the token footprint of a string (`len / 4` heuristic). Mirrors
+/// `ratel_ai_core::estimate_tokens` so the TS SDK's usage-rollup builder reads
+/// token maths from the core instead of re-deriving it.
+#[napi]
+pub fn estimate_tokens(text: String) -> f64 {
+    core::estimate_tokens(&text) as f64
+}
+
+/// Estimate the USD cost of a generation from its model and token counts.
+#[napi]
+pub fn estimate_cost_usd(model: String, input_tokens: f64, output_tokens: f64) -> f64 {
+    core::estimate_cost_usd(
+        &model,
+        input_tokens.max(0.0) as u64,
+        output_tokens.max(0.0) as u64,
+    )
+}
+
 /// A constructed sink plus the `MemorySink` handle when the kind is `"memory"`
 /// (so the owner can drain it later).
 type BuiltTraceSink = (Arc<dyn core::TraceSink>, Option<Arc<MemorySink>>);
@@ -95,6 +113,18 @@ impl ToolRegistry {
             input_schema: tool.input_schema,
             output_schema: tool.output_schema,
         });
+    }
+
+    /// Total context-token footprint of the full registered catalog.
+    #[napi]
+    pub fn catalog_tokens(&self) -> f64 {
+        self.inner.catalog_tokens() as f64
+    }
+
+    /// Footprint of the tools with the given ids (e.g. a search's hits).
+    #[napi]
+    pub fn tokens_for(&self, ids: Vec<String>) -> f64 {
+        self.inner.tokens_for(&ids) as f64
     }
 
     #[napi]
@@ -208,6 +238,18 @@ impl SkillRegistry {
             metadata: skill.metadata.unwrap_or_default(),
             body: skill.body.unwrap_or_default(),
         });
+    }
+
+    /// Total context-token footprint of the full registered skill corpus.
+    #[napi]
+    pub fn catalog_tokens(&self) -> f64 {
+        self.inner.catalog_tokens() as f64
+    }
+
+    /// Footprint of the skills with the given ids (e.g. a search's hits).
+    #[napi]
+    pub fn tokens_for(&self, ids: Vec<String>) -> f64 {
+        self.inner.tokens_for(&ids) as f64
     }
 
     #[napi]
