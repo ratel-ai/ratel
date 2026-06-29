@@ -8,6 +8,7 @@ native binding; this module only normalizes and shapes them for the wire.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
@@ -36,9 +37,30 @@ def normalize_sources(value: SourceMap | None) -> dict[str, int] | None:
     return out
 
 
+def count_segment(seg: Any) -> int:
+    """Token-count one raw context segment via the core estimator: a string
+    directly, a list/tuple element-wise, any other object by its compact JSON
+    (mirrors the TS client's `estimateTokens(JSON.stringify(seg))`)."""
+    if seg is None:
+        return 0
+    if isinstance(seg, str):
+        return int(_native.estimate_tokens(seg))
+    if isinstance(seg, (list, tuple)):
+        return sum(count_segment(item) for item in seg)
+    return int(_native.estimate_tokens(json.dumps(seg, separators=(",", ":"), default=str)))
+
+
+def tokens_from_context(context: SourceMap) -> dict[str, int]:
+    """Derive per-source token counts from raw context segments — pass what you
+    already have (the system/skills text, the tools list, the prior messages, the
+    retrieved memory, the user's turn) and let the core estimator count each."""
+    return {key: count_segment(context.get(key)) for key in CONTEXT_SOURCES}
+
+
 def build_rollup(
     *,
-    tokens_by_category: SourceMap,
+    tokens_by_category: SourceMap | None = None,
+    context: SourceMap | None = None,
     saved_by_category: SourceMap | None = None,
     saveable_by_category: SourceMap | None = None,
     input_tokens: int | None = None,
@@ -50,11 +72,17 @@ def build_rollup(
 ) -> dict[str, Any]:
     """Assemble one interaction's rollup event.
 
-    The only required field is ``tokens_by_category``; everything else enriches
-    it. ``input_tokens`` defaults to the sum of the per-source spend, and
-    ``cost_usd`` is estimated from the model + tokens (via the core) unless given.
+    Provide the per-source spend one of two ways: ``tokens_by_category`` when you
+    already have exact counts (provider usage, tiktoken), or ``context`` — raw
+    segments the SDK token-counts for you (no manual tokenization). When both are
+    given, ``tokens_by_category`` wins. ``input_tokens`` defaults to the sum of
+    the per-source spend, and ``cost_usd`` is estimated from the model + tokens
+    (via the core) unless given.
     """
-    tokens = normalize_sources(tokens_by_category) or {key: 0 for key in CONTEXT_SOURCES}
+    per_source = tokens_by_category
+    if per_source is None and context is not None:
+        per_source = tokens_from_context(context)
+    tokens = normalize_sources(per_source) or {key: 0 for key in CONTEXT_SOURCES}
     total = sum(tokens.values())
     event: dict[str, Any] = {"tokens_by_category": tokens}
 

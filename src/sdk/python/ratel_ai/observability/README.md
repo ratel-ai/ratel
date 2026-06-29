@@ -24,7 +24,6 @@ rollup.py    build_rollup() — assemble the wire rollup; calls the native cost 
 client.py    RatelClient.track() + get_client() singleton; enqueue and flush rollups
 exporter.py  BatchProcessor — background daemon thread, batched POST to /api/v1/events
 _emit.py     Exporter protocol + Noop/Capture exporters (and the core-stream recorder)
-context.py   contextvars: async-safe current trace / observation; id + clock helpers
 ```
 
 ## Usage
@@ -41,8 +40,9 @@ get_client().track(
 get_client().flush()   # also auto-flushed at process exit
 ```
 
-`tokens_by_category` is the only required field; `input_tokens` defaults to its
-sum and `cost_usd` is estimated in-core from `model` + tokens when omitted. Each
+Pass the per-source spend as exact counts (`tokens_by_category`) or as raw
+`context` the SDK token-counts for you; `input_tokens` defaults to its sum and
+`cost_usd` is estimated in-core from `model` + tokens when omitted. Each
 `track()` enqueues onto a bounded queue; the background thread batches by
 size/interval and POSTs a JSON array to `{host}/api/v1/events`, retrying 5xx,
 dropping 4xx/overflow, and never blocking or raising.

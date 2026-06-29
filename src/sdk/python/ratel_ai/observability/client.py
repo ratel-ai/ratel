@@ -88,7 +88,8 @@ class RatelClient:
     def track(
         self,
         *,
-        tokens_by_category: SourceMap,
+        tokens_by_category: SourceMap | None = None,
+        context: SourceMap | None = None,
         saved_by_category: SourceMap | None = None,
         saveable_by_category: SourceMap | None = None,
         input_tokens: int | None = None,
@@ -100,15 +101,19 @@ class RatelClient:
     ) -> None:
         """Record one interaction's usage rollup. Best-effort; never raises.
 
-        `tokens_by_category` is the per-source prompt spend; `saved_by_category`
-        is what Ratel selection kept out of the prompt this run, and
-        `saveable_by_category` is what it *could* save in observe-only mode.
+        Give the per-source prompt spend either as `tokens_by_category` (exact
+        counts you already have) or as `context` — the raw skills/tools/history/
+        memory/user_input segments, which the SDK token-counts for you (no manual
+        tokenization). `saved_by_category` is what Ratel selection kept out of the
+        prompt this run, and `saveable_by_category` is what it *could* save in
+        observe-only mode.
         """
         try:
             if self.config.sample_rate < 1.0 and random.random() >= self.config.sample_rate:
                 return
             rollup = build_rollup(
                 tokens_by_category=tokens_by_category,
+                context=context,
                 saved_by_category=saved_by_category,
                 saveable_by_category=saveable_by_category,
                 input_tokens=input_tokens,

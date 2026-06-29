@@ -43,6 +43,36 @@ def test_build_rollup_explicit_cost_wins_over_estimate() -> None:
     assert rollup["cost_usd"] == 0.5
 
 
+def test_build_rollup_counts_raw_context_automatically() -> None:
+    # Pass the raw context as-is; the SDK token-counts each source (no manual
+    # tokenization). Strings count directly, lists element-wise, dicts as JSON.
+    rollup = build_rollup(
+        context={
+            "skills": "You are a support agent. Follow the refund playbook carefully.",
+            "tools": [{"name": "search_orders", "description": "find a customer's orders"}],
+            "history": [
+                {"role": "user", "content": "where is my order"},
+                {"role": "assistant", "content": "let me check that for you"},
+            ],
+            "memory": "Customer is a premium member since 2021.",
+            "user_input": "I want a refund please",
+        },
+        model="gpt-4o",
+    )
+    tbc = rollup["tokens_by_category"]
+    for key in ("skills", "tools", "history", "memory", "user_input"):
+        assert tbc[key] > 0
+    assert rollup["input_tokens"] == sum(tbc.values())
+
+
+def test_build_rollup_prefers_explicit_tokens_over_context() -> None:
+    rollup = build_rollup(
+        tokens_by_category={"tools": 5},
+        context={"tools": "this string would count to something else entirely"},
+    )
+    assert rollup["tokens_by_category"]["tools"] == 5
+
+
 def test_normalize_sources_none_passes_through() -> None:
     assert normalize_sources(None) is None
     assert normalize_sources({"tools": 5})["tools"] == 5  # type: ignore[index]
@@ -65,6 +95,19 @@ def test_track_enqueues_a_rollup() -> None:
     assert event["tokens_by_category"]["tools"] == 2000
     assert event["saved_by_category"]["tools"] == 7000
     assert event["cost_usd"] > 0
+
+
+def test_track_accepts_raw_context() -> None:
+    exporter = CaptureExporter()
+    client = RatelClient(api_key="rk-test", enabled=True, exporter=exporter)
+    client.track(
+        context={"skills": "be a helpful assistant", "user_input": "hi there"},
+        model="gpt-4o",
+    )
+    assert len(exporter.events) == 1
+    tbc = exporter.events[0]["tokens_by_category"]
+    assert tbc["skills"] > 0
+    assert tbc["user_input"] > 0
 
 
 def test_noop_client_never_raises() -> None:

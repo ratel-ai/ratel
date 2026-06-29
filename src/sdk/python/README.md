@@ -306,7 +306,7 @@ export RATEL_API_KEY="rtl-..."                  # from the dashboard; absent →
 export RATEL_HOST="https://cloud.ratel.sh"      # optional; this is the default
 ```
 
-Call `track(...)` once per interaction with the per-source token spend; everything but `tokens_by_category` is optional. `input_tokens` defaults to the sum of the per-source spend, and `cost_usd` is estimated in-core from `model` + tokens when omitted:
+Call `track(...)` once per interaction. Give the per-source spend either as exact counts (`tokens_by_category`) or as raw `context` the SDK token-counts for you (see below); everything else is optional. `input_tokens` defaults to the sum of the per-source spend, and `cost_usd` is estimated in-core from `model` + tokens when omitted:
 
 ```python
 from ratel_ai import get_client, RatelClient
@@ -319,6 +319,21 @@ get_client().track(
     model="claude-sonnet-4-6", output_tokens=180, latency_ms=420,  # cost_usd auto-estimated
 )
 get_client().flush()   # also auto-flushed at process exit
+```
+
+**No exact counts? Pass raw `context` instead.** Hand `track()` what you already have — the system/skills text, the tools list, the prior messages, the retrieved memory, the user's turn — and the SDK token-counts each source for you (no manual `estimate_tokens`). Strings count directly, lists element-wise, dicts as compact JSON. Explicit `tokens_by_category` wins if you pass both:
+
+```python
+get_client().track(
+    context={
+        "skills": SYSTEM_PROMPT,       # str
+        "tools": tools,                # the tools list, counted as-is
+        "history": messages,           # the prior turns
+        "memory": retrieved_memory,
+        "user_input": user_message,
+    },
+    model="gpt-4o", output_tokens=resp.usage.completion_tokens,
+)
 ```
 
 The five context sources are exactly `skills, tools, history, memory, user_input`. Export is background, batched, and best-effort — it never blocks or breaks your app (overflow drops, retries on 5xx, gives up quietly when the cloud is unreachable). `get_client()` returns a process-wide, env-configured `RatelClient`; construct your own `RatelClient(...)` to override config.
