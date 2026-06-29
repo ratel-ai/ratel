@@ -4,8 +4,7 @@ use std::time::Instant;
 
 use crate::dense_search::dense_search;
 use crate::embedding::embedder;
-use crate::fusion::{RERANK_POOL, RETRIEVE_DEPTH, RRF_K, rrf_fuse, sort_and_truncate};
-use crate::reranker::reranker;
+use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
 use crate::search::bm25_search;
 use crate::skill::Skill;
 use crate::skill_indexing::searchable_text;
@@ -19,8 +18,8 @@ pub struct SkillHit {
 }
 
 /// Retrieval index over [`Skill`]s — the on-demand analog of
-/// [`crate::ToolRegistry`]. Same hybrid engine (BM25 + dense + RRF + cross-encoder
-/// rerank, ADR-0013); a parallel type keeps the tool path independent and lets
+/// [`crate::ToolRegistry`]. Same hybrid engine (BM25 + dense fused with RRF,
+/// ADR-0013/ADR-0014); a parallel type keeps the tool path independent and lets
 /// skill telemetry stand on its own.
 pub struct SkillRegistry {
     skills: Vec<Skill>,
@@ -80,7 +79,7 @@ impl SkillRegistry {
 
     /// Hybrid skill retrieval — the skill analog of
     /// [`crate::ToolRegistry::search_with_origin`]. Same `(query, top_k)`
-    /// contract; BM25 + dense fused with RRF, then cross-encoder reranked.
+    /// contract; BM25 + dense fused with RRF.
     pub fn search_with_origin(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SkillHit> {
         let started = Instant::now();
         if self.skills.is_empty() || top_k == 0 {
@@ -96,14 +95,11 @@ impl SkillRegistry {
         }
 
         let depth = RETRIEVE_DEPTH.max(top_k);
-        let pool = RERANK_POOL.max(top_k);
 
         // Collapse duplicate ids to the latest entry (last-wins), mirroring BM25.
         let mut latest_vec: HashMap<&str, &[f32]> = HashMap::new();
-        let mut latest_skill: HashMap<&str, &Skill> = HashMap::new();
         for (skill, embedding) in self.skills.iter().zip(self.embeddings.iter()) {
             latest_vec.insert(skill.id.as_str(), embedding.as_slice());
-            latest_skill.insert(skill.id.as_str(), skill);
         }
 
         // 1. BM25 (lexical).
@@ -135,37 +131,19 @@ impl SkillRegistry {
             top_score: dense_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        // 3. RRF fusion → bounded rerank pool.
+        // 3. RRF fusion → final top_k.
         let t = Instant::now();
         let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
         let dense_ids: Vec<String> = dense_ranked.into_iter().map(|(id, _)| id).collect();
         let mut fused = rrf_fuse(&[&bm25_ids, &dense_ids], RRF_K);
-        fused.truncate(pool);
+        fused.truncate(top_k);
         let rrf_stage = SearchStage {
             name: "rrf".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: fused.first().map(|(_, s)| *s as f64),
         };
 
-        // 4. Cross-encoder rerank → final top_k.
-        let t = Instant::now();
-        let candidates: Vec<(String, String)> = fused
-            .iter()
-            .filter_map(|(id, _)| {
-                latest_skill
-                    .get(id.as_str())
-                    .map(|skill| (id.clone(), searchable_text(skill)))
-            })
-            .collect();
-        let mut reranked = reranker().rerank(query, &candidates);
-        sort_and_truncate(&mut reranked, top_k);
-        let rerank_stage = SearchStage {
-            name: "rerank".into(),
-            took_ms: t.elapsed().as_millis() as u64,
-            top_score: reranked.first().map(|(_, s)| *s as f64),
-        };
-
-        let hits: Vec<SkillHit> = reranked
+        let hits: Vec<SkillHit> = fused
             .into_iter()
             .map(|(skill_id, score)| SkillHit { skill_id, score })
             .collect();
@@ -181,7 +159,7 @@ impl SkillRegistry {
                     score: h.score as f64,
                 })
                 .collect(),
-            stages: vec![bm25_stage, dense_stage, rrf_stage, rerank_stage],
+            stages: vec![bm25_stage, dense_stage, rrf_stage],
             took_ms,
         });
         hits

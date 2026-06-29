@@ -46,15 +46,16 @@ Tools are the first content type indexed by the core. Each `Tool` is projected t
 
 ## Hybrid retrieval
 
-`search()` runs a hybrid pipeline ([ADR‑0013](../../../docs/adr/0013-hybrid-retrieval.md)): BM25 (lexical) and a dense embedding arm (semantic) each rank the corpus, **Reciprocal Rank Fusion** (`k = 60`) merges the two rankings, and a **cross-encoder reranker** scores the fused candidate pool to produce the final order. BM25 is precise where query and tool share words; the dense arm recovers the "missing gold" cases where they describe the same thing in different words ("remove a file" vs. "delete a path"); the cross-encoder, which reads the `(query, tool)` pair jointly, tightens precision over either alone.
+`search()` runs a hybrid pipeline ([ADR‑0013](../../../docs/adr/0013-hybrid-retrieval.md), [ADR‑0014](../../../docs/adr/0014-drop-cross-encoder-rerank.md)): BM25 (lexical) and a dense embedding arm (semantic) each rank the corpus, then **Reciprocal Rank Fusion** (`k = 60`) merges the two rankings into the final order. BM25 is precise where query and tool share words; the dense arm recovers the "missing gold" cases where they describe the same thing in different words ("remove a file" vs. "delete a path"); RRF fuses on rank position, so the two incomparable score scales need no calibration.
 
 - **Dense embedder:** `BAAI/bge-small-en-v1.5` (384-dim, CLS-pooled, L2-normalized, asymmetric query prefix). Each tool/skill is embedded once at `register()`; a query embeds only the query string. Vectors live in-registry (`Vec<Vec<f32>>`), index-aligned — no vector DB; brute-force cosine.
-- **Cross-encoder:** `cross-encoder/ms-marco-MiniLM-L6-v2`, run only over the bounded fused pool (query-time, never at registration). `SearchHit.score` is its relevance logit (unbounded; can be negative).
-- **Pure-Rust [Candle](https://github.com/huggingface/candle)** inference, CPU + f32, **pinned model revisions** — deterministic across machines. Weights are **downloaded on first use** into `~/.cache/huggingface` (~220 MB across both models) and cached, never bundled; offline after the first fetch.
+- **Pure-Rust [Candle](https://github.com/huggingface/candle)** inference, CPU + f32, **pinned model revision** — deterministic across machines. Weights are **downloaded on first use** into `~/.cache/huggingface` (~130 MB) and cached, never bundled; offline after the first fetch.
 
-The public `search()` / `search_with_origin()` signatures are unchanged from the BM25-only releases — upgrading gets hybrid transparently. Each pipeline phase is recorded as a `SearchStage` (`bm25`, `dense`, `rrf`, `rerank`) on the trace event.
+A cross-encoder rerank stage shipped in `0.3.0-hybrid.1` but was dropped in `0.3.0-hybrid.2` — see [ADR‑0014](../../../docs/adr/0014-drop-cross-encoder-rerank.md). `SearchHit.score` is the RRF fusion score.
 
-> First run needs network to fetch the models. `cargo test -p ratel-ai-core` downloads them once; CI should cache `~/.cache/huggingface`.
+The public `search()` / `search_with_origin()` signatures are unchanged from the BM25-only releases — upgrading gets hybrid transparently. Each pipeline phase is recorded as a `SearchStage` (`bm25`, `dense`, `rrf`) on the trace event.
+
+> First run needs network to fetch the model. `cargo test -p ratel-ai-core` downloads it once; CI should cache `~/.cache/huggingface`.
 
 ## Trace stream
 

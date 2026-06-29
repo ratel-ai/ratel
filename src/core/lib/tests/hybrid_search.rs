@@ -1,10 +1,10 @@
-//! End-to-end behavior of the public hybrid `search()` (ADR-0013): BM25 + dense
-//! fused with RRF, then a cross-encoder rerank. These exercise the engine
-//! through the *unchanged* public API, so they double as the proof that callers
-//! upgrading from the BM25-only releases get hybrid transparently.
+//! End-to-end behavior of the public hybrid `search()` (ADR-0013/ADR-0014): BM25
+//! and dense fused with RRF. These exercise the engine through the *unchanged*
+//! public API, so they double as the proof that callers upgrading from the
+//! BM25-only releases get hybrid transparently.
 //!
-//! First run downloads the bge-small and ms-marco-MiniLM models into the shared
-//! HuggingFace cache (network required once, then offline).
+//! First run downloads the bge-small model into the shared HuggingFace cache
+//! (network required once, then offline).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,7 +47,7 @@ fn surfaces_a_synonym_match_pure_bm25_would_miss() {
 }
 
 #[test]
-fn search_emits_the_four_hybrid_stages_in_order() {
+fn search_emits_the_three_hybrid_stages_in_order() {
     let sink = Arc::new(MemorySink::new("hybrid-stages"));
     let mut registry = ToolRegistry::with_trace_sink(sink.clone());
     registry.register(tool("delete_file", "delete a path from the filesystem"));
@@ -63,7 +63,7 @@ fn search_emits_the_four_hybrid_stages_in_order() {
         })
         .expect("expected a Search event");
     let names: Vec<String> = stages.into_iter().map(|s| s.name).collect();
-    assert_eq!(names, ["bm25", "dense", "rrf", "rerank"]);
+    assert_eq!(names, ["bm25", "dense", "rrf"]);
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn skill_search_surfaces_a_synonym_match() {
 }
 
 #[test]
-fn skill_search_emits_the_four_hybrid_stages() {
+fn skill_search_emits_the_three_hybrid_stages() {
     let sink = Arc::new(MemorySink::new("hybrid-skill-stages"));
     let mut registry = SkillRegistry::with_trace_sink(sink.clone());
     registry.register(skill("delete_path", "erase a directory entry permanently"));
@@ -164,7 +164,7 @@ fn skill_search_emits_the_four_hybrid_stages() {
         })
         .expect("expected a SkillSearch event");
     let names: Vec<String> = stages.into_iter().map(|s| s.name).collect();
-    assert_eq!(names, ["bm25", "dense", "rrf", "rerank"]);
+    assert_eq!(names, ["bm25", "dense", "rrf"]);
 }
 
 #[test]

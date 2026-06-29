@@ -15,11 +15,6 @@ pub(crate) const RRF_K: f32 = 60.0;
 /// so a tool the two arms rank differently still has rank signal to fuse.
 pub(crate) const RETRIEVE_DEPTH: usize = 100;
 
-/// Max candidates the cross-encoder scores after fusion. Bounds the per-query
-/// rerank cost (one forward pass per candidate); the reranker is what decides
-/// the final order, so this only has to be wide enough to contain the gold.
-pub(crate) const RERANK_POOL: usize = 50;
-
 /// Reciprocal Rank Fusion over already-ranked, best-first id lists.
 ///
 /// `score(id) = Σ_list 1 / (k + rank_in_list)`, with `rank` 0-based. An id

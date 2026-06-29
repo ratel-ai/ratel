@@ -79,11 +79,10 @@ fn search_emits_search_event_with_hybrid_stages_and_hits() {
             assert_eq!(hits.len(), 1);
             assert_eq!(hits[0].tool_id, "alpha");
             // The hybrid pipeline records one stage per phase, in order. The
-            // final user-visible score is the cross-encoder logit (the last
-            // stage's top score). Cross-encoder logits are unbounded, so we
-            // assert the score *matches the rerank stage*, not its sign.
+            // final user-visible score is the RRF fusion score (the last stage's
+            // top score).
             let names: Vec<&str> = stages.iter().map(|s| s.name.as_str()).collect();
-            assert_eq!(names, ["bm25", "dense", "rrf", "rerank"]);
+            assert_eq!(names, ["bm25", "dense", "rrf"]);
             assert_eq!(stages.last().unwrap().top_score, Some(hits[0].score));
         }
         _ => unreachable!(),

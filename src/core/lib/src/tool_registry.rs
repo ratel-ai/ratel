@@ -4,9 +4,8 @@ use std::time::Instant;
 
 use crate::dense_search::dense_search;
 use crate::embedding::embedder;
-use crate::fusion::{RERANK_POOL, RETRIEVE_DEPTH, RRF_K, rrf_fuse, sort_and_truncate};
+use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
 use crate::indexing::searchable_text;
-use crate::reranker::reranker;
 use crate::search::bm25_search;
 use crate::tool::Tool;
 use crate::trace::{
@@ -75,11 +74,11 @@ impl ToolRegistry {
         self.search_with_origin(query, top_k, Origin::Direct)
     }
 
-    /// Hybrid retrieval (ADR-0013): BM25 and dense each rank the corpus, RRF
-    /// fuses the two rankings, and a cross-encoder reranks the fused candidate
-    /// pool. The public `(query, top_k) -> Vec<SearchHit>` contract is unchanged
-    /// — callers upgrading from the BM25-only releases need no code change; the
-    /// returned `score` is now the cross-encoder relevance logit.
+    /// Hybrid retrieval (ADR-0013, ADR-0014): BM25 and dense each rank the
+    /// corpus and RRF fuses the two rankings into the final order. The public
+    /// `(query, top_k) -> Vec<SearchHit>` contract is unchanged — callers
+    /// upgrading from the BM25-only releases need no code change; the returned
+    /// `score` is the RRF fusion score.
     pub fn search_with_origin(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SearchHit> {
         let started = Instant::now();
         // Empty corpus (or a zero budget) short-circuits before any model load.
@@ -96,17 +95,14 @@ impl ToolRegistry {
         }
 
         // Retrieve deeper than `top_k` so the two arms have rank signal to fuse;
-        // the rerank pool is what the cross-encoder actually scores.
+        // a tool ranked low by one arm but high by the other can still surface.
         let depth = RETRIEVE_DEPTH.max(top_k);
-        let pool = RERANK_POOL.max(top_k);
 
-        // Collapse duplicate ids to the latest entry — mirrors the BM25 engine's
-        // id-keyed last-wins, so re-registering a tool replaces it on every arm.
+        // Collapse duplicate ids to the latest embedding — mirrors the BM25
+        // engine's id-keyed last-wins, so re-registering a tool replaces it here.
         let mut latest_vec: HashMap<&str, &[f32]> = HashMap::new();
-        let mut latest_tool: HashMap<&str, &Tool> = HashMap::new();
         for (tool, embedding) in self.tools.iter().zip(self.embeddings.iter()) {
             latest_vec.insert(tool.id.as_str(), embedding.as_slice());
-            latest_tool.insert(tool.id.as_str(), tool);
         }
 
         // 1. BM25 (lexical).
@@ -138,37 +134,19 @@ impl ToolRegistry {
             top_score: dense_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        // 3. RRF fusion of the two rankings → bounded rerank pool.
+        // 3. RRF fusion of the two rankings → final top_k.
         let t = Instant::now();
         let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
         let dense_ids: Vec<String> = dense_ranked.into_iter().map(|(id, _)| id).collect();
         let mut fused = rrf_fuse(&[&bm25_ids, &dense_ids], RRF_K);
-        fused.truncate(pool);
+        fused.truncate(top_k);
         let rrf_stage = SearchStage {
             name: "rrf".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: fused.first().map(|(_, s)| *s as f64),
         };
 
-        // 4. Cross-encoder rerank of the fused pool → final top_k.
-        let t = Instant::now();
-        let candidates: Vec<(String, String)> = fused
-            .iter()
-            .filter_map(|(id, _)| {
-                latest_tool
-                    .get(id.as_str())
-                    .map(|tool| (id.clone(), searchable_text(tool)))
-            })
-            .collect();
-        let mut reranked = reranker().rerank(query, &candidates);
-        sort_and_truncate(&mut reranked, top_k);
-        let rerank_stage = SearchStage {
-            name: "rerank".into(),
-            took_ms: t.elapsed().as_millis() as u64,
-            top_score: reranked.first().map(|(_, s)| *s as f64),
-        };
-
-        let hits: Vec<SearchHit> = reranked
+        let hits: Vec<SearchHit> = fused
             .into_iter()
             .map(|(tool_id, score)| SearchHit { tool_id, score })
             .collect();
@@ -184,7 +162,7 @@ impl ToolRegistry {
                     score: h.score as f64,
                 })
                 .collect(),
-            stages: vec![bm25_stage, dense_stage, rrf_stage, rerank_stage],
+            stages: vec![bm25_stage, dense_stage, rrf_stage],
             took_ms,
         });
         hits
