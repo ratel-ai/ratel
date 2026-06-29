@@ -1,8 +1,8 @@
 # `@ratel-ai/cloud`
 
-Ship Ratel usage analytics to your dashboard. The cloud client for [`@ratel-ai/sdk`](../../sdk/ts): it batches the *usage rollups* the SDK assembles and POSTs them to `{host}/api/v1/events` — the exact shape Ratel's cloud dashboard renders. Best-effort, never throws into your code, and a no-op without an API key.
+Ship Ratel usage analytics to your dashboard. The cloud client for [`@ratel-ai/sdk`](../../sdk/ts): it batches the *usage rollups* the SDK assembles and POSTs them to `{host}/api/v1/events` — the exact shape Ratel's cloud dashboard renders. Best-effort, never throws into your code, and a no-op without an API key. It also carries the opt-in **chat channel** — conversation turns shipped to `{host}/api/v1/chats` for server-side intent extraction.
 
-Design: [ADR-0013](../../../docs/adr/0013-observability-and-analytics.md).
+Design: [ADR-0013](../../../docs/adr/0013-observability-and-analytics.md) (analytics), [ADR-0014](../../../docs/adr/0014-chat-ingestion-contract-and-privacy.md) (chat ingestion).
 
 ## Install
 
@@ -33,10 +33,33 @@ await client.flush(); // send everything buffered
 
 For a process-wide singleton, use `getClient()` / `configure(options)`.
 
+## Chat capture (opt-in)
+
+To power Ratel's skill-suggestion product, the client can also ship **conversation turns** to `{host}/api/v1/chats` ([ADR-0014](../../../docs/adr/0014-chat-ingestion-contract-and-privacy.md)). Conversation text is sensitive, so capture is **off by default** — turn it on with `captureChats: true` (or `RATEL_CAPTURE_CHATS=true`). Even then it only ships when an API key is present. Ship the full conversation each call; the server does all dedup.
+
+```ts
+const client = new RatelClient({ captureChats: true }); // + RATEL_API_KEY
+
+// Record a slice of one conversation's turns. `seq` defaults to the array index.
+client.recordMessages("conv-abc123", [
+  { role: "user", content: "where is my order", occurredAt: new Date() },
+  { role: "assistant", content: "let me check" },
+]);
+
+// Or bind a handle to one conversation id.
+const conv = client.trackConversation("conv-abc123");
+conv.record([{ role: "user", content: "and refund it" }]);
+await conv.flush();
+```
+
+Chats batch independently of usage rollups (their own buffer, same `flushAt` / `flushIntervalMs` / retry / never-throws). The wire body is a single object or array of `{ conversation_id, messages: [{ role, content, seq, occurred_at? }], metadata? }`; `role ∈ {user, assistant, tool, system}`.
+
 ## API
 
-- `new RatelClient(options?)` / `RatelClientOptions` — `apiKey`, `host`, `enabled`, `sampleRate`, `flushAt`, `flushIntervalMs`, `timeoutMs`, `transport`.
+- `new RatelClient(options?)` / `RatelClientOptions` — `apiKey`, `host`, `enabled`, `sampleRate`, `flushAt`, `flushIntervalMs`, `timeoutMs`, `transport`, `captureChats`, `chatTransport`.
 - `client.track(input)` · `client.flush()` · `client.shutdown()` · `client.canExport`.
+- `client.recordMessages(conversationId, messages, opts?)` · `client.trackConversation(conversationId)` → `ConversationHandle` (`.record(messages, opts?)` · `.flush()`).
 - `getClient()` · `configure(options)` · `setGlobalClient(client)`.
+- Chat types: `ChatMessage`, `RecordMessagesOptions`, `ChatPayload` / `ChatWireMessage` (wire shape), `ChatTransport`, `ConversationHandle`.
 
 Rollup assembly (`buildRollup`), the `Transport` seam, and the `TrackInput` / `Rollup` / `SourceTokens` types live in [`@ratel-ai/sdk`](../../sdk/ts).
