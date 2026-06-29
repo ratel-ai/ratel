@@ -43,4 +43,35 @@ describe("buildRollup", () => {
     });
     expect(rollup.occurred_at).toBe("2026-06-25T00:00:00.000Z");
   });
+
+  it("counts raw context segments automatically (no manual tokenization)", () => {
+    const rollup = buildRollup({
+      context: {
+        skills: "You are a support agent. Follow the refund playbook carefully.",
+        tools: [{ name: "search_orders", description: "find a customer's orders" }],
+        history: [
+          { role: "user", content: "where is my order" },
+          { role: "assistant", content: "let me check that for you" },
+        ],
+        memory: "Customer is a premium member since 2021.",
+        userInput: "I want a refund please",
+      },
+      model: "gpt-4o",
+    });
+    const tbc = rollup.tokens_by_category as Record<string, number>;
+    for (const key of ["skills", "tools", "history", "memory", "user_input"]) {
+      expect(tbc[key]).toBeGreaterThan(0);
+    }
+    expect(rollup.input_tokens).toBe(
+      tbc.skills + tbc.tools + tbc.history + tbc.memory + tbc.user_input,
+    );
+  });
+
+  it("prefers explicit tokensByCategory over context when both are given", () => {
+    const rollup = buildRollup({
+      tokensByCategory: { tools: 5 },
+      context: { tools: "this string would count to something else entirely" },
+    });
+    expect((rollup.tokens_by_category as Record<string, number>).tools).toBe(5);
+  });
 });

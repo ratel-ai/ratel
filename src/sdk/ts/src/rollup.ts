@@ -1,4 +1,4 @@
-import { estimateCostUsd } from "../native/index.cjs";
+import { estimateCostUsd, estimateTokens } from "../native/index.cjs";
 
 /**
  * Usage-rollup assembly and the metrics-export seam (ADR-0013). Turns one agent
@@ -19,10 +19,29 @@ export type SourceTokens = Record<ContextSource, number>;
 /** A partial per-source map — callers usually set only the sources that apply. */
 export type PartialSources = Partial<Record<ContextSource, number>>;
 
+/** A raw context segment to be token-counted for you: a string, an object (a tools
+ * array, a message, etc.), or an array of either. */
+export type RawSegment = string | object;
+
+/** Raw per-source context. Pass what you already have — the system/skills text, the
+ * tools array, the prior messages, the retrieved memory, the user's turn — and the
+ * SDK counts the tokens for you via the core estimator. No manual tokenization. */
+export interface InteractionContext {
+  skills?: RawSegment;
+  tools?: RawSegment;
+  history?: RawSegment;
+  memory?: RawSegment;
+  userInput?: RawSegment;
+}
+
 /** One interaction's usage, in idiomatic camelCase. */
 export interface TrackInput {
-  /** Per-source prompt spend this interaction. */
-  tokensByCategory: PartialSources;
+  /** Pre-counted per-source spend. Use when you already have exact token counts
+   * (provider usage, tiktoken). Otherwise pass `context` and let the SDK count. */
+  tokensByCategory?: PartialSources;
+  /** Raw context segments — the SDK token-counts each for you. Ignored when
+   * `tokensByCategory` is given. */
+  context?: InteractionContext;
   /** What Ratel selection kept OUT of the prompt this run. */
   savedByCategory?: PartialSources;
   /** What selection COULD save in observe-only mode. */
@@ -59,13 +78,35 @@ function total(sources: SourceTokens): number {
   return sum;
 }
 
+/** Token-count a raw segment via the core estimator: a string directly, an array
+ * element-wise, any other object by its compact JSON. */
+function countSegment(seg: RawSegment | undefined): number {
+  if (seg == null) return 0;
+  if (typeof seg === "string") return estimateTokens(seg);
+  if (Array.isArray(seg)) return seg.reduce((sum: number, item) => sum + countSegment(item), 0);
+  return estimateTokens(JSON.stringify(seg));
+}
+
+/** Derive per-source token counts from raw context segments. */
+function tokensFromContext(ctx: InteractionContext): PartialSources {
+  return {
+    skills: countSegment(ctx.skills),
+    tools: countSegment(ctx.tools),
+    history: countSegment(ctx.history),
+    memory: countSegment(ctx.memory),
+    user_input: countSegment(ctx.userInput),
+  };
+}
+
 /**
  * Assemble one interaction's rollup event. The only required field is
  * `tokensByCategory`; `inputTokens` defaults to the per-source sum, and `costUsd`
  * is estimated in-core from model + tokens unless supplied.
  */
 export function buildRollup(input: TrackInput): Rollup {
-  const tokens = normalizeSources(input.tokensByCategory) ?? zeroSources();
+  const perSource =
+    input.tokensByCategory ?? (input.context ? tokensFromContext(input.context) : undefined);
+  const tokens = normalizeSources(perSource) ?? zeroSources();
   const event: Rollup = { tokens_by_category: tokens };
 
   const saved = normalizeSources(input.savedByCategory);
