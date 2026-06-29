@@ -29,7 +29,9 @@ describe("ToolCatalog", () => {
     const hits = catalog.search("read file", 5);
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].toolId).toBe("read_file");
-    expect(hits[0].score).toBeGreaterThan(0);
+    // Hybrid scores are cross-encoder logits (unbounded, can be negative), so
+    // assert a finite score rather than a positive one.
+    expect(Number.isFinite(hits[0].score)).toBe(true);
   });
 
   it("invokes a registered tool by id with args", async () => {

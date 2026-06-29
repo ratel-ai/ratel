@@ -31,7 +31,9 @@ describe("SkillCatalog", () => {
     const hits = catalog.search("design a REST endpoint with pagination", 5);
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].skillId).toBe("api-design");
-    expect(hits[0].score).toBeGreaterThan(0);
+    // Hybrid scores are cross-encoder logits (unbounded, can be negative), so
+    // assert a finite score rather than a positive one.
+    expect(Number.isFinite(hits[0].score)).toBe(true);
   });
 
   it("invoke(id) returns the body; has/get report membership and metadata", () => {

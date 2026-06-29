@@ -1,6 +1,9 @@
 [package]
 name = "ratel-ai-core"
-version.workspace = true
+# Prerelease for the hybrid retrieval milestone (ADR-0013): BM25 + dense fused
+# with RRF, then a cross-encoder rerank. Scoped to this crate; the SDK crates
+# stay on the workspace version.
+version = "0.3.0-hybrid.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -8,14 +11,25 @@ homepage.workspace = true
 documentation.workspace = true
 authors.workspace = true
 readme = "README.md"
-description = "Tool retrieval and ranking for AI agents — BM25 over tool catalogs. Core of the Ratel context engineering platform."
-keywords = ["mcp", "ai-agents", "tool-calling", "bm25", "retrieval"]
+description = "Hybrid tool retrieval for AI agents — BM25 + dense embeddings fused with RRF and a cross-encoder reranker, in-process. Core of the Ratel context engineering platform."
+keywords = ["mcp", "ai-agents", "tool-calling", "retrieval", "embeddings"]
 categories = ["text-processing", "algorithms"]
 
 [dependencies]
 bm25 = "2.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
+
+# Hybrid retrieval — pure-Rust Candle inference, no C++/ONNX native dep, so the
+# SDK wheels/addons stay clean cross-platform. The bi-encoder (bge-small) and the
+# cross-encoder (ms-marco-MiniLM) are downloaded on first use into the shared
+# HuggingFace cache (sync `ureq`/rustls — no OpenSSL/native-tls) and cached, not
+# bundled. See ADR-0013.
+candle-core = "0.9"
+candle-nn = "0.9"
+candle-transformers = "0.9"
+tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
+hf-hub = { version = "0.5", default-features = false, features = ["ureq"] }
 
 [dev-dependencies]
 tempfile = "3"

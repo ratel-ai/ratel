@@ -22,7 +22,10 @@ def test_register_and_search_returns_hit() -> None:
     assert len(hits) >= 1
     assert isinstance(hits[0], SearchHit)
     assert hits[0].tool_id == "read_file"
-    assert hits[0].score > 0
+    # Hybrid scores are cross-encoder logits (unbounded, can be negative).
+    import math
+
+    assert math.isfinite(hits[0].score)
 
 
 def test_search_empty_registry_returns_empty() -> None:

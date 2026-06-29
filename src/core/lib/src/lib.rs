@@ -2,7 +2,11 @@
 //!
 //! See `README.md` and `docs/adr/` for design.
 
+mod dense_search;
+mod embedding;
+mod fusion;
 mod indexing;
+mod reranker;
 mod search;
 mod skill;
 mod skill_indexing;

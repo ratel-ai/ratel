@@ -54,14 +54,15 @@ describe("ToolRegistry", () => {
     expect(registry.search("anything", 5)).toEqual([]);
   });
 
-  it("finds a registered tool by name with a positive score", () => {
+  it("finds a registered tool by name with a finite score", () => {
     const registry = new ToolRegistry();
     registry.register(readFile);
 
     const hits = registry.search("read file", 5);
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].toolId).toBe("read_file");
-    expect(hits[0].score).toBeGreaterThan(0);
+    // Hybrid scores are cross-encoder logits (unbounded, can be negative).
+    expect(Number.isFinite(hits[0].score)).toBe(true);
   });
 
   it("indexes content nested inside inputSchema property descriptions", () => {
@@ -96,6 +97,6 @@ describe("ToolRegistry", () => {
     const typedHit: SearchHit = hit;
     expect(typeof typedHit.toolId).toBe("string");
     expect(typeof typedHit.score).toBe("number");
-    expect(typedHit.score).toBeGreaterThan(0);
+    expect(Number.isFinite(typedHit.score)).toBe(true);
   });
 });
