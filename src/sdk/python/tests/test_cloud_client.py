@@ -1,0 +1,158 @@
+"""Lean cloud client + rollup builder (ADR-0013)."""
+
+from __future__ import annotations
+
+from ratel_ai.observability import (
+    CaptureExporter,
+    RatelClient,
+    build_rollup,
+    normalize_sources,
+)
+
+# -- rollup builder ---------------------------------------------------------
+
+
+def test_build_rollup_fills_sources_and_defaults_input_tokens() -> None:
+    rollup = build_rollup(tokens_by_category={"tools": 2000, "history": 3400})
+    assert rollup["tokens_by_category"] == {
+        "skills": 0,
+        "tools": 2000,
+        "history": 3400,
+        "memory": 0,
+        "user_input": 0,
+    }
+    assert rollup["input_tokens"] == 5400  # defaults to the sum of the spend
+    # absent optionals are omitted, not null
+    assert "saved_by_category" not in rollup
+    assert "cost_usd" not in rollup
+
+
+def test_build_rollup_estimates_cost_from_model() -> None:
+    rollup = build_rollup(
+        tokens_by_category={"tools": 1000}, output_tokens=200, model="claude-sonnet-4-6"
+    )
+    assert rollup["model"] == "claude-sonnet-4-6"
+    assert rollup["output_tokens"] == 200
+    assert rollup["cost_usd"] > 0
+
+
+def test_build_rollup_explicit_cost_wins_over_estimate() -> None:
+    rollup = build_rollup(
+        tokens_by_category={"tools": 1000}, model="claude-opus-4-8", cost_usd=0.5
+    )
+    assert rollup["cost_usd"] == 0.5
+
+
+def test_build_rollup_counts_raw_context_automatically() -> None:
+    # Pass the raw context as-is; the SDK token-counts each source (no manual
+    # tokenization). Strings count directly, lists element-wise, dicts as JSON.
+    rollup = build_rollup(
+        context={
+            "skills": "You are a support agent. Follow the refund playbook carefully.",
+            "tools": [{"name": "search_orders", "description": "find a customer's orders"}],
+            "history": [
+                {"role": "user", "content": "where is my order"},
+                {"role": "assistant", "content": "let me check that for you"},
+            ],
+            "memory": "Customer is a premium member since 2021.",
+            "user_input": "I want a refund please",
+        },
+        model="gpt-4o",
+    )
+    tbc = rollup["tokens_by_category"]
+    for key in ("skills", "tools", "history", "memory", "user_input"):
+        assert tbc[key] > 0
+    assert rollup["input_tokens"] == sum(tbc.values())
+
+
+def test_build_rollup_prefers_explicit_tokens_over_context() -> None:
+    rollup = build_rollup(
+        tokens_by_category={"tools": 5},
+        context={"tools": "this string would count to something else entirely"},
+    )
+    assert rollup["tokens_by_category"]["tools"] == 5
+
+
+def test_normalize_sources_none_passes_through() -> None:
+    assert normalize_sources(None) is None
+    assert normalize_sources({"tools": 5})["tools"] == 5  # type: ignore[index]
+
+
+# -- client -----------------------------------------------------------------
+
+
+def test_track_enqueues_a_rollup() -> None:
+    exporter = CaptureExporter()
+    client = RatelClient(api_key="rk-test", enabled=True, exporter=exporter)
+    client.track(
+        tokens_by_category={"tools": 2000},
+        saved_by_category={"tools": 7000},
+        model="claude-haiku-4-5",
+        output_tokens=120,
+    )
+    assert len(exporter.events) == 1
+    event = exporter.events[0]
+    assert event["tokens_by_category"]["tools"] == 2000
+    assert event["saved_by_category"]["tools"] == 7000
+    assert event["cost_usd"] > 0
+
+
+def test_track_accepts_raw_context() -> None:
+    exporter = CaptureExporter()
+    client = RatelClient(api_key="rk-test", enabled=True, exporter=exporter)
+    client.track(
+        context={"skills": "be a helpful assistant", "user_input": "hi there"},
+        model="gpt-4o",
+    )
+    assert len(exporter.events) == 1
+    tbc = exporter.events[0]["tokens_by_category"]
+    assert tbc["skills"] > 0
+    assert tbc["user_input"] > 0
+
+
+def test_noop_client_never_raises() -> None:
+    client = RatelClient(api_key=None, enabled=False)  # no key → no-op
+    client.track(tokens_by_category={"tools": 1})  # must not raise
+    client.flush()
+    client.shutdown()
+
+
+def test_track_swallows_bad_input() -> None:
+    exporter = CaptureExporter()
+    client = RatelClient(api_key="rk-test", enabled=True, exporter=exporter)
+    # A non-mapping would blow up inside normalize_sources — track must absorb it.
+    client.track(tokens_by_category=123)  # type: ignore[arg-type]
+    assert exporter.events == []  # dropped, not raised
+
+
+def test_config_repr_masks_api_key() -> None:
+    from ratel_ai.observability import ObservabilityConfig
+
+    rendered = repr(ObservabilityConfig.resolve(api_key="rk-secret-123"))
+    assert "rk-secret-123" not in rendered
+    assert "***" in rendered
+
+
+def test_sample_rate_zero_drops_everything() -> None:
+    exporter = CaptureExporter()
+    client = RatelClient(api_key="rk-test", enabled=True, exporter=exporter, sample_rate=0.0)
+    for _ in range(20):
+        client.track(tokens_by_category={"tools": 1})
+    assert exporter.events == []
+
+
+def test_build_rollup_serializes_occurred_at() -> None:
+    from datetime import datetime, timezone
+
+    rollup = build_rollup(
+        tokens_by_category={"tools": 1},
+        occurred_at=datetime(2026, 6, 25, 0, 0, tzinfo=timezone.utc),
+    )
+    assert rollup["occurred_at"] == "2026-06-25T00:00:00+00:00"
+
+
+def test_normalize_sources_clamps_negatives_to_zero() -> None:
+    normalized = normalize_sources({"tools": -5, "skills": 3})
+    assert normalized is not None
+    assert normalized["tools"] == 0
+    assert normalized["skills"] == 3

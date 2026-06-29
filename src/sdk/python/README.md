@@ -1,6 +1,6 @@
 <div align="center">
   <h1>ratel-ai</h1>
-  <h4>Python SDK for Ratel — drop context engineering into any Python agent with one dependency.</h4>
+  <h4>Context engineering & usage analytics for any Python agent — one dependency.</h4>
 
   <p>
     <a href="../../../docs/">Docs</a> •
@@ -16,9 +16,12 @@
   </p>
 </div>
 
-As an agent runs, its context window fills with tool definitions it will never call this turn. A model staring at 100 tools picks the wrong one, burns tokens on schemas it ignores, and drifts. **Ratel** keeps the full toolset out of the prompt and surfaces only the handful that matter for the current turn.
+`ratel-ai` ([Ratel](../../../README.md)'s Python SDK) does two things for an agent, each one dependency away, in-process, with no service to deploy:
 
-`ratel-ai` is the Python surface of [Ratel](../../../README.md). It bundles the Rust core (`ratel-ai-core`) via [PyO3](https://pyo3.rs), so a Python agent gets ranked tool selection by adding one dependency, **in-process, no API key, no service to deploy, no Rust toolchain.** Retrieval is BM25 over a schema-aware text projection of each tool: deterministic, with no embeddings, no vector DB, and no inference cost on the retrieval path. The API mirrors the [TypeScript SDK](../ts/README.md) one-to-one; the binding strategy is locked in [ADR 0011](../../../docs/adr/0011-python-rust-binding-strategy.md).
+- **Engineers its context** — ranks your tools (and skills) so only the handful relevant to *this* turn enter the prompt, instead of a wall of 100 definitions the model has to wade through. Fewer input tokens, sharper tool choice. Ranking is BM25 over a schema-aware projection of each tool: deterministic, no embeddings, no vector DB, no inference cost.
+- **Measures it** — ships one *usage rollup* per agent interaction to your dashboard: token spend per context source, plus what Ratel selection saved. Best-effort, batched, never throws; no API key → no-op.
+
+Adopt either, at the depth you want — **[Get started](#get-started)** shows the two levels, smallest first. It bundles the Rust core (`ratel-ai-core`) via [PyO3](https://pyo3.rs); the binding strategy is locked in [ADR 0011](../../../docs/adr/0011-python-rust-binding-strategy.md).
 
 ## Install
 
@@ -26,11 +29,66 @@ As an agent runs, its context window fills with tool definitions it will never c
 pip install ratel-ai
 # upstream MCP ingestion (register_mcp_server) needs the extra:
 pip install 'ratel-ai[mcp]'
+# observability + analytics (ship traces to Ratel's cloud) needs the extra:
+pip install 'ratel-ai[observability]'
 ```
 
 Prebuilt `abi3` wheels ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc, so there is nothing to compile. The base SDK runs on CPython ≥ 3.9; the `mcp` extra requires ≥ 3.10.
 
+## Get started
+
+Ratel meets your agent at two levels, and they **compose** — engineer the context, then measure it.
+
+### 1 · Engineer the context — register a catalog
+
+Passing a big tool list to the model on every turn? Register a `ToolCatalog` and Ratel ranks it: pre-filter the top-K most relevant tools each turn, hand the agent a `search_capabilities` + `invoke_tool` gateway for the rest, add skills and MCP servers — the full catalog never enters the prompt.
+
+```python
+from ratel_ai import ToolCatalog, ExecutableTool
+
+catalog = ToolCatalog()
+catalog.register(ExecutableTool(
+    id="read_file",
+    name="read_file",
+    description="Read a file from local disk and return its contents.",
+    input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+    execute=lambda args: {"contents": open(args["path"]).read()},
+))
+# ...register your other tools, then pre-filter the top-K each turn or hand the agent
+# search_capabilities + invoke_tool. See "How it works" below.
+```
+
+More → [How it works](#how-it-works) · [`ToolCatalog`](#toolcatalog).
+
+### 2 · Measure it — ship a usage rollup
+
+Once you know what each turn costs, ship one *usage rollup* per interaction to your dashboard: token spend per context source, plus what Ratel selection saved. Best-effort, batched, never throws.
+
+```python
+from ratel_ai import get_client
+
+get_client().track(
+    tokens_by_category={"skills": 120, "tools": 2000, "history": 3400,
+                        "memory": 260, "user_input": 340},
+    saved_by_category={"tools": 7200},   # optional: what selection kept out of the prompt
+    model="claude-sonnet-4-6", output_tokens=180,
+)
+```
+
+`pip install 'ratel-ai[observability]'`, then set `RATEL_API_KEY` to ship to your dashboard (no key → silent no-op, never raises). More → [Usage analytics](#usage-analytics).
+
+### Which level do I want?
+
+| You want… | Use | Code change |
+|---|---|---|
+| Lower token cost: gateway, skills, MCP, dispatch | **1** — `ToolCatalog` | register tools |
+| Usage analytics on your dashboard | **2** — `get_client().track(...)` | one call per interaction |
+
+They stack: register a catalog (1) to shrink the prompt, then `track()` (2) the result so the dashboard shows the saving. The rest of this README is the reference for each.
+
 ## How it works
+
+*This section is **Level 1** — the full `ToolCatalog`. For the usage-analytics path, see [Usage analytics](#usage-analytics).*
 
 Everything starts with a **`ToolCatalog`**: register each of your tools once, pairing its metadata (id, description, JSON schemas) with the handler that runs it. From there you reach the model in one of two ways, and most agents use both at once:
 
@@ -239,6 +297,57 @@ Sink kinds:
 
 `search_capabilities_tool` tags its emitted `search` event with `origin="agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
 
+## Usage analytics
+
+This is **Level 2**: ship one *usage rollup* per agent interaction to Ratel's cloud — the exact shape the dashboard renders. A rollup carries token spend broken down by the five context sources, plus what Ratel selection saved and what it *could* save. The token / savings / cost maths live in `ratel-ai-core` (native); the SDK is a thin client that assembles and ships. Needs the `observability` extra (`pip install 'ratel-ai[observability]'`) and an API key from the dashboard. Design: [ADR-0013](../../../docs/adr/0013-observability-and-analytics.md).
+
+```bash
+export RATEL_API_KEY="rtl-..."                  # from the dashboard; absent → no-op, never raises
+export RATEL_HOST="https://cloud.ratel.sh"      # optional; this is the default
+```
+
+Call `track(...)` once per interaction. Give the per-source spend either as exact counts (`tokens_by_category`) or as raw `context` the SDK token-counts for you (see below); everything else is optional. `input_tokens` defaults to the sum of the per-source spend, and `cost_usd` is estimated in-core from `model` + tokens when omitted:
+
+```python
+from ratel_ai import get_client, RatelClient
+
+get_client().track(
+    tokens_by_category={"skills": 120, "tools": 2000, "history": 3400,
+                        "memory": 260, "user_input": 340},
+    saved_by_category={"tools": 7200},      # optional: kept out of the prompt this run
+    saveable_by_category={"tools": 7000},   # optional: could save in observe-only mode
+    model="claude-sonnet-4-6", output_tokens=180, latency_ms=420,  # cost_usd auto-estimated
+)
+get_client().flush()   # also auto-flushed at process exit
+```
+
+**No exact counts? Pass raw `context` instead.** Hand `track()` what you already have — the system/skills text, the tools list, the prior messages, the retrieved memory, the user's turn — and the SDK token-counts each source for you (no manual `estimate_tokens`). Strings count directly, lists element-wise, dicts as compact JSON. Explicit `tokens_by_category` wins if you pass both:
+
+```python
+get_client().track(
+    context={
+        "skills": SYSTEM_PROMPT,       # str
+        "tools": tools,                # the tools list, counted as-is
+        "history": messages,           # the prior turns
+        "memory": retrieved_memory,
+        "user_input": user_message,
+    },
+    model="gpt-4o", output_tokens=resp.usage.completion_tokens,
+)
+```
+
+The five context sources are exactly `skills, tools, history, memory, user_input`. Export is background, batched, and best-effort — it never blocks or breaks your app (overflow drops, retries on 5xx, gives up quietly when the cloud is unreachable). `get_client()` returns a process-wide, env-configured `RatelClient`; construct your own `RatelClient(...)` to override config.
+
+**Ratel savings from the catalog.** Pass `observe=True` to `ToolCatalog` and every search records the tokens its top-K selection keeps out of the prompt (full catalog vs selected) onto `last_savings` and the local trace stream — ready to fold into a `track()` call as `saved_by_category` / `saveable_by_category`:
+
+```python
+catalog = ToolCatalog(observe=True)
+catalog.search("read a file from disk", top_k=2)
+catalog.last_savings   # → {"full_catalog_tokens": ..., "selected_tokens": ..., "tokens_saved": ...}
+```
+
+A runnable end-to-end demo — BM25 suggestions plus a backfilled adoption story shipped via `track()` — lives in [`examples/observability_demo.py`](examples/README.md).
+
 ## Develop
 
 This package is part of the Cargo workspace at the repo root and builds into a local venv. From `src/sdk/python/`:
@@ -257,6 +366,8 @@ uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy
 ```
 native/         PyO3 binding to ratel-ai-core (cdylib Cargo workspace member)
 ratel_ai/       pure-Python SDK: catalog, gateway tools, skills, MCP ingestion
+  observability/  lean cloud analytics — usage rollups via RatelClient.track
+examples/       runnable demos (observability_demo.py)
 tests/          pytest suite
 pyproject.toml  maturin build backend + tooling config
 ```

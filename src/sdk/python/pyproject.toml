@@ -32,12 +32,20 @@ dependencies = []
 # register_mcp_server() ingests upstream MCP servers via the official client.
 # Lazily imported, so the base SDK installs without it. Requires Python >=3.10.
 mcp = ["mcp>=1.0"]
+# Observability/analytics layer (ADR-0013): usage-rollup tracking and the cloud
+# exporter. Only httpx is required; the tracing core is otherwise stdlib-only.
+observability = ["httpx>=0.27"]
+# Precise token-savings estimation. Kept separate from `observability` because
+# tiktoken's wheel coverage on the abi3-py39 floor is narrower (see lessons.md).
+observability-tiktoken = ["tiktoken>=0.7"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "ruff>=0.6",
     "mypy>=1.11",
     "maturin>=1.7,<2.0",
+    "httpx>=0.27",
+    "pytest-httpx>=0.30",
 ]
 
 [project.urls]
@@ -60,6 +68,10 @@ target-version = "py39"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
 
+[tool.ruff.lint.per-file-ignores]
+# Example data tables (the tool/skill catalogs) read better unwrapped.
+"examples/*" = ["E501"]
+
 # Runtime floor is 3.9 (via `from __future__ import annotations`); mypy's minimum
 # supported target is 3.10, so we type-check against that.
 [tool.mypy]
@@ -68,7 +80,17 @@ strict = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["ratel_ai._native", "mcp", "mcp.*"]
+# Native ext + optional/lazily-imported deps that may be absent at type-check time.
+module = [
+    "ratel_ai._native",
+    "mcp",
+    "mcp.*",
+    "openai",
+    "openai.*",
+    "anthropic",
+    "anthropic.*",
+    "tiktoken",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
