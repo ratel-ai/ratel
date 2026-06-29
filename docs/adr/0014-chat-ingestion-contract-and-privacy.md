@@ -54,7 +54,7 @@ Caps: ≤100 conversations/request, ≤500 messages total, per-message content �
 are chained:
 
 ```
-msg_hash[i]    = sha256( role · "\0" · content )
+msg_hash[i]    = sha256( role · " " · content )             // role is a fixed enum (space-free), so the delimiter is unambiguous
 prefix_hash[i] = sha256( prefix_hash[i-1] · msg_hash[i] )   // fingerprints turns [0..i] in order
 ```
 
