@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0-rc.2] - 2026-06-30
+
+### Changed
+
+- Retrieval is now **hybrid** — BM25 + dense embeddings fused with Reciprocal Rank Fusion — via the bundled `ratel-ai-core` native core. The `search()` API is unchanged, so upgrading is transparent, but `SearchHit.score` is now the RRF fusion score and the dense arm downloads a small embedding model (`bge-small-en-v1.5`) on first use (cached, ~130 MB). See [ADR-0013](../../../docs/adr/0013-hybrid-retrieval.md).
+
 ## [0.2.0] - 2026-06-16
 
 ### Changed

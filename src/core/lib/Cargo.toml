@@ -1,10 +1,6 @@
 [package]
 name = "ratel-ai-core"
-# Prerelease for the hybrid retrieval milestone: BM25 + dense fused with RRF
-# (ADR-0013). hybrid.2 drops the cross-encoder rerank stage (ADR-0014) pending a
-# stronger reranker. Scoped to this crate; the SDK crates stay on the workspace
-# version.
-version = "0.3.0-hybrid.2"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

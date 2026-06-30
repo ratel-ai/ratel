@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0-rc.2] - 2026-06-30
+
+_No package-specific changes; released in lockstep with the workspace (hybrid retrieval lands in `ratel-ai-core` and the SDKs)._
+
 ## [0.2.0] - 2026-06-16
 
 ### Changed
