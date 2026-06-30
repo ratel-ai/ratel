@@ -1,35 +1,38 @@
-//! Local dense embedder — `all-MiniLM-L6-v2` run in-process via Candle.
+//! Local dense embedder — `bge-small-en-v1.5` run in-process via Candle.
 //!
 //! Pure-Rust inference (no C++/ONNX native dep), so the SDK wheels/addons stay
-//! clean cross-platform. The model is BERT-family, 384-dim; we **mean-pool** the
-//! last hidden state and L2-normalize, so cosine similarity is a dot product
-//! (see [`crate::dense_search`]). MiniLM is **symmetric** — query and document
-//! are embedded the same way, no instruction prefix.
+//! clean cross-platform. The model is BERT-family, 384-dim; we pool the `[CLS]`
+//! token of the last hidden state and L2-normalize, so cosine similarity is a
+//! dot product (see [`crate::dense_search`]). It is asymmetric: documents are
+//! embedded plain, queries with the retrieval instruction prefix below.
 //!
 //! Weights are **not** bundled. On first use the model is downloaded via
 //! `hf-hub` into the shared HuggingFace cache (`~/.cache/huggingface`) at a
 //! pinned revision, then loaded from cache on every later run — offline after
 //! the first fetch, deterministic because the revision is fixed. The model is
 //! loaded once per process (kept resident for both registration and queries).
-//! The model used is the experiment variable for this crate version (ADR-0013).
+//! See ADR-0013.
 
 use std::sync::OnceLock;
 
-use candle_core::{DType, Device, Tensor};
+use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config};
 use hf_hub::api::sync::Api;
 use hf_hub::{Repo, RepoType};
 use tokenizers::{Tokenizer, TruncationDirection, TruncationParams, TruncationStrategy};
 
+/// bge asymmetric-retrieval query prefix; only the query side gets it.
+const QUERY_INSTRUCTION: &str = "Represent this sentence for searching relevant passages: ";
+
 /// HuggingFace repo and pinned commit for the embedding model. Pinning the
 /// revision keeps embeddings reproducible across machines and over time.
-const MODEL_REPO: &str = "sentence-transformers/all-MiniLM-L6-v2";
-const MODEL_REVISION: &str = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41";
+const MODEL_REPO: &str = "BAAI/bge-small-en-v1.5";
+const MODEL_REVISION: &str = "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a";
 
 /// Maps a tool's searchable text (and a query) to an L2-normalized vector.
-/// A trait so the model is swappable per experiment without touching the
-/// registry.
+/// A trait so the model is swappable — MiniLM or a static model can be dropped
+/// in as alternate benchmark arms without touching the registry.
 pub(crate) trait Embedder: Send + Sync {
     fn embed_doc(&self, text: &str) -> Vec<f32>;
     fn embed_query(&self, text: &str) -> Vec<f32>;
@@ -40,19 +43,20 @@ pub(crate) trait Embedder: Send + Sync {
 /// thus typically a first-run network/cache problem — we fail loud rather than
 /// thread a `Result` through the infallible `Embedder` API.
 pub(crate) fn embedder() -> &'static dyn Embedder {
-    static EMBEDDER: OnceLock<BertEmbedder> = OnceLock::new();
+    static EMBEDDER: OnceLock<BgeSmallEmbedder> = OnceLock::new();
     EMBEDDER.get_or_init(|| {
-        BertEmbedder::load().expect("download/load embedding model (first use needs network)")
+        BgeSmallEmbedder::load()
+            .expect("download/load bge-small-en-v1.5 embedder (first use needs network)")
     })
 }
 
-pub(crate) struct BertEmbedder {
+pub(crate) struct BgeSmallEmbedder {
     model: BertModel,
     tokenizer: Tokenizer,
     device: Device,
 }
 
-impl BertEmbedder {
+impl BgeSmallEmbedder {
     fn load() -> candle_core::Result<Self> {
         let device = Device::Cpu;
 
@@ -114,25 +118,24 @@ impl BertEmbedder {
         let mask: Vec<u32> = encoding.get_attention_mask().to_vec();
         let attention_mask = Tensor::new(mask.as_slice(), &self.device)?.unsqueeze(0)?;
 
-        // (1, seq, hidden). Mean-pool over the token dimension — exact here since
-        // a single sequence has no padding (every attention-mask entry is 1).
+        // (1, seq, hidden); CLS pooling = the first token's hidden state.
         let sequence_output =
             self.model
                 .forward(&input_ids, &token_type_ids, Some(&attention_mask))?;
-        let pooled = sequence_output.mean(1)?.squeeze(0)?; // (hidden,)
-        let vec = pooled.to_vec1::<f32>()?;
+        let cls = sequence_output.i((0, 0))?; // (hidden,)
+        let vec = cls.to_vec1::<f32>()?;
         Ok(l2_normalize(vec))
     }
 }
 
-impl Embedder for BertEmbedder {
+impl Embedder for BgeSmallEmbedder {
     fn embed_doc(&self, text: &str) -> Vec<f32> {
         self.embed(text).expect("embed document")
     }
 
-    // MiniLM is symmetric — the query is embedded exactly like a document.
     fn embed_query(&self, text: &str) -> Vec<f32> {
-        self.embed(text).expect("embed query")
+        self.embed(&format!("{QUERY_INSTRUCTION}{text}"))
+            .expect("embed query")
     }
 }
 
@@ -157,23 +160,23 @@ mod tests {
         let e = embedder();
         let a = e.embed_doc("read a file from disk");
         let b = e.embed_doc("read a file from disk");
-        assert_eq!(a.len(), 384, "MiniLM-L6 is 384-dim");
+        assert_eq!(a.len(), 384, "bge-small is 384-dim");
         assert_eq!(a, b, "same text must embed identically (determinism)");
         let norm = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "expected unit norm, got {norm}");
     }
 
     #[test]
-    fn query_and_doc_are_symmetric() {
-        // MiniLM applies no query instruction, so both sides embed identically.
+    fn query_prefix_changes_the_embedding() {
         let e = embedder();
-        assert_eq!(e.embed_query("delete a file"), e.embed_doc("delete a file"));
+        let doc = e.embed_doc("delete a file");
+        let query = e.embed_query("delete a file");
+        assert_ne!(doc, query, "query instruction prefix must shift the vector");
     }
 
     #[test]
     fn ranks_synonyms_above_lexically_unrelated_text() {
-        // The "missing gold" case lexical search can't see: query and doc share
-        // no words.
+        // The "missing gold" case BM25 can't see: query and doc share no words.
         let e = embedder();
         let q = e.embed_query("remove a file");
         let delete = e.embed_doc("delete a path from the filesystem");

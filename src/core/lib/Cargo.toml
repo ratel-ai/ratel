@@ -3,7 +3,7 @@ name = "ratel-ai-core"
 # Retrieval-experiment line (ADR-0013): the version identifies the experiment.
 # semantic.1 = bge-small-en-v1.5; semantic.2 = all-MiniLM-L6-v2. Scoped to this
 # crate; the SDK crates stay on the workspace version.
-version = "0.3.0-semantic.2"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -26,7 +26,10 @@ serde_json = { version = "1.0", features = ["preserve_order"] }
 candle-core = "0.9"
 candle-nn = "0.9"
 candle-transformers = "0.9"
-tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
+# `fancy-regex` is the pure-Rust regex backend; `onig` pulls oniguruma (C) via
+# onig_sys, which breaks cross-compilation to aarch64-linux for the SDK
+# wheels/addons. BERT WordPiece tokenization is unaffected by the backend.
+tokenizers = { version = "0.21", default-features = false, features = ["fancy-regex"] }
 hf-hub = { version = "0.5", default-features = false, features = ["ureq"] }
 
 [dev-dependencies]
