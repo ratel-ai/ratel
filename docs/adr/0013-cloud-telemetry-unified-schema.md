@@ -187,7 +187,7 @@ stuck before the adapter lands.
 
 ### Package layout (decision-level; details in the implementation plan)
 
-- **Schema** — `src/core/cloud` → crate `ratel-ai-cloud`: event types, serde, strict validation, and the
+- **Schema** — `src/cloud/core` → crate `ratel-ai-cloud`: event types, serde, strict validation, and the
   conformance test vectors. Sibling of `ratel-ai-core`, independent of it. Directly usable by Rust /
   server consumers.
 - **Clients** — pure-language packages, no native addon: `@ratel-ai/cloud` (TS) and `ratel_ai-cloud`
