@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "src/core/lib",
+    "src/cloud/core",
     "src/sdk/ts/native",
     "src/sdk/python/native",
 ]

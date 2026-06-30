@@ -1,0 +1,12 @@
+{
+  "provider": "openai",
+  "model": "gpt-5.5",
+  "ts": "2026-06-30T12:00:00Z",
+  "stream": false,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Weather in Paris?"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "provider": "anthropic",
+  "model": "claude-opus-4-8",
+  "ts": "2026-06-30T12:05:00Z",
+  "stream": false,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "image", "media_type": "image/png" }
+      ]
+    }
+  ]
+}

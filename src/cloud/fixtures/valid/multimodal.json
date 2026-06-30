@@ -1,0 +1,32 @@
+{
+  "provider": "anthropic",
+  "model": "claude-opus-4-8",
+  "ts": "2026-06-30T12:05:00Z",
+  "stream": true,
+  "latency_ms": 1203,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Describe this image."
+        },
+        {
+          "type": "image",
+          "source": "iVBORw0KGgo=",
+          "media_type": "image/png"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "A red square."
+    }
+  ],
+  "usage": {
+    "input_tokens": 1024,
+    "output_tokens": 12
+  },
+  "finish_reason": "stop"
+}
