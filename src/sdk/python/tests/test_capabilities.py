@@ -1,4 +1,4 @@
-"""Tests for the gateway tools — mirrors `src/sdk/ts/src/gateway.test.ts`."""
+"""Tests for the capability tools — mirrors `src/sdk/ts/src/capabilities.test.ts`."""
 
 from ratel_ai import (
     INVOKE_TOOL_ID,
@@ -12,7 +12,7 @@ from ratel_ai import (
     invoke_tool_tool,
     search_capabilities_tool,
 )
-from ratel_ai.gateway import format_upstream_line
+from ratel_ai.capabilities import format_upstream_line
 
 
 def _tool(tool_id: str, description: str, execute=lambda args: {}) -> ExecutableTool:

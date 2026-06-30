@@ -2,7 +2,7 @@
 
 The pattern mirrors `examples/ai-sdk/src/agent.ts`:
 1. BM25-prefilter the catalog for the prompt and expose the top-K directly.
-2. Always expose the two gateway tools (`search_capabilities`, `invoke_tool`) so the
+2. Always expose the two capability tools (`search_capabilities`, `invoke_tool`) so the
    agent can discover and call anything else in the catalog on demand.
 
 Pydantic AI tools are built from the catalog's JSON schemas via `Tool.from_schema`,
@@ -47,8 +47,8 @@ def _catalog_tool(catalog: ToolCatalog, tool_id: str, description: str, schema: 
     return _tool_from_fn(fn, tool_id, description, schema)
 
 
-def _gateway_tool(execute: Any, name: str, description: str, schema: dict[str, Any]) -> Tool:
-    """Wrap a gateway meta-tool (`search_capabilities` / `invoke_tool`).
+def _capability_tool(execute: Any, name: str, description: str, schema: dict[str, Any]) -> Tool:
+    """Wrap a capability meta-tool (`search_capabilities` / `invoke_tool`).
 
     These are not catalog entries; they own `async def` `execute` handlers, so
     they're awaited directly rather than routed through `catalog.invoke`.
@@ -65,8 +65,8 @@ def build_tools(catalog: ToolCatalog, prompt: str, initial_top_k: int = 3) -> li
     invoke = invoke_tool_tool(catalog)
 
     tools: dict[str, Tool] = {
-        search.id: _gateway_tool(search.execute, search.id, search.description, search.input_schema),
-        invoke.id: _gateway_tool(invoke.execute, invoke.id, invoke.description, invoke.input_schema),
+        search.id: _capability_tool(search.execute, search.id, search.description, search.input_schema),
+        invoke.id: _capability_tool(invoke.execute, invoke.id, invoke.description, invoke.input_schema),
     }
 
     for hit in catalog.search(prompt, initial_top_k):

@@ -1,4 +1,4 @@
-"""Skill gateway tool — the Python mirror of `src/sdk/ts/src/skill-gateway.ts`.
+"""Skill content tool — the Python mirror of `src/sdk/ts/src/skill-tools.ts`.
 
 `get_skill_content_tool` is the counterpart to `invoke_tool`: the agent discovers
 a skill in the `skills` bucket of `search_capabilities`, then loads its full

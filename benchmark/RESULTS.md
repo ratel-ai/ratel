@@ -27,7 +27,7 @@ This document consolidates the agent benchmark across four model families on the
 - **Arms**:
   - `control-baseline` — entire candidate pool exposed to the agent.
   - `control-oracle` — only the gold tool is exposed (upper bound).
-  - `ratel-full` — Ratel discovery + selection. The model sees ~5 BM25-prefetched tools plus the 2 gateway tools (`search_tools` + `invoke_tool`) — ~7 total — regardless of pool size.
+  - `ratel-full` — Ratel discovery + selection. The model sees ~5 BM25-prefetched tools plus the 2 capability tools (`search_tools` + `invoke_tool`) — ~7 total — regardless of pool size.
 - **Pool sizes**: 30, 50, 100, 180. Real-world MCP setups land in the 100–200 range.
 - **Hardware**: cloud APIs for Claude / glm-5.1:cloud; local Ollama on **MacBook Pro M4 24 GB** for qwen3.5.
 
@@ -43,7 +43,7 @@ This document consolidates the agent benchmark across four model families on the
 | 50 | 86.7% | 81.7% | -5.0 pp | 6 738 → 2 557 (-62%) | 61.3s → 65.6s |
 | **100** | **8.3%** | **76.7%** | **+68.4 pp** | 6 485 → 2 820 (-57%) | 107.6s → 69.1s (**-36%**) |
 
-What happens at pool=100 is the story. The baseline arm catastrophically degrades — the model is overwhelmed by the tool list and stops calling tools at all (programmatic pass rate drops to 0). With Ratel, the model only sees ~7 well-targeted tools (5 prefetched + 2 gateway) and stays at **76.7%**. This is the difference between "local models can't handle large tool catalogs" and "local models are a real option for large MCP setups."
+What happens at pool=100 is the story. The baseline arm catastrophically degrades — the model is overwhelmed by the tool list and stops calling tools at all (programmatic pass rate drops to 0). With Ratel, the model only sees ~7 well-targeted tools (5 prefetched + 2 capability tools) and stays at **76.7%**. This is the difference between "local models can't handle large tool catalogs" and "local models are a real option for large MCP setups."
 
 The wall-clock improvement (107.6s → 69.1s) is a side benefit — fewer tokens means faster inference on memory-constrained hardware.
 
@@ -97,7 +97,7 @@ For agent platforms running 100s of MCP tools, the cost difference between feedi
 | 100 | 73.3% | 75.0% (+1.7 pp)      | 63.3% | 53.3% (-20 pp)   | 91.7% |
 | 180 | 65.0% | **73.3%** (+8.3 pp)  | 66.7% | 48.3% (-16.7 pp) | 91.7% |
 
-Opus 4.6 is the model where Ratel produces an unambiguous accuracy *win*. The baseline is unusually weak for a frontier model (65% at pool=180) while the oracle is the strongest in the suite (**91.7%**, pool-invariant) — a strong agent loop sitting on top of weak fat-context selection. The `ratel-discovery-tool` arm (gateway only, no pre-fetch) beats baseline at every pool size, peaking **+15 pp at pool=50** and **+8 pp at pool=180**, with **-72% input tokens at pool=180**. `ratel-full` zig-zags around baseline (sample noise) with the same token savings. **Anthropic's [tool-search-tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool)** sits 15–20 pp below baseline across the sweep.
+Opus 4.6 is the model where Ratel produces an unambiguous accuracy *win*. The baseline is unusually weak for a frontier model (65% at pool=180) while the oracle is the strongest in the suite (**91.7%**, pool-invariant) — a strong agent loop sitting on top of weak fat-context selection. The `ratel-discovery-tool` arm (capability tools only, no pre-fetch) beats baseline at every pool size, peaking **+15 pp at pool=50** and **+8 pp at pool=180**, with **-72% input tokens at pool=180**. `ratel-full` zig-zags around baseline (sample noise) with the same token savings. **Anthropic's [tool-search-tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool)** sits 15–20 pp below baseline across the sweep.
 
 #### `claude-opus-4-7`
 
@@ -111,7 +111,7 @@ Pool=180 only, n=60 per cell:
 | ratel-full               | 55.0%     | -16.7 pp      | -79.5%     |
 | claude-sdk-tool-search   | 63.3%     | **-8.4 pp**   | -76.7%     |
 
-Opus 4.7 lifts the baseline (71.7% at pool=180), softening the selection bottleneck that made 4.6 a clear Ratel win. The story shifts to a competitive frame: `ratel-discovery-tool` lands within **-1.7 pp** of baseline while saving **-81% input tokens**, whereas **Anthropic's tool-search-tool drops -8.4 pp on the same pool — roughly 5× the accuracy hit for similar token savings**. The `ratel-full` regression to 55% is an open thread (pre-fetch + gateway underperforming gateway-alone for this model, under investigation).
+Opus 4.7 lifts the baseline (71.7% at pool=180), softening the selection bottleneck that made 4.6 a clear Ratel win. The story shifts to a competitive frame: `ratel-discovery-tool` lands within **-1.7 pp** of baseline while saving **-81% input tokens**, whereas **Anthropic's tool-search-tool drops -8.4 pp on the same pool — roughly 5× the accuracy hit for similar token savings**. The `ratel-full` regression to 55% is an open thread (pre-fetch + capability tools underperforming capability-tools-alone for this model, under investigation).
 
 > **Sample-size caveat.** Opus cells are 20 scenarios × 3 runs (n=60), versus 20 × 5 (n=100) for the Sonnet headline. Treat the per-pool deltas as directional, not headline-grade.
 

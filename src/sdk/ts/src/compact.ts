@@ -2,8 +2,8 @@ const MAX_DESCRIPTION_LEN = 160;
 
 /**
  * Collapse whitespace and clip a description to {@link MAX_DESCRIPTION_LEN},
- * cutting on a word boundary and appending an ellipsis. Shared by the tool and
- * skill gateways so listed descriptions stay compact.
+ * cutting on a word boundary and appending an ellipsis. Shared by the capability
+ * and skill tools so listed descriptions stay compact.
  */
 export function compactDescription(s: string): string {
   const collapsed = s.trim().replace(/\s+/g, " ");

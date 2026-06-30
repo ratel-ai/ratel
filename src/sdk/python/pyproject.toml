@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "ratel-ai"
 version = "0.2.0"
-description = "Python SDK for Ratel — context engineering platform for AI agents. BM25 tool retrieval, MCP ingestion, framework-neutral gateway tools."
+description = "Python SDK for Ratel — context engineering platform for AI agents. BM25 tool retrieval, MCP ingestion, framework-neutral capability tools."
 readme = "README.md"
 license = { file = "LICENSE.md" }
 authors = [{ name = "Agentified" }]
@@ -25,7 +25,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-# Base SDK (ToolRegistry, ToolCatalog, gateway tools) has no runtime deps.
+# Base SDK (ToolRegistry, ToolCatalog, capability tools) has no runtime deps.
 dependencies = []
 
 [project.optional-dependencies]

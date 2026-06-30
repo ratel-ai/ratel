@@ -19,7 +19,7 @@ __all__ = ["Skill", "SkillCatalog", "SkillHit"]
 
 @dataclass
 class Skill:
-    """Skill metadata: what the index ranks and the gateway surfaces."""
+    """Skill metadata: what the index ranks and the capability tools surface."""
 
     id: str
     name: str
@@ -78,7 +78,7 @@ class SkillCatalog:
     def invoke(self, skill_id: str) -> str:
         """Return a skill's body for dispatch, recording a `skill_invoke` event.
 
-        Raises `ValueError` on an unknown id — callers at the gateway boundary
+        Raises `ValueError` on an unknown id — callers at the capability-tool boundary
         translate that into a structured error for the agent.
         """
         skill = self._skills.get(skill_id)

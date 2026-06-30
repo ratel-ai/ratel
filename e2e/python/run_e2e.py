@@ -7,11 +7,11 @@ surface through the PUBLIC API, and asserts behavior against e2e/scenario.json:
 
   1. ToolCatalog.search       — BM25 ranking (top-1 per query)
   2. ToolCatalog.invoke       — executor dispatch
-  3. search_tools_tool        — gateway search surface (grouped hits)
-  4. invoke_tool_tool         — gateway invoke surface
+  3. search_tools_tool        — capability search surface (grouped hits)
+  4. invoke_tool_tool         — capability invoke surface
   5. SkillCatalog.search      — BM25 ranking over the skill corpus (top-1 per query)
   6. get_skill_content_tool   — load a skill body by id (+ unknown-id error path)
-  7. search_capabilities_tool — unified gateway over tools AND skills (two buckets)
+  7. search_capabilities_tool — unified capability search over tools AND skills (two buckets)
   8. search_capabilities_tool — skill->tool cross-pollination (declared tools, score 0)
 
 Exits non-zero on any mismatch. The same assertions run from the TS runner, so a
@@ -119,23 +119,23 @@ async def main() -> None:
         fail(f"invoke returned {result!r}, expected {expected!r}")
     print(f"  invoke OK: {inv['toolId']} -> {result}")
 
-    # 3. Gateway search surface.
-    gs = SCENARIO["gatewaySearch"]
+    # 3. Capability search surface.
+    gs = SCENARIO["capabilitySearch"]
     search_tool = search_tools_tool(catalog)
     gs_out = await search_tool.execute({"query": gs["query"], "topK": gs["topK"]})
     tool_ids = [h["toolId"] for g in gs_out.get("groups", []) for h in g.get("hits", [])]
     if gs["expectToolId"] not in tool_ids:
-        fail(f"gateway search missing {gs['expectToolId']!r}; got {tool_ids}")
-    print(f"  gateway search OK: {gs['query']!r} -> {tool_ids}")
+        fail(f"capability search missing {gs['expectToolId']!r}; got {tool_ids}")
+    print(f"  capability search OK: {gs['query']!r} -> {tool_ids}")
 
-    # 4. Gateway invoke surface.
-    gi = SCENARIO["gatewayInvoke"]
+    # 4. Capability invoke surface.
+    gi = SCENARIO["capabilityInvoke"]
     invoke_tool = invoke_tool_tool(catalog)
     gi_out = await invoke_tool.execute({"toolId": gi["toolId"], "args": gi["args"]})
     gi_expected = {"tool": gi["toolId"], "echo": gi["args"]}
     if gi_out != gi_expected:
-        fail(f"gateway invoke returned {gi_out!r}, expected {gi_expected!r}")
-    print(f"  gateway invoke OK: {gi['toolId']} -> {gi_out}")
+        fail(f"capability invoke returned {gi_out!r}, expected {gi_expected!r}")
+    print(f"  capability invoke OK: {gi['toolId']} -> {gi_out}")
 
     # --- Skills surface (0.2.0) ---------------------------------------------
     skill_catalog = build_skill_catalog()
@@ -177,7 +177,7 @@ async def main() -> None:
         fail(f"get_skill_content for unknown {unk['skillId']!r} should not return a body; got {unk_out!r}")
     print(f"  get_skill_content unknown-id OK: {unk['skillId']} -> isError")
 
-    # 7. search_capabilities — unified gateway returns tools AND skills buckets.
+    # 7. search_capabilities — unified capability search returns tools AND skills buckets.
     cap = SCENARIO["capabilities"]
     search_caps = search_capabilities_tool(catalog, skill_catalog)
     cap_out = await search_caps.execute(
@@ -216,7 +216,7 @@ async def main() -> None:
     print(
         f"PASS (python): {n_tools} tools, {len(SCENARIO['searches'])} search cases, "
         f"{n_skills} skills, {len(SCENARIO['skillSearches'])} skill-search cases, "
-        "gateway + cross-pollination OK"
+        "capability search + cross-pollination OK"
     )
 
 

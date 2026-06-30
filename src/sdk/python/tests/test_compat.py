@@ -1,6 +1,6 @@
 """Tests for the deprecated 0.1.x compatibility shim.
 
-Mirrors `src/sdk/ts/src/gateway-compat.test.ts`: the pre-0.2.0 `search_tools_tool`
+Mirrors `src/sdk/ts/src/compat.test.ts`: the pre-0.2.0 `search_tools_tool`
 keeps its `search_tools` id and tools-only ``{groups}`` result so code written
 against `ratel-ai==0.1.x` keeps working after upgrading to 0.2.0.
 """

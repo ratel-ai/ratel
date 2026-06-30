@@ -24,7 +24,7 @@ SearchOrigin = str  # "direct" | "agent"
 
 @dataclass
 class Tool:
-    """Tool metadata: what the index ranks and the gateway surfaces."""
+    """Tool metadata: what the index ranks and the capability tools surface."""
 
     id: str
     name: str

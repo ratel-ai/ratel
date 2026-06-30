@@ -6,8 +6,8 @@ use std::collections::HashMap;
 /// `tags` are author-declared labels and task phrases ("frontend", "login form")
 /// folded into the BM25 text so a terse intent prompt matches the skill. `tools`
 /// are the ids of tools the body's instructions call — an explicit dependency
-/// edge, **not** indexed; the gateway pulls them into the `search_capabilities`
-/// tools bucket so the agent gets a skill and the tools it needs in one turn
+/// edge, **not** indexed; `search_capabilities` pulls them into its tools
+/// bucket so the agent gets a skill and the tools it needs in one turn
 /// instead of a second search. `metadata` is free-form, non-indexed context for
 /// higher layers — e.g. `{"stacks": ["react"]}` for the push-path ranker to
 /// boost/filter by project context, deliberately *not* matched as query terms.
