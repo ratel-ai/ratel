@@ -94,4 +94,30 @@ describe("validate", () => {
     };
     expect(paths(e)).toEqual(["tools[0].parameters"]);
   });
+
+  // Host-safety contract: `record` is documented never to throw, so `validate`
+  // must report malformed input — including missing required fields — not throw.
+  it("reports (does not throw on) an event missing required fields", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: simulates an untyped JS caller
+    const e = { model: "x", ts: "x", messages: [{ role: "user", content: "hi" }] } as any;
+    expect(() => validate(e)).not.toThrow();
+    const result = validate(e);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.issues.map((i) => i.path)).toContain("provider");
+  });
+
+  it("does not throw on a fully empty object", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: simulates an untyped JS caller
+    expect(() => validate({} as any)).not.toThrow();
+    // biome-ignore lint/suspicious/noExplicitAny: simulates an untyped JS caller
+    const result = validate({} as any);
+    expect(result.ok).toBe(false);
+  });
+
+  it("reports non-object messages and blocks instead of throwing", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: simulates an untyped JS caller
+    const e = { provider: "p", model: "m", ts: "t", messages: [null] } as any;
+    expect(() => validate(e)).not.toThrow();
+    expect(paths(e)).toEqual(["messages[0]"]);
+  });
 });

@@ -100,3 +100,21 @@ def test_image_without_source_or_url_rejected() -> None:
 def test_tool_parameters_not_object_rejected() -> None:
     event = {**minimal(), "tools": [{"name": "x", "parameters": "nope"}]}
     assert paths(event) == ["tools[0].parameters"]
+
+
+def test_missing_required_fields_reported_not_raised() -> None:
+    # Mirrors the TS host-safety contract: malformed input is reported, never raised.
+    event = {"model": "x", "ts": "x", "messages": [{"role": "user", "content": "hi"}]}
+    result = validate(event)
+    assert not result.ok
+    assert "provider" in [i.path for i in result.issues]
+
+
+def test_empty_object_does_not_raise() -> None:
+    result = validate({})
+    assert not result.ok
+
+
+def test_non_object_message_reported() -> None:
+    event = {"provider": "p", "model": "m", "ts": "t", "messages": [None]}
+    assert paths(event) == ["messages[0]"]

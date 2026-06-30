@@ -27,33 +27,50 @@ def _is_object(value: Any) -> bool:
     return isinstance(value, dict)
 
 
+def _is_non_empty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
 def validate(event: Event) -> ValidationResult:
-    """Check an event's semantic invariants. Structural shape is assumed."""
+    """Check an event's semantic invariants. Fully defensive: callers reach this
+    through ``RatelCloud.record``, so malformed input is reported, never raised on."""
     issues: list[Issue] = []
 
     def fail(path: str, message: str) -> None:
         issues.append(Issue(path=path, message=message))
 
-    if not str(event.get("provider", "")).strip():
+    if not _is_non_empty_string(event.get("provider")):
         fail("provider", "must not be empty")
-    if not str(event.get("model", "")).strip():
+    if not _is_non_empty_string(event.get("model")):
         fail("model", "must not be empty")
-    if not str(event.get("ts", "")).strip():
+    if not _is_non_empty_string(event.get("ts")):
         fail("ts", "must not be empty")
-    if not event.get("messages"):
+
+    messages = _as_list(event.get("messages"))
+    if not messages:
         fail("messages", "must not be empty")
 
-    for i, tool in enumerate(event.get("tools", [])):
-        if not str(tool.get("name", "")).strip():
+    for i, tool in enumerate(_as_list(event.get("tools"))):
+        if not _is_object(tool):
+            fail(f"tools[{i}]", "must be an object")
+            continue
+        if not _is_non_empty_string(tool.get("name")):
             fail(f"tools[{i}].name", "must not be empty")
         if not _is_object(tool.get("parameters")):
             fail(f"tools[{i}].parameters", "must be a JSON Schema object")
 
-    for i, message in enumerate(event.get("messages", [])):
+    for i, message in enumerate(messages):
         base = f"messages[{i}]"
+        if not _is_object(message):
+            fail(base, "must be an object")
+            continue
         role = message.get("role")
         if role == "tool":
-            if not str(message.get("tool_call_id", "")).strip():
+            if not _is_non_empty_string(message.get("tool_call_id")):
                 fail(f"{base}.tool_call_id", "must not be empty")
             continue
         _validate_content(message.get("content"), role == "assistant", base, fail)
@@ -71,6 +88,9 @@ def _validate_content(
         return
     for j, block in enumerate(content):
         path = f"{base}.content[{j}]"
+        if not _is_object(block):
+            fail(path, "must be an object")
+            continue
         kind = block.get("type")
         if kind == "tool_call":
             if not allow_tool_call:
