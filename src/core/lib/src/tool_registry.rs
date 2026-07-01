@@ -94,4 +94,21 @@ impl ToolRegistry {
         });
         hits
     }
+
+    /// Total context-token footprint of the full registered catalog — what an
+    /// agent would carry without selection.
+    pub fn catalog_tokens(&self) -> u64 {
+        self.tools.iter().map(crate::usage::tool_tokens).sum()
+    }
+
+    /// Footprint of the tools with the given ids — typically a search's hits, to
+    /// compute the realized saving against [`Self::catalog_tokens`].
+    pub fn tokens_for(&self, ids: &[String]) -> u64 {
+        let want: std::collections::HashSet<&str> = ids.iter().map(String::as_str).collect();
+        self.tools
+            .iter()
+            .filter(|t| want.contains(t.id.as_str()))
+            .map(crate::usage::tool_tokens)
+            .sum()
+    }
 }

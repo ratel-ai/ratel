@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use ratel_ai_core::{
-    ChurnKind, JsonlSink, MemorySink, NoopSink, Origin, Tool, ToolRegistry, TraceEnvelope,
-    TraceEvent, TraceSink,
+    ChurnKind, JsonlSink, MemorySink, NoopSink, ObservationKind, ObservationStatus, Origin, Tool,
+    ToolRegistry, TraceEnvelope, TraceEvent, TraceSink,
 };
 use serde_json::{Value, json};
 use tempfile::tempdir;
@@ -294,11 +294,159 @@ fn trace_event_round_trips_through_json() {
             kind: ChurnKind::Add,
             tool_id: "t".into(),
         },
+        TraceEvent::TraceRoot {
+            trace_id: "trc".into(),
+            name: "handle_ticket".into(),
+            tags: vec!["prod".into()],
+            version: Some("1.4.0".into()),
+        },
+        TraceEvent::ObservationStart {
+            trace_id: "trc".into(),
+            observation_id: "obs".into(),
+            parent_observation_id: None,
+            name: "retrieval".into(),
+            kind: ObservationKind::Span,
+        },
+        TraceEvent::ObservationEnd {
+            trace_id: "trc".into(),
+            observation_id: "obs".into(),
+            took_ms: 12,
+            status: ObservationStatus::Ok,
+            error: None,
+        },
+        TraceEvent::Generation {
+            trace_id: "trc".into(),
+            observation_id: "obs".into(),
+            parent_observation_id: Some("root".into()),
+            provider: "openai".into(),
+            model: "gpt-4o".into(),
+            input_tokens: Some(812),
+            output_tokens: Some(96),
+            total_tokens: Some(908),
+        },
+        TraceEvent::TokensSaved {
+            trace_id: "trc".into(),
+            full_catalog_tokens: 4200,
+            selected_tokens: 380,
+            top_k: 5,
+        },
     ];
 
     for original in originals {
         let serialized = serde_json::to_string(&original).expect("serialize");
         let back: TraceEvent = serde_json::from_str(&serialized).expect("deserialize");
         assert_eq!(back, original);
+    }
+}
+
+/// The Python observability layer (ADR-0013) emits these events via the PyO3
+/// `record_event(dict)` path, which deserializes into `TraceEvent`. This test
+/// locks the wire shape — `type` tags and field names — that the SDK depends on.
+#[test]
+fn observability_events_have_stable_wire_shape() {
+    let trace_root = serde_json::to_value(TraceEvent::TraceRoot {
+        trace_id: "trc".into(),
+        name: "root".into(),
+        tags: vec!["prod".into()],
+        version: None,
+    })
+    .unwrap();
+    assert_eq!(trace_root["type"], "trace_root");
+    assert_eq!(trace_root["trace_id"], "trc");
+    assert_eq!(trace_root["tags"][0], "prod");
+    assert!(trace_root["version"].is_null());
+    // user_id must NOT appear in the core event (PII stays in the cloud stream).
+    assert!(trace_root.get("user_id").is_none());
+
+    let start = serde_json::to_value(TraceEvent::ObservationStart {
+        trace_id: "trc".into(),
+        observation_id: "obs".into(),
+        parent_observation_id: Some("parent".into()),
+        name: "llm".into(),
+        kind: ObservationKind::Generation,
+    })
+    .unwrap();
+    assert_eq!(start["type"], "observation_start");
+    assert_eq!(start["kind"], "generation");
+    assert_eq!(start["parent_observation_id"], "parent");
+
+    let end = serde_json::to_value(TraceEvent::ObservationEnd {
+        trace_id: "trc".into(),
+        observation_id: "obs".into(),
+        took_ms: 3,
+        status: ObservationStatus::Error,
+        error: Some("boom".into()),
+    })
+    .unwrap();
+    assert_eq!(end["type"], "observation_end");
+    assert_eq!(end["status"], "error");
+    assert_eq!(end["error"], "boom");
+
+    let generation = serde_json::to_value(TraceEvent::Generation {
+        trace_id: "trc".into(),
+        observation_id: "obs".into(),
+        parent_observation_id: None,
+        provider: "anthropic".into(),
+        model: "claude-opus-4-8".into(),
+        input_tokens: Some(10),
+        output_tokens: Some(20),
+        total_tokens: Some(30),
+    })
+    .unwrap();
+    assert_eq!(generation["type"], "generation");
+    assert_eq!(generation["provider"], "anthropic");
+    assert_eq!(generation["input_tokens"], 10);
+    assert_eq!(generation["output_tokens"], 20);
+    assert_eq!(generation["total_tokens"], 30);
+
+    let saved = serde_json::to_value(TraceEvent::TokensSaved {
+        trace_id: "trc".into(),
+        full_catalog_tokens: 4200,
+        selected_tokens: 380,
+        top_k: 5,
+    })
+    .unwrap();
+    assert_eq!(saved["type"], "tokens_saved");
+    assert_eq!(saved["full_catalog_tokens"], 4200);
+    assert_eq!(saved["selected_tokens"], 380);
+    assert_eq!(saved["top_k"], 5);
+}
+
+/// The new variants must survive the same path the Python SDK uses:
+/// dict → `serde_json::Value` → `TraceEvent` → sink.
+#[test]
+fn observability_events_record_through_sink() {
+    let sink = Arc::new(MemorySink::new("session-obs"));
+    let registry = ToolRegistry::with_trace_sink(sink.clone());
+
+    // Simulate the deserialize step the PyO3 binding performs on a Python dict.
+    let value = json!({
+        "type": "generation",
+        "trace_id": "trc",
+        "observation_id": "obs",
+        "parent_observation_id": null,
+        "provider": "openai",
+        "model": "gpt-4o",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "total_tokens": 150
+    });
+    let event: TraceEvent = serde_json::from_value(value).expect("deserialize generation");
+    registry.record_event(event);
+
+    let events = sink.snapshot();
+    assert_eq!(events.len(), 1);
+    match &events[0].event {
+        TraceEvent::Generation {
+            provider,
+            model,
+            total_tokens,
+            ..
+        } => {
+            assert_eq!(provider, "openai");
+            assert_eq!(model, "gpt-4o");
+            assert_eq!(*total_tokens, Some(150));
+        }
+        other => panic!("expected Generation, got {other:?}"),
     }
 }
