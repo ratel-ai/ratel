@@ -28,3 +28,9 @@ a validator, and a non-blocking batching transport — and are kept honest by re
 `core/`'s `dump_fixtures` example regenerates `fixtures/valid/` from the canonical types; the three
 conformance suites (one per language) replay every fixture, so drift between the mirrors and the spec
 fails CI rather than slipping into production.
+
+## Examples
+
+[`EXAMPLES.md`](EXAMPLES.md) has worked, copy-pasteable examples for each language — the batching
+client, a tool-calling turn, and stateless sending — plus the Rust schema-only path. Per-language
+install and API reference live in each client's README (linked above).
