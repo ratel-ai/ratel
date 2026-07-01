@@ -39,8 +39,8 @@ A Rust HTTP server is on the roadmap, **not yet shipped.** The Rust core is a li
 
 ## Examples
 
-- [`examples/ai-sdk`](https://github.com/ratel-ai/ratel/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic gateway (`search_capabilities` / `invoke_tool`). Pure-SDK, no MCP.
-- [`examples/pydantic-ai`](https://github.com/ratel-ai/ratel/blob/main/examples/pydantic-ai/README.md): Pydantic AI (Python) with pre-filter (top-K) + dynamic gateway. Pure-SDK, no MCP.
+- [`examples/ai-sdk`](https://github.com/ratel-ai/ratel/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic capability search (`search_capabilities` / `invoke_tool`). Pure-SDK, no MCP.
+- [`examples/pydantic-ai`](https://github.com/ratel-ai/ratel/blob/main/examples/pydantic-ai/README.md): Pydantic AI (Python) with pre-filter (top-K) + dynamic capability search. Pure-SDK, no MCP.
 - [`examples/mcp-chat`](https://github.com/ratel-ai/ratel/blob/main/examples/mcp-chat/README.md): REPL agent ingesting an upstream MCP server via `registerMcpServer`.
 - [`examples/mcp-server`](https://github.com/ratel-ai/ratel/blob/main/examples/mcp-server/README.md): Claude Code session fronted by Ratel as the only MCP.
 

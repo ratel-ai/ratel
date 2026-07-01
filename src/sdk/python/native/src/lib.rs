@@ -53,7 +53,7 @@ impl SkillHit {
     }
 }
 
-/// Metadata-only BM25 index over `ratel-ai-core`. Executors and the gateway /
+/// Metadata-only BM25 index over `ratel-ai-core`. Executors and the capability /
 /// MCP layers live in the pure-Python `ratel_ai` package above this binding.
 #[pyclass]
 pub struct ToolRegistry {

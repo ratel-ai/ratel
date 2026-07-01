@@ -1,5 +1,5 @@
 /**
- * Backward-compatibility shims for the pre-0.2.0 gateway surface.
+ * Backward-compatibility shims for the pre-0.2.0 capability-tools surface.
  *
  * 0.2.0 renamed `search_tools` → `search_capabilities` and changed its result
  * shape from `{ groups }` to `{ tools: { groups }, skills }`. To keep code
@@ -9,10 +9,11 @@
  * the `search_tools` id — not aliased to the new two-bucket tool.
  *
  * @deprecated These are temporary. Migrate to `searchCapabilitiesTool` /
- * `SEARCH_CAPABILITIES_ID` (see gateway.ts). Tracked for removal in RAT-250.
+ * `SEARCH_CAPABILITIES_ID` (see capabilities.ts). Tracked for removal in RAT-250.
  */
+
+import { formatUpstreamLine, type UpstreamServerInfo } from "./capabilities.js";
 import type { ExecutableTool, ToolCatalog } from "./catalog.js";
-import { formatUpstreamLine, type UpstreamServerInfo } from "./gateway.js";
 
 /** @deprecated Use `SEARCH_CAPABILITIES_ID` (`"search_capabilities"`). */
 export const SEARCH_TOOLS_ID = "search_tools" as const;

@@ -14,7 +14,7 @@ exactly one runner fail:
 - `fixtures/catalog.json` — the shared tool catalog (the input).
 - `fixtures/skills.json` — the shared skill catalog (the on-demand analogue, added in 0.2.0).
 - `scenario.json` — the assertions (the source of truth): per-query top-1 ranking for
-  tools and skills, direct invoke, the gateway `search_tools` / `invoke_tool` surfaces,
+  tools and skills, direct invoke, the capability `search_tools` / `invoke_tool` surfaces,
   `get_skill_content`, the unified `search_capabilities` (tools + skills) surface, and the
   skill→tool cross-pollination (a matched skill's declared `tools` ride into the tools
   bucket at score 0).

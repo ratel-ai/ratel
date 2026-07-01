@@ -1,4 +1,4 @@
-"""Backward-compatibility shim for the pre-0.2.0 gateway surface.
+"""Backward-compatibility shim for the pre-0.2.0 capability-tools surface.
 
 0.2.0 renamed `search_tools` → `search_capabilities` and changed its result
 shape from `{groups}` to `{tools: {groups}, skills}`. To keep code written
@@ -18,8 +18,8 @@ import time
 from collections.abc import Sequence
 from typing import Any
 
+from .capabilities import UpstreamServerInfo, format_upstream_line
 from .catalog import ExecutableTool, ToolCatalog
-from .gateway import UpstreamServerInfo, format_upstream_line
 
 SEARCH_TOOLS_ID = "search_tools"
 

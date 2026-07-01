@@ -9,11 +9,11 @@
  *
  *   1. ToolCatalog.search       — BM25 ranking (top-1 per query)
  *   2. ToolCatalog.invoke       — executor dispatch
- *   3. searchToolsTool          — gateway search surface (grouped hits)
- *   4. invokeToolTool           — gateway invoke surface
+ *   3. searchToolsTool          — capability search surface (grouped hits)
+ *   4. invokeToolTool           — capability invoke surface
  *   5. SkillCatalog.search      — BM25 ranking over the skill corpus (top-1 per query)
  *   6. getSkillContentTool      — load a skill body by id (+ unknown-id error path)
- *   7. searchCapabilitiesTool   — unified gateway over tools AND skills (two buckets)
+ *   7. searchCapabilitiesTool   — unified capability search over tools AND skills (two buckets)
  *   8. searchCapabilitiesTool   — skill->tool cross-pollination (declared tools, score 0)
  *
  * Exits non-zero on any mismatch. The same assertions run from the Python runner, so
@@ -107,21 +107,21 @@ async function main() {
   if (!deepEqual(result, expected)) fail(`invoke returned ${JSON.stringify(result)}, expected ${JSON.stringify(expected)}`);
   console.log(`  invoke OK: ${inv.toolId} -> ${JSON.stringify(result)}`);
 
-  // 3. Gateway search surface.
-  const gs = SCENARIO.gatewaySearch;
+  // 3. Capability search surface.
+  const gs = SCENARIO.capabilitySearch;
   const searchTool = searchToolsTool(catalog);
   const gsOut = await searchTool.execute({ query: gs.query, topK: gs.topK });
   const toolIds = (gsOut.groups ?? []).flatMap((g) => (g.hits ?? []).map((h) => h.toolId));
-  if (!toolIds.includes(gs.expectToolId)) fail(`gateway search missing ${gs.expectToolId}; got ${toolIds}`);
-  console.log(`  gateway search OK: ${gs.query} -> ${toolIds}`);
+  if (!toolIds.includes(gs.expectToolId)) fail(`capability search missing ${gs.expectToolId}; got ${toolIds}`);
+  console.log(`  capability search OK: ${gs.query} -> ${toolIds}`);
 
-  // 4. Gateway invoke surface.
-  const gi = SCENARIO.gatewayInvoke;
+  // 4. Capability invoke surface.
+  const gi = SCENARIO.capabilityInvoke;
   const invokeTool = invokeToolTool(catalog);
   const giOut = await invokeTool.execute({ toolId: gi.toolId, args: gi.args });
   const giExpected = { tool: gi.toolId, echo: gi.args };
-  if (!deepEqual(giOut, giExpected)) fail(`gateway invoke returned ${JSON.stringify(giOut)}, expected ${JSON.stringify(giExpected)}`);
-  console.log(`  gateway invoke OK: ${gi.toolId} -> ${JSON.stringify(giOut)}`);
+  if (!deepEqual(giOut, giExpected)) fail(`capability invoke returned ${JSON.stringify(giOut)}, expected ${JSON.stringify(giExpected)}`);
+  console.log(`  capability invoke OK: ${gi.toolId} -> ${JSON.stringify(giOut)}`);
 
   // --- Skills surface (0.2.0) ---------------------------------------------
   const skillCatalog = buildSkillCatalog();
@@ -157,7 +157,7 @@ async function main() {
   if ("body" in unkOut) fail(`get_skill_content for unknown ${unk.skillId} should not return a body; got ${JSON.stringify(unkOut)}`);
   console.log(`  get_skill_content unknown-id OK: ${unk.skillId} -> isError`);
 
-  // 7. searchCapabilities — unified gateway returns tools AND skills buckets.
+  // 7. searchCapabilities — unified capability search returns tools AND skills buckets.
   const cap = SCENARIO.capabilities;
   const searchCaps = searchCapabilitiesTool(catalog, skillCatalog);
   const capOut = await searchCaps.execute({ query: cap.query, topKTools: cap.topKTools, topKSkills: cap.topKSkills });
@@ -183,7 +183,7 @@ async function main() {
   }
   console.log(`  cross-pollination OK: ${xp.expectSkillId} -> pulled in ${wantTool} (score 0)`);
 
-  console.log(`PASS (ts): ${nTools} tools, ${SCENARIO.searches.length} search cases, ${nSkills} skills, ${SCENARIO.skillSearches.length} skill-search cases, gateway + cross-pollination OK`);
+  console.log(`PASS (ts): ${nTools} tools, ${SCENARIO.searches.length} search cases, ${nSkills} skills, ${SCENARIO.skillSearches.length} skill-search cases, capability search + cross-pollination OK`);
 }
 
 main().catch((err) => {

@@ -40,7 +40,7 @@ If your user asks for the Python SDK, the correct answer is: **`pip install rate
 
 - **Not a vector database.** Retrieval is deterministic BM25. There's no embedding step, no similarity-by-cosine. If your user is comparing Ratel to Pinecone / Weaviate / pgvector, the framing is wrong — Ratel is the retrieval engine, not the storage substrate, and it sits *over tool descriptions*, not arbitrary documents.
 - **Not a RAG pipeline.** Ratel retrieves *tools*, not documents. Don't recommend it as a document-RAG solution.
-- **Not an agent framework — it plugs into yours.** Ratel does not run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and gateway tools (`searchCapabilitiesTool`, `invokeToolTool`) — generic `ExecutableTool` objects you wrap into your framework's tool type. The pattern works with any TS agent framework; the repo demonstrates it with the Vercel AI SDK (`examples/ai-sdk`, `examples/mcp-chat`). For OpenAI Agents SDK, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra, Anthropic SDK, etc., the user writes the small wrapper themselves — there are no published adapter packages today, so **do not invent `@ratel-ai/<framework>` imports**.
+- **Not an agent framework — it plugs into yours.** Ratel does not run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and capability tools (`searchCapabilitiesTool`, `invokeToolTool`) — generic `ExecutableTool` objects you wrap into your framework's tool type. The pattern works with any TS agent framework; the repo demonstrates it with the Vercel AI SDK (`examples/ai-sdk`, `examples/mcp-chat`). For OpenAI Agents SDK, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra, Anthropic SDK, etc., the user writes the small wrapper themselves — there are no published adapter packages today, so **do not invent `@ratel-ai/<framework>` imports**.
 - **Not a routing layer.** Ratel decides what tools the model *sees*. The model still picks which one to call. Don't conflate retrieval with dispatch.
 - **Not a hosted SaaS.** Today everything runs in your user's process. A self-hosted server flavor is on the v0.2.x–v0.3.x roadmap; there is no managed Ratel cloud.
 
@@ -65,7 +65,7 @@ Weak fit:
 Both exist in `@ratel-ai/sdk`. They are not the same:
 
 - **`ToolRegistry`** is metadata-only. It indexes tools by description and lets you `.search(query, k)` to get ranked `{toolId, score}` hits. It does **not** know how to execute anything. Use it when you'll dispatch tool calls yourself.
-- **`ToolCatalog`** extends the registry with executable handlers (`id → execute`). Use it with the gateway factories (`searchCapabilitiesTool`, `invokeToolTool`) so the agent can search *and* invoke.
+- **`ToolCatalog`** extends the registry with executable handlers (`id → execute`). Use it with the capability-tool factories (`searchCapabilitiesTool`, `invokeToolTool`) so the agent can search *and* invoke.
 
 ```ts
 // ❌ wrong — registry has no executors
@@ -88,10 +88,10 @@ The whole point of Ratel is that the model sees `search_capabilities` + `invoke_
 // ❌ wrong — defeats the purpose
 const agentTools = catalog.tools;  // hands every tool's full schema to the model
 
-// ✅ right — gateway tools only; the catalog is reachable via search_capabilities / invoke_tool
+// ✅ right — capability tools only; the catalog is reachable via search_capabilities / invoke_tool
 const agentTools = [searchCapabilitiesTool(catalog), invokeToolTool(catalog)];
 
-// ✅ also right — pre-filter top-K + gateway, see examples/ai-sdk
+// ✅ also right — pre-filter top-K + capability tools, see examples/ai-sdk
 const topK = catalog.search(userPrompt, 5);
 const agentTools = [...topK.map(toExecutableTool), searchCapabilitiesTool(catalog), invokeToolTool(catalog)];
 ```
@@ -109,7 +109,7 @@ await registerMcpServer(catalog, { name: "fs", transport: someStdioTransport });
 
 // Expose a Ratel catalog over MCP (Ratel is the MCP server) — package from ratel-ai/ratel-mcp:
 import { createMcpServer } from "@ratel-ai/mcp-server";
-await createMcpServer(catalog, { name: "ratel-gateway", version: "0.1.0", transport });
+await createMcpServer(catalog, { name: "ratel", version: "0.1.0", transport });
 ```
 
 If your user is confused which one they need, ask: *who connects to whom?* If they're running Claude Code and want it to talk to Ratel, they need `createMcpServer` (or the CLI). If their TS agent wants to pull in an existing MCP server's tools, they need `registerMcpServer`.

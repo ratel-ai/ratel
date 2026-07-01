@@ -1,4 +1,4 @@
-"""Tests for get_skill_content_tool — mirrors `src/sdk/ts/src/skill-gateway.test.ts`."""
+"""Tests for get_skill_content_tool — mirrors `src/sdk/ts/src/skill-tools.test.ts`."""
 
 from ratel_ai import GET_SKILL_CONTENT_ID, Skill, SkillCatalog, get_skill_content_tool
 
