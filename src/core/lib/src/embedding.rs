@@ -13,12 +13,14 @@
 //! loaded once per process (kept resident for both registration and queries).
 //! See ADR-0013.
 
+use std::path::PathBuf;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config};
-use hf_hub::api::sync::Api;
+use hf_hub::api::sync::{Api, ApiRepo};
 use hf_hub::{Repo, RepoType};
 use tokenizers::{Tokenizer, TruncationDirection, TruncationParams, TruncationStrategy};
 
@@ -69,15 +71,9 @@ impl BgeSmallEmbedder {
             RepoType::Model,
             MODEL_REVISION.to_string(),
         ));
-        let config_path = repo
-            .get("config.json")
-            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-        let tokenizer_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-        let weights_path = repo
-            .get("model.safetensors")
-            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let config_path = fetch_cached(&repo, "config.json")?;
+        let tokenizer_path = fetch_cached(&repo, "tokenizer.json")?;
+        let weights_path = fetch_cached(&repo, "model.safetensors")?;
 
         let config: Config =
             serde_json::from_slice(&std::fs::read(config_path).map_err(candle_core::Error::wrap)?)
@@ -139,6 +135,46 @@ impl Embedder for BgeSmallEmbedder {
     }
 }
 
+/// Resolve one model file from the HF cache, tolerating the cross-process
+/// download race on a cold cache. hf-hub guards each blob with a *non-blocking*
+/// `flock` and gives up after ~5s (5 × 1s); a first fetch of the ~130 MB weights
+/// takes longer, so when several processes load the embedder at once on a cold
+/// cache — parallel test workers, a web server's worker pool cold-starting,
+/// `multiprocessing` — every process but the lock holder gets `LockAcquisition`
+/// and, through the infallible [`Embedder`] API, aborts. Retry with backoff: the
+/// losers wait for the winner's download to land, then `get()` returns the
+/// now-cached blob without locking (hf-hub checks the cache before it locks).
+/// Non-lock errors (network, 404, disk) are returned immediately. See ADR-0013.
+fn fetch_cached(repo: &ApiRepo, file: &str) -> candle_core::Result<PathBuf> {
+    // ~30 × (up to hf-hub's own ~5s lock wait + 1s backoff) comfortably outlasts
+    // a single cold-cache download; the loser normally succeeds within a few.
+    const MAX_ATTEMPTS: u32 = 30;
+    const BACKOFF: Duration = Duration::from_secs(1);
+
+    let mut attempt = 1;
+    loop {
+        match repo.get(file) {
+            Ok(path) => return Ok(path),
+            Err(e) => {
+                let msg = e.to_string();
+                if attempt < MAX_ATTEMPTS && is_lock_contention(&msg) {
+                    attempt += 1;
+                    std::thread::sleep(BACKOFF);
+                    continue;
+                }
+                return Err(candle_core::Error::Msg(msg));
+            }
+        }
+    }
+}
+
+/// True only when an hf-hub fetch failed because another process holds the
+/// download lock — the one error worth retrying, since the blob appears once the
+/// winner finishes. Every other failure is terminal and returned as-is.
+fn is_lock_contention(err: &str) -> bool {
+    err.contains("Lock acquisition failed")
+}
+
 /// Scale to unit L2 norm so downstream cosine similarity is a plain dot product.
 /// A zero vector is returned unchanged (no NaNs).
 fn l2_normalize(mut v: Vec<f32>) -> Vec<f32> {
@@ -154,6 +190,20 @@ fn l2_normalize(mut v: Vec<f32>) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_lock_contention_is_retried() {
+        // The cold-cache download race: retry and wait for the winner.
+        assert!(is_lock_contention(
+            "Lock acquisition failed: /home/u/.cache/huggingface/hub/models--BAAI--bge-small-en-v1.5/blobs/abc.lock"
+        ));
+        // Everything else is terminal — fail loud, don't spin.
+        assert!(!is_lock_contention("request error: connection refused"));
+        assert!(!is_lock_contention("Http(reqwest::Error { status: 404 })"));
+        assert!(!is_lock_contention(
+            "No such file or directory (os error 2)"
+        ));
+    }
 
     #[test]
     fn embeds_to_unit_norm_384_vectors_deterministically() {
