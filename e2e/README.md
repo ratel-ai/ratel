@@ -8,7 +8,7 @@ dev-mode source build. They are driven by the `pr-gate` workflow
 ## What it covers
 
 A single, language-neutral fixture + scenario is exercised identically by every SDK,
-so a behavior divergence between SDKs (they all wrap the same Rust BM25 core) makes
+so a behavior divergence between SDKs (they all wrap the same Rust dense-retrieval core) makes
 exactly one runner fail:
 
 - `fixtures/catalog.json` — the shared tool catalog (the input).
