@@ -88,7 +88,9 @@ class _UsageRequired(TypedDict):
 
 
 class Usage(_UsageRequired, total=False):
+    # Subset of input_tokens served from cache.
     cached_tokens: int
+    # Subset of output_tokens spent on reasoning; not counted on top of them.
     reasoning_tokens: int
 
 

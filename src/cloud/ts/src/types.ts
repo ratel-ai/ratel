@@ -81,7 +81,9 @@ export interface Params {
 export interface Usage {
   input_tokens: number;
   output_tokens: number;
+  /** Subset of `input_tokens` served from cache. */
   cached_tokens?: number;
+  /** Subset of `output_tokens` spent on reasoning; not counted on top of them. */
   reasoning_tokens?: number;
 }
 
