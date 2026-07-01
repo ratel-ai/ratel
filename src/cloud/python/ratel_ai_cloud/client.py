@@ -11,7 +11,7 @@ from typing import Any, cast
 import httpx
 
 from .events import Event, EventInput
-from .transport import MAX_BATCH, send_batch
+from .transport import MAX_BATCH, send_event_batch
 from .validate import validate
 
 
@@ -21,13 +21,13 @@ def _default_now() -> str:
 
 
 class RatelCloud:
-    """``record`` validates and enqueues without awaiting the network; batches
+    """``send_event`` validates and enqueues without awaiting the network; batches
     flush on a timer, on reaching ``batch_size``, or explicitly via ``flush``.
 
     Use as an async context manager to run the periodic flush task::
 
         async with RatelCloud(endpoint=..., api_key=...) as cloud:
-            cloud.record(event)
+            cloud.send_event(event)
 
     The caller may pass its own ``httpx.AsyncClient`` (owned by the caller); if
     omitted, each batch uses a transient client. Nothing here raises into the host.
@@ -63,7 +63,7 @@ class RatelCloud:
         self._tasks: set[asyncio.Task[None]] = set()
         self._timer: asyncio.Task[None] | None = None
 
-    def record(self, event: EventInput) -> None:
+    def send_event(self, event: EventInput) -> None:
         """Validate (unless disabled) and enqueue an event. ``ts`` is stamped with
         the current time when omitted. Never blocks or raises."""
         stamped = cast(Event, dict(event))
@@ -98,7 +98,7 @@ class RatelCloud:
             while self._queue:
                 batch = self._queue[: self._batch_size]
                 del self._queue[: self._batch_size]
-                result = await send_batch(
+                result = await send_event_batch(
                     batch,
                     endpoint=self._endpoint,
                     api_key=self._api_key,

@@ -36,7 +36,7 @@ async with RatelCloud(
     endpoint="https://cloud.ratel.ai/api/v1/events",
     api_key="rtl_...",
 ) as cloud:
-    cloud.record({
+    cloud.send_event({
         "provider": "openai",
         "model": "gpt-5.5",
         "ts": "2026-06-30T12:00:00Z",
@@ -47,19 +47,19 @@ async with RatelCloud(
     })
 ```
 
-`record` validates and enqueues without awaiting the network. Batches flush on a timer (when used as
+`send_event` validates and enqueues without awaiting the network. Batches flush on a timer (when used as
 an `async with` context), on reaching `batch_size`, or via `await cloud.flush()`. Pass your own
 `httpx.AsyncClient` to reuse a connection pool; otherwise each batch uses a transient client.
 
 ## API
 
-- **`record(event)`** — validate (unless `validate_events=False`) and enqueue. `ts` may be omitted
+- **`send_event(event)`** — validate (unless `validate_events=False`) and enqueue. `ts` may be omitted
   (the client stamps the current time; override the clock with the `now` argument); pass it explicitly
   for replayed/backfilled events. Invalid events are dropped and reported via `on_error`.
 - **`await flush()`** — drain the queue in `batch_size`-bounded requests (`MAX_BATCH` = 500).
 - **`await aclose()`** — stop the timer and flush. Also runs on `async with` exit.
 - **`validate(event) -> ValidationResult`** — the standalone validator.
-- **`send_batch(events, *, endpoint, api_key, ...)`** — the stateless transport, if you want to manage
+- **`send_event_batch(events, *, endpoint, api_key, ...)`** — the stateless transport, if you want to manage
   batching yourself.
 
 ## Develop
@@ -76,7 +76,7 @@ uv pip install --python .venv -e '.[dev]'
 ratel_ai_cloud/
   events.py      canonical event TypedDicts (mirror of the Rust schema)
   validate.py    semantic validation → ValidationResult
-  transport.py   httpx batch POST with retry/backoff (send_batch)
-  client.py      RatelCloud — non-blocking record / flush / close
+  transport.py   httpx batch POST with retry/backoff (send_event_batch)
+  client.py      RatelCloud — non-blocking send_event / flush / close
 tests/           validator, transport (httpx.MockTransport), conformance
 ```

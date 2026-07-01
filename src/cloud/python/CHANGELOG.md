@@ -13,6 +13,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   fixtures ([ADR-0013](../../../docs/adr/0013-cloud-telemetry-unified-schema.md)).
   - `Event` and related `TypedDict`s — the unified v1 telemetry shape.
   - `validate` — semantic validation returning a `ValidationResult` of `{path, message}` issues.
-  - `send_batch` — best-effort `httpx` batch POST with exponential backoff + jitter; never raises.
-  - `RatelCloud` — non-blocking `record` / `flush` / `aclose`, batching, and an async-context periodic
+  - `send_event_batch` — best-effort `httpx` batch POST with exponential backoff + jitter; never raises.
+  - `RatelCloud` — non-blocking `send_event` / `flush` / `aclose`, batching, and an async-context periodic
     flush.

@@ -27,12 +27,12 @@ def recording_client() -> tuple[httpx.AsyncClient, list[httpx.Request]]:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler)), seen
 
 
-async def test_record_does_not_send_until_flush() -> None:
+async def test_send_event_does_not_send_until_flush() -> None:
     http, seen = recording_client()
     async with http:
         cloud = RatelCloud(endpoint="https://x", api_key="k", flush_interval=0, client=http)
-        cloud.record(event())
-        cloud.record(event())
+        cloud.send_event(event())
+        cloud.send_event(event())
         assert seen == []
 
         await cloud.flush()
@@ -51,7 +51,7 @@ async def test_drops_invalid_events_without_enqueuing() -> None:
             client=http,
             on_error=errors.append,
         )
-        cloud.record({**event(), "provider": ""})
+        cloud.send_event({**event(), "provider": ""})
         await cloud.flush()
 
     assert len(errors) == 1
@@ -62,7 +62,7 @@ async def test_close_flushes_remaining() -> None:
     http, seen = recording_client()
     async with http:
         cloud = RatelCloud(endpoint="https://x", api_key="k", flush_interval=0, client=http)
-        cloud.record(event())
+        cloud.send_event(event())
         await cloud.aclose()
     assert len(seen) == 1
 
@@ -78,7 +78,7 @@ async def test_stamps_ts_when_omitted() -> None:
             now=lambda: "2026-07-01T00:00:00Z",
         )
         without_ts = {k: v for k, v in event().items() if k != "ts"}
-        cloud.record(without_ts)  # type: ignore[arg-type]
+        cloud.send_event(without_ts)  # type: ignore[arg-type]
         await cloud.flush()
 
     assert json.loads(seen[0].content)[0]["ts"] == "2026-07-01T00:00:00Z"
@@ -94,7 +94,7 @@ async def test_preserves_explicit_ts() -> None:
             client=http,
             now=lambda: "2026-07-01T00:00:00Z",
         )
-        cloud.record(event())  # ts: "2026-06-30T12:00:00Z"
+        cloud.send_event(event())  # ts: "2026-06-30T12:00:00Z"
         await cloud.flush()
 
     assert json.loads(seen[0].content)[0]["ts"] == "2026-06-30T12:00:00Z"
@@ -107,7 +107,7 @@ async def test_large_queue_splits_into_max_batch_requests() -> None:
             endpoint="https://x", api_key="k", flush_interval=0, batch_size=500, client=http
         )
         for _ in range(1100):
-            cloud.record(event())
+            cloud.send_event(event())
         await cloud.flush()
     # 1100 events / 500 per batch → 3 requests.
     assert len(seen) == 3

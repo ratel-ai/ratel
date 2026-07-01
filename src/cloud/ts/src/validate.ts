@@ -22,7 +22,7 @@ function toArray(value: unknown): unknown[] {
 
 /**
  * Check the semantic invariants of an event — the same rules the Rust spec's
- * `validate` enforces. Fully defensive: callers reach this through `record`,
+ * `validate` enforces. Fully defensive: callers reach this through `sendEvent`,
  * which is documented never to throw, so malformed input (a JS caller or `as
  * any` omitting required fields) must be *reported*, never thrown on.
  */

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Event } from "./index.js";
-import { sendBatch } from "./index.js";
+import { sendEventBatch } from "./index.js";
 
 function event(): Event {
   return {
@@ -21,10 +21,10 @@ function jsonResponse(status: number, body: unknown): Response {
 
 const noSleep = () => Promise.resolve();
 
-describe("sendBatch", () => {
+describe("sendEventBatch", () => {
   it("posts events with a bearer token and returns accepted count on 202", async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse(202, { accepted: 1 }));
-    const result = await sendBatch([event()], {
+    const result = await sendEventBatch([event()], {
       endpoint: "https://x/api/v1/events",
       apiKey: "secret",
       fetch,
@@ -42,7 +42,7 @@ describe("sendBatch", () => {
 
   it("does nothing and reports success for an empty batch", async () => {
     const fetch = vi.fn();
-    const result = await sendBatch([], { endpoint: "https://x", apiKey: "k", fetch });
+    const result = await sendEventBatch([], { endpoint: "https://x", apiKey: "k", fetch });
     expect(result).toEqual({ ok: true, accepted: 0 });
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -52,7 +52,7 @@ describe("sendBatch", () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse(503, {}))
       .mockResolvedValueOnce(jsonResponse(202, { accepted: 1 }));
-    const result = await sendBatch([event()], {
+    const result = await sendEventBatch([event()], {
       endpoint: "https://x",
       apiKey: "k",
       fetch,
@@ -66,7 +66,7 @@ describe("sendBatch", () => {
   it("retries on network errors up to maxRetries then gives up", async () => {
     const fetch = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
     const onError = vi.fn();
-    const result = await sendBatch([event()], {
+    const result = await sendEventBatch([event()], {
       endpoint: "https://x",
       apiKey: "k",
       fetch,
@@ -83,7 +83,7 @@ describe("sendBatch", () => {
   it("does not retry a permanent 4xx", async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse(400, { error: "bad" }));
     const onError = vi.fn();
-    const result = await sendBatch([event()], {
+    const result = await sendEventBatch([event()], {
       endpoint: "https://x",
       apiKey: "k",
       fetch,
@@ -99,7 +99,7 @@ describe("sendBatch", () => {
   it("never throws", async () => {
     const fetch = vi.fn().mockRejectedValue(new Error("boom"));
     await expect(
-      sendBatch([event()], {
+      sendEventBatch([event()], {
         endpoint: "https://x",
         apiKey: "k",
         fetch,

@@ -40,7 +40,7 @@ def _accepted(response: httpx.Response, fallback: int) -> int:
     return value if isinstance(value, int) else fallback
 
 
-async def send_batch(
+async def send_event_batch(
     events: list[Event],
     *,
     endpoint: str,

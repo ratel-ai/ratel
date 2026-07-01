@@ -160,7 +160,7 @@ function makeEndpoint(base, client, isMock) {
 }
 
 // ── TS phase ─────────────────────────────────────────────────────────────────
-async function runTs({ base, isMock, RatelCloud, sendBatch }) {
+async function runTs({ base, isMock, RatelCloud, sendEventBatch }) {
   section("TypeScript client (@ratel-ai/cloud)");
 
   // (a) client behaviour: valid enqueued, invalid dropped, small batch → split.
@@ -172,8 +172,8 @@ async function runTs({ base, isMock, RatelCloud, sendBatch }) {
     flushIntervalMs: 0,
     onError: (e) => drops.push(String(e?.message ?? e)),
   });
-  for (const ev of VALID) cloud.record(ev);
-  for (const ev of INVALID) cloud.record(ev);
+  for (const ev of VALID) cloud.sendEvent(ev);
+  for (const ev of INVALID) cloud.sendEvent(ev);
   await cloud.close();
 
   const validationDrops = drops.filter((m) => m.includes("dropped invalid event")).length;
@@ -182,14 +182,14 @@ async function runTs({ base, isMock, RatelCloud, sendBatch }) {
   // (b) wire acceptance via the raw transport (works live and in mock).
   // Default retries (3) so a cold backend route (e.g. a Next.js dev server
   // compiling the handler on first hit → transient 5xx) is absorbed, not failed.
-  const result = await sendBatch(VALID, {
+  const result = await sendEventBatch(VALID, {
     endpoint: makeEndpoint(base, "ts-batch", isMock),
     apiKey: API_KEY,
   });
-  check("sendBatch fixtures accepted (2xx)", result.ok, `status=${result.status}`);
+  check("sendEventBatch fixtures accepted (2xx)", result.ok, `status=${result.status}`);
 
   // (c) genuine ingestion: a fresh, never-sent event must be newly ingested.
-  const probe = await sendBatch([uniqueEvent("ts")], {
+  const probe = await sendEventBatch([uniqueEvent("ts")], {
     endpoint: makeEndpoint(base, "ts-probe", isMock),
     apiKey: API_KEY,
   });
@@ -226,7 +226,7 @@ function runPython({ base, isMock }) {
         return res(null);
       }
       check(`records ${VALID.length} valid, drops ${INVALID.length} invalid`, summary.drops === INVALID.length, `dropped ${summary.drops}`);
-      check("send_batch fixtures accepted (2xx)", summary.batch_ok === true, `status=${summary.batch_status}`);
+      check("send_event_batch fixtures accepted (2xx)", summary.batch_ok === true, `status=${summary.batch_status}`);
       check("fresh event ingested (accepted=1)", summary.probe_ok === true && summary.probe_accepted === 1, `ok=${summary.probe_ok} accepted=${summary.probe_accepted}`);
       res(summary);
     });
@@ -234,7 +234,7 @@ function runPython({ base, isMock }) {
 }
 
 // ── mock-only wire assertions ─────────────────────────────────────────────────
-async function assertMockWire({ buckets, RatelCloud, sendBatch, base }) {
+async function assertMockWire({ buckets, RatelCloud, sendEventBatch, base }) {
   section("Wire inspection (mock only)");
 
   const cli = buckets.get("ts-client");
@@ -249,7 +249,7 @@ async function assertMockWire({ buckets, RatelCloud, sendBatch, base }) {
 
   // 401 rejection path: a wrong key is dropped best-effort (no throw, onError fires).
   const rejErrors = [];
-  const bad = await sendBatch(VALID, {
+  const bad = await sendEventBatch(VALID, {
     endpoint: makeEndpoint(base, "badkey", true),
     apiKey: "rtl_wrong_key",
     maxRetries: 0,
@@ -266,7 +266,7 @@ async function main() {
     process.exit(2);
   }
   const ts = await import(pathToFileURL(TS_DIST_INDEX).href);
-  const { RatelCloud, sendBatch, validate } = ts;
+  const { RatelCloud, sendEventBatch, validate } = ts;
 
   console.log(`Fixtures: ${VALID.length} valid, ${INVALID.length} invalid`);
 
@@ -302,9 +302,9 @@ async function main() {
   }
 
   try {
-    await runTs({ base, isMock, RatelCloud, sendBatch });
+    await runTs({ base, isMock, RatelCloud, sendEventBatch });
     await runPython({ base, isMock });
-    if (isMock) await assertMockWire({ buckets: mock.buckets, RatelCloud, sendBatch, base });
+    if (isMock) await assertMockWire({ buckets: mock.buckets, RatelCloud, sendEventBatch, base });
   } finally {
     if (mock) mock.server.close();
   }

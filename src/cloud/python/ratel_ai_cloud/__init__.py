@@ -21,7 +21,7 @@ from .events import (
     Usage,
     UserMessage,
 )
-from .transport import MAX_BATCH, SendResult, send_batch
+from .transport import MAX_BATCH, SendResult, send_event_batch
 from .validate import Issue, ValidationResult, validate
 
 __all__ = [
@@ -46,6 +46,6 @@ __all__ = [
     "Usage",
     "UserMessage",
     "ValidationResult",
-    "send_batch",
+    "send_event_batch",
     "validate",
 ]

@@ -1,9 +1,9 @@
-import { MAX_BATCH, type SendResult, sendBatch } from "./transport.js";
+import { MAX_BATCH, type SendResult, sendEventBatch } from "./transport.js";
 import type { Event } from "./types.js";
 import { validate } from "./validate.js";
 
 /**
- * An {@link Event} as accepted by {@link RatelCloud.record}: `ts` may be omitted,
+ * An {@link Event} as accepted by {@link RatelCloud.sendEvent}: `ts` may be omitted,
  * in which case the client stamps the current time. Everything else is identical.
  * The canonical wire schema still requires `ts` — this is client-side sugar for
  * the common live-recording case; pass `ts` explicitly for replayed or
@@ -20,20 +20,20 @@ export interface RatelCloudOptions {
   batchSize?: number;
   /** Auto-flush cadence in ms. Default 5_000; `0` disables the timer. */
   flushIntervalMs?: number;
-  /** Validate each event on `record`, dropping invalid ones. Default true. */
+  /** Validate each event on `sendEvent`, dropping invalid ones. Default true. */
   validateEvents?: boolean;
   maxRetries?: number;
   timeoutMs?: number;
   /** Injectable for testing; defaults to the global `fetch`. */
   fetch?: typeof fetch;
-  /** Clock for the `record` `ts` default; defaults to `() => new Date().toISOString()`. */
+  /** Clock for the `sendEvent` `ts` default; defaults to `() => new Date().toISOString()`. */
   now?: () => string;
   /** Observe dropped events and swallowed transport errors. */
   onError?: (err: unknown) => void;
 }
 
 /**
- * Non-blocking, best-effort client for Ratel Cloud telemetry. `record` validates
+ * Non-blocking, best-effort client for Ratel Cloud telemetry. `sendEvent` validates
  * and enqueues without awaiting the network; batches flush on a timer, on reaching
  * `batchSize`, or explicitly via `flush`. Nothing here throws into the host app.
  */
@@ -63,7 +63,7 @@ export class RatelCloud {
    * Validate (unless disabled) and enqueue an event. `ts` is stamped with the
    * current time when omitted. Never blocks or throws.
    */
-  record(event: EventInput): void {
+  sendEvent(event: EventInput): void {
     // Stamp only when omitted; a present-but-empty `ts` is left to fail validation.
     const stamped: Event = event.ts === undefined ? { ...event, ts: this.now() } : (event as Event);
     if (this.opts.validateEvents !== false) {
@@ -91,7 +91,7 @@ export class RatelCloud {
   private async drain(): Promise<void> {
     while (this.queue.length > 0) {
       const batch = this.queue.splice(0, this.batchSize);
-      const result: SendResult = await sendBatch(batch, {
+      const result: SendResult = await sendEventBatch(batch, {
         endpoint: this.opts.endpoint,
         apiKey: this.opts.apiKey,
         fetch: this.opts.fetch,

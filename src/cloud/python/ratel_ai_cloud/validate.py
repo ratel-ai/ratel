@@ -37,7 +37,7 @@ def _as_list(value: Any) -> list[Any]:
 
 def validate(event: Event) -> ValidationResult:
     """Check an event's semantic invariants. Fully defensive: callers reach this
-    through ``RatelCloud.record``, so malformed input is reported, never raised on."""
+    through ``RatelCloud.send_event``, so malformed input is reported, never raised on."""
     issues: list[Issue] = []
 
     def fail(path: str, message: str) -> None:

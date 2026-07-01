@@ -22,12 +22,12 @@ function okFetch() {
 }
 
 describe("RatelCloud", () => {
-  it("does not send on record; sends a batched array on flush", async () => {
+  it("does not send on sendEvent; sends a batched array on flush", async () => {
     const fetch = okFetch();
     const cloud = new RatelCloud({ endpoint: "https://x", apiKey: "k", flushIntervalMs: 0, fetch });
 
-    cloud.record(event());
-    cloud.record(event());
+    cloud.sendEvent(event());
+    cloud.sendEvent(event());
     expect(fetch).not.toHaveBeenCalled();
 
     await cloud.flush();
@@ -45,8 +45,8 @@ describe("RatelCloud", () => {
       fetch,
     });
 
-    cloud.record(event());
-    cloud.record(event()); // hits batchSize → triggers flush
+    cloud.sendEvent(event());
+    cloud.sendEvent(event()); // hits batchSize → triggers flush
     await cloud.close();
 
     expect(fetch).toHaveBeenCalledOnce();
@@ -64,7 +64,7 @@ describe("RatelCloud", () => {
       onError,
     });
 
-    cloud.record({ ...event(), provider: "" });
+    cloud.sendEvent({ ...event(), provider: "" });
     await cloud.flush();
 
     expect(onError).toHaveBeenCalledOnce();
@@ -74,7 +74,7 @@ describe("RatelCloud", () => {
   it("flushes remaining events on close", async () => {
     const fetch = okFetch();
     const cloud = new RatelCloud({ endpoint: "https://x", apiKey: "k", flushIntervalMs: 0, fetch });
-    cloud.record(event());
+    cloud.sendEvent(event());
     await cloud.close();
     expect(fetch).toHaveBeenCalledOnce();
   });
@@ -90,7 +90,7 @@ describe("RatelCloud", () => {
     });
 
     const { ts: _ts, ...withoutTs } = event();
-    cloud.record(withoutTs);
+    cloud.sendEvent(withoutTs);
     await cloud.flush();
 
     expect(JSON.parse(fetch.mock.calls[0][1].body)[0].ts).toBe("2026-07-01T00:00:00Z");
@@ -106,7 +106,7 @@ describe("RatelCloud", () => {
       now: () => "2026-07-01T00:00:00Z",
     });
 
-    cloud.record(event()); // ts: "2026-06-30T12:00:00Z"
+    cloud.sendEvent(event()); // ts: "2026-06-30T12:00:00Z"
     await cloud.flush();
 
     expect(JSON.parse(fetch.mock.calls[0][1].body)[0].ts).toBe("2026-06-30T12:00:00Z");
@@ -121,7 +121,7 @@ describe("RatelCloud", () => {
       batchSize: 500,
       fetch,
     });
-    for (let i = 0; i < 1100; i++) cloud.record(event());
+    for (let i = 0; i < 1100; i++) cloud.sendEvent(event());
     await cloud.flush();
     // 1100 events / 500 per batch → 3 requests.
     expect(fetch).toHaveBeenCalledTimes(3);

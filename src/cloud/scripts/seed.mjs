@@ -30,7 +30,7 @@ if (!existsSync(TS_DIST_INDEX)) {
   console.error(`TS client is not built (${TS_DIST_INDEX} missing). Run: pnpm --dir ${join(HERE, "..", "ts")} build`);
   process.exit(2);
 }
-const { sendBatch, validate } = await import(pathToFileURL(TS_DIST_INDEX).href);
+const { sendEventBatch, validate } = await import(pathToFileURL(TS_DIST_INDEX).href);
 
 const ENDPOINT = process.env.RATEL_CLOUD_ENDPOINT ?? "http://localhost:3000/api/v1/events";
 const API_KEY = process.env.RATEL_CLOUD_API_KEY;
@@ -96,7 +96,7 @@ const CONTEXT_BLOCK =
 
 const HISTORY_TURNS = [
   { role: "user", content: "Where does the batching transport live in the TS client?" },
-  { role: "assistant", content: "In src/transport.ts — sendBatch POSTs with retry/backoff; client.ts owns the queue." },
+  { role: "assistant", content: "In src/transport.ts — sendEventBatch POSTs with retry/backoff; client.ts owns the queue." },
   { role: "user", content: "And how are invalid events handled?" },
   { role: "assistant", content: "validate() drops them before enqueue and reports via onError; they never hit the wire." },
 ];
@@ -357,7 +357,7 @@ let sent = 0, accepted = 0;
 const CHUNK = 20;
 for (let i = 0; i < events.length; i += CHUNK) {
   const batch = events.slice(i, i + CHUNK);
-  const r = await sendBatch(batch, { endpoint: ENDPOINT, apiKey: API_KEY, onError: (e) => console.error("send error:", String(e)) });
+  const r = await sendEventBatch(batch, { endpoint: ENDPOINT, apiKey: API_KEY, onError: (e) => console.error("send error:", String(e)) });
   sent += batch.length; accepted += r.accepted;
   console.log(`  batch ${i / CHUNK + 1}: sent ${batch.length}, status ${r.status}, accepted ${r.accepted}`);
 }

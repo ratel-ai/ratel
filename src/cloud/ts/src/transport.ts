@@ -38,7 +38,7 @@ function isRetryableStatus(status: number): boolean {
  * failures with exponential backoff + jitter, drops on permanent 4xx, and
  * **never throws** — failures are reported via `onError` and a falsy result.
  */
-export async function sendBatch(events: Event[], opts: TransportOptions): Promise<SendResult> {
+export async function sendEventBatch(events: Event[], opts: TransportOptions): Promise<SendResult> {
   if (events.length === 0) return { ok: true, accepted: 0 };
 
   const doFetch = opts.fetch ?? fetch;

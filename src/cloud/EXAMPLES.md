@@ -10,15 +10,15 @@ shape; the only difference is the host language.
 
 A minimal valid event needs `provider`, `model`, `ts`, and a non-empty `messages` array; everything
 else (`system`, `tools`, `params`, `usage`, `finish_reason`, …) is optional. When you use the batching
-client's `record`, `ts` may also be omitted — the client stamps the current time. Pass `ts` explicitly
-for replayed or backfilled events, and always for the stateless `sendBatch` / `send_batch` path (the
-wire schema still requires it).
+client's `sendEvent` / `send_event`, `ts` may also be omitted — the client stamps the current time. Pass
+`ts` explicitly for replayed or backfilled events, and always for the stateless `sendEventBatch` /
+`send_event_batch` path (the wire schema still requires it).
 
 ## TypeScript / JavaScript
 
 ### Batching client
 
-`RatelCloud` validates, queues, and flushes in the background — `record` never blocks or throws.
+`RatelCloud` validates, queues, and flushes in the background — `sendEvent` never blocks or throws.
 
 ```ts
 import { RatelCloud } from "@ratel-ai/cloud";
@@ -29,7 +29,7 @@ const cloud = new RatelCloud({
   onError: (err) => console.warn("ratel-cloud:", err), // dropped events + swallowed transport errors
 });
 
-cloud.record({
+cloud.sendEvent({
   provider: "openai",
   model: "gpt-5.5",
   ts: new Date().toISOString(),
@@ -48,7 +48,7 @@ Tool-call `arguments` are a **parsed object**, never a JSON string. A `tool` mes
 call by `tool_call_id`.
 
 ```ts
-cloud.record({
+cloud.sendEvent({
   provider: "anthropic",
   model: "claude-opus-4-8",
   ts: new Date().toISOString(),
@@ -82,18 +82,18 @@ cloud.record({
 
 ### Stateless send (edge / serverless)
 
-Skip the queue and POST a batch yourself with `sendBatch` — handy on request-scoped runtimes (Vercel
+Skip the queue and POST a batch yourself with `sendEventBatch` — handy on request-scoped runtimes (Vercel
 Edge, Cloudflare Workers) where a long-lived background timer doesn't fit. It retries transient
 failures and never throws.
 
 ```ts
-import { sendBatch, validate } from "@ratel-ai/cloud";
+import { sendEventBatch, validate } from "@ratel-ai/cloud";
 
 const event = { /* … as above … */ };
 const check = validate(event);
 if (!check.ok) throw new Error(check.issues.map((i) => `${i.path} ${i.message}`).join("; "));
 
-const result = await sendBatch([event], {
+const result = await sendEventBatch([event], {
   endpoint: "https://cloud.ratel.ai/api/v1/events",
   apiKey: env.RATEL_CLOUD_API_KEY,
 });
@@ -104,7 +104,7 @@ const result = await sendBatch([event], {
 
 ### Batching client
 
-Use `RatelCloud` as an async context manager to run the periodic flush; `record` is non-blocking and
+Use `RatelCloud` as an async context manager to run the periodic flush; `send_event` is non-blocking and
 never raises.
 
 ```python
@@ -117,7 +117,7 @@ async def main() -> None:
         api_key=os.environ["RATEL_CLOUD_API_KEY"],
         on_error=lambda err: print("ratel-cloud:", err),
     ) as cloud:
-        cloud.record({
+        cloud.send_event({
             "provider": "openai",
             "model": "gpt-5.5",
             "ts": "2026-06-30T12:00:00Z",
@@ -142,20 +142,20 @@ async with httpx.AsyncClient() as http, RatelCloud(
     api_key=api_key,
     client=http,
 ) as cloud:
-    cloud.record(event)
+    cloud.send_event(event)
     await cloud.flush()  # force a drain before you're done
 ```
 
 ### Stateless send
 
 ```python
-from ratel_ai_cloud import send_batch, validate
+from ratel_ai_cloud import send_event_batch, validate
 
 check = validate(event)
 if not check.ok:
     raise ValueError("; ".join(f"{i.path} {i.message}" for i in check.issues))
 
-result = await send_batch(
+result = await send_event_batch(
     [event],
     endpoint="https://cloud.ratel.ai/api/v1/events",
     api_key=api_key,

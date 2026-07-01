@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from ratel_ai_cloud import Event, send_batch
+from ratel_ai_cloud import Event, send_event_batch
 
 
 def event() -> Event:
@@ -34,7 +34,7 @@ async def test_posts_with_bearer_and_returns_accepted() -> None:
         return httpx.Response(202, json={"accepted": 1})
 
     async with client(handler) as http:
-        result = await send_batch(
+        result = await send_event_batch(
             [event()],
             endpoint="https://x/api/v1/events",
             api_key="secret",
@@ -56,7 +56,7 @@ async def test_empty_batch_is_a_noop() -> None:
         return httpx.Response(202, json={})
 
     async with client(handler) as http:
-        result = await send_batch([], endpoint="https://x", api_key="k", client=http)
+        result = await send_event_batch([], endpoint="https://x", api_key="k", client=http)
 
     assert result.ok and result.accepted == 0
     assert calls == 0
@@ -73,7 +73,7 @@ async def test_retries_transient_5xx_then_succeeds() -> None:
         return httpx.Response(202, json={"accepted": 1})
 
     async with client(handler) as http:
-        result = await send_batch(
+        result = await send_event_batch(
             [event()], endpoint="https://x", api_key="k", client=http, base_delay=0, sleep=no_sleep
         )
 
@@ -91,7 +91,7 @@ async def test_retries_network_errors_then_gives_up() -> None:
         raise httpx.ConnectError("boom", request=request)
 
     async with client(handler) as http:
-        result = await send_batch(
+        result = await send_event_batch(
             [event()],
             endpoint="https://x",
             api_key="k",
@@ -117,7 +117,7 @@ async def test_does_not_retry_permanent_4xx() -> None:
         return httpx.Response(400, json={"error": "bad"})
 
     async with client(handler) as http:
-        result = await send_batch(
+        result = await send_event_batch(
             [event()],
             endpoint="https://x",
             api_key="k",

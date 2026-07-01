@@ -40,7 +40,7 @@ const cloud = new RatelCloud({
   apiKey: "rtl_...",
 });
 
-cloud.record({
+cloud.sendEvent({
   provider: "openai",
   model: "gpt-5.5",
   ts: new Date().toISOString(),
@@ -53,19 +53,19 @@ cloud.record({
 await cloud.close(); // flush anything queued
 ```
 
-`record` validates and enqueues without awaiting the network. Batches flush on a timer, on reaching
+`sendEvent` validates and enqueues without awaiting the network. Batches flush on a timer, on reaching
 `batchSize`, or via `await cloud.flush()`.
 
 ## API
 
-- **`record(event)`** — validate (unless `validateEvents: false`) and enqueue. `ts` may be omitted
+- **`sendEvent(event)`** — validate (unless `validateEvents: false`) and enqueue. `ts` may be omitted
   (the client stamps the current time; override the clock with the `now` option); pass it explicitly
   for replayed/backfilled events. Invalid events are dropped and reported via `onError`. Never blocks
   or throws.
 - **`flush()`** — drain the queue in `batchSize`-bounded requests (`MAX_BATCH` = 500).
 - **`close()`** — stop the timer and flush.
 - **`validate(event)`** — the standalone validator, returning `{ ok }` or `{ ok: false, issues }`.
-- **`sendBatch(events, opts)`** — the stateless transport, if you want to manage batching yourself.
+- **`sendEventBatch(events, opts)`** — the stateless transport, if you want to manage batching yourself.
 
 ## Local check against the endpoint
 
@@ -89,6 +89,6 @@ pnpm test       # vitest run (incl. conformance against ../fixtures)
 src/
   types.ts       canonical event types (mirror of the Rust schema)
   validate.ts    semantic validation → { ok } | { ok: false, issues }
-  transport.ts   fetch batch POST with retry/backoff (sendBatch)
-  client.ts      RatelCloud — non-blocking record / flush / close
+  transport.ts   fetch batch POST with retry/backoff (sendEventBatch)
+  client.ts      RatelCloud — non-blocking sendEvent / flush / close
 ```

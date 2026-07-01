@@ -120,7 +120,7 @@ class Event(_EventBase, _EventOptional):
 
 
 class EventInput(_EventBase, _EventOptional, total=False):
-    """An :class:`Event` as accepted by ``RatelCloud.record``: ``ts`` may be
+    """An :class:`Event` as accepted by ``RatelCloud.send_event``: ``ts`` may be
     omitted, in which case the client stamps the current time. The canonical wire
     schema still requires ``ts`` — this is client-side sugar for the common
     live-recording case; pass ``ts`` explicitly for replayed or backfilled events.

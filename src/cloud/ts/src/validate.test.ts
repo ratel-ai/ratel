@@ -95,7 +95,7 @@ describe("validate", () => {
     expect(paths(e)).toEqual(["tools[0].parameters"]);
   });
 
-  // Host-safety contract: `record` is documented never to throw, so `validate`
+  // Host-safety contract: `sendEvent` is documented never to throw, so `validate`
   // must report malformed input — including missing required fields — not throw.
   it("reports (does not throw on) an event missing required fields", () => {
     // biome-ignore lint/suspicious/noExplicitAny: simulates an untyped JS caller
