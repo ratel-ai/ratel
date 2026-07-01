@@ -58,8 +58,10 @@ await cloud.close(); // flush anything queued
 
 ## API
 
-- **`record(event)`** — validate (unless `validateEvents: false`) and enqueue. Invalid events are
-  dropped and reported via `onError`. Never blocks or throws.
+- **`record(event)`** — validate (unless `validateEvents: false`) and enqueue. `ts` may be omitted
+  (the client stamps the current time; override the clock with the `now` option); pass it explicitly
+  for replayed/backfilled events. Invalid events are dropped and reported via `onError`. Never blocks
+  or throws.
 - **`flush()`** — drain the queue in `batchSize`-bounded requests (`MAX_BATCH` = 500).
 - **`close()`** — stop the timer and flush.
 - **`validate(event)`** — the standalone validator, returning `{ ok }` or `{ ok: false, issues }`.

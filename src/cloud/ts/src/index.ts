@@ -1,4 +1,4 @@
-export { RatelCloud, type RatelCloudOptions } from "./client.js";
+export { type EventInput, RatelCloud, type RatelCloudOptions } from "./client.js";
 export { MAX_BATCH, type SendResult, sendBatch, type TransportOptions } from "./transport.js";
 export type {
   AssistantMessage,

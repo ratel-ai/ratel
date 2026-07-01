@@ -2,6 +2,15 @@ import { MAX_BATCH, type SendResult, sendBatch } from "./transport.js";
 import type { Event } from "./types.js";
 import { validate } from "./validate.js";
 
+/**
+ * An {@link Event} as accepted by {@link RatelCloud.record}: `ts` may be omitted,
+ * in which case the client stamps the current time. Everything else is identical.
+ * The canonical wire schema still requires `ts` — this is client-side sugar for
+ * the common live-recording case; pass `ts` explicitly for replayed or
+ * backfilled events.
+ */
+export type EventInput = Omit<Event, "ts"> & { ts?: string };
+
 export interface RatelCloudOptions {
   /** Ingest endpoint URL, e.g. `https://cloud.ratel.ai/api/v1/events`. */
   endpoint: string;
@@ -17,6 +26,8 @@ export interface RatelCloudOptions {
   timeoutMs?: number;
   /** Injectable for testing; defaults to the global `fetch`. */
   fetch?: typeof fetch;
+  /** Clock for the `record` `ts` default; defaults to `() => new Date().toISOString()`. */
+  now?: () => string;
   /** Observe dropped events and swallowed transport errors. */
   onError?: (err: unknown) => void;
 }
@@ -29,6 +40,7 @@ export interface RatelCloudOptions {
 export class RatelCloud {
   private readonly opts: RatelCloudOptions;
   private readonly batchSize: number;
+  private readonly now: () => string;
   private queue: Event[] = [];
   private timer: ReturnType<typeof setInterval> | undefined;
   private flushing: Promise<void> = Promise.resolve();
@@ -36,6 +48,7 @@ export class RatelCloud {
   constructor(opts: RatelCloudOptions) {
     this.opts = opts;
     this.batchSize = Math.min(opts.batchSize ?? 100, MAX_BATCH);
+    this.now = opts.now ?? (() => new Date().toISOString());
 
     const interval = opts.flushIntervalMs ?? 5_000;
     if (interval > 0) {
@@ -46,10 +59,15 @@ export class RatelCloud {
     }
   }
 
-  /** Validate (unless disabled) and enqueue an event. Never blocks or throws. */
-  record(event: Event): void {
+  /**
+   * Validate (unless disabled) and enqueue an event. `ts` is stamped with the
+   * current time when omitted. Never blocks or throws.
+   */
+  record(event: EventInput): void {
+    // Stamp only when omitted; a present-but-empty `ts` is left to fail validation.
+    const stamped: Event = event.ts === undefined ? { ...event, ts: this.now() } : (event as Event);
     if (this.opts.validateEvents !== false) {
-      const result = validate(event);
+      const result = validate(stamped);
       if (!result.ok) {
         this.opts.onError?.(
           new Error(`ratel-cloud: dropped invalid event: ${describe(result.issues)}`),
@@ -57,7 +75,7 @@ export class RatelCloud {
         return;
       }
     }
-    this.queue.push(event);
+    this.queue.push(stamped);
     if (this.queue.length >= this.batchSize) {
       void this.flush();
     }

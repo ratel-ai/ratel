@@ -5,13 +5,19 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections.abc import Callable, Coroutine
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, cast
 
 import httpx
 
-from .events import Event
+from .events import Event, EventInput
 from .transport import MAX_BATCH, send_batch
 from .validate import validate
+
+
+def _default_now() -> str:
+    """Current time as an RFC 3339 / ISO 8601 string with a ``Z`` suffix."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class RatelCloud:
@@ -39,6 +45,7 @@ class RatelCloud:
         timeout: float = 10.0,
         client: httpx.AsyncClient | None = None,
         on_error: Callable[[Exception], None] | None = None,
+        now: Callable[[], str] | None = None,
     ) -> None:
         self._endpoint = endpoint
         self._api_key = api_key
@@ -49,22 +56,28 @@ class RatelCloud:
         self._timeout = timeout
         self._client = client
         self._on_error = on_error
+        self._now = now or _default_now
 
         self._queue: list[Event] = []
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task[None]] = set()
         self._timer: asyncio.Task[None] | None = None
 
-    def record(self, event: Event) -> None:
-        """Validate (unless disabled) and enqueue an event. Never blocks or raises."""
+    def record(self, event: EventInput) -> None:
+        """Validate (unless disabled) and enqueue an event. ``ts`` is stamped with
+        the current time when omitted. Never blocks or raises."""
+        stamped = cast(Event, dict(event))
+        # Stamp only when omitted; a present-but-empty `ts` is left to fail validation.
+        if stamped.get("ts") is None:
+            stamped["ts"] = self._now()
         if self._validate_events:
-            result = validate(event)
+            result = validate(stamped)
             if not result.ok:
                 if self._on_error is not None:
                     detail = "; ".join(f"{i.path} {i.message}" for i in result.issues)
                     self._on_error(RuntimeError(f"ratel-cloud: dropped invalid event: {detail}"))
                 return
-        self._queue.append(event)
+        self._queue.append(stamped)
         if len(self._queue) >= self._batch_size:
             self._schedule(self.flush())
 

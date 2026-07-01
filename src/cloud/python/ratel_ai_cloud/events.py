@@ -97,16 +97,13 @@ class Usage(_UsageRequired, total=False):
 FinishReason = Literal["stop", "length", "tool_call", "content_filter", "refusal"]
 
 
-class _EventRequired(TypedDict):
+class _EventBase(TypedDict):
     provider: str
     model: str
-    ts: str
     messages: list[Message]
 
 
-class Event(_EventRequired, total=False):
-    """A single LLM-call event — the entire v1 telemetry surface."""
-
+class _EventOptional(TypedDict, total=False):
     stream: bool
     latency_ms: int
     system: str
@@ -114,3 +111,19 @@ class Event(_EventRequired, total=False):
     params: Params
     usage: Usage
     finish_reason: FinishReason
+
+
+class Event(_EventBase, _EventOptional):
+    """A single LLM-call event — the entire v1 telemetry surface."""
+
+    ts: str
+
+
+class EventInput(_EventBase, _EventOptional, total=False):
+    """An :class:`Event` as accepted by ``RatelCloud.record``: ``ts`` may be
+    omitted, in which case the client stamps the current time. The canonical wire
+    schema still requires ``ts`` — this is client-side sugar for the common
+    live-recording case; pass ``ts`` explicitly for replayed or backfilled events.
+    """
+
+    ts: str

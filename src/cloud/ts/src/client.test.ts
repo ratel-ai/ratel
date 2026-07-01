@@ -79,6 +79,39 @@ describe("RatelCloud", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  it("stamps ts with the current time when omitted", async () => {
+    const fetch = okFetch();
+    const cloud = new RatelCloud({
+      endpoint: "https://x",
+      apiKey: "k",
+      flushIntervalMs: 0,
+      fetch,
+      now: () => "2026-07-01T00:00:00Z",
+    });
+
+    const { ts: _ts, ...withoutTs } = event();
+    cloud.record(withoutTs);
+    await cloud.flush();
+
+    expect(JSON.parse(fetch.mock.calls[0][1].body)[0].ts).toBe("2026-07-01T00:00:00Z");
+  });
+
+  it("preserves an explicit ts rather than stamping", async () => {
+    const fetch = okFetch();
+    const cloud = new RatelCloud({
+      endpoint: "https://x",
+      apiKey: "k",
+      flushIntervalMs: 0,
+      fetch,
+      now: () => "2026-07-01T00:00:00Z",
+    });
+
+    cloud.record(event()); // ts: "2026-06-30T12:00:00Z"
+    await cloud.flush();
+
+    expect(JSON.parse(fetch.mock.calls[0][1].body)[0].ts).toBe("2026-06-30T12:00:00Z");
+  });
+
   it("splits a large queue into MAX_BATCH-bounded requests", async () => {
     const fetch = okFetch();
     const cloud = new RatelCloud({

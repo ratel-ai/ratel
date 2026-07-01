@@ -67,6 +67,39 @@ async def test_close_flushes_remaining() -> None:
     assert len(seen) == 1
 
 
+async def test_stamps_ts_when_omitted() -> None:
+    http, seen = recording_client()
+    async with http:
+        cloud = RatelCloud(
+            endpoint="https://x",
+            api_key="k",
+            flush_interval=0,
+            client=http,
+            now=lambda: "2026-07-01T00:00:00Z",
+        )
+        without_ts = {k: v for k, v in event().items() if k != "ts"}
+        cloud.record(without_ts)  # type: ignore[arg-type]
+        await cloud.flush()
+
+    assert json.loads(seen[0].content)[0]["ts"] == "2026-07-01T00:00:00Z"
+
+
+async def test_preserves_explicit_ts() -> None:
+    http, seen = recording_client()
+    async with http:
+        cloud = RatelCloud(
+            endpoint="https://x",
+            api_key="k",
+            flush_interval=0,
+            client=http,
+            now=lambda: "2026-07-01T00:00:00Z",
+        )
+        cloud.record(event())  # ts: "2026-06-30T12:00:00Z"
+        await cloud.flush()
+
+    assert json.loads(seen[0].content)[0]["ts"] == "2026-06-30T12:00:00Z"
+
+
 async def test_large_queue_splits_into_max_batch_requests() -> None:
     http, seen = recording_client()
     async with http:

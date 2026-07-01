@@ -53,8 +53,9 @@ an `async with` context), on reaching `batch_size`, or via `await cloud.flush()`
 
 ## API
 
-- **`record(event)`** — validate (unless `validate_events=False`) and enqueue. Invalid events are
-  dropped and reported via `on_error`.
+- **`record(event)`** — validate (unless `validate_events=False`) and enqueue. `ts` may be omitted
+  (the client stamps the current time; override the clock with the `now` argument); pass it explicitly
+  for replayed/backfilled events. Invalid events are dropped and reported via `on_error`.
 - **`await flush()`** — drain the queue in `batch_size`-bounded requests (`MAX_BATCH` = 500).
 - **`await aclose()`** — stop the timer and flush. Also runs on `async with` exit.
 - **`validate(event) -> ValidationResult`** — the standalone validator.
