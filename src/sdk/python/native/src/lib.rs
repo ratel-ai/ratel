@@ -10,8 +10,104 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use ratel_ai_core as core;
-use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
+use ratel_ai_core::{EnvelopeStamper, JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
 use serde_json::Value;
+
+/// Default event capacity for a [`TraceSession`] buffer — past this, the
+/// oldest events drop (ADR-0013 query-log semantics).
+const DEFAULT_SESSION_CAPACITY: usize = 10_000;
+
+fn build_stamper(
+    session_id: String,
+    harness: Option<String>,
+    environment: Option<String>,
+    sdk_version: Option<String>,
+    catalog_version: Option<String>,
+) -> EnvelopeStamper {
+    let mut stamper = EnvelopeStamper::new(session_id);
+    if let Some(harness) = harness {
+        stamper = stamper.with_harness(harness);
+    }
+    if let Some(environment) = environment {
+        stamper = stamper.with_environment(environment);
+    }
+    if let Some(sdk_version) = sdk_version {
+        stamper = stamper.with_sdk_version(sdk_version);
+    }
+    if let Some(catalog_version) = catalog_version {
+        stamper = stamper.with_catalog_version(catalog_version);
+    }
+    stamper
+}
+
+fn parse_origin(origin: &str) -> Origin {
+    match origin {
+        "agent" => Origin::Agent,
+        _ => Origin::Direct,
+    }
+}
+
+/// One shared, bounded trace buffer for a whole session: attach it to every
+/// registry so `(session_id, seq)` is unique and there is a single drain
+/// point for the Cloud exporter. See ADR-0013. Mirrors the TS `TraceSession`.
+#[pyclass]
+pub struct TraceSession {
+    sink: Arc<MemorySink>,
+}
+
+#[pymethods]
+impl TraceSession {
+    #[new]
+    #[pyo3(signature = (session_id, harness=None, environment=None, sdk_version=None, catalog_version=None, capacity=None))]
+    fn new(
+        session_id: String,
+        harness: Option<String>,
+        environment: Option<String>,
+        sdk_version: Option<String>,
+        catalog_version: Option<String>,
+        capacity: Option<usize>,
+    ) -> Self {
+        let stamper = build_stamper(
+            session_id,
+            harness,
+            environment,
+            sdk_version,
+            catalog_version,
+        );
+        let capacity = capacity.unwrap_or(DEFAULT_SESSION_CAPACITY);
+        Self {
+            sink: Arc::new(MemorySink::with_stamper(Arc::new(stamper)).with_capacity(capacity)),
+        }
+    }
+
+    /// Drain all buffered envelopes. A session should have exactly one
+    /// drainer (typically the Cloud exporter).
+    fn drain<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        for env in self.sink.drain() {
+            let obj = pythonize::pythonize(py, &env)
+                .map_err(|e| PyValueError::new_err(format!("serialize trace envelope: {e}")))?;
+            out.append(obj)?;
+        }
+        Ok(out)
+    }
+
+    /// Re-point the catalog version stamped on subsequent envelopes.
+    #[pyo3(signature = (catalog_version=None))]
+    fn set_catalog_version(&self, catalog_version: Option<String>) {
+        self.sink.stamper().set_catalog_version(catalog_version);
+    }
+
+    /// Events dropped to the capacity bound since construction.
+    fn dropped_count(&self) -> u64 {
+        self.sink.dropped_count()
+    }
+
+    #[getter]
+    fn session_id(&self) -> String {
+        self.sink.session_id().to_string()
+    }
+}
 
 /// A single search result: the matched tool id and its BM25 score. Mirrors the
 /// TS SDK's `SearchHit` (camelCase `toolId` there → snake_case `tool_id` here).
@@ -105,18 +201,38 @@ impl ToolRegistry {
     }
 
     fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SearchHit> {
-        let parsed = match origin.as_str() {
-            "agent" => Origin::Agent,
-            _ => Origin::Direct,
-        };
         self.inner
-            .search_with_origin(&query, top_k as usize, parsed)
+            .search_with_origin(&query, top_k as usize, parse_origin(&origin))
             .into_iter()
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
             })
             .collect()
+    }
+
+    /// Like `search_with_origin`, but also returns the `search_id` stamped on
+    /// the emitted event, as a `(search_id, hits)` tuple.
+    fn search_with_trace(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+    ) -> (String, Vec<SearchHit>) {
+        let outcome = self
+            .inner
+            .search_traced(&query, top_k as usize, parse_origin(&origin));
+        (
+            outcome.search_id,
+            outcome
+                .hits
+                .into_iter()
+                .map(|hit| SearchHit {
+                    tool_id: hit.tool_id,
+                    score: hit.score as f64,
+                })
+                .collect(),
+        )
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -128,12 +244,17 @@ impl ToolRegistry {
         Ok(())
     }
 
-    #[pyo3(signature = (kind, session_id=None, path=None))]
+    #[pyo3(signature = (kind, session_id=None, path=None, harness=None, environment=None, sdk_version=None, catalog_version=None))]
+    #[allow(clippy::too_many_arguments)]
     fn set_trace_sink(
         &mut self,
         kind: String,
         session_id: Option<String>,
         path: Option<String>,
+        harness: Option<String>,
+        environment: Option<String>,
+        sdk_version: Option<String>,
+        catalog_version: Option<String>,
     ) -> PyResult<()> {
         match kind.as_str() {
             "noop" => {
@@ -143,7 +264,14 @@ impl ToolRegistry {
             "memory" => {
                 let session_id = session_id
                     .ok_or_else(|| PyValueError::new_err("memory sink requires session_id"))?;
-                let sink = Arc::new(MemorySink::new(session_id));
+                let stamper = build_stamper(
+                    session_id,
+                    harness,
+                    environment,
+                    sdk_version,
+                    catalog_version,
+                );
+                let sink = Arc::new(MemorySink::with_stamper(Arc::new(stamper)));
                 self.memory_sink = Some(sink.clone());
                 self.inner.set_trace_sink(sink);
             }
@@ -151,7 +279,14 @@ impl ToolRegistry {
                 let session_id = session_id
                     .ok_or_else(|| PyValueError::new_err("jsonl sink requires session_id"))?;
                 let path = path.ok_or_else(|| PyValueError::new_err("jsonl sink requires path"))?;
-                let sink = JsonlSink::new(session_id, &path)
+                let stamper = build_stamper(
+                    session_id,
+                    harness,
+                    environment,
+                    sdk_version,
+                    catalog_version,
+                );
+                let sink = JsonlSink::with_stamper(Arc::new(stamper), &path)
                     .map_err(|e| PyValueError::new_err(format!("open jsonl sink: {e}")))?;
                 self.memory_sink = None;
                 self.inner.set_trace_sink(Arc::new(sink));
@@ -163,6 +298,12 @@ impl ToolRegistry {
             }
         }
         Ok(())
+    }
+
+    /// Route this registry's events into a shared [`TraceSession`] buffer.
+    fn attach_trace_session(&mut self, session: PyRef<'_, TraceSession>) {
+        self.memory_sink = Some(session.sink.clone());
+        self.inner.set_trace_sink(session.sink.clone());
     }
 
     /// Drain captured envelopes from the active sink. Returns `[]` unless the
@@ -224,6 +365,37 @@ impl SkillRegistry {
         });
     }
 
+    /// Register-or-replace by id (collapses historical duplicates). Emits
+    /// `Remove` + `Add` churn on replacement. Returns whether something was
+    /// replaced.
+    #[allow(clippy::too_many_arguments)]
+    fn upsert(
+        &mut self,
+        id: String,
+        name: String,
+        description: String,
+        tags: Vec<String>,
+        tools: Vec<String>,
+        metadata: HashMap<String, Vec<String>>,
+        body: String,
+    ) -> bool {
+        self.inner.upsert(core::Skill {
+            id,
+            name,
+            description,
+            tags,
+            tools,
+            metadata,
+            body,
+        })
+    }
+
+    /// Remove every skill with the given id. Returns whether anything was
+    /// removed.
+    fn remove(&mut self, skill_id: String) -> bool {
+        self.inner.remove(&skill_id)
+    }
+
     fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
         self.inner
             .search(&query, top_k as usize)
@@ -236,18 +408,38 @@ impl SkillRegistry {
     }
 
     fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SkillHit> {
-        let parsed = match origin.as_str() {
-            "agent" => Origin::Agent,
-            _ => Origin::Direct,
-        };
         self.inner
-            .search_with_origin(&query, top_k as usize, parsed)
+            .search_with_origin(&query, top_k as usize, parse_origin(&origin))
             .into_iter()
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
             })
             .collect()
+    }
+
+    /// Like `search_with_origin`, but also returns the `search_id` stamped on
+    /// the emitted event, as a `(search_id, hits)` tuple.
+    fn search_with_trace(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+    ) -> (String, Vec<SkillHit>) {
+        let outcome = self
+            .inner
+            .search_traced(&query, top_k as usize, parse_origin(&origin));
+        (
+            outcome.search_id,
+            outcome
+                .hits
+                .into_iter()
+                .map(|hit| SkillHit {
+                    skill_id: hit.skill_id,
+                    score: hit.score as f64,
+                })
+                .collect(),
+        )
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -259,12 +451,17 @@ impl SkillRegistry {
         Ok(())
     }
 
-    #[pyo3(signature = (kind, session_id=None, path=None))]
+    #[pyo3(signature = (kind, session_id=None, path=None, harness=None, environment=None, sdk_version=None, catalog_version=None))]
+    #[allow(clippy::too_many_arguments)]
     fn set_trace_sink(
         &mut self,
         kind: String,
         session_id: Option<String>,
         path: Option<String>,
+        harness: Option<String>,
+        environment: Option<String>,
+        sdk_version: Option<String>,
+        catalog_version: Option<String>,
     ) -> PyResult<()> {
         match kind.as_str() {
             "noop" => {
@@ -274,7 +471,14 @@ impl SkillRegistry {
             "memory" => {
                 let session_id = session_id
                     .ok_or_else(|| PyValueError::new_err("memory sink requires session_id"))?;
-                let sink = Arc::new(MemorySink::new(session_id));
+                let stamper = build_stamper(
+                    session_id,
+                    harness,
+                    environment,
+                    sdk_version,
+                    catalog_version,
+                );
+                let sink = Arc::new(MemorySink::with_stamper(Arc::new(stamper)));
                 self.memory_sink = Some(sink.clone());
                 self.inner.set_trace_sink(sink);
             }
@@ -282,7 +486,14 @@ impl SkillRegistry {
                 let session_id = session_id
                     .ok_or_else(|| PyValueError::new_err("jsonl sink requires session_id"))?;
                 let path = path.ok_or_else(|| PyValueError::new_err("jsonl sink requires path"))?;
-                let sink = JsonlSink::new(session_id, &path)
+                let stamper = build_stamper(
+                    session_id,
+                    harness,
+                    environment,
+                    sdk_version,
+                    catalog_version,
+                );
+                let sink = JsonlSink::with_stamper(Arc::new(stamper), &path)
                     .map_err(|e| PyValueError::new_err(format!("open jsonl sink: {e}")))?;
                 self.memory_sink = None;
                 self.inner.set_trace_sink(Arc::new(sink));
@@ -294,6 +505,12 @@ impl SkillRegistry {
             }
         }
         Ok(())
+    }
+
+    /// Route this registry's events into a shared [`TraceSession`] buffer.
+    fn attach_trace_session(&mut self, session: PyRef<'_, TraceSession>) {
+        self.memory_sink = Some(session.sink.clone());
+        self.inner.set_trace_sink(session.sink.clone());
     }
 
     fn drain_trace_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
@@ -316,5 +533,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SearchHit>()?;
     m.add_class::<SkillRegistry>()?;
     m.add_class::<SkillHit>()?;
+    m.add_class::<TraceSession>()?;
     Ok(())
 }
