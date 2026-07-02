@@ -20,12 +20,15 @@ fn tool(id: &str, description: &str) -> Tool {
 
 fn catalog() -> ToolRegistry {
     let mut r = ToolRegistry::new();
-    r.register(tool("delete_path", "erase a directory entry permanently"));
+    r.register(tool("delete_path", "erase a directory entry permanently"))
+        .unwrap();
     r.register(tool(
         "weather",
         "get the current weather forecast for a city",
-    ));
-    r.register(tool("send_email", "compose and send an email message"));
+    ))
+    .unwrap();
+    r.register(tool("send_email", "compose and send an email message"))
+        .unwrap();
     r
 }
 
@@ -33,7 +36,7 @@ fn catalog() -> ToolRegistry {
 fn search_surfaces_a_synonym_match() {
     // "remove a file" shares no content words with "erase a directory entry" —
     // the lexical "missing gold" case dense closes.
-    let hits = catalog().search("remove a file", 3);
+    let hits = catalog().search("remove a file", 3).unwrap();
     assert_eq!(
         hits.first().map(|h| h.tool_id.as_str()),
         Some("delete_path")
@@ -42,20 +45,27 @@ fn search_surfaces_a_synonym_match() {
 
 #[test]
 fn search_respects_top_k() {
-    assert!(catalog().search("anything", 2).len() <= 2);
+    assert!(catalog().search("anything", 2).unwrap().len() <= 2);
 }
 
 #[test]
 fn empty_registry_returns_no_hits() {
-    assert!(ToolRegistry::new().search("anything", 5).is_empty());
+    assert!(
+        ToolRegistry::new()
+            .search("anything", 5)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
 fn search_emits_a_dense_trace_stage() {
     let sink = Arc::new(MemorySink::new("test-session"));
     let mut registry = ToolRegistry::with_trace_sink(sink.clone());
-    registry.register(tool("delete_path", "delete a path"));
-    let _ = registry.search("remove a file", 1);
+    registry
+        .register(tool("delete_path", "delete a path"))
+        .unwrap();
+    registry.search("remove a file", 1).unwrap();
     let saw_dense = sink.snapshot().into_iter().any(|env| match env.event {
         TraceEvent::Search { stages, .. } => stages.iter().any(|s| s.name == "dense"),
         _ => false,
@@ -79,18 +89,21 @@ fn skill(id: &str, description: &str) -> Skill {
 
 fn skill_catalog() -> SkillRegistry {
     let mut r = SkillRegistry::new();
-    r.register(skill("delete_path", "erase a directory entry permanently"));
+    r.register(skill("delete_path", "erase a directory entry permanently"))
+        .unwrap();
     r.register(skill(
         "weather",
         "get the current weather forecast for a city",
-    ));
-    r.register(skill("send_email", "compose and send an email message"));
+    ))
+    .unwrap();
+    r.register(skill("send_email", "compose and send an email message"))
+        .unwrap();
     r
 }
 
 #[test]
 fn skill_search_surfaces_a_synonym_match() {
-    let hits = skill_catalog().search("remove a file", 3);
+    let hits = skill_catalog().search("remove a file", 3).unwrap();
     assert_eq!(
         hits.first().map(|h| h.skill_id.as_str()),
         Some("delete_path")
@@ -101,8 +114,10 @@ fn skill_search_surfaces_a_synonym_match() {
 fn skill_search_emits_a_dense_trace_stage() {
     let sink = Arc::new(MemorySink::new("test-session"));
     let mut registry = SkillRegistry::with_trace_sink(sink.clone());
-    registry.register(skill("delete_path", "delete a path"));
-    let _ = registry.search("remove a file", 1);
+    registry
+        .register(skill("delete_path", "delete a path"))
+        .unwrap();
+    registry.search("remove a file", 1).unwrap();
     let saw_dense = sink.snapshot().into_iter().any(|env| match env.event {
         TraceEvent::SkillSearch { stages, .. } => stages.iter().any(|s| s.name == "dense"),
         _ => false,

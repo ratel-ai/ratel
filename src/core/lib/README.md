@@ -54,6 +54,12 @@ There is no separate `search_dense` method and no feature flag: dense is the eng
 cargo test -p ratel-ai-core   # first run downloads the model (~130 MB) into the HF cache
 ```
 
+### Failure handling & footprint
+
+`register()` and `search()` are **fallible**. The first-use model load can fail — no network/DNS, an unwritable cache, or corrupt weights — and is surfaced as a typed `EmbedderError` carrying a remediation hint (raised as a catchable exception in the SDKs) rather than aborting the process. A failed load is **not cached**, so a later call retries once the cause clears. `HF_HOME` (cache location) and `HF_ENDPOINT` (mirror / offline proxy) are honored via `hf-hub`.
+
+The resident model is ~130 MB of f32 weights and inference is CPU-only, so an underpowered machine loads and embeds slowly. A slow cold load emits a `TraceEvent::EmbedderLoad { status: "slow", .. }` flag (threshold overridable via `RATEL_EMBED_SLOW_MS`, default 5000 ms) and logs a one-line warning; running out of memory is an uncatchable OS kill, which no flag can intercept.
+
 ## Trace stream
 
 Every layer of Ratel — core, SDK, mcp-server — emits into a single tagged event stream owned by this crate ([ADR‑0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). One stream, multiple consumers (inspector, suggestion analyzer, future rerankers and consolidation server), filtered at the consumer.
