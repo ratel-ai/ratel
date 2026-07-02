@@ -5,7 +5,7 @@
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
     <a href="https://github.com/ratel-ai/skills">Skills</a> •
-    <a href="https://discord.gg/hdKpx69NR">Discord</a>
+    <a href="https://discord.gg/75vAPdjYqT">Discord</a>
   </p>
 
   <p>
