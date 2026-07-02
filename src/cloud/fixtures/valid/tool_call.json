@@ -1,0 +1,67 @@
+{
+  "provider": "openai",
+  "model": "gpt-5.5",
+  "ts": "2026-06-30T12:00:00Z",
+  "latency_ms": 842,
+  "system": "You are a weather assistant.",
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Look up the weather for a location.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "location"
+        ]
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Weather in Paris?"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Let me check."
+        },
+        {
+          "type": "tool_call",
+          "id": "call_9x",
+          "name": "get_weather",
+          "arguments": {
+            "location": "Paris"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_9x",
+      "content": "18°C, cloudy"
+    }
+  ],
+  "params": {
+    "temperature": 0.7,
+    "top_p": 1.0,
+    "max_tokens": 512,
+    "stop": [
+      "\n\n"
+    ]
+  },
+  "usage": {
+    "input_tokens": 82,
+    "output_tokens": 41,
+    "cached_tokens": 0,
+    "reasoning_tokens": 22
+  },
+  "finish_reason": "tool_call"
+}

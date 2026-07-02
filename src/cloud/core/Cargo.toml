@@ -1,0 +1,17 @@
+[package]
+name = "ratel-ai-cloud"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+authors.workspace = true
+readme = "README.md"
+description = "Canonical schema for Ratel Cloud telemetry — agent (LLM call) events sent to a remote endpoint. Spec for the pure-language clients."
+keywords = ["telemetry", "observability", "ai-agents", "llm", "ratel"]
+categories = ["api-bindings", "data-structures"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
