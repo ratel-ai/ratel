@@ -136,6 +136,22 @@ jobs:
           cp "$GITHUB_WORKSPACE/e2e/ts/run_e2e.mjs" ./run_e2e.mjs
           RATEL_E2E_DIR="$GITHUB_WORKSPACE/e2e" node run_e2e.mjs
 
+      - name: Cloud client — pack against PR-built SDK, install, e2e
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/tgz/cloud"
+          pnpm --filter @ratel-ai/cloud build
+          pnpm --filter @ratel-ai/cloud pack --pack-destination "$RUNNER_TEMP/tgz/cloud"
+          work="$(mktemp -d)"; cd "$work"; npm init -y >/dev/null
+          # install the cloud client plus the locally-built SDK loader+subpackage
+          # (from the Node step) so its @ratel-ai/sdk peer resolves to the PR build.
+          npm install --no-audit --no-fund \
+            "$RUNNER_TEMP"/tgz/cloud/*.tgz \
+            "$RUNNER_TEMP"/tgz/loader/*.tgz \
+            "$RUNNER_TEMP"/tgz/sub/*.tgz
+          cp "$GITHUB_WORKSPACE/e2e/cloud/run_e2e.mjs" ./run_e2e.mjs
+          RATEL_E2E_DIR="$GITHUB_WORKSPACE/e2e" node run_e2e.mjs
+
       - name: CLI — pack against PR-built SDK, install, e2e
         run: |
           set -e

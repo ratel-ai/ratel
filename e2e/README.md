@@ -24,6 +24,7 @@ exactly one runner fail:
 | `python/run_e2e.py` | `ratel-ai` wheel | `ToolCatalog` + `SkillCatalog` search/invoke; `search_tools_tool` / `invoke_tool_tool` / `get_skill_content_tool` / `search_capabilities_tool` |
 | `ts/run_e2e.mjs` | `@ratel-ai/sdk` (+ native binary) | `ToolCatalog` + `SkillCatalog` search/invoke; `searchToolsTool` / `invokeToolTool` / `getSkillContentTool` / `searchCapabilitiesTool` |
 | `cli/run_e2e.sh` | `@ratel-ai/cli` | binary loads + `mcp add/list/get/remove` round-trip (sandboxed `HOME`) |
+| `cloud/run_e2e.mjs` | `@ratel-ai/cloud` (+ PR-built SDK) | full SDK↔Cloud loop against an in-process mock Cloud: catalog sync + hot-reload through the gateway tools, `CloudExporter` wire assertions (seq, `search_id` linkage, `client_event_id`, `catalog_version`), suggestion approve round-trip |
 
 The CLI runner deliberately avoids spawning live MCP servers (passing `--description`
 skips the upstream probe); the deep search/invoke parity is proven through the two SDKs.
@@ -59,6 +60,19 @@ npm pack "./src/sdk/ts/npm/$triple" --pack-destination /tmp/ratel-tgz # native s
 mkdir -p /tmp/ratel-e2e-ts && cd /tmp/ratel-e2e-ts && npm init -y >/dev/null
 npm install /tmp/ratel-tgz/*.tgz             # install loader + subpackage together
 cp "$repo/e2e/ts/run_e2e.mjs" ./run_e2e.mjs
+RATEL_E2E_DIR="$repo/e2e" node run_e2e.mjs
+```
+
+**Cloud client** — same install shape as the TS runner (the cloud package's `@ratel-ai/sdk`
+peer must resolve to the PR build), plus the cloud tarball; the runner boots its own mock
+Cloud, so no live Cloud is needed:
+```bash
+repo="$PWD"   # after the TS steps above have packed the loader + subpackage into /tmp/ratel-tgz
+pnpm --filter @ratel-ai/cloud build
+pnpm --filter @ratel-ai/cloud pack --pack-destination /tmp/ratel-tgz
+mkdir -p /tmp/ratel-e2e-cloud && cd /tmp/ratel-e2e-cloud && npm init -y >/dev/null
+npm install /tmp/ratel-tgz/*.tgz
+cp "$repo/e2e/cloud/run_e2e.mjs" ./run_e2e.mjs
 RATEL_E2E_DIR="$repo/e2e" node run_e2e.mjs
 ```
 
