@@ -108,6 +108,43 @@ fn fixtures() -> Vec<(&'static str, Event)> {
             },
         ),
         (
+            "attachments",
+            Event {
+                provider: "openai".into(),
+                model: "gpt-5.5".into(),
+                ts: "2026-06-30T12:10:00Z".into(),
+                stream: false,
+                latency_ms: None,
+                system: None,
+                tools: Vec::new(),
+                messages: vec![Message::User {
+                    content: Content::Blocks(vec![
+                        Block::Text {
+                            text: "Review these.".into(),
+                        },
+                        Block::Image {
+                            source: None,
+                            url: Some("https://example.com/a.png".into()),
+                            media_type: "image/png".into(),
+                        },
+                        Block::File {
+                            source: None,
+                            url: Some("https://example.com/b.pdf".into()),
+                            media_type: "application/pdf".into(),
+                        },
+                    ]),
+                }],
+                params: None,
+                usage: Some(Usage {
+                    input_tokens: 50,
+                    output_tokens: 5,
+                    cached_tokens: None,
+                    reasoning_tokens: None,
+                }),
+                finish_reason: Some(FinishReason::Stop),
+            },
+        ),
+        (
             "multimodal",
             Event {
                 provider: "anthropic".into(),

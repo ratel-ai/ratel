@@ -1,4 +1,4 @@
-import { MAX_BATCH, type SendResult, sendEventBatch } from "./transport.js";
+import { MAX_BATCH, type SendResult, safeOnError, sendEventBatch } from "./transport.js";
 import type { Event } from "./types.js";
 import { validate } from "./validate.js";
 
@@ -69,7 +69,8 @@ export class RatelCloud {
     if (this.opts.validateEvents !== false) {
       const result = validate(stamped);
       if (!result.ok) {
-        this.opts.onError?.(
+        safeOnError(
+          this.opts.onError,
           new Error(`ratel-cloud: dropped invalid event: ${describe(result.issues)}`),
         );
         return;
@@ -83,8 +84,13 @@ export class RatelCloud {
 
   /** Drain the queue, sending in batches. Resolves when the queue is empty. */
   flush(): Promise<void> {
-    // Serialize concurrent flushes so batches don't interleave or double-send.
-    this.flushing = this.flushing.then(() => this.drain());
+    // Serialize concurrent flushes so batches don't interleave or double-send. The
+    // `.catch` keeps a single rejected drain from permanently poisoning the chain (so
+    // every later flush would silently no-op) — `drain` shouldn't reject, but telemetry
+    // must fail open, not brick the client.
+    this.flushing = this.flushing
+      .then(() => this.drain())
+      .catch((err) => safeOnError(this.opts.onError, err));
     return this.flushing;
   }
 

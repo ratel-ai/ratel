@@ -16,8 +16,9 @@ pub struct Event {
     pub model: String,
     /// Event timestamp, RFC 3339.
     pub ts: String,
-    /// Whether the response was streamed.
-    #[serde(default)]
+    /// Whether the response was streamed. Omitted on the wire when `false`, matching
+    /// the pure-language clients so serialization is byte-identical across mirrors.
+    #[serde(default, skip_serializing_if = "is_false")]
     pub stream: bool,
     /// Wall-clock latency of the call in milliseconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,6 +40,11 @@ pub struct Event {
     /// Why generation stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
+}
+
+/// `skip_serializing_if` predicate: omit `stream` on the wire when it is `false`.
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// A tool definition: `parameters` is a JSON Schema object.

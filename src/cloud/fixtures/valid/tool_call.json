@@ -2,7 +2,6 @@
   "provider": "openai",
   "model": "gpt-5.5",
   "ts": "2026-06-30T12:00:00Z",
-  "stream": false,
   "latency_ms": 842,
   "system": "You are a weather assistant.",
   "tools": [

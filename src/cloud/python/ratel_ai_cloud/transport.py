@@ -22,6 +22,20 @@ class SendResult:
     status: int | None = None
 
 
+def _safe_on_error(on_error: Callable[[Exception], None] | None, err: Exception) -> None:
+    """Invoke a host error callback without letting it break us: the transport is
+    contractually best-effort and must never raise into the host — not even when the
+    observer itself throws (which, on the permanent-4xx path, would otherwise be caught
+    by the retry loop and turn a permanent drop into repeated retries)."""
+    if on_error is None:
+        return
+    try:
+        on_error(err)
+    except Exception:
+        # A broken observer must not propagate — telemetry is best-effort.
+        pass
+
+
 def _is_retryable(status: int) -> bool:
     return status == 429 or status >= 500
 
@@ -57,19 +71,21 @@ async def send_event_batch(
     if not events:
         return SendResult(ok=True, accepted=0)
 
+    retries = max(0, max_retries)
     owns_client = client is None
+    # When we own the client the timeout is set at construction; when the caller injects
+    # one we respect its configuration rather than overriding per request.
     http = client or httpx.AsyncClient(timeout=timeout)
     nap = sleep or asyncio.sleep
     headers = {"content-type": "application/json", "authorization": f"Bearer {api_key}"}
 
     try:
-        for attempt in range(max_retries + 1):
+        for attempt in range(retries + 1):
             try:
-                response = await http.post(endpoint, json=events, headers=headers, timeout=timeout)
+                response = await http.post(endpoint, json=events, headers=headers)
             except httpx.HTTPError as err:
-                if attempt == max_retries:
-                    if on_error is not None:
-                        on_error(err)
+                if attempt == retries:
+                    _safe_on_error(on_error, err)
                     return SendResult(ok=False, accepted=0)
                 await nap(_backoff(base_delay, attempt))
                 continue
@@ -78,11 +94,11 @@ async def send_event_batch(
                 accepted = _accepted(response, len(events))
                 return SendResult(ok=True, accepted=accepted, status=response.status_code)
 
-            if not _is_retryable(response.status_code) or attempt == max_retries:
-                if on_error is not None:
-                    on_error(
-                        RuntimeError(f"ratel-cloud: ingest rejected with {response.status_code}")
-                    )
+            if not _is_retryable(response.status_code) or attempt == retries:
+                _safe_on_error(
+                    on_error,
+                    RuntimeError(f"ratel-cloud: ingest rejected with {response.status_code}"),
+                )
                 return SendResult(ok=False, accepted=0, status=response.status_code)
 
             await nap(_backoff(base_delay, attempt))

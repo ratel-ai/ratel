@@ -34,31 +34,57 @@ function isRetryableStatus(status: number): boolean {
 }
 
 /**
+ * Invoke a host-supplied error callback without ever letting it break us. The client
+ * is contractually "never throws into the host"; a callback that throws must not defeat
+ * that (nor, on the 4xx path, be caught by the retry loop and turn a permanent drop into
+ * repeated retries).
+ */
+export function safeOnError(onError: ((err: unknown) => void) | undefined, err: unknown): void {
+  if (!onError) return;
+  try {
+    onError(err);
+  } catch {
+    // A broken observer must not propagate — telemetry is best-effort.
+  }
+}
+
+/**
  * POST a batch of events to the ingest endpoint. Best-effort: retries transient
- * failures with exponential backoff + jitter, drops on permanent 4xx, and
- * **never throws** — failures are reported via `onError` and a falsy result.
+ * failures with exponential backoff + jitter (honoring `Retry-After` on 429), drops
+ * on permanent 4xx, and **never throws** — failures are reported via `onError` and a
+ * falsy result.
  */
 export async function sendEventBatch(events: Event[], opts: TransportOptions): Promise<SendResult> {
   if (events.length === 0) return { ok: true, accepted: 0 };
 
   const doFetch = opts.fetch ?? fetch;
-  const maxRetries = opts.maxRetries ?? 3;
+  const maxRetries = Math.max(0, opts.maxRetries ?? 3);
   const timeoutMs = opts.timeoutMs ?? 10_000;
   const baseDelayMs = opts.baseDelayMs ?? 200;
   const sleep = opts.sleep ?? defaultSleep;
   const body = JSON.stringify(events);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    let retryAfterMs: number | undefined;
     try {
-      const response = await doFetch(opts.endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${opts.apiKey}`,
-        },
-        body,
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      // A fresh AbortController per attempt, cleared as soon as the fetch settles, so no
+      // timer lingers after a fast response (unlike `AbortSignal.timeout`).
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      let response: Response;
+      try {
+        response = await doFetch(opts.endpoint, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${opts.apiKey}`,
+          },
+          body,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       if (response.ok) {
         const accepted = await readAccepted(response, events.length);
@@ -66,17 +92,21 @@ export async function sendEventBatch(events: Event[], opts: TransportOptions): P
       }
 
       if (!isRetryableStatus(response.status) || attempt === maxRetries) {
-        opts.onError?.(new Error(`ratel-cloud: ingest rejected with ${response.status}`));
+        safeOnError(
+          opts.onError,
+          new Error(`ratel-cloud: ingest rejected with ${response.status}`),
+        );
         return { ok: false, accepted: 0, status: response.status };
       }
+      retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
     } catch (err) {
       if (attempt === maxRetries) {
-        opts.onError?.(err);
+        safeOnError(opts.onError, err);
         return { ok: false, accepted: 0 };
       }
     }
 
-    await sleep(backoffDelay(baseDelayMs, attempt));
+    await sleep(retryAfterMs ?? backoffDelay(baseDelayMs, attempt));
   }
 
   return { ok: false, accepted: 0 };
@@ -89,6 +119,13 @@ async function readAccepted(response: Response, fallback: number): Promise<numbe
   } catch {
     return fallback;
   }
+}
+
+/** `Retry-After` in delta-seconds → ms; HTTP-date and malformed values fall back to backoff. */
+function parseRetryAfter(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
 }
 
 function backoffDelay(baseDelayMs: number, attempt: number): number {

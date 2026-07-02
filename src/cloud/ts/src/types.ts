@@ -67,8 +67,8 @@ export type Message = UserMessage | AssistantMessage | ToolMessage;
 export interface ToolDef {
   name: string;
   description?: string;
-  /** JSON Schema for the tool's parameters. */
-  parameters: JsonValue;
+  /** JSON Schema for the tool's parameters — an object (enforced at runtime by `validate`). */
+  parameters: JsonObject;
 }
 
 export interface Params {

@@ -37,15 +37,22 @@ fn valid_fixtures_deserialize_validate_and_round_trip() {
 }
 
 #[test]
-fn invalid_fixtures_deserialize_but_fail_validation() {
+fn invalid_fixtures_are_rejected() {
     for (path, raw) in fixtures("invalid") {
-        // Invalid fixtures are structurally well-formed (so every language's
-        // parser accepts them) but break a semantic rule, so `validate` rejects.
-        let event: Event = serde_json::from_str(&raw)
-            .unwrap_or_else(|e| panic!("invalid fixture {path:?} should still deserialize: {e}"));
-        assert!(
-            validate(&event).is_err(),
-            "expected validation failure for {path:?}"
-        );
+        // A fixture is rejected if the strict schema refuses to deserialize it (the
+        // serde structural gate — unknown role/block type, wrong JSON type, negative
+        // count) OR it deserializes but fails `validate` (the semantic gate — empties,
+        // misplaced tool calls, over-int4 counts). Both are valid rejection paths; the
+        // pure-language clients, which have no serde gate, must catch the structural
+        // cases in `validate` — that is exactly what these fixtures pin cross-language.
+        // `Err` here means the strict schema rejected it at the deserialize gate,
+        // which is itself a valid rejection; only a successful parse must then fail
+        // `validate`.
+        if let Ok(event) = serde_json::from_str::<Event>(&raw) {
+            assert!(
+                validate(&event).is_err(),
+                "expected validation failure for {path:?}"
+            );
+        }
     }
 }

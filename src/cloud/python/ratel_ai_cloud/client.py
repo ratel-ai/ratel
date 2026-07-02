@@ -11,7 +11,7 @@ from typing import Any, cast
 import httpx
 
 from .events import Event, EventInput
-from .transport import MAX_BATCH, send_event_batch
+from .transport import MAX_BATCH, _safe_on_error, send_event_batch
 from .validate import validate
 
 
@@ -73,9 +73,11 @@ class RatelCloud:
         if self._validate_events:
             result = validate(stamped)
             if not result.ok:
-                if self._on_error is not None:
-                    detail = "; ".join(f"{i.path} {i.message}" for i in result.issues)
-                    self._on_error(RuntimeError(f"ratel-cloud: dropped invalid event: {detail}"))
+                detail = "; ".join(f"{i.path} {i.message}" for i in result.issues)
+                _safe_on_error(
+                    self._on_error,
+                    RuntimeError(f"ratel-cloud: dropped invalid event: {detail}"),
+                )
                 return
         self._queue.append(stamped)
         if len(self._queue) >= self._batch_size:
@@ -120,7 +122,11 @@ class RatelCloud:
         with contextlib.suppress(asyncio.CancelledError):
             while True:
                 await asyncio.sleep(self._flush_interval)
-                await self.flush()
+                try:
+                    await self.flush()
+                except Exception as err:
+                    # A failing flush must never kill the periodic timer.
+                    _safe_on_error(self._on_error, err)
 
     async def aclose(self) -> None:
         """Stop the timer, await pending flushes, and drain whatever remains."""
