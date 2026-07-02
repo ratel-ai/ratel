@@ -12,10 +12,11 @@ mod tool_registry;
 mod trace;
 
 pub use skill::Skill;
-pub use skill_registry::{SkillHit, SkillRegistry};
+pub use skill_registry::{SkillHit, SkillRegistry, SkillSearchOutcome};
 pub use tool::Tool;
-pub use tool_registry::{SearchHit, ToolRegistry};
+pub use tool_registry::{SearchHit, SearchOutcome, ToolRegistry};
 pub use trace::{
-    ChurnKind, JsonlSink, MemorySink, NoopSink, Origin, SearchHitTrace, SearchStage, SkillHitTrace,
-    TraceEnvelope, TraceEvent, TraceSink,
+    ChurnKind, EnvelopeStamper, ErrorKind, GatewaySkillHitTrace, GatewayToolHitTrace, JsonlSink,
+    MemorySink, NoopSink, Origin, SearchHitTrace, SearchStage, SkillHitTrace, TraceEnvelope,
+    TraceEvent, TraceSink,
 };

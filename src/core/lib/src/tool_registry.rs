@@ -13,6 +13,13 @@ pub struct SearchHit {
     pub score: f32,
 }
 
+/// A traced search: the ranked hits plus the `search_id` stamped on the
+/// emitted `search` event.
+pub struct SearchOutcome {
+    pub search_id: String,
+    pub hits: Vec<SearchHit>,
+}
+
 pub struct ToolRegistry {
     tools: Vec<Tool>,
     sink: Arc<dyn TraceSink>,
@@ -61,6 +68,14 @@ impl ToolRegistry {
     }
 
     pub fn search_with_origin(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SearchHit> {
+        self.search_traced(query, top_k, origin).hits
+    }
+
+    /// Like [`Self::search_with_origin`], but also returns the `search_id`
+    /// stamped on the emitted `search` event, so callers can attribute later
+    /// invokes to this search (ADR-0013).
+    pub fn search_traced(&self, query: &str, top_k: usize, origin: Origin) -> SearchOutcome {
+        let search_id = uuid::Uuid::new_v4().to_string();
         let started = Instant::now();
         let hits: Vec<SearchHit> = bm25_search(
             self.tools
@@ -91,7 +106,8 @@ impl ToolRegistry {
                 top_score,
             }],
             took_ms,
+            search_id: Some(search_id.clone()),
         });
-        hits
+        SearchOutcome { search_id, hits }
     }
 }
