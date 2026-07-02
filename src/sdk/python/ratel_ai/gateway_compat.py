@@ -66,7 +66,8 @@ def search_tools_tool(
         top_k = input.get("topK")
         k = top_k if isinstance(top_k, int) and not isinstance(top_k, bool) and top_k > 0 else 5
         started_at = time.monotonic()
-        hits = catalog.search(query, k, "agent")
+        traced = catalog.search_traced(query, k, "agent")
+        hits = traced.hits
         catalog.record_event(
             {
                 "type": "gateway_search",
@@ -75,6 +76,11 @@ def search_tools_tool(
                 "top_k": k,
                 "hits": len(hits),
                 "took_ms": int((time.monotonic() - started_at) * 1000),
+                "search_id": traced.search_id,
+                "tool_hits": [
+                    {"tool_id": h.tool_id, "score": h.score, "rank": rank}
+                    for rank, h in enumerate(hits)
+                ],
             }
         )
         order: list[str] = []

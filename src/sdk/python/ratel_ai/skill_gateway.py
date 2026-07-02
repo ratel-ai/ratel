@@ -29,6 +29,8 @@ def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
                     "type": "gateway_error",
                     "tool_id": skill_id if isinstance(skill_id, str) else "",
                     "error": "unknown_skill_id",
+                    "error_code": "unknown_skill_id",
+                    "error_kind": "permanent",
                 }
             )
             return {

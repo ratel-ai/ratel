@@ -1,6 +1,12 @@
 """Tests for get_skill_content_tool — mirrors `src/sdk/ts/src/skill-gateway.test.ts`."""
 
-from ratel_ai import GET_SKILL_CONTENT_ID, Skill, SkillCatalog, get_skill_content_tool
+from ratel_ai import (
+    GET_SKILL_CONTENT_ID,
+    Skill,
+    SkillCatalog,
+    TraceSinkConfig,
+    get_skill_content_tool,
+)
 
 
 def _catalog(*skills: Skill) -> SkillCatalog:
@@ -38,6 +44,18 @@ async def test_missing_skill_id_returns_error_not_keyerror() -> None:
     result = await tool.execute({})
     assert "unknown skillId" in result["error"]
     assert result["isError"] is True
+
+
+async def test_unknown_id_emits_gateway_error_with_structured_code() -> None:
+    catalog = SkillCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    tool = get_skill_content_tool(catalog)
+    await tool.execute({"skillId": "nope"})
+    events = catalog.drain_trace_events()
+    err = next(e for e in events if e["type"] == "gateway_error")
+    assert err["tool_id"] == "nope"
+    assert err["error"] == "unknown_skill_id"
+    assert err["error_code"] == "unknown_skill_id"
+    assert err["error_kind"] == "permanent"
 
 
 def test_output_schema_accepts_error_shape_not_just_body() -> None:

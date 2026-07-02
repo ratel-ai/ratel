@@ -290,3 +290,87 @@ def test_search_capabilities_description_mentions_skills_only_when_wired() -> No
     # an empty skill catalog is treated as no skills
     empty = search_capabilities_tool(catalog, SkillCatalog())
     assert "get_skill_content" not in empty.description
+
+
+def test_search_capabilities_description_recomputes_as_catalog_fills_and_empties() -> None:
+    # Computed at read time so a catalog synced/mutated after construction
+    # advertises correctly (TS getter parity).
+    catalog = ToolCatalog()
+    catalog.register(_tool("a__read", "read a file"))
+    skills = SkillCatalog()
+    search = search_capabilities_tool(catalog, skills)
+
+    assert "get_skill_content" not in search.description
+    skills.register(
+        Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel.")
+    )
+    assert "get_skill_content" in search.description
+    skills.remove("vercel-deploy")
+    assert "get_skill_content" not in search.description
+
+
+async def test_gateway_search_carries_search_id_and_ranked_hit_arrays() -> None:
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    catalog.register(_tool("fs__read_file", "Read a file from local disk."))
+    catalog.register(_tool("mail__send_email", "Send an email via SMTP."))
+    skills = SkillCatalog()
+    skills.register(
+        Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel.")
+    )
+    search = search_capabilities_tool(catalog, skills)
+    catalog.drain_trace_events()
+
+    await search.execute({"query": "read a file", "topKTools": 3})
+
+    events = catalog.drain_trace_events()
+    gw = next(e for e in events if e["type"] == "gateway_search")
+    assert isinstance(gw["search_id"], str)
+    tool_hits = gw["tool_hits"]
+    assert tool_hits[0]["tool_id"] == "fs__read_file"
+    assert tool_hits[0]["rank"] == 0
+    assert isinstance(tool_hits[0]["score"], float)
+    assert gw["hits"] == len(tool_hits)
+    assert isinstance(gw["skill_hits"], list)
+
+
+async def test_gateway_invoke_carries_the_surfacing_gateway_searchs_id() -> None:
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    catalog.register(
+        _tool("fs__read_file", "Read a file from local disk.", execute=lambda args: {"ok": True})
+    )
+    search = search_capabilities_tool(catalog)
+    invoke = invoke_tool_tool(catalog)
+    catalog.drain_trace_events()
+
+    await search.execute({"query": "read a file"})
+    await invoke.execute({"toolId": "fs__read_file", "args": {"path": "/x"}})
+
+    events = catalog.drain_trace_events()
+    gw_search = next(e for e in events if e["type"] == "gateway_search")
+    gw_invoke = next(e for e in events if e["type"] == "gateway_invoke")
+    assert isinstance(gw_search["search_id"], str)
+    assert gw_invoke["search_id"] == gw_search["search_id"]
+
+
+async def test_gateway_errors_carry_structured_error_codes() -> None:
+    class UnauthorizedError(Exception):
+        pass
+
+    def boom(args):
+        raise UnauthorizedError("expired")
+
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    catalog.register(_tool("stripe__charges", "Charge a card.", execute=boom))
+    invoke = invoke_tool_tool(catalog)
+    catalog.drain_trace_events()
+
+    await invoke.execute({"toolId": "nope", "args": {}})
+    await invoke.execute({"toolId": "stripe__charges", "args": {}})
+
+    gateway_errors = [e for e in catalog.drain_trace_events() if e["type"] == "gateway_error"]
+    unknown = next(e for e in gateway_errors if e["error"] == "unknown_tool_id")
+    assert unknown["error_code"] == "unknown_tool_id"
+    assert unknown["error_kind"] == "permanent"
+    needs_auth = next(e for e in gateway_errors if e["error"] == "needs_auth")
+    assert needs_auth["error_code"] == "needs_auth"
+    assert needs_auth["error_kind"] == "transient"

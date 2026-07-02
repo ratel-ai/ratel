@@ -2,7 +2,14 @@
 
 import pytest
 
-from ratel_ai import ExecutableTool, ToolCatalog, TraceSinkConfig
+from ratel_ai import (
+    ExecutableTool,
+    Skill,
+    SkillCatalog,
+    ToolCatalog,
+    TraceSession,
+    TraceSinkConfig,
+)
 
 
 def _read_file_tool(execute) -> ExecutableTool:
@@ -103,3 +110,97 @@ async def test_invoke_emits_error_telemetry_and_reraises() -> None:
     types = [e["type"] for e in events]
     assert types == ["invoke_start", "invoke_error"]
     assert events[1]["error"] == "kaboom"
+
+
+def test_shared_trace_session_collects_both_catalogs_with_one_seq_counter() -> None:
+    session = TraceSession("shared", harness="pytest")
+    tools = ToolCatalog(trace_session=session)
+    skills = SkillCatalog(trace_session=session)
+
+    tools.register(_read_file_tool(lambda args: {}))
+    skills.register(Skill(id="s1", name="s1", description="REST API design"))
+    tools.search("read", 5)
+
+    events = session.drain()
+    assert [e["seq"] for e in events] == [0, 1, 2]
+    assert events[0]["harness"] == "pytest"
+
+
+def test_trace_session_takes_precedence_over_trace() -> None:
+    session = TraceSession("s2")
+    catalog = ToolCatalog(
+        trace=TraceSinkConfig(kind="memory", session_id="ignored"), trace_session=session
+    )
+    catalog.register(_read_file_tool(lambda args: {}))
+    assert [e["type"] for e in session.drain()] == ["index_churn"]
+
+
+async def test_invoke_carries_latest_search_id_on_start_and_end() -> None:
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
+    catalog.register(_read_file_tool(lambda args: {"ok": True}))
+    catalog.drain_trace_events()
+
+    first = catalog.search_traced("read file", 5, "agent")
+    second = catalog.search_traced("read the file again", 5, "agent")
+    await catalog.invoke("read_file", {"path": "/x"})
+
+    assert first.search_id != second.search_id
+    assert catalog.last_search_id("read_file") == second.search_id
+    events = catalog.drain_trace_events()
+    start = next(e for e in events if e["type"] == "invoke_start")
+    end = next(e for e in events if e["type"] == "invoke_end")
+    assert start["search_id"] == second.search_id
+    assert end["search_id"] == second.search_id
+
+
+async def test_invoke_end_carries_result_size_bytes() -> None:
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
+    catalog.register(_read_file_tool(lambda args: {"contents": "data"}))
+    catalog.drain_trace_events()
+
+    await catalog.invoke("read_file", {"path": "/x"})
+
+    events = catalog.drain_trace_events()
+    end = next(e for e in events if e["type"] == "invoke_end")
+    assert isinstance(end["result_size_bytes"], int)
+    assert end["result_size_bytes"] > 0
+
+
+async def test_unauthorized_invoke_classified_needs_auth_transient() -> None:
+    class UnauthorizedError(Exception):
+        pass
+
+    def locked(args):
+        raise UnauthorizedError("401")
+
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
+    catalog.register(_read_file_tool(locked))
+    catalog.drain_trace_events()
+
+    with pytest.raises(UnauthorizedError):
+        await catalog.invoke("read_file", {})
+
+    events = catalog.drain_trace_events()
+    err = next(e for e in events if e["type"] == "invoke_error")
+    assert err["error_code"] == "needs_auth"
+    assert err["error_kind"] == "transient"
+
+
+def test_trace_sink_config_context_fields_stamp_events() -> None:
+    catalog = ToolCatalog(
+        trace=TraceSinkConfig(
+            kind="memory",
+            session_id="s",
+            harness="pytest",
+            environment="ci",
+            sdk_version="0.2.0",
+            catalog_version="v1",
+        )
+    )
+    catalog.register(_read_file_tool(lambda args: {}))
+    events = catalog.drain_trace_events()
+    assert events
+    assert events[0]["harness"] == "pytest"
+    assert events[0]["environment"] == "ci"
+    assert events[0]["sdk_version"] == "0.2.0"
+    assert events[0]["catalog_version"] == "v1"

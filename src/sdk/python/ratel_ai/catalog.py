@@ -14,7 +14,7 @@ from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any, Callable, Union
 
-from ._native import SearchHit, ToolRegistry
+from ._native import SearchHit, ToolRegistry, TraceSession
 
 # Tool inputs are heterogeneous across the catalog; handlers may be sync or async.
 Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
@@ -46,23 +46,57 @@ class TraceSinkConfig:
     """Where the catalog's trace events go. Mirrors the TS `TraceSinkConfig` union.
 
     kind: "noop" | "memory" | "jsonl". `session_id` is required for memory/jsonl;
-    `path` is required for jsonl.
+    `path` is required for jsonl. The optional envelope context (`harness`,
+    `environment`, `sdk_version`, `catalog_version`) is stamped on every event —
+    see ADR-0013.
     """
 
     kind: str
     session_id: str | None = None
     path: str | None = None
+    harness: str | None = None
+    environment: str | None = None
+    sdk_version: str | None = None
+    catalog_version: str | None = None
+
+
+@dataclass(frozen=True)
+class TracedSearch:
+    """A search result plus the emitted event's id (mirrors the TS `TracedSearch`)."""
+
+    # Id stamped on the emitted search event — attributed to later invokes.
+    search_id: str
+    hits: list[SearchHit]
 
 
 class ToolCatalog:
     """Registry + executors. Register tools once, then search and invoke by id."""
 
-    def __init__(self, trace: TraceSinkConfig | None = None) -> None:
+    def __init__(
+        self,
+        trace: TraceSinkConfig | None = None,
+        trace_session: TraceSession | None = None,
+    ) -> None:
         self._registry = ToolRegistry()
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
-        if trace is not None:
-            self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
+        # tool id → id of the most recent search that surfaced it (ADR-0013).
+        self._last_search_id_by_tool: dict[str, str] = {}
+        # Shared session buffer (one per process/session). Attach the same session
+        # to every catalog so `(session_id, seq)` stays unique and the Cloud
+        # exporter has a single drain point. Takes precedence over `trace`.
+        if trace_session is not None:
+            self._registry.attach_trace_session(trace_session)
+        elif trace is not None:
+            self._registry.set_trace_sink(
+                trace.kind,
+                trace.session_id,
+                trace.path,
+                trace.harness,
+                trace.environment,
+                trace.sdk_version,
+                trace.catalog_version,
+            )
 
     def register(self, tool: ExecutableTool) -> None:
         if tool.execute is None:
@@ -84,7 +118,20 @@ class ToolCatalog:
         )
 
     def search(self, query: str, top_k: int, origin: SearchOrigin = "direct") -> list[SearchHit]:
-        return self._registry.search_with_origin(query, top_k, origin)
+        return self.search_traced(query, top_k, origin).hits
+
+    def search_traced(
+        self, query: str, top_k: int, origin: SearchOrigin = "direct"
+    ) -> TracedSearch:
+        """Like `search`, but also returns the emitted event's `search_id`."""
+        search_id, hits = self._registry.search_with_trace(query, top_k, origin)
+        for hit in hits:
+            self._last_search_id_by_tool[hit.tool_id] = search_id
+        return TracedSearch(search_id=search_id, hits=hits)
+
+    def last_search_id(self, tool_id: str) -> str | None:
+        """Id of the most recent search that surfaced this tool, if any."""
+        return self._last_search_id_by_tool.get(tool_id)
 
     def has(self, tool_id: str) -> bool:
         return tool_id in self._executors
@@ -116,11 +163,14 @@ class ToolCatalog:
         fn = self._executors.get(tool_id)
         if fn is None:
             raise ValueError(f"unknown toolId: {tool_id}")
+        search_id = self._last_search_id_by_tool.get(tool_id)
+        attribution = {"search_id": search_id} if search_id is not None else {}
         self._registry.record_event(
             {
                 "type": "invoke_start",
                 "tool_id": tool_id,
-                "args_size_bytes": _args_size_bytes(args),
+                "args_size_bytes": _json_size_bytes(args),
+                **attribution,
             }
         )
         started = time.monotonic()
@@ -138,24 +188,34 @@ class ToolCatalog:
                     "type": "invoke_end",
                     "tool_id": tool_id,
                     "took_ms": _elapsed_ms(started),
+                    "result_size_bytes": _json_size_bytes(result),
+                    **attribution,
                 }
             )
             return result
         except Exception as err:
+            # Same detection as the gateway's `_is_unauthorized_error` — by class
+            # name, so any upstream's UnauthorizedError classifies without a dep.
+            unauthorized = type(err).__name__ == "UnauthorizedError"
+            classification = (
+                {"error_code": "needs_auth", "error_kind": "transient"} if unauthorized else {}
+            )
             self._registry.record_event(
                 {
                     "type": "invoke_error",
                     "tool_id": tool_id,
                     "took_ms": _elapsed_ms(started),
                     "error": _error_message(err),
+                    **attribution,
+                    **classification,
                 }
             )
             raise
 
 
-def _args_size_bytes(args: Any) -> int:
+def _json_size_bytes(value: Any) -> int:
     try:
-        return len(json.dumps(args))
+        return len(json.dumps(value))
     except Exception:
         return 0
 

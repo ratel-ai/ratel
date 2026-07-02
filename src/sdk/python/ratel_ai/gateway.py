@@ -101,6 +101,28 @@ def _build_search_description(has_skills: bool, upstreams: Sequence[UpstreamServ
     )
 
 
+class _LiveDescriptionTool(ExecutableTool):
+    """An `ExecutableTool` whose `description` is recomputed at read time (the TS
+    getter's counterpart) — so a skill catalog synced/mutated after construction
+    advertises correctly. NOTE: an MCP client caches tools/list until a
+    list_changed notification, and copying the field (`dataclasses.replace`,
+    `tool.description`) freezes the text at read time.
+    """
+
+    def __init__(self, describe: Callable[[], str], **kwargs: Any) -> None:
+        self._describe = describe
+        super().__init__(description="", **kwargs)
+
+    @property
+    def description(self) -> str:
+        return self._describe()
+
+    @description.setter
+    def description(self, value: str) -> None:
+        # The dataclass __init__ assigns the placeholder; the live value wins.
+        pass
+
+
 def search_capabilities_tool(
     catalog: ToolCatalog,
     skill_catalog: SkillCatalog | None = None,
@@ -115,14 +137,24 @@ def search_capabilities_tool(
     """
     upstreams = list(upstream_servers or [])
     upstream_by_name = {u.name: u for u in upstreams}
-    has_skills = skill_catalog is not None and skill_catalog.size() > 0
 
     async def execute(input: dict[str, Any]) -> dict[str, Any]:
         query = input["query"]
         k_tools = _clamp_top_k(input.get("topKTools"), _DEFAULT_TOP_K_TOOLS)
         k_skills = _clamp_top_k(input.get("topKSkills"), _DEFAULT_TOP_K_SKILLS)
         started_at = time.monotonic()
-        tool_hits = catalog.search(query, k_tools, "agent")
+        traced_tools = catalog.search_traced(query, k_tools, "agent")
+        tool_hits = traced_tools.hits
+
+        # Skills are ranked in their own bucket against the same query (reserved
+        # budget → never starved by tools). search_traced emits the skill_search
+        # trace (with its own id) for the funnel.
+        traced_skills = (
+            skill_catalog.search_traced(query, k_skills, "agent")
+            if skill_catalog is not None
+            else None
+        )
+
         catalog.record_event(
             {
                 "type": "gateway_search",
@@ -131,6 +163,16 @@ def search_capabilities_tool(
                 "top_k": k_tools,
                 "hits": len(tool_hits),
                 "took_ms": int((time.monotonic() - started_at) * 1000),
+                # The tool search's id — later gateway_invokes attribute to it.
+                "search_id": traced_tools.search_id,
+                "tool_hits": [
+                    {"tool_id": h.tool_id, "score": h.score, "rank": rank}
+                    for rank, h in enumerate(tool_hits)
+                ],
+                "skill_hits": [
+                    {"skill_id": h.skill_id, "score": h.score, "rank": rank}
+                    for rank, h in enumerate(traced_skills.hits if traced_skills else [])
+                ],
             }
         )
         order: list[str] = []
@@ -172,11 +214,9 @@ def search_capabilities_tool(
         for h in tool_hits:
             add_tool(h.tool_id, h.score)
 
-        # Skills are ranked in their own bucket against the same query (reserved
-        # budget → never starved by tools).
         skills: list[dict[str, Any]] = []
-        if skill_catalog is not None:
-            for sh in skill_catalog.search(query, k_skills, "agent"):
+        if skill_catalog is not None and traced_skills is not None:
+            for sh in traced_skills.hits:
                 sk = skill_catalog.get(sh.skill_id)
                 skills.append(
                     {
@@ -196,10 +236,14 @@ def search_capabilities_tool(
 
         return {"tools": {"groups": [groups[n] for n in order]}, "skills": skills}
 
-    return ExecutableTool(
+    def describe() -> str:
+        has_skills = skill_catalog is not None and skill_catalog.size() > 0
+        return _build_search_description(has_skills, upstreams)
+
+    return _LiveDescriptionTool(
+        describe,
         id=SEARCH_CAPABILITIES_ID,
         name=SEARCH_CAPABILITIES_ID,
-        description=_build_search_description(has_skills, upstreams),
         input_schema={
             "type": "object",
             "properties": {
@@ -295,6 +339,8 @@ def invoke_tool_tool(
                     "type": "gateway_error",
                     "tool_id": tool_id if isinstance(tool_id, str) else "",
                     "error": "unknown_tool_id",
+                    "error_code": "unknown_tool_id",
+                    "error_kind": "permanent",
                 }
             )
             return {
@@ -322,6 +368,7 @@ def invoke_tool_tool(
                 "isError": True,
             }
         started_at = time.monotonic()
+        search_id = catalog.last_search_id(tool_id)
         try:
             result = await catalog.invoke(tool_id, args)
             catalog.record_event(
@@ -329,6 +376,7 @@ def invoke_tool_tool(
                     "type": "gateway_invoke",
                     "tool_id": tool_id,
                     "took_ms": int((time.monotonic() - started_at) * 1000),
+                    **({"search_id": search_id} if search_id is not None else {}),
                 }
             )
             return result
@@ -340,7 +388,13 @@ def invoke_tool_tool(
                     if inspect.isawaitable(maybe):
                         await maybe
                 catalog.record_event(
-                    {"type": "gateway_error", "tool_id": tool_id, "error": "needs_auth"}
+                    {
+                        "type": "gateway_error",
+                        "tool_id": tool_id,
+                        "error": "needs_auth",
+                        "error_code": "needs_auth",
+                        "error_kind": "transient",
+                    }
                 )
                 payload: dict[str, Any] = {
                     "error": "needs_auth",

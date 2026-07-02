@@ -2,7 +2,15 @@
 
 import pytest
 
-from ratel_ai import Skill, SkillCatalog
+from ratel_ai import Skill, SkillCatalog, TraceSinkConfig
+
+_API_DESIGN = Skill(
+    id="api-design",
+    name="api-design",
+    description="REST API design patterns: resource naming, status codes, pagination.",
+    tags=["backend", "api"],
+    body="# API Design\n\nUse nouns for resources.",
+)
 
 
 def _catalog(*skills: Skill) -> SkillCatalog:
@@ -49,3 +57,71 @@ def test_minimal_skill_without_tags_or_body() -> None:
     assert catalog.has("min")
     assert catalog.invoke("min") == ""
     assert catalog.search("minimal", 5)[0].skill_id == "min"
+
+
+def test_upsert_replaces_an_existing_skill_and_reindexes_it() -> None:
+    catalog = _catalog(_API_DESIGN)
+
+    replaced = catalog.upsert(
+        Skill(
+            id="api-design",
+            name="api-design",
+            description="GraphQL schema modeling and federation.",
+            tags=["graphql"],
+            body="# GraphQL",
+        )
+    )
+
+    assert replaced is True
+    assert catalog.search("REST pagination", 5) == []
+    assert catalog.search("GraphQL federation", 5)[0].skill_id == "api-design"
+    assert "GraphQL" in catalog.get("api-design").description
+    assert catalog.invoke("api-design") == "# GraphQL"
+
+
+def test_upsert_of_a_new_id_registers_it_and_reports_no_replacement() -> None:
+    catalog = SkillCatalog()
+    assert catalog.upsert(_API_DESIGN) is False
+    assert catalog.has("api-design")
+
+
+def test_remove_drops_the_skill_from_search_and_membership() -> None:
+    catalog = _catalog(_API_DESIGN)
+
+    assert catalog.remove("api-design") is True
+    assert catalog.remove("api-design") is False
+    assert not catalog.has("api-design")
+    assert catalog.search("REST API", 5) == []
+
+
+def test_on_change_fires_on_register_upsert_remove_until_unsubscribed() -> None:
+    catalog = SkillCatalog()
+    fired = 0
+
+    def listener() -> None:
+        nonlocal fired
+        fired += 1
+
+    unsubscribe = catalog.on_change(listener)
+
+    catalog.register(_API_DESIGN)
+    catalog.upsert(Skill(id="slides", name="slides", description="Build HTML presentations."))
+    catalog.remove("api-design")
+    assert fired == 3
+
+    unsubscribe()
+    catalog.remove("slides")
+    assert fired == 3
+
+
+def test_stamps_the_surfacing_skill_searchs_id_onto_the_invoke_that_follows() -> None:
+    catalog = SkillCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    catalog.register(_API_DESIGN)
+    catalog.drain_trace_events()
+
+    outcome = catalog.search_traced("REST API design", 5, "agent")
+    catalog.invoke("api-design")
+
+    events = catalog.drain_trace_events()
+    invoke = next(e for e in events if e["type"] == "skill_invoke")
+    assert invoke["search_id"] == outcome.search_id
