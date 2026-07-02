@@ -128,7 +128,8 @@ export function searchToolsTool(
       const { query, topK } = input as { query: string; topK?: number };
       const k = typeof topK === "number" && Number.isInteger(topK) && topK >= 1 ? topK : 5;
       const startedAt = Date.now();
-      const hits = catalog.search(query, k, "agent");
+      const traced = catalog.searchTraced(query, k, "agent");
+      const hits = traced.hits;
       catalog.recordEvent({
         type: "gateway_search",
         query,
@@ -136,6 +137,8 @@ export function searchToolsTool(
         top_k: k,
         hits: hits.length,
         took_ms: Date.now() - startedAt,
+        search_id: traced.searchId,
+        tool_hits: hits.map((h, rank) => ({ tool_id: h.toolId, score: h.score, rank })),
       });
       const order: string[] = [];
       const groups = new Map<string, SearchToolsGroup>();

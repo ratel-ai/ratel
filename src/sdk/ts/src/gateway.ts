@@ -101,11 +101,16 @@ export function searchCapabilitiesTool(
 ): ExecutableTool {
   const upstreams = opts?.upstreamServers ?? [];
   const upstreamByName = new Map(upstreams.map((u) => [u.name, u]));
-  const hasSkills = skillCatalog !== undefined && skillCatalog.size() > 0;
   return {
     id: SEARCH_CAPABILITIES_ID,
     name: SEARCH_CAPABILITIES_ID,
-    description: buildSearchDescription(hasSkills, opts),
+    // Computed at read time so a catalog synced/mutated after construction
+    // advertises correctly. NOTE: an MCP client caches tools/list until a
+    // list_changed notification, and spreading this tool (`{...tool}`)
+    // freezes the text at spread time.
+    get description() {
+      return buildSearchDescription(skillCatalog !== undefined && skillCatalog.size() > 0, opts);
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -183,7 +188,16 @@ export function searchCapabilitiesTool(
       const kSkills = clampTopK(topKSkills, DEFAULT_TOP_K_SKILLS);
       const startedAt = Date.now();
 
-      const toolHits = toolCatalog.search(query, kTools, "agent");
+      const tracedTools = toolCatalog.searchTraced(query, kTools, "agent");
+      const toolHits = tracedTools.hits;
+
+      // Skills are ranked in their own bucket against the same query (reserved
+      // budget → never starved by tools). searchTraced emits the skill_search
+      // trace (with its own id) for the funnel.
+      const tracedSkills = skillCatalog
+        ? skillCatalog.searchTraced(query, kSkills, "agent")
+        : undefined;
+
       toolCatalog.recordEvent({
         type: "gateway_search",
         query,
@@ -191,6 +205,14 @@ export function searchCapabilitiesTool(
         top_k: kTools,
         hits: toolHits.length,
         took_ms: Date.now() - startedAt,
+        // The tool search's id — later gateway_invokes attribute to it.
+        search_id: tracedTools.searchId,
+        tool_hits: toolHits.map((h, rank) => ({ tool_id: h.toolId, score: h.score, rank })),
+        skill_hits: (tracedSkills?.hits ?? []).map((h, rank) => ({
+          skill_id: h.skillId,
+          score: h.score,
+          rank,
+        })),
       });
 
       const order: string[] = [];
@@ -229,16 +251,14 @@ export function searchCapabilitiesTool(
       };
       for (const h of toolHits) addTool(h.toolId, h.score);
 
-      // Skills are ranked in their own bucket against the same query (reserved
-      // budget → never starved by tools). SkillCatalog.search emits its own
-      // skill_search trace for the funnel.
-      const skills: CapabilitySkillHit[] = skillCatalog
-        ? skillCatalog.search(query, kSkills, "agent").map((h) => ({
-            skillId: h.skillId,
-            score: h.score,
-            description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),
-          }))
-        : [];
+      const skills: CapabilitySkillHit[] =
+        tracedSkills && skillCatalog
+          ? tracedSkills.hits.map((h) => ({
+              skillId: h.skillId,
+              score: h.score,
+              description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),
+            }))
+          : [];
 
       // A matched skill's instructions name the tools they call. Pull those into
       // the tools bucket so the agent gets the playbook and its toolkit in one
@@ -303,6 +323,8 @@ export function invokeToolTool(
           type: "gateway_error",
           tool_id: toolId,
           error: "unknown_tool_id",
+          error_code: "unknown_tool_id",
+          error_kind: "permanent",
         });
         return {
           error: `unknown toolId: ${toolId}. Use the catalog's search tool to discover available ids.`,
@@ -329,12 +351,14 @@ export function invokeToolTool(
         };
       }
       const startedAt = Date.now();
+      const searchId = catalog.lastSearchId(toolId);
       try {
         const result = await catalog.invoke(toolId, args);
         catalog.recordEvent({
           type: "gateway_invoke",
           tool_id: toolId,
           took_ms: Date.now() - startedAt,
+          ...(searchId ? { search_id: searchId } : {}),
         });
         return result;
       } catch (err) {
@@ -347,6 +371,8 @@ export function invokeToolTool(
             type: "gateway_error",
             tool_id: toolId,
             error: "needs_auth",
+            error_code: "needs_auth",
+            error_kind: "transient",
           });
           const payload: { error: string; isError: true; upstream?: string; hint: string } = {
             error: "needs_auth",

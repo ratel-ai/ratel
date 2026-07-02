@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type ExecutableTool, ToolCatalog } from "./index.js";
+import { type ExecutableTool, SkillCatalog, ToolCatalog, TraceSession } from "./index.js";
 
 const readFile: ExecutableTool = {
   id: "read_file",
@@ -137,5 +137,73 @@ describe("ToolCatalog tracing", () => {
     const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
     const search = events.find((e) => e.type === "search");
     expect(search?.origin).toBe("agent");
+  });
+
+  it("a shared TraceSession collects both catalogs' events with one seq counter", () => {
+    const session = new TraceSession({ sessionId: "shared", harness: "vitest" });
+    const tools = new ToolCatalog({ traceSession: session });
+    const skills = new SkillCatalog({ traceSession: session });
+
+    tools.register(readFile);
+    skills.register({ id: "s1", name: "s1", description: "REST API design" });
+    tools.search("read", 5);
+
+    const events = session.drain() as Array<Record<string, unknown>>;
+    expect(events.map((e) => e.seq)).toEqual([0, 1, 2]);
+    expect(events[0].harness).toBe("vitest");
+  });
+
+  it("stamps the surfacing search's id onto the invoke that follows", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    catalog.register(readFile);
+    catalog.drainTraceEvents();
+
+    const first = catalog.searchTraced("read file", 5, "agent");
+    const second = catalog.searchTraced("read the file again", 5, "agent");
+    await catalog.invoke("read_file", { path: "/x" });
+
+    expect(first.searchId).not.toBe(second.searchId);
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const start = events.find((e) => e.type === "invoke_start");
+    const end = events.find((e) => e.type === "invoke_end");
+    expect(start?.search_id).toBe(second.searchId);
+    expect(end?.search_id).toBe(second.searchId);
+  });
+
+  it("invoke_end carries result_size_bytes", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    catalog.register(readFile);
+    catalog.drainTraceEvents();
+
+    await catalog.invoke("read_file", { path: "/x" });
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const end = events.find((e) => e.type === "invoke_end");
+    expect(typeof end?.result_size_bytes).toBe("number");
+    expect(end?.result_size_bytes as number).toBeGreaterThan(0);
+  });
+
+  it("classifies an UnauthorizedError invoke as needs_auth / transient", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    catalog.register({
+      id: "locked",
+      name: "locked",
+      description: "x",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => {
+        const err = new Error("401");
+        err.name = "UnauthorizedError";
+        throw err;
+      },
+    });
+    catalog.drainTraceEvents();
+
+    await expect(catalog.invoke("locked", {})).rejects.toThrow();
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const err = events.find((e) => e.type === "invoke_error");
+    expect(err?.error_code).toBe("needs_auth");
+    expect(err?.error_kind).toBe("transient");
   });
 });

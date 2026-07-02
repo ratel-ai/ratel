@@ -47,6 +47,8 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
           type: "gateway_error",
           tool_id: skillId,
           error: "unknown_skill_id",
+          error_code: "unknown_skill_id",
+          error_kind: "permanent",
         });
         return {
           error: `unknown skillId: ${skillId}. Use search_capabilities to discover available ids.`,

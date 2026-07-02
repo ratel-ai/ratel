@@ -1,10 +1,20 @@
-export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
-export { SkillRegistry, ToolRegistry } from "../native/index.cjs";
+export type {
+  SearchHit,
+  SearchOutcome,
+  Skill,
+  SkillHit,
+  SkillSearchOutcome,
+  Tool,
+  TraceSessionConfig,
+} from "../native/index.cjs";
+export { SkillRegistry, ToolRegistry, TraceSession } from "../native/index.cjs";
 export type {
   ExecutableTool,
   Executor,
   SearchOrigin,
   ToolCatalogOptions,
+  TraceContext,
+  TracedSearch,
   TraceSinkConfig,
 } from "./catalog.js";
 export { ToolCatalog } from "./catalog.js";
@@ -35,6 +45,6 @@ export type {
 export { SEARCH_TOOLS_ID, searchToolsTool } from "./gateway-compat.js";
 export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
 export { registerMcpServer } from "./mcp.js";
-export type { SkillCatalogOptions } from "./skill-catalog.js";
+export type { SkillCatalogOptions, TracedSkillSearch } from "./skill-catalog.js";
 export { SkillCatalog } from "./skill-catalog.js";
 export { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-gateway.js";

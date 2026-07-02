@@ -188,6 +188,39 @@ describe("searchCapabilitiesTool", () => {
     const emptyCatalog = searchCapabilitiesTool(tools, new SkillCatalog());
     expect(emptyCatalog.description).not.toContain("get_skill_content");
   });
+
+  it("recomputes skill advertising as the catalog fills and empties after construction", () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const skills = new SkillCatalog();
+    const tool = searchCapabilitiesTool(tools, skills);
+
+    expect(tool.description).not.toContain("get_skill_content");
+    skills.register(vercelSkill);
+    expect(tool.description).toContain("get_skill_content");
+    skills.remove("vercel-deploy");
+    expect(tool.description).not.toContain("get_skill_content");
+  });
+
+  it("gateway_search carries a search_id and ranked tool/skill hit arrays beside the count", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    tools.register(readFile);
+    tools.register(sendEmail);
+    const tool = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill));
+    tools.drainTraceEvents();
+
+    await tool.execute({ query: "read a file", topKTools: 3 });
+
+    const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
+    const gw = events.find((e) => e.type === "gateway_search");
+    expect(typeof gw?.search_id).toBe("string");
+    const toolHits = gw?.tool_hits as Array<Record<string, unknown>>;
+    expect(toolHits[0].tool_id).toBe("fs__read_file");
+    expect(toolHits[0].rank).toBe(0);
+    expect(typeof toolHits[0].score).toBe("number");
+    expect(gw?.hits).toBe(toolHits.length);
+    expect(Array.isArray(gw?.skill_hits)).toBe(true);
+  });
 });
 
 describe("invokeToolTool", () => {
@@ -309,5 +342,56 @@ describe("invokeToolTool", () => {
     await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });
     const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
     expect(events.find((e) => e.type === "gateway_invoke")?.tool_id).toBe("fs__read_file");
+  });
+
+  it("gateway_invoke carries the search_id of the gateway search that surfaced the tool", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    tools.register(readFile);
+    const search = searchCapabilitiesTool(tools);
+    const invoke = invokeToolTool(tools);
+    tools.drainTraceEvents();
+
+    await search.execute({ query: "read a file" });
+    await invoke.execute({ toolId: "fs__read_file", args: { path: "/x" } });
+
+    const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
+    const gwSearch = events.find((e) => e.type === "gateway_search");
+    const gwInvoke = events.find((e) => e.type === "gateway_invoke");
+    expect(typeof gwSearch?.search_id).toBe("string");
+    expect(gwInvoke?.search_id).toBe(gwSearch?.search_id);
+  });
+
+  it("stamps structured error codes on gateway errors", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    class UnauthorizedError extends Error {
+      constructor(m: string) {
+        super(m);
+        this.name = "UnauthorizedError";
+      }
+    }
+    tools.register({
+      id: "stripe__charges",
+      name: "charges",
+      description: "...",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => {
+        throw new UnauthorizedError("expired");
+      },
+    });
+    const tool = invokeToolTool(tools);
+    tools.drainTraceEvents();
+
+    await tool.execute({ toolId: "nope", args: {} });
+    await tool.execute({ toolId: "stripe__charges", args: {} });
+
+    const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
+    const gatewayErrors = events.filter((e) => e.type === "gateway_error");
+    const unknown = gatewayErrors.find((e) => e.error === "unknown_tool_id");
+    expect(unknown?.error_code).toBe("unknown_tool_id");
+    expect(unknown?.error_kind).toBe("permanent");
+    const needsAuth = gatewayErrors.find((e) => e.error === "needs_auth");
+    expect(needsAuth?.error_code).toBe("needs_auth");
+    expect(needsAuth?.error_kind).toBe("transient");
   });
 });
