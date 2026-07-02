@@ -26,9 +26,9 @@ fn flatten(value: &serde_json::Value, tokens: &mut Vec<String>) {
     }
 }
 
-// Push the original identifier and, if it differs, a space-split form so that
-// the bm25 crate's UAX #29 tokenizer (which keeps `snake_case` and `camelCase`
-// whole) still surfaces the constituent words.
+// Push the original identifier and, if it differs, a space-split form so the
+// embedder's tokenizer sees the constituent words of `snake_case`/`camelCase`
+// identifiers, not just the glued-together form.
 pub(crate) fn push_identifier(s: &str, tokens: &mut Vec<String>) {
     tokens.push(s.to_string());
     let split = split_identifier(s);

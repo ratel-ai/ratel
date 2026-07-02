@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use ratel_ai_core::{
-    ChurnKind, JsonlSink, MemorySink, NoopSink, Origin, Tool, ToolRegistry, TraceEnvelope,
-    TraceEvent, TraceSink,
+    ChurnKind, EmbedderLoadStatus, JsonlSink, MemorySink, NoopSink, Origin, Tool, ToolRegistry,
+    TraceEnvelope, TraceEvent, TraceSink,
 };
 use serde_json::{Value, json};
 use tempfile::tempdir;
@@ -24,19 +24,24 @@ fn lookup_tool(id: &str) -> Tool {
 #[test]
 fn default_registry_uses_noop_sink_and_does_not_panic() {
     let mut registry = ToolRegistry::new();
-    registry.register(lookup_tool("t"));
-    let _ = registry.search("lookup", 5);
+    registry.register(lookup_tool("t")).unwrap();
+    registry.search("lookup", 5).unwrap();
 }
 
 #[test]
 fn register_emits_index_churn_add() {
     let sink = Arc::new(MemorySink::new("session-1"));
     let mut registry = ToolRegistry::with_trace_sink(sink.clone());
-    registry.register(lookup_tool("alpha"));
+    registry.register(lookup_tool("alpha")).unwrap();
 
+    // The first (cold) load in this test binary also emits one EmbedderLoad on
+    // whichever sink triggered it — order-dependent across parallel tests, so
+    // find the IndexChurn rather than asserting the total count.
     let events = sink.snapshot();
-    assert_eq!(events.len(), 1);
-    let env: &TraceEnvelope = &events[0];
+    let env: &TraceEnvelope = events
+        .iter()
+        .find(|e| matches!(e.event, TraceEvent::IndexChurn { .. }))
+        .expect("expected an IndexChurn event");
     assert_eq!(env.session_id, "session-1");
     assert_eq!(env.v, 1);
     assert!(env.ts > 0);
@@ -50,12 +55,12 @@ fn register_emits_index_churn_add() {
 }
 
 #[test]
-fn search_emits_search_event_with_bm25_stage_and_hits() {
+fn search_emits_search_event_with_dense_stage_and_hits() {
     let sink = Arc::new(MemorySink::new("session-2"));
     let mut registry = ToolRegistry::with_trace_sink(sink.clone());
-    registry.register(lookup_tool("alpha"));
+    registry.register(lookup_tool("alpha")).unwrap();
 
-    let hits = registry.search("lookup", 5);
+    let hits = registry.search("lookup", 5).unwrap();
     assert!(!hits.is_empty());
 
     let events = sink.snapshot();
@@ -80,7 +85,7 @@ fn search_emits_search_event_with_bm25_stage_and_hits() {
             assert_eq!(hits[0].tool_id, "alpha");
             assert!(hits[0].score > 0.0);
             assert_eq!(stages.len(), 1);
-            assert_eq!(stages[0].name, "bm25");
+            assert_eq!(stages[0].name, "dense");
             assert_eq!(stages[0].top_score, Some(hits[0].score));
         }
         _ => unreachable!(),
@@ -91,9 +96,11 @@ fn search_emits_search_event_with_bm25_stage_and_hits() {
 fn search_with_origin_propagates_origin() {
     let sink = Arc::new(MemorySink::new("session-3"));
     let mut registry = ToolRegistry::with_trace_sink(sink.clone());
-    registry.register(lookup_tool("alpha"));
+    registry.register(lookup_tool("alpha")).unwrap();
 
-    let _ = registry.search_with_origin("lookup", 3, Origin::Agent);
+    registry
+        .search_with_origin("lookup", 3, Origin::Agent)
+        .unwrap();
 
     let events = sink.snapshot();
     let search_event = events
@@ -110,18 +117,22 @@ fn empty_registry_search_still_emits_event() {
     let sink = Arc::new(MemorySink::new("session-4"));
     let registry = ToolRegistry::with_trace_sink(sink.clone());
 
-    let _ = registry.search("anything", 5);
+    registry.search("anything", 5).unwrap();
 
+    // A cold model load may also emit one EmbedderLoad here; find the Search.
     let events = sink.snapshot();
-    assert_eq!(events.len(), 1);
-    match &events[0].event {
+    let search = events
+        .iter()
+        .find(|e| matches!(e.event, TraceEvent::Search { .. }))
+        .expect("expected a Search event");
+    match &search.event {
         TraceEvent::Search { hits, stages, .. } => {
             assert!(hits.is_empty());
             assert_eq!(stages.len(), 1);
-            assert_eq!(stages[0].name, "bm25");
+            assert_eq!(stages[0].name, "dense");
             assert!(stages[0].top_score.is_none());
         }
-        _ => panic!("expected Search event"),
+        _ => unreachable!(),
     }
 }
 
@@ -293,6 +304,12 @@ fn trace_event_round_trips_through_json() {
         TraceEvent::IndexChurn {
             kind: ChurnKind::Add,
             tool_id: "t".into(),
+        },
+        TraceEvent::EmbedderLoad {
+            model: "BAAI/bge-small-en-v1.5".into(),
+            status: EmbedderLoadStatus::Slow,
+            took_ms: 8000,
+            reason: Some("slow".into()),
         },
     ];
 

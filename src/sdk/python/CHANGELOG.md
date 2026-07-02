@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0-rc.1] - 2026-06-30
+
+### Changed
+
+- Retrieval is now **dense (semantic)** — `search()` ranks by embedding cosine similarity (`BAAI/bge-small-en-v1.5`) via the bundled `ratel-ai-core` native core. The `search()` API is unchanged, so upgrading is transparent, but `SearchHit.score` is now a cosine similarity and the engine downloads a small embedding model on first use (cached, ~130 MB). See [ADR-0013](../../../docs/adr/0013-dense-semantic-retrieval.md).
+
 ## [0.2.0] - 2026-06-16
 
 ### Changed

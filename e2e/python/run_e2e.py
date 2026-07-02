@@ -5,11 +5,11 @@ Assumes `ratel-ai` is already pip-installed (from the wheel built on this PR) in
 the active environment. Loads the shared fixture catalog, drives the full product
 surface through the PUBLIC API, and asserts behavior against e2e/scenario.json:
 
-  1. ToolCatalog.search       — BM25 ranking (top-1 per query)
+  1. ToolCatalog.search       — dense ranking (top-1 per query)
   2. ToolCatalog.invoke       — executor dispatch
   3. search_tools_tool        — gateway search surface (grouped hits)
   4. invoke_tool_tool         — gateway invoke surface
-  5. SkillCatalog.search      — BM25 ranking over the skill corpus (top-1 per query)
+  5. SkillCatalog.search      — dense ranking over the skill corpus (top-1 per query)
   6. get_skill_content_tool   — load a skill body by id (+ unknown-id error path)
   7. search_capabilities_tool — unified gateway over tools AND skills (two buckets)
   8. search_capabilities_tool — skill->tool cross-pollination (declared tools, score 0)
@@ -142,7 +142,7 @@ async def main() -> None:
     n_skills = len(SKILLS["skills"])
     skills_by_id = {s["id"]: s for s in SKILLS["skills"]}
 
-    # 5. Skill search ranking parity (separate BM25 corpus from tools).
+    # 5. Skill search ranking parity (separate dense corpus from tools).
     for case in SCENARIO["skillSearches"]:
         query, top_k, want = case["query"], case["topK"], case["expectTop1"]
         hits = skill_catalog.search(query, top_k)
@@ -193,8 +193,9 @@ async def main() -> None:
 
     # 8. search_capabilities — skill->tool cross-pollination. A matched skill's
     #    declared tools ride into the tools bucket at score 0, even when the query
-    #    doesn't match them. The expected tool shares no terms with the query, so
-    #    presence + score 0 proves it arrived via the skill, not a BM25 match.
+    #    doesn't rank them in its own top-K. The expected tool falls outside the
+    #    query's dense top-K, so presence + score 0 proves it arrived via the
+    #    skill, not a direct query match.
     xp = SCENARIO["capabilitiesCrossPollination"]
     xp_out = await search_caps.execute(
         {"query": xp["query"], "topKTools": xp["topKTools"], "topKSkills": xp["topKSkills"]}

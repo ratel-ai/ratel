@@ -10,7 +10,7 @@
 use ratel_ai_core::{Tool, ToolRegistry};
 use serde_json::json;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut registry = ToolRegistry::new();
 
     registry.register(Tool {
@@ -32,7 +32,7 @@ fn main() {
                 "contents": { "type": "string", "description": "decoded file contents" }
             }
         }),
-    });
+    })?;
 
     registry.register(Tool {
         id: "write_file".into(),
@@ -45,7 +45,7 @@ fn main() {
             }
         }),
         output_schema: json!({}),
-    });
+    })?;
 
     registry.register(Tool {
         id: "search_files".into(),
@@ -71,7 +71,7 @@ fn main() {
                 }
             }
         }),
-    });
+    })?;
 
     registry.register(Tool {
         id: "run_command".into(),
@@ -94,7 +94,7 @@ fn main() {
                 "exit_code": { "type": "number" }
             }
         }),
-    });
+    })?;
 
     let queries: Vec<String> = match std::env::args().nth(1) {
         Some(q) => vec![q],
@@ -108,7 +108,7 @@ fn main() {
 
     for query in queries {
         println!("\nquery: {query:?}");
-        let hits = registry.search(&query, 5);
+        let hits = registry.search(&query, 5)?;
         if hits.is_empty() {
             println!("  (no matches)");
             continue;
@@ -117,4 +117,5 @@ fn main() {
             println!("  {}. {:<14} score={:.4}", rank + 1, hit.tool_id, hit.score);
         }
     }
+    Ok(())
 }

@@ -110,8 +110,11 @@ jobs:
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-unknown-linux-gnu --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
           - triple: linux-arm64-gnu
             target: aarch64-unknown-linux-gnu
-            runs-on: ubuntu-latest
-            build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target aarch64-unknown-linux-gnu --use-napi-cross --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+            # Native ARM64 runner — the dense engine's native deps (ring, esaxx-rs,
+            # candle) compile fine on linux natively (see linux-x64) but not under
+            # zig cross-compile, so build arm64-linux natively instead of `--use-napi-cross`.
+            runs-on: ubuntu-24.04-arm
+            build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target aarch64-unknown-linux-gnu --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
           - triple: win32-x64-msvc
             target: x86_64-pc-windows-msvc
             runs-on: windows-latest
@@ -334,7 +337,9 @@ jobs:
             manylinux: auto
           - triple: linux-arm64-gnu
             target: aarch64-unknown-linux-gnu
-            runs-on: ubuntu-latest
+            # Native ARM64 runner — see the note in the `build` job: the ML native
+            # deps cross-compile cleanly only when built natively, not via zig.
+            runs-on: ubuntu-24.04-arm
             manylinux: auto
           - triple: win32-x64-msvc
             target: x86_64-pc-windows-msvc

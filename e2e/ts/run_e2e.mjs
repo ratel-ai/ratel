@@ -7,11 +7,11 @@
  * shared fixture catalog, drives the full product surface through the PUBLIC API, and
  * asserts behavior against e2e/scenario.json:
  *
- *   1. ToolCatalog.search       — BM25 ranking (top-1 per query)
+ *   1. ToolCatalog.search       — dense ranking (top-1 per query)
  *   2. ToolCatalog.invoke       — executor dispatch
  *   3. searchToolsTool          — gateway search surface (grouped hits)
  *   4. invokeToolTool           — gateway invoke surface
- *   5. SkillCatalog.search      — BM25 ranking over the skill corpus (top-1 per query)
+ *   5. SkillCatalog.search      — dense ranking over the skill corpus (top-1 per query)
  *   6. getSkillContentTool      — load a skill body by id (+ unknown-id error path)
  *   7. searchCapabilitiesTool   — unified gateway over tools AND skills (two buckets)
  *   8. searchCapabilitiesTool   — skill->tool cross-pollination (declared tools, score 0)
@@ -128,7 +128,7 @@ async function main() {
   const nSkills = SKILLS.skills.length;
   const skillsById = new Map(SKILLS.skills.map((s) => [s.id, s]));
 
-  // 5. Skill search ranking parity (separate BM25 corpus from tools).
+  // 5. Skill search ranking parity (separate dense corpus from tools).
   for (const { query, topK, expectTop1 } of SCENARIO.skillSearches) {
     const hits = skillCatalog.search(query, topK);
     if (!Array.isArray(hits) || hits.length === 0) fail(`skill search returned no hits for ${query}`);
@@ -169,8 +169,9 @@ async function main() {
 
   // 8. searchCapabilities — skill->tool cross-pollination. A matched skill's
   //    declared tools ride into the tools bucket at score 0, even when the query
-  //    doesn't match them. The expected tool shares no terms with the query, so
-  //    presence + score 0 proves it arrived via the skill, not a BM25 match.
+  //    doesn't rank them in its own top-K. The expected tool falls outside the
+  //    query's dense top-K, so presence + score 0 proves it arrived via the
+  //    skill, not a direct query match.
   const xp = SCENARIO.capabilitiesCrossPollination;
   const xpOut = await searchCaps.execute({ query: xp.query, topKTools: xp.topKTools, topKSkills: xp.topKSkills });
   const xpSkillIds = (xpOut.skills ?? []).map((s) => s.skillId);

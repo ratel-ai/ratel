@@ -83,40 +83,52 @@ impl ToolRegistry {
             .map_err(|e| PyValueError::new_err(format!("invalid input_schema: {e}")))?;
         let output_schema: Value = pythonize::depythonize(output_schema)
             .map_err(|e| PyValueError::new_err(format!("invalid output_schema: {e}")))?;
-        self.inner.register(core::Tool {
-            id,
-            name,
-            description,
-            input_schema,
-            output_schema,
-        });
-        Ok(())
+        self.inner
+            .register(core::Tool {
+                id,
+                name,
+                description,
+                input_schema,
+                output_schema,
+            })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
-    fn search(&self, query: String, top_k: u32) -> Vec<SearchHit> {
-        self.inner
+    fn search(&self, query: String, top_k: u32) -> PyResult<Vec<SearchHit>> {
+        let hits = self
+            .inner
             .search(&query, top_k as usize)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(hits
             .into_iter()
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
             })
-            .collect()
+            .collect())
     }
 
-    fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SearchHit> {
+    fn search_with_origin(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+    ) -> PyResult<Vec<SearchHit>> {
         let parsed = match origin.as_str() {
             "agent" => Origin::Agent,
             _ => Origin::Direct,
         };
-        self.inner
+        let hits = self
+            .inner
             .search_with_origin(&query, top_k as usize, parsed)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(hits
             .into_iter()
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
             })
-            .collect()
+            .collect())
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -212,42 +224,55 @@ impl SkillRegistry {
         tools: Vec<String>,
         metadata: HashMap<String, Vec<String>>,
         body: String,
-    ) {
-        self.inner.register(core::Skill {
-            id,
-            name,
-            description,
-            tags,
-            tools,
-            metadata,
-            body,
-        });
+    ) -> PyResult<()> {
+        self.inner
+            .register(core::Skill {
+                id,
+                name,
+                description,
+                tags,
+                tools,
+                metadata,
+                body,
+            })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
-    fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
-        self.inner
+    fn search(&self, query: String, top_k: u32) -> PyResult<Vec<SkillHit>> {
+        let hits = self
+            .inner
             .search(&query, top_k as usize)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(hits
             .into_iter()
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
             })
-            .collect()
+            .collect())
     }
 
-    fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SkillHit> {
+    fn search_with_origin(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+    ) -> PyResult<Vec<SkillHit>> {
         let parsed = match origin.as_str() {
             "agent" => Origin::Agent,
             _ => Origin::Direct,
         };
-        self.inner
+        let hits = self
+            .inner
             .search_with_origin(&query, top_k as usize, parsed)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(hits
             .into_iter()
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
             })
-            .collect()
+            .collect())
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {

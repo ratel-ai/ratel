@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0-rc.1] - 2026-06-30
+
+### Added
+
+- **Dense (semantic) retrieval.** `search()` / `search_with_origin()` on both `ToolRegistry` and `SkillRegistry` rank by cosine similarity over embeddings of the tool/skill text, embedded with **`BAAI/bge-small-en-v1.5`** (384-dim, in-process Candle inference; CLS-pooled, L2-normalized, asymmetric query prefix). Weights are downloaded on first use and cached (~130 MB), never bundled. Embeddings are precomputed at `register()` and stored in-registry, index-aligned. See [ADR-0013](../../../docs/adr/0013-dense-semantic-retrieval.md).
+
+### Changed
+
+- `SearchHit.score` / `SkillHit.score` is now a cosine similarity (previously the BM25 score). The public `search()` / `search_with_origin()` signatures are unchanged — upgrading is transparent.
+- New mandatory dependencies: `candle-core`, `candle-nn`, `candle-transformers`, `tokenizers`, `hf-hub` (pure-Rust inference; model fetched at runtime, not packaged).
+
 ## [0.2.0] - 2026-06-16
 
 ### Added

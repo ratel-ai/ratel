@@ -87,42 +87,55 @@ impl ToolRegistry {
     }
 
     #[napi]
-    pub fn register(&mut self, tool: Tool) {
-        self.inner.register(core::Tool {
-            id: tool.id,
-            name: tool.name,
-            description: tool.description,
-            input_schema: tool.input_schema,
-            output_schema: tool.output_schema,
-        });
+    pub fn register(&mut self, tool: Tool) -> napi::Result<()> {
+        self.inner
+            .register(core::Tool {
+                id: tool.id,
+                name: tool.name,
+                description: tool.description,
+                input_schema: tool.input_schema,
+                output_schema: tool.output_schema,
+            })
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
     #[napi]
-    pub fn search(&self, query: String, top_k: u32) -> Vec<SearchHit> {
-        self.inner
+    pub fn search(&self, query: String, top_k: u32) -> napi::Result<Vec<SearchHit>> {
+        let hits = self
+            .inner
             .search(&query, top_k as usize)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(hits
             .into_iter()
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
             })
-            .collect()
+            .collect())
     }
 
     #[napi]
-    pub fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SearchHit> {
+    pub fn search_with_origin(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+    ) -> napi::Result<Vec<SearchHit>> {
         let parsed = match origin.as_str() {
             "agent" => Origin::Agent,
             _ => Origin::Direct,
         };
-        self.inner
+        let hits = self
+            .inner
             .search_with_origin(&query, top_k as usize, parsed)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(hits
             .into_iter()
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
             })
-            .collect()
+            .collect())
     }
 
     #[napi]
@@ -198,44 +211,57 @@ impl SkillRegistry {
     }
 
     #[napi]
-    pub fn register(&mut self, skill: Skill) {
-        self.inner.register(core::Skill {
-            id: skill.id,
-            name: skill.name,
-            description: skill.description,
-            tags: skill.tags.unwrap_or_default(),
-            tools: skill.tools.unwrap_or_default(),
-            metadata: skill.metadata.unwrap_or_default(),
-            body: skill.body.unwrap_or_default(),
-        });
+    pub fn register(&mut self, skill: Skill) -> napi::Result<()> {
+        self.inner
+            .register(core::Skill {
+                id: skill.id,
+                name: skill.name,
+                description: skill.description,
+                tags: skill.tags.unwrap_or_default(),
+                tools: skill.tools.unwrap_or_default(),
+                metadata: skill.metadata.unwrap_or_default(),
+                body: skill.body.unwrap_or_default(),
+            })
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
     #[napi]
-    pub fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
-        self.inner
+    pub fn search(&self, query: String, top_k: u32) -> napi::Result<Vec<SkillHit>> {
+        let hits = self
+            .inner
             .search(&query, top_k as usize)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(hits
             .into_iter()
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
             })
-            .collect()
+            .collect())
     }
 
     #[napi]
-    pub fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SkillHit> {
+    pub fn search_with_origin(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+    ) -> napi::Result<Vec<SkillHit>> {
         let parsed = match origin.as_str() {
             "agent" => Origin::Agent,
             _ => Origin::Direct,
         };
-        self.inner
+        let hits = self
+            .inner
             .search_with_origin(&query, top_k as usize, parsed)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(hits
             .into_iter()
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
             })
-            .collect()
+            .collect())
     }
 
     #[napi]

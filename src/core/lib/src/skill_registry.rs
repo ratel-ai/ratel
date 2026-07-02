@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::search::bm25_search;
+use crate::dense_search::dense_search;
+use crate::embedding::{Embedder, EmbedderError, embedder_with_telemetry};
 use crate::skill::Skill;
 use crate::skill_indexing::searchable_text;
 use crate::trace::{
@@ -14,11 +16,17 @@ pub struct SkillHit {
 }
 
 /// Retrieval index over [`Skill`]s — the on-demand analog of
-/// [`crate::ToolRegistry`]. Same BM25 engine and tuning; a parallel type keeps
-/// the tool path untouched and lets skill telemetry stand on its own.
+/// [`crate::ToolRegistry`]. Same dense engine; a parallel type keeps skill
+/// telemetry standing on its own.
 pub struct SkillRegistry {
     skills: Vec<Skill>,
+    /// Precomputed embeddings, index-aligned with `skills` (one per `register`).
+    /// Mirrors [`crate::ToolRegistry`]'s dense path.
+    embeddings: Vec<Vec<f32>>,
     sink: Arc<dyn TraceSink>,
+    /// Test-only override for the process embedder (`None` → the shared
+    /// bge-small). Mirrors [`crate::ToolRegistry`].
+    embedder_override: Option<Arc<dyn Embedder>>,
 }
 
 impl Default for SkillRegistry {
@@ -31,14 +39,18 @@ impl SkillRegistry {
     pub fn new() -> Self {
         Self {
             skills: Vec::new(),
+            embeddings: Vec::new(),
             sink: Arc::new(NoopSink),
+            embedder_override: None,
         }
     }
 
     pub fn with_trace_sink(sink: Arc<dyn TraceSink>) -> Self {
         Self {
             skills: Vec::new(),
+            embeddings: Vec::new(),
             sink,
+            embedder_override: None,
         }
     }
 
@@ -50,26 +62,57 @@ impl SkillRegistry {
         self.sink.record(event);
     }
 
-    pub fn register(&mut self, skill: Skill) {
+    /// The embedder to use: an injected one (tests) or the shared process
+    /// embedder, whose one-time load telemetry is recorded on this sink.
+    fn resolve_embedder(&self) -> Result<Arc<dyn Embedder>, EmbedderError> {
+        match &self.embedder_override {
+            Some(e) => Ok(e.clone()),
+            None => embedder_with_telemetry(self.sink.as_ref()),
+        }
+    }
+
+    /// Register a skill. Fallible for the same reason as
+    /// [`crate::ToolRegistry::register`]: the first-use model load can fail.
+    pub fn register(&mut self, skill: Skill) -> Result<(), EmbedderError> {
         let skill_id = skill.id.clone();
+        // Embed the skill's name+description+tags text once, before the skill is
+        // moved into the corpus. Index-aligned with `skills`.
+        let embedding = self
+            .resolve_embedder()?
+            .embed_doc(&searchable_text(&skill))?;
         self.skills.push(skill);
+        self.embeddings.push(embedding);
         self.sink.record(TraceEvent::SkillChurn {
             kind: ChurnKind::Add,
             skill_id,
         });
+        Ok(())
     }
 
-    pub fn search(&self, query: &str, top_k: usize) -> Vec<SkillHit> {
+    pub fn search(&self, query: &str, top_k: usize) -> Result<Vec<SkillHit>, EmbedderError> {
         self.search_with_origin(query, top_k, Origin::Direct)
     }
 
-    pub fn search_with_origin(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SkillHit> {
+    /// Dense (semantic) skill retrieval — the skill analog of
+    /// [`crate::ToolRegistry::search_with_origin`]. Ranks by embedding cosine;
+    /// the only retrieval path in this version (see ADR-0013).
+    pub fn search_with_origin(
+        &self,
+        query: &str,
+        top_k: usize,
+        origin: Origin,
+    ) -> Result<Vec<SkillHit>, EmbedderError> {
         let started = Instant::now();
-        let hits: Vec<SkillHit> = bm25_search(
-            self.skills
-                .iter()
-                .map(|s| (s.id.clone(), searchable_text(s))),
-            query,
+        let query_vec = self.resolve_embedder()?.embed_query(query)?;
+        // Collapse duplicate ids to the latest embedding (last-wins), so
+        // re-registering a skill replaces it.
+        let mut latest: HashMap<&str, &[f32]> = HashMap::new();
+        for (skill, embedding) in self.skills.iter().zip(self.embeddings.iter()) {
+            latest.insert(skill.id.as_str(), embedding.as_slice());
+        }
+        let hits: Vec<SkillHit> = dense_search(
+            latest.into_iter().map(|(id, v)| (id.to_string(), v)),
+            &query_vec,
             top_k,
         )
         .into_iter()
@@ -89,13 +132,13 @@ impl SkillRegistry {
                 })
                 .collect(),
             stages: vec![SearchStage {
-                name: "bm25".into(),
+                name: "dense".into(),
                 took_ms,
                 top_score,
             }],
             took_ms,
         });
-        hits
+        Ok(hits)
     }
 }
 
@@ -116,6 +159,21 @@ mod tests {
         }
     }
 
+    /// Stands in for a machine that can't run the model: every embed fails.
+    struct FailingEmbedder;
+    impl Embedder for FailingEmbedder {
+        fn embed_doc(&self, _: &str) -> Result<Vec<f32>, EmbedderError> {
+            Err(EmbedderError::Inference {
+                source: "stub failure".into(),
+            })
+        }
+        fn embed_query(&self, _: &str) -> Result<Vec<f32>, EmbedderError> {
+            Err(EmbedderError::Inference {
+                source: "stub failure".into(),
+            })
+        }
+    }
+
     fn catalog() -> SkillRegistry {
         let mut reg = SkillRegistry::new();
         reg.register(skill(
@@ -123,20 +181,24 @@ mod tests {
             "frontend-slides",
             "Build animation-rich HTML presentations from scratch",
             &["frontend", "presentations"],
-        ));
+        ))
+        .unwrap();
         reg.register(skill(
             "api-design",
             "api-design",
             "REST API design patterns: resource naming, status codes, pagination",
             &["backend", "api"],
-        ));
+        ))
+        .unwrap();
         reg
     }
 
     #[test]
     fn search_ranks_the_relevant_skill_first() {
         let reg = catalog();
-        let hits = reg.search("design a REST endpoint with pagination", 5);
+        let hits = reg
+            .search("design a REST endpoint with pagination", 5)
+            .unwrap();
         assert_eq!(
             hits.first().map(|h| h.skill_id.as_str()),
             Some("api-design")
@@ -146,7 +208,26 @@ mod tests {
     #[test]
     fn search_on_empty_registry_returns_no_hits() {
         let reg = SkillRegistry::new();
-        assert!(reg.search("anything", 5).is_empty());
+        assert!(reg.search("anything", 5).unwrap().is_empty());
+    }
+
+    #[test]
+    fn register_surfaces_embedder_error_instead_of_panicking() {
+        let mut reg = SkillRegistry {
+            skills: Vec::new(),
+            embeddings: Vec::new(),
+            sink: Arc::new(NoopSink),
+            embedder_override: Some(Arc::new(FailingEmbedder)),
+        };
+        let err = reg
+            .register(skill(
+                "api-design",
+                "api-design",
+                "REST API design",
+                &["api"],
+            ))
+            .unwrap_err();
+        assert!(matches!(err, EmbedderError::Inference { .. }));
     }
 
     #[test]
@@ -158,8 +239,10 @@ mod tests {
             "api-design",
             "REST API design",
             &["api"],
-        ));
-        reg.search_with_origin("api design", 5, Origin::Agent);
+        ))
+        .unwrap();
+        reg.search_with_origin("api design", 5, Origin::Agent)
+            .unwrap();
 
         let events = sink.drain();
         assert!(events.iter().any(|e| matches!(
