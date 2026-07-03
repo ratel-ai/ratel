@@ -13,6 +13,20 @@ use ratel_ai_core as core;
 use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
 use serde_json::Value;
 
+/// Estimate the token footprint of a string (`len / 4` heuristic). Module-level
+/// mirror of `ratel_ai_core::estimate_tokens`, exposed so the Python SDK reads
+/// token maths from the core instead of re-deriving it.
+#[pyfunction]
+fn estimate_tokens(text: &str) -> u64 {
+    core::estimate_tokens(text)
+}
+
+/// Estimate the USD cost of a generation from its model and token counts.
+#[pyfunction]
+fn estimate_cost_usd(model: &str, input_tokens: u64, output_tokens: u64) -> f64 {
+    core::estimate_cost_usd(model, input_tokens, output_tokens)
+}
+
 /// A single search result: the matched tool id and its BM25 score. Mirrors the
 /// TS SDK's `SearchHit` (camelCase `toolId` there → snake_case `tool_id` here).
 #[pyclass(frozen)]
@@ -91,6 +105,16 @@ impl ToolRegistry {
             output_schema,
         });
         Ok(())
+    }
+
+    /// Total context-token footprint of the full registered catalog.
+    fn catalog_tokens(&self) -> u64 {
+        self.inner.catalog_tokens()
+    }
+
+    /// Footprint of the tools with the given ids (e.g. a search's hits).
+    fn tokens_for(&self, ids: Vec<String>) -> u64 {
+        self.inner.tokens_for(&ids)
     }
 
     fn search(&self, query: String, top_k: u32) -> Vec<SearchHit> {
@@ -224,6 +248,16 @@ impl SkillRegistry {
         });
     }
 
+    /// Total context-token footprint of the full registered skill corpus.
+    fn catalog_tokens(&self) -> u64 {
+        self.inner.catalog_tokens()
+    }
+
+    /// Footprint of the skills with the given ids (e.g. a search's hits).
+    fn tokens_for(&self, ids: Vec<String>) -> u64 {
+        self.inner.tokens_for(&ids)
+    }
+
     fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
         self.inner
             .search(&query, top_k as usize)
@@ -316,5 +350,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SearchHit>()?;
     m.add_class::<SkillRegistry>()?;
     m.add_class::<SkillHit>()?;
+    m.add_function(pyo3::wrap_pyfunction!(estimate_tokens, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(estimate_cost_usd, m)?)?;
     Ok(())
 }

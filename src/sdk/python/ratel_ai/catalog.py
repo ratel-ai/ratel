@@ -55,14 +55,27 @@ class TraceSinkConfig:
 
 
 class ToolCatalog:
-    """Registry + executors. Register tools once, then search and invoke by id."""
+    """Registry + executors. Register tools once, then search and invoke by id.
 
-    def __init__(self, trace: TraceSinkConfig | None = None) -> None:
+    Pass `observe=True` to also record Ratel's tokens-saved metric on every search
+    — the full registered catalog vs the selected top-K, computed natively in
+    `ratel-ai-core` — into `last_savings` (in-memory only; nothing is emitted to
+    the trace stream or the network). Omit it and behavior is unchanged.
+    """
+
+    def __init__(
+        self,
+        trace: TraceSinkConfig | None = None,
+        observe: bool = False,
+    ) -> None:
         self._registry = ToolRegistry()
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
+        self._observe = bool(observe)
+        # The most recent search's savings (full vs selected tokens), or None.
+        self.last_savings: dict[str, int] | None = None
 
     def register(self, tool: ExecutableTool) -> None:
         if tool.execute is None:
@@ -83,8 +96,33 @@ class ToolCatalog:
             output_schema=tool.output_schema,
         )
 
-    def search(self, query: str, top_k: int, origin: SearchOrigin = "direct") -> list[SearchHit]:
-        return self._registry.search_with_origin(query, top_k, origin)
+    def search(
+        self, query: str, top_k: int, origin: SearchOrigin = "direct"
+    ) -> list[SearchHit]:
+        hits = self._registry.search_with_origin(query, top_k, origin)
+        if self._observe:
+            self._record_savings(hits, top_k)
+        return hits
+
+    def _record_savings(self, hits: list[SearchHit], top_k: int) -> None:
+        """Record the full-catalog-vs-top-K token saving into `last_savings`.
+
+        Best-effort: never raises. The footprint maths run in the core
+        (`catalog_tokens` / `tokens_for`); Python only records the result, in
+        memory — nothing is emitted to the trace stream or the network.
+        """
+        try:
+            full = int(self._registry.catalog_tokens())
+            selected = int(self._registry.tokens_for([hit.tool_id for hit in hits]))
+            saved = max(0, full - selected)
+            self.last_savings = {
+                "full_catalog_tokens": full,
+                "selected_tokens": selected,
+                "tokens_saved": saved,
+                "top_k": top_k,
+            }
+        except Exception:
+            pass
 
     def has(self, tool_id: str) -> bool:
         return tool_id in self._executors

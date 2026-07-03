@@ -10,7 +10,14 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `register_mcp_server` — ingest an upstream MCP server's tools (extra: mcp).
 """
 
-from ._native import SearchHit, SkillHit, SkillRegistry, ToolRegistry
+from ._native import (
+    SearchHit,
+    SkillHit,
+    SkillRegistry,
+    ToolRegistry,
+    estimate_cost_usd,
+    estimate_tokens,
+)
 from .catalog import (
     ExecutableTool,
     Executor,
@@ -56,6 +63,8 @@ __all__ = [
     "ToolRegistry",
     "TraceSinkConfig",
     "UpstreamServerInfo",
+    "estimate_cost_usd",
+    "estimate_tokens",
     "format_upstream_line",
     "get_skill_content_tool",
     "invoke_tool_tool",
