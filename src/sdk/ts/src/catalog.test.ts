@@ -139,3 +139,47 @@ describe("ToolCatalog tracing", () => {
     expect(search?.origin).toBe("agent");
   });
 });
+
+describe("ToolCatalog observe (tokens saved)", () => {
+  const sendEmail: ExecutableTool = {
+    id: "send_email",
+    name: "send_email",
+    description: "Send an email message to one or more recipients with a subject and body.",
+    inputSchema: { properties: { to: { type: "string" } } },
+    outputSchema: {},
+    execute: async () => ({}),
+  };
+
+  it("records lastSavings (in-memory only) when observing", () => {
+    const catalog = new ToolCatalog({ observe: true, trace: { kind: "memory", sessionId: "t" } });
+    catalog.register(readFile);
+    catalog.register(sendEmail);
+    catalog.drainTraceEvents(); // discard register churn
+
+    catalog.search("read a file from disk", 1);
+
+    const sv = catalog.lastSavings;
+    expect(sv).toBeDefined();
+    if (!sv) return;
+    expect(sv.topK).toBe(1);
+    expect(sv.fullCatalogTokens).toBeGreaterThan(sv.selectedTokens);
+    expect(sv.tokensSaved).toBeGreaterThan(0);
+
+    // Savings is in-memory only — nothing is emitted to the trace stream.
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    expect(events.some((e) => e.type === "tokens_saved")).toBe(false);
+  });
+
+  it("records nothing extra when not observing", () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    catalog.register(readFile);
+    catalog.register(sendEmail);
+    catalog.drainTraceEvents();
+
+    catalog.search("read a file", 1);
+
+    expect(catalog.lastSavings).toBeUndefined();
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    expect(events.some((e) => e.type === "tokens_saved")).toBe(false);
+  });
+});

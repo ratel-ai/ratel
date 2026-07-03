@@ -1,10 +1,11 @@
 export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
-export { SkillRegistry, ToolRegistry } from "../native/index.cjs";
+export { estimateCostUsd, estimateTokens, SkillRegistry, ToolRegistry } from "../native/index.cjs";
 export type {
   ExecutableTool,
   Executor,
   SearchOrigin,
   ToolCatalogOptions,
+  ToolSavings,
   TraceSinkConfig,
 } from "./catalog.js";
 export { ToolCatalog } from "./catalog.js";

@@ -14,20 +14,38 @@ export type TraceSinkConfig =
 
 export type SearchOrigin = "direct" | "agent";
 
+/** Ratel's tokens-saved metric for one search: full catalog vs the selected top-K. */
+export interface ToolSavings {
+  fullCatalogTokens: number;
+  selectedTokens: number;
+  tokensSaved: number;
+  topK: number;
+}
+
 export interface ToolCatalogOptions {
   trace?: TraceSinkConfig;
+  /**
+   * Record Ratel's tokens-saved metric (full catalog vs selected top-K, computed
+   * natively in `ratel-ai-core`) on every search into `lastSavings`. In-memory
+   * only — best-effort, never emitted to the trace stream or the network.
+   */
+  observe?: boolean;
 }
 
 export class ToolCatalog {
   private readonly registry: ToolRegistry;
   private readonly executors = new Map<string, Executor>();
   private readonly tools = new Map<string, Tool>();
+  private readonly observe: boolean;
+  /** The most recent search's savings (full vs selected tokens), or undefined. */
+  lastSavings: ToolSavings | undefined;
 
   constructor(options: ToolCatalogOptions = {}) {
     this.registry = new ToolRegistry();
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
+    this.observe = options.observe ?? false;
   }
 
   register(tool: ExecutableTool): void {
@@ -38,7 +56,31 @@ export class ToolCatalog {
   }
 
   search(query: string, topK: number, origin: SearchOrigin = "direct"): SearchHit[] {
-    return this.registry.searchWithOrigin(query, topK, origin);
+    const hits = this.registry.searchWithOrigin(query, topK, origin);
+    if (this.observe) {
+      this.recordSavings(hits, topK);
+    }
+    return hits;
+  }
+
+  /**
+   * Record the full-catalog-vs-top-K token saving into `lastSavings`. Best-effort:
+   * never throws. The footprint maths run in the core (`catalogTokens` / `tokensFor`).
+   */
+  private recordSavings(hits: SearchHit[], topK: number): void {
+    try {
+      const full = Math.trunc(this.registry.catalogTokens());
+      const selected = Math.trunc(this.registry.tokensFor(hits.map((hit) => hit.toolId)));
+      const tokensSaved = Math.max(0, full - selected);
+      this.lastSavings = {
+        fullCatalogTokens: full,
+        selectedTokens: selected,
+        tokensSaved,
+        topK,
+      };
+    } catch {
+      // never break search over a metrics side-effect
+    }
   }
 
   has(toolId: string): boolean {

@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Usage estimation** bound from `ratel-ai-core`: `estimateTokens` and `estimateCostUsd`, plus `ToolCatalog({ observe })` which records the full-catalog-vs-selected-top-K saving on each search into `lastSavings` (in-memory, best-effort, never emitted). No wire format — usage/cost telemetry rides `@ratel-ai/cloud`'s ADR-0013 event. See [ADR-0015](../../../docs/adr/0015-usage-estimation-in-core.md).
+
 ## [0.2.0] - 2026-06-16
 
 ### Changed
