@@ -66,4 +66,8 @@ Built-in sinks:
 
 Schema: `TraceEvent` is a tagged enum (search, index_churn, skill_search, skill_churn, skill_invoke, invoke_*, gateway_*, upstream_*, auth_*) wrapped in `TraceEnvelope { v, ts, session_id, ...event }`. The reliability profile is **query-log shaped** — best-effort, sampleable, lossy on backpressure. See ADR-0009 for the full rationale.
 
+## Usage estimation
+
+Network-free token/cost maths for showing what context selection saved and what a call cost. `estimate_tokens` is the `len / 4` heuristic; `tool_footprint` / `skill_footprint` (and `tool_tokens` / `skill_tokens`) price one definition; `ToolRegistry` / `SkillRegistry` expose `catalog_tokens()` (the full registered corpus) and `tokens_for(&ids)` (a search's hits), so `tokens_saved(catalog_tokens, tokens_for(hits))` is the realized saving. `estimate_cost_usd(model, input, output)` gives a coarse USD estimate. These bind directly into the TS and Python SDKs — no wire format lives here. See [ADR‑0015](../../../docs/adr/0015-usage-estimation-in-core.md).
+
 The custom `TraceSink` trait lets embedders forward events to their own pipeline (HTTP, structured logger, ring buffer). The trait carries a `sample_rate()` knob (defaulting to `1.0`); the rate-limiter implementation is deferred to a later release.
