@@ -20,6 +20,6 @@ mod message;
 mod validate;
 
 pub use content::Block;
-pub use event::{Event, FinishReason, Params, ToolDef, Usage};
+pub use event::{Event, FinishReason, Params, Savings, SourceTokens, ToolDef, Usage};
 pub use message::{Content, Message};
 pub use validate::{Issue, ValidationError, validate};

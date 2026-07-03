@@ -40,6 +40,11 @@ pub struct Event {
     /// Why generation stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
+    /// Ratel context-engineering savings for this call — what selection kept out
+    /// of the prompt, broken down by source. Optional and additive (ADR-0015 kept
+    /// the maths in the SDK; ADR-0016 carries the result on the wire).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub savings: Option<Savings>,
 }
 
 /// `skip_serializing_if` predicate: omit `stream` on the wire when it is `false`.
@@ -80,6 +85,35 @@ pub struct Usage {
     /// Subset of `output_tokens` spent on reasoning; not counted on top of them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_tokens: Option<u64>,
+}
+
+/// Per-context-source token counts, keyed by the sources Ratel breaks spend and
+/// savings down by. Every field defaults to `0`, so a caller can populate only the
+/// sources it measures (Ratel fills `tools` / `skills`; the host supplies the rest).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceTokens {
+    #[serde(default)]
+    pub skills: u64,
+    #[serde(default)]
+    pub tools: u64,
+    #[serde(default)]
+    pub history: u64,
+    #[serde(default)]
+    pub memory: u64,
+    #[serde(default)]
+    pub user_input: u64,
+}
+
+/// Context-engineering savings for one call: what selection kept out of the prompt,
+/// attributed per source. `tokens_by_category` is the spend actually sent; the two
+/// optional maps are the realized and the potential (observe-only) savings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Savings {
+    pub tokens_by_category: SourceTokens,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_by_category: Option<SourceTokens>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saveable_by_category: Option<SourceTokens>,
 }
 
 /// Why generation stopped, normalized across providers.

@@ -118,3 +118,25 @@ def test_empty_object_does_not_raise() -> None:
 def test_non_object_message_reported() -> None:
     event = {"provider": "p", "model": "m", "ts": "t", "messages": [None]}
     assert paths(event) == ["messages[0]"]
+
+
+def test_full_savings_facet_is_valid() -> None:
+    event = {
+        **minimal(),
+        "savings": {
+            "tokens_by_category": {
+                "skills": 120,
+                "tools": 400,
+                "history": 900,
+                "memory": 50,
+                "user_input": 30,
+            },
+            "saved_by_category": {"tools": 3800},
+        },
+    }
+    assert validate(event).ok
+
+
+def test_over_int4_savings_count_rejected() -> None:
+    event = {**minimal(), "savings": {"tokens_by_category": {"tools": 3_000_000_000}}}
+    assert paths(event) == ["savings.tokens_by_category.tools"]

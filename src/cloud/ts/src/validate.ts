@@ -26,6 +26,7 @@ const MAX_STOP = 100;
 const ROLES = new Set(["user", "assistant", "tool"]);
 const BLOCK_TYPES = new Set(["text", "tool_call", "image", "file"]);
 const FINISH_REASONS = new Set(["stop", "length", "tool_call", "content_filter", "refusal"]);
+const SOURCE_KEYS = ["skills", "tools", "history", "memory", "user_input"] as const;
 
 type Fail = (path: string, message: string) => void;
 
@@ -120,8 +121,34 @@ export function validate(event: Event): ValidationResult {
   }
   validateUsage(ev.usage, fail);
   validateParams(ev.params, fail);
+  validateSavings(ev.savings, fail);
 
   return issues.length === 0 ? { ok: true } : { ok: false, issues };
+}
+
+function validateSourceTokens(src: unknown, base: string, fail: Fail): void {
+  if (!isObject(src)) {
+    fail(base, "must be an object");
+    return;
+  }
+  for (const key of SOURCE_KEYS) {
+    const value = src[key];
+    if (value !== undefined && !isTokenCount(value))
+      fail(`${base}.${key}`, "must be a non-negative integer within range");
+  }
+}
+
+function validateSavings(savings: unknown, fail: Fail): void {
+  if (savings === undefined) return;
+  if (!isObject(savings)) {
+    fail("savings", "must be an object");
+    return;
+  }
+  validateSourceTokens(savings.tokens_by_category, "savings.tokens_by_category", fail);
+  if (savings.saved_by_category !== undefined)
+    validateSourceTokens(savings.saved_by_category, "savings.saved_by_category", fail);
+  if (savings.saveable_by_category !== undefined)
+    validateSourceTokens(savings.saveable_by_category, "savings.saveable_by_category", fail);
 }
 
 function validateContent(content: unknown, allowToolCall: boolean, base: string, fail: Fail): void {

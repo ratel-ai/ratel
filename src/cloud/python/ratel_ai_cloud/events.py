@@ -97,6 +97,30 @@ class Usage(_UsageRequired, total=False):
 FinishReason = Literal["stop", "length", "tool_call", "content_filter", "refusal"]
 
 
+class SourceTokens(TypedDict, total=False):
+    """Per-context-source token counts. Populate only the sources you measure;
+    Ratel fills ``tools`` / ``skills``, the host supplies the rest."""
+
+    skills: int
+    tools: int
+    history: int
+    memory: int
+    user_input: int
+
+
+class _SavingsRequired(TypedDict):
+    tokens_by_category: SourceTokens
+
+
+class Savings(_SavingsRequired, total=False):
+    """Context-engineering savings for one call: what selection kept out of the
+    prompt, attributed per source. ``tokens_by_category`` is the spend sent; the
+    optional maps are the realized and the potential (observe-only) savings."""
+
+    saved_by_category: SourceTokens
+    saveable_by_category: SourceTokens
+
+
 class _EventBase(TypedDict):
     provider: str
     model: str
@@ -111,6 +135,8 @@ class _EventOptional(TypedDict, total=False):
     params: Params
     usage: Usage
     finish_reason: FinishReason
+    # Ratel context-engineering savings for this call (ADR-0016).
+    savings: Savings
 
 
 class Event(_EventBase, _EventOptional):

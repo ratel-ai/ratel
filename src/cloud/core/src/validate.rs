@@ -1,5 +1,5 @@
 use crate::content::Block;
-use crate::event::{Event, Usage};
+use crate::event::{Event, Savings, SourceTokens, Usage};
 use crate::message::{Content, Message};
 
 /// Ingest bounds, mirrored from the cloud consumer's schema (`cloud-schema.ts`) so an
@@ -96,6 +96,9 @@ pub fn validate(event: &Event) -> Result<(), ValidationError> {
 
     if let Some(usage) = &event.usage {
         validate_usage(usage, &mut issues);
+    }
+    if let Some(savings) = &event.savings {
+        validate_savings(savings, &mut issues);
     }
     if event.latency_ms.is_some_and(|latency| latency > MAX_INT4) {
         issues.push(issue("latency_ms", "exceeds maximum"));
@@ -219,6 +222,37 @@ fn validate_usage(usage: &Usage, issues: &mut Vec<Issue>) {
     }
 }
 
+fn validate_savings(savings: &Savings, issues: &mut Vec<Issue>) {
+    validate_source_tokens(
+        &savings.tokens_by_category,
+        "savings.tokens_by_category",
+        issues,
+    );
+    if let Some(saved) = &savings.saved_by_category {
+        validate_source_tokens(saved, "savings.saved_by_category", issues);
+    }
+    if let Some(saveable) = &savings.saveable_by_category {
+        validate_source_tokens(saveable, "savings.saveable_by_category", issues);
+    }
+}
+
+/// Every per-source count must fit the consumer's `int4` ceiling. Rust's `u64`
+/// already rules out negatives and non-integers; the pure-language mirrors, which
+/// have no such gate, re-check both in their own `validate`.
+fn validate_source_tokens(src: &SourceTokens, base: &str, issues: &mut Vec<Issue>) {
+    for (name, value) in [
+        ("skills", src.skills),
+        ("tools", src.tools),
+        ("history", src.history),
+        ("memory", src.memory),
+        ("user_input", src.user_input),
+    ] {
+        if value > MAX_INT4 {
+            issues.push(issue(&format!("{base}.{name}"), "exceeds maximum"));
+        }
+    }
+}
+
 /// A required identifier: non-empty (after trim) and within the name length bound.
 fn check_name(s: &str, path: &str, issues: &mut Vec<Issue>) {
     if s.trim().is_empty() {
@@ -246,7 +280,7 @@ fn issue(path: &str, message: &str) -> Issue {
 mod tests {
     use super::*;
     use crate::content::Block;
-    use crate::event::{Event, Usage};
+    use crate::event::{Event, Savings, SourceTokens, Usage};
     use crate::message::{Content, Message};
     use serde_json::json;
 
@@ -265,6 +299,7 @@ mod tests {
             params: None,
             usage: None,
             finish_reason: None,
+            savings: None,
         }
     }
 
@@ -403,5 +438,40 @@ mod tests {
         });
         let err = validate(&e).unwrap_err();
         assert_eq!(paths(&err), vec!["usage.input_tokens"]);
+    }
+
+    #[test]
+    fn savings_facet_is_valid() {
+        let mut e = minimal();
+        e.savings = Some(Savings {
+            tokens_by_category: SourceTokens {
+                skills: 120,
+                tools: 400,
+                history: 900,
+                memory: 50,
+                user_input: 30,
+            },
+            saved_by_category: Some(SourceTokens {
+                tools: 3800,
+                ..Default::default()
+            }),
+            saveable_by_category: None,
+        });
+        assert!(validate(&e).is_ok());
+    }
+
+    #[test]
+    fn savings_token_over_int4_is_rejected() {
+        let mut e = minimal();
+        e.savings = Some(Savings {
+            tokens_by_category: SourceTokens {
+                tools: 3_000_000_000,
+                ..Default::default()
+            },
+            saved_by_category: None,
+            saveable_by_category: None,
+        });
+        let err = validate(&e).unwrap_err();
+        assert_eq!(paths(&err), vec!["savings.tokens_by_category.tools"]);
     }
 }

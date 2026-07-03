@@ -41,9 +41,11 @@ cargo run -p ratel-ai-cloud --example dump_fixtures
 ## Schema
 
 [`Event`] is the entire v1 surface: resolved `provider` / `model`, `ts`, `stream`, optional `system`,
-`tools`, `messages`, `params`, `usage`, and `finish_reason`. Messages are tagged on `role`
-(`user` / `assistant` / `tool`); content is a string or a list of typed [`Block`]s (`text`, `tool_call`,
-`image`, `file`). Tool-call arguments are a **parsed object**, never a JSON string.
+`tools`, `messages`, `params`, `usage`, `finish_reason`, and an optional Ratel `savings` facet
+(per-source spend and what selection kept out of the prompt — [ADR-0016](../../../docs/adr/0016-cloud-event-savings-facet.md)).
+Messages are tagged on `role` (`user` / `assistant` / `tool`); content is a string or a list of typed
+[`Block`]s (`text`, `tool_call`, `image`, `file`). Tool-call arguments are a **parsed object**, never a
+JSON string.
 
 The schema is **strict but forward-compatible**: there is no escape-hatch bag (the type surface is
 closed), but deserialization ignores unknown fields so adding fields later stays non-breaking. Semantic

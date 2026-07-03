@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Optional `savings` facet on `Event` — per-source spend plus realized / potential savings
+  (`SourceTokens` / `Savings`), validated to the `int4` bound. Additive and backward-compatible; lets a
+  Ratel SDK user report what context selection kept out of the prompt
+  ([ADR-0016](../../../docs/adr/0016-cloud-event-savings-facet.md)).
 - Initial release. Pure-TypeScript client for Ratel Cloud telemetry — no native addon, runs on edge
   runtimes. Event schema mirrors the canonical `ratel-ai-cloud` Rust crate, kept honest by shared
   conformance fixtures ([ADR-0013](../../../docs/adr/0013-cloud-telemetry-unified-schema.md)).

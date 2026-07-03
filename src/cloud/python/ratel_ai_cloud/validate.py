@@ -25,6 +25,7 @@ MAX_STOP = 100
 _ROLES = frozenset({"user", "assistant", "tool"})
 _BLOCK_TYPES = frozenset({"text", "tool_call", "image", "file"})
 _FINISH_REASONS = frozenset({"stop", "length", "tool_call", "content_filter", "refusal"})
+_SOURCE_KEYS = ("skills", "tools", "history", "memory", "user_input")
 
 Fail = Callable[[str, str], None]
 
@@ -133,6 +134,7 @@ def validate(event: Event) -> ValidationResult:
         fail("latency_ms", "must be a non-negative number within range")
     _validate_usage(ev.get("usage"), fail)
     _validate_params(ev.get("params"), fail)
+    _validate_savings(ev.get("savings"), fail)
 
     return ValidationResult(ok=not issues, issues=issues)
 
@@ -218,6 +220,31 @@ def _validate_usage(usage: Any, fail: Fail) -> None:
             fail("usage.reasoning_tokens", "must be a non-negative integer within range")
         elif reasoning > output_tokens:
             fail("usage.reasoning_tokens", "must not exceed output_tokens")
+
+
+def _validate_savings(savings: Any, fail: Fail) -> None:
+    if savings is None:
+        return
+    if not _is_object(savings):
+        fail("savings", "must be an object")
+        return
+    _validate_source_tokens(savings.get("tokens_by_category"), "savings.tokens_by_category", fail)
+    if savings.get("saved_by_category") is not None:
+        _validate_source_tokens(savings.get("saved_by_category"), "savings.saved_by_category", fail)
+    if savings.get("saveable_by_category") is not None:
+        _validate_source_tokens(
+            savings.get("saveable_by_category"), "savings.saveable_by_category", fail
+        )
+
+
+def _validate_source_tokens(src: Any, base: str, fail: Fail) -> None:
+    if not _is_object(src):
+        fail(base, "must be an object")
+        return
+    for key in _SOURCE_KEYS:
+        value = src.get(key)
+        if value is not None and not _is_token_count(value):
+            fail(f"{base}.{key}", "must be a non-negative integer within range")
 
 
 def _validate_params(params: Any, fail: Fail) -> None:

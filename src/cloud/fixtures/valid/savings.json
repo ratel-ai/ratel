@@ -1,0 +1,35 @@
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6",
+  "ts": "2026-07-03T12:00:00Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Summarize the incident channel."
+    }
+  ],
+  "usage": { "input_tokens": 1800, "output_tokens": 240 },
+  "savings": {
+    "tokens_by_category": {
+      "skills": 120,
+      "tools": 400,
+      "history": 900,
+      "memory": 260,
+      "user_input": 120
+    },
+    "saved_by_category": {
+      "skills": 0,
+      "tools": 3800,
+      "history": 0,
+      "memory": 0,
+      "user_input": 0
+    },
+    "saveable_by_category": {
+      "skills": 0,
+      "tools": 0,
+      "history": 5200,
+      "memory": 0,
+      "user_input": 0
+    }
+  }
+}

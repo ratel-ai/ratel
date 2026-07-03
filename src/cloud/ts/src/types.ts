@@ -89,6 +89,25 @@ export interface Usage {
 
 export type FinishReason = "stop" | "length" | "tool_call" | "content_filter" | "refusal";
 
+/** Per-context-source token counts. Populate only the sources you measure; Ratel
+ * fills `tools` / `skills`, the host supplies `history` / `memory` / `user_input`. */
+export interface SourceTokens {
+  skills?: number;
+  tools?: number;
+  history?: number;
+  memory?: number;
+  user_input?: number;
+}
+
+/** Context-engineering savings for one call: what selection kept out of the prompt,
+ * attributed per source. `tokens_by_category` is the spend sent; the optional maps
+ * are the realized and the potential (observe-only) savings. */
+export interface Savings {
+  tokens_by_category: SourceTokens;
+  saved_by_category?: SourceTokens;
+  saveable_by_category?: SourceTokens;
+}
+
 /** A single LLM-call event — the entire v1 telemetry surface. */
 export interface Event {
   /** Resolved provider, e.g. `openai`, `anthropic`, `bedrock`. */
@@ -105,4 +124,6 @@ export interface Event {
   params?: Params;
   usage?: Usage;
   finish_reason?: FinishReason;
+  /** Ratel context-engineering savings for this call (optional; ADR-0016). */
+  savings?: Savings;
 }

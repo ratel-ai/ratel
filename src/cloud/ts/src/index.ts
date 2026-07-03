@@ -12,6 +12,8 @@ export type {
   JsonValue,
   Message,
   Params,
+  Savings,
+  SourceTokens,
   TextBlock,
   ToolCallBlock,
   ToolDef,

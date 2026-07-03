@@ -120,4 +120,23 @@ describe("validate", () => {
     expect(() => validate(e)).not.toThrow();
     expect(paths(e)).toEqual(["messages[0]"]);
   });
+
+  it("accepts a full savings facet", () => {
+    const e: Event = {
+      ...minimal(),
+      savings: {
+        tokens_by_category: { skills: 120, tools: 400, history: 900, memory: 50, user_input: 30 },
+        saved_by_category: { tools: 3800 },
+      },
+    };
+    expect(validate(e)).toEqual({ ok: true });
+  });
+
+  it("rejects an over-int4 savings count", () => {
+    const e: Event = {
+      ...minimal(),
+      savings: { tokens_by_category: { tools: 3_000_000_000 } },
+    };
+    expect(paths(e)).toEqual(["savings.tokens_by_category.tools"]);
+  });
 });

@@ -51,6 +51,7 @@ fn fixtures() -> Vec<(&'static str, Event)> {
                 params: None,
                 usage: None,
                 finish_reason: None,
+                savings: None,
             },
         ),
         (
@@ -105,6 +106,7 @@ fn fixtures() -> Vec<(&'static str, Event)> {
                     reasoning_tokens: Some(22),
                 }),
                 finish_reason: Some(FinishReason::ToolCall),
+                savings: None,
             },
         ),
         (
@@ -142,6 +144,7 @@ fn fixtures() -> Vec<(&'static str, Event)> {
                     reasoning_tokens: None,
                 }),
                 finish_reason: Some(FinishReason::Stop),
+                savings: None,
             },
         ),
         (
@@ -179,6 +182,7 @@ fn fixtures() -> Vec<(&'static str, Event)> {
                     reasoning_tokens: None,
                 }),
                 finish_reason: Some(FinishReason::Stop),
+                savings: None,
             },
         ),
     ]
