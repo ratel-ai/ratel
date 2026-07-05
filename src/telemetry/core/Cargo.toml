@@ -1,0 +1,13 @@
+[package]
+name = "ratel-ai-telemetry"
+version = "0.1.0-rc.1" # telemetry-v* release unit (ADR-0016)
+edition.workspace = true
+license = "MIT"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+authors.workspace = true
+readme = "README.md"
+description = "Ratel telemetry conventions — the ratel.* overlay on OpenTelemetry gen_ai spans. Constants and helpers for the Ratel context engineering platform."
+keywords = ["telemetry", "opentelemetry", "observability", "gen-ai", "ratel"]
+categories = ["development-tools::profiling"]

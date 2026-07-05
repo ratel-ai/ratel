@@ -35,6 +35,7 @@ build/
 # TypeScript
 *.tsbuildinfo
 src/sdk/ts/dist/
+src/telemetry/ts/dist/
 
 # NAPI native binding outputs
 src/sdk/ts/native/index.cjs

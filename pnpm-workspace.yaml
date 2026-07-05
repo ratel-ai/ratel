@@ -1,3 +1,4 @@
 packages:
   - 'src/sdk/ts'
+  - 'src/telemetry/ts'
   - 'examples/*'

@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ratel-ai-telemetry"
+version = "0.1.0rc1"
+description = "Ratel telemetry conventions — the ratel.* overlay on OpenTelemetry gen_ai spans. init() helper and constants for the Ratel context engineering platform."
+readme = "README.md"
+license = { file = "LICENSE.md" }
+authors = [{ name = "Agentified" }]
+requires-python = ">=3.9"
+keywords = [
+    "telemetry",
+    "opentelemetry",
+    "observability",
+    "gen-ai",
+    "ai-agents",
+    "ratel",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Monitoring",
+]
+# The vocabulary constants have no runtime deps. The init() OTLP builder adds the
+# OpenTelemetry SDK deps in a later slice.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+
+[project.urls]
+Homepage = "https://github.com/ratel-ai/ratel"
+Repository = "https://github.com/ratel-ai/ratel"
+Issues = "https://github.com/ratel-ai/ratel/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ratel_ai_telemetry"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+# Runtime floor is 3.9; mypy's minimum supported target is 3.10, so we type-check
+# against that (matches the Python SDK).
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
