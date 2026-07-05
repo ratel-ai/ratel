@@ -1,8 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "src/core/lib",
-    "src/cloud/core",
+    "src/core",
     "src/sdk/ts/native",
     "src/sdk/python/native",
 ]
@@ -10,11 +9,10 @@ members = [
 [workspace.package]
 version = "0.2.0"
 edition = "2024"
-license = "MIT"
 repository = "https://github.com/ratel-ai/ratel"
 homepage = "https://github.com/ratel-ai/ratel"
 documentation = "https://docs.rs/ratel-ai-core"
 authors = ["Agentified"]
 
 [workspace.dependencies]
-ratel-ai-core = { path = "src/core/lib" }
+ratel-ai-core = { path = "src/core" }

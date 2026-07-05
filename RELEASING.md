@@ -81,7 +81,7 @@ a one-member team). Run the E2E locally per `e2e/README.md`.
 1. **Bump versions everywhere** to the new value (e.g. `0.1.4-rc.2`, then later `0.1.4`):
    - `Cargo.toml` (workspace `version` field)
    - `src/sdk/ts/package.json` (`version` only — `optionalDependencies` is not stored in source; it is injected at pack/publish time by `napi pre-publish`, which reads `napi.targets` and writes the block referencing each `npm/<triple>/package.json` version)
-   - `src/integrations/cli/package.json` (`version`)
+   - `src/cli/package.json` (`version`)
 2. **Verify locally** before tagging:
    - `cargo publish -p ratel-ai-core --dry-run --allow-dirty`
    - `pnpm -r build`, `pnpm -r typecheck`, `pnpm -r lint`, `pnpm -r test`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`

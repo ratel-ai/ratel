@@ -60,7 +60,7 @@ We publish three artifacts from this repo in lockstep: `ratel-ai-core` (crates.i
 
 Before tagging a release:
 
-1. Bump the version in `Cargo.toml`, `src/sdk/ts/package.json`, `src/integrations/cli/package.json` (kept in lockstep — the release workflow validates).
+1. Bump the version in `Cargo.toml`, `src/sdk/ts/package.json`, `src/cli/package.json` (kept in lockstep — the release workflow validates).
 2. Run the `/changelog` skill (`.claude/skills/changelog/`). It drafts per-package entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the three CHANGELOGs. For GA versions (no `-rc` suffix), it collapses any existing `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]` section.
 3. Commit the version bumps and CHANGELOG updates together (typically `release: vX.Y.Z`), tag, push.
 
@@ -74,4 +74,4 @@ The release workflow's `tag-version-check` job rejects any tag whose CHANGELOGs 
 
 ## License
 
-Contributions are licensed under the project's [MIT License](LICENSE.md). By submitting a PR you agree your contribution is licensed accordingly.
+The kernel (`ratel-ai-core`) is licensed under [Apache-2.0](LICENSE-APACHE); every other component (SDKs, CLI, telemetry helpers, examples) is [MIT](LICENSE.md) — see [ADR-0017](docs/adr/0017-relicense-core-apache-2.md). By submitting a PR you agree your contribution is licensed under the terms governing the component it touches.

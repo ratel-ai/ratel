@@ -3,7 +3,7 @@
   <h4>The <code>ratel</code> CLI — manage MCP servers across scopes and front Claude Code with Ratel.</h4>
 
   <p>
-    <a href="../../../docs/">Docs</a> •
+    <a href="../../docs/">Docs</a> •
     <a href="https://discord.gg/hdKpx69NR">Discord</a>
   </p>
 
@@ -11,11 +11,11 @@
     <a href="https://www.npmjs.com/package/@ratel-ai/cli"><img src="https://img.shields.io/npm/v/@ratel-ai/cli?label=npm&color=cb3837" alt="npm" /></a>
     <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
     <a href="https://discord.gg/hdKpx69NR"><img src="https://img.shields.io/discord/1478702964003705015?logo=discord&logoColor=white&color=7289da&label=discord" alt="Discord" /></a>
-    <a href="../../../LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license" /></a>
+    <a href="../../LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license" /></a>
   </p>
 </div>
 
-The `ratel` CLI: manage MCP servers across Ratel scopes, run the Ratel MCP gateway, and import Claude Code's existing MCP setup. The CLI is a thin orchestrator over [`@ratel-ai/mcp-server`](../mcp-server/README.md) (gateway + config types) and [`@ratel-ai/sdk`](../../sdk/ts/README.md) (catalog + upstream registration).
+The `ratel` CLI: manage MCP servers across Ratel scopes, run the Ratel MCP gateway, and import Claude Code's existing MCP setup. The CLI is a thin orchestrator over [`@ratel-ai/mcp-server`](https://github.com/ratel-ai/ratel-mcp) (gateway + config types) and [`@ratel-ai/sdk`](../sdk/ts/README.md) (catalog + upstream registration).
 
 ## Install
 
@@ -130,7 +130,7 @@ When you run `ratel serve --config a.json --config b.json --config c.json`, the 
 
 ## OAuth flow
 
-HTTP and SSE upstreams that require OAuth authorization are handled at the gateway layer ([`@ratel-ai/mcp-server`'s OAuth section](../mcp-server/README.md#oauth-protected-upstreams) has the architectural detail). From the CLI:
+HTTP and SSE upstreams that require OAuth authorization are handled at the gateway layer ([`@ratel-ai/mcp-server`'s OAuth section](https://github.com/ratel-ai/ratel-mcp#oauth-protected-upstreams) has the architectural detail). From the CLI:
 
 1. `ratel mcp add --scope user my-upstream https://mcp.example/mcp [--client-id <id>] [--callback-port <n>] [--oauth-scope "<s>"]` — records the entry **and** drives the OAuth flow inline: opens your default browser to the upstream's authorization URL, captures the redirect on `127.0.0.1:<port>`, exchanges the code for tokens, persists them at `~/.ratel/oauth/my-upstream.json` (mode 0600). Most upstreams support Dynamic Client Registration; only pass `--client-id` if yours doesn't. Pass `--no-fetch-description` to defer auth (handy on headless boxes — see step 2).
 2. `ratel mcp auth my-upstream` — refresh-first. If a `refresh_token` is on disk, rotates silently with no browser involvement (output: `authorized (refreshed)`). Falls back to PKCE — opens the browser, completes the loopback redirect — only when no refresh token is available or the auth server rejects the refresh (output: `authorized (re-authed)`). With no `<name>`, runs against every upstream the merged config marks `needsAuth`.
@@ -143,7 +143,7 @@ Token state is per-user-per-machine (`~/.ratel/oauth/`), not per-config-scope. M
 
 ## Telemetry
 
-`ratel serve` writes one JSON line per event to `~/.ratel/telemetry/<project-slug>/<ISO-ts>-<short>.jsonl` by default — every search, invoke, gateway call, upstream MCP call, and OAuth event flows through the same JSONL ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). The slug is `process.cwd()` at serve time with every `/` and `.` replaced by `-`, mirroring Claude Code's `~/.claude/projects/` convention. Best-effort, sampleable, lossy on backpressure — query-log shaped, not oplog.
+`ratel serve` writes one JSON line per event to `~/.ratel/telemetry/<project-slug>/<ISO-ts>-<short>.jsonl` by default — every search, invoke, gateway call, upstream MCP call, and OAuth event flows through the same JSONL ([ADR 0009](../../docs/adr/0009-trace-events-core-owned-schema.md)). The slug is `process.cwd()` at serve time with every `/` and `.` replaced by `-`, mirroring Claude Code's `~/.claude/projects/` convention. Best-effort, sampleable, lossy on backpressure — query-log shaped, not oplog.
 
 Flags / env on `ratel serve`:
 
@@ -161,7 +161,7 @@ Every `import`, `link`, `add`, `edit`, and `remove` snapshots the files it touch
 
 ## Locating the binary for Claude Code
 
-When the wizard writes the `ratel` entry into Claude's config, it has to record an absolute command. The cascade is: `$RATEL_BIN` → `which ratel` on PATH → walk up to `pnpm-workspace.yaml` and use the workspace's built `src/integrations/cli/dist/bin.js` (run via `node`) → ask you. Set `RATEL_BIN` to skip the cascade.
+When the wizard writes the `ratel` entry into Claude's config, it has to record an absolute command. The cascade is: `$RATEL_BIN` → `which ratel` on PATH → walk up to `pnpm-workspace.yaml` and use the workspace's built `src/cli/dist/bin.js` (run via `node`) → ask you. Set `RATEL_BIN` to skip the cascade.
 
 ## Build & test
 

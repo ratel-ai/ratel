@@ -1,5 +1,4 @@
 packages:
   - 'src/sdk/ts'
-  - 'src/cloud/ts'
-  - 'src/integrations/*'
+  - 'src/cli'
   - 'examples/*'

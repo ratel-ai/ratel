@@ -5,12 +5,9 @@
       "src/sdk/**/*.ts",
       "src/sdk/**/*.tsx",
       "src/sdk/**/*.js",
-      "src/cloud/**/*.ts",
-      "src/cloud/**/*.tsx",
-      "src/cloud/**/*.js",
-      "src/integrations/**/*.ts",
-      "src/integrations/**/*.tsx",
-      "src/integrations/**/*.js",
+      "src/cli/**/*.ts",
+      "src/cli/**/*.tsx",
+      "src/cli/**/*.js",
       "benchmark/agent/src/**/*.ts",
       "benchmark/agent/src/**/*.tsx"
     ]
