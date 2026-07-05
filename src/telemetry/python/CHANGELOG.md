@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.2] - 2026-07-05
+
+### Added
+
+- Usage example in the README (runnable end-to-end in `examples/telemetry-python`).
+
+### Changed
+
+- Released as an independent PyPI unit under the `telemetry-py-v*` tag prefix.
+
 ## [0.1.0-rc.1] - 2026-07-05
 
 ### Added

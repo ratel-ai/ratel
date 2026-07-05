@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.2] - 2026-07-05
+
+### Changed
+
+- Released as an independent crates.io unit under the `telemetry-core-v*` tag prefix.
+
 ## [0.1.0-rc.1] - 2026-07-05
 
 ### Added
