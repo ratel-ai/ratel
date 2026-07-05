@@ -7,7 +7,9 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+# Versions are per-package (ADR-0016): each release unit carries its own version
+# in its own manifest, tagged independently (core-v*, sdk-js-v*, sdk-py-v*). Only
+# non-version metadata is shared here.
 edition = "2024"
 repository = "https://github.com/ratel-ai/ratel"
 homepage = "https://github.com/ratel-ai/ratel"
