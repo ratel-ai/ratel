@@ -33,9 +33,6 @@ function makeRepo(version = "0.2.0", pyVersion = version) {
   write("src/sdk/python/pyproject.toml", `[project]\nname = "ratel-ai"\nversion = "${pyVersion}"\n`);
   write("src/sdk/python/native/Cargo.toml", cargo("ratel-sdk-python-native"));
   write("src/sdk/python/CHANGELOG.md", changelog(version));
-  // cli
-  write("src/cli/package.json", json("@ratel-ai/cli"));
-  write("src/cli/CHANGELOG.md", changelog(version));
 
   return { root, write, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -44,7 +41,6 @@ test("parseTag splits prefix and version for every unit", () => {
   assert.deepEqual(parseTag("core-v0.2.0"), { unit: "core", version: "0.2.0" });
   assert.deepEqual(parseTag("sdk-js-v0.2.0"), { unit: "sdk-js", version: "0.2.0" });
   assert.deepEqual(parseTag("sdk-py-v1.4.0-rc.2"), { unit: "sdk-py", version: "1.4.0-rc.2" });
-  assert.deepEqual(parseTag("cli-v0.2.0"), { unit: "cli", version: "0.2.0" });
 });
 
 test("parseTag rejects the old lockstep tag and unknown prefixes", () => {
@@ -110,11 +106,11 @@ test("sdk-py accepts the PEP 440 normalized form in pyproject", () => {
   }
 });
 
-test("cli fails when the CHANGELOG lacks the version heading", () => {
+test("sdk-py fails when the CHANGELOG lacks the version heading", () => {
   const repo = makeRepo("0.2.0");
   try {
-    repo.write("src/cli/CHANGELOG.md", "# Changelog\n\n## [Unreleased]\n");
-    const r = checkReleaseTag("cli-v0.2.0", { root: repo.root });
+    repo.write("src/sdk/python/CHANGELOG.md", "# Changelog\n\n## [Unreleased]\n");
+    const r = checkReleaseTag("sdk-py-v0.2.0", { root: repo.root });
     assert.equal(r.ok, false);
     assert.ok(r.errors.some((e) => e.includes("CHANGELOG")), r.errors.join("; "));
   } finally {
@@ -125,8 +121,8 @@ test("cli fails when the CHANGELOG lacks the version heading", () => {
 test("a core tag only checks the core unit, ignoring drift elsewhere", () => {
   const repo = makeRepo("0.2.0");
   try {
-    // CLI is on a totally different version — must not affect a core release
-    repo.write("src/cli/package.json", JSON.stringify({ name: "@ratel-ai/cli", version: "9.9.9" }, null, 2));
+    // the JS SDK is on a totally different version — must not affect a core release
+    repo.write("src/sdk/ts/package.json", JSON.stringify({ name: "@ratel-ai/sdk", version: "9.9.9" }, null, 2));
     const r = checkReleaseTag("core-v0.2.0", { root: repo.root });
     assert.equal(r.ok, true, r.errors.join("; "));
   } finally {

@@ -1,7 +1,7 @@
 # End-to-end product checks (`e2e/`)
 
 These runners exercise the **real, installed distributables** (the wheel, the npm
-tarball + native binary, the CLI package) through each SDK's **public API** — not the
+tarball + native binary) through each SDK's **public API** — not the
 dev-mode source build. They are driven by the `pr-gate` workflow
 (`.github/workflows/pr-gate.yml`) after artifacts are built, and can be run locally.
 
@@ -23,10 +23,6 @@ exactly one runner fail:
 |--------|--------------------|-------------------|
 | `python/run_e2e.py` | `ratel-ai` wheel | `ToolCatalog` + `SkillCatalog` search/invoke; `search_tools_tool` / `invoke_tool_tool` / `get_skill_content_tool` / `search_capabilities_tool` |
 | `ts/run_e2e.mjs` | `@ratel-ai/sdk` (+ native binary) | `ToolCatalog` + `SkillCatalog` search/invoke; `searchToolsTool` / `invokeToolTool` / `getSkillContentTool` / `searchCapabilitiesTool` |
-| `cli/run_e2e.sh` | `@ratel-ai/cli` | binary loads + `mcp add/list/get/remove` round-trip (sandboxed `HOME`) |
-
-The CLI runner deliberately avoids spawning live MCP servers (passing `--description`
-skips the upstream probe); the deep search/invoke parity is proven through the two SDKs.
 
 ## Run locally
 
@@ -62,28 +58,9 @@ cp "$repo/e2e/ts/run_e2e.mjs" ./run_e2e.mjs
 RATEL_E2E_DIR="$repo/e2e" node run_e2e.mjs
 ```
 
-**CLI** — like the `pr-gate.yml` "CLI" step: the CLI depends on `@ratel-ai/sdk`, so install the
-**PR-built** SDK (loader + native subpackage) alongside the CLI tarball — otherwise `@ratel-ai/sdk`
-resolves from the npm registry (the wrong artifact, and unresolvable on a release-prep PR whose new
-version isn't published yet). Then point `RATEL_BIN` at the installed bin:
-```bash
-repo="$PWD"
-pnpm --filter @ratel-ai/sdk build && pnpm --filter @ratel-ai/cli build
-node_file="$(ls src/sdk/ts/native/ratel-sdk.*.node | head -1)"
-triple="$(basename "$node_file" .node | sed 's/^ratel-sdk\.//')"   # e.g. darwin-arm64
-cp "$node_file" "src/sdk/ts/npm/$triple/"
-rm -rf /tmp/ratel-cli && mkdir -p /tmp/ratel-cli
-pnpm --filter @ratel-ai/sdk pack --pack-destination /tmp/ratel-cli    # loader
-npm pack "./src/sdk/ts/npm/$triple" --pack-destination /tmp/ratel-cli # native subpackage
-pnpm --filter @ratel-ai/cli pack --pack-destination /tmp/ratel-cli    # CLI
-mkdir -p /tmp/ratel-e2e-cli && cd /tmp/ratel-e2e-cli && npm init -y >/dev/null
-npm install /tmp/ratel-cli/*.tgz             # CLI + PR-built SDK loader+subpackage
-RATEL_BIN="$PWD/node_modules/.bin/ratel" bash "$repo/e2e/cli/run_e2e.sh"
-```
-
 ## Extending
 
-When you add product surface (new tools, new skills, a new SDK method, a new CLI command):
+When you add product surface (new tools, new skills, a new SDK method):
 
 1. Add the tool(s) to `fixtures/catalog.json`, or the skill(s) to `fixtures/skills.json`
    (give each a distinctive description; most skills set only `id`/`name`/`description`/`body`,

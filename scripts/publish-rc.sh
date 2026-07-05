@@ -111,7 +111,7 @@ if [[ $SKIP_NPM -eq 0 ]]; then
   echo
 
   # Order matters: subpackages first (loader's optionalDependencies references them),
-  # then the loader, then cli.
+  # then the loader.
   PACKAGES=(
     "ratel-ai-sdk-darwin-arm64-${VERSION}.tgz|@ratel-ai/sdk-darwin-arm64"
     "ratel-ai-sdk-darwin-x64-${VERSION}.tgz|@ratel-ai/sdk-darwin-x64"
@@ -119,7 +119,6 @@ if [[ $SKIP_NPM -eq 0 ]]; then
     "ratel-ai-sdk-linux-arm64-gnu-${VERSION}.tgz|@ratel-ai/sdk-linux-arm64-gnu"
     "ratel-ai-sdk-win32-x64-msvc-${VERSION}.tgz|@ratel-ai/sdk-win32-x64-msvc"
     "ratel-ai-sdk-${VERSION}.tgz|@ratel-ai/sdk"
-    "ratel-ai-cli-${VERSION}.tgz|@ratel-ai/cli"
   )
 
   # Pre-flight: every expected tarball must exist.
@@ -141,8 +140,8 @@ if [[ $SKIP_NPM -eq 0 ]]; then
   #  (b) Capture the publish output. If the registry rejects with "previously
   #      published versions" anyway (CDN lag / replication), treat as already-
   #      published and continue.
-  # --provenance=false overrides publishConfig.provenance=true on SDK
-  # loader / cli. Provenance requires GH Actions OIDC, which a
+  # --provenance=false overrides publishConfig.provenance=true on the SDK
+  # loader. Provenance requires GH Actions OIDC, which a
   # laptop doesn't have; release.yml always publishes with provenance.
   for entry in "${PACKAGES[@]}"; do
     file="${entry%%|*}"
@@ -201,7 +200,7 @@ echo "==> done"
 echo
 echo "next steps:"
 echo "  1. verify on a clean machine without Rust:"
-echo "       npx -y @ratel-ai/cli@${TAG} --help"
-echo "  2. configure Trusted Publishers for each of the 7 npm packages and"
+echo "       npm install @ratel-ai/sdk@${TAG} && node -e \"require('@ratel-ai/sdk')\""
+echo "  2. configure Trusted Publishers for each of the 6 npm packages and"
 echo "     the ratel-ai-core crate (see RELEASING.md, 'first-time bootstrap')"
 echo "  3. push v${VERSION%-rc.*}-rc.2 to validate the CI publish path"

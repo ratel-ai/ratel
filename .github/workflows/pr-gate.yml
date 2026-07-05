@@ -2,7 +2,7 @@ name: PR Gate
 
 # Release-readiness gate. Builds the REAL distributables (wheel, npm loader + native
 # binding, crate, sdist) from this PR, installs each into a clean environment, and runs
-# the cross-SDK end-to-end scenario through every SDK + the CLI — catching packaging /
+# the cross-SDK end-to-end scenario through every SDK — catching packaging /
 # binding / cross-SDK-drift breakage before it reaches `main` instead of at release time.
 #
 # Opt-in to save CI: the heavy jobs only run when a PR carries the `ready-to-merge` label
@@ -10,7 +10,7 @@ name: PR Gate
 # required check — it FAILS an unlabeled PR (blocking merge) and reflects the pipeline on a
 # labeled PR. `rstagi` bypasses via the branch ruleset (scripts/setup-branch-ruleset.sh).
 #
-# Layout (kept to few check rows): one `verify` job PER PLATFORM does Python + Node + CLI
+# Layout (kept to few check rows): one `verify` job PER PLATFORM does Python + Node
 # build+install+e2e in sequence (platforms run in parallel), and the platform-independent
 # packaging checks (sdist+twine, crate dry-run, npm optionalDeps integrity) run once on the
 # linux leg. Reduced matrix (linux-x64 + darwin-arm64) on PR commits; full 5-platform on
@@ -136,21 +136,6 @@ jobs:
           cp "$GITHUB_WORKSPACE/e2e/ts/run_e2e.mjs" ./run_e2e.mjs
           RATEL_E2E_DIR="$GITHUB_WORKSPACE/e2e" node run_e2e.mjs
 
-      - name: CLI — pack against PR-built SDK, install, e2e
-        run: |
-          set -e
-          mkdir -p "$RUNNER_TEMP/tgz/cli"
-          pnpm --filter @ratel-ai/cli build
-          pnpm --filter @ratel-ai/cli pack --pack-destination "$RUNNER_TEMP/tgz/cli"
-          work="$(mktemp -d)"; cd "$work"; npm init -y >/dev/null
-          # install the CLI plus the locally-built SDK loader+subpackage (from the Node step)
-          # so the CLI's @ratel-ai/sdk dep resolves to the PR build, not the registry.
-          npm install --no-audit --no-fund \
-            "$RUNNER_TEMP"/tgz/cli/*.tgz \
-            "$RUNNER_TEMP"/tgz/loader/*.tgz \
-            "$RUNNER_TEMP"/tgz/sub/*.tgz
-          RATEL_BIN="$work/node_modules/.bin/ratel" bash "$GITHUB_WORKSPACE/e2e/cli/run_e2e.sh"
-
       # Platform-independent packaging integrity — folded into the gate's linux leg so
       # it's one fewer check row; runs once (linux-x64 is always in both matrices).
       - name: Packaging integrity (sdist + twine, crate dry-run, optionalDeps inject)
@@ -165,7 +150,7 @@ jobs:
           # Smoke the optionalDeps inject + assert loader/subpackage versions match.
           # NOTE: this rewrites src/sdk/ts/package.json's optionalDependencies in place
           # — harmless here, since it runs after the packs above and the checkout is
-          # throwaway. (The CLI's workspace:^ pack rewrite is covered by the CLI step.)
+          # throwaway.
           node scripts/inject-sdk-optional-deps.mjs
 
   # Single required check.

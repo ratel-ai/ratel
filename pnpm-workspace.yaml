@@ -1,4 +1,3 @@
 packages:
   - 'src/sdk/ts'
-  - 'src/cli'
   - 'examples/*'

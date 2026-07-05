@@ -56,12 +56,12 @@ For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Statu
 
 ## Releases
 
-We publish three artifacts from this repo in lockstep: `ratel-ai-core` (crates.io) and `@ratel-ai/sdk` / `@ratel-ai/cli` (npm). Each has a `CHANGELOG.md` in its package directory. The MCP-server library `@ratel-ai/mcp-server` is published independently from [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp); `@ratel-ai/cli` depends on it from npm.
+We publish `ratel-ai-core` (crates.io) and `@ratel-ai/sdk` (npm) from this repo. Each has a `CHANGELOG.md` in its package directory. The MCP-server library `@ratel-ai/mcp-server` is published independently from [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp).
 
 Before tagging a release:
 
-1. Bump the version in `Cargo.toml`, `src/sdk/ts/package.json`, `src/cli/package.json` (kept in lockstep — the release workflow validates).
-2. Run the `/changelog` skill (`.claude/skills/changelog/`). It drafts per-package entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the three CHANGELOGs. For GA versions (no `-rc` suffix), it collapses any existing `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]` section.
+1. Bump the version in `Cargo.toml` and `src/sdk/ts/package.json` (the release workflow validates each unit's tag against its manifests).
+2. Run the `/changelog` skill (`.claude/skills/changelog/`). It drafts per-package entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the CHANGELOGs. For GA versions (no `-rc` suffix), it collapses any existing `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]` section.
 3. Commit the version bumps and CHANGELOG updates together (typically `release: vX.Y.Z`), tag, push.
 
 The release workflow's `tag-version-check` job rejects any tag whose CHANGELOGs don't contain a `## [<version>]` heading. See [ADR 0008](docs/adr/0008-per-package-changelogs.md) for the full rationale.

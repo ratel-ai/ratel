@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Per-unit release-tag gate (ADR-0016). A release is cut by pushing a prefixed
-// tag: `core-v*`, `sdk-js-v*`, `sdk-py-v*`, or `cli-v*`. This checks that ONLY
+// tag: `core-v*`, `sdk-js-v*`, or `sdk-py-v*`. This checks that ONLY
 // the tagged unit's manifests carry the tag's version and that its CHANGELOG(s)
 // record it — nothing else in the repo has to be in lockstep.
 //
@@ -38,10 +38,6 @@ const UNITS = {
     ],
     changelogs: ["src/sdk/python/CHANGELOG.md"],
   },
-  cli: {
-    manifests: [{ path: "src/cli/package.json", kind: "json" }],
-    changelogs: ["src/cli/CHANGELOG.md"],
-  },
 };
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-rc\.\d+)?$/;
@@ -50,7 +46,7 @@ const SEMVER = /^\d+\.\d+\.\d+(?:-rc\.\d+)?$/;
 // `v0.2.0`, an unknown prefix, a non-semver body) returns null so the caller can
 // fail loudly instead of routing a tag nowhere.
 export function parseTag(tag) {
-  const m = /^(core|sdk-js|sdk-py|cli)-v(.+)$/.exec(tag ?? "");
+  const m = /^(core|sdk-js|sdk-py)-v(.+)$/.exec(tag ?? "");
   if (!m) return null;
   const [, unit, version] = m;
   if (!SEMVER.test(version)) return null;
@@ -82,7 +78,7 @@ export function checkReleaseTag(tag, { root = process.cwd() } = {}) {
       unit: null,
       version: null,
       distTag: null,
-      errors: [`unroutable tag "${tag}" — expected <core|sdk-js|sdk-py|cli>-v<semver>`],
+      errors: [`unroutable tag "${tag}" — expected <core|sdk-js|sdk-py>-v<semver>`],
     };
   }
 

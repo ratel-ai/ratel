@@ -60,11 +60,6 @@ jobs:
           else
             echo "spec=latest" >> "$GITHUB_OUTPUT"
           fi
-      - name: Install + run @ratel-ai/cli
-        shell: bash
-        run: |
-          set -e
-          npx -y "@ratel-ai/cli@${{ steps.ver.outputs.spec }}" --help
       - name: Smoke-test SDK native binding load
         shell: bash
         run: |

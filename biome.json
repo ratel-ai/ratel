@@ -5,9 +5,6 @@
       "src/sdk/**/*.ts",
       "src/sdk/**/*.tsx",
       "src/sdk/**/*.js",
-      "src/cli/**/*.ts",
-      "src/cli/**/*.tsx",
-      "src/cli/**/*.js",
       "benchmark/agent/src/**/*.ts",
       "benchmark/agent/src/**/*.tsx"
     ]

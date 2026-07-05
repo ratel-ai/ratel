@@ -3,16 +3,15 @@ name: Release
 # Per-package releases (ADR-0016): each unit ships on its own tag prefix, routed
 # through this ONE workflow. Keeping a single release.yml + the `release`
 # environment preserves the OIDC Trusted Publisher registrations (npm loader + 5
-# platform packages + cli, the PyPI wheel, the crate) — splitting the file or
+# platform packages, the PyPI wheel, the crate) — splitting the file or
 # renaming the environment would de-register all of them.
 #   core-v*    -> ratel-ai-core on crates.io
 #   sdk-js-v*  -> @ratel-ai/sdk loader + 5 platform packages (internally lockstep)
 #   sdk-py-v*  -> ratel-ai on PyPI
-#   cli-v*     -> @ratel-ai/cli on npm
 
 on:
   push:
-    tags: ['core-v*', 'sdk-js-v*', 'sdk-py-v*', 'cli-v*']
+    tags: ['core-v*', 'sdk-js-v*', 'sdk-py-v*']
   workflow_dispatch:
     inputs:
       tag:
@@ -223,64 +222,6 @@ jobs:
             (cd src/sdk/ts && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
           fi
 
-  publish-cli:
-    name: Publish @ratel-ai/cli
-    needs: [tag-version-check]
-    if: needs.tag-version-check.outputs.unit == 'cli'
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
-      - name: Verify npm CLI version
-        shell: bash
-        run: |
-          set -e
-          npm --version
-          # Trusted Publishers requires npm CLI 11.5.1+
-          node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      # cli has `workspace:^` specifiers for its internal SDK dep.
-      # `npm publish` doesn't understand that protocol and ships the literal
-      # string, breaking installs (EUNSUPPORTEDPROTOCOL on `npm install`).
-      # Pack with `pnpm pack` first (rewrites workspace:^ → real semver),
-      # then publish the tarball with `npm publish` so OIDC + provenance
-      # still work.
-      - name: Preflight — dry-run cli publish
-        shell: bash
-        env:
-          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
-        run: |
-          set -e
-          pnpm --filter @ratel-ai/cli pack --pack-destination "${RUNNER_TEMP}/cli-preflight"
-          npm publish "${RUNNER_TEMP}/cli-preflight"/*.tgz --access public --tag "$DIST_TAG" --dry-run
-      - name: Publish cli
-        shell: bash
-        env:
-          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
-        run: |
-          set -e
-          name=$(node -p "require('./src/cli/package.json').name")
-          ver=$(node -p "require('./src/cli/package.json').version")
-          if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
-            echo "::notice::$name@$ver already published — skipping"
-          else
-            pnpm --filter @ratel-ai/cli pack --pack-destination "${RUNNER_TEMP}/cli"
-            npm publish "${RUNNER_TEMP}/cli"/*.tgz --provenance --access public --tag "$DIST_TAG" $DRY_RUN
-          fi
-
   publish-crate:
     name: Publish ratel-ai-core to crates.io
     needs: [tag-version-check]
@@ -429,14 +370,13 @@ jobs:
 
   github-release:
     name: GitHub Release
-    needs: [tag-version-check, publish-sdk-js, publish-cli, publish-pypi, publish-crate]
+    needs: [tag-version-check, publish-sdk-js, publish-pypi, publish-crate]
     # One publish job runs per unit; the rest are skipped. Run when the tag was
     # pushed and whichever publish job applied to this unit succeeded.
     if: >-
       ${{ github.event_name == 'push' && !cancelled()
           && needs.tag-version-check.result == 'success'
           && (needs.publish-sdk-js.result == 'success'
-              || needs.publish-cli.result == 'success'
               || needs.publish-pypi.result == 'success'
               || needs.publish-crate.result == 'success') }}
     runs-on: ubuntu-latest
