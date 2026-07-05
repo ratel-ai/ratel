@@ -26,7 +26,7 @@
     "ratel"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.6.0"
   },
   "files": [
     "dist",
@@ -43,6 +43,14 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.9.0",
+    "@opentelemetry/semantic-conventions": "^1.41.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",

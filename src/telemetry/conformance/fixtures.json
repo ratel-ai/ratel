@@ -1,0 +1,85 @@
+{
+  "semconv_version": "1.42.0",
+  "description": "Contract-against-the-pin fixtures shared across the language helpers. Each fixture names a scenario, the span to open (by logical id, mapped to a span-name constant), the attributes to set (by logical id, mapped to an attribute-key constant), and the exact wire span name + attributes the pinned convention (CONVENTIONS.md) requires. A helper builds the span from its own constants through the real OTel SDK and must emit exactly `expect_name` + `expect_attributes`. A constant that drifts from the pin fails here.",
+  "fixtures": [
+    {
+      "name": "tool invocation rides an execute_tool span enriched with ratel.*",
+      "span": "execute_tool",
+      "set": {
+        "gen_ai_operation_name": "execute_tool",
+        "gen_ai_tool_name": "search_docs",
+        "gen_ai_tool_call_id": "call_42",
+        "ratel_origin": "agent",
+        "ratel_tool_args_size_bytes": 128,
+        "ratel_upstream_server": "context7"
+      },
+      "expect_name": "execute_tool",
+      "expect_attributes": {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "search_docs",
+        "gen_ai.tool.call.id": "call_42",
+        "ratel.origin": "agent",
+        "ratel.tool.args_size_bytes": 128,
+        "ratel.upstream.server": "context7"
+      }
+    },
+    {
+      "name": "capability search span carries counts, not hit content",
+      "span": "ratel_search",
+      "set": {
+        "ratel_search_target": "tool",
+        "ratel_search_top_k": 5,
+        "ratel_search_hit_count": 3,
+        "ratel_search_query": "how do I refresh an oauth token",
+        "ratel_origin": "direct"
+      },
+      "expect_name": "ratel.search",
+      "expect_attributes": {
+        "ratel.search.target": "tool",
+        "ratel.search.top_k": 5,
+        "ratel.search.hit_count": 3,
+        "ratel.search.query": "how do I refresh an oauth token",
+        "ratel.origin": "direct"
+      }
+    },
+    {
+      "name": "skill content load span",
+      "span": "ratel_skill_load",
+      "set": {
+        "ratel_skill_id": "deep-research"
+      },
+      "expect_name": "ratel.skill.load",
+      "expect_attributes": {
+        "ratel.skill.id": "deep-research"
+      }
+    },
+    {
+      "name": "upstream MCP register span",
+      "span": "ratel_upstream_register",
+      "set": {
+        "ratel_upstream_server": "granola",
+        "ratel_upstream_transport": "stdio",
+        "ratel_upstream_tool_count": 12
+      },
+      "expect_name": "ratel.upstream.register",
+      "expect_attributes": {
+        "ratel.upstream.server": "granola",
+        "ratel.upstream.transport": "stdio",
+        "ratel.upstream.tool_count": 12
+      }
+    },
+    {
+      "name": "MCP auth flow span with the 401-driven needs_auth outcome",
+      "span": "ratel_auth_flow",
+      "set": {
+        "ratel_upstream_server": "granola",
+        "ratel_auth_outcome": "needs_auth"
+      },
+      "expect_name": "ratel.auth.flow",
+      "expect_attributes": {
+        "ratel.upstream.server": "granola",
+        "ratel.auth.outcome": "needs_auth"
+      }
+    }
+  ]
+}

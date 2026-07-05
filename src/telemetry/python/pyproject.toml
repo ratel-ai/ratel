@@ -24,9 +24,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: System :: Monitoring",
 ]
-# The vocabulary constants have no runtime deps. The init() OTLP builder adds the
-# OpenTelemetry SDK deps in a later slice.
-dependencies = []
+# init() is sugar over the standard OTel Python SDK (ADR-0015): no custom transport.
+# Pinned to the 1.41.x line and capped below 1.42, which drops Python 3.9 support
+# (this package targets >=3.9). semantic-conventions is not a direct dep: SERVICE_NAME
+# resolves to the literal "service.name" from opentelemetry-sdk.
+dependencies = [
+    "opentelemetry-api>=1.41.0,<1.42",
+    "opentelemetry-sdk>=1.41.0,<1.42",
+    "opentelemetry-exporter-otlp-proto-http>=1.41.0,<1.42",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
