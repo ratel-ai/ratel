@@ -171,10 +171,9 @@ Span duration is the invoke latency; failure sets span status `ERROR`. Tool argu
 content on the span attributes `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` (distinct from the
 `tool_call_response` message part's `response` field above), gated like messages.
 
-> **Open decision (flagged for review):** modelling invoke as `execute_tool` (rather than a pure
-> `ratel.invoke` span) buys OTel-backend interop but couples the funnel to a `gen_ai.*` operation. The
-> alternative, a pure `ratel.invoke` span, keeps tiers fully separate at the cost of interop. Recommending
-> `execute_tool`; easy to revisit before the helpers freeze the constant.
+> **Decided (2026-07-05):** invoke is modelled as an `execute_tool` span enriched with `ratel.*`, for
+> OTel-backend interop, not a pure `ratel.invoke` span. The considered alternative (a pure `ratel.invoke`
+> span, full tier separation, no interop) was rejected. Revisit only via a superseding note.
 
 ### `ratel.skill.load`: skill content load (`skill_invoke` / `get_skill_content`)
 
@@ -218,6 +217,10 @@ does not reject an oversized span, the ingest endpoint does.
 ADR-0015 retired ADR-0013's three-way golden-JSON round-trip. That machinery existed to stop three
 hand-mirrored schemas from drifting; with one borrowed schema (`gen_ai.*`) and one owned overlay (`ratel.*`),
 that reason is gone.
+
+**Decided (2026-07-05):** keep a conformance suite but re-scope it as below. This resolves the phrase
+"rebuild the conformance-vector pattern" carried over from the task brief, which predates ADR-0015's retirement
+of the cross-mirror fixtures.
 
 Conformance is re-scoped to **contract-against-the-pin**: a shared fixture set of
 `(known input -> expected emitted keys/values)`, asserted per language against an in-memory span/event
