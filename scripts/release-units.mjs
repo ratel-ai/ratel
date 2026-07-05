@@ -62,6 +62,26 @@ export const UNITS = {
     srcPaths: ["src/sdk/python"],
     changelog: { name: "ratel-ai", includePaths: ["src/sdk/python/**"] },
   },
+  telemetry: {
+    tagPrefix: "telemetry-v",
+    label: "@ratel-ai/telemetry (npm) + ratel-ai-telemetry (PyPI + crates.io)",
+    // The first 3-registry unit: the npm loader, the pure-python wheel, and the
+    // constants crate share one telemetry-v* tag and move in lockstep. The npm
+    // package.json is canonical; the pyproject carries the PEP 440 spelling.
+    versionManifest: { path: "src/telemetry/ts/package.json", kind: "json" },
+    manifests: [
+      { path: "src/telemetry/ts/package.json", kind: "json" },
+      { path: "src/telemetry/python/pyproject.toml", kind: "toml", pep440: true },
+      { path: "src/telemetry/core/Cargo.toml", kind: "toml" },
+    ],
+    changelogs: [
+      "src/telemetry/ts/CHANGELOG.md",
+      "src/telemetry/python/CHANGELOG.md",
+      "src/telemetry/core/CHANGELOG.md",
+    ],
+    srcPaths: ["src/telemetry"],
+    changelog: { name: "ratel-ai-telemetry", includePaths: ["src/telemetry/**"] },
+  },
 };
 
 export const UNIT_IDS = Object.keys(UNITS);

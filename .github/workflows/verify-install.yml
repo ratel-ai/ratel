@@ -1,8 +1,9 @@
 name: Verify install
 
 # Per-unit install smoke tests (ADR-0016). Each release unit — core (crate),
-# sdk-js (npm), sdk-py (PyPI) — is verified from its public registry with no repo
-# checkout and no local toolchain state, so a broken publish surfaces here.
+# sdk-js (npm), sdk-py (PyPI), telemetry (npm + PyPI + crate) — is verified from
+# its public registry with no repo checkout and no local toolchain state, so a
+# broken publish surfaces here.
 #
 # workflow_dispatch: pick a `unit` and (optionally) a `version` to verify just
 # that one. The daily cron runs `unit: all` at each unit's `latest`.
@@ -14,7 +15,7 @@ on:
         description: Release unit to verify
         type: choice
         default: all
-        options: [all, core, sdk-js, sdk-py]
+        options: [all, core, sdk-js, sdk-py, telemetry]
       version:
         description: Version to verify (e.g. 0.2.0-rc.2 or 0.2.0). Only applied when a single unit is selected; ignored for `all`.
         required: false
@@ -169,6 +170,94 @@ jobs:
           cat > src/main.rs <<'EOF'
           fn main() {
               println!("{}", std::any::type_name::<ratel_ai_core::ToolRegistry>());
+          }
+          EOF
+          cargo run -q
+
+  # telemetry ships to three registries from one tag, so it has three verify legs.
+  # Each is pure-language (no per-OS artifact), so one linux leg per registry proves
+  # downstream installability. The smoke test reads the pinned SEMCONV_VERSION const.
+  verify-telemetry-npm:
+    name: verify telemetry (npm)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.unit }}" = "telemetry" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "spec=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=${{ inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install + smoke-test the package
+        shell: bash
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "@ratel-ai/telemetry@${{ steps.ver.outputs.spec }}"
+          node --input-type=module -e "import { SEMCONV_VERSION } from '@ratel-ai/telemetry'; if (SEMCONV_VERSION !== '1.42.0') { console.error('unexpected SEMCONV_VERSION', SEMCONV_VERSION); process.exit(1); } console.log('OK', SEMCONV_VERSION);"
+
+  verify-telemetry-pypi:
+    name: verify telemetry (PyPI)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Resolve spec
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.unit }}" = "telemetry" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "spec===${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install + smoke-test the wheel
+        shell: bash
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install "ratel-ai-telemetry${{ steps.ver.outputs.spec }}"
+          python -c "import ratel_ai_telemetry as t; assert t.SEMCONV_VERSION == '1.42.0', t.SEMCONV_VERSION; print('OK', t.SEMCONV_VERSION)"
+
+  verify-telemetry-crate:
+    name: verify telemetry (crate)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve spec
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.unit }}" = "telemetry" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "spec=@${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Add + build the published crate
+        shell: bash
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          cargo init --name ratel_verify --bin -q
+          cargo add "ratel-ai-telemetry${{ steps.ver.outputs.spec }}"
+          cat > src/main.rs <<'EOF'
+          fn main() {
+              println!("{}", ratel_ai_telemetry::SEMCONV_VERSION);
           }
           EOF
           cargo run -q

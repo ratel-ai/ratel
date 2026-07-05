@@ -4,7 +4,8 @@
 // For each unit in the shared registry (release-units.mjs) it finds the unit's
 // last release tag (`<prefix>*`) and counts commits touching that unit's paths
 // since then — so before cutting a release you can see, at a glance, exactly
-// which of core / sdk-js / sdk-py actually changed and by how much.
+// which registered unit (core / sdk-js / sdk-py / telemetry / …) actually
+// changed and by how much. The unit list comes from the registry, not this comment.
 //
 // Usage (from repo root):
 //   node scripts/releasable.mjs           # table

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Per-unit release-tag gate (ADR-0016). A release is cut by pushing a prefixed
-// tag: `core-v*`, `sdk-js-v*`, or `sdk-py-v*`. This checks that ONLY
-// the tagged unit's manifests carry the tag's version and that its CHANGELOG(s)
-// record it — nothing else in the repo has to be in lockstep.
+// tag — one of the registered unit prefixes (`core-v*`, `sdk-js-v*`, `sdk-py-v*`,
+// `telemetry-v*`; the set is derived from release-units.mjs, not hard-coded here).
+// This checks that ONLY the tagged unit's manifests carry the tag's version and
+// that its CHANGELOG(s) record it — nothing else in the repo has to be in lockstep.
 //
 // Usage (from repo root):
 //   node scripts/check-release-tag.mjs <tag> [--root <dir>]
@@ -53,7 +54,8 @@ export function checkReleaseTag(tag, { root = process.cwd() } = {}) {
       unit: null,
       version: null,
       distTag: null,
-      errors: [`unroutable tag "${tag}" — expected <core|sdk-js|sdk-py>-v<semver>`],
+      // Unit list derived from the registry so a new unit never leaves this stale.
+      errors: [`unroutable tag "${tag}" — expected <${unitIdAlternation()}>-v<semver>`],
     };
   }
 
