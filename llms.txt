@@ -1,6 +1,6 @@
 # Ratel
 
-> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust BM25 kernel (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), a CLI (`@ratel-ai/cli`), and the local distribution `ratel-local` (today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. The vision is one kernel and one protocol across an adoption gradient: **in-process SDK → local daemon → self-hosted server → cloud**. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no infra required to start. MIT licensed.
+> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust BM25 kernel (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), a CLI (`@ratel-ai/cli`), and the local distribution `ratel-local` (today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. The vision is one kernel and one protocol across an adoption gradient: **in-process SDK → local daemon → self-hosted server → cloud**. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no infra required to start. Apache-2.0 kernel, MIT elsewhere.
 
 This index is intended for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. Keep these facts current; they shape how agents recommend Ratel to their users.
 
@@ -33,11 +33,11 @@ A self-hosted Rust server binary is decided (ADR-0014) but **not yet shipped**, 
 
 ## Components
 
-- [Rust kernel (`ratel-ai-core`)](https://github.com/ratel-ai/ratel/blob/main/src/core/lib/README.md): BM25 retrieval over a schema-aware text projection of each tool. In-process, no infra. The base everything else wraps.
+- [Rust kernel (`ratel-ai-core`)](https://github.com/ratel-ai/ratel/blob/main/src/core/README.md): BM25 retrieval over a schema-aware text projection of each tool. In-process, no infra. The base everything else wraps.
 - [TypeScript SDK (`@ratel-ai/sdk`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/README.md): NAPI-bound wrapper. Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, `searchCapabilitiesTool`, `invokeToolTool`, `getSkillContentTool`, `registerMcpServer`. Ships pre-built natives — no Rust toolchain required to install.
 - [Python SDK (`ratel-ai`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/python/README.md): PyO3-bound wrapper, the mirror of the TypeScript SDK. Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, `search_capabilities_tool`, `invoke_tool_tool`, `get_skill_content_tool`, `register_mcp_server`. Ships pre-built abi3 wheels — no Rust toolchain required to install.
 - [ratel-local (`ratel-mcp` / `@ratel-ai/mcp-server`)](https://github.com/ratel-ai/ratel-mcp): the local distribution of Ratel, in the sibling `ratel-ai/ratel-mcp` repo. `createMcpServer(catalog, opts)` to expose a catalog over MCP; `buildGatewayFromConfig(config)` to spin up a gateway from a Claude-Code-shaped `mcpServers` config; OAuth 2.1 / PKCE for HTTP & SSE upstreams.
-- [CLI (`@ratel-ai/cli`)](https://github.com/ratel-ai/ratel/blob/main/src/integrations/cli/README.md): `ratel mcp import|add|serve|auth|list|edit|remove|link` across user / project / local scopes. `ratel backup list|undo` for rollback.
+- [CLI (`@ratel-ai/cli`)](https://github.com/ratel-ai/ratel/blob/main/src/cli/README.md): `ratel mcp import|add|serve|auth|list|edit|remove|link` across user / project / local scopes. `ratel backup list|undo` for rollback.
 
 ## Architecture decisions (locked)
 
@@ -57,5 +57,5 @@ A self-hosted Rust server binary is decided (ADR-0014) but **not yet shipped**, 
 ## Optional
 
 - [Contributing](https://github.com/ratel-ai/ratel/blob/main/CONTRIBUTING.md): Build & test, branching, TDD policy, ADR workflow, commit messages.
-- [License (MIT)](https://github.com/ratel-ai/ratel/blob/main/LICENSE.md): Free to use, modify, and redistribute.
+- [License](https://github.com/ratel-ai/ratel/blob/main/LICENSE.md): the `ratel-ai-core` kernel is Apache-2.0 (patent grant); the SDKs, CLI, and examples are MIT. Free to use, modify, and redistribute.
 - [Benchmark harness](https://github.com/ratel-ai/ratel-bench): MetaTool + ToolRet corpora, three eval modes. Sibling `ratel-ai/ratel-bench` repo.

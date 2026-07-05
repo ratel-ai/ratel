@@ -45,23 +45,3 @@ jobs:
       - name: Test the example wiring
         working-directory: examples/pydantic-ai
         run: uv run pytest
-
-  cloud:
-    # Pure-Python cloud client — no native extension, no Rust toolchain.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: src/cloud/python
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - name: Create venv + install
-        run: |
-          uv venv --python 3.11 .venv
-          uv pip install --python .venv -e '.[dev]'
-      - name: Lint
-        run: .venv/bin/ruff check .
-      - name: Typecheck
-        run: .venv/bin/mypy ratel_ai_cloud
-      - name: Test
-        run: .venv/bin/pytest

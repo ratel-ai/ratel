@@ -1,0 +1,9 @@
+Ratel
+Copyright 2025 Agentified
+
+This product includes software developed at Agentified (https://ratel.sh).
+
+The `ratel-ai-core` kernel crate is licensed under the Apache License,
+Version 2.0 (see LICENSE-APACHE). All other components in this repository —
+the TypeScript and Python SDKs and their native bindings, the CLI, telemetry
+helpers, and examples — are licensed under the MIT License (see LICENSE.md).

@@ -14,7 +14,7 @@ export interface ResolvedBin {
   source: "env" | "path" | "workspace" | "prompt";
 }
 
-const WORKSPACE_BIN_REL = join("src", "integrations", "cli", "dist", "bin.js");
+const WORKSPACE_BIN_REL = join("src", "cli", "dist", "bin.js");
 
 export async function locateRatelBin(env: LocateBinEnv): Promise<ResolvedBin> {
   if (env.envVar && env.envVar.length > 0) {

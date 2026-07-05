@@ -41,7 +41,7 @@ jobs:
 
           ws_version=$(grep -E '^version' Cargo.toml | head -1 | sed -E 's/version *= *"([^"]+)"/\1/')
           sdk_version=$(node -p "require('./src/sdk/ts/package.json').version")
-          cli_version=$(node -p "require('./src/integrations/cli/package.json').version")
+          cli_version=$(node -p "require('./src/cli/package.json').version")
           py_version=$(grep -E '^version' src/sdk/python/pyproject.toml | head -1 | sed -E 's/version *= *"([^"]+)"/\1/')
 
           echo "tag_version=$tag_version"
@@ -78,10 +78,10 @@ jobs:
           set -e
           fail=0
           for f in \
-            src/core/lib/CHANGELOG.md \
+            src/core/CHANGELOG.md \
             src/sdk/ts/CHANGELOG.md \
             src/sdk/python/CHANGELOG.md \
-            src/integrations/cli/CHANGELOG.md; do
+            src/cli/CHANGELOG.md; do
             if ! grep -qF "## [${VERSION}]" "$f"; then
               echo "::error file=$f::missing entry for version ${VERSION} — run /changelog before tagging"
               fail=1
@@ -262,8 +262,8 @@ jobs:
           DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
         run: |
           set -e
-          name=$(node -p "require('./src/integrations/cli/package.json').name")
-          ver=$(node -p "require('./src/integrations/cli/package.json').version")
+          name=$(node -p "require('./src/cli/package.json').name")
+          ver=$(node -p "require('./src/cli/package.json').version")
           if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
             echo "::notice::$name@$ver already published — skipping"
           else

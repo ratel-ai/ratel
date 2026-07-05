@@ -1,7 +1,7 @@
 {
-  "name": "@ratel-ai/cloud",
+  "name": "@ratel-ai/cli",
   "version": "0.2.0",
-  "description": "Pure-TypeScript client for Ratel Cloud telemetry — send agent (LLM call) events to a remote endpoint. Runs anywhere, including edge runtimes.",
+  "description": "Ratel CLI — manage MCP servers across scopes, run the Ratel MCP gateway, import Claude Code's MCP setup, drive OAuth flows.",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -12,22 +12,25 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ratel-ai/ratel.git",
-    "directory": "src/cloud/ts"
+    "directory": "src/cli"
   },
   "bugs": {
     "url": "https://github.com/ratel-ai/ratel/issues"
   },
   "keywords": [
-    "telemetry",
-    "observability",
+    "mcp",
+    "claude-code",
+    "ratel",
     "ai-agents",
-    "llm",
-    "edge",
     "context-engineering",
-    "ratel"
+    "cli",
+    "oauth"
   ],
   "engines": {
     "node": ">=20.0.0"
+  },
+  "bin": {
+    "ratel": "./dist/bin.js"
   },
   "files": [
     "dist",
@@ -37,9 +40,11 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepack": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "node dist/bin.js"
   },
   "publishConfig": {
     "access": "public",
@@ -47,7 +52,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
+    "@types/node": "^24.0.0",
     "typescript": "^5.6.0",
     "vitest": "^4.1.5"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.3.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@ratel-ai/mcp-server": "^0.1.5",
+    "@ratel-ai/sdk": "workspace:^"
   }
 }

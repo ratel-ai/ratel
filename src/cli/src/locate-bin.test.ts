@@ -24,14 +24,14 @@ describe("locateRatelBin", () => {
     });
   });
 
-  it("falls back to workspace src/integrations/cli/dist/bin.js with `node` as command", async () => {
+  it("falls back to workspace src/cli/dist/bin.js with `node` as command", async () => {
     const r = await locateRatelBin({
       workspaceRoot: "/repo",
-      exists: async (p) => p === "/repo/src/integrations/cli/dist/bin.js",
+      exists: async (p) => p === "/repo/src/cli/dist/bin.js",
     });
     expect(r).toEqual({
       command: "node",
-      args: ["/repo/src/integrations/cli/dist/bin.js"],
+      args: ["/repo/src/cli/dist/bin.js"],
       source: "workspace",
     });
   });

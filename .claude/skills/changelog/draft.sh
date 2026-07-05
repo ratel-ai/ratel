@@ -34,9 +34,9 @@ fi
 range="${from_ref}..HEAD"
 
 declare -a packages=(
-  "ratel-ai-core|src/core/lib/**|Cargo.toml"
+  "ratel-ai-core|src/core/**|Cargo.toml"
   "@ratel-ai/sdk|src/sdk/ts/**"
-  "@ratel-ai/cli|src/integrations/cli/**"
+  "@ratel-ai/cli|src/cli/**"
 )
 
 for entry in "${packages[@]}"; do

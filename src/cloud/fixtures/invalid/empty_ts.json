@@ -1,6 +1,0 @@
-{
-  "provider": "openai",
-  "model": "gpt-5.5",
-  "ts": "",
-  "messages": [{ "role": "user", "content": "hi" }]
-}

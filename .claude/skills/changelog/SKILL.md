@@ -11,9 +11,9 @@ Updates the three published-package `CHANGELOG.md` files in preparation for a re
 
 | Package | CHANGELOG path |
 |---|---|
-| `ratel-ai-core` | `src/core/lib/CHANGELOG.md` |
+| `ratel-ai-core` | `src/core/CHANGELOG.md` |
 | `@ratel-ai/sdk` | `src/sdk/ts/CHANGELOG.md` |
-| `@ratel-ai/cli` | `src/integrations/cli/CHANGELOG.md` |
+| `@ratel-ai/cli` | `src/cli/CHANGELOG.md` |
 
 `@ratel-ai/mcp-server` lives in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) and maintains its own CHANGELOG there.
 

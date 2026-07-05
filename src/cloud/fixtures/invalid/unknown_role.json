@@ -1,6 +1,0 @@
-{
-  "provider": "openai",
-  "model": "gpt-5.5",
-  "ts": "2026-06-30T12:00:00Z",
-  "messages": [{ "role": "system", "content": "You are a helpful assistant." }]
-}

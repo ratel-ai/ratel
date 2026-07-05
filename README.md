@@ -12,7 +12,7 @@
     <a href="https://www.npmjs.com/package/@ratel-ai/sdk"><img src="https://img.shields.io/npm/v/@ratel-ai/sdk?label=npm&color=cb3837" alt="npm" /></a>
     <a href="https://crates.io/crates/ratel-ai-core"><img src="https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300" alt="crates.io" /></a>
     <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
-    <a href="./LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="license" /></a>
+    <a href="#license"><img src="https://img.shields.io/badge/license-Apache--2.0%20%26%20MIT-blue" alt="license" /></a>
   </p>
 </div>
 
@@ -122,13 +122,12 @@ The server and hosted cloud are decided direction ([ADR-0014](docs/adr/0014-prod
 
 ```
 src/
-├── core/lib/          # ratel-ai-core — Rust BM25 engine
+├── core/              # ratel-ai-core — Rust BM25 engine
 ├── sdk/ts/            # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
 ├── sdk/python/        # ratel-ai — Python SDK (PyO3-bound)
-└── integrations/
-    └── cli/           # @ratel-ai/cli — ratel CLI
+└── cli/               # @ratel-ai/cli — ratel CLI
 examples/              # End-to-end SDK examples
-docs/                  # Overview, ADRs
+docs/                  # ADRs
 ```
 
 ## Build & test
@@ -148,4 +147,4 @@ pnpm install && pnpm -r build && pnpm -r test       # TypeScript
 
 ## License
 
-MIT — see [LICENSE.md](LICENSE.md).
+The `ratel-ai-core` kernel is licensed under [Apache-2.0](LICENSE-APACHE) — an explicit patent grant for the engine others embed. Everything else (SDKs, CLI, examples) is [MIT](LICENSE.md). See [ADR-0017](docs/adr/0017-relicense-core-apache-2.md) for the rationale.
