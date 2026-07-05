@@ -3,7 +3,6 @@
   <h4>Pure-Python client for Ratel Cloud telemetry — send agent events to a remote endpoint</h4>
   <p>
     <a href="../../../docs/">Docs</a> •
-    <a href="../../../docs/roadmap.md">Roadmap</a> •
     <a href="https://discord.gg/ratel-ai">Discord</a>
   </p>
   <p>

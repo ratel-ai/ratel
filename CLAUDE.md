@@ -59,16 +59,11 @@ CI (`.github/workflows/{rust,ts,python}.yml`) runs all of the above on every PR;
   - Good: `docs: drop CLAUDE.md refs from READMEs, codify folder-README rule`
   - Bad: `updated some documentation files`
 
-## Lessons
-
-When Claude makes a mistake, the rule that prevents the next occurrence goes in [`docs/lessons.md`](docs/lessons.md). Read it at the start of every session; append to it whenever a new rule is needed.
-
 ## Where to find more
 
 - `README.md` — public-facing overview
 - `CONTRIBUTING.md` — contributor workflow, prerequisites, branching
 - `docs/adr/` — every locked architectural decision and its rationale
-- `docs/lessons.md` — accumulated rules from past mistakes
 - `LICENSE.md` — license terms
 
 ## Local conventions

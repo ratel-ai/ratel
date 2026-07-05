@@ -107,9 +107,16 @@ The index uses BM25, the same algorithm behind most search engines, applied to e
 
 ## The Ratel project
 
+Ratel scales from an in-process library to a hosted service — one kernel, one protocol, all the way up. Four products share it:
+
 | | Repo | What it is |
 |---|---|---|
-| **Library** | [ratel-ai/ratel](https://github.com/ratel-ai/ratel) (this one) | The engine. Embed it in your agent. |
+| **Kernel + platform** | [ratel-ai/ratel](https://github.com/ratel-ai/ratel) (this one) | The `ratel-ai-core` engine plus TS/Python SDKs, CLI, and the coming server. Embed it today; run it standalone once the server lands. |
+| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution — Ratel in front of your MCP setup, today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`. |
+| **ratel-cloud** | *coming* | Managed, hosted Ratel. Same protocol; SDKs reach it over the wire via `RATEL_URL`. |
+| **ratel-bench** | [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) | The benchmark harness behind [benchmark.ratel.sh](https://benchmark.ratel.sh). |
+
+The server and hosted cloud are decided direction ([ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md)), not yet public.
 
 ## Repo layout
 

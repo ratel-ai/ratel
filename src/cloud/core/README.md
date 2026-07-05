@@ -3,7 +3,6 @@
   <h4>Canonical schema for Ratel Cloud telemetry — the spec the language clients mirror</h4>
   <p>
     <a href="../../../docs/">Docs</a> •
-    <a href="../../../docs/roadmap.md">Roadmap</a> •
     <a href="https://discord.gg/ratel-ai">Discord</a>
   </p>
   <p>

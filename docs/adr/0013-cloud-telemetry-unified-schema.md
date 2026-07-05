@@ -4,7 +4,13 @@ Date: 2026-06-30
 
 ## Status
 
-Accepted
+Superseded by [ADR-0015 — Telemetry re-founding on OpenTelemetry conventions](0015-telemetry-otel-conventions.md).
+
+The bespoke unified cloud-event schema and the `ratel-ai-cloud` crate / `@ratel-ai/cloud` /
+`ratel_ai-cloud` clients this ADR introduced were implemented (see `src/cloud/` at commit
+`961985d`) but **never published**. Ratel re-founds telemetry on OpenTelemetry semantic
+conventions instead of a custom transport and schema; ADR-0015 carries the reasoning and pins
+this ADR's concept inventory as the mapping source.
 
 ## Context
 

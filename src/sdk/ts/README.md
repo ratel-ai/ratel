@@ -4,7 +4,6 @@
 
   <p>
     <a href="../../../docs/">Docs</a> •
-    <a href="../../../docs/roadmap.md">Roadmap</a> •
     <a href="https://discord.gg/hdKpx69NR">Discord</a>
   </p>
 
