@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.1-rc.1] - 2026-07-04
+
+### Changed
+
+- First release cut under the per-package release scheme (ADR-0016): `ratel-ai` now versions and ships independently of the core crate and JS SDK, tagged `sdk-py-v*`. No API changes since 0.2.0.
+
 ## [0.2.0] - 2026-06-16
 
 ### Changed
