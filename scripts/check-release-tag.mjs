@@ -13,40 +13,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Each release unit -> the manifests that must match the tag version and the
-// CHANGELOG(s) that must record it. The JS SDK is internally lockstep: loader +
-// five platform packages + the ts-native crate all move together.
-const PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64-gnu", "linux-arm64-gnu", "win32-x64-msvc"];
-
-const UNITS = {
-  core: {
-    manifests: [{ path: "src/core/Cargo.toml", kind: "toml" }],
-    changelogs: ["src/core/CHANGELOG.md"],
-  },
-  "sdk-js": {
-    manifests: [
-      { path: "src/sdk/ts/package.json", kind: "json" },
-      ...PLATFORMS.map((t) => ({ path: `src/sdk/ts/npm/${t}/package.json`, kind: "json" })),
-      { path: "src/sdk/ts/native/Cargo.toml", kind: "toml" },
-    ],
-    changelogs: ["src/sdk/ts/CHANGELOG.md"],
-  },
-  "sdk-py": {
-    manifests: [
-      { path: "src/sdk/python/pyproject.toml", kind: "toml", pep440: true },
-      { path: "src/sdk/python/native/Cargo.toml", kind: "toml" },
-    ],
-    changelogs: ["src/sdk/python/CHANGELOG.md"],
-  },
-};
-
-const SEMVER = /^\d+\.\d+\.\d+(?:-rc\.\d+)?$/;
+// The release units (manifests, CHANGELOGs, tag prefixes) live in one registry
+// shared with releasable.mjs / publish-rc.sh / draft.sh — see release-units.mjs.
+import { UNITS, SEMVER, unitIdAlternation } from "./release-units.mjs";
 
 // `<prefix>-v<semver>` -> { unit, version }. Anything else (the old lockstep
 // `v0.2.0`, an unknown prefix, a non-semver body) returns null so the caller can
 // fail loudly instead of routing a tag nowhere.
 export function parseTag(tag) {
-  const m = /^(core|sdk-js|sdk-py)-v(.+)$/.exec(tag ?? "");
+  const m = new RegExp(`^(${unitIdAlternation()})-v(.+)$`).exec(tag ?? "");
   if (!m) return null;
   const [, unit, version] = m;
   if (!SEMVER.test(version)) return null;

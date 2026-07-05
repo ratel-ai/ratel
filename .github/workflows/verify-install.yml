@@ -1,26 +1,40 @@
 name: Verify install
 
+# Per-unit install smoke tests (ADR-0016). Each release unit — core (crate),
+# sdk-js (npm), sdk-py (PyPI) — is verified from its public registry with no repo
+# checkout and no local toolchain state, so a broken publish surfaces here.
+#
+# workflow_dispatch: pick a `unit` and (optionally) a `version` to verify just
+# that one. The daily cron runs `unit: all` at each unit's `latest`.
+
 on:
   workflow_dispatch:
     inputs:
+      unit:
+        description: Release unit to verify
+        type: choice
+        default: all
+        options: [all, core, sdk-js, sdk-py]
       version:
-        description: Version to verify (e.g. 0.1.4-rc.2 or 0.1.4)
-        required: true
+        description: Version to verify (e.g. 0.2.0-rc.2 or 0.2.0). Only applied when a single unit is selected; ignored for `all`.
+        required: false
       tag:
-        description: npm dist-tag (rc or latest)
-        required: true
+        description: npm dist-tag to fall back to when no version is given (rc or latest)
+        required: false
         default: rc
   schedule:
-    # Daily at 09:00 UTC against whatever is on `latest`.
+    # Daily at 09:00 UTC against whatever each unit has on `latest`.
     - cron: '0 9 * * *'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.version || 'cron' }}
+  group: ${{ github.workflow }}-${{ inputs.unit || 'cron' }}-${{ inputs.version || 'latest' }}
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: verify (${{ matrix.label }})
+  verify-sdk-js:
+    name: verify sdk-js (${{ matrix.label }})
+    # Runs for `sdk-js`, `all`, or the cron (schedule has no inputs).
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'sdk-js'
     strategy:
       fail-fast: false
       matrix:
@@ -53,12 +67,14 @@ jobs:
       - name: Resolve version
         id: ver
         shell: bash
+        # A pinned version only applies when sdk-js is the single selected unit;
+        # otherwise fall back to the dist-tag (rc/latest), defaulting to latest.
         run: |
           set -e
-          if [ -n "${{ inputs.version }}" ]; then
+          if [ "${{ inputs.unit }}" = "sdk-js" ] && [ -n "${{ inputs.version }}" ]; then
             echo "spec=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
-            echo "spec=latest" >> "$GITHUB_OUTPUT"
+            echo "spec=${{ inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
           fi
       - name: Smoke-test SDK native binding load
         shell: bash
@@ -70,8 +86,9 @@ jobs:
           npm install --no-audit --no-fund "@ratel-ai/sdk@${{ steps.ver.outputs.spec }}"
           node -e "const {ToolRegistry} = require('@ratel-ai/sdk'); const r = new ToolRegistry(); r.register({id:'x',name:'x',description:'x',inputSchema:{},outputSchema:{}}); const hits = r.search('x', 5); if (!Array.isArray(hits) || hits.length === 0) { console.error('search failed'); process.exit(1); } console.log('OK', hits);"
 
-  verify-pypi:
-    name: verify-pypi (${{ matrix.label }})
+  verify-sdk-py:
+    name: verify sdk-py (${{ matrix.label }})
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'sdk-py'
     strategy:
       fail-fast: false
       matrix:
@@ -106,7 +123,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          if [ -n "${{ inputs.version }}" ]; then
+          if [ "${{ inputs.unit }}" = "sdk-py" ] && [ -n "${{ inputs.version }}" ]; then
             echo "spec===${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "spec=" >> "$GITHUB_OUTPUT"
@@ -118,3 +135,40 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "ratel-ai${{ steps.ver.outputs.spec }}"
           python -c "from ratel_ai import ToolRegistry; r = ToolRegistry(); r.register('x','x','x',{},{}); hits = r.search('x', 5); assert hits and hits[0].tool_id == 'x', hits; print('OK', hits[0].tool_id, hits[0].score)"
+
+  verify-core:
+    name: verify core (crate)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'core'
+    # The crate is pure Rust source compiled by the consumer (no prebuilt
+    # per-OS artifact), so one linux leg that resolves + builds it as a
+    # dependency proves downstream installability; no platform matrix needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve spec
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.unit }}" = "core" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "spec=@${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Add + build the published crate
+        shell: bash
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          cargo init --name ratel_verify --bin -q
+          cargo add "ratel-ai-core${{ steps.ver.outputs.spec }}"
+          # Reference a public type so the published crate must resolve, download,
+          # and link for a downstream consumer — the crate analogue of the npm
+          # loader / PyPI wheel smoke tests. (The SDK jobs exercise search behavior.)
+          cat > src/main.rs <<'EOF'
+          fn main() {
+              println!("{}", std::any::type_name::<ratel_ai_core::ToolRegistry>());
+          }
+          EOF
+          cargo run -q
