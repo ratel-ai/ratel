@@ -5,15 +5,24 @@ name: Release
 # environment preserves the OIDC Trusted Publisher registrations (npm loader + 5
 # platform packages, the PyPI wheel, the crate) — splitting the file or
 # renaming the environment would de-register all of them.
-#   core-v*      -> ratel-ai-core on crates.io
-#   sdk-js-v*    -> @ratel-ai/sdk loader + 5 platform packages (internally lockstep)
-#   sdk-py-v*    -> ratel-ai on PyPI
-#   telemetry-v* -> @ratel-ai/telemetry (npm) + ratel-ai-telemetry (PyPI + crates.io)
-#                   — one unit, three registries, all published from the same tag.
+#   core-v*           -> ratel-ai-core on crates.io
+#   sdk-js-v*         -> @ratel-ai/sdk loader + 5 platform packages (internally lockstep)
+#   sdk-py-v*         -> ratel-ai on PyPI
+#   telemetry-core-v* -> ratel-ai-telemetry on crates.io
+#   telemetry-js-v*   -> @ratel-ai/telemetry on npm
+#   telemetry-py-v*   -> ratel-ai-telemetry on PyPI
+#     The three telemetry helpers release independently (one registry each); tag
+#     the same commit thrice to ship them together.
 
 on:
   push:
-    tags: ['core-v*', 'sdk-js-v*', 'sdk-py-v*', 'telemetry-v*']
+    tags:
+      - 'core-v*'
+      - 'sdk-js-v*'
+      - 'sdk-py-v*'
+      - 'telemetry-core-v*'
+      - 'telemetry-js-v*'
+      - 'telemetry-py-v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -370,13 +379,13 @@ jobs:
           skip-existing: true
         if: ${{ !inputs.dry_run }}
 
-  # telemetry is the one unit spanning three registries: a single telemetry-v*
-  # tag fans out to npm + PyPI + crates.io. Each leg is its own job (distinct
-  # toolchain + Trusted Publisher), all gated on unit == 'telemetry'.
-  publish-telemetry-npm:
+  # The three telemetry helpers are independent single-registry units, each on
+  # its own tag prefix (telemetry-js-v* / telemetry-py-v* / telemetry-core-v*) and
+  # its own Trusted Publisher — exactly like core / sdk-js / sdk-py.
+  publish-telemetry-js:
     name: Publish @ratel-ai/telemetry to npm
     needs: [tag-version-check]
-    if: needs.tag-version-check.outputs.unit == 'telemetry'
+    if: needs.tag-version-check.outputs.unit == 'telemetry-js'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -425,10 +434,10 @@ jobs:
             (cd src/telemetry/ts && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
           fi
 
-  publish-telemetry-pypi:
+  publish-telemetry-py:
     name: Publish ratel-ai-telemetry to PyPI
     needs: [tag-version-check]
-    if: needs.tag-version-check.outputs.unit == 'telemetry'
+    if: needs.tag-version-check.outputs.unit == 'telemetry-py'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -458,10 +467,10 @@ jobs:
         # Dry runs upload nothing; gate on the workflow_dispatch flag.
         if: ${{ !inputs.dry_run }}
 
-  publish-telemetry-crate:
+  publish-telemetry-core:
     name: Publish ratel-ai-telemetry to crates.io
     needs: [tag-version-check]
-    if: needs.tag-version-check.outputs.unit == 'telemetry'
+    if: needs.tag-version-check.outputs.unit == 'telemetry-core'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -504,21 +513,21 @@ jobs:
       - publish-sdk-js
       - publish-pypi
       - publish-crate
-      - publish-telemetry-npm
-      - publish-telemetry-pypi
-      - publish-telemetry-crate
-    # One unit's publish job(s) run; the rest are skipped. Run when the tag was
-    # pushed and the applicable publish work succeeded. The single-registry units
-    # need any one of their jobs; telemetry needs all three registry legs.
+      - publish-telemetry-js
+      - publish-telemetry-py
+      - publish-telemetry-core
+    # Exactly one unit's publish job runs; the rest are skipped. Run when the tag
+    # was pushed and that one job succeeded. Every unit is single-registry now, so
+    # any one publish job succeeding is enough.
     if: >-
       ${{ github.event_name == 'push' && !cancelled()
           && needs.tag-version-check.result == 'success'
           && (needs.publish-sdk-js.result == 'success'
               || needs.publish-pypi.result == 'success'
               || needs.publish-crate.result == 'success'
-              || (needs.publish-telemetry-npm.result == 'success'
-                  && needs.publish-telemetry-pypi.result == 'success'
-                  && needs.publish-telemetry-crate.result == 'success')) }}
+              || needs.publish-telemetry-js.result == 'success'
+              || needs.publish-telemetry-py.result == 'success'
+              || needs.publish-telemetry-core.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

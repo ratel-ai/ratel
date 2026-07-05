@@ -145,9 +145,9 @@ ADR-0009-era "trace-consolidation" idea) is likewise just another OTLP receiver.
 | `ratel-ai-telemetry` | PyPI | Python helper: `init()` over the OTel SDK + `ratel.*` constants |
 | `@ratel-ai/telemetry` | npm | TS/JS helper: `init()` over the OTel SDK + `ratel.*` constants |
 
-Built in Phase 3 under `src/telemetry/{core,ts,python}`; released under the `telemetry-v*` tag prefix
-(per ADR-0016). Each helper is `init()` sugar plus constants only — the shared "spec" is the pinned OTel
-semconv version, not a Ratel crate the clients mirror.
+Built in Phase 3 under `src/telemetry/{core,ts,python}`; each helper is an independent per-package
+release unit on its own tag prefix (per ADR-0016), one per registry. Each helper is `init()` sugar plus
+constants only — the shared "spec" is the pinned OTel semconv version, not a Ratel crate the clients mirror.
 
 ## Consequences
 

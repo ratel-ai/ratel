@@ -6,25 +6,28 @@
 # it publishes via OIDC with provenance and no stored tokens.
 #
 # Release units (ADR-0016), each publishable independently:
-#   core       -> ratel-ai-core on crates.io          (cargo publish)
-#   sdk-js     -> @ratel-ai/sdk + 5 platform pkgs, npm (npm publish, tarballs)
-#   sdk-py     -> ratel-ai on PyPI                     (twine upload, wheels + sdist)
-#   telemetry  -> @ratel-ai/telemetry (npm) + ratel-ai-telemetry (PyPI + crate)
+#   core           -> ratel-ai-core on crates.io          (cargo publish)
+#   sdk-js         -> @ratel-ai/sdk + 5 platform pkgs, npm (npm publish, tarballs)
+#   sdk-py         -> ratel-ai on PyPI                     (twine upload, wheels + sdist)
+#   telemetry-core -> ratel-ai-telemetry on crates.io      (cargo publish)
+#   telemetry-js   -> @ratel-ai/telemetry on npm           (npm publish, built locally)
+#   telemetry-py   -> ratel-ai-telemetry on PyPI           (twine upload, built locally)
 # Each unit's version is read from its own manifest via scripts/release-units.mjs
 # (the single source of truth) — units are NOT assumed to share a version.
 #
-# telemetry is pure-language (no cross-compiled native binaries), so this helper
-# BUILDS its npm/PyPI/crate artifacts locally — it needs no --from-run/--from-dir.
+# The telemetry units are pure-language (no cross-compiled native binaries), so this
+# helper BUILDS their npm/PyPI/crate artifacts locally — they need no --from-run/--from-dir.
 #
 # Usage:
 #   scripts/publish-rc.sh --unit sdk-js --from-run <run-id> [--tag rc] [--dry-run]
 #   scripts/publish-rc.sh --unit sdk-py --from-dir <path>   [--dry-run]
 #   scripts/publish-rc.sh --unit core                       [--dry-run]
-#   scripts/publish-rc.sh --unit telemetry                  [--dry-run]
+#   scripts/publish-rc.sh --unit telemetry-js               [--dry-run]
 #   scripts/publish-rc.sh --from-dir <path>                 # all units
 #
 # Options:
-#   --unit <id>        core | sdk-js | sdk-py | telemetry. Repeatable. Default: all.
+#   --unit <id>        core | sdk-js | sdk-py | telemetry-core | telemetry-js |
+#                      telemetry-py. Repeatable. Default: all.
 #   --from-run <id>    Download all artifacts from the given GH Actions run
 #                      (requires `gh auth login`); tarballs/wheels are found within.
 #   --from-dir <path>  Use a directory already holding the tarballs/wheels.
@@ -218,34 +221,35 @@ publish_core() {
   echo
 }
 
-# ---------- telemetry: npm + PyPI + crate, all built locally ----------
-# The one 3-registry unit. Pure-language, so nothing comes from a CI run: build
-# the npm package (tsc), the pure-python wheel+sdist (python -m build), and the
-# crate (cargo publish from the repo), each idempotent against its registry.
-publish_telemetry() {
-  local version; version="$(resolve_version telemetry)"
-  echo "===== telemetry @ $version (npm + PyPI + crates.io) ====="
-
-  # -- npm: @ratel-ai/telemetry --
+# ---------- telemetry-js: @ratel-ai/telemetry on npm, built locally ----------
+# Pure-language, so nothing comes from a CI run: build the npm package (tsc) and
+# publish, idempotent against the registry.
+publish_telemetry_js() {
+  local version; version="$(resolve_version telemetry-js)"
+  echo "===== telemetry-js @ $version (npm) ====="
   echo "----- @ratel-ai/telemetry@$version (npm) -----"
   local status
   status="$(curl -sS -o /dev/null -w '%{http_code}' \
     "https://registry.npmjs.org/@ratel-ai%2Ftelemetry/${version}" || echo 000)"
   if [[ "$status" == "200" ]]; then
-    echo "    already published, skipping npm"
-  else
-    if [[ $DRY_RUN -eq 0 ]] && ! npm whoami >/dev/null 2>&1; then
-      echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
-    fi
-    ( cd "$REPO_ROOT" && pnpm --filter @ratel-ai/telemetry run build )
-    if [[ $DRY_RUN -eq 1 ]]; then
-      echo "    [dry-run] npm publish (src/telemetry/ts) --access public --tag $TAG --provenance=false"
-    else
-      ( cd "$REPO_ROOT/src/telemetry/ts" && npm publish --access public --tag "$TAG" --provenance=false )
-    fi
+    echo "    already published, skipping npm"; echo; return 0
   fi
+  if [[ $DRY_RUN -eq 0 ]] && ! npm whoami >/dev/null 2>&1; then
+    echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
+  fi
+  ( cd "$REPO_ROOT" && pnpm --filter @ratel-ai/telemetry run build )
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] npm publish (src/telemetry/ts) --access public --tag $TAG --provenance=false"
+  else
+    ( cd "$REPO_ROOT/src/telemetry/ts" && npm publish --access public --tag "$TAG" --provenance=false )
+  fi
+  echo "==> telemetry-js publish complete"; echo
+}
 
-  # -- PyPI: ratel-ai-telemetry (pure-python wheel + sdist) --
+# ---------- telemetry-py: ratel-ai-telemetry on PyPI (pure-python wheel + sdist) ----------
+publish_telemetry_py() {
+  local version; version="$(resolve_version telemetry-py)"
+  echo "===== telemetry-py @ $version (PyPI) ====="
   echo "----- ratel-ai-telemetry@$version (PyPI) -----"
   if ! command -v twine >/dev/null 2>&1; then
     echo "error: twine not found. 'pip install twine build' (auth via TWINE_* env or ~/.pypirc)." >&2; exit 1
@@ -259,34 +263,42 @@ publish_telemetry() {
     # --skip-existing keeps re-runs idempotent.
     twine upload --skip-existing "$dist"/*
   fi
+  echo "==> telemetry-py publish complete"; echo
+}
 
-  # -- crates.io: ratel-ai-telemetry --
+# ---------- telemetry-core: ratel-ai-telemetry on crates.io ----------
+publish_telemetry_core() {
+  local version; version="$(resolve_version telemetry-core)"
+  echo "===== telemetry-core @ $version (crates.io) ====="
   echo "----- ratel-ai-telemetry@$version (crates.io) -----"
+  local status
   status="$(curl -sS -o /dev/null -w '%{http_code}' \
     -H 'User-Agent: ratel-publish-rc (roberto@ratel.sh)' \
     "https://crates.io/api/v1/crates/ratel-ai-telemetry/${version}" || echo 000)"
   if [[ "$status" == "200" ]]; then
-    echo "    already published, skipping crate"
-  elif [[ $DRY_RUN -eq 1 ]]; then
-    echo "    [dry-run] cargo publish -p ratel-ai-telemetry"
-  else
-    local out
-    if out="$(cd "$REPO_ROOT" && cargo publish -p ratel-ai-telemetry 2>&1)"; then
-      printf '%s\n' "$out"
-    elif printf '%s' "$out" | grep -qE "already (exists|uploaded)|crate version .* is already uploaded"; then
-      echo "    already published (caught at publish time), continuing"
-    else
-      printf '%s\n' "$out" >&2; exit 1
-    fi
+    echo "    already published, skipping crate"; echo; return 0
   fi
-  echo "==> telemetry publishes complete"; echo
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] cargo publish -p ratel-ai-telemetry"; echo; return 0
+  fi
+  local out
+  if out="$(cd "$REPO_ROOT" && cargo publish -p ratel-ai-telemetry 2>&1)"; then
+    printf '%s\n' "$out"
+  elif printf '%s' "$out" | grep -qE "already (exists|uploaded)|crate version .* is already uploaded"; then
+    echo "    already published (caught at publish time), continuing"
+  else
+    printf '%s\n' "$out" >&2; exit 1
+  fi
+  echo "==> telemetry-core publish complete"; echo
 }
 
 # Publish in a stable order regardless of --unit argument order.
-selected core      && publish_core
-selected sdk-js    && publish_sdk_js
-selected sdk-py    && publish_sdk_py
-selected telemetry && publish_telemetry
+selected core           && publish_core
+selected sdk-js         && publish_sdk_js
+selected sdk-py         && publish_sdk_py
+selected telemetry-core && publish_telemetry_core
+selected telemetry-js   && publish_telemetry_js
+selected telemetry-py   && publish_telemetry_py
 
 echo "==> done"
 echo

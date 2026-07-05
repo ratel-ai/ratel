@@ -33,7 +33,8 @@ function makeRepo(version = "0.2.0", pyVersion = version) {
   write("src/sdk/python/pyproject.toml", `[project]\nname = "ratel-ai"\nversion = "${pyVersion}"\n`);
   write("src/sdk/python/native/Cargo.toml", cargo("ratel-sdk-python-native"));
   write("src/sdk/python/CHANGELOG.md", changelog(version));
-  // telemetry: the first 3-registry unit — npm + PyPI + crate all move together.
+  // telemetry: three independent units (crate / npm / PyPI), each tagged and
+  // gated separately (telemetry-core-v* / telemetry-js-v* / telemetry-py-v*).
   write("src/telemetry/ts/package.json", json("@ratel-ai/telemetry"));
   write("src/telemetry/ts/CHANGELOG.md", changelog(version));
   write("src/telemetry/python/pyproject.toml", `[project]\nname = "ratel-ai-telemetry"\nversion = "${pyVersion}"\n`);
@@ -48,12 +49,16 @@ test("parseTag splits prefix and version for every unit", () => {
   assert.deepEqual(parseTag("core-v0.2.0"), { unit: "core", version: "0.2.0" });
   assert.deepEqual(parseTag("sdk-js-v0.2.0"), { unit: "sdk-js", version: "0.2.0" });
   assert.deepEqual(parseTag("sdk-py-v1.4.0-rc.2"), { unit: "sdk-py", version: "1.4.0-rc.2" });
-  assert.deepEqual(parseTag("telemetry-v0.1.0-rc.1"), { unit: "telemetry", version: "0.1.0-rc.1" });
+  // telemetry is three independent units, each on its own prefix.
+  assert.deepEqual(parseTag("telemetry-core-v0.1.0-rc.1"), { unit: "telemetry-core", version: "0.1.0-rc.1" });
+  assert.deepEqual(parseTag("telemetry-js-v0.1.0"), { unit: "telemetry-js", version: "0.1.0" });
+  assert.deepEqual(parseTag("telemetry-py-v0.2.0-rc.2"), { unit: "telemetry-py", version: "0.2.0-rc.2" });
 });
 
 test("parseTag rejects the old lockstep tag and unknown prefixes", () => {
   assert.equal(parseTag("v0.2.0"), null);
   assert.equal(parseTag("server-v0.1.0"), null); // not (yet) a registered unit
+  assert.equal(parseTag("telemetry-v0.1.0"), null); // the bundled tag was split into telemetry-core/js/py
   assert.equal(parseTag("sdk-js-0.2.0"), null); // missing the -v
   assert.equal(parseTag("core-vX.Y.Z"), null); // non-semver
 });
@@ -126,30 +131,72 @@ test("sdk-py fails when the CHANGELOG lacks the version heading", () => {
   }
 });
 
-test("telemetry rc tag passes when npm + PyPI + crate manifests + all 3 CHANGELOGs match", () => {
-  // telemetry is the first unit spanning three registries; the tag gate must
-  // check the loader package.json, the pyproject (PEP 440), AND the crate Cargo.toml.
+test("telemetry-core rc tag passes when the crate + its changelog match", () => {
   const repo = makeRepo("0.1.0-rc.1", "0.1.0rc1");
   try {
-    const r = checkReleaseTag("telemetry-v0.1.0-rc.1", { root: repo.root });
+    const r = checkReleaseTag("telemetry-core-v0.1.0-rc.1", { root: repo.root });
     assert.equal(r.ok, true, r.errors.join("; "));
-    assert.equal(r.unit, "telemetry");
+    assert.equal(r.unit, "telemetry-core");
     assert.equal(r.distTag, "rc");
   } finally {
     repo.cleanup();
   }
 });
 
-test("telemetry fails when the crate version lags the npm/PyPI version", () => {
+test("telemetry-js tag passes when the npm package + its changelog match", () => {
+  const repo = makeRepo("0.1.0");
+  try {
+    const r = checkReleaseTag("telemetry-js-v0.1.0", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+    assert.equal(r.unit, "telemetry-js");
+    assert.equal(r.distTag, "latest");
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("telemetry-py accepts the PEP 440 normalized form in pyproject", () => {
+  // tag says 0.1.0-rc.1; the telemetry pyproject stores the PEP 440 form 0.1.0rc1
+  const repo = makeRepo("0.1.0-rc.1", "0.1.0rc1");
+  try {
+    const r = checkReleaseTag("telemetry-py-v0.1.0-rc.1", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+    assert.equal(r.unit, "telemetry-py");
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("telemetry-core catches drift in its own crate manifest", () => {
   const repo = makeRepo("0.1.0");
   try {
     repo.write(
       "src/telemetry/core/Cargo.toml",
       `[package]\nname = "ratel-ai-telemetry"\nversion = "0.0.9"\nedition = "2024"\n`,
     );
-    const r = checkReleaseTag("telemetry-v0.1.0", { root: repo.root });
+    const r = checkReleaseTag("telemetry-core-v0.1.0", { root: repo.root });
     assert.equal(r.ok, false);
     assert.ok(r.errors.some((e) => e.includes("telemetry/core/Cargo.toml")), r.errors.join("; "));
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("the three telemetry units release independently — one's tag ignores the others' drift", () => {
+  // The crate lags at 0.0.9 while npm is at 0.1.0. A telemetry-js release must
+  // NOT be blocked by the crate (they are separate units now).
+  const repo = makeRepo("0.1.0");
+  try {
+    repo.write(
+      "src/telemetry/core/Cargo.toml",
+      `[package]\nname = "ratel-ai-telemetry"\nversion = "0.0.9"\nedition = "2024"\n`,
+    );
+    const js = checkReleaseTag("telemetry-js-v0.1.0", { root: repo.root });
+    assert.equal(js.ok, true, js.errors.join("; "));
+    // ...and the crate can still ship on its own older version.
+    repo.write("src/telemetry/core/CHANGELOG.md", "# Changelog\n\n## [0.0.9] - 2026-07-04\n\n### Added\n- thing\n");
+    const core = checkReleaseTag("telemetry-core-v0.0.9", { root: repo.root });
+    assert.equal(core.ok, true, core.errors.join("; "));
   } finally {
     repo.cleanup();
   }

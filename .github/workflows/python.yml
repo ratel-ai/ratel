@@ -67,3 +67,10 @@ jobs:
         run: .venv/bin/mypy ratel_ai_telemetry
       - name: Test
         run: .venv/bin/pytest
+      # Telemetry example — runs offline (console exporter), emitting a ratel.search
+      # + execute_tool trace through the OTel SDK, so it verifies the `ratel.*` vocab
+      # end-to-end. `uv run` builds the local ratel-ai-telemetry + installs the OTel
+      # SDK. See examples/telemetry-python/main.py.
+      - name: Run the telemetry example
+        working-directory: examples/telemetry-python
+        run: uv run --python 3.11 main.py

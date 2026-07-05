@@ -29,10 +29,10 @@ Drop the shared workspace version. Each release unit carries its own version and
 | JS SDK | `@ratel-ai/sdk` loader + 5 platform packages + the `ts-native` crate — **internally lockstep** | `sdk-js-v*` | now |
 | Python SDK | `ratel-ai` (PyPI) + the `py-native` crate | `sdk-py-v*` | now |
 | CLI | `@ratel-ai/cli` | `cli-v*` | now |
-| Telemetry | `ratel-ai-telemetry` + `@ratel-ai/telemetry` | `telemetry-v*` | reserved, Phase 3 |
+| Telemetry | the telemetry helper packages — one independent unit **per registry** (no cross-package lockstep) | `telemetry-*-v*` (per package) | reserved, Phase 3 |
 | Server | `ratel-ai-server` + `@ratel-ai/server` | `server-v*` | reserved, Phase 4 |
 
-A tag is `<prefix>-vX.Y.Z` (GA) or `<prefix>-vX.Y.Z-rc.N` (RC). `telemetry-v*` and `server-v*` are reserved names, not live jobs — they ship when Phases 3/4 land those folders.
+A tag is `<prefix>-vX.Y.Z` (GA) or `<prefix>-vX.Y.Z-rc.N` (RC). The telemetry and server prefixes are reserved, not live jobs — they ship when Phases 3/4 land those folders. What counts as a *unit* is decided by the per-package principle above, not by a fixed tag name: the telemetry helpers have no cross-registry install dependency to force lockstep, so they finalize as one independent unit per registry — each on its own `telemetry-*-v*` prefix — rather than a single bundled tag.
 
 ### The JS SDK unit is internally lockstep
 
@@ -44,7 +44,7 @@ Every release ships as `<prefix>-vX.Y.Z-rc.N` first, promoted to GA only after t
 
 ### One `release.yml`, routed by tag prefix
 
-Keep a **single `release.yml`**. Splitting it per unit would break all nine Trusted Publisher registrations, since each is bound to this exact workflow filename. Instead the workflow **routes by tag prefix**: `<prefix>-v*` selects which build/publish jobs run. `on.push.tags` widens from `['v*']` to the prefix set (`core-v*`, `sdk-js-v*`, `sdk-py-v*`, `cli-v*`, and later `telemetry-v*`, `server-v*`), and a job gates on the parsed prefix so a `core-v*` tag never runs the npm publish path, and vice versa.
+Keep a **single `release.yml`**. Splitting it per unit would break all nine Trusted Publisher registrations, since each is bound to this exact workflow filename. Instead the workflow **routes by tag prefix**: `<prefix>-v*` selects which build/publish jobs run. `on.push.tags` widens from `['v*']` to the prefix set (`core-v*`, `sdk-js-v*`, `sdk-py-v*`, `cli-v*`, and later the telemetry helper prefixes and `server-v*`), and a job gates on the parsed prefix so a `core-v*` tag never runs the npm publish path, and vice versa.
 
 ### Keep the `release` environment name; update only its tag policy
 

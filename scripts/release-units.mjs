@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Single source of truth for Ratel's release units (ADR-0016).
 //
-// Every release-infra tool reads unit facts from HERE so the three units can
+// Every release-infra tool reads unit facts from HERE so the units can
 // never drift apart:
 //   - scripts/check-release-tag.mjs  — the per-tag manifest + CHANGELOG gate
 //   - scripts/releasable.mjs         — "which units have commits since their tag"
 //   - scripts/publish-rc.sh          — the manual first-publish helper (--unit)
 //   - .claude/skills/changelog/draft.sh — via the `--changelog-map` CLI below
 //
-// Adding a 4th unit later (e.g. `server`, `telemetry`) is a one-place change.
+// Adding another unit later (e.g. `server`) is a one-place change.
 //
 // Per unit:
 //   tagPrefix        release tag prefix; a unit ships on `<tagPrefix><semver>`.
@@ -62,25 +62,49 @@ export const UNITS = {
     srcPaths: ["src/sdk/python"],
     changelog: { name: "ratel-ai", includePaths: ["src/sdk/python/**"] },
   },
-  telemetry: {
-    tagPrefix: "telemetry-v",
-    label: "@ratel-ai/telemetry (npm) + ratel-ai-telemetry (PyPI + crates.io)",
-    // The first 3-registry unit: the npm loader, the pure-python wheel, and the
-    // constants crate share one telemetry-v* tag and move in lockstep. The npm
-    // package.json is canonical; the pyproject carries the PEP 440 spelling.
+  // The telemetry helpers are three INDEPENDENT units — one per registry — so a
+  // fix to just the npm helper ships alone, and all three can still go out in one
+  // run by tagging the same commit thrice (ADR-0016's per-package principle; the
+  // packages have no cross-registry install dependency, so nothing forces them
+  // lockstep). Each shares the vocabulary spec + conformance fixtures, so a change
+  // there marks all three releasable and drafts into all three changelogs.
+  "telemetry-core": {
+    tagPrefix: "telemetry-core-v",
+    label: "ratel-ai-telemetry → crates.io",
+    versionManifest: { path: "src/telemetry/core/Cargo.toml", kind: "toml" },
+    manifests: [{ path: "src/telemetry/core/Cargo.toml", kind: "toml" }],
+    changelogs: ["src/telemetry/core/CHANGELOG.md"],
+    srcPaths: ["src/telemetry/core", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance"],
+    changelog: {
+      name: "ratel-ai-telemetry (crate)",
+      includePaths: ["src/telemetry/core/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
+    },
+  },
+  "telemetry-js": {
+    tagPrefix: "telemetry-js-v",
+    label: "@ratel-ai/telemetry → npm",
     versionManifest: { path: "src/telemetry/ts/package.json", kind: "json" },
-    manifests: [
-      { path: "src/telemetry/ts/package.json", kind: "json" },
-      { path: "src/telemetry/python/pyproject.toml", kind: "toml", pep440: true },
-      { path: "src/telemetry/core/Cargo.toml", kind: "toml" },
-    ],
-    changelogs: [
-      "src/telemetry/ts/CHANGELOG.md",
-      "src/telemetry/python/CHANGELOG.md",
-      "src/telemetry/core/CHANGELOG.md",
-    ],
-    srcPaths: ["src/telemetry"],
-    changelog: { name: "ratel-ai-telemetry", includePaths: ["src/telemetry/**"] },
+    manifests: [{ path: "src/telemetry/ts/package.json", kind: "json" }],
+    changelogs: ["src/telemetry/ts/CHANGELOG.md"],
+    srcPaths: ["src/telemetry/ts", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance"],
+    changelog: {
+      name: "@ratel-ai/telemetry",
+      includePaths: ["src/telemetry/ts/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
+    },
+  },
+  "telemetry-py": {
+    tagPrefix: "telemetry-py-v",
+    label: "ratel-ai-telemetry → PyPI",
+    // The npm package.json is canonical for its unit; the pyproject carries the
+    // PEP 440 spelling of the same semver (e.g. 0.1.0rc1).
+    versionManifest: { path: "src/telemetry/python/pyproject.toml", kind: "toml", pep440: true },
+    manifests: [{ path: "src/telemetry/python/pyproject.toml", kind: "toml", pep440: true }],
+    changelogs: ["src/telemetry/python/CHANGELOG.md"],
+    srcPaths: ["src/telemetry/python", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance"],
+    changelog: {
+      name: "ratel-ai-telemetry (PyPI)",
+      includePaths: ["src/telemetry/python/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
+    },
   },
 };
 

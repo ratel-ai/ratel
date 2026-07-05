@@ -1,9 +1,10 @@
 name: Verify install
 
 # Per-unit install smoke tests (ADR-0016). Each release unit — core (crate),
-# sdk-js (npm), sdk-py (PyPI), telemetry (npm + PyPI + crate) — is verified from
-# its public registry with no repo checkout and no local toolchain state, so a
-# broken publish surfaces here.
+# sdk-js (npm), sdk-py (PyPI), and the three telemetry helpers (telemetry-core
+# on crates.io, telemetry-js on npm, telemetry-py on PyPI) — is verified from its
+# public registry with no repo checkout and no local toolchain state, so a broken
+# publish surfaces here.
 #
 # workflow_dispatch: pick a `unit` and (optionally) a `version` to verify just
 # that one. The daily cron runs `unit: all` at each unit's `latest`.
@@ -15,7 +16,7 @@ on:
         description: Release unit to verify
         type: choice
         default: all
-        options: [all, core, sdk-js, sdk-py, telemetry]
+        options: [all, core, sdk-js, sdk-py, telemetry-core, telemetry-js, telemetry-py]
       version:
         description: Version to verify (e.g. 0.2.0-rc.2 or 0.2.0). Only applied when a single unit is selected; ignored for `all`.
         required: false
@@ -174,12 +175,12 @@ jobs:
           EOF
           cargo run -q
 
-  # telemetry ships to three registries from one tag, so it has three verify legs.
-  # Each is pure-language (no per-OS artifact), so one linux leg per registry proves
-  # downstream installability. The smoke test reads the pinned SEMCONV_VERSION const.
-  verify-telemetry-npm:
-    name: verify telemetry (npm)
-    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry'
+  # The three telemetry helpers are independent single-registry units, each with
+  # its own verify leg. Each is pure-language (no per-OS artifact), so one linux
+  # leg proves downstream installability. The smoke test reads SEMCONV_VERSION.
+  verify-telemetry-js:
+    name: verify telemetry-js (npm)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry-js'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-node@v4
@@ -190,7 +191,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          if [ "${{ inputs.unit }}" = "telemetry" ] && [ -n "${{ inputs.version }}" ]; then
+          if [ "${{ inputs.unit }}" = "telemetry-js" ] && [ -n "${{ inputs.version }}" ]; then
             echo "spec=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "spec=${{ inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
@@ -205,9 +206,9 @@ jobs:
           npm install --no-audit --no-fund "@ratel-ai/telemetry@${{ steps.ver.outputs.spec }}"
           node --input-type=module -e "import { SEMCONV_VERSION } from '@ratel-ai/telemetry'; if (SEMCONV_VERSION !== '1.42.0') { console.error('unexpected SEMCONV_VERSION', SEMCONV_VERSION); process.exit(1); } console.log('OK', SEMCONV_VERSION);"
 
-  verify-telemetry-pypi:
-    name: verify telemetry (PyPI)
-    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry'
+  verify-telemetry-py:
+    name: verify telemetry-py (PyPI)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry-py'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-python@v5
@@ -218,7 +219,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          if [ "${{ inputs.unit }}" = "telemetry" ] && [ -n "${{ inputs.version }}" ]; then
+          if [ "${{ inputs.unit }}" = "telemetry-py" ] && [ -n "${{ inputs.version }}" ]; then
             echo "spec===${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "spec=" >> "$GITHUB_OUTPUT"
@@ -231,9 +232,9 @@ jobs:
           python -m pip install "ratel-ai-telemetry${{ steps.ver.outputs.spec }}"
           python -c "import ratel_ai_telemetry as t; assert t.SEMCONV_VERSION == '1.42.0', t.SEMCONV_VERSION; print('OK', t.SEMCONV_VERSION)"
 
-  verify-telemetry-crate:
-    name: verify telemetry (crate)
-    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry'
+  verify-telemetry-core:
+    name: verify telemetry-core (crate)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry-core'
     runs-on: ubuntu-latest
     steps:
       - uses: dtolnay/rust-toolchain@stable
@@ -242,7 +243,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          if [ "${{ inputs.unit }}" = "telemetry" ] && [ -n "${{ inputs.version }}" ]; then
+          if [ "${{ inputs.unit }}" = "telemetry-core" ] && [ -n "${{ inputs.version }}" ]; then
             echo "spec=@${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "spec=" >> "$GITHUB_OUTPUT"
