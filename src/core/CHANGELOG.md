@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.1-rc.1] - 2026-07-04
+
+### Changed
+
+- First release cut under the per-package release scheme (ADR-0016): `ratel-ai-core` now versions and ships independently, tagged `core-v*`. No crate API changes since 0.2.0.
+
 ## [0.2.0] - 2026-06-16
 
 ### Added
