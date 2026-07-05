@@ -13,11 +13,11 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 // The release units (manifests, CHANGELOGs, tag prefixes) live in one registry
 // shared with releasable.mjs / publish-rc.sh / draft.sh — see release-units.mjs.
-import { UNITS, SEMVER, unitIdAlternation } from "./release-units.mjs";
+// `isMainModule` is shared too so every CLI's entry check is symlink-robust.
+import { UNITS, SEMVER, unitIdAlternation, isMainModule } from "./release-units.mjs";
 
 // `<prefix>-v<semver>` -> { unit, version }. Anything else (the old lockstep
 // `v0.2.0`, an unknown prefix, a non-semver body) returns null so the caller can
@@ -122,6 +122,6 @@ function main(argv) {
   console.log(`${r.unit} ${r.version} (${r.distTag}) — manifests + CHANGELOG verified`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   main(process.argv);
 }

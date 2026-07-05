@@ -14,9 +14,8 @@
 // Informational only: always exits 0.
 
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
-import { UNITS } from "./release-units.mjs";
+import { UNITS, isMainModule } from "./release-units.mjs";
 
 // Pure core: given a unit registry and injectable git accessors, decide which
 // units are releasable. `git.lastTag(prefix)` returns the unit's most recent tag
@@ -87,6 +86,6 @@ function main(argv) {
   );
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   main(process.argv.slice(2));
 }

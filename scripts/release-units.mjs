@@ -20,7 +20,7 @@
 //                    carry commits since its last tag (releasable.mjs).
 //   changelog        git-cliff scope: { name, includePaths } (draft.sh).
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export const PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64-gnu", "linux-arm64-gnu", "win32-x64-msvc"];
@@ -131,6 +131,22 @@ export function versionOf(unit, root = process.cwd()) {
   return /^version\s*=\s*"([^"]+)"/m.exec(body)?.[1] ?? null;
 }
 
+// Robust "was this module run as the entry script?" check, shared by every CLI in
+// this dir. ESM resolves symlinks in import.meta.url, but process.argv[1] keeps the
+// path as it was invoked — so a plain string compare is false when the repo is
+// reached through a symlink, and the CLI silently does nothing (e.g. `--list` prints
+// an empty list, which made publish-rc.sh report `unknown unit … (valid: )`).
+// Comparing real paths matches any symlinked / relative / absolute invocation.
+export function isMainModule(importMetaUrl) {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(importMetaUrl));
+  } catch {
+    return false;
+  }
+}
+
 // ---- tiny CLI so bash tools (draft.sh) share this one registry ----
 //   node scripts/release-units.mjs --list
 //   node scripts/release-units.mjs --changelog-map [unit]
@@ -181,6 +197,6 @@ function main(argv) {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   main(process.argv);
 }
