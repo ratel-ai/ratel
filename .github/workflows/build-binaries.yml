@@ -129,12 +129,11 @@ jobs:
           for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
             (cd src/sdk/ts/npm/$triple && npm pack --pack-destination "$GITHUB_WORKSPACE/tarballs")
           done
-      - name: Pack SDK loader and cli
+      - name: Pack SDK loader
         shell: bash
         run: |
           set -e
           pnpm --filter @ratel-ai/sdk pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
-          pnpm --filter @ratel-ai/cli pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
       - name: List final bundle
         run: ls -la tarballs/
       - name: Upload bundle

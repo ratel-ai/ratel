@@ -33,6 +33,10 @@ jobs:
         run: pnpm -r lint
       - name: Test
         run: pnpm -r test
+      # Release tooling lives at repo root (outside the pnpm workspace), so run its
+      # dependency-free node:test suite here rather than via `pnpm -r test`.
+      - name: Test release tooling
+        run: node --test scripts/*.test.mjs
       # Example wiring (Vercel AI SDK) — folded in here to keep one TS check row.
       # Drives the real ToolLoopAgent loop with a scripted MockLanguageModel (no API
       # key), catching framework-integration drift the SDK-level tests can't see. The

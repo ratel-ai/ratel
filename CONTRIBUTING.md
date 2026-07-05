@@ -50,21 +50,22 @@ For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Statu
 ## Commit messages
 
 - Concise, imperative mood; sacrifice grammar for brevity
-- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful — these route into per-package CHANGELOGs (see Releases)
-- Use a scope when the change is package-specific: `feat(sdk):`, `fix(cli):`, `refactor(core):`. Unscoped `feat`/`fix` won't auto-route to a single package's changelog
+- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful — the prefix picks the CHANGELOG section (`feat`→Added, `fix`→Fixed, `perf`/`refactor`→Changed; `docs`/`chore`/`ci`/`build`/`test` are skipped). See Releases
+- A scope (`feat(core):`, `fix(sdk):`) is cosmetic — it's shown in the entry but does not decide which unit's CHANGELOG a commit lands in. That routing is by the files a commit touches (git-cliff scopes each unit to its own paths), so keep a commit within one unit's tree where practical
 - No tool-attribution lines (no `Co-Authored-By` for AI assistants)
 
 ## Releases
 
-We publish three artifacts from this repo in lockstep: `ratel-ai-core` (crates.io) and `@ratel-ai/sdk` / `@ratel-ai/cli` (npm). Each has a `CHANGELOG.md` in its package directory. The MCP-server library `@ratel-ai/mcp-server` is published independently from [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp); `@ratel-ai/cli` depends on it from npm.
+Three independently-versioned units publish from this repo (ADR-0016): `ratel-ai-core` (crates.io), `@ratel-ai/sdk` + its per-OS packages (npm), and `ratel-ai` (PyPI). Each has a `CHANGELOG.md` in its package directory and its own tag prefix (`core-v*` / `sdk-js-v*` / `sdk-py-v*`). `@ratel-ai/mcp-server` publishes independently from [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp).
 
-Before tagging a release:
+To cut a release — one unit at a time; see [RELEASING.md](RELEASING.md) for the full flow:
 
-1. Bump the version in `Cargo.toml`, `src/sdk/ts/package.json`, `src/cli/package.json` (kept in lockstep — the release workflow validates).
-2. Run the `/changelog` skill (`.claude/skills/changelog/`). It drafts per-package entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the three CHANGELOGs. For GA versions (no `-rc` suffix), it collapses any existing `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]` section.
-3. Commit the version bumps and CHANGELOG updates together (typically `release: vX.Y.Z`), tag, push.
+1. `node scripts/releasable.mjs` to see which units have unreleased commits.
+2. Bump that unit's version in its manifest(s) — the release workflow validates the tag against every manifest the unit owns.
+3. Run the `/changelog` skill (`.claude/skills/changelog/`) for the unit. It drafts entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the unit's CHANGELOG; for GA versions it collapses the unit's `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]`.
+4. Commit the bump + CHANGELOG together (`release: <unit>-vX.Y.Z`), tag `<unit>-vX.Y.Z`, push.
 
-The release workflow's `tag-version-check` job rejects any tag whose CHANGELOGs don't contain a `## [<version>]` heading. See [ADR 0008](docs/adr/0008-per-package-changelogs.md) for the full rationale.
+The release workflow's `tag-version-check` job rejects any tag whose unit CHANGELOG lacks a `## [<version>]` heading. See [ADR 0008](docs/adr/0008-per-package-changelogs.md) (per-package changelogs) and [ADR 0016](docs/adr/0016-per-package-versions-and-releases.md) (per-unit versions + tags) for the rationale.
 
 ## Pull requests
 

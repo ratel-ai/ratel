@@ -124,8 +124,7 @@ The server and hosted cloud are decided direction ([ADR-0014](docs/adr/0014-prod
 src/
 ├── core/              # ratel-ai-core — Rust BM25 engine
 ├── sdk/ts/            # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
-├── sdk/python/        # ratel-ai — Python SDK (PyO3-bound)
-└── cli/               # @ratel-ai/cli — ratel CLI
+└── sdk/python/        # ratel-ai — Python SDK (PyO3-bound)
 examples/              # End-to-end SDK examples
 docs/                  # ADRs
 ```

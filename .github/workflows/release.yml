@@ -1,10 +1,22 @@
 name: Release
 
+# Per-package releases (ADR-0016): each unit ships on its own tag prefix, routed
+# through this ONE workflow. Keeping a single release.yml + the `release`
+# environment preserves the OIDC Trusted Publisher registrations (npm loader + 5
+# platform packages, the PyPI wheel, the crate) — splitting the file or
+# renaming the environment would de-register all of them.
+#   core-v*    -> ratel-ai-core on crates.io
+#   sdk-js-v*  -> @ratel-ai/sdk loader + 5 platform packages (internally lockstep)
+#   sdk-py-v*  -> ratel-ai on PyPI
+
 on:
   push:
-    tags: ['v*']
+    tags: ['core-v*', 'sdk-js-v*', 'sdk-py-v*']
   workflow_dispatch:
     inputs:
+      tag:
+        description: 'Tag to validate/publish, e.g. core-v0.2.0 or sdk-js-v0.3.0-rc.1'
+        required: true
       dry_run:
         description: Dry run (validate but do not publish)
         type: boolean
@@ -12,7 +24,7 @@ on:
       ref:
         description: Git ref to build (only used with workflow_dispatch)
         required: false
-        default: revamp
+        default: main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,75 +35,36 @@ jobs:
     name: Tag/version sync
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.compute.outputs.version }}
-      dist_tag: ${{ steps.compute.outputs.dist_tag }}
+      unit: ${{ steps.check.outputs.unit }}
+      version: ${{ steps.check.outputs.version }}
+      dist_tag: ${{ steps.check.outputs.dist_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
-      - id: compute
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - id: check
         shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
         run: |
           set -e
           if [ "${{ github.event_name }}" = "push" ]; then
-            tag_version="${GITHUB_REF_NAME#v}"
+            tag="${GITHUB_REF_NAME}"
           else
-            tag_version=$(node -p "require('./src/sdk/ts/package.json').version")
+            tag="${DISPATCH_TAG}"
           fi
-
-          ws_version=$(grep -E '^version' Cargo.toml | head -1 | sed -E 's/version *= *"([^"]+)"/\1/')
-          sdk_version=$(node -p "require('./src/sdk/ts/package.json').version")
-          cli_version=$(node -p "require('./src/cli/package.json').version")
-          py_version=$(grep -E '^version' src/sdk/python/pyproject.toml | head -1 | sed -E 's/version *= *"([^"]+)"/\1/')
-
-          echo "tag_version=$tag_version"
-          echo "workspace=$ws_version sdk=$sdk_version cli=$cli_version py=$py_version"
-
-          fail=0
-          for v in "$ws_version" "$sdk_version" "$cli_version"; do
-            if [ "$v" != "$tag_version" ]; then
-              echo "::error::Version mismatch — expected $tag_version, got $v"
-              fail=1
-            fi
-          done
-          # PyPI/PEP 440 normalizes pre-release tags (e.g. `0.1.5-rc.4` -> `0.1.5rc4`),
-          # so the version that lands on PyPI differs from the npm/crate string. Accept
-          # either the npm-style tag or its PEP 440 form in pyproject.toml.
-          py_expected=$(printf '%s' "$tag_version" | sed -E 's/-?rc\.?([0-9]+)/rc\1/')
-          if [ "$py_version" != "$tag_version" ] && [ "$py_version" != "$py_expected" ]; then
-            echo "::error::Python version mismatch — expected $tag_version (or PEP 440 $py_expected), got $py_version"
-            fail=1
-          fi
-          if [ "$fail" = "1" ]; then exit 1; fi
-
-          if [[ "$tag_version" == *-rc.* ]]; then
-            echo "dist_tag=rc" >> "$GITHUB_OUTPUT"
-          else
-            echo "dist_tag=latest" >> "$GITHUB_OUTPUT"
-          fi
-          echo "version=$tag_version" >> "$GITHUB_OUTPUT"
-      - name: Verify CHANGELOGs updated
-        shell: bash
-        env:
-          VERSION: ${{ steps.compute.outputs.version }}
-        run: |
-          set -e
-          fail=0
-          for f in \
-            src/core/CHANGELOG.md \
-            src/sdk/ts/CHANGELOG.md \
-            src/sdk/python/CHANGELOG.md \
-            src/cli/CHANGELOG.md; do
-            if ! grep -qF "## [${VERSION}]" "$f"; then
-              echo "::error file=$f::missing entry for version ${VERSION} — run /changelog before tagging"
-              fail=1
-            fi
-          done
-          [ "$fail" = "0" ]
+          # Routes <unit>-v<semver>, verifies ONLY that unit's manifests + CHANGELOG,
+          # and writes unit/version/dist_tag to $GITHUB_OUTPUT. Covered by
+          # scripts/check-release-tag.test.mjs (run in the TS workflow).
+          node scripts/check-release-tag.mjs "$tag"
 
   build:
     name: build (${{ matrix.triple }})
     needs: tag-version-check
+    if: needs.tag-version-check.outputs.unit == 'sdk-js'
     strategy:
       fail-fast: false
       matrix:
@@ -147,9 +120,10 @@ jobs:
             src/sdk/ts/native/index.d.cts
           if-no-files-found: error
 
-  publish-npm:
-    name: Publish npm packages
+  publish-sdk-js:
+    name: Publish @ratel-ai/sdk (loader + platform packages)
     needs: [tag-version-check, build]
+    if: needs.tag-version-check.outputs.unit == 'sdk-js'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -202,7 +176,7 @@ jobs:
         run: node scripts/inject-sdk-optional-deps.mjs
       # Preflight: dry-run every npm publish BEFORE any real push, so a packaging
       # error fails the job before a single (immutable) version goes live. The
-      # subpackages → loader → cli order is the install-time dependency order.
+      # subpackages → loader order is the install-time dependency order.
       - name: Preflight — dry-run all npm publishes
         shell: bash
         env:
@@ -213,8 +187,6 @@ jobs:
             (cd src/sdk/ts/npm/$triple && npm publish --access public --tag "$DIST_TAG" --dry-run)
           done
           (cd src/sdk/ts && npm publish --access public --tag "$DIST_TAG" --dry-run)
-          pnpm --filter @ratel-ai/cli pack --pack-destination "${RUNNER_TEMP}/cli-preflight"
-          npm publish "${RUNNER_TEMP}/cli-preflight"/*.tgz --access public --tag "$DIST_TAG" --dry-run
       # Real publishes are idempotent: each skips if that exact name@version is
       # already on the registry, so re-running this job after a partial/transient
       # failure resumes instead of erroring with E409 (npm versions are immutable).
@@ -249,35 +221,11 @@ jobs:
           else
             (cd src/sdk/ts && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
           fi
-      # cli has `workspace:^` specifiers for its internal SDK dep.
-      # `npm publish` doesn't understand that protocol and ships the literal
-      # string, breaking installs (EUNSUPPORTEDPROTOCOL on `npm install`).
-      # Pack with `pnpm pack` first (rewrites workspace:^ → real semver),
-      # then publish the tarball with `npm publish` so OIDC + provenance
-      # still work.
-      - name: Publish cli
-        shell: bash
-        env:
-          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
-        run: |
-          set -e
-          name=$(node -p "require('./src/cli/package.json').name")
-          ver=$(node -p "require('./src/cli/package.json').version")
-          if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
-            echo "::notice::$name@$ver already published — skipping"
-          else
-            pnpm --filter @ratel-ai/cli pack --pack-destination "${RUNNER_TEMP}/cli"
-            npm publish "${RUNNER_TEMP}/cli"/*.tgz --provenance --access public --tag "$DIST_TAG" $DRY_RUN
-          fi
 
   publish-crate:
     name: Publish ratel-ai-core to crates.io
-    # crates.io is the least-reversible registry (a version can't be re-published
-    # and `cargo yank` doesn't free it), so publish it LAST — only once npm and
-    # PyPI have both succeeded. Avoids burning the crate version if an earlier
-    # registry fails.
-    needs: [tag-version-check, publish-npm, publish-pypi]
+    needs: [tag-version-check]
+    if: needs.tag-version-check.outputs.unit == 'core'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -288,7 +236,8 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
-      # Preflight: package + verify before the irreversible upload.
+      # crates.io is the least-reversible registry (a version can't be re-published
+      # and `cargo yank` doesn't free it), so preflight before the irreversible upload.
       - name: Preflight — cargo publish --dry-run
         run: cargo publish -p ratel-ai-core --dry-run
       - name: Authenticate to crates.io via Trusted Publishing
@@ -316,6 +265,7 @@ jobs:
   build-wheels:
     name: build wheel (${{ matrix.triple }})
     needs: tag-version-check
+    if: needs.tag-version-check.outputs.unit == 'sdk-py'
     strategy:
       fail-fast: false
       matrix:
@@ -363,6 +313,7 @@ jobs:
   build-sdist:
     name: build sdist
     needs: tag-version-check
+    if: needs.tag-version-check.outputs.unit == 'sdk-py'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -383,10 +334,8 @@ jobs:
 
   publish-pypi:
     name: Publish ratel-ai to PyPI
-    # Sequenced after npm so a partial multi-registry release fails forward in a
-    # fixed order (npm → PyPI → crates) rather than three registries racing
-    # independently. `twine check` below + `skip-existing` keep this idempotent.
-    needs: [tag-version-check, build-wheels, build-sdist, publish-npm]
+    needs: [tag-version-check, build-wheels, build-sdist]
+    if: needs.tag-version-check.outputs.unit == 'sdk-py'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -421,14 +370,22 @@ jobs:
 
   github-release:
     name: GitHub Release
-    needs: [tag-version-check, publish-npm, publish-crate, publish-pypi]
-    if: github.event_name == 'push'
+    needs: [tag-version-check, publish-sdk-js, publish-pypi, publish-crate]
+    # One publish job runs per unit; the rest are skipped. Run when the tag was
+    # pushed and whichever publish job applied to this unit succeeded.
+    if: >-
+      ${{ github.event_name == 'push' && !cancelled()
+          && needs.tag-version-check.result == 'success'
+          && (needs.publish-sdk-js.result == 'success'
+              || needs.publish-pypi.result == 'success'
+              || needs.publish-crate.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Download binaries
+        if: needs.tag-version-check.outputs.unit == 'sdk-js'
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -437,14 +394,19 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.tag-version-check.outputs.version }}
+          UNIT: ${{ needs.tag-version-check.outputs.unit }}
           DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
         run: |
           set -e
           flags=""
           if [ "$DIST_TAG" = "rc" ]; then flags="--prerelease"; fi
-          gh release create "v$VERSION" \
-            --title "v$VERSION" \
+          # Only the JS SDK ships prebuilt .node binaries as release assets.
+          assets=()
+          if [ "$UNIT" = "sdk-js" ]; then
+            assets=(artifacts/*.node)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
             --generate-notes \
             $flags \
-            artifacts/*.node
+            "${assets[@]}"
