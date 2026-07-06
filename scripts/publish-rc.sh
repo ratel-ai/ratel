@@ -7,12 +7,12 @@
 #
 # Release units (ADR-0016), each publishable independently:
 #   core           -> ratel-ai-core on crates.io          (cargo publish)
-#   sdk-js         -> @ratel-ai/sdk + 5 platform pkgs, npm (npm publish, tarballs)
+#   sdk-ts         -> @ratel-ai/sdk + 5 platform pkgs, npm (npm publish, tarballs)
 #   sdk-py         -> ratel-ai on PyPI                     (twine upload, wheels + sdist)
 #   telemetry-core -> ratel-ai-telemetry on crates.io      (cargo publish)
-#   telemetry-js   -> @ratel-ai/telemetry on npm           (npm publish, built locally)
+#   telemetry-ts   -> @ratel-ai/telemetry on npm           (npm publish, built locally)
 #   telemetry-py   -> ratel-ai-telemetry on PyPI           (twine upload, built locally)
-#   telemetry-otlp -> @ratel-ai/telemetry-otlp on npm      (npm publish, pnpm-packed locally)
+#   telemetry-ts-otlp -> @ratel-ai/telemetry-otlp on npm      (npm publish, pnpm-packed locally)
 # Each unit's version is read from its own manifest via scripts/release-units.mjs
 # (the single source of truth) — units are NOT assumed to share a version.
 #
@@ -20,15 +20,15 @@
 # helper BUILDS their npm/PyPI/crate artifacts locally — they need no --from-run/--from-dir.
 #
 # Usage:
-#   scripts/publish-rc.sh --unit sdk-js --from-run <run-id> [--tag rc] [--dry-run]
+#   scripts/publish-rc.sh --unit sdk-ts --from-run <run-id> [--tag rc] [--dry-run]
 #   scripts/publish-rc.sh --unit sdk-py --from-dir <path>   [--dry-run]
 #   scripts/publish-rc.sh --unit core                       [--dry-run]
-#   scripts/publish-rc.sh --unit telemetry-js               [--dry-run]
+#   scripts/publish-rc.sh --unit telemetry-ts               [--dry-run]
 #   scripts/publish-rc.sh --from-dir <path>                 # all units
 #
 # Options:
-#   --unit <id>        core | sdk-js | sdk-py | telemetry-core | telemetry-js |
-#                      telemetry-py | telemetry-otlp. Repeatable. Default: all.
+#   --unit <id>        core | sdk-ts | sdk-py | telemetry-core | telemetry-ts |
+#                      telemetry-py | telemetry-ts-otlp. Repeatable. Default: all.
 #   --from-run <id>    Download all artifacts from the given GH Actions run
 #                      (requires `gh auth login`); tarballs/wheels are found within.
 #   --from-dir <path>  Use a directory already holding the tarballs/wheels.
@@ -79,10 +79,10 @@ resolve_version() { node "$REPO_ROOT/scripts/release-units.mjs" --version "$1"; 
 
 # npm-only units need artifacts on disk; core (cargo) builds from the repo.
 NEEDS_ARTIFACTS=0
-selected sdk-js && NEEDS_ARTIFACTS=1
+selected sdk-ts && NEEDS_ARTIFACTS=1
 selected sdk-py && NEEDS_ARTIFACTS=1
 if [[ $NEEDS_ARTIFACTS -eq 1 && -z "$FROM_DIR" && -z "$FROM_RUN" ]]; then
-  echo "error: sdk-js/sdk-py need --from-run <id> or --from-dir <path>" >&2
+  echo "error: sdk-ts/sdk-py need --from-run <id> or --from-dir <path>" >&2
   exit 2
 fi
 if [[ -n "$FROM_RUN" && -z "$FROM_DIR" ]]; then
@@ -113,10 +113,10 @@ publish_one_npm() {
   rm -f "$err_file"; return 1
 }
 
-# ---------- sdk-js: npm loader + 5 platform packages ----------
-publish_sdk_js() {
-  local version; version="$(resolve_version sdk-js)"
-  echo "===== sdk-js @ $version (npm) ====="
+# ---------- sdk-ts: npm loader + 5 platform packages ----------
+publish_sdk_ts() {
+  local version; version="$(resolve_version sdk-ts)"
+  echo "===== sdk-ts @ $version (npm) ====="
   # A dry-run only validates the publish plan, so it doesn't need credentials.
   if [[ $DRY_RUN -eq 0 ]]; then
     if ! npm whoami >/dev/null 2>&1; then
@@ -159,7 +159,7 @@ publish_sdk_js() {
     fi
     publish_one_npm "$file" || exit 1
   done
-  echo "==> sdk-js npm publishes complete"; echo
+  echo "==> sdk-ts npm publishes complete"; echo
 }
 
 # ---------- sdk-py: PyPI wheels + sdist via twine ----------
@@ -222,12 +222,12 @@ publish_core() {
   echo
 }
 
-# ---------- telemetry-js: @ratel-ai/telemetry on npm, built locally ----------
+# ---------- telemetry-ts: @ratel-ai/telemetry on npm, built locally ----------
 # Pure-language, so nothing comes from a CI run: build the npm package (tsc) and
 # publish, idempotent against the registry.
-publish_telemetry_js() {
-  local version; version="$(resolve_version telemetry-js)"
-  echo "===== telemetry-js @ $version (npm) ====="
+publish_telemetry_ts() {
+  local version; version="$(resolve_version telemetry-ts)"
+  echo "===== telemetry-ts @ $version (npm) ====="
   echo "----- @ratel-ai/telemetry@$version (npm) -----"
   local status
   status="$(curl -sS -o /dev/null -w '%{http_code}' \
@@ -244,7 +244,7 @@ publish_telemetry_js() {
   else
     ( cd "$REPO_ROOT/src/telemetry/ts" && npm publish --access public --tag "$TAG" --provenance=false )
   fi
-  echo "==> telemetry-js publish complete"; echo
+  echo "==> telemetry-ts publish complete"; echo
 }
 
 # ---------- telemetry-py: ratel-ai-telemetry on PyPI (pure-python wheel + sdist) ----------
@@ -267,13 +267,13 @@ publish_telemetry_py() {
   echo "==> telemetry-py publish complete"; echo
 }
 
-# ---------- telemetry-otlp: @ratel-ai/telemetry-otlp on npm, packed locally ----------
-# Pure-language like telemetry-js, but it has a workspace:^ dep on @ratel-ai/telemetry.
+# ---------- telemetry-ts-otlp: @ratel-ai/telemetry-otlp on npm, packed locally ----------
+# Pure-language like telemetry-ts, but it has a workspace:^ dep on @ratel-ai/telemetry.
 # `pnpm pack` rewrites that to a real version range in the tarball, so a plain
 # `npm publish <tarball>` (bootstrap: no OIDC, no provenance) ships a valid manifest.
-publish_telemetry_otlp() {
-  local version; version="$(resolve_version telemetry-otlp)"
-  echo "===== telemetry-otlp @ $version (npm) ====="
+publish_telemetry_ts_otlp() {
+  local version; version="$(resolve_version telemetry-ts-otlp)"
+  echo "===== telemetry-ts-otlp @ $version (npm) ====="
   echo "----- @ratel-ai/telemetry-otlp@$version (npm) -----"
   local status
   status="$(curl -sS -o /dev/null -w '%{http_code}' \
@@ -293,7 +293,7 @@ publish_telemetry_otlp() {
   else
     publish_one_npm "$tgz" || exit 1
   fi
-  echo "==> telemetry-otlp publish complete"; echo
+  echo "==> telemetry-ts-otlp publish complete"; echo
 }
 
 # ---------- telemetry-core: ratel-ai-telemetry on crates.io ----------
@@ -324,11 +324,11 @@ publish_telemetry_core() {
 
 # Publish in a stable order regardless of --unit argument order.
 selected core           && publish_core
-selected sdk-js         && publish_sdk_js
+selected sdk-ts         && publish_sdk_ts
 selected sdk-py         && publish_sdk_py
 selected telemetry-core && publish_telemetry_core
-selected telemetry-js   && publish_telemetry_js
-selected telemetry-otlp && publish_telemetry_otlp
+selected telemetry-ts   && publish_telemetry_ts
+selected telemetry-ts-otlp && publish_telemetry_ts_otlp
 selected telemetry-py   && publish_telemetry_py
 
 echo "==> done"

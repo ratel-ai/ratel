@@ -6,8 +6,8 @@ description: Update per-package CHANGELOG.md files for a Ratel release. Drafts e
 # /changelog
 
 Updates a release unit's `CHANGELOG.md` in preparation for tagging it. Ratel releases
-**per unit** (ADR-0016): each of `core`, `sdk-js`, `sdk-py` ships on its own tag
-(`core-v*` / `sdk-js-v*` / `sdk-py-v*`) at its own version. The CI gate in
+**per unit** (ADR-0016): each of `core`, `sdk-ts`, `sdk-py` ships on its own tag
+(`core-v*` / `sdk-ts-v*` / `sdk-py-v*`) at its own version. The CI gate in
 `.github/workflows/release.yml` rejects any tag whose unit CHANGELOG doesn't contain the
 version being released, so this skill must run before `git tag`.
 
@@ -21,7 +21,7 @@ The units and their manifests/CHANGELOGs live in one registry —
 | Unit | Registry | CHANGELOG path |
 |---|---|---|
 | `core` | `ratel-ai-core` (crates.io) | `src/core/CHANGELOG.md` |
-| `sdk-js` | `@ratel-ai/sdk` (npm) | `src/sdk/ts/CHANGELOG.md` |
+| `sdk-ts` | `@ratel-ai/sdk` (npm) | `src/sdk/ts/CHANGELOG.md` |
 | `sdk-py` | `ratel-ai` (PyPI) | `src/sdk/python/CHANGELOG.md` |
 
 `@ratel-ai/mcp-server` lives in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) and maintains its own CHANGELOG there.

@@ -6,12 +6,12 @@ name: Release
 # platform packages, the PyPI wheel, the crate) — splitting the file or
 # renaming the environment would de-register all of them.
 #   core-v*           -> ratel-ai-core on crates.io
-#   sdk-js-v*         -> @ratel-ai/sdk loader + 5 platform packages (internally lockstep)
+#   sdk-ts-v*         -> @ratel-ai/sdk loader + 5 platform packages (internally lockstep)
 #   sdk-py-v*         -> ratel-ai on PyPI
 #   telemetry-core-v* -> ratel-ai-telemetry on crates.io
-#   telemetry-js-v*   -> @ratel-ai/telemetry on npm
+#   telemetry-ts-v*   -> @ratel-ai/telemetry on npm
 #   telemetry-py-v*   -> ratel-ai-telemetry on PyPI
-#   telemetry-otlp-v* -> @ratel-ai/telemetry-otlp on npm (the init() exporter)
+#   telemetry-ts-otlp-v* -> @ratel-ai/telemetry-otlp on npm (the init() exporter)
 #     The telemetry helpers release independently (one registry each; otlp is the
 #     npm exporter split from the vocabulary); tag the same commit to ship together.
 
@@ -19,16 +19,16 @@ on:
   push:
     tags:
       - 'core-v*'
-      - 'sdk-js-v*'
+      - 'sdk-ts-v*'
       - 'sdk-py-v*'
       - 'telemetry-core-v*'
-      - 'telemetry-js-v*'
+      - 'telemetry-ts-v*'
       - 'telemetry-py-v*'
-      - 'telemetry-otlp-v*'
+      - 'telemetry-ts-otlp-v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to validate/publish, e.g. core-v0.2.0 or sdk-js-v0.3.0-rc.1'
+        description: 'Tag to validate/publish, e.g. core-v0.2.0 or sdk-ts-v0.3.0-rc.1'
         required: true
       dry_run:
         description: Dry run (validate but do not publish)
@@ -77,7 +77,7 @@ jobs:
   build:
     name: build (${{ matrix.triple }})
     needs: tag-version-check
-    if: needs.tag-version-check.outputs.unit == 'sdk-js'
+    if: needs.tag-version-check.outputs.unit == 'sdk-ts'
     strategy:
       fail-fast: false
       matrix:
@@ -133,10 +133,10 @@ jobs:
             src/sdk/ts/native/index.d.cts
           if-no-files-found: error
 
-  publish-sdk-js:
+  publish-sdk-ts:
     name: Publish @ratel-ai/sdk (loader + platform packages)
     needs: [tag-version-check, build]
-    if: needs.tag-version-check.outputs.unit == 'sdk-js'
+    if: needs.tag-version-check.outputs.unit == 'sdk-ts'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -382,12 +382,12 @@ jobs:
         if: ${{ !inputs.dry_run }}
 
   # The telemetry units are independent single-registry units, each on its own tag
-  # prefix (telemetry-js-v* / telemetry-py-v* / telemetry-core-v* / telemetry-otlp-v*)
-  # and its own Trusted Publisher — exactly like core / sdk-js / sdk-py.
-  publish-telemetry-js:
+  # prefix (telemetry-ts-v* / telemetry-py-v* / telemetry-core-v* / telemetry-ts-otlp-v*)
+  # and its own Trusted Publisher — exactly like core / sdk-ts / sdk-py.
+  publish-telemetry-ts:
     name: Publish @ratel-ai/telemetry to npm
     needs: [tag-version-check]
-    if: needs.tag-version-check.outputs.unit == 'telemetry-js'
+    if: needs.tag-version-check.outputs.unit == 'telemetry-ts'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -508,10 +508,10 @@ jobs:
             exit 1
           fi
 
-  publish-telemetry-otlp:
+  publish-telemetry-ts-otlp:
     name: Publish @ratel-ai/telemetry-otlp to npm
     needs: [tag-version-check]
-    if: needs.tag-version-check.outputs.unit == 'telemetry-otlp'
+    if: needs.tag-version-check.outputs.unit == 'telemetry-ts-otlp'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -576,33 +576,33 @@ jobs:
     name: GitHub Release
     needs:
       - tag-version-check
-      - publish-sdk-js
+      - publish-sdk-ts
       - publish-pypi
       - publish-crate
-      - publish-telemetry-js
+      - publish-telemetry-ts
       - publish-telemetry-py
       - publish-telemetry-core
-      - publish-telemetry-otlp
+      - publish-telemetry-ts-otlp
     # Exactly one unit's publish job runs; the rest are skipped. Run when the tag
     # was pushed and that one job succeeded. Every unit is single-registry now, so
     # any one publish job succeeding is enough.
     if: >-
       ${{ github.event_name == 'push' && !cancelled()
           && needs.tag-version-check.result == 'success'
-          && (needs.publish-sdk-js.result == 'success'
+          && (needs.publish-sdk-ts.result == 'success'
               || needs.publish-pypi.result == 'success'
               || needs.publish-crate.result == 'success'
-              || needs.publish-telemetry-js.result == 'success'
+              || needs.publish-telemetry-ts.result == 'success'
               || needs.publish-telemetry-py.result == 'success'
               || needs.publish-telemetry-core.result == 'success'
-              || needs.publish-telemetry-otlp.result == 'success') }}
+              || needs.publish-telemetry-ts-otlp.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Download binaries
-        if: needs.tag-version-check.outputs.unit == 'sdk-js'
+        if: needs.tag-version-check.outputs.unit == 'sdk-ts'
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -619,7 +619,7 @@ jobs:
           if [ "$DIST_TAG" = "rc" ]; then flags="--prerelease"; fi
           # Only the JS SDK ships prebuilt .node binaries as release assets.
           assets=()
-          if [ "$UNIT" = "sdk-js" ]; then
+          if [ "$UNIT" = "sdk-ts" ]; then
             assets=(artifacts/*.node)
           fi
           gh release create "$GITHUB_REF_NAME" \

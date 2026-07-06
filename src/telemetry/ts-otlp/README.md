@@ -41,7 +41,7 @@ version (console exporter + a `ratel.search` → `execute_tool` trace) is in
 
 - Package name: `@ratel-ai/telemetry-otlp`
 - Pure TypeScript (no native binding); depends on `@ratel-ai/telemetry` + the OpenTelemetry JS SDK
-- Released under the `telemetry-otlp-v*` tag prefix ([ADR-0016](../../../docs/adr/0016-per-package-versions-and-releases.md))
+- Released under the `telemetry-ts-otlp-v*` tag prefix ([ADR-0016](../../../docs/adr/0016-per-package-versions-and-releases.md))
 - MIT ([ADR-0017](../../../docs/adr/0017-relicense-core-apache-2.md)); member of the pnpm workspace
 
 ## Build & test

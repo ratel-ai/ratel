@@ -35,11 +35,11 @@ export const UNITS = {
     srcPaths: ["src/core"],
     changelog: { name: "ratel-ai-core", includePaths: ["src/core/**", "Cargo.toml"] },
   },
-  "sdk-js": {
-    tagPrefix: "sdk-js-v",
+  "sdk-ts": {
+    tagPrefix: "sdk-ts-v",
     label: "@ratel-ai/sdk (loader + 5 platform packages) → npm",
     // The JS SDK is internally lockstep: loader + five platform packages + the
-    // ts-native crate all move together on one sdk-js-v* tag.
+    // ts-native crate all move together on one sdk-ts-v* tag.
     versionManifest: { path: "src/sdk/ts/package.json", kind: "json" },
     manifests: [
       { path: "src/sdk/ts/package.json", kind: "json" },
@@ -68,7 +68,7 @@ export const UNITS = {
   // the packages have no cross-registry install dependency, so nothing forces them
   // lockstep). core/js/py share the vocabulary spec + conformance fixtures, so a
   // change there marks those releasable and drafts into their changelogs; the
-  // exporter (telemetry-otlp) tracks only its own source.
+  // exporter (telemetry-ts-otlp) tracks only its own source.
   "telemetry-core": {
     tagPrefix: "telemetry-core-v",
     label: "ratel-ai-telemetry → crates.io",
@@ -81,8 +81,8 @@ export const UNITS = {
       includePaths: ["src/telemetry/core/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
     },
   },
-  "telemetry-js": {
-    tagPrefix: "telemetry-js-v",
+  "telemetry-ts": {
+    tagPrefix: "telemetry-ts-v",
     label: "@ratel-ai/telemetry → npm",
     versionManifest: { path: "src/telemetry/ts/package.json", kind: "json" },
     manifests: [{ path: "src/telemetry/ts/package.json", kind: "json" }],
@@ -110,8 +110,8 @@ export const UNITS = {
   // The OTLP exporter (init()), split from the npm vocabulary package so importing
   // the constants stays OTel-free (ADR-0015). npm-only; tracks only its own source
   // (a CONVENTIONS change is a vocabulary change, not an exporter change).
-  "telemetry-otlp": {
-    tagPrefix: "telemetry-otlp-v",
+  "telemetry-ts-otlp": {
+    tagPrefix: "telemetry-ts-otlp-v",
     label: "@ratel-ai/telemetry-otlp → npm",
     versionManifest: { path: "src/telemetry/ts-otlp/package.json", kind: "json" },
     manifests: [{ path: "src/telemetry/ts-otlp/package.json", kind: "json" }],
@@ -130,7 +130,7 @@ export const UNIT_IDS = Object.keys(UNITS);
 export const SEMVER = /^\d+\.\d+\.\d+(?:-rc\.\d+)?$/;
 
 // Regex alternation of the registered unit ids, derived so a new unit needs no
-// hand-edited regex anywhere. `sdk-js` etc. are literal in a character run.
+// hand-edited regex anywhere. `sdk-ts` etc. are literal in a character run.
 export function unitIdAlternation() {
   return UNIT_IDS.join("|");
 }
