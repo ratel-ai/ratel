@@ -18,10 +18,12 @@ export class SkillCatalog {
   private readonly registry: SkillRegistry;
   private readonly skills = new Map<string, Skill>();
   private readonly method: SearchMethod;
+  private readonly eager: boolean;
 
   constructor(options: SkillCatalogOptions = {}) {
     this.registry = new SkillRegistry();
     this.method = options.method ?? "bm25";
+    this.eager = this.method === "semantic" || this.method === "hybrid";
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
@@ -30,6 +32,14 @@ export class SkillCatalog {
   register(skill: Skill): void {
     this.registry.register(skill);
     this.skills.set(skill.id, skill);
+    if (this.eager) {
+      this.registry.warm();
+    }
+  }
+
+  /** Pre-compute embeddings for not-yet-embedded skills. See `ToolCatalog.warm`. */
+  warm(): void {
+    this.registry.warm();
   }
 
   search(

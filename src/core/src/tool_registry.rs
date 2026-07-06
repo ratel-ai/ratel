@@ -21,11 +21,13 @@ pub struct SearchHit {
 pub struct ToolRegistry {
     tools: Vec<Tool>,
     sink: Arc<dyn TraceSink>,
-    /// Lazily-computed dense embeddings, index-aligned with `tools`. `None` until
-    /// the first semantic/hybrid search builds them; cleared on `register` so it
-    /// never goes stale. A pure BM25 user never populates this — the embedding
-    /// model is never loaded (see ADR-0011).
-    embeddings: Mutex<Option<Vec<Vec<f32>>>>,
+    /// Dense embeddings, a growing **prefix** of `tools`: `embeddings[i]` is the
+    /// vector for `tools[i]`, and any tool beyond `embeddings.len()` is not yet
+    /// embedded. `register` only appends a tool (never invalidates); the missing
+    /// tail is embedded incrementally by [`Self::warm`] or the first semantic/
+    /// hybrid search — so an existing vector is never recomputed. A pure BM25 user
+    /// never populates this and never loads the model (see ADR-0011).
+    embeddings: Mutex<Vec<Vec<f32>>>,
     /// Test-only override for the process embedder (`None` → the shared
     /// bge-small, loaded lazily on first use). Lets tests inject a
     /// deterministic/failing embedder without touching the network.
@@ -43,7 +45,7 @@ impl ToolRegistry {
         Self {
             tools: Vec::new(),
             sink: Arc::new(NoopSink),
-            embeddings: Mutex::new(None),
+            embeddings: Mutex::new(Vec::new()),
             embedder_override: None,
         }
     }
@@ -52,7 +54,7 @@ impl ToolRegistry {
         Self {
             tools: Vec::new(),
             sink,
-            embeddings: Mutex::new(None),
+            embeddings: Mutex::new(Vec::new()),
             embedder_override: None,
         }
     }
@@ -68,9 +70,10 @@ impl ToolRegistry {
     pub fn register(&mut self, tool: Tool) {
         let tool_id = tool.id.clone();
         self.tools.push(tool);
-        // The corpus changed — drop any cached embeddings so the next
-        // semantic/hybrid search rebuilds them. BM25 needs no invalidation.
-        *self.embeddings.lock().expect("embeddings mutex poisoned") = None;
+        // Just append — never touch the embeddings cache. The new tool sits
+        // beyond the cached prefix and gets embedded incrementally by the next
+        // `warm`/semantic search. Registration stays infallible and model-free,
+        // so BM25 users are unaffected (see ADR-0011).
         self.sink.record(TraceEvent::IndexChurn {
             kind: ChurnKind::Add,
             tool_id,
@@ -105,6 +108,15 @@ impl ToolRegistry {
             SearchMethod::Semantic => self.semantic_search_traced(query, top_k, origin),
             SearchMethod::Hybrid => self.hybrid_search_traced(query, top_k, origin),
         }
+    }
+
+    /// Pre-compute embeddings for any not-yet-embedded tools so a later
+    /// semantic/hybrid search only has to embed the query (never the corpus).
+    /// Incremental — embeds only tools registered since the last call. The SDK
+    /// calls this after `register` in semantic mode so searches never pay the
+    /// embedding cost; a BM25-only user never calls it and never loads the model.
+    pub fn warm(&self) -> Result<(), EmbedderError> {
+        self.extend_embeddings()
     }
 
     // ---- engines -----------------------------------------------------------
@@ -149,7 +161,7 @@ impl ToolRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.ensure_embeddings()?;
+        self.extend_embeddings()?;
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let t = Instant::now();
         let ranked = self.dense_ranked(&query_vec, top_k)?;
@@ -208,8 +220,8 @@ impl ToolRegistry {
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        // 2. Dense (semantic) — load/build embeddings lazily.
-        self.ensure_embeddings()?;
+        // 2. Dense (semantic) — extend the cache with any new tools.
+        self.extend_embeddings()?;
         let t = Instant::now();
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let dense_ranked = self.dense_ranked(&query_vec, depth)?;
@@ -258,36 +270,34 @@ impl ToolRegistry {
         }
     }
 
-    /// Build the dense embeddings cache if absent. Embeds each tool's flattened
-    /// text once; index-aligned with `tools`. Idempotent and cheap once warm.
-    fn ensure_embeddings(&self) -> Result<(), EmbedderError> {
+    /// Embed the tools not yet in the cache and append them — the incremental
+    /// core of the prefix cache. Embeds only `tools[cache.len()..]`, so an
+    /// already-embedded tool is never recomputed (O(k) for k newly-registered
+    /// tools). Idempotent: a no-op once the cache is caught up.
+    fn extend_embeddings(&self) -> Result<(), EmbedderError> {
         let mut guard = self.embeddings.lock().expect("embeddings mutex poisoned");
-        if guard.is_some() {
+        if guard.len() >= self.tools.len() {
             return Ok(());
         }
         let embedder = self.resolve_embedder()?;
-        let mut vecs = Vec::with_capacity(self.tools.len());
-        for tool in &self.tools {
-            vecs.push(embedder.embed_doc(&searchable_text(tool))?);
+        for tool in &self.tools[guard.len()..] {
+            guard.push(embedder.embed_doc(&searchable_text(tool))?);
         }
-        *guard = Some(vecs);
         Ok(())
     }
 
     /// Cosine-rank the query against the cached embeddings. Assumes
-    /// [`Self::ensure_embeddings`] already ran. Collapses duplicate ids to the
-    /// latest embedding (last-wins), mirroring the BM25 engine's id-keyed dedup.
+    /// [`Self::extend_embeddings`] already ran. Collapses duplicate ids to the
+    /// latest embedding (last-wins), mirroring the BM25 engine's id-keyed dedup —
+    /// so a re-registered tool (a later entry in the prefix) wins.
     fn dense_ranked(
         &self,
         query_vec: &[f32],
         depth: usize,
     ) -> Result<Vec<(String, f32)>, EmbedderError> {
         let guard = self.embeddings.lock().expect("embeddings mutex poisoned");
-        let embeddings = guard
-            .as_ref()
-            .expect("dense_ranked called before ensure_embeddings");
         let mut latest: HashMap<&str, &[f32]> = HashMap::new();
-        for (tool, embedding) in self.tools.iter().zip(embeddings.iter()) {
+        for (tool, embedding) in self.tools.iter().zip(guard.iter()) {
             latest.insert(tool.id.as_str(), embedding.as_slice());
         }
         Ok(dense_search(
@@ -368,11 +378,37 @@ mod tests {
         }
     }
 
+    /// Counts `embed_doc` calls so tests can prove the cache is incremental
+    /// (registering a tool re-embeds only that tool, not the whole corpus).
+    struct CountingEmbedder {
+        doc_calls: std::sync::atomic::AtomicUsize,
+    }
+    impl CountingEmbedder {
+        fn new() -> Self {
+            Self {
+                doc_calls: std::sync::atomic::AtomicUsize::new(0),
+            }
+        }
+        fn doc_calls(&self) -> usize {
+            self.doc_calls.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+    impl Embedder for CountingEmbedder {
+        fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            self.doc_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(StubEmbedder::vec_for(text))
+        }
+        fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(StubEmbedder::vec_for(text))
+        }
+    }
+
     fn with_embedder(embedder: Arc<dyn Embedder>) -> ToolRegistry {
         ToolRegistry {
             tools: Vec::new(),
             sink: Arc::new(NoopSink),
-            embeddings: Mutex::new(None),
+            embeddings: Mutex::new(Vec::new()),
             embedder_override: Some(embedder),
         }
     }
@@ -475,17 +511,70 @@ mod tests {
     }
 
     #[test]
-    fn register_invalidates_the_embeddings_cache() {
-        let mut reg = catalog(Arc::new(StubEmbedder));
-        // Warm the cache.
+    fn register_after_search_embeds_only_the_new_tool() {
+        let counter = Arc::new(CountingEmbedder::new());
+        let mut reg = with_embedder(counter.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a file"));
+        // First semantic search embeds the 2-tool corpus.
         reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
-        // A new tool must be visible to the next semantic search.
+        assert_eq!(counter.doc_calls(), 2);
+        // Registering one more must embed ONLY it on the next search — the two
+        // existing vectors are reused, never recomputed (the O(N) regression).
         reg.register(tool("reader_v2", "read a file too"));
         let hits = reg
             .search_with_method("read", 10, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
+        assert_eq!(
+            counter.doc_calls(),
+            3,
+            "only the newly-registered tool should be embedded"
+        );
         assert!(hits.iter().any(|h| h.tool_id == "reader_v2"));
+    }
+
+    #[test]
+    fn warm_precomputes_so_search_embeds_no_docs() {
+        let counter = Arc::new(CountingEmbedder::new());
+        let mut reg = with_embedder(counter.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a file"));
+        reg.warm().unwrap();
+        assert_eq!(counter.doc_calls(), 2, "warm embeds the corpus up front");
+        reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(
+            counter.doc_calls(),
+            2,
+            "a warmed search embeds only the query, no documents"
+        );
+    }
+
+    #[test]
+    fn warm_is_idempotent() {
+        let counter = Arc::new(CountingEmbedder::new());
+        let mut reg = with_embedder(counter.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.warm().unwrap();
+        reg.warm().unwrap();
+        assert_eq!(counter.doc_calls(), 1);
+    }
+
+    #[test]
+    fn re_register_updates_the_ranked_vector() {
+        // Re-registering an id appends a fresh entry; last-wins dedup ranks with
+        // the latest embedding, so the updated content wins.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(tool("t", "read a file")); // dense vec keyed on "read"
+        reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        reg.register(tool("t", "delete a file")); // re-register → keyed on "delete"
+        let hits = reg
+            .search_with_method("delete", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(hits.first().map(|h| h.tool_id.as_str()), Some("t"));
+        assert!(hits[0].score > 0.9, "ranks with the re-registered vector");
     }
 
     #[test]

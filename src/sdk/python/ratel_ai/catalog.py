@@ -69,6 +69,9 @@ class ToolCatalog:
         # Default retrieval method for `search`; "bm25" keeps the historical
         # (model-free) behavior. A per-call `method=` overrides it.
         self._method: SearchMethod = method
+        # Semantic/hybrid default → eagerly embed each tool at registration so
+        # searches never pay the embedding cost. BM25 default does nothing.
+        self._eager: bool = method in ("semantic", "hybrid")
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -90,6 +93,16 @@ class ToolCatalog:
             input_schema=tool.input_schema,
             output_schema=tool.output_schema,
         )
+        if self._eager:
+            # Embed the just-registered tool now (incremental) so semantic/hybrid
+            # searches stay fast. Raises RuntimeError if the model fails to load.
+            self._registry.warm()
+
+    def warm(self) -> None:
+        """Pre-compute embeddings for any not-yet-embedded tools. Call after a
+        bulk register, or rely on the automatic per-register warming that a
+        semantic/hybrid catalog does. No-op for a BM25 catalog's cache."""
+        self._registry.warm()
 
     def search(
         self,

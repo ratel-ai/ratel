@@ -25,9 +25,9 @@ pub struct SkillHit {
 pub struct SkillRegistry {
     skills: Vec<Skill>,
     sink: Arc<dyn TraceSink>,
-    /// Lazily-computed dense embeddings, index-aligned with `skills`. See the
+    /// Dense embeddings, a growing prefix of `skills` (incremental). See the
     /// [`crate::ToolRegistry`] field of the same name.
-    embeddings: Mutex<Option<Vec<Vec<f32>>>>,
+    embeddings: Mutex<Vec<Vec<f32>>>,
     embedder_override: Option<Arc<dyn Embedder>>,
 }
 
@@ -42,7 +42,7 @@ impl SkillRegistry {
         Self {
             skills: Vec::new(),
             sink: Arc::new(NoopSink),
-            embeddings: Mutex::new(None),
+            embeddings: Mutex::new(Vec::new()),
             embedder_override: None,
         }
     }
@@ -51,7 +51,7 @@ impl SkillRegistry {
         Self {
             skills: Vec::new(),
             sink,
-            embeddings: Mutex::new(None),
+            embeddings: Mutex::new(Vec::new()),
             embedder_override: None,
         }
     }
@@ -67,7 +67,8 @@ impl SkillRegistry {
     pub fn register(&mut self, skill: Skill) {
         let skill_id = skill.id.clone();
         self.skills.push(skill);
-        *self.embeddings.lock().expect("embeddings mutex poisoned") = None;
+        // Append only — the new skill is embedded incrementally by the next
+        // `warm`/semantic search (see [`crate::ToolRegistry::register`]).
         self.sink.record(TraceEvent::SkillChurn {
             kind: ChurnKind::Add,
             skill_id,
@@ -96,6 +97,12 @@ impl SkillRegistry {
             SearchMethod::Semantic => self.semantic_search_traced(query, top_k, origin),
             SearchMethod::Hybrid => self.hybrid_search_traced(query, top_k, origin),
         }
+    }
+
+    /// Pre-compute embeddings for not-yet-embedded skills — see
+    /// [`crate::ToolRegistry::warm`].
+    pub fn warm(&self) -> Result<(), EmbedderError> {
+        self.extend_embeddings()
     }
 
     // ---- engines -----------------------------------------------------------
@@ -140,7 +147,7 @@ impl SkillRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.ensure_embeddings()?;
+        self.extend_embeddings()?;
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let t = Instant::now();
         let ranked = self.dense_ranked(&query_vec, top_k)?;
@@ -193,7 +200,7 @@ impl SkillRegistry {
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        self.ensure_embeddings()?;
+        self.extend_embeddings()?;
         let t = Instant::now();
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let dense_ranked = self.dense_ranked(&query_vec, depth)?;
@@ -239,17 +246,15 @@ impl SkillRegistry {
         }
     }
 
-    fn ensure_embeddings(&self) -> Result<(), EmbedderError> {
+    fn extend_embeddings(&self) -> Result<(), EmbedderError> {
         let mut guard = self.embeddings.lock().expect("embeddings mutex poisoned");
-        if guard.is_some() {
+        if guard.len() >= self.skills.len() {
             return Ok(());
         }
         let embedder = self.resolve_embedder()?;
-        let mut vecs = Vec::with_capacity(self.skills.len());
-        for skill in &self.skills {
-            vecs.push(embedder.embed_doc(&searchable_text(skill))?);
+        for skill in &self.skills[guard.len()..] {
+            guard.push(embedder.embed_doc(&searchable_text(skill))?);
         }
-        *guard = Some(vecs);
         Ok(())
     }
 
@@ -259,11 +264,8 @@ impl SkillRegistry {
         depth: usize,
     ) -> Result<Vec<(String, f32)>, EmbedderError> {
         let guard = self.embeddings.lock().expect("embeddings mutex poisoned");
-        let embeddings = guard
-            .as_ref()
-            .expect("dense_ranked called before ensure_embeddings");
         let mut latest: HashMap<&str, &[f32]> = HashMap::new();
-        for (skill, embedding) in self.skills.iter().zip(embeddings.iter()) {
+        for (skill, embedding) in self.skills.iter().zip(guard.iter()) {
             latest.insert(skill.id.as_str(), embedding.as_slice());
         }
         Ok(dense_search(
@@ -327,11 +329,36 @@ mod tests {
         }
     }
 
+    /// Counts `embed_doc` calls (see `tool_registry`'s `CountingEmbedder`).
+    struct CountingEmbedder {
+        doc_calls: std::sync::atomic::AtomicUsize,
+    }
+    impl CountingEmbedder {
+        fn new() -> Self {
+            Self {
+                doc_calls: std::sync::atomic::AtomicUsize::new(0),
+            }
+        }
+        fn doc_calls(&self) -> usize {
+            self.doc_calls.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+    impl Embedder for CountingEmbedder {
+        fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            self.doc_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(StubEmbedder::vec_for(text))
+        }
+        fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(StubEmbedder::vec_for(text))
+        }
+    }
+
     fn with_embedder(embedder: Arc<dyn Embedder>) -> SkillRegistry {
         SkillRegistry {
             skills: Vec::new(),
             sink: Arc::new(NoopSink),
-            embeddings: Mutex::new(None),
+            embeddings: Mutex::new(Vec::new()),
             embedder_override: Some(embedder),
         }
     }
@@ -402,6 +429,47 @@ mod tests {
         assert_eq!(
             hits.first().map(|h| h.skill_id.as_str()),
             Some("api-design")
+        );
+    }
+
+    #[test]
+    fn register_after_search_embeds_only_the_new_skill() {
+        let counter = Arc::new(CountingEmbedder::new());
+        let mut reg = with_embedder(counter.clone());
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        reg.register(skill("frontend", "frontend", "HTML slides", &["frontend"]));
+        reg.search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(counter.doc_calls(), 2);
+        reg.register(skill("api-v2", "api-v2", "REST API v2", &["api"]));
+        reg.search_with_method("api", 10, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(counter.doc_calls(), 3, "only the new skill is embedded");
+    }
+
+    #[test]
+    fn warm_precomputes_so_search_embeds_no_docs() {
+        let counter = Arc::new(CountingEmbedder::new());
+        let mut reg = with_embedder(counter.clone());
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        reg.warm().unwrap();
+        assert_eq!(counter.doc_calls(), 1);
+        reg.search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(
+            counter.doc_calls(),
+            1,
+            "warmed search embeds only the query"
         );
     }
 

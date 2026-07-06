@@ -99,6 +99,13 @@ describe("ToolCatalog search methods", () => {
       catalog.search("read", 5, "direct", "keyword" as any),
     ).toThrow(/unknown search method/);
   });
+
+  it("warm() on an empty catalog is a no-op and loads no model", () => {
+    // Empty corpus short-circuits before any embedder load — the incremental
+    // eager path proper is proven in the Rust core tests (counting embedder).
+    const catalog = new ToolCatalog({ method: "semantic" });
+    expect(() => catalog.warm()).not.toThrow();
+  });
 });
 
 describe("ToolCatalog tracing", () => {

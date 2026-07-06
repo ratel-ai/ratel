@@ -47,6 +47,7 @@ class SkillCatalog:
         self._registry = SkillRegistry()
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
+        self._eager: bool = method in ("semantic", "hybrid")
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -61,6 +62,13 @@ class SkillCatalog:
             skill.body,
         )
         self._skills[skill.id] = skill
+        if self._eager:
+            self._registry.warm()
+
+    def warm(self) -> None:
+        """Pre-compute embeddings for not-yet-embedded skills. See
+        `ToolCatalog.warm`."""
+        self._registry.warm()
 
     def search(
         self,

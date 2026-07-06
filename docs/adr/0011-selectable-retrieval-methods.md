@@ -42,10 +42,17 @@ parallel to `SearchOrigin`.
   `Result<_, EmbedderError>`; `Bm25` is always `Ok`, while `Semantic`/`Hybrid` surface a failed
   model load (network, cache, underpowered machine) as a catchable error — a Python
   `RuntimeError` / a thrown JS error at the SDK edge.
-- **Embeddings load lazily.** A registry embeds its corpus on the first semantic/hybrid search
-  and caches it (invalidated on `register`); a pure BM25 user never loads the model. The
-  one-time load emits a `TraceEvent::EmbedderLoad` flagging a slow (possibly underpowered) or
-  failed load.
+- **The embedding cache is incremental and in-process.** It is a growing *prefix* of the
+  corpus: `register` only appends a tool (never invalidates), and the not-yet-embedded tail is
+  embedded by `warm()` or a search — so an existing vector is never recomputed (adding one tool
+  costs one embedding, not N). Core `register(&mut self, tool) -> ()` stays infallible and
+  model-free; a pure BM25 registry never populates the cache. The one-time model load emits a
+  `TraceEvent::EmbedderLoad` flagging a slow (possibly underpowered) or failed load.
+- **Semantic is opt-in and eagerly warmed.** A catalog whose default method is `"semantic"` /
+  `"hybrid"` (the opt-in flag) calls `warm()` after each `register`, so the cost lands at load
+  time and a search only ever embeds the *query* — no search pays the corpus-embedding cost, and
+  a model-load failure surfaces at `register` (fail-fast). A BM25 catalog does none of this. A
+  public `catalog.warm()` is also exposed for the bulk-register-then-warm pattern.
 
 ## Consequences
 
@@ -60,6 +67,9 @@ parallel to `SearchOrigin`.
   SDK binaries build on a native ARM64 runner instead of `--use-napi-cross`.
 - Rejected: a compile-time feature flag to pick the engine (the earlier spikes' shape) —
   runtime selection is required for per-call and per-catalog choice, and for one binary serving
-  all three. Rejected: eager embedding at `register` — it would force a model load (and make
-  `register` fallible) on every user, including BM25-only ones. Rejected: score-normalization
-  fusion for hybrid — RRF needs no per-arm score calibration.
+  all three. Rejected: forcing eager embedding at `register` on *every* registry (the earlier
+  spikes' shape) — it made `register` fallible and loaded the model for BM25-only users; eager
+  embedding is instead **opt-in** in semantic mode, driven from the SDK via `warm()`, so core
+  `register` stays infallible. Rejected: full-corpus re-embed on `register` (the first cut of
+  this ADR) — the incremental prefix cache re-embeds only newly-registered tools. Rejected:
+  score-normalization fusion for hybrid — RRF needs no per-arm score calibration.

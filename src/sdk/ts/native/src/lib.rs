@@ -159,6 +159,16 @@ impl ToolRegistry {
             .collect())
     }
 
+    /// Pre-compute embeddings for not-yet-embedded tools (incremental) so a later
+    /// semantic/hybrid search only embeds the query. Throws if the model fails to
+    /// load. The catalog calls this after `register` in semantic mode.
+    #[napi]
+    pub fn warm(&self) -> napi::Result<()> {
+        self.inner
+            .warm()
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
     #[napi]
     pub fn record_event(&self, event: Value) -> napi::Result<()> {
         let event: TraceEvent = serde_json::from_value(event)
@@ -302,6 +312,14 @@ impl SkillRegistry {
                 score: hit.score as f64,
             })
             .collect())
+    }
+
+    /// See `ToolRegistry.warm`.
+    #[napi]
+    pub fn warm(&self) -> napi::Result<()> {
+        self.inner
+            .warm()
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
     #[napi]

@@ -28,10 +28,14 @@ export class ToolCatalog {
   private readonly executors = new Map<string, Executor>();
   private readonly tools = new Map<string, Tool>();
   private readonly method: SearchMethod;
+  private readonly eager: boolean;
 
   constructor(options: ToolCatalogOptions = {}) {
     this.registry = new ToolRegistry();
     this.method = options.method ?? "bm25";
+    // Semantic/hybrid default → embed each tool at registration so searches
+    // never pay the embedding cost. BM25 default does nothing.
+    this.eager = this.method === "semantic" || this.method === "hybrid";
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
@@ -42,6 +46,18 @@ export class ToolCatalog {
     this.registry.register(metadata);
     this.executors.set(tool.id, execute);
     this.tools.set(tool.id, metadata);
+    if (this.eager) {
+      // Embed the just-registered tool now (incremental). Throws if the model
+      // fails to load.
+      this.registry.warm();
+    }
+  }
+
+  /** Pre-compute embeddings for any not-yet-embedded tools. Call after a bulk
+   * register, or rely on the automatic per-register warming a semantic/hybrid
+   * catalog does. No-op for a BM25 catalog's cache. */
+  warm(): void {
+    this.registry.warm();
   }
 
   /** Search the catalog. `method` overrides the catalog default for this call;

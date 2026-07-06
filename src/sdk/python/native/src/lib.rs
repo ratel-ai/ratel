@@ -150,6 +150,16 @@ impl ToolRegistry {
             .collect())
     }
 
+    /// Pre-compute embeddings for not-yet-embedded tools (incremental) so a later
+    /// semantic/hybrid search only embeds the query. Raises `RuntimeError` if the
+    /// model fails to load. The catalog calls this after `register` in semantic
+    /// mode; BM25-only callers never do.
+    fn warm(&self) -> PyResult<()> {
+        self.inner
+            .warm()
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    }
+
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
         let value: Value = pythonize::depythonize(event)
             .map_err(|e| PyValueError::new_err(format!("invalid trace event: {e}")))?;
@@ -307,6 +317,13 @@ impl SkillRegistry {
                 score: hit.score as f64,
             })
             .collect())
+    }
+
+    /// See [`ToolRegistry::warm`].
+    fn warm(&self) -> PyResult<()> {
+        self.inner
+            .warm()
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {

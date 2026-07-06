@@ -81,6 +81,13 @@ def test_unknown_method_raises() -> None:
         catalog.search("read", 5, method="keyword")
 
 
+def test_warm_on_empty_catalog_is_a_noop() -> None:
+    # Empty corpus short-circuits before any embedder load — the incremental
+    # eager path proper is proven in the Rust core tests (counting embedder).
+    catalog = ToolCatalog(method="semantic")
+    catalog.warm()  # no tools → no model load, must not raise
+
+
 async def test_invoke_runs_sync_executor() -> None:
     catalog = ToolCatalog()
     catalog.register(_read_file_tool(lambda args: {"contents": f"read {args['path']}"}))
