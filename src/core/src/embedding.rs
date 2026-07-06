@@ -519,6 +519,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "downloads the ~130 MB bge model; run with `cargo test -- --ignored`"]
     fn embeds_to_unit_norm_384_vectors_deterministically() {
         let (e, _) = embedder().expect("load embedder");
         let a = e.embed_doc("read a file from disk").expect("embed");
@@ -530,6 +531,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "downloads the ~130 MB bge model; run with `cargo test -- --ignored`"]
     fn query_prefix_changes_the_embedding() {
         let (e, _) = embedder().expect("load embedder");
         let doc = e.embed_doc("delete a file").expect("embed");
@@ -538,6 +540,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "downloads the ~130 MB bge model; run with `cargo test -- --ignored`"]
     fn ranks_synonyms_above_lexically_unrelated_text() {
         // The "missing gold" case BM25 can't see: query and doc share no words.
         let (e, _) = embedder().expect("load embedder");

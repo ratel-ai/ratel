@@ -66,12 +66,16 @@ def test_search_defaults_to_bm25_stage() -> None:
     assert any(stage["name"] == "bm25" for stage in search["stages"])
 
 
-def test_per_call_method_overrides_the_catalog_default() -> None:
-    # A semantic-default catalog, overridden back to bm25 per call (model-free).
-    catalog = ToolCatalog(method="semantic")
+def test_per_call_bm25_matches_the_default() -> None:
+    # Stays on a BM25 catalog so no model loads. (Registering into a semantic
+    # catalog eagerly warms and would download the model — the override behaviour
+    # proper is covered offline in the Rust core tests.)
+    catalog = ToolCatalog()
     catalog.register(_read_file_tool(lambda args: {}))
-    hits = catalog.search("read a file", 5, method="bm25")
-    assert hits[0].tool_id == "read_file"
+    via_default = [h.tool_id for h in catalog.search("read a file", 5)]
+    via_explicit = [h.tool_id for h in catalog.search("read a file", 5, method="bm25")]
+    assert via_explicit == via_default
+    assert via_explicit[0] == "read_file"
 
 
 def test_unknown_method_raises() -> None:

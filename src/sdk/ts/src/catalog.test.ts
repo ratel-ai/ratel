@@ -83,12 +83,16 @@ describe("ToolCatalog search methods", () => {
     expect(search?.stages?.some((s) => s.name === "bm25")).toBe(true);
   });
 
-  it("an explicit bm25 per-call method matches the default", () => {
-    const catalog = new ToolCatalog({ method: "semantic" });
+  it("accepts an explicit per-call bm25 method matching the default", () => {
+    // Stays on a BM25 catalog so no model loads. (Registering into a semantic
+    // catalog eagerly warms and would download the model — the override
+    // behaviour proper is covered offline in the Rust core tests.)
+    const catalog = new ToolCatalog();
     catalog.register(readFile);
-    // Override the semantic default back to bm25 so this stays model-free.
-    const hits = catalog.search("read file", 5, "direct", "bm25");
-    expect(hits[0]?.toolId).toBe("read_file");
+    const viaDefault = catalog.search("read file", 5).map((h) => h.toolId);
+    const viaExplicit = catalog.search("read file", 5, "direct", "bm25").map((h) => h.toolId);
+    expect(viaExplicit).toEqual(viaDefault);
+    expect(viaExplicit[0]).toBe("read_file");
   });
 
   it("rejects an unknown method", () => {
