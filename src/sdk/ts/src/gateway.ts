@@ -1,6 +1,7 @@
 import type { ExecutableTool, ToolCatalog } from "./catalog.js";
 import { compactDescription } from "./compact.js";
 import type { SkillCatalog } from "./skill-catalog.js";
+import { recordAuthNeeded } from "./telemetry.js";
 
 export const SEARCH_CAPABILITIES_ID = "search_capabilities" as const;
 export const INVOKE_TOOL_ID = "invoke_tool" as const;
@@ -343,6 +344,7 @@ export function invokeToolTool(
           if (upstream && opts.onUnauthorized) {
             await opts.onUnauthorized(upstream);
           }
+          recordAuthNeeded(upstream);
           catalog.recordEvent({
             type: "gateway_error",
             tool_id: toolId,

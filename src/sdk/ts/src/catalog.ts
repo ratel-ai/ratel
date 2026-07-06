@@ -1,4 +1,6 @@
+import { SearchTarget } from "@ratel-ai/telemetry";
 import { type SearchHit, type Tool, ToolRegistry } from "../native/index.cjs";
+import { traceExecuteTool, traceSearch } from "./telemetry.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: tool inputs are heterogeneous across the catalog
 export type Executor = (input: any) => Promise<unknown> | unknown;
@@ -70,7 +72,9 @@ export class ToolCatalog {
     origin: SearchOrigin = "direct",
     method?: SearchMethod,
   ): SearchHit[] {
-    return this.registry.searchWithMethod(query, topK, origin, method ?? this.method);
+    return traceSearch(SearchTarget.Tool, query, topK, origin, () =>
+      this.registry.searchWithMethod(query, topK, origin, method ?? this.method),
+    );
   }
 
   has(toolId: string): boolean {
@@ -101,29 +105,33 @@ export class ToolCatalog {
     if (!fn) {
       throw new Error(`unknown toolId: ${toolId}`);
     }
-    this.registry.recordEvent({
-      type: "invoke_start",
-      tool_id: toolId,
-      args_size_bytes: argsSizeBytes(args),
+    // The `execute_tool` OTel span wraps the local trace stream; both record the
+    // same invocation, on their two independent channels (ADR-0007).
+    return traceExecuteTool(toolId, args, async () => {
+      this.registry.recordEvent({
+        type: "invoke_start",
+        tool_id: toolId,
+        args_size_bytes: argsSizeBytes(args),
+      });
+      const started = Date.now();
+      try {
+        const result = await fn(args);
+        this.registry.recordEvent({
+          type: "invoke_end",
+          tool_id: toolId,
+          took_ms: Date.now() - started,
+        });
+        return result;
+      } catch (err) {
+        this.registry.recordEvent({
+          type: "invoke_error",
+          tool_id: toolId,
+          took_ms: Date.now() - started,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     });
-    const started = Date.now();
-    try {
-      const result = await fn(args);
-      this.registry.recordEvent({
-        type: "invoke_end",
-        tool_id: toolId,
-        took_ms: Date.now() - started,
-      });
-      return result;
-    } catch (err) {
-      this.registry.recordEvent({
-        type: "invoke_error",
-        tool_id: toolId,
-        took_ms: Date.now() - started,
-        error: errorMessage(err),
-      });
-      throw err;
-    }
   }
 }
 
