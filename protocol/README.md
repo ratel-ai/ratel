@@ -6,7 +6,7 @@ source or a third-party loader tomorrow) serves a published catalog; an SDK with
 set pulls it and runs retrieval locally
 ([ADR-0003](../docs/adr/0003-catalog-source-interface.md)). It is a product surface, not a
 code module, so it lives at the repo top level beside `src/` (per
-[ADR-0002](../docs/adr/0002-product-split-kernel-local-cloud.md)).
+[ADR-0002](../docs/adr/0002-product-split-engine-local-cloud.md)).
 
 It is language-agnostic: the shapes here are the contract; the Rust/TS/Python types (and
 `@ratel-ai/cloud` / `ratel-ai-cloud`) are implementations of it. Keeping every source an
@@ -15,8 +15,9 @@ self-hosted server cheap to add.
 
 ## Layout
 
-- `v1/` — the current major version of the contract. Auth, catalog pull-sync, the wire
-  shapes, the error model, and the versioning rules.
+- `v1/` — the current major version of the contract: auth, catalog pull-sync, the wire
+  shapes, the error model, and the versioning rules, plus its JSON Schemas (`v1/schema/`) and
+  executable conformance vectors (`v1/conformance/`).
 
 ## Versioning
 
