@@ -27,13 +27,13 @@ pnpm add @ratel-ai/sdk
 npm install @ratel-ai/sdk
 ```
 
-Prebuilt native bindings ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc. The right per-platform binary is selected automatically through npm `optionalDependencies` ([ADR 0002](../../../docs/adr/0002-ts-rust-binding-strategy.md)), so there is nothing to compile.
+Prebuilt native bindings ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc. The right per-platform binary is selected automatically through npm `optionalDependencies` ([ADR 0006](../../../docs/adr/0006-native-ffi-bindings.md)), so there is nothing to compile.
 
 ## How it works
 
 Everything starts with a **`ToolCatalog`**: register each of your tools once, pairing its metadata (id, description, JSON schemas) with the handler that runs it. From there you reach the model in one of two ways, and most agents use both at once:
 
-- **Pre-filter (top-K).** Before each model call, ask the catalog for the few tools most relevant to the user's message and put *those* in the tool list. The full catalog never enters the prompt. This is Ratel's replace-by-default tool injection ([ADR 0003](../../../docs/adr/0003-tool-selection-replace-vs-suggest.md)).
+- **Pre-filter (top-K).** Before each model call, ask the catalog for the few tools most relevant to the user's message and put *those* in the tool list. The full catalog never enters the prompt. This is Ratel's replace-by-default tool injection ([ADR 0004](../../../docs/adr/0004-retrieval-and-tool-selection.md)).
 - **Dynamic gateway.** Give the agent two always-present tools, `search_capabilities` (find more tools by description) and `invoke_tool` (run one by id), so it can reach the rest of the catalog on its own when the pre-filtered set is not enough.
 
 The two compose: the pre-filter covers the common case in the prompt, and the gateway is the escape hatch for everything else. Tools can be local functions, an upstream MCP server's tools (via [`registerMcpServer`](#registermcpserver-ingest-an-mcp-servers-tools)), or both. The model sees one unified, ranked surface.
@@ -221,7 +221,7 @@ Errors from the upstream `tools/call` propagate as rejected promises from `catal
 
 ## Telemetry
 
-Pass `trace` to the `ToolCatalog` constructor to capture every search / invoke / gateway / upstream / auth event into a sink owned by the Rust core ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). The default is no-op: nothing is captured unless you opt in.
+Pass `trace` to the `ToolCatalog` constructor to capture every search / invoke / gateway / upstream / auth event into a sink owned by the Rust core ([ADR 0007](../../../docs/adr/0007-telemetry-two-streams.md)). The default is no-op: nothing is captured unless you opt in.
 
 ```ts
 const catalog = new ToolCatalog({
@@ -234,7 +234,7 @@ const catalog = new ToolCatalog({
 Sink kinds:
 - `{ kind: "noop" }`, drop everything (default).
 - `{ kind: "memory"; sessionId }`, keep events in memory; drain via `catalog.drainTraceEvents()`. Useful in tests.
-- `{ kind: "jsonl"; sessionId; path }`, append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure; see [ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md) for the reliability profile.
+- `{ kind: "jsonl"; sessionId; path }`, append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure; see [ADR 0007](../../../docs/adr/0007-telemetry-two-streams.md) for the reliability profile.
 
 `searchCapabilitiesTool` tags its emitted `search` event with `origin: "agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
 

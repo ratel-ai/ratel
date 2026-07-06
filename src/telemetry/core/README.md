@@ -7,14 +7,14 @@ emit the convention without stringly-typed keys, plus the pinned semconv version
 (`SEMCONV_VERSION`) and the content-capture gate env var.
 
 Emitting the vocabulary is done through the standard OpenTelemetry SDK; this crate
-adds no transport, no FFI, no schema ([ADR-0015](../../../docs/adr/0015-telemetry-otel-conventions.md)).
+adds no transport, no FFI, no schema ([ADR-0007](../../../docs/adr/0007-telemetry-two-streams.md)).
 
 ## Library shape
 
 - Crate name: `ratel-ai-telemetry`
 - Library name: `ratel_ai_telemetry`
-- No dependencies; released under the `telemetry-core-v*` tag prefix ([ADR-0016](../../../docs/adr/0016-per-package-versions-and-releases.md))
-- MIT ([ADR-0017](../../../docs/adr/0017-relicense-core-apache-2.md)); member of the root Cargo workspace
+- No dependencies; released under the `telemetry-core-v*` tag prefix ([ADR-0008](../../../docs/adr/0008-release-engineering.md))
+- MIT ([ADR-0009](../../../docs/adr/0009-licensing.md)); member of the root Cargo workspace
 
 ## Build & test
 

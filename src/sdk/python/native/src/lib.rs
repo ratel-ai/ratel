@@ -1,7 +1,7 @@
 //! PyO3 binding to `ratel-ai-core` — the Python analogue of the TS SDK's NAPI
 //! binding (`src/sdk/ts/native/src/lib.rs`). Pure pass-through over the public
-//! API of `ratel-ai-core`; see ADR-0011 for the binding-strategy rationale and
-//! ADR-0009 for the core-owned trace schema this emits into.
+//! API of `ratel-ai-core`; see ADR-0006 for the binding-strategy rationale and
+//! ADR-0007 for the core-owned trace schema this emits into.
 
 use std::collections::HashMap;
 use std::sync::Arc;

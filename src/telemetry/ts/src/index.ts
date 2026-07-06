@@ -3,11 +3,11 @@
  *
  * See the wire contract in `../CONVENTIONS.md`. Emitting the vocabulary is done
  * through the standard OpenTelemetry JS SDK; this package adds no transport and
- * no schema (ADR-0015). These constants are the `ratel.*` overlay Ratel owns,
+ * no schema (ADR-0007). These constants are the `ratel.*` overlay Ratel owns,
  * plus the small subset of `gen_ai.*` keys the overlay emits directly on the
  * `execute_tool` span (borrowed verbatim from OpenTelemetry, never renamed).
  *
- * This package is OTel-free (ADR-0015): the OTLP config resolver and the
+ * This package is OTel-free (ADR-0007): the OTLP config resolver and the
  * content-capture gate are re-exported from `./config`; the `init()` exporter,
  * which does pull the OpenTelemetry SDK, lives in `@ratel-ai/telemetry-otlp`.
  */
@@ -149,7 +149,7 @@ export const GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result";
 /**
  * Whether a `ratel.*` span was a direct library call or synthesized by the agent
  * inside its loop. Carried by `ratel.origin`; mirrors the local trace `Origin`
- * (ADR-0009).
+ * (ADR-0007).
  */
 export const Origin = {
   Direct: "direct",
@@ -169,7 +169,7 @@ export type SearchTarget = (typeof SearchTarget)[keyof typeof SearchTarget];
 
 /**
  * Outcome of an MCP auth flow. Carried by `ratel.auth.outcome`; `NeedsAuth` is
- * the 401-driven `AuthNeeds` case (ADR-0009 `auth_needs`).
+ * the 401-driven `AuthNeeds` case (ADR-0007 `auth_needs`).
  */
 export const AuthOutcome = {
   Ok: "ok",

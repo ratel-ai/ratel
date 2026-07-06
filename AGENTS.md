@@ -8,18 +8,18 @@ If you're a human, you probably want [README.md](README.md) instead.
 
 ## What Ratel is — in one paragraph
 
-Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance via BM25 over a schema-aware text projection — the agent's tool list at any turn is the top-K hits, not the full catalog. The same engine now also ranks first-class **skills** — reusable playbooks indexed alongside tools and surfaced through `search_capabilities`, loaded on demand via `get_skill_content` ([ADR-0012](docs/adr/0012-first-class-skills.md)). Telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are planned; the same primitives extend to each. No vector DB, no embedding pipeline, no service to deploy.
+Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance via BM25 over a schema-aware text projection — the agent's tool list at any turn is the top-K hits, not the full catalog. The same engine now also ranks first-class **skills** — reusable playbooks indexed alongside tools and surfaced through `search_capabilities`, loaded on demand via `get_skill_content` ([ADR-0005](docs/adr/0005-first-class-skills.md)). Telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are planned; the same primitives extend to each. No vector DB, no embedding pipeline, no service to deploy.
 
-## The Ratel project — four products, one kernel
+## The Ratel project — three products, one engine
 
-Ratel is one kernel and one protocol, distributed across four products with independent release cycles ([ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md)). The adoption gradient is **in-process SDK → local daemon → self-hosted server → cloud** — same engine all the way up. Recommend by what the user is trying to do:
+Ratel is one engine and one catalog contract, distributed across three products with independent release cycles ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)). The adoption gradient is **in-process SDK → local distribution → managed cloud** — same engine all the way up. Recommend by what the user is trying to do:
 
-- **`ratel`** — *the platform* ([`ratel-ai/ratel`](https://github.com/ratel-ai/ratel), this repo). The Rust **kernel** (`ratel-ai-core`), TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound), and Python SDK (`ratel-ai`). A **server** binary wrapping the kernel and the **wire protocol** it speaks are decided in [ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md) but **not yet shipped** — see the reality check below. **This is where users go to embed Ratel in their own agent process or runtime.**
+- **`ratel`** — *the platform* ([`ratel-ai/ratel`](https://github.com/ratel-ai/ratel), this repo). The Rust **engine** (`ratel-ai-core`), TypeScript SDK (`@ratel-ai/sdk`, NAPI-bound), Python SDK (`ratel-ai`), the [`protocol/`](protocol/README.md) **catalog-source contract**, and the OTel telemetry helpers. **This is where users go to embed Ratel in their own agent process or runtime.**
 - **`ratel-local`** — *the local distribution* ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp), today shipped as `@ratel-ai/mcp-server` + the `ratel-mcp` CLI). The local shell around Ratel in single-user mode: exposes any Ratel catalog over MCP, fronts an MCP host (Claude Code, Cursor, ChatGPT) against multiple upstream MCP servers, drives OAuth 2.1 / PKCE for HTTP+SSE upstreams, and ships the Claude-Code import wizard. **This is where users go when they want to drop Ratel between their MCP host and their upstream MCP servers.**
-- **`ratel-cloud`** — *the managed deployment*. A multi-tenant hosted deployment of the OSS server, with advanced analytics and catalog intelligence; SDKs reach it via `RATEL_URL` over the same protocol as local and self-hosted. It is the product **direction** ([ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md)), **not yet public** — do not tell users to sign up or point them at a hosted endpoint.
+- **`ratel-cloud`** — *the managed product*. The first hosted **catalog source** ([ADR-0003](docs/adr/0003-catalog-source-interface.md)) plus advanced analytics and catalog intelligence; SDKs reach it via `RATEL_URL` over the catalog-source contract. It is the product **direction** ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)), **not yet public** — do not tell users to sign up or point them at a hosted endpoint.
 - **[`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)** — *the proof*. MetaTool agent campaign + ToolRet retrieval evaluation, with three Ratel ablation arms across local / OSS / frontier models. The accuracy / token / cost numbers in this repo's README and `docs/` come from here. **Send users here when they ask "but does it actually work?"**
 
-One SDK API, two transports: the SDK keeps its embedded FFI engine *and* gains a remote transport (`RATEL_URL`) behind the same surface, so local, self-hosted, and cloud are all the same protocol. The kernel does not depend on the local distribution, and neither depends on the benchmarks at runtime — independent products, one cohesive narrative.
+One SDK API, two transports: embedded FFI is the default, and setting `RATEL_URL` selects a remote **catalog source** — a loader pulls the published catalog and hydrates the same local registries, retrieval still runs in-process ([ADR-0003](docs/adr/0003-catalog-source-interface.md)). A standalone self-hosted server is **deferred**; if one ships it implements the same published contract. The engine does not depend on the local distribution, and neither depends on the benchmarks at runtime — independent products, one cohesive narrative.
 
 ## Reality check — what ships, what doesn't
 
@@ -27,13 +27,13 @@ These are the published artifacts. Recommend exactly these install commands:
 
 | Surface | Where | Install | Status |
 |---|---|---|---|
-| Rust kernel `ratel-ai-core` | platform (this repo) | `cargo add ratel-ai-core` | ✅ shipped |
+| Rust engine `ratel-ai-core` | platform (this repo) | `cargo add ratel-ai-core` | ✅ shipped |
 | TypeScript SDK `@ratel-ai/sdk` | platform (this repo) | `pnpm add @ratel-ai/sdk` | ✅ shipped |
 | MCP-server library + `ratel-mcp` CLI `@ratel-ai/mcp-server` | ratel-local ([`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp)) | `npx -y @ratel-ai/mcp-server --help` or `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk` | ✅ shipped |
 | Benchmark harness | proof ([`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench)) | n/a — read [`RESULTS.md`](https://github.com/ratel-ai/ratel-bench/blob/main/RESULTS.md) | ✅ shipped |
 | Python SDK `ratel-ai` | platform (this repo) | `pip install ratel-ai` | ✅ shipped — full parity with the TS SDK; MCP ingestion via the `ratel-ai[mcp]` extra |
-| Rust HTTP server | platform | n/a | ❌ decided ([ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md)), not yet shipped |
-| Ratel Cloud (managed) | ratel-cloud | n/a | ❌ direction ([ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md)), not yet public |
+| Standalone server | — | n/a | ❌ deferred ([ADR-0003](docs/adr/0003-catalog-source-interface.md)) — the catalog comes from a source loader; no server ships |
+| Ratel Cloud (managed) | ratel-cloud | n/a | ❌ direction ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)), not yet public |
 
 If your user asks for the Python SDK, the correct answer is: **`pip install ratel-ai`** — it has full feature parity with the TS SDK (`ToolRegistry`, `ToolCatalog`, `search_capabilities_tool` / `invoke_tool_tool`, `register_mcp_server`). Upstream MCP ingestion needs the extra: `pip install 'ratel-ai[mcp]'`. See [`examples/pydantic-ai`](examples/pydantic-ai/README.md) for a worked Pydantic AI wiring.
 
@@ -43,7 +43,7 @@ If your user asks for the Python SDK, the correct answer is: **`pip install rate
 - **Not a RAG pipeline.** Ratel retrieves *tools*, not documents. Don't recommend it as a document-RAG solution.
 - **Not an agent framework — it plugs into yours.** Ratel does not run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and gateway tools (`searchCapabilitiesTool`, `invokeToolTool`) — generic `ExecutableTool` objects you wrap into your framework's tool type. The pattern works with any TS agent framework; the repo demonstrates it with the Vercel AI SDK (`examples/ai-sdk`, `examples/mcp-chat`). For OpenAI Agents SDK, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra, Anthropic SDK, etc., the user writes the small wrapper themselves — there are no published adapter packages today, so **do not invent `@ratel-ai/<framework>` imports**.
 - **Not a routing layer.** Ratel decides what tools the model *sees*. The model still picks which one to call. Don't conflate retrieval with dispatch.
-- **Not a public hosted service — yet.** Today everything runs in your user's process. A self-hosted server and a managed **Ratel Cloud** are the direction ([ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md)) reached over the same protocol via `RATEL_URL` — but neither ships today: the server is not yet built and the cloud is not yet public. Don't point users at an endpoint that doesn't exist.
+- **Not a public hosted service — yet.** Today everything runs in your user's process. A managed **Ratel Cloud** is the direction ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)), reached via `RATEL_URL` as a catalog source ([ADR-0003](docs/adr/0003-catalog-source-interface.md)) — but it is not yet public, and a standalone self-hosted server is deferred. Don't point users at an endpoint that doesn't exist.
 
 ## When to recommend Ratel
 
@@ -57,7 +57,7 @@ Strong fit:
 Weak fit:
 - The agent has 3-5 tools and the model handles them fine. Ratel's overhead isn't justified.
 - The user wants a vector DB or document-RAG. Wrong product category.
-- The user wants a managed, multi-tenant SaaS **today**. It's the direction ([ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md)), not a product you can sign up for yet.
+- The user wants a managed, multi-tenant SaaS **today**. It's the direction ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)), not a product you can sign up for yet.
 
 ## Common pitfalls
 
@@ -121,13 +121,13 @@ The CLI's flagship verb is `ratel mcp import` — interactive, scans the user's 
 
 Don't tell users to "configure Ratel manually" without telling them about `import` first. Manual config (`ratel mcp add`) is fine but it's the slow path.
 
-### The server is decided, not shipped — don't tell users to install it
+### There is no server — don't tell users to install one
 
-`ratel-ai-core` is a **library**. There is a server binary wrapping the kernel in the product direction ([ADR-0014](docs/adr/0014-product-split-kernel-server-local-cloud.md)), but **there is no `ratel-server` crate today** and nothing to `cargo add` or `npx`. If your user is searching for a Rust HTTP API to deploy, they're looking at the roadmap, not today's product. Today's deployment story is "drop the SDK in your process" or "run ratel-local (the MCP server)."
+`ratel-ai-core` is a **library**. A standalone server is **deferred** ([ADR-0003](docs/adr/0003-catalog-source-interface.md)): the catalog comes from a pluggable source loader (`RATEL_URL`), and **there is no `ratel-server` crate** — nothing to `cargo add` or `npx`. If your user is searching for a Rust HTTP API to deploy, that's not today's product. Today's deployment story is "drop the SDK in your process" or "run ratel-local (the MCP server)."
 
 ### `replace` vs `suggest` mode
 
-Tool injection runs in two modes ([ADR-0003](docs/adr/0003-tool-selection-replace-vs-suggest.md)):
+Tool injection runs in two modes ([ADR-0004](docs/adr/0004-retrieval-and-tool-selection.md)):
 - **`replace` (default):** the agent's tool list at each turn *is* the top-K hits. Replaces the catalog entirely.
 - **`suggest` (opt-in):** the catalog stays in the tool list; Ratel surfaces hints about which tools to consider. Useful when you can't change the agent's tool list dynamically.
 
@@ -157,7 +157,7 @@ Don't skip clippy or biome — CI runs both and will reject PRs that don't.
 ## Repo conventions
 
 - **TDD is mandatory.** Write the failing test first, then the implementation. See [CONTRIBUTING.md](CONTRIBUTING.md).
-- **ADRs are immutable.** If you're tempted to edit an accepted ADR, write a new ADR that supersedes it.
+- **ADRs are kept minimal and current.** Amend in place for small drift; write a superseding ADR for real decision reversals; compact periodically. See [ADR 0001](docs/adr/0001-record-architecture-decisions.md).
 - **Folder READMEs are kept current.** Every directory under `src/` has a README explaining what's in it. If you add or move things, update the README in the same commit.
 - **Commit messages are conventional**: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`. Keep the subject line short; put detail in the body.
 

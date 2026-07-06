@@ -9,7 +9,7 @@ use crate::trace::event::{TraceEnvelope, TraceEvent};
 const ENVELOPE_VERSION: u32 = 1;
 
 /// A best-effort sink for trace events. Implementations must be cheap on the
-/// hot path — see ADR-0009 for the query-log reliability profile (lossy on
+/// hot path — see ADR-0007 for the query-log reliability profile (lossy on
 /// backpressure is fine, blocking the agent loop is not).
 pub trait TraceSink: Send + Sync {
     fn record(&self, event: TraceEvent);

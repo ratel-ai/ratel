@@ -1,4 +1,4 @@
-"""Regression guard for the tree-shakeable split (ADR-0015).
+"""Regression guard for the tree-shakeable split (ADR-0007).
 
 Importing the constants must not pull the OpenTelemetry SDK, so the SDK (emit
 side), the server (read side), and edge/serverless emitters take the `ratel.*`

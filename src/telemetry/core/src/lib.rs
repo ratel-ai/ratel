@@ -93,7 +93,7 @@ pub const GEN_AI_TOOL_CALL_RESULT: &str = "gen_ai.tool.call.result";
 
 /// Whether a `ratel.*` span was a direct library call or synthesized by the
 /// agent inside its loop. Emitted as the `ratel.origin` attribute; mirrors the
-/// local trace `Origin` (ADR-0009).
+/// local trace `Origin` (ADR-0007).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
     Direct,
@@ -129,7 +129,7 @@ impl SearchTarget {
 }
 
 /// Outcome of an MCP auth flow. Emitted as `ratel.auth.outcome`; `needs_auth`
-/// is the 401-driven `AuthNeeds` case (ADR-0009 `auth_needs`).
+/// is the 401-driven `AuthNeeds` case (ADR-0007 `auth_needs`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthOutcome {
     Ok,

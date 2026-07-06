@@ -87,7 +87,7 @@ class TestInitGuard:
 
 
 def test_new_processor_surface_is_importable_top_level() -> None:
-    """The coexistence surface resolves through the lazy top-level accessor (ADR-0015)."""
+    """The coexistence surface resolves through the lazy top-level accessor (ADR-0007)."""
     import ratel_ai_telemetry
     from ratel_ai_telemetry.otlp import ratel_span_processor as otlp_processor
 

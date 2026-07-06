@@ -1,6 +1,6 @@
 //! Trace events emitted from every layer of Ratel — the substrate for the
 //! inspector, the suggestion analyzer, the reranker training, and the optional
-//! self-hosted consolidation server. See ADR-0009 for the schema-ownership
+//! self-hosted consolidation server. See ADR-0007 for the schema-ownership
 //! and reliability story.
 
 mod event;

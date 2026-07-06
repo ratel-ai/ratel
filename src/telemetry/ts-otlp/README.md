@@ -6,7 +6,7 @@ for coexisting with a provider a partner already owns. `init()` wires an OTLP `h
 exporter to `RATEL_URL` (or `{ endpoint, headers }`) with a `service.name` resource and batch
 processor over the [OpenTelemetry JS SDK](https://opentelemetry.io/docs/languages/js/), registers
 it as the global tracer provider, and returns a shutdown handle. It is split from the vocabulary
-package (ADR-0015) so importing the `ratel.*` constants never pulls the OpenTelemetry SDK.
+package (ADR-0007) so importing the `ratel.*` constants never pulls the OpenTelemetry SDK.
 
 ## Usage
 
@@ -67,8 +67,8 @@ you need full-trace fidelity rather than just the gen_ai/ratel metrics.
 
 - Package name: `@ratel-ai/telemetry-otlp`
 - Pure TypeScript (no native binding); depends on `@ratel-ai/telemetry` + the OpenTelemetry JS SDK
-- Released under the `telemetry-ts-otlp-v*` tag prefix ([ADR-0016](../../../docs/adr/0016-per-package-versions-and-releases.md))
-- MIT ([ADR-0017](../../../docs/adr/0017-relicense-core-apache-2.md)); member of the pnpm workspace
+- Released under the `telemetry-ts-otlp-v*` tag prefix ([ADR-0008](../../../docs/adr/0008-release-engineering.md))
+- MIT ([ADR-0009](../../../docs/adr/0009-licensing.md)); member of the pnpm workspace
 
 ## Build & test
 

@@ -2,7 +2,7 @@
 
 The Python mirror of [`examples/ai-sdk`](../ai-sdk/README.md): the [`ratel-ai`](../../src/sdk/python/README.md) SDK wired into [Pydantic AI](https://ai.pydantic.dev/) with two layers of context engineering:
 
-1. **Pre-filter** ([ADR 0003](../../docs/adr/0003-tool-selection-replace-vs-suggest.md) `replace` mode) — the catalog is registered in a `ToolCatalog`; before the model call, BM25 narrows it to the top-K most relevant tools for the prompt. Those land directly in the agent's tool list with full schemas.
+1. **Pre-filter** ([ADR-0004](../../docs/adr/0004-retrieval-and-tool-selection.md) `replace` mode) — the catalog is registered in a `ToolCatalog`; before the model call, retrieval narrows it to the top-K most relevant tools for the prompt. Those land directly in the agent's tool list with full schemas.
 2. **Dynamic gateway** — two always-present tools, `search_capabilities` and `invoke_tool`, give the agent reach into the rest of the catalog when the top-K isn't enough. `search_capabilities` returns a `tools` bucket (hits grouped by upstream server) plus a `skills` bucket — `{tools: {groups: [{server, hits: [{toolId, score, description, inputSchema}]}]}, skills: [...]}` (the skills bucket is empty here — this example registers no skills); `invoke_tool` executes a tool by id.
 
 Tools are built from the catalog's JSON schemas via Pydantic AI's `Tool.from_schema`, so the schema the model sees is the same one Ratel ranks.

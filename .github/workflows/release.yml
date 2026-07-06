@@ -1,6 +1,6 @@
 name: Release
 
-# Per-package releases (ADR-0016): each unit ships on its own tag prefix, routed
+# Per-package releases (ADR-0008): each unit ships on its own tag prefix, routed
 # through this ONE workflow. Keeping a single release.yml + the `release`
 # environment preserves the OIDC Trusted Publisher registrations (npm loader + 5
 # platform packages, the PyPI wheel, the crate) — splitting the file or

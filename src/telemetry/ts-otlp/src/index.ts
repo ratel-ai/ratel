@@ -2,7 +2,7 @@
  * `@ratel-ai/telemetry-otlp` — the OTLP exporter surface for Ratel telemetry.
  *
  * Turnkey OpenTelemetry SDK wiring over the OTel-free `@ratel-ai/telemetry`
- * vocabulary. Split out (ADR-0015) so importing the constants never pulls the OTel
+ * vocabulary. Split out (ADR-0007) so importing the constants never pulls the OTel
  * SDK. Two entry points: `init()` for a greenfield app where Ratel owns the provider,
  * and `ratelSpanProcessor()` / `ratelTraceExporter()` to compose Ratel onto a provider
  * a partner already owns (Langfuse, the Vercel AI SDK, ...). The OTLP config resolver

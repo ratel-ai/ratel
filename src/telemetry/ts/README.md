@@ -6,7 +6,7 @@ the `Origin`/`SearchTarget`/`AuthOutcome` value enums, the pinned semconv versio
 the pure OTLP config resolver (`resolveOtlpConfig`) and the content-capture gate
 (`contentCaptureMode`). **This package is OTel-free** — importing it pulls no OpenTelemetry
 SDK, so the SDK (emit side), the server (read side), and edge/serverless emitters take the
-vocabulary weight-free ([ADR-0015](../../../docs/adr/0015-telemetry-otel-conventions.md)).
+vocabulary weight-free ([ADR-0007](../../../docs/adr/0007-telemetry-two-streams.md)).
 The `init()` exporter, which does wire the OTel SDK, lives in the companion
 [`@ratel-ai/telemetry-otlp`](../ts-otlp/README.md) package.
 
@@ -37,8 +37,8 @@ and call its `init()`. A complete, offline-runnable version (console exporter + 
 
 - Package name: `@ratel-ai/telemetry`
 - Pure TypeScript (no native binding), **zero runtime dependencies** (OTel-free)
-- Released under the `telemetry-ts-v*` tag prefix ([ADR-0016](../../../docs/adr/0016-per-package-versions-and-releases.md))
-- MIT ([ADR-0017](../../../docs/adr/0017-relicense-core-apache-2.md)); member of the pnpm workspace
+- Released under the `telemetry-ts-v*` tag prefix ([ADR-0008](../../../docs/adr/0008-release-engineering.md))
+- MIT ([ADR-0009](../../../docs/adr/0009-licensing.md)); member of the pnpm workspace
 
 ## Build & test
 

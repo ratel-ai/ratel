@@ -1,6 +1,6 @@
 """The OTLP exporter surface over the standard OpenTelemetry Python SDK.
 
-Two entry points, no custom transport and no schema (ADR-0015, CONVENTIONS.md § init()
+Two entry points, no custom transport and no schema (ADR-0007, CONVENTIONS.md § init()
 surface):
 
 - ``init()`` — the turnkey greenfield path: wires an OTLP http/protobuf exporter and

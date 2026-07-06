@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Single source of truth for Ratel's release units (ADR-0016).
+// Single source of truth for Ratel's release units (ADR-0008).
 //
 // Every release-infra tool reads unit facts from HERE so the units can
 // never drift apart:
@@ -8,7 +8,7 @@
 //   - scripts/publish-rc.sh          — the manual first-publish helper (--unit)
 //   - .claude/skills/changelog/draft.sh — via the `--changelog-map` CLI below
 //
-// Adding another unit later (e.g. `server`) is a one-place change.
+// Adding another unit later is a one-place change.
 //
 // Per unit:
 //   tagPrefix        release tag prefix; a unit ships on `<tagPrefix><semver>`.
@@ -64,7 +64,7 @@ export const UNITS = {
   },
   // The telemetry helpers are INDEPENDENT units — one per registry, plus the npm
   // exporter — so a fix to just the npm vocabulary ships alone, and they can still
-  // go out in one run by tagging the same commit (ADR-0016's per-package principle;
+  // go out in one run by tagging the same commit (ADR-0008's per-package principle;
   // the packages have no cross-registry install dependency, so nothing forces them
   // lockstep). core/js/py share the vocabulary spec + conformance fixtures, so a
   // change there marks those releasable and drafts into their changelogs; the
@@ -108,7 +108,7 @@ export const UNITS = {
     },
   },
   // The OTLP exporter (init()), split from the npm vocabulary package so importing
-  // the constants stays OTel-free (ADR-0015). npm-only; tracks only its own source
+  // the constants stays OTel-free (ADR-0007). npm-only; tracks only its own source
   // (a CONVENTIONS change is a vocabulary change, not an exporter change).
   "telemetry-ts-otlp": {
     tagPrefix: "telemetry-ts-otlp-v",

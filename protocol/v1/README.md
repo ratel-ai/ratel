@@ -1,0 +1,185 @@
+# Ratel catalog-source contract — v1
+
+The v1 surface is deliberately small: **catalog pull-sync + authentication.** A catalog
+source (the managed cloud today) is the authoritative *source* of a project's published
+catalog; a client pulls it and runs retrieval (`search_capabilities` / `invoke_tool` /
+`get_skill_content`) **locally** over that replica. There is no remote search/invoke on the
+wire — see [ADR-0003](../../docs/adr/0003-catalog-source-interface.md) (the embedded-replica
+model; it also fixes auth + scope and the sync / storage semantics).
+
+Transport is HTTP/1.1+ with JSON bodies. All paths are under `/v1`. The in-process library
+speaks none of this — it reads local disk; the contract is for **networked** sources.
+
+## Files
+
+- [`schema/`](schema/) — JSON Schemas for the wire shapes (`CatalogSkillWire`, the catalog
+  response, the error body).
+- [`conformance/`](conformance/) — the executable conformance vectors and the reference
+  verifier that every source and loader MUST pass.
+
+## Authentication
+
+Every `/v1` request to a networked source carries `Authorization: Bearer <key>`. The source
+takes `sha256(key)` (hex) and looks it up against active keys (`key_hash = $ AND revoked_at IS
+NULL`). Keys are stored **hash-only** — plaintext is shown once at creation and never
+persisted (ADR-0003).
+
+- missing or malformed header → `401`
+- unknown or revoked key → `401`
+- key store unreachable → `503`
+
+A networked source MUST be served over TLS; a bearer key is a replayable static secret. Every
+`/v1` request to a networked source carries a key — v1 has no loopback exception (see
+non-goals).
+
+## Catalog pull-sync
+
+### `GET /v1/catalog`
+
+Returns the project's published catalog. Conditional-GET with an `ETag`; the client caches
+the last body and revalidates.
+
+**Query parameters**
+
+- `scope` *(optional)* — an opaque subject id (the SDK's end-user identifier). Selects the
+  subject layer **overlaid on the global layer**: a skill in both layers is taken from the
+  subject layer (**subject wins on name collision**). Absent — or naming a subject the source
+  does not know — ⇒ the global layer only, byte-compatible with a source that has no notion of
+  subjects. The scope *model* (`tenant → project → subject`, authorization, confidential
+  isolation) is [ADR-0010](../../docs/adr/0010-catalog-scope-model.md); only the wire mechanics
+  of `?scope=` are frozen here.
+
+**Request headers**
+
+- `If-None-Match: <etag>` *(optional)* — the client's cached ETag.
+
+**Responses**
+
+- `200 OK` — body below, plus `ETag: "<hash>"` and `Cache-Control: no-cache`.
+- `304 Not Modified` — the client's `If-None-Match` matches the current ETag for the requested
+  scope; no body. The ETag is a content hash of the resolved set for that scope, so a tag
+  issued for one scope matches another only when both scopes currently hash to the same bytes.
+- `401` / `503` — per Authentication.
+
+**200 body**
+
+```
+{
+  "catalogVersion": "<etag-string>",
+  "skills": [ CatalogSkillWire, ... ]
+}
+```
+
+`CatalogSkillWire` mirrors the engine `Skill` struct field-for-field, so a client hydrates its
+`SkillCatalog` with no remapping (JSON Schema:
+[`schema/catalog-skill.schema.json`](schema/catalog-skill.schema.json)):
+
+```
+{
+  "id":          string,
+  "name":        string,               // kebab, unique within the project's set
+  "description": string,
+  "tags":        string[],
+  "tools":       string[],             // skill's referenced tool ids
+  "metadata":    { [key: string]: string[] },
+  "body":        string                // SKILL.md payload
+}
+```
+
+v1 serves **skills only** (mirroring today's catalog). Tool definitions in the pull, and any
+authoring/write path, are deferred (PSKS-8, internal tracker) and land as additive `/v1`
+extensions.
+
+### Tool resolution (client-owned registry)
+
+A synced skill's `tools` are tool **ids**, not definitions. The **tool registry is
+client-owned** — tools are registered in-process by the SDK (e.g. from the client's own
+upstream MCP servers). A referenced id resolves against that local registry; an id with no
+local definition behaves as unknown-tool at invoke time, though the skill stays discoverable by
+search. A source-published skill is therefore a coupling contract: it should reference only
+tools the consuming client registers locally. Syncing tool definitions to close this gap is a
+deferred extension (PSKS-8).
+
+### ETag algorithm (frozen at v1)
+
+The ETag is a SHA-256 over a **canonical serialization of the resolved published set for the
+request's scope**. The steps are byte-exact so every implementation — the managed cloud, an
+SDK loader, a future server — produces the identical ETag:
+
+1. **Resolve** the set for the scope (see `scope` above): the global layer, or the subject
+   layer overlaid on it.
+2. **Project** each skill to exactly `{id, name, description, tags, tools, metadata, body}`.
+   Every other field — timestamps, status, version, anything unrecognised — is dropped, so a
+   byte-identical republish keeps the ETag stable.
+3. **Canonicalize** each projected skill to JSON: the seven keys in the order above;
+   `metadata` keys sorted ascending by UTF-8 byte order; `tags`, `tools`, and every `metadata`
+   value array in **authored order** (order is significant); minimal JSON string escaping;
+   non-ASCII emitted as raw UTF-8 (never `\u`-escaped); no insignificant whitespace.
+4. **Sort** the projected skills by `id`, ascending by UTF-8 byte order, and join them into a
+   compact JSON array (`[skill,skill,…]`, no whitespace).
+5. `etag_hex = lowercase_hex(sha256(utf8_bytes(that array)))`. The `ETag` header is the strong
+   tag `"<etag_hex>"`; the body's `catalogVersion` is the bare `<etag_hex>`.
+
+An empty catalog hashes the two bytes `[]`. `If-None-Match` uses **weak comparison**
+(RFC 7232 §3.2): tolerate a `W/` prefix, surrounding quotes, comma-lists, and `*` (which
+matches any current representation).
+
+Because the ETag is part of the compatibility surface, **this projection and serialization are
+frozen at v1**: changing which fields are hashed, their order, the sort, or the escaping
+invalidates every client's cache and is a breaking (v2) change. The vectors in
+[`conformance/`](conformance/) pin the exact bytes.
+
+## Operational endpoints
+
+- `GET /healthz` — unauthenticated liveness probe for a networked source. Not under `/v1`,
+  not versioned, returns `200` with no meaningful body.
+
+## Error model
+
+Every non-2xx `/v1` response carries a uniform body (JSON Schema:
+[`schema/error.schema.json`](schema/error.schema.json)):
+
+```
+{ "error": { "code": string, "message": string, "details"?: object } }
+```
+
+v1 codes: `unauthorized` (401), `not_found` (404), `invalid_request` (400),
+`unavailable` (503). (`409` conflict codes arrive with the authoring surface, PSKS-8.)
+
+## Conformance
+
+The conformance vectors in [`conformance/vectors.json`](conformance/vectors.json) are part of
+this contract: fixture catalogs paired with their expected ETag and resolved id-set, the
+canonicalization invariants (field-order / metadata-key-sort / array-order / projection),
+scope-overlay cases, `If-None-Match` / 304 semantics, and the secrets-never-sync field rule.
+Every source and loader (the managed cloud, any third-party loader, a future server) MUST
+reproduce them, so the contract — not the single closed implementation — stays normative.
+[`conformance/verify.mjs`](conformance/verify.mjs) is the reference implementation of the
+algorithm and the vector runner (`node verify.mjs`); the JSON Schemas in [`schema/`](schema/)
+pin the wire shapes.
+
+## Versioning
+
+- Major version is the URL prefix `/v1`. Additive changes (new optional fields, new
+  endpoints) stay within `/v1`; clients MUST ignore unknown fields.
+- The frozen v1 surface: the `Authorization: Bearer` scheme and 401/503 contract, the
+  `GET /v1/catalog` shape, the `scope` selector semantics, `CatalogSkillWire`, and the ETag
+  content projection. A break in any of these is a `/v2`.
+
+## Explicit non-goals for v1
+
+- **No remote search / invoke / get_skill over the wire.** The client runs the engine's
+  retrieval and the gateway tools locally over the pulled replica (ADR-0003). A source-side
+  gateway is a possible later addition (PSKS-8), not a v1 shape.
+- **No authoring / CRUD / publish / archive.** Deferred to PSKS-8; a local file source has no
+  version semantics, so mutation verbs are not part of the v1 read contract.
+- **No telemetry ingest.** Remote telemetry is stock OTLP `http/protobuf` + Bearer into a
+  separate receiver ([ADR-0007](../../docs/adr/0007-telemetry-two-streams.md)), never
+  this contract.
+- **Secrets never appear on the wire.** OAuth tokens and API keys stay in the local secret
+  stores; no field of any v1 shape can carry one (ADR-0003).
+- **No loopback auth exception in v1.** A future local-daemon source that skips auth for
+  same-machine clients is deferred with the server (ADR-0003).
+- **No suggestion / analytics / ranking surface.** The cloud's differentiated features are a
+  private API outside this contract (ADR-0003); a source is not expected to implement them. The
+  usage-ranking read model may later be brought on-contract (RCSR-5, internal tracker).

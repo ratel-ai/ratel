@@ -1,7 +1,7 @@
 /**
  * `init()` — the turnkey greenfield path: sugar over the standard OpenTelemetry JS SDK
  * that wires an OTLP `http/protobuf` span exporter at the Ratel endpoint and registers a
- * provider Ratel owns. No custom transport, no schema (ADR-0015, CONVENTIONS.md § init()
+ * provider Ratel owns. No custom transport, no schema (ADR-0007, CONVENTIONS.md § init()
  * surface). The `ratel.*` vocabulary and the pure OTLP config resolution live in
  * `@ratel-ai/telemetry`; this package adds only the exporter wiring.
  *

@@ -25,12 +25,12 @@ classifiers = [
     "Topic :: System :: Monitoring",
 ]
 # The ratel.* vocabulary + the OTLP config/gate are pure Python and OTel-free
-# (ADR-0015), so importing the constants pulls no OpenTelemetry SDK. The SDK is an
+# (ADR-0007), so importing the constants pulls no OpenTelemetry SDK. The SDK is an
 # optional [otlp] extra, needed only by init() (in ratel_ai_telemetry.otlp).
 dependencies = []
 
 [project.optional-dependencies]
-# init() is sugar over the standard OTel Python SDK (ADR-0015): no custom transport.
+# init() is sugar over the standard OTel Python SDK (ADR-0007): no custom transport.
 # Pinned to the 1.41.x line and capped below 1.42, which drops Python 3.9 support
 # (this package targets >=3.9). semantic-conventions is not a direct dep: SERVICE_NAME
 # resolves to the literal "service.name" from opentelemetry-sdk.

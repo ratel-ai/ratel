@@ -12,7 +12,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 
-# abi3 wheels: one wheel per platform serves all CPython >= 3.9 (see ADR-0011).
+# abi3 wheels: one wheel per platform serves all CPython >= 3.9 (see ADR-0006).
 # Targets mirror the TS SDK's native matrix (build-binaries.yml).
 jobs:
   wheels:

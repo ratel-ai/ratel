@@ -46,7 +46,7 @@ jobs:
         working-directory: examples/pydantic-ai
         run: uv run pytest
 
-  # Pure-Python telemetry helper (ADR-0015): no Rust extension, so no maturin —
+  # Pure-Python telemetry helper (ADR-0007): no Rust extension, so no maturin —
   # editable install + ruff/mypy/pytest. Separate job because the SDK job's build
   # is maturin-specific to src/sdk/python.
   telemetry:

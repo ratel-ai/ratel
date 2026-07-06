@@ -95,7 +95,7 @@ class TestInit:
 
 def test_top_level_lazy_accessor_resolves_the_otlp_surface() -> None:
     """`from ratel_ai_telemetry import init` still works via the module __getattr__,
-    resolving to the same object as the .otlp submodule (ADR-0015 back-compat)."""
+    resolving to the same object as the .otlp submodule (ADR-0007 back-compat)."""
     import ratel_ai_telemetry
     from ratel_ai_telemetry.otlp import init as otlp_init
     from ratel_ai_telemetry.otlp import resolve_otlp_config as otlp_resolve

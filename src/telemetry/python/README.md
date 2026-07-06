@@ -4,8 +4,8 @@ The `ratel.*` telemetry vocabulary for Python: the constants that codify the Tie
 of [`../CONVENTIONS.md`](../CONVENTIONS.md) (attribute keys, span/event names, the
 `Origin`/`SearchTarget`/`AuthOutcome` value enums, the pinned semconv version). **Importing
 the constants pulls no OpenTelemetry SDK** — the vocabulary stays weight-free for the SDK
-(emit side), the server (read side), and edge/serverless emitters
-([ADR-0015](../../../docs/adr/0015-telemetry-otel-conventions.md)). `init()` — turnkey OTLP
+(emit side), the cloud (read side), and edge/serverless emitters
+([ADR-0007](../../../docs/adr/0007-telemetry-two-streams.md)). `init()` — turnkey OTLP
 exporter sugar over the standard OTel Python SDK — lives in the `ratel_ai_telemetry.otlp`
 submodule behind the optional `[otlp]` extra.
 
@@ -70,8 +70,8 @@ gen_ai/ratel metrics.
 - Distribution name: `ratel-ai-telemetry`; import name: `ratel_ai_telemetry`
 - Pure Python (hatchling build, no Rust extension); OTel-free constants, `init()` behind the `[otlp]` extra
 - Targets Python >=3.9 (the `[otlp]` OTel deps are pinned below 1.42, the last line supporting 3.9)
-- Released under the `telemetry-py-v*` tag prefix ([ADR-0016](../../../docs/adr/0016-per-package-versions-and-releases.md))
-- MIT ([ADR-0017](../../../docs/adr/0017-relicense-core-apache-2.md))
+- Released under the `telemetry-py-v*` tag prefix ([ADR-0008](../../../docs/adr/0008-release-engineering.md))
+- MIT ([ADR-0009](../../../docs/adr/0009-licensing.md))
 
 ## Build & test
 
