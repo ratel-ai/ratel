@@ -112,7 +112,7 @@ def main() -> None:
     # --- Production wiring: the same spans, exported to Ratel via init() ---
     # resolve_otlp_config is pure (no network), so we can show how endpoint + auth
     # resolve without sending anything:
-    cfg = resolve_otlp_config(api_key="sk-demo", endpoint="https://ingest.ratel.sh/v1/traces")
+    cfg = resolve_otlp_config(api_key="sk-demo", endpoint="https://cloud.ratel.sh/v1/traces")
     print("\n--- how init() resolves options -> exporter config (illustrative demo values) ---")
     print(f"  url:          {cfg.url}")
     print(f"  service_name: {cfg.service_name} (default {DEFAULT_SERVICE_NAME})")
