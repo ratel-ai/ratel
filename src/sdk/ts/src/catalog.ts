@@ -14,17 +14,24 @@ export type TraceSinkConfig =
 
 export type SearchOrigin = "direct" | "agent";
 
+export type SearchMethod = "bm25" | "semantic" | "hybrid";
+
 export interface ToolCatalogOptions {
   trace?: TraceSinkConfig;
+  /** Default retrieval method for `search` (default `"bm25"`, model-free). A
+   * per-call `method` argument overrides it. */
+  method?: SearchMethod;
 }
 
 export class ToolCatalog {
   private readonly registry: ToolRegistry;
   private readonly executors = new Map<string, Executor>();
   private readonly tools = new Map<string, Tool>();
+  private readonly method: SearchMethod;
 
   constructor(options: ToolCatalogOptions = {}) {
     this.registry = new ToolRegistry();
+    this.method = options.method ?? "bm25";
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
@@ -37,8 +44,16 @@ export class ToolCatalog {
     this.tools.set(tool.id, metadata);
   }
 
-  search(query: string, topK: number, origin: SearchOrigin = "direct"): SearchHit[] {
-    return this.registry.searchWithOrigin(query, topK, origin);
+  /** Search the catalog. `method` overrides the catalog default for this call;
+   * `"semantic"`/`"hybrid"` load the embedding model lazily and throw if it
+   * fails to load. */
+  search(
+    query: string,
+    topK: number,
+    origin: SearchOrigin = "direct",
+    method?: SearchMethod,
+  ): SearchHit[] {
+    return this.registry.searchWithMethod(query, topK, origin, method ?? this.method);
   }
 
   has(toolId: string): boolean {

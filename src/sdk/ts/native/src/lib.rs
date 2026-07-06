@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use ratel_ai_core as core;
-use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
+use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, SearchMethod, TraceEvent};
 use serde_json::Value;
 
 /// A constructed sink plus the `MemorySink` handle when the kind is `"memory"`
@@ -125,6 +125,40 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
+    /// `bm25` is infallible; `semantic`/`hybrid` load the embedding model lazily
+    /// and throw on a failed load. An unknown method string throws too.
+    #[napi]
+    pub fn search_with_method(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        method: String,
+    ) -> napi::Result<Vec<SearchHit>> {
+        let parsed_origin = match origin.as_str() {
+            "agent" => Origin::Agent,
+            _ => Origin::Direct,
+        };
+        let parsed_method: SearchMethod =
+            method
+                .parse()
+                .map_err(|e: ratel_ai_core::ParseSearchMethodError| {
+                    napi::Error::from_reason(e.to_string())
+                })?;
+        let hits = self
+            .inner
+            .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(hits
+            .into_iter()
+            .map(|hit| SearchHit {
+                tool_id: hit.tool_id,
+                score: hit.score as f64,
+            })
+            .collect())
+    }
+
     #[napi]
     pub fn record_event(&self, event: Value) -> napi::Result<()> {
         let event: TraceEvent = serde_json::from_value(event)
@@ -236,6 +270,38 @@ impl SkillRegistry {
                 score: hit.score as f64,
             })
             .collect()
+    }
+
+    /// Search with an explicit method — see [`ToolRegistry::search_with_method`].
+    #[napi]
+    pub fn search_with_method(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        method: String,
+    ) -> napi::Result<Vec<SkillHit>> {
+        let parsed_origin = match origin.as_str() {
+            "agent" => Origin::Agent,
+            _ => Origin::Direct,
+        };
+        let parsed_method: SearchMethod =
+            method
+                .parse()
+                .map_err(|e: ratel_ai_core::ParseSearchMethodError| {
+                    napi::Error::from_reason(e.to_string())
+                })?;
+        let hits = self
+            .inner
+            .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(hits
+            .into_iter()
+            .map(|hit| SkillHit {
+                skill_id: hit.skill_id,
+                score: hit.score as f64,
+            })
+            .collect())
     }
 
     #[napi]

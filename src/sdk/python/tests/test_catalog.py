@@ -54,6 +54,33 @@ def test_search_ranks_the_relevant_tool_first() -> None:
     assert hits[0].tool_id == "read_file"
 
 
+def test_search_defaults_to_bm25_stage() -> None:
+    # Semantic/hybrid load a real model (network) and are covered in Rust; this
+    # stays offline and asserts the model-free default + selection plumbing.
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="m"))
+    catalog.register(_read_file_tool(lambda args: {}))
+    hits = catalog.search("read a file", 5)
+    assert hits[0].tool_id == "read_file"
+    events = catalog.drain_trace_events()
+    search = next(e for e in events if e["type"] == "search")
+    assert any(stage["name"] == "bm25" for stage in search["stages"])
+
+
+def test_per_call_method_overrides_the_catalog_default() -> None:
+    # A semantic-default catalog, overridden back to bm25 per call (model-free).
+    catalog = ToolCatalog(method="semantic")
+    catalog.register(_read_file_tool(lambda args: {}))
+    hits = catalog.search("read a file", 5, method="bm25")
+    assert hits[0].tool_id == "read_file"
+
+
+def test_unknown_method_raises() -> None:
+    catalog = ToolCatalog()
+    catalog.register(_read_file_tool(lambda args: {}))
+    with pytest.raises(ValueError, match="unknown search method"):
+        catalog.search("read", 5, method="keyword")
+
+
 async def test_invoke_runs_sync_executor() -> None:
     catalog = ToolCatalog()
     catalog.register(_read_file_tool(lambda args: {"contents": f"read {args['path']}"}))

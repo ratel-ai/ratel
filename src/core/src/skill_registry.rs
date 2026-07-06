@@ -1,6 +1,11 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use crate::dense_search::dense_search;
+use crate::embedding::{Embedder, EmbedderError, embedder_with_telemetry};
+use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
+use crate::method::SearchMethod;
 use crate::search::bm25_search;
 use crate::skill::Skill;
 use crate::skill_indexing::searchable_text;
@@ -14,11 +19,16 @@ pub struct SkillHit {
 }
 
 /// Retrieval index over [`Skill`]s — the on-demand analog of
-/// [`crate::ToolRegistry`]. Same BM25 engine and tuning; a parallel type keeps
-/// the tool path untouched and lets skill telemetry stand on its own.
+/// [`crate::ToolRegistry`]. Same selectable BM25/semantic/hybrid engines; a
+/// parallel type keeps the tool path untouched and lets skill telemetry stand on
+/// its own.
 pub struct SkillRegistry {
     skills: Vec<Skill>,
     sink: Arc<dyn TraceSink>,
+    /// Lazily-computed dense embeddings, index-aligned with `skills`. See the
+    /// [`crate::ToolRegistry`] field of the same name.
+    embeddings: Mutex<Option<Vec<Vec<f32>>>>,
+    embedder_override: Option<Arc<dyn Embedder>>,
 }
 
 impl Default for SkillRegistry {
@@ -32,6 +42,8 @@ impl SkillRegistry {
         Self {
             skills: Vec::new(),
             sink: Arc::new(NoopSink),
+            embeddings: Mutex::new(None),
+            embedder_override: None,
         }
     }
 
@@ -39,6 +51,8 @@ impl SkillRegistry {
         Self {
             skills: Vec::new(),
             sink,
+            embeddings: Mutex::new(None),
+            embedder_override: None,
         }
     }
 
@@ -53,6 +67,7 @@ impl SkillRegistry {
     pub fn register(&mut self, skill: Skill) {
         let skill_id = skill.id.clone();
         self.skills.push(skill);
+        *self.embeddings.lock().expect("embeddings mutex poisoned") = None;
         self.sink.record(TraceEvent::SkillChurn {
             kind: ChurnKind::Add,
             skill_id,
@@ -64,6 +79,28 @@ impl SkillRegistry {
     }
 
     pub fn search_with_origin(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SkillHit> {
+        self.bm25_search_traced(query, top_k, origin)
+    }
+
+    /// Retrieve with an explicit [`SearchMethod`]. See
+    /// [`crate::ToolRegistry::search_with_method`].
+    pub fn search_with_method(
+        &self,
+        query: &str,
+        top_k: usize,
+        origin: Origin,
+        method: SearchMethod,
+    ) -> Result<Vec<SkillHit>, EmbedderError> {
+        match method {
+            SearchMethod::Bm25 => Ok(self.bm25_search_traced(query, top_k, origin)),
+            SearchMethod::Semantic => self.semantic_search_traced(query, top_k, origin),
+            SearchMethod::Hybrid => self.hybrid_search_traced(query, top_k, origin),
+        }
+    }
+
+    // ---- engines -----------------------------------------------------------
+
+    fn bm25_search_traced(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SkillHit> {
         let started = Instant::now();
         let hits: Vec<SkillHit> = bm25_search(
             self.skills
@@ -77,6 +114,175 @@ impl SkillRegistry {
         .collect();
         let took_ms = started.elapsed().as_millis() as u64;
         let top_score = hits.first().map(|h| h.score as f64);
+        self.record_search(
+            query,
+            origin,
+            top_k,
+            &hits,
+            vec![SearchStage {
+                name: "bm25".into(),
+                took_ms,
+                top_score,
+            }],
+            took_ms,
+        );
+        hits
+    }
+
+    fn semantic_search_traced(
+        &self,
+        query: &str,
+        top_k: usize,
+        origin: Origin,
+    ) -> Result<Vec<SkillHit>, EmbedderError> {
+        let started = Instant::now();
+        if self.skills.is_empty() || top_k == 0 {
+            self.record_search(query, origin, top_k, &[], Vec::new(), 0);
+            return Ok(Vec::new());
+        }
+        self.ensure_embeddings()?;
+        let query_vec = self.resolve_embedder()?.embed_query(query)?;
+        let t = Instant::now();
+        let ranked = self.dense_ranked(&query_vec, top_k)?;
+        let stage_ms = t.elapsed().as_millis() as u64;
+        let hits: Vec<SkillHit> = ranked
+            .into_iter()
+            .map(|(skill_id, score)| SkillHit { skill_id, score })
+            .collect();
+        let took_ms = started.elapsed().as_millis() as u64;
+        let top_score = hits.first().map(|h| h.score as f64);
+        self.record_search(
+            query,
+            origin,
+            top_k,
+            &hits,
+            vec![SearchStage {
+                name: "dense".into(),
+                took_ms: stage_ms,
+                top_score,
+            }],
+            took_ms,
+        );
+        Ok(hits)
+    }
+
+    fn hybrid_search_traced(
+        &self,
+        query: &str,
+        top_k: usize,
+        origin: Origin,
+    ) -> Result<Vec<SkillHit>, EmbedderError> {
+        let started = Instant::now();
+        if self.skills.is_empty() || top_k == 0 {
+            self.record_search(query, origin, top_k, &[], Vec::new(), 0);
+            return Ok(Vec::new());
+        }
+        let depth = RETRIEVE_DEPTH.max(top_k);
+
+        let t = Instant::now();
+        let bm25_ranked = bm25_search(
+            self.skills
+                .iter()
+                .map(|s| (s.id.clone(), searchable_text(s))),
+            query,
+            depth,
+        );
+        let bm25_stage = SearchStage {
+            name: "bm25".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
+        };
+
+        self.ensure_embeddings()?;
+        let t = Instant::now();
+        let query_vec = self.resolve_embedder()?.embed_query(query)?;
+        let dense_ranked = self.dense_ranked(&query_vec, depth)?;
+        let dense_stage = SearchStage {
+            name: "dense".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: dense_ranked.first().map(|(_, s)| *s as f64),
+        };
+
+        let t = Instant::now();
+        let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
+        let dense_ids: Vec<String> = dense_ranked.into_iter().map(|(id, _)| id).collect();
+        let mut fused = rrf_fuse(&[&bm25_ids, &dense_ids], RRF_K);
+        fused.truncate(top_k);
+        let rrf_stage = SearchStage {
+            name: "rrf".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: fused.first().map(|(_, s)| *s as f64),
+        };
+
+        let hits: Vec<SkillHit> = fused
+            .into_iter()
+            .map(|(skill_id, score)| SkillHit { skill_id, score })
+            .collect();
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(
+            query,
+            origin,
+            top_k,
+            &hits,
+            vec![bm25_stage, dense_stage, rrf_stage],
+            took_ms,
+        );
+        Ok(hits)
+    }
+
+    // ---- dense support -----------------------------------------------------
+
+    fn resolve_embedder(&self) -> Result<Arc<dyn Embedder>, EmbedderError> {
+        match &self.embedder_override {
+            Some(e) => Ok(e.clone()),
+            None => embedder_with_telemetry(self.sink.as_ref()),
+        }
+    }
+
+    fn ensure_embeddings(&self) -> Result<(), EmbedderError> {
+        let mut guard = self.embeddings.lock().expect("embeddings mutex poisoned");
+        if guard.is_some() {
+            return Ok(());
+        }
+        let embedder = self.resolve_embedder()?;
+        let mut vecs = Vec::with_capacity(self.skills.len());
+        for skill in &self.skills {
+            vecs.push(embedder.embed_doc(&searchable_text(skill))?);
+        }
+        *guard = Some(vecs);
+        Ok(())
+    }
+
+    fn dense_ranked(
+        &self,
+        query_vec: &[f32],
+        depth: usize,
+    ) -> Result<Vec<(String, f32)>, EmbedderError> {
+        let guard = self.embeddings.lock().expect("embeddings mutex poisoned");
+        let embeddings = guard
+            .as_ref()
+            .expect("dense_ranked called before ensure_embeddings");
+        let mut latest: HashMap<&str, &[f32]> = HashMap::new();
+        for (skill, embedding) in self.skills.iter().zip(embeddings.iter()) {
+            latest.insert(skill.id.as_str(), embedding.as_slice());
+        }
+        Ok(dense_search(
+            latest.into_iter().map(|(id, v)| (id.to_string(), v)),
+            query_vec,
+            depth,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn record_search(
+        &self,
+        query: &str,
+        origin: Origin,
+        top_k: usize,
+        hits: &[SkillHit],
+        stages: Vec<SearchStage>,
+        took_ms: u64,
+    ) {
         self.sink.record(TraceEvent::SkillSearch {
             query: query.to_string(),
             origin,
@@ -88,14 +294,9 @@ impl SkillRegistry {
                     score: h.score as f64,
                 })
                 .collect(),
-            stages: vec![SearchStage {
-                name: "bm25".into(),
-                took_ms,
-                top_score,
-            }],
+            stages,
             took_ms,
         });
-        hits
     }
 }
 
@@ -103,6 +304,37 @@ impl SkillRegistry {
 mod tests {
     use super::*;
     use crate::trace::MemorySink;
+
+    struct StubEmbedder;
+    impl StubEmbedder {
+        fn vec_for(text: &str) -> Vec<f32> {
+            let t = text.to_lowercase();
+            if t.contains("api") || t.contains("rest") {
+                vec![1.0, 0.0, 0.0]
+            } else if t.contains("frontend") || t.contains("slides") {
+                vec![0.0, 1.0, 0.0]
+            } else {
+                vec![0.0, 0.0, 1.0]
+            }
+        }
+    }
+    impl Embedder for StubEmbedder {
+        fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(StubEmbedder::vec_for(text))
+        }
+        fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(StubEmbedder::vec_for(text))
+        }
+    }
+
+    fn with_embedder(embedder: Arc<dyn Embedder>) -> SkillRegistry {
+        SkillRegistry {
+            skills: Vec::new(),
+            sink: Arc::new(NoopSink),
+            embeddings: Mutex::new(None),
+            embedder_override: Some(embedder),
+        }
+    }
 
     fn skill(id: &str, name: &str, description: &str, tags: &[&str]) -> Skill {
         Skill {
@@ -147,6 +379,53 @@ mod tests {
     fn search_on_empty_registry_returns_no_hits() {
         let reg = SkillRegistry::new();
         assert!(reg.search("anything", 5).is_empty());
+    }
+
+    #[test]
+    fn semantic_ranks_via_injected_embedder() {
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        reg.register(skill(
+            "frontend-slides",
+            "frontend-slides",
+            "HTML slides",
+            &["frontend"],
+        ));
+        let hits = reg
+            .search_with_method("rest api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(
+            hits.first().map(|h| h.skill_id.as_str()),
+            Some("api-design")
+        );
+    }
+
+    #[test]
+    fn hybrid_emits_three_stages() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        reg.search_with_method("api", 5, Origin::Agent, SearchMethod::Hybrid)
+            .unwrap();
+        let events = sink.drain();
+        assert!(events.iter().any(|e| matches!(
+            &e.event,
+            TraceEvent::SkillSearch { stages, .. }
+                if stages.iter().any(|s| s.name == "bm25")
+                && stages.iter().any(|s| s.name == "dense")
+                && stages.iter().any(|s| s.name == "rrf")
+        )));
     }
 
     #[test]

@@ -35,7 +35,10 @@ jobs:
             manylinux: auto
           - triple: linux-arm64-gnu
             target: aarch64-unknown-linux-gnu
-            runs-on: ubuntu-latest
+            # The dense/hybrid ML deps (candle's esaxx-rs C++, ring) don't
+            # cross-compile in the x86 manylinux image, so build natively on an
+            # arm64 runner.
+            runs-on: ubuntu-24.04-arm
             manylinux: auto
           - triple: win32-x64-msvc
             target: x86_64-pc-windows-msvc

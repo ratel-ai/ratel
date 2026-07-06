@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use ratel_ai_core as core;
@@ -117,6 +117,37 @@ impl ToolRegistry {
                 score: hit.score as f64,
             })
             .collect()
+    }
+
+    /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
+    /// `bm25` is infallible; `semantic`/`hybrid` load the embedding model lazily
+    /// and raise `RuntimeError` on a failed load (network / cache / underpowered
+    /// machine). An unknown method string raises `ValueError`.
+    fn search_with_method(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        method: String,
+    ) -> PyResult<Vec<SearchHit>> {
+        let parsed_origin = match origin.as_str() {
+            "agent" => Origin::Agent,
+            _ => Origin::Direct,
+        };
+        let parsed_method = method
+            .parse::<core::SearchMethod>()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let hits = self
+            .inner
+            .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        Ok(hits
+            .into_iter()
+            .map(|hit| SearchHit {
+                tool_id: hit.tool_id,
+                score: hit.score as f64,
+            })
+            .collect())
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -248,6 +279,34 @@ impl SkillRegistry {
                 score: hit.score as f64,
             })
             .collect()
+    }
+
+    /// Search with an explicit method — see [`ToolRegistry::search_with_method`].
+    fn search_with_method(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        method: String,
+    ) -> PyResult<Vec<SkillHit>> {
+        let parsed_origin = match origin.as_str() {
+            "agent" => Origin::Agent,
+            _ => Origin::Direct,
+        };
+        let parsed_method = method
+            .parse::<core::SearchMethod>()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let hits = self
+            .inner
+            .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        Ok(hits
+            .into_iter()
+            .map(|hit| SkillHit {
+                skill_id: hit.skill_id,
+                score: hit.score as f64,
+            })
+            .collect())
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {

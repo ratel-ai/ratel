@@ -67,6 +67,40 @@ describe("ToolCatalog", () => {
   });
 });
 
+describe("ToolCatalog search methods", () => {
+  // Semantic/hybrid load a real model (network) and are covered in Rust; these
+  // stay offline and assert the selection plumbing + the model-free default.
+  it("defaults to bm25 and never loads a model", () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "m" } });
+    catalog.register(readFile);
+    const hits = catalog.search("read file", 5);
+    expect(hits[0]?.toolId).toBe("read_file");
+    const events = catalog.drainTraceEvents() as Array<{
+      type: string;
+      stages?: { name: string }[];
+    }>;
+    const search = events.find((e) => e.type === "search");
+    expect(search?.stages?.some((s) => s.name === "bm25")).toBe(true);
+  });
+
+  it("an explicit bm25 per-call method matches the default", () => {
+    const catalog = new ToolCatalog({ method: "semantic" });
+    catalog.register(readFile);
+    // Override the semantic default back to bm25 so this stays model-free.
+    const hits = catalog.search("read file", 5, "direct", "bm25");
+    expect(hits[0]?.toolId).toBe("read_file");
+  });
+
+  it("rejects an unknown method", () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    expect(() =>
+      // biome-ignore lint/suspicious/noExplicitAny: exercising the runtime guard
+      catalog.search("read", 5, "direct", "keyword" as any),
+    ).toThrow(/unknown search method/);
+  });
+});
+
 describe("ToolCatalog tracing", () => {
   it("does not capture events when no trace sink is configured (default noop)", () => {
     const catalog = new ToolCatalog();

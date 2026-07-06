@@ -3,6 +3,7 @@ export { SkillRegistry, ToolRegistry } from "../native/index.cjs";
 export type {
   ExecutableTool,
   Executor,
+  SearchMethod,
   SearchOrigin,
   ToolCatalogOptions,
   TraceSinkConfig,

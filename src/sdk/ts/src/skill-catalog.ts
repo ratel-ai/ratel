@@ -1,10 +1,12 @@
 import { type Skill, type SkillHit, SkillRegistry } from "../native/index.cjs";
-import type { SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import type { SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
 
 export type { Skill, SkillHit };
 
 export interface SkillCatalogOptions {
   trace?: TraceSinkConfig;
+  /** Default retrieval method for `search` (default `"bm25"`). */
+  method?: SearchMethod;
 }
 
 /**
@@ -15,9 +17,11 @@ export interface SkillCatalogOptions {
 export class SkillCatalog {
   private readonly registry: SkillRegistry;
   private readonly skills = new Map<string, Skill>();
+  private readonly method: SearchMethod;
 
   constructor(options: SkillCatalogOptions = {}) {
     this.registry = new SkillRegistry();
+    this.method = options.method ?? "bm25";
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
@@ -28,8 +32,13 @@ export class SkillCatalog {
     this.skills.set(skill.id, skill);
   }
 
-  search(query: string, topK: number, origin: SearchOrigin = "direct"): SkillHit[] {
-    return this.registry.searchWithOrigin(query, topK, origin);
+  search(
+    query: string,
+    topK: number,
+    origin: SearchOrigin = "direct",
+    method?: SearchMethod,
+  ): SkillHit[] {
+    return this.registry.searchWithMethod(query, topK, origin, method ?? this.method);
   }
 
   has(skillId: string): boolean {

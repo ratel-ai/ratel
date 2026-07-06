@@ -20,6 +20,7 @@ from ._native import SearchHit, ToolRegistry
 Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
 
 SearchOrigin = str  # "direct" | "agent"
+SearchMethod = str  # "bm25" | "semantic" | "hybrid"
 
 
 @dataclass
@@ -57,10 +58,17 @@ class TraceSinkConfig:
 class ToolCatalog:
     """Registry + executors. Register tools once, then search and invoke by id."""
 
-    def __init__(self, trace: TraceSinkConfig | None = None) -> None:
+    def __init__(
+        self,
+        trace: TraceSinkConfig | None = None,
+        method: SearchMethod = "bm25",
+    ) -> None:
         self._registry = ToolRegistry()
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
+        # Default retrieval method for `search`; "bm25" keeps the historical
+        # (model-free) behavior. A per-call `method=` overrides it.
+        self._method: SearchMethod = method
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -83,8 +91,17 @@ class ToolCatalog:
             output_schema=tool.output_schema,
         )
 
-    def search(self, query: str, top_k: int, origin: SearchOrigin = "direct") -> list[SearchHit]:
-        return self._registry.search_with_origin(query, top_k, origin)
+    def search(
+        self,
+        query: str,
+        top_k: int,
+        origin: SearchOrigin = "direct",
+        method: SearchMethod | None = None,
+    ) -> list[SearchHit]:
+        """Search the catalog. `method` overrides the catalog default for this
+        call ("bm25" | "semantic" | "hybrid"); "semantic"/"hybrid" raise
+        `RuntimeError` if the embedding model fails to load."""
+        return self._registry.search_with_method(query, top_k, origin, method or self._method)
 
     def has(self, tool_id: str) -> bool:
         return tool_id in self._executors

@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0-rc.1] - 2026-07-06
+
+### Added
+
+- **Selectable retrieval methods** (ADR-0011): a `SearchMethod` enum — `Bm25` (default), `Semantic`, `Hybrid` — chosen per registry or per call via `ToolRegistry::search_with_method` / `SkillRegistry::search_with_method`. Semantic ranks a local `BAAI/bge-small-en-v1.5` embedding (pure-Rust Candle); hybrid fuses the BM25 and dense arms with Reciprocal Rank Fusion (no reranker).
+- `EmbedderError` (surfaced from `search_with_method` on the semantic/hybrid path) and a `TraceEvent::EmbedderLoad` / `EmbedderLoadStatus` flagging a slow (possibly underpowered machine) or failed model load.
+
+### Changed
+
+- BM25 remains the default engine. `search` / `search_with_origin` keep their infallible `Vec<SearchHit>` signature and BM25 behavior unchanged. Embeddings load lazily on the first semantic/hybrid search, so a BM25-only registry never loads the model.
+
 ## [0.2.1-rc.1] - 2026-07-04
 
 ### Changed

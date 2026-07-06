@@ -1,6 +1,6 @@
 <div align="center">
   <h1>ratel-ai-core</h1>
-  <h4>Rust core for Ratel — BM25 retrieval over an agent's tool catalog, in-process, no infra.</h4>
+  <h4>Rust core for Ratel — selectable BM25, semantic, or hybrid retrieval over an agent's tool catalog, in-process, no infra.</h4>
 
   <p>
     <a href="../../docs/">Docs</a> •
@@ -41,7 +41,17 @@ Or run against the whole workspace from the repo root with `cargo build --worksp
 
 Tools are the first content type indexed by the core. Tool search ranks a deterministic flat-text projection of each `Tool`: its `name`, `description`, and a walk of both `input_schema` and `output_schema`. Only semantic tokens (property names, descriptions, enum values) are emitted; JSON Schema structure (`type`, `required`, `$ref`, braces, quotes) is skipped. See [ADR‑0004](../../docs/adr/0004-retrieval-and-tool-selection.md) for the algorithm and rationale.
 
-`Skill` is the second content type, ranked by the same BM25 engine through `SkillRegistry`. A skill is indexed over its `name`, `description`, and `tags` (author-declared labels and task phrases); its `tools` (declared tool-id dependencies, surfaced at the gateway), `metadata` (non-indexed context such as `{"stacks": ["react"]}` for the push-path ranker), and `body` (the dispatch payload) are not indexed. See [ADR‑0005](../../docs/adr/0005-first-class-skills.md). The same retrieval primitive carries forward to memories and message history as those land.
+`Skill` is the second content type, ranked by the same engines through `SkillRegistry`. A skill is indexed over its `name`, `description`, and `tags` (author-declared labels and task phrases); its `tools` (declared tool-id dependencies, surfaced at the gateway), `metadata` (non-indexed context such as `{"stacks": ["react"]}` for the push-path ranker), and `body` (the dispatch payload) are not indexed. See [ADR‑0005](../../docs/adr/0005-first-class-skills.md). The same retrieval primitive carries forward to memories and message history as those land.
+
+## Retrieval methods
+
+A `SearchMethod` selects the ranker — `Bm25` (default), `Semantic`, or `Hybrid` — per registry (a construction-time default) or per call via `search_with_method`. `search` / `search_with_origin` keep their infallible BM25 behavior unchanged.
+
+- **BM25** — lexical, model-free, the default. Never fails, never loads a model.
+- **Semantic** — dense cosine ranking over a local `BAAI/bge-small-en-v1.5` embedding (pure-Rust Candle; fetched once into the HuggingFace cache on first use).
+- **Hybrid** — BM25 and dense arms fused by Reciprocal Rank Fusion (no reranker).
+
+Semantic/hybrid load the model lazily on first use — a BM25-only registry never touches it — and `search_with_method` returns `Result<_, EmbedderError>` so a failed load (network / cache / underpowered machine) is catchable. See [ADR‑0011](../../docs/adr/0011-selectable-retrieval-methods.md).
 
 ## Trace stream
 
