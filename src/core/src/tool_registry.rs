@@ -24,9 +24,10 @@ pub struct ToolRegistry {
     /// Dense embeddings, a growing **prefix** of `tools`: `embeddings[i]` is the
     /// vector for `tools[i]`, and any tool beyond `embeddings.len()` is not yet
     /// embedded. `register` only appends a tool (never invalidates); the missing
-    /// tail is embedded incrementally by [`Self::build_embeddings`] or the first semantic/
-    /// hybrid search — so an existing vector is never recomputed. A pure BM25 user
-    /// never populates this and never loads the model (see ADR-0011).
+    /// tail is embedded by [`Self::build_embeddings`] — a search never embeds the
+    /// corpus (it requires the cache built first) — so an existing vector is never
+    /// recomputed. A pure BM25 user never populates this and never loads the model
+    /// (see ADR-0011).
     embeddings: Mutex<Vec<Vec<f32>>>,
     /// Test-only override for the process embedder (`None` → the shared
     /// bge-small, loaded lazily on first use). Lets tests inject a
@@ -71,8 +72,8 @@ impl ToolRegistry {
         let tool_id = tool.id.clone();
         self.tools.push(tool);
         // Just append — never touch the embeddings cache. The new tool sits
-        // beyond the cached prefix and gets embedded incrementally by the next
-        // `build_embeddings`/semantic search. Registration stays infallible and model-free,
+        // beyond the cached prefix and gets embedded by the next `build_embeddings`
+        // (a search never embeds). Registration stays infallible and model-free,
         // so BM25 users are unaffected (see ADR-0011).
         self.sink.record(TraceEvent::IndexChurn {
             kind: ChurnKind::Add,
@@ -92,10 +93,11 @@ impl ToolRegistry {
     }
 
     /// Retrieve with an explicit [`SearchMethod`]. `Bm25` is infallible; `Semantic`
-    /// and `Hybrid` load the embedding model lazily and may return an
-    /// [`EmbedderError`] on a failed load/inference (network, cache, underpowered
-    /// machine). The SDK layer picks the method (a per-catalog default or a
-    /// per-call override) and calls this.
+    /// and `Hybrid` rank against the prebuilt embedding cache and return an
+    /// [`EmbedderError`] (`EmbeddingsNotBuilt`) if it isn't built — they never load
+    /// the model or embed the corpus in-search (the model loads at
+    /// `build_embeddings`). The SDK layer picks the method (a per-catalog default or
+    /// a per-call override) and calls this.
     pub fn search_with_method(
         &self,
         query: &str,

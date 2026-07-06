@@ -60,9 +60,10 @@ export class ToolCatalog {
     this.registry.buildEmbeddings();
   }
 
-  /** Search the catalog. `method` overrides the catalog default for this call;
-   * `"semantic"`/`"hybrid"` load the embedding model lazily and throw if it
-   * fails to load. */
+  /** Search the catalog. `method` overrides the catalog default for this call.
+   * `"semantic"`/`"hybrid"` rank against the prebuilt embedding cache and throw
+   * `EmbeddingsNotBuilt` if it isn't built; they never load the model in-search (a
+   * semantic/hybrid catalog builds embeddings eagerly at register). */
   search(
     query: string,
     topK: number,

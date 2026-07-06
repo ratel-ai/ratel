@@ -120,9 +120,10 @@ impl ToolRegistry {
     }
 
     /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
-    /// `bm25` is infallible; `semantic`/`hybrid` load the embedding model lazily
-    /// and raise `RuntimeError` on a failed load (network / cache / underpowered
-    /// machine). An unknown method string raises `ValueError`.
+    /// `bm25` is infallible; `semantic`/`hybrid` rank against the prebuilt embedding
+    /// cache and raise `RuntimeError` (`EmbeddingsNotBuilt`) if it isn't built — the
+    /// model loads at `build_embeddings`, never inside a search. An unknown method
+    /// string raises `ValueError`.
     fn search_with_method(
         &self,
         query: String,

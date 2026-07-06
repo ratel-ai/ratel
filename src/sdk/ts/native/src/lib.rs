@@ -126,8 +126,9 @@ impl ToolRegistry {
     }
 
     /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
-    /// `bm25` is infallible; `semantic`/`hybrid` load the embedding model lazily
-    /// and throw on a failed load. An unknown method string throws too.
+    /// `bm25` is infallible; `semantic`/`hybrid` rank against the prebuilt embedding
+    /// cache and throw (`EmbeddingsNotBuilt`) if it isn't built — the model loads at
+    /// `build_embeddings`, never inside a search. An unknown method string throws too.
     #[napi]
     pub fn search_with_method(
         &self,

@@ -3,8 +3,10 @@
 //! Three engines coexist and are selectable per registry (a construction-time
 //! default) or per call (an explicit override). BM25 is the default — it needs
 //! no model and never fails, so the legacy `search`/`search_with_origin` paths
-//! stay infallible. Semantic and Hybrid load the embedding model lazily on first
-//! use (see `embedding.rs` and ADR-0011).
+//! stay infallible. Semantic and Hybrid rank against a prebuilt embedding cache;
+//! the model loads when the cache is first built (eagerly at register in
+//! semantic/hybrid mode), never at install and never inside a search (see
+//! `embedding.rs` and ADR-0011).
 
 use std::fmt;
 use std::str::FromStr;

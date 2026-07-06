@@ -51,7 +51,7 @@ A `SearchMethod` selects the ranker — `Bm25` (default), `Semantic`, or `Hybrid
 - **Semantic** — dense cosine ranking over a local `BAAI/bge-small-en-v1.5` embedding (pure-Rust Candle; fetched once into the HuggingFace cache on first use).
 - **Hybrid** — BM25 and dense arms fused by Reciprocal Rank Fusion (no reranker).
 
-Semantic/hybrid load the model lazily on first use — a BM25-only registry never touches it — and `search_with_method` returns `Result<_, EmbedderError>` so a failed load (network / cache / underpowered machine) is catchable. See [ADR‑0011](../../docs/adr/0011-selectable-retrieval-methods.md).
+Semantic/hybrid load the model when embeddings are first built (eagerly at `register` in semantic/hybrid mode), never at install and never inside a search — a BM25-only registry never touches it — and `search_with_method` returns `Result<_, EmbedderError>` so a failed load (network / cache / underpowered machine) is catchable. See [ADR‑0011](../../docs/adr/0011-selectable-retrieval-methods.md).
 
 ## Trace stream
 

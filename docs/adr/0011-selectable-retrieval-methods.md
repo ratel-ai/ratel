@@ -44,7 +44,7 @@ parallel to `SearchOrigin`.
   `RuntimeError` / a thrown JS error at the SDK edge.
 - **The embedding cache is incremental and in-process.** It is a growing *prefix* of the
   corpus: `register` only appends a tool (never invalidates), and the not-yet-embedded tail is
-  embedded by `build_embeddings()` or a search — so an existing vector is never recomputed (adding one tool
+  embedded by `build_embeddings()` — so an existing vector is never recomputed (adding one tool
   costs one embedding, not N). Core `register(&mut self, tool) -> ()` stays infallible and
   model-free; a pure BM25 registry never populates the cache. The one-time model load emits a
   `TraceEvent::EmbedderLoad` flagging a slow (possibly underpowered) or failed load.

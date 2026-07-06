@@ -67,8 +67,8 @@ impl SkillRegistry {
     pub fn register(&mut self, skill: Skill) {
         let skill_id = skill.id.clone();
         self.skills.push(skill);
-        // Append only — the new skill is embedded incrementally by the next
-        // `build_embeddings`/semantic search (see [`crate::ToolRegistry::register`]).
+        // Append only — the new skill is embedded by the next `build_embeddings`
+        // (a search never embeds); see [`crate::ToolRegistry::register`].
         self.sink.record(TraceEvent::SkillChurn {
             kind: ChurnKind::Add,
             skill_id,
