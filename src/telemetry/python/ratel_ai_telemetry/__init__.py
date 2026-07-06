@@ -161,6 +161,10 @@ _OTLP_EXPORTS: Final = frozenset(
         "OtlpConfig",
         "ENDPOINT_ENV",
         "DEFAULT_SERVICE_NAME",
+        "ratel_signal_filter",
+        "ratel_span_exporter",
+        "ratel_span_processor",
+        "SpanFilter",
     }
 )
 
@@ -210,7 +214,7 @@ __all__ = [
     "SearchTarget",
     # The OTLP exporter surface, lazily resolved from `.otlp` via __getattr__ above
     # (importing any of these — or `import *` — loads the submodule but still no OTel
-    # SDK; only calling init() needs the [otlp] extra).
+    # SDK; only wiring an exporter needs the [otlp] extra).
     "init",
     "resolve_otlp_config",
     "content_capture_mode",
@@ -218,4 +222,8 @@ __all__ = [
     "OtlpConfig",
     "ENDPOINT_ENV",
     "DEFAULT_SERVICE_NAME",
+    "ratel_signal_filter",
+    "ratel_span_exporter",
+    "ratel_span_processor",
+    "SpanFilter",
 ]

@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.4] - 2026-07-05
+
+### Added
+
+- `ratelSpanProcessor()` / `ratelTraceExporter()` + the default `ratelSignalFilter`: a composable OTLP span-processor for multi-provider coexistence. OpenTelemetry's model is one provider with many span-processors, so a partner already running one (e.g. Langfuse + the Vercel AI SDK) adds `ratelSpanProcessor` to their provider's `spanProcessors` to dual-export to Ratel — forwarding only the `gen_ai.*` / `ratel.*` signal (overridable via `spanFilter`; `() => true` sends everything), so the framework's `ai.*` wrapper noise stays out of Ratel.
+
+### Changed
+
+- `init()` refactored onto `ratelSpanProcessor` (still exports every span — it owns the provider) and now throws, pointing at `ratelSpanProcessor`, when a `TracerProvider` is already registered globally, instead of silently no-op'ing.
+
 ## [0.1.0-rc.3] - 2026-07-05
 
 ### Added

@@ -38,8 +38,32 @@ provider = init(api_key="sk-...")  # wires the OTLP exporter to RATEL_URL (or en
 provider.shutdown()  # flush the exporter on exit
 ```
 
-A complete, offline-runnable version (console exporter + a `ratel.search` → `execute_tool`
-trace) is in [`examples/telemetry-python`](../../../examples/telemetry-python/README.md).
+`init()` owns the global provider, so it is the turnkey path for a greenfield app; it raises —
+pointing at `ratel_span_processor` — rather than silently no-op'ing if a provider is already
+registered. A complete, offline-runnable version (console exporter + a `ratel.search` →
+`execute_tool` trace) is in [`examples/telemetry-python`](../../../examples/telemetry-python/README.md).
+
+### Coexisting with another provider (Langfuse, the Vercel AI SDK, ...)
+
+OpenTelemetry's model is one provider with many span-processors. When a partner already owns the
+provider, add `ratel_span_processor` to it instead of calling `init()` — Ratel ingests only the
+`gen_ai.*` / `ratel.*` signal (the default `ratel_signal_filter`), dropping the framework's `ai.*`
+wrapper noise:
+
+```python
+from opentelemetry.sdk.trace import TracerProvider
+from ratel_ai_telemetry.otlp import ratel_span_processor
+
+provider = TracerProvider()
+provider.add_span_processor(existing_langfuse_processor)              # keeps every span
+provider.add_span_processor(ratel_span_processor(api_key="sk-..."))  # gen_ai.*/ratel.* only
+```
+
+Pass `span_filter=lambda _s: True` (or your own predicate) to override the default;
+`ratel_span_exporter()` is the bare OTLP exporter if you want to wire your own processor.
+Note that per-span filtering can orphan the AI SDK's `ai.*` wrapper from its `gen_ai.*` child;
+send everything (or tail-sample) when you need full-trace fidelity rather than just the
+gen_ai/ratel metrics.
 
 ## Package shape
 
@@ -62,7 +86,9 @@ uv pip install --python .venv -e '.[dev]'
 Unlike the Python SDK there is no `maturin develop` step — the package is pure Python,
 installed editable (`[dev]` pulls the `[otlp]` extra so the tests exercise the real SDK).
 The tests cover the vocabulary (each constant asserted against the pin), `init()`'s
-endpoint/auth resolution and the content-capture gate, a purity guard that importing the
-package pulls no OTel, and the shared contract-against-the-pin conformance in
+endpoint/auth resolution, its already-registered guard and the content-capture gate, the
+`ratel_signal_filter` predicate and that `ratel_span_processor` forwards only the spans it
+passes, a purity guard that importing the package pulls no OTel, and the shared
+contract-against-the-pin conformance in
 [`../conformance/`](../conformance/README.md) (spans built from these constants through the
 real SDK must emit the exact pinned keys).

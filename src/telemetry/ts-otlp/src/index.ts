@@ -1,11 +1,12 @@
 /**
- * `@ratel-ai/telemetry-otlp` — the `init()` OTLP exporter for Ratel telemetry.
+ * `@ratel-ai/telemetry-otlp` — the OTLP exporter surface for Ratel telemetry.
  *
- * Turnkey OpenTelemetry SDK wiring (an OTLP `http/protobuf` exporter to `RATEL_URL`
- * or a caller-supplied endpoint) over the OTel-free `@ratel-ai/telemetry`
+ * Turnkey OpenTelemetry SDK wiring over the OTel-free `@ratel-ai/telemetry`
  * vocabulary. Split out (ADR-0015) so importing the constants never pulls the OTel
- * SDK. The OTLP config resolver and options are re-exported from
- * `@ratel-ai/telemetry` for convenience alongside `init()`.
+ * SDK. Two entry points: `init()` for a greenfield app where Ratel owns the provider,
+ * and `ratelSpanProcessor()` / `ratelTraceExporter()` to compose Ratel onto a provider
+ * a partner already owns (Langfuse, the Vercel AI SDK, ...). The OTLP config resolver
+ * and options are re-exported from `@ratel-ai/telemetry` for convenience.
  */
 
 export {
@@ -16,3 +17,10 @@ export {
   resolveOtlpConfig,
 } from "@ratel-ai/telemetry";
 export { init, type TelemetryHandle } from "./init.js";
+export {
+  type RatelSpanProcessorOptions,
+  ratelSignalFilter,
+  ratelSpanProcessor,
+  ratelTraceExporter,
+  type SpanFilter,
+} from "./processor.js";

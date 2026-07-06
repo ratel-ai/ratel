@@ -1,8 +1,15 @@
+import { trace } from "@opentelemetry/api";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ENDPOINT_ENV } from "@ratel-ai/telemetry";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { init } from "./init.js";
 
 describe("init", () => {
+  // init() registers a global provider; reset it so each case starts clean.
+  afterEach(() => {
+    trace.disable();
+  });
+
   it("returns a handle with a shutdown function", async () => {
     const handle = init({
       apiKey: "k",
@@ -26,6 +33,18 @@ describe("init", () => {
       } else {
         process.env[ENDPOINT_ENV] = saved;
       }
+    }
+  });
+
+  it("throws — pointing at ratelSpanProcessor — when a provider is already registered", async () => {
+    const existing = new NodeTracerProvider();
+    existing.register();
+    try {
+      expect(() => init({ apiKey: "k", endpoint: "http://localhost:4318/v1/traces" })).toThrow(
+        /ratelSpanProcessor/,
+      );
+    } finally {
+      await existing.shutdown();
     }
   });
 });
