@@ -17,7 +17,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Changed
 
 - BM25 remains the default engine. `search` / `search_with_origin` keep their infallible `Vec<SearchHit>` signature and BM25 behavior unchanged.
-- The dense embedding cache is now **incremental** — a growing prefix of the corpus. `register` only appends (never invalidates), and `warm`/search embed only newly-registered tools, so an existing vector is never recomputed (adding one tool costs one embedding, not N). A BM25-only registry still never loads the model.
+- The dense embedding cache is now **incremental** — a growing prefix of the corpus. `register` only appends (never invalidates), and `warm` embeds only newly-registered tools, so an existing vector is never recomputed (adding one tool costs one embedding, not N). A BM25-only registry still never loads the model.
+- A semantic/hybrid search over an un-warmed corpus now returns `EmbedderError::NotWarmed` instead of embedding inside the search path — a search never silently pays the corpus-embedding cost. Populate the cache with `warm()` first.
 
 ## [0.2.1-rc.1] - 2026-07-04
 

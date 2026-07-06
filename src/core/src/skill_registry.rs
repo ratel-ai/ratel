@@ -147,7 +147,7 @@ impl SkillRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.extend_embeddings()?;
+        self.require_warm()?;
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let t = Instant::now();
         let ranked = self.dense_ranked(&query_vec, top_k)?;
@@ -200,7 +200,7 @@ impl SkillRegistry {
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        self.extend_embeddings()?;
+        self.require_warm()?;
         let t = Instant::now();
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let dense_ranked = self.dense_ranked(&query_vec, depth)?;
@@ -244,6 +244,20 @@ impl SkillRegistry {
             Some(e) => Ok(e.clone()),
             None => embedder_with_telemetry(self.sink.as_ref()),
         }
+    }
+
+    /// Error unless the cache covers the whole corpus — see
+    /// [`crate::ToolRegistry::require_warm`].
+    fn require_warm(&self) -> Result<(), EmbedderError> {
+        let cached = self
+            .embeddings
+            .lock()
+            .expect("embeddings mutex poisoned")
+            .len();
+        if cached < self.skills.len() {
+            return Err(EmbedderError::NotWarmed);
+        }
+        Ok(())
     }
 
     fn extend_embeddings(&self) -> Result<(), EmbedderError> {
@@ -423,6 +437,7 @@ mod tests {
             "HTML slides",
             &["frontend"],
         ));
+        reg.warm().unwrap();
         let hits = reg
             .search_with_method("rest api", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
@@ -433,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn register_after_search_embeds_only_the_new_skill() {
+    fn warm_after_register_embeds_only_the_new_skill() {
         let counter = Arc::new(CountingEmbedder::new());
         let mut reg = with_embedder(counter.clone());
         reg.register(skill(
@@ -443,12 +458,10 @@ mod tests {
             &["api"],
         ));
         reg.register(skill("frontend", "frontend", "HTML slides", &["frontend"]));
-        reg.search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
-            .unwrap();
+        reg.warm().unwrap();
         assert_eq!(counter.doc_calls(), 2);
         reg.register(skill("api-v2", "api-v2", "REST API v2", &["api"]));
-        reg.search_with_method("api", 10, Origin::Direct, SearchMethod::Semantic)
-            .unwrap();
+        reg.warm().unwrap();
         assert_eq!(counter.doc_calls(), 3, "only the new skill is embedded");
     }
 
@@ -484,6 +497,7 @@ mod tests {
             "REST API design",
             &["api"],
         ));
+        reg.warm().unwrap();
         reg.search_with_method("api", 5, Origin::Agent, SearchMethod::Hybrid)
             .unwrap();
         let events = sink.drain();

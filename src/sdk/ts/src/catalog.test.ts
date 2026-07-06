@@ -106,6 +106,17 @@ describe("ToolCatalog search methods", () => {
     const catalog = new ToolCatalog({ method: "semantic" });
     expect(() => catalog.warm()).not.toThrow();
   });
+
+  it("semantic on an unwarmed BM25 catalog errors (no model load)", () => {
+    // A BM25 catalog never warmed → a per-call semantic search refuses with a
+    // clear error instead of silently embedding the corpus. The guard runs
+    // before any model load, so this is offline-safe.
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    expect(() => catalog.search("read", 5, "direct", "semantic")).toThrow(
+      /not computed for semantic/,
+    );
+  });
 });
 
 describe("ToolCatalog tracing", () => {

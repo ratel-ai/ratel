@@ -161,7 +161,7 @@ impl ToolRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.extend_embeddings()?;
+        self.require_warm()?;
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let t = Instant::now();
         let ranked = self.dense_ranked(&query_vec, top_k)?;
@@ -220,8 +220,8 @@ impl ToolRegistry {
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        // 2. Dense (semantic) — extend the cache with any new tools.
-        self.extend_embeddings()?;
+        // 2. Dense (semantic) — requires a warmed cache; never embeds in-search.
+        self.require_warm()?;
         let t = Instant::now();
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let dense_ranked = self.dense_ranked(&query_vec, depth)?;
@@ -268,6 +268,22 @@ impl ToolRegistry {
             Some(e) => Ok(e.clone()),
             None => embedder_with_telemetry(self.sink.as_ref()),
         }
+    }
+
+    /// Error unless the embedding cache covers the whole corpus. A semantic/
+    /// hybrid search never embeds inside the search path — the caller must have
+    /// warmed first (a semantic-mode catalog does this at `register`), so no
+    /// search silently pays the embedding cost. Loads no model.
+    fn require_warm(&self) -> Result<(), EmbedderError> {
+        let cached = self
+            .embeddings
+            .lock()
+            .expect("embeddings mutex poisoned")
+            .len();
+        if cached < self.tools.len() {
+            return Err(EmbedderError::NotWarmed);
+        }
+        Ok(())
     }
 
     /// Embed the tools not yet in the cache and append them — the incremental
@@ -454,6 +470,7 @@ mod tests {
     #[test]
     fn semantic_ranks_via_injected_embedder() {
         let reg = catalog(Arc::new(StubEmbedder));
+        reg.warm().unwrap();
         let hits = reg
             .search_with_method("read something", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
@@ -461,17 +478,28 @@ mod tests {
     }
 
     #[test]
-    fn semantic_surfaces_embedder_error_instead_of_panicking() {
-        let reg = catalog(Arc::new(FailingEmbedder));
+    fn semantic_without_warm_errors_not_warmed() {
+        // Registered but never warmed: a semantic search must refuse with a clear
+        // error rather than silently embedding the corpus in the search path.
+        let reg = catalog(Arc::new(StubEmbedder));
         assert!(matches!(
-            reg.search_with_method("anything", 5, Origin::Direct, SearchMethod::Semantic),
-            Err(EmbedderError::Inference { .. })
+            reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic),
+            Err(EmbedderError::NotWarmed)
         ));
+    }
+
+    #[test]
+    fn warm_surfaces_embedder_error_instead_of_panicking() {
+        // The failing embedder's error surfaces at warm() (where embedding
+        // happens) as a catchable error.
+        let reg = catalog(Arc::new(FailingEmbedder));
+        assert!(matches!(reg.warm(), Err(EmbedderError::Inference { .. })));
     }
 
     #[test]
     fn hybrid_fuses_bm25_and_dense() {
         let reg = catalog(Arc::new(StubEmbedder));
+        reg.warm().unwrap();
         let hits = reg
             .search_with_method("read a file", 5, Origin::Direct, SearchMethod::Hybrid)
             .unwrap();
@@ -484,6 +512,7 @@ mod tests {
         let sink = Arc::new(MemorySink::new("s"));
         let mut reg = catalog(Arc::new(StubEmbedder));
         reg.set_trace_sink(sink.clone());
+        reg.warm().unwrap();
         reg.search_with_method("read", 5, Origin::Agent, SearchMethod::Semantic)
             .unwrap();
         let events = sink.drain();
@@ -498,6 +527,7 @@ mod tests {
         let sink = Arc::new(MemorySink::new("s"));
         let mut reg = catalog(Arc::new(StubEmbedder));
         reg.set_trace_sink(sink.clone());
+        reg.warm().unwrap();
         reg.search_with_method("read", 5, Origin::Agent, SearchMethod::Hybrid)
             .unwrap();
         let events = sink.drain();
@@ -511,26 +541,26 @@ mod tests {
     }
 
     #[test]
-    fn register_after_search_embeds_only_the_new_tool() {
+    fn warm_after_register_embeds_only_the_new_tool() {
         let counter = Arc::new(CountingEmbedder::new());
         let mut reg = with_embedder(counter.clone());
         reg.register(tool("read_file", "read a file"));
         reg.register(tool("delete_file", "delete a file"));
-        // First semantic search embeds the 2-tool corpus.
-        reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
-            .unwrap();
+        // Warming embeds the 2-tool corpus.
+        reg.warm().unwrap();
         assert_eq!(counter.doc_calls(), 2);
-        // Registering one more must embed ONLY it on the next search — the two
-        // existing vectors are reused, never recomputed (the O(N) regression).
+        // Registering one more then warming must embed ONLY it — the two existing
+        // vectors are reused, never recomputed (the O(N) regression).
         reg.register(tool("reader_v2", "read a file too"));
-        let hits = reg
-            .search_with_method("read", 10, Origin::Direct, SearchMethod::Semantic)
-            .unwrap();
+        reg.warm().unwrap();
         assert_eq!(
             counter.doc_calls(),
             3,
             "only the newly-registered tool should be embedded"
         );
+        let hits = reg
+            .search_with_method("read", 10, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
         assert!(hits.iter().any(|h| h.tool_id == "reader_v2"));
     }
 
@@ -567,9 +597,9 @@ mod tests {
         // the latest embedding, so the updated content wins.
         let mut reg = with_embedder(Arc::new(StubEmbedder));
         reg.register(tool("t", "read a file")); // dense vec keyed on "read"
-        reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
-            .unwrap();
+        reg.warm().unwrap();
         reg.register(tool("t", "delete a file")); // re-register → keyed on "delete"
+        reg.warm().unwrap();
         let hits = reg
             .search_with_method("delete", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();

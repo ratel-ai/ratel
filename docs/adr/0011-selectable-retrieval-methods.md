@@ -53,6 +53,11 @@ parallel to `SearchOrigin`.
   time and a search only ever embeds the *query* — no search pays the corpus-embedding cost, and
   a model-load failure surfaces at `register` (fail-fast). A BM25 catalog does none of this. A
   public `catalog.warm()` is also exposed for the bulk-register-then-warm pattern.
+- **A search never embeds the corpus.** A semantic/hybrid search over a corpus whose cache is not
+  fully built returns `EmbedderError::NotWarmed` (a catchable `RuntimeError` / thrown error) —
+  it does *not* silently embed inside the search path. So a BM25 catalog handed a per-call
+  `"semantic"` errors with a remediation hint (construct with the method, or `warm()`), rather
+  than incurring a one-off slow search. The guard loads no model.
 
 ## Consequences
 

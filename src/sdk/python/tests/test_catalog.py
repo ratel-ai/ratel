@@ -88,6 +88,16 @@ def test_warm_on_empty_catalog_is_a_noop() -> None:
     catalog.warm()  # no tools → no model load, must not raise
 
 
+def test_semantic_on_unwarmed_bm25_catalog_raises() -> None:
+    # A BM25 catalog never warmed → a per-call semantic search refuses with a
+    # clear error instead of silently embedding. Guard runs before any model
+    # load, so this is offline-safe.
+    catalog = ToolCatalog()
+    catalog.register(_read_file_tool(lambda args: {}))
+    with pytest.raises(RuntimeError, match="not computed for semantic"):
+        catalog.search("read", 5, method="semantic")
+
+
 async def test_invoke_runs_sync_executor() -> None:
     catalog = ToolCatalog()
     catalog.register(_read_file_tool(lambda args: {"contents": f"read {args['path']}"}))
