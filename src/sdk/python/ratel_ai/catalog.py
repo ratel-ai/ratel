@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Union
 
 from ._native import SearchHit, ToolRegistry
+from .telemetry import SEARCH_TARGET_TOOL, trace_execute_tool, trace_search
 
 # Tool inputs are heterogeneous across the catalog; handlers may be sync or async.
 Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
@@ -114,7 +115,13 @@ class ToolCatalog:
         """Search the catalog. `method` overrides the catalog default for this
         call ("bm25" | "semantic" | "hybrid"); "semantic"/"hybrid" raise
         `RuntimeError` if the embedding model fails to load."""
-        return self._registry.search_with_method(query, top_k, origin, method or self._method)
+        return trace_search(
+            SEARCH_TARGET_TOOL,
+            query,
+            top_k,
+            origin,
+            lambda: self._registry.search_with_method(query, top_k, origin, method or self._method),
+        )
 
     def has(self, tool_id: str) -> bool:
         return tool_id in self._executors
@@ -146,41 +153,47 @@ class ToolCatalog:
         fn = self._executors.get(tool_id)
         if fn is None:
             raise ValueError(f"unknown toolId: {tool_id}")
-        self._registry.record_event(
-            {
-                "type": "invoke_start",
-                "tool_id": tool_id,
-                "args_size_bytes": _args_size_bytes(args),
-            }
-        )
-        started = time.monotonic()
-        try:
-            # Executors may be sync (a plain dict-returning function) or async
-            # (`async def`, e.g. MCP/HTTP tools) — so call first, then await only
-            # if awaitable. Never bare-`await fn(args)`: in Python that raises on a
-            # sync result. This is the canonical place that absorbs the difference;
-            # callers must route here, not re-derive it.
-            result = fn(args)
-            if inspect.isawaitable(result):
-                result = await result
+
+        async def _run() -> Any:
             self._registry.record_event(
                 {
-                    "type": "invoke_end",
+                    "type": "invoke_start",
                     "tool_id": tool_id,
-                    "took_ms": _elapsed_ms(started),
+                    "args_size_bytes": _args_size_bytes(args),
                 }
             )
-            return result
-        except Exception as err:
-            self._registry.record_event(
-                {
-                    "type": "invoke_error",
-                    "tool_id": tool_id,
-                    "took_ms": _elapsed_ms(started),
-                    "error": _error_message(err),
-                }
-            )
-            raise
+            started = time.monotonic()
+            try:
+                # Executors may be sync (a plain dict-returning function) or async
+                # (`async def`, e.g. MCP/HTTP tools) — so call first, then await only
+                # if awaitable. Never bare-`await fn(args)`: in Python that raises on a
+                # sync result. This is the canonical place that absorbs the difference;
+                # callers must route here, not re-derive it.
+                result = fn(args)
+                if inspect.isawaitable(result):
+                    result = await result
+                self._registry.record_event(
+                    {
+                        "type": "invoke_end",
+                        "tool_id": tool_id,
+                        "took_ms": _elapsed_ms(started),
+                    }
+                )
+                return result
+            except Exception as err:
+                self._registry.record_event(
+                    {
+                        "type": "invoke_error",
+                        "tool_id": tool_id,
+                        "took_ms": _elapsed_ms(started),
+                        "error": _error_message(err),
+                    }
+                )
+                raise
+
+        # The `execute_tool` OTel span wraps the local trace stream; both record the
+        # same invocation, on their two independent channels (ADR-0007).
+        return await trace_execute_tool(tool_id, args, _run)
 
 
 def _args_size_bytes(args: Any) -> int:
