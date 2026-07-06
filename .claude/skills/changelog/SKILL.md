@@ -6,23 +6,27 @@ description: Update per-package CHANGELOG.md files for a Ratel release. Drafts e
 # /changelog
 
 Updates a release unit's `CHANGELOG.md` in preparation for tagging it. Ratel releases
-**per unit** (ADR-0016): each of `core`, `sdk-ts`, `sdk-py` ships on its own tag
-(`core-v*` / `sdk-ts-v*` / `sdk-py-v*`) at its own version. The CI gate in
-`.github/workflows/release.yml` rejects any tag whose unit CHANGELOG doesn't contain the
-version being released, so this skill must run before `git tag`.
+**per unit** (ADR-0016): each unit ships on its own tag (`<prefix>-v*`) at its own version.
+The CI gate in `.github/workflows/release.yml` rejects any tag whose unit CHANGELOG doesn't
+contain the version being released, so this skill must run before `git tag`.
 
 Run it **once per unit** you're releasing.
 
 ## Release units it touches
 
 The units and their manifests/CHANGELOGs live in one registry —
-`scripts/release-units.mjs` — which every release tool reads. For reference:
+`scripts/release-units.mjs` — which every release tool reads. Run `node scripts/release-units.mjs --list`
+for the authoritative set; the current units are:
 
 | Unit | Registry | CHANGELOG path |
 |---|---|---|
 | `core` | `ratel-ai-core` (crates.io) | `src/core/CHANGELOG.md` |
 | `sdk-ts` | `@ratel-ai/sdk` (npm) | `src/sdk/ts/CHANGELOG.md` |
 | `sdk-py` | `ratel-ai` (PyPI) | `src/sdk/python/CHANGELOG.md` |
+| `telemetry-core` | `ratel-ai-telemetry` (crates.io) | `src/telemetry/core/CHANGELOG.md` |
+| `telemetry-ts` | `@ratel-ai/telemetry` (npm) | `src/telemetry/ts/CHANGELOG.md` |
+| `telemetry-py` | `ratel-ai-telemetry` (PyPI) | `src/telemetry/python/CHANGELOG.md` |
+| `telemetry-ts-otlp` | `@ratel-ai/telemetry-otlp` (npm) | `src/telemetry/ts-otlp/CHANGELOG.md` |
 
 `@ratel-ai/mcp-server` lives in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) and maintains its own CHANGELOG there.
 

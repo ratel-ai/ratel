@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -26,6 +26,26 @@ describe("@ratel-ai/telemetry stays OTel-free (tree-shakeable vocabulary)", () =
     const offenders = shipped.filter((f) =>
       /from ["']@opentelemetry\//.test(readFileSync(join(here, f), "utf8")),
     );
+    expect(offenders).toEqual([]);
+  });
+
+  // The published artifact is `dist/` (files: ["dist"]), so guard the actually-shipped
+  // .js too: a stale build output (e.g. a left-over from a since-deleted source file)
+  // could re-introduce an OTel import that the src scan above can't see. CI runs
+  // `pnpm -r build` before `pnpm -r test`, so dist/ exists here; skip if unbuilt.
+  it("ships no dist file that references the OTel SDK", () => {
+    const dist = join(pkgRoot, "dist");
+    if (!existsSync(dist)) return;
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, entry.name);
+        if (entry.isDirectory()) walk(p);
+        else if (entry.name.endsWith(".js") && /@opentelemetry\//.test(readFileSync(p, "utf8")))
+          offenders.push(p.slice(pkgRoot.length + 1));
+      }
+    };
+    walk(dist);
     expect(offenders).toEqual([]);
   });
 });

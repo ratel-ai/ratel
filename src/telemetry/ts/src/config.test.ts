@@ -45,6 +45,19 @@ describe("resolveOtlpConfig", () => {
     expect(cfg.serviceName).toBe("my-agent");
   });
 
+  it("apiKey overrides a caller-supplied Authorization header, keeping other headers", () => {
+    const cfg = resolveOtlpConfig(
+      {
+        endpoint: "https://x/v1/traces",
+        apiKey: "k",
+        headers: { Authorization: "Bearer CALLER", "x-tenant": "acme" },
+      },
+      {},
+    );
+    expect(cfg.headers.Authorization).toBe("Bearer k");
+    expect(cfg.headers["x-tenant"]).toBe("acme");
+  });
+
   it("throws when no endpoint and no RATEL_URL", () => {
     expect(() => resolveOtlpConfig({ apiKey: "k" }, {})).toThrow(ENDPOINT_ENV);
   });

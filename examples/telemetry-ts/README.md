@@ -2,7 +2,7 @@
 
 Shows how to emit Ratel's telemetry vocabulary through the standard [OpenTelemetry JS SDK](https://opentelemetry.io/docs/languages/js/) using [`@ratel-ai/telemetry`](../../src/telemetry/ts/README.md). Ratel telemetry *is* OpenTelemetry ([ADR-0015](../../docs/adr/0015-telemetry-otel-conventions.md)): the package ships no transport and no schema, just the `ratel.*` constants and value enums you set as span attributes, plus an `init()` helper that wires the OTLP exporter.
 
-The demo emits one realistic trace — a `ratel.search` (capability search) span followed by an `execute_tool` span enriched with the `ratel.*` overlay — and prints it with a `ConsoleSpanExporter`, so it runs offline with no collector and no API key.
+The demo emits one realistic trace — a `ratel.search` (capability search) span followed by an `execute_tool` span enriched with the `ratel.*` overlay, both under a root agent-turn span so they share one trace — and prints it with a `ConsoleSpanExporter`, so it runs offline with no collector and no API key.
 
 ## Setup
 
@@ -11,7 +11,7 @@ pnpm install
 pnpm -F @ratel-ai/example-telemetry start
 ```
 
-`start` builds `@ratel-ai/telemetry` and runs `src/index.ts` with [tsx](https://tsx.is/). It prints the two spans (with their `ratel.*` / `gen_ai.*` attributes) and the config `init()` would use in production.
+`start` builds `@ratel-ai/telemetry` and runs `src/index.ts` with [tsx](https://tsx.is/). It prints the trace (the agent-turn root plus the two Ratel spans, with their `ratel.*` / `gen_ai.*` attributes) and shows how `init()` resolves its endpoint + auth.
 
 To export a real trace instead of printing, set the endpoint and run again:
 
@@ -31,7 +31,7 @@ pnpm -F @ratel-ai/example-telemetry start
 ## Layout
 
 ```
-src/index.ts   emitRatelTrace() — builds the two spans from the constants; main() wires the exporter and prints
+src/index.ts   emitRatelTrace() — builds the trace (root + the two Ratel spans) from the constants; main() wires the exporter and prints
 ```
 
 ## Why it's a separate workspace package

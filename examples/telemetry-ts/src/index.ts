@@ -9,7 +9,7 @@
  * wires the OTLP exporter to `RATEL_URL`; everything else stays identical.
  */
 
-import type { Tracer } from "@opentelemetry/api";
+import { context, type Tracer, trace } from "@opentelemetry/api";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { ConsoleSpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
@@ -39,35 +39,56 @@ import { init } from "@ratel-ai/telemetry-otlp";
 
 /**
  * Emit one realistic Ratel trace: a `ratel.search` (capability search) span
- * followed by an `execute_tool` span enriched with the `ratel.*` overlay. This is
- * the pattern you copy into your own agent — only the constants come from Ratel;
- * the tracer is the stock OTel SDK.
+ * followed by an `execute_tool` span enriched with the `ratel.*` overlay, both
+ * hanging under a root span so they share ONE trace. This is the pattern you copy
+ * into your own agent — only the constants come from Ratel; the tracer is the
+ * stock OTel SDK.
  */
 function emitRatelTrace(tracer: Tracer): void {
+  // A root span standing in for the caller's own span — the agent turn (in a real
+  // app, the LLM `chat` gen_ai span or the inbound request). Ratel's search + tool
+  // spans hang under it, so the `ratel.*` overlay and the `gen_ai.*` call land in
+  // ONE trace, told apart by namespace and joined on trace/span id (CONVENTIONS.md).
+  const root = tracer.startSpan("agent turn");
+  // Parent the two spans on `root` by threading its context explicitly, rather than
+  // relying on the active context (which needs a registered ContextManager the
+  // offline demo skips).
+  const parentCtx = trace.setSpan(context.active(), root);
+
   // 1. Capability search — the agent asks Ratel which tools fit the prompt.
-  const search = tracer.startSpan(RATEL_SEARCH, {
-    attributes: {
-      [RATEL_ORIGIN]: Origin.Agent, // synthesized inside the agent loop
-      [RATEL_SEARCH_TARGET]: SearchTarget.Tool,
-      [RATEL_SEARCH_TOP_K]: 5,
-      [RATEL_SEARCH_HIT_COUNT]: 2,
+  const search = tracer.startSpan(
+    RATEL_SEARCH,
+    {
+      attributes: {
+        [RATEL_ORIGIN]: Origin.Agent, // synthesized inside the agent loop
+        [RATEL_SEARCH_TARGET]: SearchTarget.Tool,
+        [RATEL_SEARCH_TOP_K]: 5,
+        [RATEL_SEARCH_HIT_COUNT]: 2,
+      },
     },
-  });
+    parentCtx,
+  );
   search.end();
 
   // 2. Tool invocation — a standard gen_ai `execute_tool` span (so any OTel
   //    backend understands it) enriched with `ratel.*` attributes.
-  const invoke = tracer.startSpan(EXECUTE_TOOL, {
-    attributes: {
-      [GEN_AI_OPERATION_NAME]: EXECUTE_TOOL,
-      [GEN_AI_TOOL_NAME]: "send_email",
-      [RATEL_ORIGIN]: Origin.Agent,
-      [RATEL_TOOL_ARGS_SIZE_BYTES]: 128,
-      [RATEL_UPSTREAM_SERVER]: "gmail",
-      [RATEL_UPSTREAM_TRANSPORT]: "stdio",
+  const invoke = tracer.startSpan(
+    EXECUTE_TOOL,
+    {
+      attributes: {
+        [GEN_AI_OPERATION_NAME]: EXECUTE_TOOL,
+        [GEN_AI_TOOL_NAME]: "send_email",
+        [RATEL_ORIGIN]: Origin.Agent,
+        [RATEL_TOOL_ARGS_SIZE_BYTES]: 128,
+        [RATEL_UPSTREAM_SERVER]: "gmail",
+        [RATEL_UPSTREAM_TRANSPORT]: "stdio",
+      },
     },
-  });
+    parentCtx,
+  );
   invoke.end();
+
+  root.end();
 }
 
 async function main(): Promise<void> {
@@ -90,7 +111,7 @@ async function main(): Promise<void> {
   // `resolveOtlpConfig` is pure (no network), so we can show how endpoint + auth
   // resolve without sending anything:
   const cfg = resolveOtlpConfig({ apiKey: "sk-demo", endpoint: "https://ingest.ratel.sh/v1/traces" });
-  console.log("\n--- production init() would export to ---");
+  console.log("\n--- how init() resolves options -> exporter config (illustrative demo values) ---");
   console.log(`  url:         ${cfg.url}`);
   console.log(`  serviceName: ${cfg.serviceName} (default ${DEFAULT_SERVICE_NAME})`);
   console.log(`  headers:     ${Object.keys(cfg.headers).join(", ") || "(none)"}`);
@@ -99,7 +120,6 @@ async function main(): Promise<void> {
   if (process.env.RATEL_URL) {
     console.log(`\n--- RATEL_URL set — exporting a real trace to ${process.env.RATEL_URL} ---`);
     const handle = init({ apiKey: process.env.RATEL_API_KEY });
-    const { trace } = await import("@opentelemetry/api");
     emitRatelTrace(trace.getTracer("@ratel-ai/example-telemetry"));
     await handle.shutdown();
   } else {

@@ -1,6 +1,6 @@
 {
   "semconv_version": "1.42.0",
-  "description": "Contract-against-the-pin fixtures shared across the language helpers. Each fixture names a scenario, the span to open (by logical id, mapped to a span-name constant), the attributes to set (by logical id, mapped to an attribute-key constant), and the exact wire span name + attributes the pinned convention (CONVENTIONS.md) requires. A helper builds the span from its own constants through the real OTel SDK and must emit exactly `expect_name` + `expect_attributes`. A constant that drifts from the pin fails here.",
+  "description": "Contract-against-the-pin fixtures shared across the language helpers. Each fixture names a scenario, the span to open (by logical id, mapped to a span-name constant), the attributes to set (by logical id, mapped to an attribute-key constant), the optional span events to add (by logical id, mapped to an event-name constant), and the exact wire span name + attributes + event names the pinned convention (CONVENTIONS.md) requires. A helper builds the span from its own constants through the real OTel SDK and must emit exactly `expect_name` + `expect_attributes` + `expect_events`. A constant that drifts from the pin fails here.",
   "fixtures": [
     {
       "name": "tool invocation rides an execute_tool span enriched with ratel.*",
@@ -80,6 +80,53 @@
         "ratel.upstream.server": "granola",
         "ratel.auth.outcome": "needs_auth"
       }
+    },
+    {
+      "name": "execute_tool with the opt-in tool-call content keys (gated content)",
+      "span": "execute_tool",
+      "set": {
+        "gen_ai_operation_name": "execute_tool",
+        "gen_ai_tool_name": "send_email",
+        "gen_ai_tool_call_arguments": "{\"to\":\"a@b.co\"}",
+        "gen_ai_tool_call_result": "queued"
+      },
+      "expect_name": "execute_tool",
+      "expect_attributes": {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "send_email",
+        "gen_ai.tool.call.arguments": "{\"to\":\"a@b.co\"}",
+        "gen_ai.tool.call.result": "queued"
+      }
+    },
+    {
+      "name": "capability search carries counts on the span, hit detail on the opt-in results event",
+      "span": "ratel_search",
+      "set": {
+        "ratel_search_target": "tool",
+        "ratel_search_hit_count": 2
+      },
+      "add_events": ["ratel_search_results"],
+      "expect_name": "ratel.search",
+      "expect_attributes": {
+        "ratel.search.target": "tool",
+        "ratel.search.hit_count": 2
+      },
+      "expect_events": ["ratel.search.results"]
+    },
+    {
+      "name": "message and tool content ride the gen_ai inference-details event, never span attributes",
+      "span": "execute_tool",
+      "set": {
+        "gen_ai_operation_name": "execute_tool",
+        "gen_ai_tool_name": "send_email"
+      },
+      "add_events": ["gen_ai_inference_details"],
+      "expect_name": "execute_tool",
+      "expect_attributes": {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "send_email"
+      },
+      "expect_events": ["gen_ai.client.inference.operation.details"]
     }
   ]
 }

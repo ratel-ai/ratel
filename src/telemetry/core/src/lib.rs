@@ -9,9 +9,10 @@
 pub const SEMCONV_VERSION: &str = "1.42.0";
 
 /// The ecosystem instrumentation env var gating message/tool content capture.
-/// Default off; honored by `init()` rather than a Ratel-invented flag
-/// (CONVENTIONS.md § Capture gating). Values: legacy boolean, or the enum
-/// `NO_CONTENT` (default) / `SPAN_ONLY` / `EVENT_ONLY` / `SPAN_AND_EVENT`.
+/// Default off; the standard OTel gen_ai gate rather than a Ratel-invented flag
+/// (CONVENTIONS.md § Capture gating). This crate is constants-only — the TS/Python
+/// `init()` helpers read it. Values: legacy boolean, or the enum `NO_CONTENT`
+/// (default) / `SPAN_ONLY` / `EVENT_ONLY` / `SPAN_AND_EVENT`.
 pub const CAPTURE_CONTENT_ENV: &str = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
 
 // ---------------------------------------------------------------------------
@@ -295,5 +296,27 @@ mod tests {
         ];
         let unique: std::collections::HashSet<&str> = keys.iter().copied().collect();
         assert_eq!(unique.len(), keys.len(), "duplicate attribute key");
+    }
+
+    #[test]
+    fn span_names_are_unique() {
+        // Same copy-paste risk as attribute_keys_are_unique, for the span names.
+        let names = [
+            RATEL_SEARCH,
+            EXECUTE_TOOL,
+            RATEL_SKILL_LOAD,
+            RATEL_UPSTREAM_REGISTER,
+            RATEL_AUTH_FLOW,
+        ];
+        let unique: std::collections::HashSet<&str> = names.iter().copied().collect();
+        assert_eq!(unique.len(), names.len(), "duplicate span name");
+    }
+
+    #[test]
+    fn event_names_are_unique() {
+        // Same copy-paste risk for the two span-event names.
+        let names = [RATEL_SEARCH_RESULTS, GEN_AI_INFERENCE_DETAILS];
+        let unique: std::collections::HashSet<&str> = names.iter().copied().collect();
+        assert_eq!(unique.len(), names.len(), "duplicate event name");
     }
 }

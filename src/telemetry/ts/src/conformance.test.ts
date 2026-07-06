@@ -4,8 +4,11 @@ import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { describe, expect, it } from "vitest";
 import {
   EXECUTE_TOOL,
+  GEN_AI_INFERENCE_DETAILS,
   GEN_AI_OPERATION_NAME,
+  GEN_AI_TOOL_CALL_ARGUMENTS,
   GEN_AI_TOOL_CALL_ID,
+  GEN_AI_TOOL_CALL_RESULT,
   GEN_AI_TOOL_NAME,
   RATEL_AUTH_FLOW,
   RATEL_AUTH_OUTCOME,
@@ -13,6 +16,7 @@ import {
   RATEL_SEARCH,
   RATEL_SEARCH_HIT_COUNT,
   RATEL_SEARCH_QUERY,
+  RATEL_SEARCH_RESULTS,
   RATEL_SEARCH_TARGET,
   RATEL_SEARCH_TOP_K,
   RATEL_SKILL_ID,
@@ -39,6 +43,8 @@ const ATTR_KEY: Record<string, string> = {
   gen_ai_operation_name: GEN_AI_OPERATION_NAME,
   gen_ai_tool_name: GEN_AI_TOOL_NAME,
   gen_ai_tool_call_id: GEN_AI_TOOL_CALL_ID,
+  gen_ai_tool_call_arguments: GEN_AI_TOOL_CALL_ARGUMENTS,
+  gen_ai_tool_call_result: GEN_AI_TOOL_CALL_RESULT,
   ratel_origin: RATEL_ORIGIN,
   ratel_tool_args_size_bytes: RATEL_TOOL_ARGS_SIZE_BYTES,
   ratel_upstream_server: RATEL_UPSTREAM_SERVER,
@@ -52,12 +58,20 @@ const ATTR_KEY: Record<string, string> = {
   ratel_auth_outcome: RATEL_AUTH_OUTCOME,
 };
 
+// Logical event id -> the event-name constant under test.
+const EVENT_NAME: Record<string, string> = {
+  ratel_search_results: RATEL_SEARCH_RESULTS,
+  gen_ai_inference_details: GEN_AI_INFERENCE_DETAILS,
+};
+
 interface Fixture {
   name: string;
   span: string;
   set: Record<string, string | number>;
+  add_events?: string[];
   expect_name: string;
   expect_attributes: Record<string, string | number>;
+  expect_events?: string[];
 }
 
 interface FixtureFile {
@@ -69,7 +83,11 @@ const fixtures: FixtureFile = JSON.parse(
   readFileSync(new URL("../../conformance/fixtures.json", import.meta.url), "utf8"),
 );
 
-function emit(fixture: Fixture): { name: string; attributes: Record<string, unknown> } {
+function emit(fixture: Fixture): {
+  name: string;
+  attributes: Record<string, unknown>;
+  events: string[];
+} {
   const exporter = new InMemorySpanExporter();
   const provider = new NodeTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
@@ -79,9 +97,16 @@ function emit(fixture: Fixture): { name: string; attributes: Record<string, unkn
   for (const [field, value] of Object.entries(fixture.set)) {
     span.setAttribute(ATTR_KEY[field], value);
   }
+  for (const event of fixture.add_events ?? []) {
+    span.addEvent(EVENT_NAME[event]);
+  }
   span.end();
   const [emitted] = exporter.getFinishedSpans();
-  return { name: emitted.name, attributes: { ...emitted.attributes } };
+  return {
+    name: emitted.name,
+    attributes: { ...emitted.attributes },
+    events: emitted.events.map((e) => e.name),
+  };
 }
 
 describe("telemetry conformance (contract against the pin)", () => {
@@ -91,9 +116,10 @@ describe("telemetry conformance (contract against the pin)", () => {
 
   for (const fixture of fixtures.fixtures) {
     it(`emits the pinned keys: ${fixture.name}`, () => {
-      const { name, attributes } = emit(fixture);
+      const { name, attributes, events } = emit(fixture);
       expect(name).toBe(fixture.expect_name);
       expect(attributes).toEqual(fixture.expect_attributes);
+      expect(events).toEqual(fixture.expect_events ?? []);
     });
   }
 });

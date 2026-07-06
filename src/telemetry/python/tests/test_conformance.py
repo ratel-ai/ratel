@@ -18,8 +18,11 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from ratel_ai_telemetry import (
     EXECUTE_TOOL,
+    GEN_AI_INFERENCE_DETAILS,
     GEN_AI_OPERATION_NAME,
+    GEN_AI_TOOL_CALL_ARGUMENTS,
     GEN_AI_TOOL_CALL_ID,
+    GEN_AI_TOOL_CALL_RESULT,
     GEN_AI_TOOL_NAME,
     RATEL_AUTH_FLOW,
     RATEL_AUTH_OUTCOME,
@@ -27,6 +30,7 @@ from ratel_ai_telemetry import (
     RATEL_SEARCH,
     RATEL_SEARCH_HIT_COUNT,
     RATEL_SEARCH_QUERY,
+    RATEL_SEARCH_RESULTS,
     RATEL_SEARCH_TARGET,
     RATEL_SEARCH_TOP_K,
     RATEL_SKILL_ID,
@@ -57,6 +61,8 @@ ATTR_KEY = {
     "gen_ai_operation_name": GEN_AI_OPERATION_NAME,
     "gen_ai_tool_name": GEN_AI_TOOL_NAME,
     "gen_ai_tool_call_id": GEN_AI_TOOL_CALL_ID,
+    "gen_ai_tool_call_arguments": GEN_AI_TOOL_CALL_ARGUMENTS,
+    "gen_ai_tool_call_result": GEN_AI_TOOL_CALL_RESULT,
     "ratel_origin": RATEL_ORIGIN,
     "ratel_tool_args_size_bytes": RATEL_TOOL_ARGS_SIZE_BYTES,
     "ratel_upstream_server": RATEL_UPSTREAM_SERVER,
@@ -68,6 +74,12 @@ ATTR_KEY = {
     "ratel_upstream_transport": RATEL_UPSTREAM_TRANSPORT,
     "ratel_upstream_tool_count": RATEL_UPSTREAM_TOOL_COUNT,
     "ratel_auth_outcome": RATEL_AUTH_OUTCOME,
+}
+
+# Logical event id -> the event-name constant under test.
+EVENT_NAME = {
+    "ratel_search_results": RATEL_SEARCH_RESULTS,
+    "gen_ai_inference_details": GEN_AI_INFERENCE_DETAILS,
 }
 
 
@@ -85,9 +97,12 @@ def test_fixture_emits_pinned_keys(fixture: dict[str, Any]) -> None:
     span = tracer.start_span(SPAN_NAME[fixture["span"]])
     for field, value in fixture["set"].items():
         span.set_attribute(ATTR_KEY[field], value)
+    for event in fixture.get("add_events", []):
+        span.add_event(EVENT_NAME[event])
     span.end()
 
     emitted = exporter.get_finished_spans()
     assert len(emitted) == 1
     assert emitted[0].name == fixture["expect_name"]
     assert dict(emitted[0].attributes or {}) == fixture["expect_attributes"]
+    assert [e.name for e in emitted[0].events] == fixture.get("expect_events", [])

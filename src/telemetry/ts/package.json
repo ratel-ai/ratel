@@ -35,7 +35,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
     "test": "vitest run"

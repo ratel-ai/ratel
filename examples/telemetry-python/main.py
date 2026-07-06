@@ -18,7 +18,7 @@ import os
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
-from opentelemetry.trace import Tracer
+from opentelemetry.trace import Tracer, set_span_in_context
 
 from ratel_ai_telemetry import (
     CAPTURE_CONTENT_ENV,
@@ -50,14 +50,23 @@ from ratel_ai_telemetry.otlp import (
 
 def emit_ratel_trace(tracer: Tracer) -> None:
     """Emit one realistic Ratel trace: a ratel.search (capability search) span
-    followed by an execute_tool span enriched with the ratel.* overlay. This is the
-    pattern you copy into your own agent — only the constants come from Ratel; the
-    tracer is the stock OTel SDK.
+    followed by an execute_tool span enriched with the ratel.* overlay, both hanging
+    under a root span so they share ONE trace. This is the pattern you copy into your
+    own agent — only the constants come from Ratel; the tracer is the stock OTel SDK.
     """
+    # A root span standing in for the caller's own span — the agent turn (in a real
+    # app, the LLM `chat` gen_ai span or the inbound request). Ratel's search + tool
+    # spans hang under it, so the ratel.* overlay and the gen_ai.* call land in ONE
+    # trace, told apart by namespace and joined on trace/span id (CONVENTIONS.md).
+    root = tracer.start_span("agent turn")
+    # Parent the two spans on root by threading its context explicitly.
+    parent_ctx = set_span_in_context(root)
+
     # 1. Capability search — the agent asks Ratel which tools fit the prompt.
     #    Origin / SearchTarget are str-enums, so .value is the exact wire string.
     search = tracer.start_span(
         RATEL_SEARCH,
+        context=parent_ctx,
         attributes={
             RATEL_ORIGIN: Origin.AGENT.value,  # synthesized inside the agent loop
             RATEL_SEARCH_TARGET: SearchTarget.TOOL.value,
@@ -71,6 +80,7 @@ def emit_ratel_trace(tracer: Tracer) -> None:
     #    understands it) enriched with ratel.* attributes.
     invoke = tracer.start_span(
         EXECUTE_TOOL,
+        context=parent_ctx,
         attributes={
             GEN_AI_OPERATION_NAME: EXECUTE_TOOL,
             GEN_AI_TOOL_NAME: "send_email",
@@ -81,6 +91,8 @@ def emit_ratel_trace(tracer: Tracer) -> None:
         },
     )
     invoke.end()
+
+    root.end()
 
 
 def main() -> None:
@@ -101,7 +113,7 @@ def main() -> None:
     # resolve_otlp_config is pure (no network), so we can show how endpoint + auth
     # resolve without sending anything:
     cfg = resolve_otlp_config(api_key="sk-demo", endpoint="https://ingest.ratel.sh/v1/traces")
-    print("\n--- production init() would export to ---")
+    print("\n--- how init() resolves options -> exporter config (illustrative demo values) ---")
     print(f"  url:          {cfg.url}")
     print(f"  service_name: {cfg.service_name} (default {DEFAULT_SERVICE_NAME})")
     print(f"  headers:      {', '.join(cfg.headers) or '(none)'}")
