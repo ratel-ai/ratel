@@ -4,12 +4,12 @@ Date: 2026-07-05
 
 ## Status
 
-Proposed
+Accepted
 
 Compacted 2026-07 from pre-compaction ADR-0019 (catalog source interface), ADR-0020 (source
-auth and scope), and ADR-0021 (sync and storage), all 2026-07-05. Stays Proposed until the
-managed cloud passes the `protocol/v1` conformance vectors; acceptance follows that
-validation.
+auth and scope), and ADR-0021 (sync and storage), all 2026-07-05. The scope model it
+originally carried is split out to [ADR-0010](0010-catalog-scope-model.md) (Proposed); the
+loader interface, auth, and sync semantics recorded here are accepted.
 
 ## Context
 
@@ -39,7 +39,7 @@ implementation of the already-published contract, not a new design.
   catalog and hydrates the local registries. Retrieval (`search_capabilities` /
   `invoke_tool` / `get_skill_content`) always runs locally over those registries.
 - `RATEL_URL` names a remote source and selects its loader; unset is the embedded floor.
-  Application code does not change ([ADR-0002](0002-product-split-kernel-local-cloud.md)).
+  Application code does not change ([ADR-0002](0002-product-split-engine-local-cloud.md)).
 - Additional sources (a local file/dir loader, git, a self-hosted endpoint) are added as
   loaders when a use case appears.
 
@@ -47,7 +47,7 @@ implementation of the already-published contract, not a new design.
 
 [`protocol/`](../../protocol/README.md) is the normative catalog-source contract: pull-sync
 `GET /v1/catalog` with ETag/304, the `CatalogSkillWire` shape (the wire projection of the
-kernel `Skill` struct, defined in [`protocol/v1`](../../protocol/v1/README.md)), Bearer auth,
+engine `Skill` struct, defined in [`protocol/v1`](../../protocol/v1/README.md)), Bearer auth,
 the `?scope=` selector, and language-agnostic **conformance vectors** (fixture catalogs with
 their expected ETag, scope-overlay cases, and `If-None-Match`/304 semantics) every source and
 loader MUST pass (so the contract, not the single closed implementation, stays normative). v1
@@ -67,14 +67,13 @@ explicit decision; `@ratel-ai/cloud` is also the developer's tap into those.
   column is not carried forward.
 - **Wire contract:** `Authorization: Bearer <key>` on every `/v1` request; missing/unknown/
   revoked → `401`, key store unreachable → `503`; TLS required.
-- **Scope model: `tenant → project → subject`.** A project Bearer key authorizes
-  `{tenant, project}`; the `?scope=<subject>` query parameter selects the subject layer
-  (served catalog = subject layer overlaid on the global layer, subject wins on name
-  collision). The selector is not itself authenticated: one backend key serving thousands of
-  its own end-users is the dominant shape. Absent `scope` means the global layer,
-  byte-compatible with a source that has no subjects. Confidential per-subject isolation
-  (key bound to a subject) is a reserved deployment policy, addable without a wire change.
-  The kernel stays scope-blind; the source serves an already-scoped set.
+- **Scope.** The served catalog is **scoped**: a project Bearer key authorizes a project, and
+  an optional `?scope=<subject>` selector picks a subject layer within it. The scope model —
+  the `tenant → project → subject` hierarchy, the overlay semantics, and the
+  confidential-isolation policy — is [ADR-0010](0010-catalog-scope-model.md) (Proposed); the
+  wire mechanics of the `?scope=` selector are frozen in
+  [`protocol/v1`](../../protocol/v1/README.md). The engine stays scope-blind; the source
+  serves an already-scoped set.
 - **Two credentials, never conflated:** the source API key (this contract) and upstream OAuth
   tokens (`~/.ratel/oauth/`, owned by ratel-local, used by locally-run `invoke_tool` to reach
   upstream MCP tools). The source never sees either side's other credential.
@@ -112,8 +111,7 @@ explicit decision; `@ratel-ai/cloud` is also the developer's tap into those.
 - The road back is cheap for the skeleton, not the value: a future server that implements
   `protocol/v1` gets catalog serving; the cloud's differentiated surfaces stay private unless
   separately opened (the usage-ranking read model is the first candidate).
-- A leaked key table yields no usable credential; the scope selector is a project-level
-  boundary, not a per-subject one, and that is stated rather than implied.
+- A leaked key table yields no usable credential (hash-only storage).
 - The only server-side implementer today is the closed cloud; the conformance vectors are
   what keep the contract from silently becoming whatever the cloud does.
 
@@ -125,6 +123,6 @@ explicit decision; `@ratel-ai/cloud` is also the developer's tap into those.
   the insurance policy for the catalog rung.
 - **Bidirectional sync:** adds an offline-merge class and an upward path a secret could leak
   through; authoring is a separate explicit write path instead.
-- **Per-subject keys as the default / KDF-hashed keys / mTLS:** each breaks the dominant
-  deployment shape or adds weight where a 192-bit token needs none; confidential isolation
-  stays an opt-in policy.
+- **KDF-hashed keys / mTLS:** adds weight where a 192-bit random token needs none; a lost
+  key is rotated, not brute-forced. (The scope-model alternatives — per-subject keys as the
+  default, confidential isolation — are weighed in [ADR-0010](0010-catalog-scope-model.md).)

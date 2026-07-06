@@ -2,7 +2,7 @@
 
 Demonstrates the Ratel SDK wired into the [Vercel AI SDK](https://ai-sdk.dev/) with two layers of context engineering:
 
-1. **Pre-filter** ([ADR-0004](../../docs/adr/0004-kernel-retrieval-and-tool-selection.md) `replace` mode) — at boot, the catalog is registered in a `ToolRegistry`; before the model call, BM25 narrows it to the top-K most relevant tools for the user's prompt. Those tools land directly in the AI SDK tool list with full schemas.
+1. **Pre-filter** ([ADR-0004](../../docs/adr/0004-retrieval-and-tool-selection.md) `replace` mode) — at boot, the catalog is registered in a `ToolRegistry`; before the model call, retrieval narrows it to the top-K most relevant tools for the user's prompt. Those tools land directly in the AI SDK tool list with full schemas.
 2. **Dynamic gateway** — two always-present tools, `search_capabilities` and `invoke_tool`, give the agent reach into the rest of the catalog when the top-K isn't enough. `search_capabilities` returns a `tools` bucket of matching `{toolId, description, inputSchema}` hits (grouped by server) plus a `skills` bucket (empty here — this example registers no skills); `invoke_tool` then executes a tool by id.
 
 The agent loop is AI SDK v6's [`ToolLoopAgent`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent) with `stopWhen: stepCountIs(N)`. The agent multi-steps internally — chaining `search_capabilities` → `invoke_tool` → final answer inside one `.generate()` call.

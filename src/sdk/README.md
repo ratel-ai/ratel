@@ -17,7 +17,7 @@ Other languages land here when their milestones come up.
 
 The TypeScript SDK. Part of the pnpm workspace; bundles `ratel-ai-core` via a NAPI-RS native binding under [`ts/native/`](ts/native/README.md). See [`ts/README.md`](ts/README.md) for usage.
 
-Binding strategy and tool-injection mode are locked in [ADR 0006](../../docs/adr/0006-native-ffi-bindings.md) and [ADR 0004](../../docs/adr/0004-kernel-retrieval-and-tool-selection.md).
+Binding strategy and tool-injection mode are locked in [ADR 0006](../../docs/adr/0006-native-ffi-bindings.md) and [ADR 0004](../../docs/adr/0004-retrieval-and-tool-selection.md).
 
 ## `python/` — `ratel-ai`
 

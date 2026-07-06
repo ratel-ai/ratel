@@ -7,8 +7,8 @@ Date: 2026-07-05
 Accepted
 
 Compacted 2026-07 from pre-compaction ADR-0001 (2026-04-30), rewritten with the current
-governance rule. The 2026-07 re-founding compacted 21 records into 9; the full pre-compaction
-set lives in git history.
+governance rule. The 2026-07 re-founding compacted 21 records into 9; new decisions are
+numbered sequentially thereafter. The full pre-compaction set lives in git history.
 
 ## Context
 

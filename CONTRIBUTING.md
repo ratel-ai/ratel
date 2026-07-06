@@ -75,4 +75,4 @@ The release workflow's `tag-version-check` job rejects any tag whose unit CHANGE
 
 ## License
 
-The kernel (`ratel-ai-core`) is licensed under [Apache-2.0](LICENSE-APACHE); every other component (SDKs, telemetry helpers, examples) is [MIT](LICENSE.md) — see [ADR-0009](docs/adr/0009-licensing.md). By submitting a PR you agree your contribution is licensed under the terms governing the component it touches.
+The engine (`ratel-ai-core`) is licensed under [Apache-2.0](LICENSE-APACHE); every other component (SDKs, telemetry helpers, examples) is [MIT](LICENSE.md) — see [ADR-0009](docs/adr/0009-licensing.md). By submitting a PR you agree your contribution is licensed under the terms governing the component it touches.

@@ -107,16 +107,16 @@ The index uses BM25, the same algorithm behind most search engines, applied to e
 
 ## The Ratel project
 
-Ratel scales from an in-process library to a managed service — one kernel, one catalog contract, all the way up:
+Ratel scales from an in-process library to a managed service — one engine, one catalog contract, all the way up:
 
 | | Repo | What it is |
 |---|---|---|
-| **Kernel + platform** | [ratel-ai/ratel](https://github.com/ratel-ai/ratel) (this one) | The `ratel-ai-core` engine plus TS/Python SDKs, the [`protocol/`](protocol/README.md) catalog-source contract, and the OTel telemetry helpers. Embed it in your agent process today. |
+| **Engine + platform** | [ratel-ai/ratel](https://github.com/ratel-ai/ratel) (this one) | The `ratel-ai-core` engine plus TS/Python SDKs, the [`protocol/`](protocol/README.md) catalog-source contract, and the OTel telemetry helpers. Embed it in your agent process today. |
 | **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution — Ratel in front of your MCP setup, today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`. |
 | **ratel-cloud** | *coming* | Managed Ratel: the first hosted catalog source plus intelligence. SDKs reach it via `RATEL_URL` over the catalog-source contract. |
 | **ratel-bench** | [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) | The benchmark harness behind [benchmark.ratel.sh](https://benchmark.ratel.sh). |
 
-The hosted cloud is decided direction ([ADR-0002](docs/adr/0002-product-split-kernel-local-cloud.md)), not yet public; a standalone server is deferred ([ADR-0003](docs/adr/0003-catalog-source-interface.md)).
+The hosted cloud is decided direction ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)), not yet public; a standalone server is deferred ([ADR-0003](docs/adr/0003-catalog-source-interface.md)).
 
 ## Repo layout
 
@@ -148,4 +148,4 @@ pnpm install && pnpm -r build && pnpm -r test       # TypeScript
 
 ## License
 
-The `ratel-ai-core` kernel is licensed under [Apache-2.0](LICENSE-APACHE) — an explicit patent grant for the engine others embed. Everything else (SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.
+The `ratel-ai-core` engine is licensed under [Apache-2.0](LICENSE-APACHE) — an explicit patent grant for the engine others embed. Everything else (SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.

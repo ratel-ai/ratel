@@ -33,7 +33,7 @@ Prebuilt `abi3` wheels ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-a
 
 Everything starts with a **`ToolCatalog`**: register each of your tools once, pairing its metadata (id, description, JSON schemas) with the handler that runs it. From there you reach the model in one of two ways, and most agents use both at once:
 
-- **Pre-filter (top-K).** Before each model call, ask the catalog for the few tools most relevant to the user's message and put *those* in the tool list. The full catalog never enters the prompt. This is Ratel's replace-by-default tool injection ([ADR 0004](../../../docs/adr/0004-kernel-retrieval-and-tool-selection.md)).
+- **Pre-filter (top-K).** Before each model call, ask the catalog for the few tools most relevant to the user's message and put *those* in the tool list. The full catalog never enters the prompt. This is Ratel's replace-by-default tool injection ([ADR 0004](../../../docs/adr/0004-retrieval-and-tool-selection.md)).
 - **Dynamic gateway.** Give the agent two always-present tools, `search_capabilities` (find more tools by description) and `invoke_tool` (run one by id), so it can reach the rest of the catalog on its own when the pre-filtered set is not enough.
 
 The two compose: the pre-filter covers the common case in the prompt, and the gateway is the escape hatch for everything else. Tools can be local functions, an upstream MCP server's tools (via [`register_mcp_server`](#register_mcp_server-ingest-an-mcp-server)), or both. The model sees one unified, ranked surface.

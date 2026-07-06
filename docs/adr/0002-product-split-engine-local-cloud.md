@@ -1,4 +1,4 @@
-# 2. Product split: kernel / local / cloud
+# 2. Product split: engine / local / cloud
 
 Date: 2026-07-05
 
@@ -6,21 +6,22 @@ Date: 2026-07-05
 
 Accepted
 
-Compacted 2026-07 from pre-compaction ADR-0010 (extract `@ratel-ai/mcp-server`, 2026-05-12)
-and ADR-0014 (product split, 2026-07-04), reframed by the catalog-source pivot
-([ADR-0003](0003-catalog-source-interface.md)): the standalone server product 0014 named is
-deferred, not decided-and-coming.
+Compacted 2026-07 from the earlier product-split and MCP-server-extraction decisions, and
+reframed by the catalog-source pivot ([ADR-0003](0003-catalog-source-interface.md)): a
+standalone server product is deferred, not decided-and-coming. Git history holds the
+pre-compaction records.
 
 ## Context
 
-Ratel is one kernel: an engine that decides what enters an agent's context window. The only
-real variable is where that kernel runs and how the agent reaches it. Framing the project as
-"a library, plus an MCP server as a showcase" under-described the direction and mis-framed the
-MCP server, which is really the local distribution of Ratel.
+Ratel is one engine that decides what enters an agent's context window. The real variable is
+where that engine runs and how an agent reaches it: linked in-process as a library, packaged
+as a local distribution, or reached as a managed service. Those are three products with
+different release cadences and audiences, so the boundaries between them need to be decided
+rather than left implicit.
 
 ## Decision
 
-### Three products, one kernel, one catalog contract
+### Three products, one engine, one catalog contract
 
 | Product | What it is | Ships as | Repo |
 |---|---|---|---|
@@ -37,7 +38,7 @@ published `protocol/` contract ([ADR-0003](0003-catalog-source-interface.md)).
 
 ### One SDK API, two transports
 
-The SDKs expose one API surface. Embedded FFI is the default and the floor: the kernel linked
+The SDKs expose one API surface. Embedded FFI is the default and the floor: the engine linked
 in-process, no infra. Setting `RATEL_URL` selects a remote **catalog source**: a loader pulls
 the published catalog and hydrates the same local registries, and retrieval still runs
 in-process ([ADR-0003](0003-catalog-source-interface.md)). Application code calling
@@ -48,7 +49,7 @@ in-process ([ADR-0003](0003-catalog-source-interface.md)). Application code call
 Default to the monorepo. A component ejects to its own repo only when **both** hold: its
 coupling has dropped to protocol level (a wire contract or a published package, not shared
 source or FFI), and its toolchain and audience diverge. Applied: the SDKs stay in-tree (FFI
-coupling to the kernel); `ratel-local` is ejected and stays ejected (protocol-level coupling,
+coupling to the engine); `ratel-local` is ejected and stays ejected (protocol-level coupling,
 app/editor toolchain, end-user audience); the cloud is closed in its own repo.
 
 ### The ratel-local boundary
@@ -60,7 +61,7 @@ app/editor toolchain, end-user audience); the cloud is closed in its own repo.
   upstream tools into a catalog) stays in this repo; it depends on the MCP SDK, not on
   `@ratel-ai/mcp-server`.
 - Upstream OAuth 2.1 / PKCE (tokens under `~/.ratel/oauth/`) lives in the shell, never the
-  kernel, and never syncs ([ADR-0003](0003-catalog-source-interface.md)).
+  engine, and never syncs ([ADR-0003](0003-catalog-source-interface.md)).
 
 ### Top-level product folders
 

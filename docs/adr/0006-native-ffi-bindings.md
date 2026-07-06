@@ -12,7 +12,7 @@ binding, 2026-06-08).
 ## Context
 
 Both language SDKs call into `ratel-ai-core` and share the same constraints: one dependency a
-consumer drops in, the kernel running in-process (no infra), negligible cold-start. The
+consumer drops in, the engine running in-process (no infra), negligible cold-start. The
 candidates in both ecosystems mirror each other: a native extension (NAPI-RS / PyO3), WASM
 (single artifact, weaker async/threads, heavier cold-start), or HTTP to a sidecar (introduces
 the server-required floor the library exists to avoid).
