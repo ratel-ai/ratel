@@ -45,3 +45,32 @@ jobs:
       - name: Test the example wiring
         working-directory: examples/pydantic-ai
         run: uv run pytest
+
+  # Pure-Python telemetry helper (ADR-0015): no Rust extension, so no maturin —
+  # editable install + ruff/mypy/pytest. Separate job because the SDK job's build
+  # is maturin-specific to src/sdk/python.
+  telemetry:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/telemetry/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Create venv + install (editable, pure Python)
+        run: |
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv -e '.[dev]'
+      - name: Lint
+        run: .venv/bin/ruff check .
+      - name: Typecheck
+        run: .venv/bin/mypy ratel_ai_telemetry
+      - name: Test
+        run: .venv/bin/pytest
+      # Telemetry example — runs offline (console exporter), emitting a ratel.search
+      # + execute_tool trace through the OTel SDK, so it verifies the `ratel.*` vocab
+      # end-to-end. `uv run` builds the local ratel-ai-telemetry + installs the OTel
+      # SDK. See examples/telemetry-python/main.py.
+      - name: Run the telemetry example
+        working-directory: examples/telemetry-python
+        run: uv run --python 3.11 main.py

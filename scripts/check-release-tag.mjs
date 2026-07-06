@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Per-unit release-tag gate (ADR-0016). A release is cut by pushing a prefixed
-// tag: `core-v*`, `sdk-js-v*`, or `sdk-py-v*`. This checks that ONLY
-// the tagged unit's manifests carry the tag's version and that its CHANGELOG(s)
-// record it — nothing else in the repo has to be in lockstep.
+// tag — one of the registered unit prefixes (`core-v*`, `sdk-ts-v*`, `sdk-py-v*`,
+// `telemetry-core-v*`, `telemetry-ts-v*`, `telemetry-py-v*`, `telemetry-ts-otlp-v*`;
+// the set is derived from release-units.mjs, not hard-coded here). This checks that ONLY the tagged
+// unit's manifests carry the tag's version and that its CHANGELOG(s) record it —
+// nothing else in the repo has to be in lockstep.
 //
 // Usage (from repo root):
 //   node scripts/check-release-tag.mjs <tag> [--root <dir>]
@@ -11,11 +13,11 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 // The release units (manifests, CHANGELOGs, tag prefixes) live in one registry
 // shared with releasable.mjs / publish-rc.sh / draft.sh — see release-units.mjs.
-import { UNITS, SEMVER, unitIdAlternation } from "./release-units.mjs";
+// `isMainModule` is shared too so every CLI's entry check is symlink-robust.
+import { UNITS, SEMVER, unitIdAlternation, isMainModule } from "./release-units.mjs";
 
 // `<prefix>-v<semver>` -> { unit, version }. Anything else (the old lockstep
 // `v0.2.0`, an unknown prefix, a non-semver body) returns null so the caller can
@@ -53,7 +55,8 @@ export function checkReleaseTag(tag, { root = process.cwd() } = {}) {
       unit: null,
       version: null,
       distTag: null,
-      errors: [`unroutable tag "${tag}" — expected <core|sdk-js|sdk-py>-v<semver>`],
+      // Unit list derived from the registry so a new unit never leaves this stale.
+      errors: [`unroutable tag "${tag}" — expected <${unitIdAlternation()}>-v<semver>`],
     };
   }
 
@@ -119,6 +122,6 @@ function main(argv) {
   console.log(`${r.unit} ${r.version} (${r.distTag}) — manifests + CHANGELOG verified`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   main(process.argv);
 }

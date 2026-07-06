@@ -5,8 +5,8 @@
 #   draft.sh [<from-ref>] [--unit <id>]
 #
 # The release units and their git-cliff scopes come from scripts/release-units.mjs
-# (the single source of truth: core, sdk-js, sdk-py). With --unit, drafts only that
-# unit; otherwise all of them. When <from-ref> is omitted each unit ranges from ITS
+# (the single source of truth; `--list` for the current set). With --unit, drafts only
+# that unit; otherwise all of them. When <from-ref> is omitted each unit ranges from ITS
 # OWN last release tag (`<prefix>*`), since the units now release independently.
 #
 # Emits one `### <package-name>` section per unit on stdout — the /changelog skill

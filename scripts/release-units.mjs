@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Single source of truth for Ratel's release units (ADR-0016).
 //
-// Every release-infra tool reads unit facts from HERE so the three units can
+// Every release-infra tool reads unit facts from HERE so the units can
 // never drift apart:
 //   - scripts/check-release-tag.mjs  — the per-tag manifest + CHANGELOG gate
 //   - scripts/releasable.mjs         — "which units have commits since their tag"
 //   - scripts/publish-rc.sh          — the manual first-publish helper (--unit)
 //   - .claude/skills/changelog/draft.sh — via the `--changelog-map` CLI below
 //
-// Adding a 4th unit later (e.g. `server`, `telemetry`) is a one-place change.
+// Adding another unit later (e.g. `server`) is a one-place change.
 //
 // Per unit:
 //   tagPrefix        release tag prefix; a unit ships on `<tagPrefix><semver>`.
@@ -20,7 +20,7 @@
 //                    carry commits since its last tag (releasable.mjs).
 //   changelog        git-cliff scope: { name, includePaths } (draft.sh).
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export const PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64-gnu", "linux-arm64-gnu", "win32-x64-msvc"];
@@ -35,11 +35,11 @@ export const UNITS = {
     srcPaths: ["src/core"],
     changelog: { name: "ratel-ai-core", includePaths: ["src/core/**", "Cargo.toml"] },
   },
-  "sdk-js": {
-    tagPrefix: "sdk-js-v",
+  "sdk-ts": {
+    tagPrefix: "sdk-ts-v",
     label: "@ratel-ai/sdk (loader + 5 platform packages) → npm",
     // The JS SDK is internally lockstep: loader + five platform packages + the
-    // ts-native crate all move together on one sdk-js-v* tag.
+    // ts-native crate all move together on one sdk-ts-v* tag.
     versionManifest: { path: "src/sdk/ts/package.json", kind: "json" },
     manifests: [
       { path: "src/sdk/ts/package.json", kind: "json" },
@@ -62,6 +62,66 @@ export const UNITS = {
     srcPaths: ["src/sdk/python"],
     changelog: { name: "ratel-ai", includePaths: ["src/sdk/python/**"] },
   },
+  // The telemetry helpers are INDEPENDENT units — one per registry, plus the npm
+  // exporter — so a fix to just the npm vocabulary ships alone, and they can still
+  // go out in one run by tagging the same commit (ADR-0016's per-package principle;
+  // the packages have no cross-registry install dependency, so nothing forces them
+  // lockstep). core/js/py share the vocabulary spec + conformance fixtures, so a
+  // change there marks those releasable and drafts into their changelogs; the
+  // exporter (telemetry-ts-otlp) tracks only its own source.
+  "telemetry-core": {
+    tagPrefix: "telemetry-core-v",
+    label: "ratel-ai-telemetry → crates.io",
+    versionManifest: { path: "src/telemetry/core/Cargo.toml", kind: "toml" },
+    manifests: [{ path: "src/telemetry/core/Cargo.toml", kind: "toml" }],
+    changelogs: ["src/telemetry/core/CHANGELOG.md"],
+    srcPaths: ["src/telemetry/core", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance"],
+    changelog: {
+      name: "ratel-ai-telemetry (crate)",
+      includePaths: ["src/telemetry/core/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
+    },
+  },
+  "telemetry-ts": {
+    tagPrefix: "telemetry-ts-v",
+    label: "@ratel-ai/telemetry → npm",
+    versionManifest: { path: "src/telemetry/ts/package.json", kind: "json" },
+    manifests: [{ path: "src/telemetry/ts/package.json", kind: "json" }],
+    changelogs: ["src/telemetry/ts/CHANGELOG.md"],
+    srcPaths: ["src/telemetry/ts", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance"],
+    changelog: {
+      name: "@ratel-ai/telemetry",
+      includePaths: ["src/telemetry/ts/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
+    },
+  },
+  "telemetry-py": {
+    tagPrefix: "telemetry-py-v",
+    label: "ratel-ai-telemetry → PyPI",
+    // The npm package.json is canonical for its unit; the pyproject carries the
+    // PEP 440 spelling of the same semver (e.g. 0.1.0rc1).
+    versionManifest: { path: "src/telemetry/python/pyproject.toml", kind: "toml", pep440: true },
+    manifests: [{ path: "src/telemetry/python/pyproject.toml", kind: "toml", pep440: true }],
+    changelogs: ["src/telemetry/python/CHANGELOG.md"],
+    srcPaths: ["src/telemetry/python", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance"],
+    changelog: {
+      name: "ratel-ai-telemetry (PyPI)",
+      includePaths: ["src/telemetry/python/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
+    },
+  },
+  // The OTLP exporter (init()), split from the npm vocabulary package so importing
+  // the constants stays OTel-free (ADR-0015). npm-only; tracks only its own source
+  // (a CONVENTIONS change is a vocabulary change, not an exporter change).
+  "telemetry-ts-otlp": {
+    tagPrefix: "telemetry-ts-otlp-v",
+    label: "@ratel-ai/telemetry-otlp → npm",
+    versionManifest: { path: "src/telemetry/ts-otlp/package.json", kind: "json" },
+    manifests: [{ path: "src/telemetry/ts-otlp/package.json", kind: "json" }],
+    changelogs: ["src/telemetry/ts-otlp/CHANGELOG.md"],
+    srcPaths: ["src/telemetry/ts-otlp"],
+    changelog: {
+      name: "@ratel-ai/telemetry-otlp",
+      includePaths: ["src/telemetry/ts-otlp/**"],
+    },
+  },
 };
 
 export const UNIT_IDS = Object.keys(UNITS);
@@ -70,7 +130,7 @@ export const UNIT_IDS = Object.keys(UNITS);
 export const SEMVER = /^\d+\.\d+\.\d+(?:-rc\.\d+)?$/;
 
 // Regex alternation of the registered unit ids, derived so a new unit needs no
-// hand-edited regex anywhere. `sdk-js` etc. are literal in a character run.
+// hand-edited regex anywhere. `sdk-ts` etc. are literal in a character run.
 export function unitIdAlternation() {
   return UNIT_IDS.join("|");
 }
@@ -85,6 +145,22 @@ export function versionOf(unit, root = process.cwd()) {
   const body = readFileSync(`${root}/${path}`, "utf8");
   if (kind === "json") return JSON.parse(body).version ?? null;
   return /^version\s*=\s*"([^"]+)"/m.exec(body)?.[1] ?? null;
+}
+
+// Robust "was this module run as the entry script?" check, shared by every CLI in
+// this dir. ESM resolves symlinks in import.meta.url, but process.argv[1] keeps the
+// path as it was invoked — so a plain string compare is false when the repo is
+// reached through a symlink, and the CLI silently does nothing (e.g. `--list` prints
+// an empty list, which made publish-rc.sh report `unknown unit … (valid: )`).
+// Comparing real paths matches any symlinked / relative / absolute invocation.
+export function isMainModule(importMetaUrl) {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(importMetaUrl));
+  } catch {
+    return false;
+  }
 }
 
 // ---- tiny CLI so bash tools (draft.sh) share this one registry ----
@@ -137,6 +213,6 @@ function main(argv) {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   main(process.argv);
 }
