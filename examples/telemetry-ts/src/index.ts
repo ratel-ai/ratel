@@ -110,7 +110,7 @@ async function main(): Promise<void> {
   // --- Production wiring: the same spans, exported to Ratel via init() ---
   // `resolveOtlpConfig` is pure (no network), so we can show how endpoint + auth
   // resolve without sending anything:
-  const cfg = resolveOtlpConfig({ apiKey: "sk-demo", endpoint: "https://ingest.ratel.sh/v1/traces" });
+  const cfg = resolveOtlpConfig({ apiKey: "sk-demo", endpoint: "https://cloud.ratel.sh/v1/traces" });
   console.log("\n--- how init() resolves options -> exporter config (illustrative demo values) ---");
   console.log(`  url:         ${cfg.url}`);
   console.log(`  serviceName: ${cfg.serviceName} (default ${DEFAULT_SERVICE_NAME})`);
