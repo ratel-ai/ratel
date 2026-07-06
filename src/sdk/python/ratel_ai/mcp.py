@@ -3,7 +3,7 @@
 `register_mcp_server` lists an upstream MCP server's tools, registers each into a
 `ToolCatalog` under a namespaced id (`<server>__<tool>`), and wires each executor
 to the upstream `call_tool`. It emits the same `upstream_*` trace **event types**
-the TS SDK emits (ADR-0009).
+the TS SDK emits (ADR-0007).
 
 The `mcp` package is an optional dependency (`pip install ratel-ai[mcp]`) and is
 imported lazily, so the base SDK installs without it.

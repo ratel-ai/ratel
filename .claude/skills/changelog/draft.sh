@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Draft per-unit CHANGELOG entries via git-cliff (ADR-0016 / ADR-0008).
+# Draft per-unit CHANGELOG entries via git-cliff (ADR-0008).
 #
 # Usage:
 #   draft.sh [<from-ref>] [--unit <id>]

@@ -2,7 +2,7 @@
 
 See the wire contract in ../CONVENTIONS.md. Emitting the vocabulary is done through
 the standard OpenTelemetry Python SDK; this package adds no transport and no schema
-(ADR-0015). These constants are the ratel.* overlay Ratel owns, plus the small subset
+(ADR-0007). These constants are the ratel.* overlay Ratel owns, plus the small subset
 of gen_ai.* keys the overlay emits directly on the execute_tool span (borrowed verbatim
 from OpenTelemetry, never renamed).
 """
@@ -120,7 +120,7 @@ GEN_AI_TOOL_CALL_RESULT: Final = "gen_ai.tool.call.result"
 
 class Origin(str, Enum):
     """Whether a ratel.* span was a direct library call or synthesized by the agent
-    inside its loop. Carried by ratel.origin; mirrors the local trace Origin (ADR-0009).
+    inside its loop. Carried by ratel.origin; mirrors the local trace Origin (ADR-0007).
 
     A str-Enum: each member equals its exact wire string, so it is usable directly
     as an OTel attribute value.
@@ -140,7 +140,7 @@ class SearchTarget(str, Enum):
 
 class AuthOutcome(str, Enum):
     """Outcome of an MCP auth flow. Carried by ratel.auth.outcome; NEEDS_AUTH is the
-    401-driven AuthNeeds case (ADR-0009 auth_needs)."""
+    401-driven AuthNeeds case (ADR-0007 auth_needs)."""
 
     OK = "ok"
     REFRESHED = "refreshed"
@@ -150,7 +150,7 @@ class AuthOutcome(str, Enum):
 
 # The OTLP exporter surface (init() + config/gate) lives in the opt-in .otlp
 # submodule behind the [otlp] extra, so plain constant imports stay OTel-free
-# (ADR-0015). A module-level __getattr__ lazily resolves it, so the ergonomic
+# (ADR-0007). A module-level __getattr__ lazily resolves it, so the ergonomic
 # `from ratel_ai_telemetry import init` keeps working without eagerly importing it.
 _OTLP_EXPORTS: Final = frozenset(
     {

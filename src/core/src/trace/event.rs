@@ -38,7 +38,7 @@ pub struct SkillHitTrace {
 }
 
 /// Every event produced by any layer of Ratel. New variants are additive;
-/// renames or removals are breaking — see ADR-0009.
+/// renames or removals are breaking — see ADR-0007.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TraceEvent {

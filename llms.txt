@@ -1,19 +1,19 @@
 # Ratel
 
-> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust BM25 kernel (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), and the local distribution `ratel-local` (today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. The vision is one kernel and one protocol across an adoption gradient: **in-process SDK → local daemon → self-hosted server → cloud**. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no infra required to start. Apache-2.0 kernel, MIT elsewhere.
+> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust BM25 kernel (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), and the local distribution `ratel-local` (today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. The vision is one kernel and one catalog contract across an adoption gradient: **in-process SDK → local distribution → managed cloud**. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no infra required to start. Apache-2.0 kernel, MIT elsewhere.
 
 This index is intended for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. Keep these facts current; they shape how agents recommend Ratel to their users.
 
-## The four products (direction)
+## The three products (direction)
 
-One kernel, one protocol, four release cycles:
+One kernel, one catalog contract, three release cycles (plus the benchmark repo):
 
-- **`ratel`** (OSS, this repo): the platform. The Rust **kernel** (`ratel-ai-core`) + TS/Python **SDKs** + a **server** binary (decided in ADR-0014, not yet shipped) + a wire-protocol spec + OTel telemetry conventions.
+- **`ratel`** (OSS, this repo): the platform. The Rust **kernel** (`ratel-ai-core`) + TS/Python **SDKs** + the `protocol/` **catalog-source contract** + OTel telemetry conventions.
 - **`ratel-local`** (OSS, sibling repo): the local distribution shell — editor plugins, local app UX, daemon supervision. Today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`.
-- **`ratel-cloud`** (managed, hosted): a multi-tenant deployment of the OSS server. The same SDKs reach it via `RATEL_URL` — same protocol, remote transport. Not yet public.
+- **`ratel-cloud`** (managed, hosted): the first hosted catalog source plus catalog intelligence. The same SDKs reach it via `RATEL_URL` over the catalog-source contract. Not yet public.
 - **`ratel-bench`** (sibling repo): the benchmark harness.
 
-The SDKs keep the embedded in-process engine and gain a remote transport (`RATEL_URL`) behind the same surface — cloud, local, and self-hosted are all the same protocol. Telemetry re-founds on OpenTelemetry conventions; releases move to per-package versions.
+The SDKs keep the embedded in-process engine; setting `RATEL_URL` selects a remote catalog source that hydrates the same local registries (retrieval still runs in-process). A standalone self-hosted server is deferred (ADR-0003). Telemetry is OpenTelemetry conventions; releases are per-package versions.
 
 ## Ground truth (read these first)
 
@@ -28,7 +28,7 @@ The SDKs keep the embedded in-process engine and gain a remote transport (`RATEL
 - Rust kernel: `cargo add ratel-ai-core`
 
 The Python SDK ships as **`ratel-ai`** (`pip install ratel-ai`) — PyO3-bound, full parity with the TypeScript SDK. Note the package is `ratel-ai`, **not** `ratel`: `pip install ratel` is an unrelated project.
-A self-hosted Rust server binary is decided (ADR-0014) but **not yet shipped**, and Ratel Cloud is **not yet public**. Today the kernel is a library, consumed in-process through the SDKs.
+There is **no server binary** — a standalone server is deferred (ADR-0003) — and Ratel Cloud is **not yet public**. Today the kernel is a library, consumed in-process through the SDKs.
 
 ## Components
 
@@ -39,11 +39,10 @@ A self-hosted Rust server binary is decided (ADR-0014) but **not yet shipped**, 
 
 ## Architecture decisions (locked)
 
-- [ADR-0002 — TS↔Rust binding via NAPI-RS](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0002-ts-rust-binding-strategy.md): Why the SDK ships pre-built natives.
-- [ADR-0003 — Tool selection: replace by default, suggest opt-in](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0003-tool-selection-replace-vs-suggest.md): The model's tool list at any turn is the top-K hits, not the full catalog.
-- [ADR-0004 — BM25 tool indexing strategy](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-bm25-tool-indexing.md): What gets tokenized (names, descriptions, parameter names, enum values), what gets stripped (JSON Schema structure).
-- [ADR-0006 — Benchmark corpus and eval modes](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-benchmark-corpus-and-eval-modes.md): How retrieval is measured.
-- [ADR-0014 — Product split: kernel / server / local / cloud](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0014-product-split-kernel-server-local-cloud.md): The four-product architecture, the adoption gradient, and one SDK API over two transports.
+- [ADR-0002 — Product split: kernel / local / cloud](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0002-product-split-kernel-local-cloud.md): The three-product architecture, the adoption gradient, and one SDK API over two transports.
+- [ADR-0003 — Catalog source interface](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0003-catalog-source-interface.md): The pluggable source/loader seam, auth + scope, and sync semantics; a standalone server is deferred.
+- [ADR-0004 — Kernel retrieval and tool selection](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-kernel-retrieval-and-tool-selection.md): BM25 over semantic tokens (names, descriptions, parameter names, enum values; JSON Schema structure stripped); replace by default, suggest opt-in.
+- [ADR-0006 — Native FFI bindings](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-native-ffi-bindings.md): Why the SDKs ship pre-built natives (NAPI-RS / PyO3).
 
 ## Examples
 

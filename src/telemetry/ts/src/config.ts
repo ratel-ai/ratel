@@ -1,6 +1,6 @@
 /**
  * Pure OTLP config resolution + the content-capture gate for the `ratel.*`
- * telemetry vocabulary. No OpenTelemetry SDK import (ADR-0015): these helpers only
+ * telemetry vocabulary. No OpenTelemetry SDK import (ADR-0007): these helpers only
  * resolve endpoint/auth precedence and parse the capture env var, so they stay
  * weight-free for the three consumers that need the vocabulary without the
  * exporter — the SDK (emit side), the server (read side), and edge/serverless

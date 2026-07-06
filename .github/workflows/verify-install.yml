@@ -1,6 +1,6 @@
 name: Verify install
 
-# Per-unit install smoke tests (ADR-0016). Each release unit — core (crate),
+# Per-unit install smoke tests (ADR-0008). Each release unit — core (crate),
 # sdk-ts (npm), sdk-py (PyPI), and the four telemetry units (telemetry-core on
 # crates.io, telemetry-ts + telemetry-ts-otlp on npm, telemetry-py on PyPI) — is verified from its
 # public registry with no repo checkout and no local toolchain state, so a broken

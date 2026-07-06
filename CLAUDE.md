@@ -54,7 +54,7 @@ CI (`.github/workflows/{rust,ts,python}.yml`) runs all of the above on every PR;
 
 - **IMPORTANT: TDD is mandatory** for backend / business-logic / library code — use the `tdd` skill (red → green → refactor). Frontend code without business logic can skip.
 - **Backend before frontend**: features that aren't frontend-only land on the Rust core (with tests) first, then surface in the SDK.
-- **IMPORTANT: ADRs are immutable once `Accepted` — never edit, always supersede.** New cross-cutting choices go in `docs/adr/`, next number, Nygard format.
+- **ADRs: keep the set minimal and current.** New cross-cutting choices go in `docs/adr/`, next number, Nygard format. Amend in place for small drift (paths, names, counts, statuses); write a superseding ADR for real decision reversals; compact periodically when stale content accumulates (git history is the archive). Full convention in ADR-0001.
 - **Folder READMEs**: every folder under `src/`, plus `docs/`, has a `README.md` describing only what's *in that folder* — purpose, layout (children with one-liners), and any folder-specific build/usage commands. Keep them lean and timeless: no roadmap, no status, no version-specific framing. Link to deeper READMEs instead of duplicating their content. When you add a new folder of that kind, add its README in the same change.
 - **Commits**: concise, imperative; sacrifice grammar for brevity. **MUST NOT** add AI-attribution lines (`Co-Authored-By: Claude`, etc.).
   - Good: `docs: drop CLAUDE.md refs from READMEs, codify folder-README rule`

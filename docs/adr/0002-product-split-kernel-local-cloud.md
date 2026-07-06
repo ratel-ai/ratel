@@ -1,0 +1,80 @@
+# 2. Product split: kernel / local / cloud
+
+Date: 2026-07-05
+
+## Status
+
+Accepted
+
+Compacted 2026-07 from pre-compaction ADR-0010 (extract `@ratel-ai/mcp-server`, 2026-05-12)
+and ADR-0014 (product split, 2026-07-04), reframed by the catalog-source pivot
+([ADR-0003](0003-catalog-source-interface.md)): the standalone server product 0014 named is
+deferred, not decided-and-coming.
+
+## Context
+
+Ratel is one kernel: an engine that decides what enters an agent's context window. The only
+real variable is where that kernel runs and how the agent reaches it. Framing the project as
+"a library, plus an MCP server as a showcase" under-described the direction and mis-framed the
+MCP server, which is really the local distribution of Ratel.
+
+## Decision
+
+### Three products, one kernel, one catalog contract
+
+| Product | What it is | Ships as | Repo |
+|---|---|---|---|
+| **ratel** (the platform) | the context-engineering engine and its embeddings into agent processes | `ratel-ai-core` crate + TS/Python SDKs + the [`protocol/`](../../protocol/README.md) catalog-source contract + the OTel telemetry conventions | this repo (OSS) |
+| **ratel-local** | the local distribution shell: single-user gateway over MCP, editor/host integration, config, upstream OAuth | today `@ratel-ai/mcp-server` / the `ratel-mcp` CLI | sibling [`ratel-ai/ratel-mcp`](https://github.com/ratel-ai/ratel-mcp) (OSS) |
+| **ratel-cloud** | the managed product: the first catalog source ([ADR-0003](0003-catalog-source-interface.md)) plus the intelligence surfaces (suggestions, analytics, ranking) | hosted endpoint reached via `RATEL_URL` | closed |
+
+`ratel-bench` (the benchmark harness and its published results) is a sibling OSS repo,
+[`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench).
+
+The adoption gradient is **in-process SDK → local distribution → managed cloud**. A
+self-hosted server rung is deferred until real demand; if one ships it implements the
+published `protocol/` contract ([ADR-0003](0003-catalog-source-interface.md)).
+
+### One SDK API, two transports
+
+The SDKs expose one API surface. Embedded FFI is the default and the floor: the kernel linked
+in-process, no infra. Setting `RATEL_URL` selects a remote **catalog source**: a loader pulls
+the published catalog and hydrates the same local registries, and retrieval still runs
+in-process ([ADR-0003](0003-catalog-source-interface.md)). Application code calling
+`search` / `invoke` / `get_skill` does not change between transports.
+
+### Repo-boundary rule
+
+Default to the monorepo. A component ejects to its own repo only when **both** hold: its
+coupling has dropped to protocol level (a wire contract or a published package, not shared
+source or FFI), and its toolchain and audience diverge. Applied: the SDKs stay in-tree (FFI
+coupling to the kernel); `ratel-local` is ejected and stays ejected (protocol-level coupling,
+app/editor toolchain, end-user audience); the cloud is closed in its own repo.
+
+### The ratel-local boundary
+
+- The `@ratel-ai/mcp-server` package lives in `ratel-ai/ratel-mcp` and publishes
+  independently. Its *identity* is `ratel-local`, the local product; the package/binary/repo
+  rename is deferred because the current names are load-bearing for real installs.
+- The SDK's `registerMcpServer` (the ingestion side, where Ratel acts as an MCP client pulling
+  upstream tools into a catalog) stays in this repo; it depends on the MCP SDK, not on
+  `@ratel-ai/mcp-server`.
+- Upstream OAuth 2.1 / PKCE (tokens under `~/.ratel/oauth/`) lives in the shell, never the
+  kernel, and never syncs ([ADR-0003](0003-catalog-source-interface.md)).
+
+### Top-level product folders
+
+`protocol/` sits at the repo top level beside `src/`: it is a product surface (the
+catalog-source contract), not a code module. The folder-README convention covers top-level
+product folders like any other.
+
+## Consequences
+
+- The product story is honest: what ships today is the library, the local distribution, and
+  (privately) the cloud. No OSS server exists, and docs must not imply one does.
+- `ratel-local` carries a name it does not publish under until the rename; docs state both.
+- The repo-boundary rule is testable, not vibes; future components get measured against the
+  same two gates.
+- The catalog contract (`protocol/`) is the compatibility surface between the products;
+  keeping the cloud's catalog half on-contract is what keeps a future server or third-party
+  source cheap ([ADR-0003](0003-catalog-source-interface.md)).

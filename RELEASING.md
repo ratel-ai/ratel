@@ -2,7 +2,7 @@
 
 How a new version of a Ratel package is published. Read end-to-end before cutting a release.
 
-Ratel releases **per unit** (ADR-0016): seven independently-versioned release units, each on
+Ratel releases **per unit** (ADR-0008): seven independently-versioned release units, each on
 its own tag prefix, all routed through one `release.yml`. There is no workspace-shared
 version — each unit carries its own version in its own manifest and ships on its own cadence.
 
@@ -33,7 +33,7 @@ vocabulary ships on `telemetry-ts-v*` alone. `telemetry-core` (crates.io), `tele
 conformance fixtures, so they usually move together: tag the same commit with those prefixes
 to release them in one run. `telemetry-ts-otlp` (`@ratel-ai/telemetry-otlp` → npm) is the
 `init()` OTLP exporter, split from the vocabulary so importing the constants stays OTel-free
-(ADR-0015); it tracks only its own source and depends on `@ratel-ai/telemetry` at publish
+(ADR-0007); it tracks only its own source and depends on `@ratel-ai/telemetry` at publish
 time. All four are pure-language, so the manual helper builds them locally (no prebuilt
 artifacts).
 

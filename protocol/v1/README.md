@@ -4,10 +4,8 @@ The v1 surface is deliberately small: **catalog pull-sync + authentication.** A 
 source (the managed cloud today) is the authoritative *source* of a project's published
 catalog; a client pulls it and runs retrieval (`search_capabilities` / `invoke_tool` /
 `get_skill_content`) **locally** over that replica. There is no remote search/invoke on the
-wire — see [ADR-0019](../../docs/adr/0019-catalog-source-interface.md) (the embedded-replica
-model). Auth and scope are [ADR-0020](../../docs/adr/0020-catalog-source-auth-and-scope.md);
-sync and storage semantics are
-[ADR-0021](../../docs/adr/0021-catalog-sync-and-storage.md).
+wire — see [ADR-0003](../../docs/adr/0003-catalog-source-interface.md) (the embedded-replica
+model; it also fixes auth + scope and the sync / storage semantics).
 
 Transport is HTTP/1.1+ with JSON bodies. All paths are under `/v1`. The in-process library
 speaks none of this — it reads local disk; the contract is for **networked** sources.
@@ -17,7 +15,7 @@ speaks none of this — it reads local disk; the contract is for **networked** s
 Every `/v1` request to a networked source carries `Authorization: Bearer <key>`. The source
 takes `sha256(key)` (hex) and looks it up against active keys (`key_hash = $ AND revoked_at IS
 NULL`). Keys are stored **hash-only** — plaintext is shown once at creation and never
-persisted (ADR-0020).
+persisted (ADR-0003).
 
 - missing or malformed header → `401`
 - unknown or revoked key → `401`
@@ -76,7 +74,8 @@ its `SkillCatalog` with no remapping:
 ```
 
 v1 serves **skills only** (mirroring today's catalog). Tool definitions in the pull, and any
-authoring/write path, are deferred (PSKS-8) and land as additive `/v1` extensions.
+authoring/write path, are deferred (PSKS-8, internal tracker) and land as additive `/v1`
+extensions.
 
 ### Tool resolution (client-owned registry)
 
@@ -125,7 +124,7 @@ A language-agnostic conformance-vector set is part of this contract: fixture cat
 expected ETag, scope-overlay cases, and `If-None-Match` / 304 semantics. Every source (the
 managed cloud, any loader, a future server) MUST pass them, so the contract — not the single
 closed implementation — stays normative. The ETag content projection and the secrets-never-sync
-rule (ADR-0021) each get a vector.
+rule (ADR-0003) each get a vector.
 
 ## Versioning
 
@@ -138,17 +137,17 @@ rule (ADR-0021) each get a vector.
 ## Explicit non-goals for v1
 
 - **No remote search / invoke / get_skill over the wire.** The client runs the kernel's BM25
-  and the gateway tools locally over the pulled replica (ADR-0019). A source-side gateway is a
+  and the gateway tools locally over the pulled replica (ADR-0003). A source-side gateway is a
   possible later addition (PSKS-8), not a v1 shape.
 - **No authoring / CRUD / publish / archive.** Deferred to PSKS-8; a local file source has no
   version semantics, so mutation verbs are not part of the v1 read contract.
 - **No telemetry ingest.** Remote telemetry is stock OTLP `http/protobuf` + Bearer into a
-  separate receiver ([ADR-0015](../../docs/adr/0015-telemetry-otel-conventions.md)), never
+  separate receiver ([ADR-0007](../../docs/adr/0007-telemetry-two-streams.md)), never
   this contract.
 - **Secrets never appear on the wire.** OAuth tokens and API keys stay in the local secret
-  stores; no field of any v1 shape can carry one (ADR-0021).
+  stores; no field of any v1 shape can carry one (ADR-0003).
 - **No loopback auth exception in v1.** A future local-daemon source that skips auth for
-  same-machine clients is deferred with the server (ADR-0019).
+  same-machine clients is deferred with the server (ADR-0003).
 - **No suggestion / analytics / ranking surface.** The cloud's differentiated features are a
-  private API outside this contract (ADR-0019); a source is not expected to implement them. The
-  usage-ranking read model may later be brought on-contract (RCSR-5).
+  private API outside this contract (ADR-0003); a source is not expected to implement them. The
+  usage-ranking read model may later be brought on-contract (RCSR-5, internal tracker).

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// "Which release units have unreleased commits?" (ADR-0016 DX helper).
+// "Which release units have unreleased commits?" (ADR-0008 DX helper).
 //
 // For each unit in the shared registry (release-units.mjs) it finds the unit's
 // last release tag (`<prefix>*`) and counts commits touching that unit's paths

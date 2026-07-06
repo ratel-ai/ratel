@@ -6,11 +6,11 @@ same traces, and ingest is stock OTLP. This document is what every consumer (Rat
 dashboards, a self-hosted receiver) reads against; the per-language helpers under
 `core/`, `ts/`, `python/` codify the `ratel.*` half as constants.
 
-Decision of record: [ADR-0015, Telemetry re-founding on OpenTelemetry conventions](../../docs/adr/0015-telemetry-otel-conventions.md).
-This spec is the concrete mapping ADR-0015 defers to Phase 3; it does not re-decide anything ADR-0015 locked.
+Decision of record: [ADR-0007, Telemetry: core-owned local trace stream, OTel remote conventions](../../docs/adr/0007-telemetry-two-streams.md).
+This spec is the concrete mapping that ADR locks; it does not re-decide anything the ADR decided.
 
-Scope is the **remote** stream only. The local JSONL trace stream (ADR-0009: `src/core/src/trace/`,
-consumed by the statusline / savings report / `ratel inspect`) is untouched and is **not** part of
+Scope is the **remote** stream only. The local JSONL trace stream (ADR-0007: `src/core/src/trace/`,
+consumed by the statusline / savings report) is untouched and is **not** part of
 this contract. Local and remote are two streams on purpose.
 
 ## The pin
@@ -36,13 +36,13 @@ helper, and note the move in a superseding ADR if the shape (not just keys) chan
 | Tier | Namespace | Owner | Carries |
 |---|---|---|---|
 | Base | `gen_ai.*` | OpenTelemetry (pinned v1.42.0) | the LLM call: operation, provider, model, params, usage, finish; message/tool content on the details event |
-| Overlay | `ratel.*` | this repo | the gateway/skill funnel (ADR-0009/0012 event set) as spans + attributes on the same trace |
+| Overlay | `ratel.*` | this repo | the gateway/skill funnel (the ADR-0007 local event set + the ADR-0005 skill events) as spans + attributes on the same trace |
 
 `gen_ai.*` is adopted **verbatim**, not one key renamed or re-nested. `ratel.*` is the only vocabulary
 Ratel designs and versions. A Ratel-instrumented agent and a plain-`gen_ai.*` agent land in the same trace,
 told apart by namespace and joined on trace/span id.
 
-`ratel.*` follows ADR-0009's schema discipline: **adding** a span or attribute is non-breaking; **renaming or
+`ratel.*` follows ADR-0007's schema discipline: **adding** a span or attribute is non-breaking; **renaming or
 removing** one is breaking and needs a superseding note.
 
 ---
@@ -53,13 +53,13 @@ An LLM call is a `gen_ai` client span. Span kind `CLIENT` (`INTERNAL` allowed fo
 Span name is `{gen_ai.operation.name} {gen_ai.request.model}` (e.g. `chat gpt-5.5`), falling back to
 `{gen_ai.operation.name}` when the model is unknown.
 
-### ADR-0013 inventory to `gen_ai.*`
+### Legacy inventory to `gen_ai.*`
 
-The `src/cloud/` schema at `961985d` (ADR-0013, deleted, never published) is the concept inventory. Every
-field re-expresses in a standard v1.42.0 key, including cached and reasoning tokens, which the earlier
-assumption held were missing:
+The `src/cloud/` schema at `961985d` (pre-compaction ADR-0013, deleted, never published; in git
+history) is the concept inventory. Every field re-expresses in a standard v1.42.0 key, including
+cached and reasoning tokens, which the earlier assumption held were missing:
 
-| ADR-0013 field | `gen_ai.*` key (v1.42.0) | Notes |
+| Legacy field | `gen_ai.*` key (v1.42.0) | Notes |
 |---|---|---|
 | `provider` (resolved) | `gen_ai.provider.name` | Well-known enum, open to custom values. Replaces the deprecated `gen_ai.system`. Enum incl. `openai`, `anthropic`, `aws.bedrock`, `gcp.vertex_ai`, `azure.ai.openai`, `mistral_ai`, `x_ai`, ... |
 | `model` (resolved) | `gen_ai.request.model` + `gen_ai.response.model` | request = asked, response = served |
@@ -84,7 +84,7 @@ Additional v1.42.0 keys worth emitting when available: `gen_ai.response.id`, `ge
 `gen_ai.request.presence_penalty`, `gen_ai.request.choice.count`, `gen_ai.output.type`,
 `server.address` / `server.port`, `error.type`.
 
-**`finish_reason` value note.** ADR-0013's enum was `stop | length | tool_call | content_filter | refusal`.
+**`finish_reason` value note.** The legacy enum was `stop | length | tool_call | content_filter | refusal`.
 The v1.42.0 normative **output-message** schema (`gen-ai-output-messages.json`, the per-message
 `finish_reason` field) is `stop | length | content_filter | tool_call | error`, with no `refusal`. Emit the
 singular `tool_call` from that schema; do **not** emit `tool_calls` (plural), which is the value from the
@@ -100,14 +100,14 @@ lossily folding it into `content_filter`.
 
 Message text and tool-call arguments ride the **`gen_ai.client.inference.operation.details`** event
 (`gen_ai.system_instructions`, `gen_ai.input.messages`, `gen_ai.output.messages`), never span attributes.
-Locked by ADR-0015: attributes are size-bounded and message content is not.
+Locked by ADR-0007: attributes are size-bounded and message content is not.
 
 Message shape (v1.42.0): `{ role, parts[], name? }`; output messages also carry `finish_reason`.
 Roles: `system | user | assistant | tool` (open). `system_instructions` is a bare `parts[]` (no role wrapper).
 
-ADR-0013 content blocks to v1.42.0 message parts:
+Legacy content blocks to v1.42.0 message parts:
 
-| ADR-0013 block | v1.42.0 part `type` | Notes |
+| Legacy block | v1.42.0 part `type` | Notes |
 |---|---|---|
 | `Text { text }` | `text` (`content`) | |
 | `ToolCall { id, name, arguments }` | `tool_call` (`id?, name, arguments`) | on an **assistant** message; `arguments` a parsed object |
@@ -116,9 +116,9 @@ ADR-0013 content blocks to v1.42.0 message parts:
 | `Image { url, media_type }` | `uri` (`modality: image`, `uri`) | |
 | `File { source, media_type }` | `blob` (`modality` per mime) or `file` (`file_id`) | |
 | `File { url, media_type }` | `uri` | |
-| (reasoning / thinking text) | `reasoning` (`content`) | new in v1.42.0; ADR-0013 flagged this as the most sensitive surface |
+| (reasoning / thinking text) | `reasoning` (`content`) | new in v1.42.0; the legacy schema flagged this as the most sensitive surface |
 
-Other v1.42.0 parts available but not in ADR-0013's inventory: `server_tool_call` /
+Other v1.42.0 parts available but not in the legacy inventory: `server_tool_call` /
 `server_tool_call_response` (provider-executed tools), `generic` (extensibility escape hatch).
 
 **Capture gating.** Content is Opt-In, **default off**. The gate is the ecosystem instrumentation
@@ -130,7 +130,7 @@ legacy boolean, or the enum `NO_CONTENT` (default) | `SPAN_ONLY` | `EVENT_ONLY` 
 
 ## Tier 2: the Ratel funnel (`ratel.*`)
 
-The ADR-0009/0012 event set is the mapping source: search, invoke (start/end/error), skill search/invoke,
+The local trace event set (ADR-0007) plus the skill events (ADR-0005) are the mapping source: search, invoke (start/end/error), skill search/invoke,
 upstream-MCP ingest, auth / `needs_auth`. Each becomes a span (or attributes on a `gen_ai` span) under `ratel.*`.
 
 **Errors** use standard OTel span status (`ERROR`) + `error.type` and the exception event, not a bespoke
@@ -198,14 +198,14 @@ content on the span attributes `gen_ai.tool.call.arguments` / `gen_ai.tool.call.
 
 ### Out of the remote tier
 
-`index_churn` / `skill_churn` are internal catalog-maintenance events with no consumer in ADR-0015's
-mapping source. They stay **local-only** (the ADR-0009 JSONL stream) and are not expressed in `ratel.*`.
+`index_churn` / `skill_churn` are internal catalog-maintenance events with no consumer in this
+mapping source. They stay **local-only** (the ADR-0007 JSONL stream) and are not expressed in `ratel.*`.
 
 ---
 
 ## Ingest bounds (informative, server-side)
 
-ADR-0013's abuse/`int4` bounds (about 2 MB per text field, about 20 MB per blob, `int4` token ceilings,
+The legacy schema's abuse/`int4` bounds (about 2 MB per text field, about 20 MB per blob, `int4` token ceilings,
 at most 10k messages, at most 2k tool defs, cache <= input, reasoning <= output) are **enforced at ingest**
 (Ratel Cloud), not re-implemented in the helpers. They are recorded here so the mapping is complete; a helper
 does not reject an oversized span, the ingest endpoint does.
@@ -214,13 +214,13 @@ does not reject an oversized span, the ingest endpoint does.
 
 ## Conformance
 
-ADR-0015 retired ADR-0013's three-way golden-JSON round-trip. That machinery existed to stop three
-hand-mirrored schemas from drifting; with one borrowed schema (`gen_ai.*`) and one owned overlay (`ratel.*`),
-that reason is gone.
+The OTel re-founding (ADR-0007) retired the legacy schema's three-way golden-JSON round-trip. That
+machinery existed to stop three hand-mirrored schemas from drifting; with one borrowed schema
+(`gen_ai.*`) and one owned overlay (`ratel.*`), that reason is gone.
 
 **Decided (2026-07-05):** keep a conformance suite but re-scope it as below. This resolves the phrase
-"rebuild the conformance-vector pattern" carried over from the task brief, which predates ADR-0015's retirement
-of the cross-mirror fixtures.
+"rebuild the conformance-vector pattern" carried over from the task brief, which predates that
+retirement of the cross-mirror fixtures.
 
 Conformance is re-scoped to **contract-against-the-pin**: a shared fixture set of
 `(known input -> expected emitted keys/values)`, asserted per language against an in-memory span/event

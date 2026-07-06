@@ -4,9 +4,9 @@ The Ratel **catalog-source wire contract**: the compatibility surface a *catalog
 implements and an SDK *loader* consumes. A source (the managed cloud today, a self-hosted
 source or a third-party loader tomorrow) serves a published catalog; an SDK with `RATEL_URL`
 set pulls it and runs retrieval locally
-([ADR-0019](../docs/adr/0019-catalog-source-interface.md)). It is a product surface, not a
+([ADR-0003](../docs/adr/0003-catalog-source-interface.md)). It is a product surface, not a
 code module, so it lives at the repo top level beside `src/` (per
-[ADR-0014](../docs/adr/0014-product-split-kernel-server-local-cloud.md)).
+[ADR-0002](../docs/adr/0002-product-split-kernel-local-cloud.md)).
 
 It is language-agnostic: the shapes here are the contract; the Rust/TS/Python types (and
 `@ratel-ai/cloud` / `ratel-ai-cloud`) are implementations of it. Keeping every source an

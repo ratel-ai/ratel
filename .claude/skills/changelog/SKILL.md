@@ -6,7 +6,7 @@ description: Update per-package CHANGELOG.md files for a Ratel release. Drafts e
 # /changelog
 
 Updates a release unit's `CHANGELOG.md` in preparation for tagging it. Ratel releases
-**per unit** (ADR-0016): each unit ships on its own tag (`<prefix>-v*`) at its own version.
+**per unit** (ADR-0008): each unit ships on its own tag (`<prefix>-v*`) at its own version.
 The CI gate in `.github/workflows/release.yml` rejects any tag whose unit CHANGELOG doesn't
 contain the version being released, so this skill must run before `git tag`.
 
@@ -132,6 +132,6 @@ Tell the user:
 
 ## Why this exists
 
-ADR 0008 (`docs/adr/0008-per-package-changelogs.md`) records the decision and rationale.
-ADR 0016 (`docs/adr/0016-per-package-versions-and-releases.md`) records the per-unit tag/version split.
-Read them if you're unsure why something is structured the way it is.
+ADR 0008 (`docs/adr/0008-release-engineering.md`) records the per-unit tag/version split, the
+CHANGELOG mechanism, and the rationale. Read it if you're unsure why something is structured
+the way it is.

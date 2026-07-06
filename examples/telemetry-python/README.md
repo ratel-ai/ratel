@@ -1,6 +1,6 @@
 # `examples/telemetry-python` — emit `ratel.*` telemetry with OpenTelemetry (Python)
 
-The Python mirror of [`examples/telemetry-ts`](../telemetry-ts/README.md): how to emit Ratel's telemetry vocabulary through the standard [OpenTelemetry Python SDK](https://opentelemetry.io/docs/languages/python/) using [`ratel-ai-telemetry`](../../src/telemetry/python/README.md). Ratel telemetry *is* OpenTelemetry ([ADR-0015](../../docs/adr/0015-telemetry-otel-conventions.md)): the package ships no transport and no schema, just the `ratel.*` constants and value enums you set as span attributes, plus an `init()` helper that wires the OTLP exporter.
+The Python mirror of [`examples/telemetry-ts`](../telemetry-ts/README.md): how to emit Ratel's telemetry vocabulary through the standard [OpenTelemetry Python SDK](https://opentelemetry.io/docs/languages/python/) using [`ratel-ai-telemetry`](../../src/telemetry/python/README.md). Ratel telemetry *is* OpenTelemetry ([ADR-0007](../../docs/adr/0007-telemetry-two-streams.md)): the package ships no transport and no schema, just the `ratel.*` constants and value enums you set as span attributes, plus an `init()` helper that wires the OTLP exporter.
 
 The demo emits one realistic trace — a `ratel.search` (capability search) span followed by an `execute_tool` span enriched with the `ratel.*` overlay, both under a root agent-turn span so they share one trace — and prints it with a `ConsoleSpanExporter`, so it runs offline with no collector and no API key.
 

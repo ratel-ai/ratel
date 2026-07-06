@@ -2,7 +2,7 @@
 
 `ToolRegistry` (the BM25 index) comes from the native binding; `ToolCatalog`
 layers executable handlers on top and emits the same trace events the TS SDK does
-(see ADR-0009 for the core-owned schema).
+(see ADR-0007 for the core-owned schema).
 """
 
 from __future__ import annotations

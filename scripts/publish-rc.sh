@@ -5,7 +5,7 @@
 # After Trusted Publishers are configured, use the release.yml workflow instead —
 # it publishes via OIDC with provenance and no stored tokens.
 #
-# Release units (ADR-0016), each publishable independently:
+# Release units (ADR-0008), each publishable independently:
 #   core           -> ratel-ai-core on crates.io          (cargo publish)
 #   sdk-ts         -> @ratel-ai/sdk + 5 platform pkgs, npm (npm publish, tarballs)
 #   sdk-py         -> ratel-ai on PyPI                     (twine upload, wheels + sdist)
