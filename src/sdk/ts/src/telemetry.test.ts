@@ -6,7 +6,8 @@ import {
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type ExecutableTool, SkillCatalog, ToolCatalog } from "./index.js";
+import { configureTelemetry, type ExecutableTool, SkillCatalog, ToolCatalog } from "./index.js";
+import { isModuleNotFound, recordAuthNeeded } from "./telemetry.js";
 
 /**
  * Instrumentation is verified through the public OTel API: register an in-memory
@@ -53,6 +54,16 @@ const boom: ExecutableTool = {
   },
 };
 
+// An MCP-proxied tool: `<server>__<tool>` id convention.
+const gmailSend: ExecutableTool = {
+  id: "gmail__send_email",
+  name: "send_email",
+  description: "Send an email through the Gmail upstream.",
+  inputSchema: { properties: { to: { type: "string" } } },
+  outputSchema: { properties: {} },
+  execute: async () => ({ ok: true }),
+};
+
 /** All exported spans with the given name. */
 function spansNamed(name: string): ReadableSpan[] {
   return exporter.getFinishedSpans().filter((s) => s.name === name);
@@ -95,6 +106,52 @@ describe("execute_tool span", () => {
     const [span] = spansNamed("execute_tool read_file");
     expect(attrs(span)["gen_ai.tool.call.arguments"]).toBe('{"path":"/p"}');
     expect(attrs(span)["gen_ai.tool.call.result"]).toContain("contents of /p");
+  });
+
+  it("keeps content off the span under EVENT_ONLY (content rides events, not spans)", async () => {
+    process.env[CAPTURE_ENV] = "EVENT_ONLY";
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    await catalog.invoke("read_file", { path: "/p" });
+
+    const [span] = spansNamed("execute_tool read_file");
+    expect(attrs(span)["gen_ai.tool.call.arguments"]).toBeUndefined();
+    expect(attrs(span)["gen_ai.tool.call.result"]).toBeUndefined();
+  });
+
+  it("keeps content off the span under explicit NO_CONTENT", async () => {
+    process.env[CAPTURE_ENV] = "NO_CONTENT";
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    await catalog.invoke("read_file", { path: "/p" });
+
+    const [span] = spansNamed("execute_tool read_file");
+    expect(attrs(span)["gen_ai.tool.call.arguments"]).toBeUndefined();
+    expect(attrs(span)["gen_ai.tool.call.result"]).toBeUndefined();
+  });
+
+  it("records args_size_bytes as UTF-8 bytes, not UTF-16 characters", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    // "café" is 4 UTF-16 chars but 5 UTF-8 bytes; the JSON wrapper adds ASCII bytes.
+    await catalog.invoke("read_file", { path: "café" });
+
+    const [span] = spansNamed("execute_tool read_file");
+    const expected = new TextEncoder().encode(JSON.stringify({ path: "café" })).length;
+    expect(attrs(span)["ratel.tool.args_size_bytes"]).toBe(expected);
+  });
+
+  it("tags an MCP-proxied invoke with ratel.upstream.server and omits it for a plain tool", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(gmailSend);
+    catalog.register(readFile);
+    await catalog.invoke("gmail__send_email", { to: "a@b.com" });
+    await catalog.invoke("read_file", { path: "/x" });
+
+    const [proxied] = spansNamed("execute_tool gmail__send_email");
+    expect(attrs(proxied)["ratel.upstream.server"]).toBe("gmail");
+    const [plain] = spansNamed("execute_tool read_file");
+    expect(attrs(plain)["ratel.upstream.server"]).toBeUndefined();
   });
 
   it("marks the span ERROR and rethrows when the tool throws", async () => {
@@ -171,10 +228,31 @@ describe("ratel.skill.load span", () => {
   });
 });
 
+describe("ratel.auth.flow span", () => {
+  it("records outcome=needs_auth with the upstream server", () => {
+    recordAuthNeeded("gmail");
+
+    const [span] = spansNamed("ratel.auth.flow");
+    expect(span, "one ratel.auth.flow span").toBeTruthy();
+    expect(attrs(span)["ratel.auth.outcome"]).toBe("needs_auth");
+    expect(attrs(span)["ratel.upstream.server"]).toBe("gmail");
+  });
+
+  it("omits the server attribute when the upstream is unknown", () => {
+    recordAuthNeeded();
+
+    const [span] = spansNamed("ratel.auth.flow");
+    expect(attrs(span)["ratel.auth.outcome"]).toBe("needs_auth");
+    expect(attrs(span)["ratel.upstream.server"]).toBeUndefined();
+  });
+});
+
 describe("no provider configured", () => {
-  it("is a no-op: operations still work and nothing is exported", async () => {
-    trace.disable(); // drop back to the default non-recording provider
-    const local = new InMemorySpanExporter();
+  it("is a no-op: operations still work and the wired exporter records nothing", async () => {
+    // Drop the beforeEach provider; the OTel API now hands back non-recording spans.
+    // `exporter` is that dropped provider's exporter, so if the SDK still reached it
+    // (e.g. by caching a tracer) this would catch it.
+    trace.disable();
     const catalog = new ToolCatalog();
     catalog.register(readFile);
 
@@ -182,6 +260,36 @@ describe("no provider configured", () => {
     await expect(catalog.invoke("read_file", { path: "/x" })).resolves.toEqual({
       contents: "contents of /x",
     });
-    expect(local.getFinishedSpans()).toHaveLength(0);
+    expect(exporter.getFinishedSpans()).toHaveLength(0);
+  });
+});
+
+describe("configureTelemetry", () => {
+  it("loads the optional peer and delegates to its init()", async () => {
+    // beforeEach already registered a global provider, so init()'s takeover guard
+    // trips — which proves configureTelemetry resolved the optional @ratel-ai/telemetry-otlp
+    // peer and called through to it (rather than throwing the install-guidance error).
+    await expect(
+      configureTelemetry({ endpoint: "http://localhost:4318/v1/traces" }),
+    ).rejects.toThrow(/already registered/);
+  });
+});
+
+describe("isModuleNotFound (configureTelemetry import guard)", () => {
+  it("is true only for a genuine module-not-found code", () => {
+    expect(isModuleNotFound(Object.assign(new Error("x"), { code: "ERR_MODULE_NOT_FOUND" }))).toBe(
+      true,
+    );
+    expect(isModuleNotFound(Object.assign(new Error("x"), { code: "MODULE_NOT_FOUND" }))).toBe(
+      true,
+    );
+  });
+
+  it("is false for a package that throws while loading, so the real error is rethrown", () => {
+    expect(isModuleNotFound(Object.assign(new Error("boom"), { code: "ERR_DLOPEN_FAILED" }))).toBe(
+      false,
+    );
+    expect(isModuleNotFound(new Error("plain error, no code"))).toBe(false);
+    expect(isModuleNotFound(undefined)).toBe(false);
   });
 });

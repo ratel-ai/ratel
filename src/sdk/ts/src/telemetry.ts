@@ -1,6 +1,6 @@
 /**
- * OpenTelemetry emission for the SDK's `ratel.*` / `gen_ai.*` funnel (ADR-0011,
- * ADR-0007). The catalog, gateway, skills, and MCP paths call these helpers to
+ * OpenTelemetry emission for the SDK's `ratel.*` / `gen_ai.*` funnel (ADR-0007).
+ * The catalog, gateway, skills, and MCP paths call these helpers to
  * open a span around each operation; the span names and attribute keys come from
  * the OTel-free `@ratel-ai/telemetry` vocabulary.
  *
@@ -58,9 +58,10 @@ function captureContentOnSpan(): boolean {
   return mode === ContentCapture.SpanOnly || mode === ContentCapture.SpanAndEvent;
 }
 
-function argsSizeBytes(args: unknown): number {
+/** UTF-8 byte size of the JSON-encoded args (0 if not encodable). */
+export function argsSizeBytes(args: unknown): number {
   try {
-    return JSON.stringify(args).length;
+    return new TextEncoder().encode(JSON.stringify(args) ?? "").length;
   } catch {
     return 0;
   }
@@ -74,8 +75,18 @@ function safeJson(value: unknown): string {
   }
 }
 
-function errorMessage(err: unknown): string {
+export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * The upstream MCP server backing a tool, derived from the `<server>__<tool>`
+ * id convention. `undefined` for a plain (non-proxied) tool id.
+ */
+export function upstreamFromToolId(toolId: string): string | undefined {
+  const idx = toolId.indexOf("__");
+  if (idx <= 0) return undefined;
+  return toolId.slice(0, idx);
 }
 
 /** Close a span in the failure path: record the exception + ERROR status. */
@@ -100,6 +111,8 @@ export function traceExecuteTool<T>(
     async (span) => {
       span.setAttribute(GEN_AI_OPERATION_NAME, EXECUTE_TOOL);
       span.setAttribute(GEN_AI_TOOL_NAME, toolId);
+      const upstream = upstreamFromToolId(toolId);
+      if (upstream) span.setAttribute(RATEL_UPSTREAM_SERVER, upstream);
       span.setAttribute(RATEL_TOOL_ARGS_SIZE_BYTES, argsSizeBytes(args));
       if (captureContentOnSpan()) span.setAttribute(GEN_AI_TOOL_CALL_ARGUMENTS, safeJson(args));
       try {
@@ -223,7 +236,12 @@ export async function configureTelemetry(options: InitOptions = {}): Promise<Tel
   let otlp: typeof import("@ratel-ai/telemetry-otlp");
   try {
     otlp = await import("@ratel-ai/telemetry-otlp");
-  } catch {
+  } catch (err) {
+    // A dynamic import both resolves and *executes* the module, so this catch
+    // fires for a genuinely-absent package and for one that throws while
+    // loading (a broken/clashing OTel dependency). Only substitute the install
+    // guidance for the former; rethrow the real load error so it stays visible.
+    if (!isModuleNotFound(err)) throw err;
     throw new Error(
       "configureTelemetry() needs the optional @ratel-ai/telemetry-otlp package. Install it " +
         "(e.g. `npm i @ratel-ai/telemetry-otlp`), or register your own OpenTelemetry provider — " +
@@ -231,6 +249,12 @@ export async function configureTelemetry(options: InitOptions = {}): Promise<Tel
     );
   }
   return otlp.init(options);
+}
+
+/** A dynamic import reports a module-not-found code only when the package is absent. */
+export function isModuleNotFound(err: unknown): boolean {
+  const code = (err as { code?: unknown })?.code;
+  return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND";
 }
 
 export type { InitOptions };

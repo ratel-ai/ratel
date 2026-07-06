@@ -1,6 +1,6 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
 import { type SearchHit, type Tool, ToolRegistry } from "../native/index.cjs";
-import { traceExecuteTool, traceSearch } from "./telemetry.js";
+import { argsSizeBytes, errorMessage, traceExecuteTool, traceSearch } from "./telemetry.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: tool inputs are heterogeneous across the catalog
 export type Executor = (input: any) => Promise<unknown> | unknown;
@@ -133,17 +133,4 @@ export class ToolCatalog {
       }
     });
   }
-}
-
-function argsSizeBytes(args: unknown): number {
-  try {
-    return JSON.stringify(args).length;
-  } catch {
-    return 0;
-  }
-}
-
-function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return String(err);
 }
