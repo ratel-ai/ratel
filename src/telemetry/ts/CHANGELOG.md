@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.3] - 2026-07-05
+
+### Changed
+
+- **Breaking (pre-GA):** `init()` moved out of this package into the new [`@ratel-ai/telemetry-otlp`](../ts-otlp/README.md). Importing `@ratel-ai/telemetry` now pulls no OpenTelemetry SDK (ADR-0015), so the SDK (emit), the server (read), and edge/serverless emitters take the `ratel.*` vocabulary weight-free. This package keeps the constants plus the pure `resolveOtlpConfig` / `contentCaptureMode`; callers of `init()` install `@ratel-ai/telemetry-otlp` and import it from there.
+
+### Added
+
+- A regression guard that no `@opentelemetry/*` runtime dependency or shipped-source import can creep back into the vocabulary package.
+
 ## [0.1.0-rc.2] - 2026-07-05
 
 ### Added

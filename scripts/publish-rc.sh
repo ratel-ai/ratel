@@ -12,6 +12,7 @@
 #   telemetry-core -> ratel-ai-telemetry on crates.io      (cargo publish)
 #   telemetry-js   -> @ratel-ai/telemetry on npm           (npm publish, built locally)
 #   telemetry-py   -> ratel-ai-telemetry on PyPI           (twine upload, built locally)
+#   telemetry-otlp -> @ratel-ai/telemetry-otlp on npm      (npm publish, pnpm-packed locally)
 # Each unit's version is read from its own manifest via scripts/release-units.mjs
 # (the single source of truth) — units are NOT assumed to share a version.
 #
@@ -27,7 +28,7 @@
 #
 # Options:
 #   --unit <id>        core | sdk-js | sdk-py | telemetry-core | telemetry-js |
-#                      telemetry-py. Repeatable. Default: all.
+#                      telemetry-py | telemetry-otlp. Repeatable. Default: all.
 #   --from-run <id>    Download all artifacts from the given GH Actions run
 #                      (requires `gh auth login`); tarballs/wheels are found within.
 #   --from-dir <path>  Use a directory already holding the tarballs/wheels.
@@ -266,6 +267,35 @@ publish_telemetry_py() {
   echo "==> telemetry-py publish complete"; echo
 }
 
+# ---------- telemetry-otlp: @ratel-ai/telemetry-otlp on npm, packed locally ----------
+# Pure-language like telemetry-js, but it has a workspace:^ dep on @ratel-ai/telemetry.
+# `pnpm pack` rewrites that to a real version range in the tarball, so a plain
+# `npm publish <tarball>` (bootstrap: no OIDC, no provenance) ships a valid manifest.
+publish_telemetry_otlp() {
+  local version; version="$(resolve_version telemetry-otlp)"
+  echo "===== telemetry-otlp @ $version (npm) ====="
+  echo "----- @ratel-ai/telemetry-otlp@$version (npm) -----"
+  local status
+  status="$(curl -sS -o /dev/null -w '%{http_code}' \
+    "https://registry.npmjs.org/@ratel-ai%2Ftelemetry-otlp/${version}" || echo 000)"
+  if [[ "$status" == "200" ]]; then
+    echo "    already published, skipping npm"; echo; return 0
+  fi
+  if [[ $DRY_RUN -eq 0 ]] && ! npm whoami >/dev/null 2>&1; then
+    echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
+  fi
+  # Build the exporter + its @ratel-ai/telemetry workspace dependency (topo order).
+  ( cd "$REPO_ROOT" && pnpm --filter "@ratel-ai/telemetry-otlp..." run build )
+  local tgz
+  tgz="$( cd "$REPO_ROOT/src/telemetry/ts-otlp" && pnpm pack --pack-destination "$(mktemp -d)" | tail -1 )"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] npm publish $tgz --access public --tag $TAG --provenance=false"
+  else
+    publish_one_npm "$tgz" || exit 1
+  fi
+  echo "==> telemetry-otlp publish complete"; echo
+}
+
 # ---------- telemetry-core: ratel-ai-telemetry on crates.io ----------
 publish_telemetry_core() {
   local version; version="$(resolve_version telemetry-core)"
@@ -298,6 +328,7 @@ selected sdk-js         && publish_sdk_js
 selected sdk-py         && publish_sdk_py
 selected telemetry-core && publish_telemetry_core
 selected telemetry-js   && publish_telemetry_js
+selected telemetry-otlp && publish_telemetry_otlp
 selected telemetry-py   && publish_telemetry_py
 
 echo "==> done"

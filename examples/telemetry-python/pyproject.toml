@@ -4,9 +4,10 @@ version = "0.0.0"
 description = "Ratel telemetry — emit ratel.* spans through the OpenTelemetry Python SDK"
 requires-python = ">=3.10"
 dependencies = [
-    "ratel-ai-telemetry",
+    # init() needs the OTLP exporter, shipped as the [otlp] extra.
+    "ratel-ai-telemetry[otlp]",
     # The console exporter + TracerProvider the demo wires by hand. Bounded to the
-    # same line as ratel-ai-telemetry (it caps OTel below 1.42 to keep py3.9).
+    # same line as ratel-ai-telemetry[otlp] (it caps OTel below 1.42 to keep py3.9).
     "opentelemetry-sdk>=1.41.0,<1.42",
 ]
 

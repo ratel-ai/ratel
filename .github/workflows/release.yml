@@ -11,8 +11,9 @@ name: Release
 #   telemetry-core-v* -> ratel-ai-telemetry on crates.io
 #   telemetry-js-v*   -> @ratel-ai/telemetry on npm
 #   telemetry-py-v*   -> ratel-ai-telemetry on PyPI
-#     The three telemetry helpers release independently (one registry each); tag
-#     the same commit thrice to ship them together.
+#   telemetry-otlp-v* -> @ratel-ai/telemetry-otlp on npm (the init() exporter)
+#     The telemetry helpers release independently (one registry each; otlp is the
+#     npm exporter split from the vocabulary); tag the same commit to ship together.
 
 on:
   push:
@@ -23,6 +24,7 @@ on:
       - 'telemetry-core-v*'
       - 'telemetry-js-v*'
       - 'telemetry-py-v*'
+      - 'telemetry-otlp-v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -379,9 +381,9 @@ jobs:
           skip-existing: true
         if: ${{ !inputs.dry_run }}
 
-  # The three telemetry helpers are independent single-registry units, each on
-  # its own tag prefix (telemetry-js-v* / telemetry-py-v* / telemetry-core-v*) and
-  # its own Trusted Publisher — exactly like core / sdk-js / sdk-py.
+  # The telemetry units are independent single-registry units, each on its own tag
+  # prefix (telemetry-js-v* / telemetry-py-v* / telemetry-core-v* / telemetry-otlp-v*)
+  # and its own Trusted Publisher — exactly like core / sdk-js / sdk-py.
   publish-telemetry-js:
     name: Publish @ratel-ai/telemetry to npm
     needs: [tag-version-check]
@@ -506,6 +508,70 @@ jobs:
             exit 1
           fi
 
+  publish-telemetry-otlp:
+    name: Publish @ratel-ai/telemetry-otlp to npm
+    needs: [tag-version-check]
+    if: needs.tag-version-check.outputs.unit == 'telemetry-otlp'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - name: Verify npm CLI version
+        shell: bash
+        run: |
+          set -e
+          npm --version
+          # Trusted Publishers requires npm CLI 11.5.1+
+          node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # Build the exporter and its @ratel-ai/telemetry workspace dependency (topo order).
+      - name: Build TS
+        run: pnpm --filter "@ratel-ai/telemetry-otlp..." run build
+      # npm keeps `workspace:` specifiers verbatim, so pin the dep to the concrete
+      # co-released @ratel-ai/telemetry version before publishing (ephemeral CI edit;
+      # not committed). Keeps the npm-OIDC dir publish + provenance identical to the
+      # other units rather than switching to `pnpm publish`.
+      - name: Pin the @ratel-ai/telemetry dependency for publish
+        shell: bash
+        run: |
+          set -e
+          tele_ver=$(node -p "require('./src/telemetry/ts/package.json').version")
+          TELE_VER="$tele_ver" node -e "const fs=require('fs'); const f='./src/telemetry/ts-otlp/package.json'; const p=require(f); p.dependencies['@ratel-ai/telemetry']='^'+process.env.TELE_VER; fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n')"
+          echo "pinned @ratel-ai/telemetry -> $(node -p "require('./src/telemetry/ts-otlp/package.json').dependencies['@ratel-ai/telemetry']")"
+      # Preflight dry-run BEFORE the real (immutable) publish, mirroring the SDK job.
+      - name: Preflight — dry-run npm publish
+        shell: bash
+        env:
+          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
+        run: (cd src/telemetry/ts-otlp && npm publish --access public --tag "$DIST_TAG" --dry-run)
+      - name: Publish
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
+        run: |
+          set -e
+          name=$(node -p "require('./src/telemetry/ts-otlp/package.json').name")
+          ver=$(node -p "require('./src/telemetry/ts-otlp/package.json').version")
+          # Idempotent: skip if this exact name@version is already live (npm is immutable).
+          if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
+            echo "::notice::$name@$ver already published — skipping"
+          else
+            (cd src/telemetry/ts-otlp && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+          fi
+
   github-release:
     name: GitHub Release
     needs:
@@ -516,6 +582,7 @@ jobs:
       - publish-telemetry-js
       - publish-telemetry-py
       - publish-telemetry-core
+      - publish-telemetry-otlp
     # Exactly one unit's publish job runs; the rest are skipped. Run when the tag
     # was pushed and that one job succeeded. Every unit is single-registry now, so
     # any one publish job succeeding is enough.
@@ -527,7 +594,8 @@ jobs:
               || needs.publish-crate.result == 'success'
               || needs.publish-telemetry-js.result == 'success'
               || needs.publish-telemetry-py.result == 'success'
-              || needs.publish-telemetry-core.result == 'success') }}
+              || needs.publish-telemetry-core.result == 'success'
+              || needs.publish-telemetry-otlp.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

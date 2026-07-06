@@ -1,15 +1,13 @@
 /**
- * `init()` — sugar over the standard OpenTelemetry JS SDK that wires an OTLP
- * `http/protobuf` span exporter at the Ratel endpoint. No custom transport, no
- * schema (ADR-0015, CONVENTIONS.md § init() surface). A caller who already runs
- * the OTel SDK skips this entirely and just takes the `ratel.*` constants.
+ * Pure OTLP config resolution + the content-capture gate for the `ratel.*`
+ * telemetry vocabulary. No OpenTelemetry SDK import (ADR-0015): these helpers only
+ * resolve endpoint/auth precedence and parse the capture env var, so they stay
+ * weight-free for the three consumers that need the vocabulary without the
+ * exporter — the SDK (emit side), the server (read side), and edge/serverless
+ * emitters. The `init()` exporter that consumes `resolveOtlpConfig()` lives in the
+ * separate `@ratel-ai/telemetry-otlp` package.
  */
 
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
-import { resourceFromAttributes } from "@opentelemetry/resources";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { CAPTURE_CONTENT_ENV } from "./index.js";
 
 /** Env var whose value is the default OTLP endpoint when `{ apiKey }` is used. */
@@ -19,11 +17,11 @@ export const ENDPOINT_ENV = "RATEL_URL";
 export const DEFAULT_SERVICE_NAME = "ratel";
 
 /**
- * `init()` accepts either `{ apiKey }` (endpoint defaults to `RATEL_URL`,
- * `Authorization: Bearer <apiKey>`) or `{ endpoint, headers }` (custom
- * endpoint / collector / dual-export). The two forms compose: an explicit
- * `endpoint` always wins over `RATEL_URL`, and `apiKey` adds the Bearer header
- * on top of any `headers`.
+ * `init()` (in `@ratel-ai/telemetry-otlp`) accepts either `{ apiKey }` (endpoint
+ * defaults to `RATEL_URL`, `Authorization: Bearer <apiKey>`) or `{ endpoint,
+ * headers }` (custom endpoint / collector / dual-export). The two forms compose:
+ * an explicit `endpoint` always wins over `RATEL_URL`, and `apiKey` adds the
+ * Bearer header on top of any `headers`.
  */
 export interface InitOptions {
   /** `service.name` resource attribute. Defaults to {@link DEFAULT_SERVICE_NAME}. */
@@ -36,12 +34,7 @@ export interface InitOptions {
   headers?: Record<string, string>;
 }
 
-/** Handle returned by {@link init}; `shutdown()` flushes and stops the exporter. */
-export interface TelemetryHandle {
-  shutdown(): Promise<void>;
-}
-
-/** Resolved exporter configuration; the pure core of {@link init}, exposed for testing. */
+/** Resolved exporter configuration; the pure core of the OTLP exporter, exposed for testing. */
 export interface ResolvedOtlpConfig {
   url: string;
   headers: Record<string, string>;
@@ -67,22 +60,6 @@ export function resolveOtlpConfig(
     headers.Authorization = `Bearer ${opts.apiKey}`;
   }
   return { url, headers, serviceName: opts.serviceName ?? DEFAULT_SERVICE_NAME };
-}
-
-/**
- * Wire an OTLP `http/protobuf` exporter + batch processor + `service.name`
- * resource over a `NodeTracerProvider`, register it globally, and return a
- * shutdown handle. Everything else is the untouched OTel SDK.
- */
-export function init(opts: InitOptions = {}): TelemetryHandle {
-  const { url, headers, serviceName } = resolveOtlpConfig(opts);
-  const exporter = new OTLPTraceExporter({ url, headers });
-  const provider = new NodeTracerProvider({
-    resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName }),
-    spanProcessors: [new BatchSpanProcessor(exporter)],
-  });
-  provider.register();
-  return { shutdown: () => provider.shutdown() };
 }
 
 /**

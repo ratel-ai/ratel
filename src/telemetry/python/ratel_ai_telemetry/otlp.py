@@ -3,6 +3,10 @@
 Sugar that wires an OTLP http/protobuf span exporter at the Ratel endpoint: no
 custom transport, no schema (ADR-0015, CONVENTIONS.md § init() surface). A caller
 already running the OTel SDK skips init() and just takes the ratel.* constants.
+
+The OpenTelemetry SDK is an optional [otlp] extra: this module imports it lazily,
+inside init(), so the config/gate helpers (resolve_otlp_config, content_capture_mode)
+and this whole submodule import OTel-free. Only calling init() needs the extra.
 """
 
 from __future__ import annotations
@@ -11,14 +15,12 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from typing import TYPE_CHECKING
 
 from . import CAPTURE_CONTENT_ENV
+
+if TYPE_CHECKING:
+    from opentelemetry.sdk.trace import TracerProvider
 
 #: Env var whose value is the default OTLP endpoint when api_key= is used.
 ENDPOINT_ENV = "RATEL_URL"
@@ -79,7 +81,21 @@ def init(
     register it as the global tracer provider, and return it as the shutdown handle
     (call provider.shutdown() / provider.force_flush()). Everything else is the
     untouched OTel SDK.
+
+    Needs the OpenTelemetry SDK, shipped as the optional [otlp] extra; a clear error
+    is raised if it is not installed.
     """
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "ratel telemetry init() needs the OpenTelemetry SDK. Install the extra: "
+            "pip install 'ratel-ai-telemetry[otlp]'."
+        ) from exc
     cfg = resolve_otlp_config(
         api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
     )

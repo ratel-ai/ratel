@@ -62,12 +62,13 @@ export const UNITS = {
     srcPaths: ["src/sdk/python"],
     changelog: { name: "ratel-ai", includePaths: ["src/sdk/python/**"] },
   },
-  // The telemetry helpers are three INDEPENDENT units — one per registry — so a
-  // fix to just the npm helper ships alone, and all three can still go out in one
-  // run by tagging the same commit thrice (ADR-0016's per-package principle; the
-  // packages have no cross-registry install dependency, so nothing forces them
-  // lockstep). Each shares the vocabulary spec + conformance fixtures, so a change
-  // there marks all three releasable and drafts into all three changelogs.
+  // The telemetry helpers are INDEPENDENT units — one per registry, plus the npm
+  // exporter — so a fix to just the npm vocabulary ships alone, and they can still
+  // go out in one run by tagging the same commit (ADR-0016's per-package principle;
+  // the packages have no cross-registry install dependency, so nothing forces them
+  // lockstep). core/js/py share the vocabulary spec + conformance fixtures, so a
+  // change there marks those releasable and drafts into their changelogs; the
+  // exporter (telemetry-otlp) tracks only its own source.
   "telemetry-core": {
     tagPrefix: "telemetry-core-v",
     label: "ratel-ai-telemetry → crates.io",
@@ -104,6 +105,21 @@ export const UNITS = {
     changelog: {
       name: "ratel-ai-telemetry (PyPI)",
       includePaths: ["src/telemetry/python/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
+    },
+  },
+  // The OTLP exporter (init()), split from the npm vocabulary package so importing
+  // the constants stays OTel-free (ADR-0015). npm-only; tracks only its own source
+  // (a CONVENTIONS change is a vocabulary change, not an exporter change).
+  "telemetry-otlp": {
+    tagPrefix: "telemetry-otlp-v",
+    label: "@ratel-ai/telemetry-otlp → npm",
+    versionManifest: { path: "src/telemetry/ts-otlp/package.json", kind: "json" },
+    manifests: [{ path: "src/telemetry/ts-otlp/package.json", kind: "json" }],
+    changelogs: ["src/telemetry/ts-otlp/CHANGELOG.md"],
+    srcPaths: ["src/telemetry/ts-otlp"],
+    changelog: {
+      name: "@ratel-ai/telemetry-otlp",
+      includePaths: ["src/telemetry/ts-otlp/**"],
     },
   },
 };

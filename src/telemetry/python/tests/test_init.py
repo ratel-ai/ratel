@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ratel_ai_telemetry import (
+from ratel_ai_telemetry.otlp import (
     DEFAULT_SERVICE_NAME,
     ENDPOINT_ENV,
     ContentCapture,
@@ -91,3 +91,14 @@ class TestInit:
         monkeypatch.delenv(ENDPOINT_ENV, raising=False)
         with pytest.raises(ValueError, match=ENDPOINT_ENV):
             init(api_key="k")
+
+
+def test_top_level_lazy_accessor_resolves_the_otlp_surface() -> None:
+    """`from ratel_ai_telemetry import init` still works via the module __getattr__,
+    resolving to the same object as the .otlp submodule (ADR-0015 back-compat)."""
+    import ratel_ai_telemetry
+    from ratel_ai_telemetry.otlp import init as otlp_init
+    from ratel_ai_telemetry.otlp import resolve_otlp_config as otlp_resolve
+
+    assert ratel_ai_telemetry.init is otlp_init
+    assert ratel_ai_telemetry.resolve_otlp_config is otlp_resolve

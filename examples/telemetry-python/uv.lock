@@ -248,9 +248,11 @@ wheels = [
 
 [[package]]
 name = "ratel-ai-telemetry"
-version = "0.1.0rc1"
+version = "0.1.0rc3"
 source = { directory = "../../src/telemetry/python" }
-dependencies = [
+
+[package.optional-dependencies]
+otlp = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
@@ -259,13 +261,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
-    { name = "opentelemetry-api", specifier = ">=1.41.0,<1.42" },
-    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.41.0,<1.42" },
-    { name = "opentelemetry-sdk", specifier = ">=1.41.0,<1.42" },
+    { name = "opentelemetry-api", marker = "extra == 'otlp'", specifier = ">=1.41.0,<1.42" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otlp'", specifier = ">=1.41.0,<1.42" },
+    { name = "opentelemetry-sdk", marker = "extra == 'otlp'", specifier = ">=1.41.0,<1.42" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "ratel-ai-telemetry", extras = ["otlp"], marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["otlp", "dev"]
 
 [[package]]
 name = "ratel-example-telemetry"
@@ -273,13 +276,13 @@ version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "opentelemetry-sdk" },
-    { name = "ratel-ai-telemetry" },
+    { name = "ratel-ai-telemetry", extra = ["otlp"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.41.0,<1.42" },
-    { name = "ratel-ai-telemetry", directory = "../../src/telemetry/python" },
+    { name = "ratel-ai-telemetry", extras = ["otlp"], directory = "../../src/telemetry/python" },
 ]
 
 [[package]]

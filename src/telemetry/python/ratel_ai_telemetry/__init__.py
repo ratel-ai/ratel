@@ -10,7 +10,7 @@ from OpenTelemetry, never renamed).
 from __future__ import annotations
 
 from enum import Enum
-from typing import Final
+from typing import Any, Final
 
 #: The pinned OpenTelemetry semantic-conventions version this vocabulary tracks
 #: (the gen_ai group). The pin is the contract; consumers read against this exact
@@ -148,27 +148,39 @@ class AuthOutcome(str, Enum):
     FAILED = "failed"
 
 
-# Imported at the bottom so the constants above are defined before otlp.py reads
-# CAPTURE_CONTENT_ENV back (init() sugar over the standard OTel SDK; ADR-0015).
-from .otlp import (  # noqa: E402
-    DEFAULT_SERVICE_NAME,
-    ENDPOINT_ENV,
-    ContentCapture,
-    OtlpConfig,
-    content_capture_mode,
-    init,
-    resolve_otlp_config,
+# The OTLP exporter surface (init() + config/gate) lives in the opt-in .otlp
+# submodule behind the [otlp] extra, so plain constant imports stay OTel-free
+# (ADR-0015). A module-level __getattr__ lazily resolves it, so the ergonomic
+# `from ratel_ai_telemetry import init` keeps working without eagerly importing it.
+_OTLP_EXPORTS: Final = frozenset(
+    {
+        "init",
+        "resolve_otlp_config",
+        "content_capture_mode",
+        "ContentCapture",
+        "OtlpConfig",
+        "ENDPOINT_ENV",
+        "DEFAULT_SERVICE_NAME",
+    }
 )
+
+
+def __getattr__(name: str) -> Any:
+    """Lazily resolve the OTLP exporter surface from the opt-in .otlp submodule.
+
+    Keeps `from ratel_ai_telemetry import init` working while a plain
+    `import ratel_ai_telemetry` pulls no OpenTelemetry SDK. init() itself raises a
+    clear error if the [otlp] extra is not installed.
+    """
+    if name in _OTLP_EXPORTS:
+        from . import otlp
+
+        return getattr(otlp, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "CAPTURE_CONTENT_ENV",
-    "DEFAULT_SERVICE_NAME",
-    "ENDPOINT_ENV",
-    "ContentCapture",
-    "OtlpConfig",
-    "content_capture_mode",
-    "init",
-    "resolve_otlp_config",
     "EXECUTE_TOOL",
     "GEN_AI_INFERENCE_DETAILS",
     "GEN_AI_OPERATION_NAME",
@@ -196,4 +208,14 @@ __all__ = [
     "AuthOutcome",
     "Origin",
     "SearchTarget",
+    # The OTLP exporter surface, lazily resolved from `.otlp` via __getattr__ above
+    # (importing any of these — or `import *` — loads the submodule but still no OTel
+    # SDK; only calling init() needs the [otlp] extra).
+    "init",
+    "resolve_otlp_config",
+    "content_capture_mode",
+    "ContentCapture",
+    "OtlpConfig",
+    "ENDPOINT_ENV",
+    "DEFAULT_SERVICE_NAME",
 ]

@@ -12,10 +12,11 @@ The wire contract is [`CONVENTIONS.md`](CONVENTIONS.md): the `gen_ai.*` mapping 
 CONVENTIONS.md   the telemetry wire contract (gen_ai.* mapping + ratel.* vocabulary)
 conformance/     shared contract-against-the-pin fixtures every language helper asserts against
 core/            ratel-ai-telemetry (crates.io): the ratel.* constants (shared vocabulary)
-ts/              @ratel-ai/telemetry (npm): init() over the OTel SDK + ratel.* constants
-python/          ratel-ai-telemetry (PyPI): init() over the OTel SDK + ratel.* constants
+ts/              @ratel-ai/telemetry (npm): the ratel.* constants + OTLP config, OTel-free
+ts-otlp/         @ratel-ai/telemetry-otlp (npm): init() over the OTel SDK
+python/          ratel-ai-telemetry (PyPI): the ratel.* constants; init() behind the [otlp] extra
 ```
 
-The `ts/` and `python/` helpers are `init()` sugar over the standard OTel SDK: `init()` wires an OTLP `http/protobuf` exporter to `RATEL_URL` (or a caller-supplied endpoint) and exposes the `ratel.*` constants. A caller already running the OTel SDK can skip `init()` and add the Ratel endpoint as a second exporter, taking only the constants. The `core/` crate carries the same `ratel.*` constants as the shared source of truth for in-process Rust consumers. Every helper's conformance test builds spans from its own constants and asserts them against the single shared fixture set in [`conformance/`](conformance/README.md), so the languages cannot drift.
+The vocabulary is kept OTel-free so the SDK (emit side), the server (read side), and edge/serverless emitters take it weight-free (ADR-0015): importing `@ratel-ai/telemetry` or `ratel_ai_telemetry` pulls no OpenTelemetry SDK. `init()` is turnkey exporter sugar over the standard OTel SDK — it wires an OTLP `http/protobuf` exporter to `RATEL_URL` (or a caller-supplied endpoint) — and lives apart from the vocabulary: in TypeScript as the separate `@ratel-ai/telemetry-otlp` package (`ts-otlp/`), in Python behind the optional `[otlp]` extra (`ratel_ai_telemetry.otlp`). A caller already running the OTel SDK skips `init()` and emits `ratel.*` on its own provider, taking only the constants. The `core/` crate carries the same `ratel.*` constants as the shared source of truth for in-process Rust consumers. Every helper's conformance test builds spans from its own constants and asserts them against the single shared fixture set in [`conformance/`](conformance/README.md), so the languages cannot drift.
 
-Rationale and the two-tier design are locked in [ADR 0015](../../docs/adr/0015-telemetry-otel-conventions.md). Each helper is an independent release unit per [ADR 0016](../../docs/adr/0016-per-package-versions-and-releases.md): `core/` ships on `telemetry-core-v*`, `ts/` on `telemetry-js-v*`, `python/` on `telemetry-py-v*`.
+Rationale and the two-tier design are locked in [ADR 0015](../../docs/adr/0015-telemetry-otel-conventions.md). Each package is an independent release unit per [ADR 0016](../../docs/adr/0016-per-package-versions-and-releases.md): `core/` ships on `telemetry-core-v*`, `ts/` on `telemetry-js-v*`, `python/` on `telemetry-py-v*`, and `ts-otlp/` on `telemetry-otlp-v*`.

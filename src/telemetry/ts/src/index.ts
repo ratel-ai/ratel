@@ -7,8 +7,9 @@
  * plus the small subset of `gen_ai.*` keys the overlay emits directly on the
  * `execute_tool` span (borrowed verbatim from OpenTelemetry, never renamed).
  *
- * The `init()` OTLP builder and its content-capture helper are re-exported from
- * `./init`.
+ * This package is OTel-free (ADR-0015): the OTLP config resolver and the
+ * content-capture gate are re-exported from `./config`; the `init()` exporter,
+ * which does pull the OpenTelemetry SDK, lives in `@ratel-ai/telemetry-otlp`.
  */
 
 export {
@@ -17,11 +18,9 @@ export {
   DEFAULT_SERVICE_NAME,
   ENDPOINT_ENV,
   type InitOptions,
-  init,
   type ResolvedOtlpConfig,
   resolveOtlpConfig,
-  type TelemetryHandle,
-} from "./init.js";
+} from "./config.js";
 
 /**
  * The pinned OpenTelemetry semantic-conventions version this vocabulary tracks

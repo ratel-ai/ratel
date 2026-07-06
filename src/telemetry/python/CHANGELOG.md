@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.3] - 2026-07-05
+
+### Changed
+
+- The OpenTelemetry SDK is now an optional `[otlp]` extra: importing `ratel_ai_telemetry` pulls no OTel SDK (ADR-0015), so the SDK (emit), the server (read), and edge/serverless emitters take the `ratel.*` vocabulary weight-free. `init()` lives in the `ratel_ai_telemetry.otlp` submodule (behind the extra) and raises a clear "install `ratel-ai-telemetry[otlp]`" error when it is absent; a lazy top-level accessor keeps `from ratel_ai_telemetry import init` working.
+
+### Added
+
+- A regression guard that a plain `import ratel_ai_telemetry` pulls no OpenTelemetry SDK.
+
 ## [0.1.0-rc.2] - 2026-07-05
 
 ### Added

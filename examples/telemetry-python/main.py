@@ -22,7 +22,6 @@ from opentelemetry.trace import Tracer
 
 from ratel_ai_telemetry import (
     CAPTURE_CONTENT_ENV,
-    DEFAULT_SERVICE_NAME,
     EXECUTE_TOOL,
     GEN_AI_OPERATION_NAME,
     GEN_AI_TOOL_NAME,
@@ -37,6 +36,12 @@ from ratel_ai_telemetry import (
     SEMCONV_VERSION,
     Origin,
     SearchTarget,
+)
+
+# init() + the OTLP config live in the .otlp submodule (the [otlp] extra) so the
+# vocabulary above stays OTel-free.
+from ratel_ai_telemetry.otlp import (
+    DEFAULT_SERVICE_NAME,
     content_capture_mode,
     init,
     resolve_otlp_config,

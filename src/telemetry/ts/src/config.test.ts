@@ -4,9 +4,8 @@ import {
   contentCaptureMode,
   DEFAULT_SERVICE_NAME,
   ENDPOINT_ENV,
-  init,
   resolveOtlpConfig,
-} from "./init.js";
+} from "./config.js";
 
 describe("resolveOtlpConfig", () => {
   it("uses the apiKey form: endpoint from RATEL_URL, Bearer auth, default service name", () => {
@@ -75,33 +74,5 @@ describe("contentCaptureMode", () => {
     });
     expect(contentCaptureMode(env("true"))).toBe(ContentCapture.SpanAndEvent);
     expect(contentCaptureMode(env("false"))).toBe(ContentCapture.NoContent);
-  });
-});
-
-describe("init", () => {
-  it("returns a handle with a shutdown function", async () => {
-    const handle = init({
-      apiKey: "k",
-      endpoint: "http://localhost:4318/v1/traces",
-      serviceName: "test",
-    });
-    expect(typeof handle.shutdown).toBe("function");
-    // Best-effort cleanup: the export target is absent in unit tests, so the
-    // handle shape (not shutdown's network resolution) is the contract asserted.
-    await handle.shutdown().catch(() => {});
-  });
-
-  it("throws on misconfiguration (no endpoint, no RATEL_URL)", () => {
-    const saved = process.env[ENDPOINT_ENV];
-    delete process.env[ENDPOINT_ENV];
-    try {
-      expect(() => init({ apiKey: "k" })).toThrow(ENDPOINT_ENV);
-    } finally {
-      if (saved === undefined) {
-        delete process.env[ENDPOINT_ENV];
-      } else {
-        process.env[ENDPOINT_ENV] = saved;
-      }
-    }
   });
 });

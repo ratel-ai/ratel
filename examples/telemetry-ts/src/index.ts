@@ -21,7 +21,6 @@ import {
   EXECUTE_TOOL,
   GEN_AI_OPERATION_NAME,
   GEN_AI_TOOL_NAME,
-  init,
   Origin,
   RATEL_ORIGIN,
   RATEL_SEARCH,
@@ -35,6 +34,8 @@ import {
   SearchTarget,
   SEMCONV_VERSION,
 } from "@ratel-ai/telemetry";
+// init() lives in the exporter package so the vocabulary above stays OTel-free.
+import { init } from "@ratel-ai/telemetry-otlp";
 
 /**
  * Emit one realistic Ratel trace: a `ratel.search` (capability search) span

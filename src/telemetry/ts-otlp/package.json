@@ -1,7 +1,7 @@
 {
-  "name": "@ratel-ai/telemetry",
+  "name": "@ratel-ai/telemetry-otlp",
   "version": "0.1.0-rc.3",
-  "description": "Ratel telemetry conventions — the ratel.* overlay on OpenTelemetry gen_ai spans. The OTel-free vocabulary + OTLP config for the Ratel context engineering platform (the init() exporter is @ratel-ai/telemetry-otlp).",
+  "description": "init() OTLP exporter for Ratel telemetry — turnkey OpenTelemetry SDK wiring over the OTel-free @ratel-ai/telemetry vocabulary.",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +12,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ratel-ai/ratel.git",
-    "directory": "src/telemetry/ts"
+    "directory": "src/telemetry/ts-otlp"
   },
   "bugs": {
     "url": "https://github.com/ratel-ai/ratel/issues"
@@ -20,6 +20,7 @@
   "keywords": [
     "telemetry",
     "opentelemetry",
+    "otlp",
     "observability",
     "gen-ai",
     "ai-agents",
@@ -44,12 +45,17 @@
     "access": "public",
     "provenance": true
   },
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.13",
+  "dependencies": {
     "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
     "@opentelemetry/sdk-trace-base": "^2.9.0",
     "@opentelemetry/sdk-trace-node": "^2.9.0",
-    "@types/node": "^24.0.0",
+    "@opentelemetry/semantic-conventions": "^1.41.1",
+    "@ratel-ai/telemetry": "workspace:^"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
     "typescript": "^5.6.0",
     "vitest": "^4.1.5"
   }
