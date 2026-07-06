@@ -18,6 +18,17 @@ pub enum ChurnKind {
     Remove,
 }
 
+/// Outcome of the one-time embedding-model load. `Slow` flags a machine that may
+/// be underpowered for the model; `Failed` a load that errored (network, cache,
+/// corrupt weights).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EmbedderLoadStatus {
+    Ok,
+    Slow,
+    Failed,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchHitTrace {
     pub tool_id: String,
@@ -126,6 +137,15 @@ pub enum TraceEvent {
     AuthFlowEnd {
         upstream: String,
         ok: bool,
+    },
+    /// Emitted once, on the first (cold) load of the embedding model. `status`
+    /// flags a slow load (possibly underpowered machine) or a failed one;
+    /// `reason` carries the hint / error. See `embedding.rs` and ADR-0011.
+    EmbedderLoad {
+        model: String,
+        status: EmbedderLoadStatus,
+        took_ms: u64,
+        reason: Option<String>,
     },
 }
 

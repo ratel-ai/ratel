@@ -67,6 +67,80 @@ describe("ToolCatalog", () => {
   });
 });
 
+describe("ToolCatalog search methods", () => {
+  // Semantic/hybrid load a real model (network) and are covered in Rust; these
+  // stay offline and assert the selection plumbing + the model-free default.
+  it("defaults to bm25 and never loads a model", () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "m" } });
+    catalog.register(readFile);
+    const hits = catalog.search("read file", 5);
+    expect(hits[0]?.toolId).toBe("read_file");
+    const events = catalog.drainTraceEvents() as Array<{
+      type: string;
+      stages?: { name: string }[];
+    }>;
+    const search = events.find((e) => e.type === "search");
+    expect(search?.stages?.some((s) => s.name === "bm25")).toBe(true);
+  });
+
+  it("accepts an explicit per-call bm25 method matching the default", () => {
+    // Stays on a BM25 catalog so no model loads. (Registering into a semantic
+    // catalog eagerly builds embeddings and would download the model — the override
+    // behaviour proper is covered offline in the Rust core tests.)
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    const viaDefault = catalog.search("read file", 5).map((h) => h.toolId);
+    const viaExplicit = catalog.search("read file", 5, "direct", "bm25").map((h) => h.toolId);
+    expect(viaExplicit).toEqual(viaDefault);
+    expect(viaExplicit[0]).toBe("read_file");
+  });
+
+  it("per-call method overrides the catalog default and reroutes the engine", () => {
+    // Default is semantic, but with no registrations no model loads. A per-call
+    // "bm25" must route to the bm25 engine — provable offline via the trace stage
+    // the semantic default (empty corpus) never emits.
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      trace: { kind: "memory", sessionId: "o" },
+    });
+    catalog.search("anything", 5); // default: semantic engine
+    catalog.search("anything", 5, "direct", "bm25"); // per-call override: bm25 engine
+    const searches = (
+      catalog.drainTraceEvents() as Array<{ type: string; stages?: { name: string }[] }>
+    ).filter((e) => e.type === "search");
+    expect(searches).toHaveLength(2);
+    expect(searches[0].stages?.some((s) => s.name === "bm25")).toBe(false);
+    expect(searches[1].stages?.some((s) => s.name === "bm25")).toBe(true);
+  });
+
+  it("rejects an unknown method", () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    expect(() =>
+      // biome-ignore lint/suspicious/noExplicitAny: exercising the runtime guard
+      catalog.search("read", 5, "direct", "keyword" as any),
+    ).toThrow(/unknown search method/);
+  });
+
+  it("buildEmbeddings() on an empty catalog is a no-op and loads no model", () => {
+    // Empty corpus short-circuits before any embedder load — the incremental
+    // eager path proper is proven in the Rust core tests (counting embedder).
+    const catalog = new ToolCatalog({ method: "semantic" });
+    expect(() => catalog.buildEmbeddings()).not.toThrow();
+  });
+
+  it("semantic on a BM25 catalog with no embeddings errors (no model load)", () => {
+    // A BM25 catalog never built embeddings → a per-call semantic search refuses with a
+    // clear error instead of silently embedding the corpus. The guard runs
+    // before any model load, so this is offline-safe.
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    expect(() => catalog.search("read", 5, "direct", "semantic")).toThrow(
+      /not computed for semantic/,
+    );
+  });
+});
+
 describe("ToolCatalog tracing", () => {
   it("does not capture events when no trace sink is configured (default noop)", () => {
     const catalog = new ToolCatalog();

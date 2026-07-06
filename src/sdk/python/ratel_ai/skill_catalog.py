@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ._native import SkillHit, SkillRegistry
-from .catalog import SearchOrigin, TraceSinkConfig
+from .catalog import SearchMethod, SearchOrigin, TraceSinkConfig
 
 __all__ = ["Skill", "SkillCatalog", "SkillHit"]
 
@@ -39,9 +39,15 @@ class Skill:
 class SkillCatalog:
     """Registry of skills. Register once, then search and load bodies by id."""
 
-    def __init__(self, trace: TraceSinkConfig | None = None) -> None:
+    def __init__(
+        self,
+        trace: TraceSinkConfig | None = None,
+        method: SearchMethod = "bm25",
+    ) -> None:
         self._registry = SkillRegistry()
         self._skills: dict[str, Skill] = {}
+        self._method: SearchMethod = method
+        self._eager: bool = method in ("semantic", "hybrid")
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -56,9 +62,22 @@ class SkillCatalog:
             skill.body,
         )
         self._skills[skill.id] = skill
+        if self._eager:
+            self._registry.build_embeddings()
 
-    def search(self, query: str, top_k: int, origin: SearchOrigin = "direct") -> list[SkillHit]:
-        return self._registry.search_with_origin(query, top_k, origin)
+    def build_embeddings(self) -> None:
+        """Pre-compute embeddings for not-yet-embedded skills. See
+        `ToolCatalog.build_embeddings`."""
+        self._registry.build_embeddings()
+
+    def search(
+        self,
+        query: str,
+        top_k: int,
+        origin: SearchOrigin = "direct",
+        method: SearchMethod | None = None,
+    ) -> list[SkillHit]:
+        return self._registry.search_with_method(query, top_k, origin, method or self._method)
 
     def has(self, skill_id: str) -> bool:
         return skill_id in self._skills

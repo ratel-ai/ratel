@@ -14,6 +14,7 @@ from ._native import SearchHit, SkillHit, SkillRegistry, ToolRegistry
 from .catalog import (
     ExecutableTool,
     Executor,
+    SearchMethod,
     SearchOrigin,
     Tool,
     ToolCatalog,
@@ -46,6 +47,7 @@ __all__ = [
     "McpServerHandle",
     "OnUnauthorized",
     "SearchHit",
+    "SearchMethod",
     "SearchOrigin",
     "Skill",
     "SkillCatalog",

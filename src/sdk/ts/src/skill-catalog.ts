@@ -1,10 +1,12 @@
 import { type Skill, type SkillHit, SkillRegistry } from "../native/index.cjs";
-import type { SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import type { SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
 
 export type { Skill, SkillHit };
 
 export interface SkillCatalogOptions {
   trace?: TraceSinkConfig;
+  /** Default retrieval method for `search` (default `"bm25"`). */
+  method?: SearchMethod;
 }
 
 /**
@@ -15,9 +17,13 @@ export interface SkillCatalogOptions {
 export class SkillCatalog {
   private readonly registry: SkillRegistry;
   private readonly skills = new Map<string, Skill>();
+  private readonly method: SearchMethod;
+  private readonly eager: boolean;
 
   constructor(options: SkillCatalogOptions = {}) {
     this.registry = new SkillRegistry();
+    this.method = options.method ?? "bm25";
+    this.eager = this.method === "semantic" || this.method === "hybrid";
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
@@ -26,10 +32,23 @@ export class SkillCatalog {
   register(skill: Skill): void {
     this.registry.register(skill);
     this.skills.set(skill.id, skill);
+    if (this.eager) {
+      this.registry.buildEmbeddings();
+    }
   }
 
-  search(query: string, topK: number, origin: SearchOrigin = "direct"): SkillHit[] {
-    return this.registry.searchWithOrigin(query, topK, origin);
+  /** Pre-compute embeddings for not-yet-embedded skills. See `ToolCatalog.buildEmbeddings`. */
+  buildEmbeddings(): void {
+    this.registry.buildEmbeddings();
+  }
+
+  search(
+    query: string,
+    topK: number,
+    origin: SearchOrigin = "direct",
+    method?: SearchMethod,
+  ): SkillHit[] {
+    return this.registry.searchWithMethod(query, topK, origin, method ?? this.method);
   }
 
   has(skillId: string): boolean {
