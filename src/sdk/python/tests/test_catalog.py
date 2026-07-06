@@ -68,7 +68,7 @@ def test_search_defaults_to_bm25_stage() -> None:
 
 def test_per_call_bm25_matches_the_default() -> None:
     # Stays on a BM25 catalog so no model loads. (Registering into a semantic
-    # catalog eagerly warms and would download the model — the override behaviour
+    # catalog eagerly builds embeddings and would download the model — the override behaviour
     # proper is covered offline in the Rust core tests.)
     catalog = ToolCatalog()
     catalog.register(_read_file_tool(lambda args: {}))
@@ -85,15 +85,15 @@ def test_unknown_method_raises() -> None:
         catalog.search("read", 5, method="keyword")
 
 
-def test_warm_on_empty_catalog_is_a_noop() -> None:
+def test_build_embeddings_on_empty_catalog_is_a_noop() -> None:
     # Empty corpus short-circuits before any embedder load — the incremental
     # eager path proper is proven in the Rust core tests (counting embedder).
     catalog = ToolCatalog(method="semantic")
-    catalog.warm()  # no tools → no model load, must not raise
+    catalog.build_embeddings()  # no tools → no model load, must not raise
 
 
-def test_semantic_on_unwarmed_bm25_catalog_raises() -> None:
-    # A BM25 catalog never warmed → a per-call semantic search refuses with a
+def test_semantic_on_bm25_without_embeddings_raises() -> None:
+    # A BM25 catalog with no embeddings built → a per-call semantic search refuses with a
     # clear error instead of silently embedding. Guard runs before any model
     # load, so this is offline-safe.
     catalog = ToolCatalog()

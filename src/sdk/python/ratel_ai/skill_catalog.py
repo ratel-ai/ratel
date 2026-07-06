@@ -63,12 +63,12 @@ class SkillCatalog:
         )
         self._skills[skill.id] = skill
         if self._eager:
-            self._registry.warm()
+            self._registry.build_embeddings()
 
-    def warm(self) -> None:
+    def build_embeddings(self) -> None:
         """Pre-compute embeddings for not-yet-embedded skills. See
-        `ToolCatalog.warm`."""
-        self._registry.warm()
+        `ToolCatalog.build_embeddings`."""
+        self._registry.build_embeddings()
 
     def search(
         self,

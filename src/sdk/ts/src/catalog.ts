@@ -49,15 +49,15 @@ export class ToolCatalog {
     if (this.eager) {
       // Embed the just-registered tool now (incremental). Throws if the model
       // fails to load.
-      this.registry.warm();
+      this.registry.buildEmbeddings();
     }
   }
 
   /** Pre-compute embeddings for any not-yet-embedded tools. Call after a bulk
-   * register, or rely on the automatic per-register warming a semantic/hybrid
+   * register, or rely on the automatic per-register embedding a semantic/hybrid
    * catalog does. No-op for a BM25 catalog's cache. */
-  warm(): void {
-    this.registry.warm();
+  buildEmbeddings(): void {
+    this.registry.buildEmbeddings();
   }
 
   /** Search the catalog. `method` overrides the catalog default for this call;

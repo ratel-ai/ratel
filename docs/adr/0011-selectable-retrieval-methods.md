@@ -44,19 +44,19 @@ parallel to `SearchOrigin`.
   `RuntimeError` / a thrown JS error at the SDK edge.
 - **The embedding cache is incremental and in-process.** It is a growing *prefix* of the
   corpus: `register` only appends a tool (never invalidates), and the not-yet-embedded tail is
-  embedded by `warm()` or a search — so an existing vector is never recomputed (adding one tool
+  embedded by `build_embeddings()` or a search — so an existing vector is never recomputed (adding one tool
   costs one embedding, not N). Core `register(&mut self, tool) -> ()` stays infallible and
   model-free; a pure BM25 registry never populates the cache. The one-time model load emits a
   `TraceEvent::EmbedderLoad` flagging a slow (possibly underpowered) or failed load.
-- **Semantic is opt-in and eagerly warmed.** A catalog whose default method is `"semantic"` /
-  `"hybrid"` (the opt-in flag) calls `warm()` after each `register`, so the cost lands at load
+- **Semantic is opt-in and eagerly built.** A catalog whose default method is `"semantic"` /
+  `"hybrid"` (the opt-in flag) calls `build_embeddings()` after each `register`, so the cost lands at load
   time and a search only ever embeds the *query* — no search pays the corpus-embedding cost, and
   a model-load failure surfaces at `register` (fail-fast). A BM25 catalog does none of this. A
-  public `catalog.warm()` is also exposed for the bulk-register-then-warm pattern.
+  public `catalog.build_embeddings()` is also exposed for the bulk-register-then-build pattern.
 - **A search never embeds the corpus.** A semantic/hybrid search over a corpus whose cache is not
-  fully built returns `EmbedderError::NotWarmed` (a catchable `RuntimeError` / thrown error) —
+  fully built returns `EmbedderError::EmbeddingsNotBuilt` (a catchable `RuntimeError` / thrown error) —
   it does *not* silently embed inside the search path. So a BM25 catalog handed a per-call
-  `"semantic"` errors with a remediation hint (construct with the method, or `warm()`), rather
+  `"semantic"` errors with a remediation hint (construct with the method, or `build_embeddings()`), rather
   than incurring a one-off slow search. The guard loads no model.
 
 ## Consequences
@@ -74,7 +74,7 @@ parallel to `SearchOrigin`.
   runtime selection is required for per-call and per-catalog choice, and for one binary serving
   all three. Rejected: forcing eager embedding at `register` on *every* registry (the earlier
   spikes' shape) — it made `register` fallible and loaded the model for BM25-only users; eager
-  embedding is instead **opt-in** in semantic mode, driven from the SDK via `warm()`, so core
+  embedding is instead **opt-in** in semantic mode, driven from the SDK via `build_embeddings()`, so core
   `register` stays infallible. Rejected: full-corpus re-embed on `register` (the first cut of
   this ADR) — the incremental prefix cache re-embeds only newly-registered tools. Rejected:
   score-normalization fusion for hybrid — RRF needs no per-arm score calibration.

@@ -24,7 +24,7 @@ pub struct ToolRegistry {
     /// Dense embeddings, a growing **prefix** of `tools`: `embeddings[i]` is the
     /// vector for `tools[i]`, and any tool beyond `embeddings.len()` is not yet
     /// embedded. `register` only appends a tool (never invalidates); the missing
-    /// tail is embedded incrementally by [`Self::warm`] or the first semantic/
+    /// tail is embedded incrementally by [`Self::build_embeddings`] or the first semantic/
     /// hybrid search — so an existing vector is never recomputed. A pure BM25 user
     /// never populates this and never loads the model (see ADR-0011).
     embeddings: Mutex<Vec<Vec<f32>>>,
@@ -72,7 +72,7 @@ impl ToolRegistry {
         self.tools.push(tool);
         // Just append — never touch the embeddings cache. The new tool sits
         // beyond the cached prefix and gets embedded incrementally by the next
-        // `warm`/semantic search. Registration stays infallible and model-free,
+        // `build_embeddings`/semantic search. Registration stays infallible and model-free,
         // so BM25 users are unaffected (see ADR-0011).
         self.sink.record(TraceEvent::IndexChurn {
             kind: ChurnKind::Add,
@@ -115,7 +115,7 @@ impl ToolRegistry {
     /// Incremental — embeds only tools registered since the last call. The SDK
     /// calls this after `register` in semantic mode so searches never pay the
     /// embedding cost; a BM25-only user never calls it and never loads the model.
-    pub fn warm(&self) -> Result<(), EmbedderError> {
+    pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
         self.extend_embeddings()
     }
 
@@ -161,7 +161,7 @@ impl ToolRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.require_warm()?;
+        self.require_embeddings()?;
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let t = Instant::now();
         let ranked = self.dense_ranked(&query_vec, top_k)?;
@@ -220,8 +220,8 @@ impl ToolRegistry {
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        // 2. Dense (semantic) — requires a warmed cache; never embeds in-search.
-        self.require_warm()?;
+        // 2. Dense (semantic) — requires embeddings to be built; never embeds in-search.
+        self.require_embeddings()?;
         let t = Instant::now();
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let dense_ranked = self.dense_ranked(&query_vec, depth)?;
@@ -272,16 +272,16 @@ impl ToolRegistry {
 
     /// Error unless the embedding cache covers the whole corpus. A semantic/
     /// hybrid search never embeds inside the search path — the caller must have
-    /// warmed first (a semantic-mode catalog does this at `register`), so no
+    /// built first (a semantic-mode catalog does this at `register`), so no
     /// search silently pays the embedding cost. Loads no model.
-    fn require_warm(&self) -> Result<(), EmbedderError> {
+    fn require_embeddings(&self) -> Result<(), EmbedderError> {
         let cached = self
             .embeddings
             .lock()
             .expect("embeddings mutex poisoned")
             .len();
         if cached < self.tools.len() {
-            return Err(EmbedderError::NotWarmed);
+            return Err(EmbedderError::EmbeddingsNotBuilt);
         }
         Ok(())
     }
@@ -470,7 +470,7 @@ mod tests {
     #[test]
     fn semantic_ranks_via_injected_embedder() {
         let reg = catalog(Arc::new(StubEmbedder));
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         let hits = reg
             .search_with_method("read something", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
@@ -478,28 +478,31 @@ mod tests {
     }
 
     #[test]
-    fn semantic_without_warm_errors_not_warmed() {
-        // Registered but never warmed: a semantic search must refuse with a clear
+    fn semantic_without_embeddings_errors() {
+        // Registered but embeddings never built: a semantic search must refuse with a clear
         // error rather than silently embedding the corpus in the search path.
         let reg = catalog(Arc::new(StubEmbedder));
         assert!(matches!(
             reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic),
-            Err(EmbedderError::NotWarmed)
+            Err(EmbedderError::EmbeddingsNotBuilt)
         ));
     }
 
     #[test]
-    fn warm_surfaces_embedder_error_instead_of_panicking() {
-        // The failing embedder's error surfaces at warm() (where embedding
+    fn build_embeddings_surfaces_embedder_error_instead_of_panicking() {
+        // The failing embedder's error surfaces at build_embeddings() (where embedding
         // happens) as a catchable error.
         let reg = catalog(Arc::new(FailingEmbedder));
-        assert!(matches!(reg.warm(), Err(EmbedderError::Inference { .. })));
+        assert!(matches!(
+            reg.build_embeddings(),
+            Err(EmbedderError::Inference { .. })
+        ));
     }
 
     #[test]
     fn hybrid_fuses_bm25_and_dense() {
         let reg = catalog(Arc::new(StubEmbedder));
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         let hits = reg
             .search_with_method("read a file", 5, Origin::Direct, SearchMethod::Hybrid)
             .unwrap();
@@ -512,7 +515,7 @@ mod tests {
         let sink = Arc::new(MemorySink::new("s"));
         let mut reg = catalog(Arc::new(StubEmbedder));
         reg.set_trace_sink(sink.clone());
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         reg.search_with_method("read", 5, Origin::Agent, SearchMethod::Semantic)
             .unwrap();
         let events = sink.drain();
@@ -527,7 +530,7 @@ mod tests {
         let sink = Arc::new(MemorySink::new("s"));
         let mut reg = catalog(Arc::new(StubEmbedder));
         reg.set_trace_sink(sink.clone());
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         reg.search_with_method("read", 5, Origin::Agent, SearchMethod::Hybrid)
             .unwrap();
         let events = sink.drain();
@@ -541,18 +544,18 @@ mod tests {
     }
 
     #[test]
-    fn warm_after_register_embeds_only_the_new_tool() {
+    fn build_embeddings_after_register_embeds_only_the_new_tool() {
         let counter = Arc::new(CountingEmbedder::new());
         let mut reg = with_embedder(counter.clone());
         reg.register(tool("read_file", "read a file"));
         reg.register(tool("delete_file", "delete a file"));
-        // Warming embeds the 2-tool corpus.
-        reg.warm().unwrap();
+        // build_embeddings embeds the 2-tool corpus.
+        reg.build_embeddings().unwrap();
         assert_eq!(counter.doc_calls(), 2);
-        // Registering one more then warming must embed ONLY it — the two existing
+        // Registering one more then building embeddings must embed ONLY it — the two existing
         // vectors are reused, never recomputed (the O(N) regression).
         reg.register(tool("reader_v2", "read a file too"));
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         assert_eq!(
             counter.doc_calls(),
             3,
@@ -565,29 +568,33 @@ mod tests {
     }
 
     #[test]
-    fn warm_precomputes_so_search_embeds_no_docs() {
+    fn build_embeddings_precomputes_so_search_embeds_no_docs() {
         let counter = Arc::new(CountingEmbedder::new());
         let mut reg = with_embedder(counter.clone());
         reg.register(tool("read_file", "read a file"));
         reg.register(tool("delete_file", "delete a file"));
-        reg.warm().unwrap();
-        assert_eq!(counter.doc_calls(), 2, "warm embeds the corpus up front");
+        reg.build_embeddings().unwrap();
+        assert_eq!(
+            counter.doc_calls(),
+            2,
+            "build_embeddings embeds the corpus up front"
+        );
         reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
         assert_eq!(
             counter.doc_calls(),
             2,
-            "a warmed search embeds only the query, no documents"
+            "a search after build_embeddings embeds only the query, no documents"
         );
     }
 
     #[test]
-    fn warm_is_idempotent() {
+    fn build_embeddings_is_idempotent() {
         let counter = Arc::new(CountingEmbedder::new());
         let mut reg = with_embedder(counter.clone());
         reg.register(tool("read_file", "read a file"));
-        reg.warm().unwrap();
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
+        reg.build_embeddings().unwrap();
         assert_eq!(counter.doc_calls(), 1);
     }
 
@@ -597,9 +604,9 @@ mod tests {
         // the latest embedding, so the updated content wins.
         let mut reg = with_embedder(Arc::new(StubEmbedder));
         reg.register(tool("t", "read a file")); // dense vec keyed on "read"
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         reg.register(tool("t", "delete a file")); // re-register → keyed on "delete"
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         let hits = reg
             .search_with_method("delete", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();

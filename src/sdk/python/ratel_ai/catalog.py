@@ -96,13 +96,13 @@ class ToolCatalog:
         if self._eager:
             # Embed the just-registered tool now (incremental) so semantic/hybrid
             # searches stay fast. Raises RuntimeError if the model fails to load.
-            self._registry.warm()
+            self._registry.build_embeddings()
 
-    def warm(self) -> None:
+    def build_embeddings(self) -> None:
         """Pre-compute embeddings for any not-yet-embedded tools. Call after a
-        bulk register, or rely on the automatic per-register warming that a
+        bulk register, or rely on the automatic per-register embedding that a
         semantic/hybrid catalog does. No-op for a BM25 catalog's cache."""
-        self._registry.warm()
+        self._registry.build_embeddings()
 
     def search(
         self,

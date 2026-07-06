@@ -33,13 +33,13 @@ export class SkillCatalog {
     this.registry.register(skill);
     this.skills.set(skill.id, skill);
     if (this.eager) {
-      this.registry.warm();
+      this.registry.buildEmbeddings();
     }
   }
 
-  /** Pre-compute embeddings for not-yet-embedded skills. See `ToolCatalog.warm`. */
-  warm(): void {
-    this.registry.warm();
+  /** Pre-compute embeddings for not-yet-embedded skills. See `ToolCatalog.buildEmbeddings`. */
+  buildEmbeddings(): void {
+    this.registry.buildEmbeddings();
   }
 
   search(

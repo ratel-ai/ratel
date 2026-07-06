@@ -12,13 +12,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Selectable retrieval methods** (ADR-0011): a `SearchMethod` enum — `Bm25` (default), `Semantic`, `Hybrid` — chosen per registry or per call via `ToolRegistry::search_with_method` / `SkillRegistry::search_with_method`. Semantic ranks a local `BAAI/bge-small-en-v1.5` embedding (pure-Rust Candle); hybrid fuses the BM25 and dense arms with Reciprocal Rank Fusion (no reranker).
 - `EmbedderError` (surfaced from `search_with_method` on the semantic/hybrid path) and a `TraceEvent::EmbedderLoad` / `EmbedderLoadStatus` flagging a slow (possibly underpowered machine) or failed model load.
-- `ToolRegistry::warm` / `SkillRegistry::warm` — pre-compute embeddings for not-yet-embedded tools/skills so a later semantic/hybrid search only embeds the query.
+- `ToolRegistry::build_embeddings` / `SkillRegistry::build_embeddings` — pre-compute embeddings for not-yet-embedded tools/skills so a later semantic/hybrid search only embeds the query.
 
 ### Changed
 
 - BM25 remains the default engine. `search` / `search_with_origin` keep their infallible `Vec<SearchHit>` signature and BM25 behavior unchanged.
-- The dense embedding cache is now **incremental** — a growing prefix of the corpus. `register` only appends (never invalidates), and `warm` embeds only newly-registered tools, so an existing vector is never recomputed (adding one tool costs one embedding, not N). A BM25-only registry still never loads the model.
-- A semantic/hybrid search over an un-warmed corpus now returns `EmbedderError::NotWarmed` instead of embedding inside the search path — a search never silently pays the corpus-embedding cost. Populate the cache with `warm()` first.
+- The dense embedding cache is now **incremental** — a growing prefix of the corpus. `register` only appends (never invalidates), and `build_embeddings` embeds only newly-registered tools, so an existing vector is never recomputed (adding one tool costs one embedding, not N). A BM25-only registry still never loads the model.
+- A semantic/hybrid search over an un-built corpus now returns `EmbedderError::EmbeddingsNotBuilt` instead of embedding inside the search path — a search never silently pays the corpus-embedding cost. Populate the cache with `build_embeddings()` first.
 
 ## [0.2.1-rc.1] - 2026-07-04
 

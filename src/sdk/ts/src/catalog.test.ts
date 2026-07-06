@@ -85,7 +85,7 @@ describe("ToolCatalog search methods", () => {
 
   it("accepts an explicit per-call bm25 method matching the default", () => {
     // Stays on a BM25 catalog so no model loads. (Registering into a semantic
-    // catalog eagerly warms and would download the model — the override
+    // catalog eagerly builds embeddings and would download the model — the override
     // behaviour proper is covered offline in the Rust core tests.)
     const catalog = new ToolCatalog();
     catalog.register(readFile);
@@ -104,15 +104,15 @@ describe("ToolCatalog search methods", () => {
     ).toThrow(/unknown search method/);
   });
 
-  it("warm() on an empty catalog is a no-op and loads no model", () => {
+  it("buildEmbeddings() on an empty catalog is a no-op and loads no model", () => {
     // Empty corpus short-circuits before any embedder load — the incremental
     // eager path proper is proven in the Rust core tests (counting embedder).
     const catalog = new ToolCatalog({ method: "semantic" });
-    expect(() => catalog.warm()).not.toThrow();
+    expect(() => catalog.buildEmbeddings()).not.toThrow();
   });
 
-  it("semantic on an unwarmed BM25 catalog errors (no model load)", () => {
-    // A BM25 catalog never warmed → a per-call semantic search refuses with a
+  it("semantic on a BM25 catalog with no embeddings errors (no model load)", () => {
+    // A BM25 catalog never built embeddings → a per-call semantic search refuses with a
     // clear error instead of silently embedding the corpus. The guard runs
     // before any model load, so this is offline-safe.
     const catalog = new ToolCatalog();

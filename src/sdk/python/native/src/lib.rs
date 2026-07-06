@@ -154,9 +154,9 @@ impl ToolRegistry {
     /// semantic/hybrid search only embeds the query. Raises `RuntimeError` if the
     /// model fails to load. The catalog calls this after `register` in semantic
     /// mode; BM25-only callers never do.
-    fn warm(&self) -> PyResult<()> {
+    fn build_embeddings(&self) -> PyResult<()> {
         self.inner
-            .warm()
+            .build_embeddings()
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))
     }
 
@@ -319,10 +319,10 @@ impl SkillRegistry {
             .collect())
     }
 
-    /// See [`ToolRegistry::warm`].
-    fn warm(&self) -> PyResult<()> {
+    /// See [`ToolRegistry::build_embeddings`].
+    fn build_embeddings(&self) -> PyResult<()> {
         self.inner
-            .warm()
+            .build_embeddings()
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))
     }
 

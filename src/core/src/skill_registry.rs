@@ -68,7 +68,7 @@ impl SkillRegistry {
         let skill_id = skill.id.clone();
         self.skills.push(skill);
         // Append only — the new skill is embedded incrementally by the next
-        // `warm`/semantic search (see [`crate::ToolRegistry::register`]).
+        // `build_embeddings`/semantic search (see [`crate::ToolRegistry::register`]).
         self.sink.record(TraceEvent::SkillChurn {
             kind: ChurnKind::Add,
             skill_id,
@@ -100,8 +100,8 @@ impl SkillRegistry {
     }
 
     /// Pre-compute embeddings for not-yet-embedded skills — see
-    /// [`crate::ToolRegistry::warm`].
-    pub fn warm(&self) -> Result<(), EmbedderError> {
+    /// [`crate::ToolRegistry::build_embeddings`].
+    pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
         self.extend_embeddings()
     }
 
@@ -147,7 +147,7 @@ impl SkillRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.require_warm()?;
+        self.require_embeddings()?;
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let t = Instant::now();
         let ranked = self.dense_ranked(&query_vec, top_k)?;
@@ -200,7 +200,7 @@ impl SkillRegistry {
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        self.require_warm()?;
+        self.require_embeddings()?;
         let t = Instant::now();
         let query_vec = self.resolve_embedder()?.embed_query(query)?;
         let dense_ranked = self.dense_ranked(&query_vec, depth)?;
@@ -247,15 +247,15 @@ impl SkillRegistry {
     }
 
     /// Error unless the cache covers the whole corpus — see
-    /// [`crate::ToolRegistry::require_warm`].
-    fn require_warm(&self) -> Result<(), EmbedderError> {
+    /// [`crate::ToolRegistry::require_embeddings`].
+    fn require_embeddings(&self) -> Result<(), EmbedderError> {
         let cached = self
             .embeddings
             .lock()
             .expect("embeddings mutex poisoned")
             .len();
         if cached < self.skills.len() {
-            return Err(EmbedderError::NotWarmed);
+            return Err(EmbedderError::EmbeddingsNotBuilt);
         }
         Ok(())
     }
@@ -437,7 +437,7 @@ mod tests {
             "HTML slides",
             &["frontend"],
         ));
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         let hits = reg
             .search_with_method("rest api", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
@@ -448,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn warm_after_register_embeds_only_the_new_skill() {
+    fn build_embeddings_after_register_embeds_only_the_new_skill() {
         let counter = Arc::new(CountingEmbedder::new());
         let mut reg = with_embedder(counter.clone());
         reg.register(skill(
@@ -458,15 +458,15 @@ mod tests {
             &["api"],
         ));
         reg.register(skill("frontend", "frontend", "HTML slides", &["frontend"]));
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         assert_eq!(counter.doc_calls(), 2);
         reg.register(skill("api-v2", "api-v2", "REST API v2", &["api"]));
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         assert_eq!(counter.doc_calls(), 3, "only the new skill is embedded");
     }
 
     #[test]
-    fn warm_precomputes_so_search_embeds_no_docs() {
+    fn build_embeddings_precomputes_so_search_embeds_no_docs() {
         let counter = Arc::new(CountingEmbedder::new());
         let mut reg = with_embedder(counter.clone());
         reg.register(skill(
@@ -475,14 +475,14 @@ mod tests {
             "REST API design",
             &["api"],
         ));
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         assert_eq!(counter.doc_calls(), 1);
         reg.search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
         assert_eq!(
             counter.doc_calls(),
             1,
-            "warmed search embeds only the query"
+            "a search after build_embeddings embeds only the query"
         );
     }
 
@@ -497,7 +497,7 @@ mod tests {
             "REST API design",
             &["api"],
         ));
-        reg.warm().unwrap();
+        reg.build_embeddings().unwrap();
         reg.search_with_method("api", 5, Origin::Agent, SearchMethod::Hybrid)
             .unwrap();
         let events = sink.drain();

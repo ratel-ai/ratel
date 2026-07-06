@@ -68,9 +68,9 @@ pub enum EmbedderError {
     /// Embedding a specific text failed (tokenization or the forward pass).
     Inference { source: String },
     /// A semantic/hybrid search was requested but the embedding cache is not
-    /// built for the current corpus — the registry was never warmed. No model is
-    /// loaded; the caller must opt into embeddings first.
-    NotWarmed,
+    /// built for the current corpus — `build_embeddings` was never run. No model
+    /// is loaded; the caller must build the embeddings first.
+    EmbeddingsNotBuilt,
 }
 
 impl EmbedderError {
@@ -87,8 +87,8 @@ impl EmbedderError {
             EmbedderError::Inference { .. } => {
                 "the machine may be underpowered for this embedding model"
             }
-            EmbedderError::NotWarmed => {
-                "construct the catalog with method=\"semantic\"/\"hybrid\" or call warm() first"
+            EmbedderError::EmbeddingsNotBuilt => {
+                "construct the catalog with method=\"semantic\"/\"hybrid\", or build its embeddings first"
             }
         }
     }
@@ -113,7 +113,7 @@ impl std::fmt::Display for EmbedderError {
             EmbedderError::Inference { source } => {
                 write!(f, "embedding failed: {source} (hint: {hint})")
             }
-            EmbedderError::NotWarmed => {
+            EmbedderError::EmbeddingsNotBuilt => {
                 write!(
                     f,
                     "embeddings are not computed for semantic search (hint: {hint})"
