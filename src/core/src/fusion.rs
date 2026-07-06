@@ -2,7 +2,7 @@
 //!
 //! Reciprocal Rank Fusion (RRF) combines the BM25 and dense rankings into one
 //! candidate list for the hybrid pipeline (see [`crate::tool_registry`] and
-//! ADR-0013). It fuses on *rank position*, not raw scores, so it is immune to
+//! ADR-0011). It fuses on *rank position*, not raw scores, so it is immune to
 //! the incomparable scales of BM25 (unbounded) and cosine ([-1, 1]). Pure Rust,
 //! no heavy deps — its tests run on every build without a model download.
 

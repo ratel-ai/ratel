@@ -2,6 +2,7 @@
 //!
 //! See `README.md` and `docs/adr/` for design.
 
+mod dense_cache;
 mod dense_search;
 mod embedding;
 mod fusion;

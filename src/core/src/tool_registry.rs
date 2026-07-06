@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
-use crate::dense_search::dense_search;
-use crate::embedding::{Embedder, EmbedderError, embedder_with_telemetry};
+use crate::dense_cache::{DenseCache, Embeddable};
+use crate::embedding::EmbedderError;
 use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
 use crate::indexing::searchable_text;
 use crate::method::SearchMethod;
@@ -18,21 +17,24 @@ pub struct SearchHit {
     pub score: f32,
 }
 
+impl Embeddable for Tool {
+    fn embed_id(&self) -> &str {
+        &self.id
+    }
+    fn embed_text(&self) -> String {
+        searchable_text(self)
+    }
+}
+
 pub struct ToolRegistry {
     tools: Vec<Tool>,
     sink: Arc<dyn TraceSink>,
-    /// Dense embeddings, a growing **prefix** of `tools`: `embeddings[i]` is the
-    /// vector for `tools[i]`, and any tool beyond `embeddings.len()` is not yet
-    /// embedded. `register` only appends a tool (never invalidates); the missing
-    /// tail is embedded by [`Self::build_embeddings`] — a search never embeds the
-    /// corpus (it requires the cache built first) — so an existing vector is never
-    /// recomputed. A pure BM25 user never populates this and never loads the model
-    /// (see ADR-0011).
-    embeddings: Mutex<Vec<Vec<f32>>>,
-    /// Test-only override for the process embedder (`None` → the shared
-    /// bge-small, loaded lazily on first use). Lets tests inject a
-    /// deterministic/failing embedder without touching the network.
-    embedder_override: Option<Arc<dyn Embedder>>,
+    /// Dense embeddings for `tools`, a growing prefix built on demand. `register`
+    /// only appends a tool (never invalidates); the missing tail is embedded by
+    /// [`Self::build_embeddings`] — a search never embeds the corpus (it requires
+    /// the cache built first). A pure BM25 user never populates it and never loads
+    /// the model (see ADR-0011 and [`DenseCache`]).
+    dense: DenseCache,
 }
 
 impl Default for ToolRegistry {
@@ -46,8 +48,7 @@ impl ToolRegistry {
         Self {
             tools: Vec::new(),
             sink: Arc::new(NoopSink),
-            embeddings: Mutex::new(Vec::new()),
-            embedder_override: None,
+            dense: DenseCache::new(),
         }
     }
 
@@ -55,8 +56,7 @@ impl ToolRegistry {
         Self {
             tools: Vec::new(),
             sink,
-            embeddings: Mutex::new(Vec::new()),
-            embedder_override: None,
+            dense: DenseCache::new(),
         }
     }
 
@@ -118,7 +118,7 @@ impl ToolRegistry {
     /// calls this after `register` in semantic mode so searches never pay the
     /// embedding cost; a BM25-only user never calls it and never loads the model.
     pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
-        self.extend_embeddings()
+        self.dense.extend(&self.tools, self.sink.as_ref())
     }
 
     // ---- engines -----------------------------------------------------------
@@ -163,10 +163,10 @@ impl ToolRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.require_embeddings()?;
-        let query_vec = self.resolve_embedder()?.embed_query(query)?;
+        self.dense.require_built(self.tools.len())?;
+        let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
         let t = Instant::now();
-        let ranked = self.dense_ranked(&query_vec, top_k)?;
+        let ranked = self.dense.ranked(&self.tools, &query_vec, top_k);
         let stage_ms = t.elapsed().as_millis() as u64;
         let hits: Vec<SearchHit> = ranked
             .into_iter()
@@ -223,10 +223,10 @@ impl ToolRegistry {
         };
 
         // 2. Dense (semantic) — requires embeddings to be built; never embeds in-search.
-        self.require_embeddings()?;
+        self.dense.require_built(self.tools.len())?;
         let t = Instant::now();
-        let query_vec = self.resolve_embedder()?.embed_query(query)?;
-        let dense_ranked = self.dense_ranked(&query_vec, depth)?;
+        let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
+        let dense_ranked = self.dense.ranked(&self.tools, &query_vec, depth);
         let dense_stage = SearchStage {
             name: "dense".into(),
             took_ms: t.elapsed().as_millis() as u64,
@@ -261,70 +261,6 @@ impl ToolRegistry {
         Ok(hits)
     }
 
-    // ---- dense support -----------------------------------------------------
-
-    /// The embedder to use: an injected one (tests) or the shared process
-    /// embedder, whose one-time load telemetry is recorded on this sink.
-    fn resolve_embedder(&self) -> Result<Arc<dyn Embedder>, EmbedderError> {
-        match &self.embedder_override {
-            Some(e) => Ok(e.clone()),
-            None => embedder_with_telemetry(self.sink.as_ref()),
-        }
-    }
-
-    /// Error unless the embedding cache covers the whole corpus. A semantic/
-    /// hybrid search never embeds inside the search path — the caller must have
-    /// built first (a semantic-mode catalog does this at `register`), so no
-    /// search silently pays the embedding cost. Loads no model.
-    fn require_embeddings(&self) -> Result<(), EmbedderError> {
-        let cached = self
-            .embeddings
-            .lock()
-            .expect("embeddings mutex poisoned")
-            .len();
-        if cached < self.tools.len() {
-            return Err(EmbedderError::EmbeddingsNotBuilt);
-        }
-        Ok(())
-    }
-
-    /// Embed the tools not yet in the cache and append them — the incremental
-    /// core of the prefix cache. Embeds only `tools[cache.len()..]`, so an
-    /// already-embedded tool is never recomputed (O(k) for k newly-registered
-    /// tools). Idempotent: a no-op once the cache is caught up.
-    fn extend_embeddings(&self) -> Result<(), EmbedderError> {
-        let mut guard = self.embeddings.lock().expect("embeddings mutex poisoned");
-        if guard.len() >= self.tools.len() {
-            return Ok(());
-        }
-        let embedder = self.resolve_embedder()?;
-        for tool in &self.tools[guard.len()..] {
-            guard.push(embedder.embed_doc(&searchable_text(tool))?);
-        }
-        Ok(())
-    }
-
-    /// Cosine-rank the query against the cached embeddings. Assumes
-    /// [`Self::extend_embeddings`] already ran. Collapses duplicate ids to the
-    /// latest embedding (last-wins), mirroring the BM25 engine's id-keyed dedup —
-    /// so a re-registered tool (a later entry in the prefix) wins.
-    fn dense_ranked(
-        &self,
-        query_vec: &[f32],
-        depth: usize,
-    ) -> Result<Vec<(String, f32)>, EmbedderError> {
-        let guard = self.embeddings.lock().expect("embeddings mutex poisoned");
-        let mut latest: HashMap<&str, &[f32]> = HashMap::new();
-        for (tool, embedding) in self.tools.iter().zip(guard.iter()) {
-            latest.insert(tool.id.as_str(), embedding.as_slice());
-        }
-        Ok(dense_search(
-            latest.into_iter().map(|(id, v)| (id.to_string(), v)),
-            query_vec,
-            depth,
-        ))
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn record_search(
         &self,
@@ -355,6 +291,7 @@ impl ToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::embedding::Embedder;
     use crate::trace::MemorySink;
 
     /// Deterministic, network-free embedder: a 3-d one-hot keyed on a keyword so
@@ -426,8 +363,7 @@ mod tests {
         ToolRegistry {
             tools: Vec::new(),
             sink: Arc::new(NoopSink),
-            embeddings: Mutex::new(Vec::new()),
-            embedder_override: Some(embedder),
+            dense: DenseCache::with_embedder(embedder),
         }
     }
 
@@ -510,6 +446,47 @@ mod tests {
             .unwrap();
         // Both arms rank read_file first (lexical "read a file" + dense "read").
         assert_eq!(hits.first().map(|h| h.tool_id.as_str()), Some("read_file"));
+    }
+
+    #[test]
+    fn hybrid_recalls_a_tool_bm25_alone_misses() {
+        // The two arms disagree: `records_mgr` matches the query lexically, while
+        // `deleter` matches only in the dense bucket (zero lexical overlap with the
+        // query). Hybrid must fuse both arms and surface `deleter` — the semantic
+        // recall a pure BM25 search never returns.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(tool("records_mgr", "manage old records archive")); // dense: other
+        reg.register(tool("deleter", "delete entries")); // dense: delete bucket
+        reg.build_embeddings().unwrap();
+        let q = "remove old records"; // lexical -> records_mgr; dense bucket -> deleter
+
+        let bm25 = reg
+            .search_with_method(q, 5, Origin::Direct, SearchMethod::Bm25)
+            .unwrap();
+        let semantic = reg
+            .search_with_method(q, 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        let hybrid = reg
+            .search_with_method(q, 5, Origin::Direct, SearchMethod::Hybrid)
+            .unwrap();
+
+        // The arms genuinely disagree on the top hit...
+        assert_eq!(
+            bm25.first().map(|h| h.tool_id.as_str()),
+            Some("records_mgr")
+        );
+        assert_eq!(
+            semantic.first().map(|h| h.tool_id.as_str()),
+            Some("deleter")
+        );
+        // ...and pure BM25 never surfaces the lexically-invisible tool.
+        assert!(!bm25.iter().any(|h| h.tool_id == "deleter"));
+        // Hybrid fuses both arms, so it recalls both.
+        let ids: Vec<&str> = hybrid.iter().map(|h| h.tool_id.as_str()).collect();
+        assert!(
+            ids.contains(&"records_mgr") && ids.contains(&"deleter"),
+            "hybrid should fuse both arms, got {ids:?}"
+        );
     }
 
     #[test]

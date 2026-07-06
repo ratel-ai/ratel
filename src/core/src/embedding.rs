@@ -11,7 +11,7 @@
 //! pinned revision, then loaded from cache on every later run — offline after
 //! the first fetch, deterministic because the revision is fixed. The model is
 //! loaded once per process (kept resident for both registration and queries).
-//! See ADR-0013.
+//! See ADR-0011.
 //!
 //! **Footprint & failure modes.** The resident model is ~130 MB of f32 weights
 //! plus BERT runtime buffers, and inference is CPU-only, so a constrained
@@ -348,7 +348,7 @@ impl Embedder for BgeSmallEmbedder {
 /// and would fail. Retry with backoff: the losers wait for the winner's download
 /// to land, then `get()` returns the now-cached blob without locking (hf-hub
 /// checks the cache before it locks). Any other failure is classified and
-/// returned immediately. See ADR-0013.
+/// returned immediately. See ADR-0011.
 fn fetch_cached(repo: &ApiRepo, file: &str, model: &str) -> Result<PathBuf, EmbedderError> {
     // ~30 × (up to hf-hub's own ~5s lock wait + 1s backoff) comfortably outlasts
     // a single cold-cache download; the loser normally succeeds within a few.

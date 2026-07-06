@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
-use crate::dense_search::dense_search;
-use crate::embedding::{Embedder, EmbedderError, embedder_with_telemetry};
+use crate::dense_cache::{DenseCache, Embeddable};
+use crate::embedding::EmbedderError;
 use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
 use crate::method::SearchMethod;
 use crate::search::bm25_search;
@@ -18,6 +17,15 @@ pub struct SkillHit {
     pub score: f32,
 }
 
+impl Embeddable for Skill {
+    fn embed_id(&self) -> &str {
+        &self.id
+    }
+    fn embed_text(&self) -> String {
+        searchable_text(self)
+    }
+}
+
 /// Retrieval index over [`Skill`]s — the on-demand analog of
 /// [`crate::ToolRegistry`]. Same selectable BM25/semantic/hybrid engines; a
 /// parallel type keeps the tool path untouched and lets skill telemetry stand on
@@ -25,10 +33,9 @@ pub struct SkillHit {
 pub struct SkillRegistry {
     skills: Vec<Skill>,
     sink: Arc<dyn TraceSink>,
-    /// Dense embeddings, a growing prefix of `skills` (incremental). See the
-    /// [`crate::ToolRegistry`] field of the same name.
-    embeddings: Mutex<Vec<Vec<f32>>>,
-    embedder_override: Option<Arc<dyn Embedder>>,
+    /// Dense embeddings for `skills`, a growing prefix built on demand — the
+    /// skill-side twin of [`crate::ToolRegistry`]'s field (see [`DenseCache`]).
+    dense: DenseCache,
 }
 
 impl Default for SkillRegistry {
@@ -42,8 +49,7 @@ impl SkillRegistry {
         Self {
             skills: Vec::new(),
             sink: Arc::new(NoopSink),
-            embeddings: Mutex::new(Vec::new()),
-            embedder_override: None,
+            dense: DenseCache::new(),
         }
     }
 
@@ -51,8 +57,7 @@ impl SkillRegistry {
         Self {
             skills: Vec::new(),
             sink,
-            embeddings: Mutex::new(Vec::new()),
-            embedder_override: None,
+            dense: DenseCache::new(),
         }
     }
 
@@ -102,7 +107,7 @@ impl SkillRegistry {
     /// Pre-compute embeddings for not-yet-embedded skills — see
     /// [`crate::ToolRegistry::build_embeddings`].
     pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
-        self.extend_embeddings()
+        self.dense.extend(&self.skills, self.sink.as_ref())
     }
 
     // ---- engines -----------------------------------------------------------
@@ -147,10 +152,10 @@ impl SkillRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.require_embeddings()?;
-        let query_vec = self.resolve_embedder()?.embed_query(query)?;
+        self.dense.require_built(self.skills.len())?;
+        let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
         let t = Instant::now();
-        let ranked = self.dense_ranked(&query_vec, top_k)?;
+        let ranked = self.dense.ranked(&self.skills, &query_vec, top_k);
         let stage_ms = t.elapsed().as_millis() as u64;
         let hits: Vec<SkillHit> = ranked
             .into_iter()
@@ -200,10 +205,10 @@ impl SkillRegistry {
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        self.require_embeddings()?;
+        self.dense.require_built(self.skills.len())?;
         let t = Instant::now();
-        let query_vec = self.resolve_embedder()?.embed_query(query)?;
-        let dense_ranked = self.dense_ranked(&query_vec, depth)?;
+        let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
+        let dense_ranked = self.dense.ranked(&self.skills, &query_vec, depth);
         let dense_stage = SearchStage {
             name: "dense".into(),
             took_ms: t.elapsed().as_millis() as u64,
@@ -237,58 +242,6 @@ impl SkillRegistry {
         Ok(hits)
     }
 
-    // ---- dense support -----------------------------------------------------
-
-    fn resolve_embedder(&self) -> Result<Arc<dyn Embedder>, EmbedderError> {
-        match &self.embedder_override {
-            Some(e) => Ok(e.clone()),
-            None => embedder_with_telemetry(self.sink.as_ref()),
-        }
-    }
-
-    /// Error unless the cache covers the whole corpus — see
-    /// [`crate::ToolRegistry::require_embeddings`].
-    fn require_embeddings(&self) -> Result<(), EmbedderError> {
-        let cached = self
-            .embeddings
-            .lock()
-            .expect("embeddings mutex poisoned")
-            .len();
-        if cached < self.skills.len() {
-            return Err(EmbedderError::EmbeddingsNotBuilt);
-        }
-        Ok(())
-    }
-
-    fn extend_embeddings(&self) -> Result<(), EmbedderError> {
-        let mut guard = self.embeddings.lock().expect("embeddings mutex poisoned");
-        if guard.len() >= self.skills.len() {
-            return Ok(());
-        }
-        let embedder = self.resolve_embedder()?;
-        for skill in &self.skills[guard.len()..] {
-            guard.push(embedder.embed_doc(&searchable_text(skill))?);
-        }
-        Ok(())
-    }
-
-    fn dense_ranked(
-        &self,
-        query_vec: &[f32],
-        depth: usize,
-    ) -> Result<Vec<(String, f32)>, EmbedderError> {
-        let guard = self.embeddings.lock().expect("embeddings mutex poisoned");
-        let mut latest: HashMap<&str, &[f32]> = HashMap::new();
-        for (skill, embedding) in self.skills.iter().zip(guard.iter()) {
-            latest.insert(skill.id.as_str(), embedding.as_slice());
-        }
-        Ok(dense_search(
-            latest.into_iter().map(|(id, v)| (id.to_string(), v)),
-            query_vec,
-            depth,
-        ))
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn record_search(
         &self,
@@ -319,6 +272,7 @@ impl SkillRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::embedding::Embedder;
     use crate::trace::MemorySink;
 
     struct StubEmbedder;
@@ -372,8 +326,7 @@ mod tests {
         SkillRegistry {
             skills: Vec::new(),
             sink: Arc::new(NoopSink),
-            embeddings: Mutex::new(Vec::new()),
-            embedder_override: Some(embedder),
+            dense: DenseCache::with_embedder(embedder),
         }
     }
 

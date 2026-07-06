@@ -78,6 +78,21 @@ def test_per_call_bm25_matches_the_default() -> None:
     assert via_explicit[0] == "read_file"
 
 
+def test_per_call_method_overrides_default_and_reroutes() -> None:
+    # Default is semantic, but with no registrations no model loads. A per-call
+    # "bm25" must route to the bm25 engine — provable offline via the trace stage
+    # the semantic default (empty corpus) never emits.
+    catalog = ToolCatalog(
+        method="semantic", trace=TraceSinkConfig(kind="memory", session_id="o")
+    )
+    catalog.search("anything", 5)  # default: semantic engine
+    catalog.search("anything", 5, method="bm25")  # per-call override: bm25 engine
+    searches = [e for e in catalog.drain_trace_events() if e["type"] == "search"]
+    assert len(searches) == 2
+    assert not any(s["name"] == "bm25" for s in searches[0]["stages"])
+    assert any(s["name"] == "bm25" for s in searches[1]["stages"])
+
+
 def test_unknown_method_raises() -> None:
     catalog = ToolCatalog()
     catalog.register(_read_file_tool(lambda args: {}))

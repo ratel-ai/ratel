@@ -95,6 +95,24 @@ describe("ToolCatalog search methods", () => {
     expect(viaExplicit[0]).toBe("read_file");
   });
 
+  it("per-call method overrides the catalog default and reroutes the engine", () => {
+    // Default is semantic, but with no registrations no model loads. A per-call
+    // "bm25" must route to the bm25 engine — provable offline via the trace stage
+    // the semantic default (empty corpus) never emits.
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      trace: { kind: "memory", sessionId: "o" },
+    });
+    catalog.search("anything", 5); // default: semantic engine
+    catalog.search("anything", 5, "direct", "bm25"); // per-call override: bm25 engine
+    const searches = (
+      catalog.drainTraceEvents() as Array<{ type: string; stages?: { name: string }[] }>
+    ).filter((e) => e.type === "search");
+    expect(searches).toHaveLength(2);
+    expect(searches[0].stages?.some((s) => s.name === "bm25")).toBe(false);
+    expect(searches[1].stages?.some((s) => s.name === "bm25")).toBe(true);
+  });
+
   it("rejects an unknown method", () => {
     const catalog = new ToolCatalog();
     catalog.register(readFile);
