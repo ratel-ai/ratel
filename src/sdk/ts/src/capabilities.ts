@@ -22,10 +22,11 @@ function clampTopK(value: unknown, fallback: number): number {
   return Math.min(value, MAX_TOP_K);
 }
 
-// The discovery prompt the model sees. The skills clause is only included when a
-// non-empty skill catalog is wired in — otherwise the tool would advertise a
+// The discovery prompt the model sees. The skills clause is only included while
+// the wired skill catalog is non-empty — otherwise the tool would advertise a
 // `skills` bucket and `get_skill_content` that don't exist (the result would
-// always be `skills: []`).
+// always be `skills: []`). Recomputed on every read so a catalog hydrated after
+// the tool was built (e.g. by an async source loader) is advertised correctly.
 const SEARCH_INTRO =
   "Discover capabilities beyond the ones already in your direct tool list. Call this BEFORE refusing " +
   "a request, falling back to a generic capability (web fetch, shell, built-in search), or improvising " +
@@ -102,11 +103,13 @@ export function searchCapabilitiesTool(
 ): ExecutableTool {
   const upstreams = opts?.upstreamServers ?? [];
   const upstreamByName = new Map(upstreams.map((u) => [u.name, u]));
-  const hasSkills = skillCatalog !== undefined && skillCatalog.size() > 0;
   return {
     id: SEARCH_CAPABILITIES_ID,
     name: SEARCH_CAPABILITIES_ID,
-    description: buildSearchDescription(hasSkills, opts),
+    get description() {
+      const hasSkills = skillCatalog !== undefined && skillCatalog.size() > 0;
+      return buildSearchDescription(hasSkills, opts);
+    },
     inputSchema: {
       type: "object",
       properties: {

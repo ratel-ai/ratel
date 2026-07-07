@@ -60,6 +60,29 @@ describe("searchCapabilitiesTool", () => {
     expect(SEARCH_CAPABILITIES_ID).toBe("search_capabilities");
   });
 
+  it("advertises the skills bucket as soon as a skill lands after tool creation", async () => {
+    // Async hydration fills the catalog after the tool is built — the
+    // description must be computed at read time, not baked at factory time.
+    const skills = new SkillCatalog();
+    const tool = searchCapabilitiesTool(new ToolCatalog(), skills);
+    expect(tool.description).not.toContain("get_skill_content");
+
+    skills.register(vercelSkill);
+    expect(tool.description).toContain("get_skill_content");
+
+    skills.remove("vercel-deploy");
+    expect(tool.description).not.toContain("get_skill_content");
+  });
+
+  it("upsert into an empty catalog flips the advertised description too", () => {
+    const skills = new SkillCatalog();
+    const tool = searchCapabilitiesTool(new ToolCatalog(), skills);
+    expect(tool.description).not.toContain("get_skill_content");
+
+    skills.upsert(vercelSkill);
+    expect(tool.description).toContain("get_skill_content");
+  });
+
   it("returns tools grouped by server and an empty skills bucket when no skill catalog", async () => {
     const tools = new ToolCatalog();
     tools.register(readFile);

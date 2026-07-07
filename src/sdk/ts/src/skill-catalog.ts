@@ -19,6 +19,7 @@ export interface SkillCatalogOptions {
 export class SkillCatalog {
   private readonly registry: SkillRegistry;
   private readonly skills = new Map<string, Skill>();
+  private readonly changeListeners = new Set<() => void>();
   private readonly method: SearchMethod;
   private readonly eager: boolean;
 
@@ -36,6 +37,56 @@ export class SkillCatalog {
     this.skills.set(skill.id, skill);
     if (this.eager) {
       this.registry.buildEmbeddings();
+    }
+    this.notifyChange();
+  }
+
+  /**
+   * Register-or-replace by id. Returns `true` when an existing skill was
+   * replaced. The path catalog sync uses to hot-reload a changed skill.
+   */
+  upsert(skill: Skill): boolean {
+    const replaced = this.registry.upsert(skill);
+    this.skills.set(skill.id, skill);
+    if (this.eager) {
+      this.registry.buildEmbeddings();
+    }
+    this.notifyChange();
+    return replaced;
+  }
+
+  /** Remove a skill by id. Returns `true` when something was removed. */
+  remove(skillId: string): boolean {
+    const removed = this.registry.remove(skillId);
+    this.skills.delete(skillId);
+    if (removed) {
+      if (this.eager) {
+        this.registry.buildEmbeddings();
+      }
+      this.notifyChange();
+    }
+    return removed;
+  }
+
+  /**
+   * Subscribe to catalog mutations (register/upsert/remove). Returns an
+   * unsubscribe function. The staleness hook for anything that caches a view
+   * of the catalog, e.g. `tools/list_changed` notifications.
+   */
+  onChange(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => {
+      this.changeListeners.delete(listener);
+    };
+  }
+
+  private notifyChange(): void {
+    for (const listener of this.changeListeners) {
+      try {
+        listener();
+      } catch {
+        // A broken subscriber must not break the mutation or its siblings.
+      }
     }
   }
 

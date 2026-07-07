@@ -225,6 +225,18 @@ pub struct SkillHit {
     pub score: f64,
 }
 
+fn to_core_skill(skill: Skill) -> core::Skill {
+    core::Skill {
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        tags: skill.tags.unwrap_or_default(),
+        tools: skill.tools.unwrap_or_default(),
+        metadata: skill.metadata.unwrap_or_default(),
+        body: skill.body.unwrap_or_default(),
+    }
+}
+
 #[napi]
 pub struct SkillRegistry {
     inner: core::SkillRegistry,
@@ -244,15 +256,21 @@ impl SkillRegistry {
 
     #[napi]
     pub fn register(&mut self, skill: Skill) {
-        self.inner.register(core::Skill {
-            id: skill.id,
-            name: skill.name,
-            description: skill.description,
-            tags: skill.tags.unwrap_or_default(),
-            tools: skill.tools.unwrap_or_default(),
-            metadata: skill.metadata.unwrap_or_default(),
-            body: skill.body.unwrap_or_default(),
-        });
+        self.inner.register(to_core_skill(skill));
+    }
+
+    /// Register-or-replace by id — see `ratel_ai_core::SkillRegistry::upsert`.
+    /// Returns `true` when an existing skill was replaced.
+    #[napi]
+    pub fn upsert(&mut self, skill: Skill) -> bool {
+        self.inner.upsert(to_core_skill(skill))
+    }
+
+    /// Remove every skill with the id — see `ratel_ai_core::SkillRegistry::remove`.
+    /// Returns `true` when anything was removed.
+    #[napi]
+    pub fn remove(&mut self, skill_id: String) -> bool {
+        self.inner.remove(&skill_id)
     }
 
     #[napi]
