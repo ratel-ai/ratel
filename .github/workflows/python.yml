@@ -26,7 +26,7 @@ jobs:
         run: |
           uv venv --python 3.11 .venv
           # opentelemetry-sdk + the local vocabulary let the OTel emission tests
-          # (test_telemetry.py, ADR-0011) run rather than skip; both are optional at
+          # (test_telemetry.py, ADR-0007) run rather than skip; both are optional at
           # runtime (base SDK stays dependency-free).
           uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy \
             opentelemetry-sdk -e ../../telemetry/python

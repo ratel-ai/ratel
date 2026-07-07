@@ -1,5 +1,5 @@
 """OpenTelemetry emission for the SDK funnel — the Python mirror of
-`src/sdk/ts/src/telemetry.ts` (ADR-0011, ADR-0007).
+`src/sdk/ts/src/telemetry.ts` (ADR-0007).
 
 The catalog / capability-tool / skill / MCP paths call these helpers to open a span around
 each operation, alongside the local `record_event` stream (untouched). Span names

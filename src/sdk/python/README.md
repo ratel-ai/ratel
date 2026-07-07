@@ -17,7 +17,7 @@
 
 As an agent runs, its context window fills with tool definitions it will never call this turn. A model staring at 100 tools picks the wrong one, burns tokens on schemas it ignores, and drifts. **Ratel** keeps the full toolset out of the prompt and surfaces only the handful that matter for the current turn.
 
-`ratel-ai` is the Python surface of [Ratel](../../../README.md). It bundles the Rust core (`ratel-ai-core`) via [PyO3](https://pyo3.rs), so a Python agent gets ranked tool selection by adding one dependency, **in-process, no API key, no service to deploy, no Rust toolchain.** Retrieval is BM25 over a schema-aware text projection of each tool: deterministic, with no embeddings, no vector DB, and no inference cost on the retrieval path. The API mirrors the [TypeScript SDK](../ts/README.md) one-to-one; the binding strategy is locked in [ADR 0006](../../../docs/adr/0006-native-ffi-bindings.md).
+`ratel-ai` is the Python surface of [Ratel](../../../README.md). It bundles the Rust core (`ratel-ai-core`) via [PyO3](https://pyo3.rs), so a Python agent gets ranked tool selection by adding one dependency, **in-process, no API key, no service to deploy, no Rust toolchain.** Retrieval defaults to BM25 over a schema-aware text projection of each tool: deterministic, with no embeddings, no vector DB, and no inference cost on the retrieval path. Semantic and hybrid retrieval are opt-in per catalog or per call ([ADR 0011](../../../docs/adr/0011-selectable-retrieval-methods.md)), ranking with a local embedding model — still in-process, still no vector DB. The API mirrors the [TypeScript SDK](../ts/README.md) one-to-one; the binding strategy is locked in [ADR 0006](../../../docs/adr/0006-native-ffi-bindings.md).
 
 ## Install
 
@@ -240,7 +240,7 @@ Sink kinds:
 
 ### OpenTelemetry export
 
-Independently of the local sink above, the SDK **emits OpenTelemetry spans** for the same funnel — `execute_tool`, `ratel.search`, `ratel.skill.load`, `ratel.upstream.register`, `ratel.auth.flow` (the `gen_ai.*` / `ratel.*` vocabulary, [ADR 0011](../../../docs/adr/0011-sdk-otel-auto-instrumentation.md)). This is transparent: spans go to whatever OpenTelemetry provider is registered, and are a pass-through no-op when OpenTelemetry isn't installed. Two ways to turn export on:
+Independently of the local sink above, the SDK **emits OpenTelemetry spans** for the same funnel — `execute_tool`, `ratel.search`, `ratel.skill.load`, `ratel.upstream.register`, `ratel.auth.flow` (the `gen_ai.*` / `ratel.*` vocabulary, [ADR 0007](../../../docs/adr/0007-telemetry-two-streams.md)). This is transparent: spans go to whatever OpenTelemetry provider is registered, and are a pass-through no-op when OpenTelemetry isn't installed. Two ways to turn export on:
 
 ```python
 from ratel_ai import configure_telemetry

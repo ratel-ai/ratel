@@ -32,7 +32,7 @@ dependencies = []
 # register_mcp_server() ingests upstream MCP servers via the official client.
 # Lazily imported, so the base SDK installs without it. Requires Python >=3.10.
 mcp = ["mcp>=1.0"]
-# OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0011). The base SDK
+# OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0007). The base SDK
 # emits spans to whatever OTel provider is active and is a no-op without one, so it
 # stays dependency-free; this extra pulls the vocabulary + the OTLP exporter so
 # configure_telemetry() can ship spans to Ratel Cloud. Lazily imported.
