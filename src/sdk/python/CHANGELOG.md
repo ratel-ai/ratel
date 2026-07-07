@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-07
+
+### Added
+
+- **OpenTelemetry emission.** The SDK now opens an OTel span at each funnel boundary — `execute_tool` (`gen_ai.operation.name`, `gen_ai.tool.name`, `ratel.tool.args_size_bytes`), `ratel.search` (target, `top_k`, origin, `hit_count`), `ratel.skill.load`, `ratel.upstream.register`, and `ratel.auth.flow` — alongside the existing local `record_event` stream, which is unchanged. Emission is transparent and free by default: the `opentelemetry` API and the vocabulary are imported lazily, so the base (dependency-free) install is a pure pass-through no-op, and when OpenTelemetry is present the spans flow to whatever provider is registered. Built on the OTel-free `ratel_ai_telemetry` vocabulary, so the base install stays dependency-free.
+- `configure_telemetry(api_key=..., endpoint=..., headers=..., service_name=...)` convenience wiring, exported from `ratel_ai`: installs a Ratel-owned OTLP exporter (via the new `[otlp]` extra, `pip install 'ratel-ai[otlp]'`) that ships the SDK's spans to Ratel Cloud (or any OTLP endpoint) and returns the provider as a shutdown handle. Hosts already running OpenTelemetry skip it and add `ratel_span_processor` from `ratel_ai_telemetry` instead.
+- Message/tool content (`ratel.search.query`, `gen_ai.tool.call.arguments` / `.result`) rides span attributes only when `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` selects a span mode (`SPAN_ONLY` / `SPAN_AND_EVENT`); default off.
+
 ## [0.3.0] - 2026-07-06
 
 ### Added
