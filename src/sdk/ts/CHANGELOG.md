@@ -6,17 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-### Fixed
-
-- `configureTelemetry()` no longer misreports a broken install as a missing peer. It now checks whether `@ratel-ai/telemetry-otlp` *resolves* before importing it, so a failure to load the peer (e.g. a missing or clashing transitive OpenTelemetry dependency) surfaces the real error instead of the "install the peer" guidance, which only fires when the peer is genuinely absent.
-
-## [0.4.0-rc.2] - 2026-07-06
-
-### Fixed
-
-- Packaging: the published loader now pins its `@ratel-ai/telemetry` dependency and optional `@ratel-ai/telemetry-otlp` peer to real version ranges. `0.4.0-rc.1` shipped them as `workspace:^` (npm publishes the workspace protocol verbatim), which made `@ratel-ai/sdk@0.4.0-rc.1` uninstallable outside the monorepo.
-
-## [0.4.0-rc.1] - 2026-07-06
+## [0.4.0] - 2026-07-07
 
 ### Added
 
