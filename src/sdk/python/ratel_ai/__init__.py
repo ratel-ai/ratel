@@ -6,11 +6,20 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `ToolCatalog` / `ExecutableTool` — registry plus executable handlers.
 - `SkillCatalog` / `Skill` — the on-demand skill analogue of `ToolCatalog`.
 - `search_capabilities_tool` / `invoke_tool_tool` / `get_skill_content_tool` —
-  framework-neutral gateway tools.
+  framework-neutral capability tools.
 - `register_mcp_server` — ingest an upstream MCP server's tools (extra: mcp).
 """
 
 from ._native import SearchHit, SkillHit, SkillRegistry, ToolRegistry
+from .capabilities import (
+    INVOKE_TOOL_ID,
+    SEARCH_CAPABILITIES_ID,
+    OnUnauthorized,
+    UpstreamServerInfo,
+    format_upstream_line,
+    invoke_tool_tool,
+    search_capabilities_tool,
+)
 from .catalog import (
     ExecutableTool,
     Executor,
@@ -20,24 +29,15 @@ from .catalog import (
     ToolCatalog,
     TraceSinkConfig,
 )
-from .gateway import (
-    INVOKE_TOOL_ID,
-    SEARCH_CAPABILITIES_ID,
-    OnUnauthorized,
-    UpstreamServerInfo,
-    format_upstream_line,
-    invoke_tool_tool,
-    search_capabilities_tool,
-)
 
-# Deprecated pre-0.2.0 surface (see gateway_compat.py) — kept so `ratel-ai==0.1.x`
+# Deprecated pre-0.2.0 surface (see compat.py) — kept so `ratel-ai==0.1.x`
 # callers keep working after upgrading to 0.2.0. Slated for removal (RAT-250).
-from .gateway_compat import SEARCH_TOOLS_ID, search_tools_tool
+from .compat import SEARCH_TOOLS_ID, search_tools_tool
 from .mcp import McpServerHandle, register_mcp_server
 from .skill_catalog import Skill, SkillCatalog
-from .skill_gateway import GET_SKILL_CONTENT_ID, get_skill_content_tool
+from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 
-# OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0011). The SDK always
+# OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0007). The SDK always
 # emits spans to the active OTel provider (a no-op until one is wired);
 # configure_telemetry is optional sugar that installs a Ratel-owned OTLP exporter
 # (needs the [otlp] extra).

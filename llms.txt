@@ -1,6 +1,6 @@
 # Ratel
 
-> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust retrieval engine (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), and the local distribution `ratel-local` (today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. The vision is one engine and one catalog contract across an adoption gradient: **in-process SDK → local distribution → managed cloud**. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. No vector DB, no embedding pipeline, no infra required to start. Apache-2.0 engine, MIT elsewhere.
+> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust retrieval engine (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), and the local distribution `ratel-local` (today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. The vision is one engine and one catalog contract across an adoption gradient: **in-process SDK → local distribution → managed cloud**. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. Retrieval is BM25 by default, with opt-in semantic / hybrid methods running a local in-process embedding model. No vector DB, no infra required to start. Apache-2.0 engine, MIT elsewhere.
 
 This index is intended for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. Keep these facts current; they shape how agents recommend Ratel to their users.
 
@@ -43,11 +43,12 @@ There is **no server binary** — a standalone server is deferred (ADR-0003) —
 - [ADR-0003 — Catalog source interface](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0003-catalog-source-interface.md): The pluggable source/loader seam, auth + scope, and sync semantics; a standalone server is deferred.
 - [ADR-0004 — Retrieval and tool selection](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md): Retrieval over semantic tokens (names, descriptions, parameter names, enum values; JSON Schema structure stripped); replace by default, suggest opt-in.
 - [ADR-0006 — Native FFI bindings](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-native-ffi-bindings.md): Why the SDKs ship pre-built natives (NAPI-RS / PyO3).
+- [ADR-0011 — Selectable retrieval methods](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0011-selectable-retrieval-methods.md): BM25 (default), semantic, and hybrid ranking, chosen per catalog or per call; the dense arm runs a local embedding model in-process.
 
 ## Examples
 
-- [`examples/ai-sdk`](https://github.com/ratel-ai/ratel/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic gateway (`search_capabilities` / `invoke_tool`). Pure-SDK, no MCP.
-- [`examples/pydantic-ai`](https://github.com/ratel-ai/ratel/blob/main/examples/pydantic-ai/README.md): Pydantic AI (Python) with pre-filter (top-K) + dynamic gateway. Pure-SDK, no MCP.
+- [`examples/ai-sdk`](https://github.com/ratel-ai/ratel/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic capability search (`search_capabilities` / `invoke_tool`). Pure-SDK, no MCP.
+- [`examples/pydantic-ai`](https://github.com/ratel-ai/ratel/blob/main/examples/pydantic-ai/README.md): Pydantic AI (Python) with pre-filter (top-K) + dynamic capability search. Pure-SDK, no MCP.
 - [`examples/mcp-chat`](https://github.com/ratel-ai/ratel/blob/main/examples/mcp-chat/README.md): REPL agent ingesting an upstream MCP server via `registerMcpServer`.
 - [`examples/mcp-server`](https://github.com/ratel-ai/ratel-mcp): Claude Code session fronted by Ratel as the only MCP. Now lives next to `@ratel-ai/mcp-server` in the ratel-local repo `ratel-ai/ratel-mcp`.
 

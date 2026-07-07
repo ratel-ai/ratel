@@ -8,7 +8,7 @@
   "files": [
     "ratel-sdk.darwin-x64.node"
   ],
-  "description": "TypeScript SDK for Ratel — context engineering platform for AI agents. BM25 tool retrieval, MCP ingestion, framework-neutral gateway tools.",
+  "description": "TypeScript SDK for Ratel — context engineering platform for AI agents. BM25 tool retrieval, MCP ingestion, framework-neutral capability tools.",
   "keywords": [
     "mcp",
     "ai-agents",

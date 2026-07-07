@@ -77,7 +77,7 @@ export class SkillCatalog {
 
   /**
    * Return a skill's body for dispatch, recording a `skill_invoke` event.
-   * Throws on an unknown id — callers at the gateway boundary translate that
+   * Throws on an unknown id — callers at the capability-tool boundary translate that
    * into a structured error for the agent.
    */
   invoke(skillId: string): string {

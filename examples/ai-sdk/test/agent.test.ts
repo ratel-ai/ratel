@@ -3,7 +3,7 @@
 // scripted MockLanguageModelV3 — no API key, no network — so it exercises the parts
 // that break on SDK/AI-SDK drift but the SDK-level e2e can't see:
 //   - toAISDKTool bridging the SDK's JSON-Schema tool defs into `tool()`/`jsonSchema()`
-//   - the gateway tools (search_capabilities / invoke_tool) registering + being invoked
+//   - the capability tools (search_capabilities / invoke_tool) registering + being invoked
 //   - argument marshaling + result flow through the agent's tool loop
 //
 // Run: `tsx test/agent.test.ts` (the `example` CI job builds @ratel-ai/sdk first).
@@ -59,7 +59,7 @@ async function main() {
     maxSteps: 8,
   });
 
-  // The gateway tools must have been wired in...
+  // The capability tools must have been wired in...
   assert.ok(result.activeTools.includes("search_capabilities"), "search_capabilities not registered");
   assert.ok(result.activeTools.includes("invoke_tool"), "invoke_tool not registered");
   // ...the model must have driven at least the two tool steps...

@@ -169,8 +169,8 @@ pin the wire shapes.
 ## Explicit non-goals for v1
 
 - **No remote search / invoke / get_skill over the wire.** The client runs the engine's
-  retrieval and the gateway tools locally over the pulled replica (ADR-0003). A source-side
-  gateway is a possible later addition (PSKS-8), not a v1 shape.
+  retrieval and the capability tools locally over the pulled replica (ADR-0003). Source-side
+  search/invoke is a possible later addition (PSKS-8), not a v1 shape.
 - **No authoring / CRUD / publish / archive.** Deferred to PSKS-8; a local file source has no
   version semantics, so mutation verbs are not part of the v1 read contract.
 - **No telemetry ingest.** Remote telemetry is stock OTLP `http/protobuf` + Bearer into a

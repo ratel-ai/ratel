@@ -22,7 +22,7 @@
 
 ## Introduction
 
-The context engineering layer for AI agents. Selects only the tools and skills relevant to each turn, recovering accuracy lost to tool overload and cutting what you pay per call. No vector DB, no embeddings.
+The context engineering layer for AI agents. Selects only the tools and skills relevant to each turn, recovering accuracy lost to tool overload and cutting what you pay per call. No vector DB, no infra.
 
 ## Why
 
@@ -101,7 +101,7 @@ Full docs: [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp)
 
 When your agent needs to act, it calls `search_capabilities`. Ratel searches its internal index and returns only the most relevant tools. The model sees a short, focused list and picks correctly far more often.
 
-The index uses BM25, the same algorithm behind most search engines, applied to each tool's name and description. It is fast, deterministic, and adds no latency to your agent loop.
+The index uses BM25 by default, the same algorithm behind most search engines, applied to each tool's name and description. It is fast, deterministic, and adds no latency to your agent loop. Semantic and hybrid ranking are opt-in per catalog or per call, running a local embedding model in the same process.
 
 [Full docs](https://docs.ratel.sh)
 

@@ -1,9 +1,9 @@
-# `examples/pydantic-ai` — Ratel + Pydantic AI + dynamic tool gateway
+# `examples/pydantic-ai` — Ratel + Pydantic AI + dynamic capability search
 
 The Python mirror of [`examples/ai-sdk`](../ai-sdk/README.md): the [`ratel-ai`](../../src/sdk/python/README.md) SDK wired into [Pydantic AI](https://ai.pydantic.dev/) with two layers of context engineering:
 
 1. **Pre-filter** ([ADR-0004](../../docs/adr/0004-retrieval-and-tool-selection.md) `replace` mode) — the catalog is registered in a `ToolCatalog`; before the model call, retrieval narrows it to the top-K most relevant tools for the prompt. Those land directly in the agent's tool list with full schemas.
-2. **Dynamic gateway** — two always-present tools, `search_capabilities` and `invoke_tool`, give the agent reach into the rest of the catalog when the top-K isn't enough. `search_capabilities` returns a `tools` bucket (hits grouped by upstream server) plus a `skills` bucket — `{tools: {groups: [{server, hits: [{toolId, score, description, inputSchema}]}]}, skills: [...]}` (the skills bucket is empty here — this example registers no skills); `invoke_tool` executes a tool by id.
+2. **Dynamic capability search** — two always-present tools, `search_capabilities` and `invoke_tool`, give the agent reach into the rest of the catalog when the top-K isn't enough. `search_capabilities` returns a `tools` bucket (hits grouped by upstream server) plus a `skills` bucket — `{tools: {groups: [{server, hits: [{toolId, score, description, inputSchema}]}]}, skills: [...]}` (the skills bucket is empty here — this example registers no skills); `invoke_tool` executes a tool by id.
 
 Tools are built from the catalog's JSON schemas via Pydantic AI's `Tool.from_schema`, so the schema the model sees is the same one Ratel ranks.
 
@@ -24,13 +24,13 @@ Without a model API key the script runs in **diagnostic mode** — prints the in
 
 ```
 tools.py    catalog + helpers — six stub tools registered into a ToolCatalog
-agent.py    run_agent — assembles the tool set (top-K + gateway), runs the Pydantic AI Agent
+agent.py    run_agent — assembles the tool set (top-K + capability tools), runs the Pydantic AI Agent
 main.py     entry — parse argv, diagnostic mode or model run, print
 ```
 
 Splitting `tools.py` and `agent.py` keeps the catalog declarative and the loop readable; nothing about the wiring is provider-specific (`run_agent` accepts any Pydantic AI model id).
 
-## How the gateway works
+## How capability search works
 
 The agent's tool list at the start of the run is:
 

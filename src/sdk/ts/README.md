@@ -17,7 +17,7 @@
 
 As an agent runs, its context window fills with tool definitions it will never call this turn. A model staring at 100 tools picks the wrong one, burns tokens on schemas it ignores, and drifts. **Ratel** keeps the full toolset out of the prompt and surfaces only the handful that matter for the current turn.
 
-`@ratel-ai/sdk` is the TypeScript surface of [Ratel](../../../README.md). It bundles the Rust core (`ratel-ai-core`) via [NAPI-RS](https://napi.rs), so a JS / TS agent gets ranked tool selection by adding one dependency, **in-process, no API key, no service to deploy, no Rust toolchain.** Retrieval is BM25 over a schema-aware text projection of each tool: deterministic, with no embeddings, no vector DB, and no inference cost on the retrieval path.
+`@ratel-ai/sdk` is the TypeScript surface of [Ratel](../../../README.md). It bundles the Rust core (`ratel-ai-core`) via [NAPI-RS](https://napi.rs), so a JS / TS agent gets ranked tool selection by adding one dependency, **in-process, no API key, no service to deploy, no Rust toolchain.** Retrieval defaults to BM25 over a schema-aware text projection of each tool: deterministic, with no embeddings, no vector DB, and no inference cost on the retrieval path. Semantic and hybrid retrieval are opt-in per catalog or per call ([ADR 0011](../../../docs/adr/0011-selectable-retrieval-methods.md)), ranking with a local embedding model — still in-process, still no vector DB.
 
 ## Install
 
@@ -34,13 +34,13 @@ Prebuilt native bindings ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux
 Everything starts with a **`ToolCatalog`**: register each of your tools once, pairing its metadata (id, description, JSON schemas) with the handler that runs it. From there you reach the model in one of two ways, and most agents use both at once:
 
 - **Pre-filter (top-K).** Before each model call, ask the catalog for the few tools most relevant to the user's message and put *those* in the tool list. The full catalog never enters the prompt. This is Ratel's replace-by-default tool injection ([ADR 0004](../../../docs/adr/0004-retrieval-and-tool-selection.md)).
-- **Dynamic gateway.** Give the agent two always-present tools, `search_capabilities` (find more tools by description) and `invoke_tool` (run one by id), so it can reach the rest of the catalog on its own when the pre-filtered set is not enough.
+- **Dynamic capability search.** Give the agent two always-present tools, `search_capabilities` (find more tools by description) and `invoke_tool` (run one by id), so it can reach the rest of the catalog on its own when the pre-filtered set is not enough.
 
-The two compose: the pre-filter covers the common case in the prompt, and the gateway is the escape hatch for everything else. Tools can be local functions, an upstream MCP server's tools (via [`registerMcpServer`](#registermcpserver-ingest-an-mcp-servers-tools)), or both. The model sees one unified, ranked surface.
+The two compose: the pre-filter covers the common case in the prompt, and the capability tools are the escape hatch for everything else. Tools can be local functions, an upstream MCP server's tools (via [`registerMcpServer`](#registermcpserver-ingest-an-mcp-servers-tools)), or both. The model sees one unified, ranked surface.
 
 ## Quickstart
 
-Register a catalog, then build each turn's tool list from the gateway plus the top-K hits for the user's message.
+Register a catalog, then build each turn's tool list from the capability tools plus the top-K hits for the user's message.
 
 ```ts
 import {
@@ -68,12 +68,12 @@ catalog.register({
 
 // Each turn, assemble the tools the model is allowed to see:
 function toolsForTurn(userMessage: string): ExecutableTool[] {
-  const gateway = [searchCapabilitiesTool(catalog), invokeToolTool(catalog)];
+  const capabilities = [searchCapabilitiesTool(catalog), invokeToolTool(catalog)];
   const topK = catalog
     .search(userMessage, 3) // BM25: the 3 most relevant tools for this message
     .map((hit) => catalog.getExecutable(hit.toolId))
     .filter((t): t is ExecutableTool => t !== undefined);
-  return [...gateway, ...topK];
+  return [...capabilities, ...topK];
 }
 ```
 
@@ -109,7 +109,7 @@ await catalog.invoke(toolId, args);  // run the handler, return its result
 
 `invoke` awaits async executors and rethrows whatever the handler throws (after recording an `invoke_error` trace event), so failures surface where you call it. `search` defaults to `origin: "direct"`; pass `catalog.search(query, k, "agent")` to tag a search as model-initiated in telemetry.
 
-### `searchCapabilitiesTool` / `invokeToolTool`: the agent gateway
+### `searchCapabilitiesTool` / `invokeToolTool`: the capability tools
 
 These wrap a catalog into two tools an agent can call itself. Hand them to your loop and the model gets self-service access to the whole catalog without it living in the prompt.
 
@@ -140,11 +140,11 @@ const invoke = invokeToolTool(catalog);         // id: "invoke_tool"
 
 **`invoke_tool({ toolId, args })`** runs `catalog.invoke(toolId, args)` and returns the tool's result. Arguments go *nested* under `args`. On a bad call it returns a structured `{ error, isError: true }` instead of throwing, so a model mistake (unknown id, malformed args, a handler that throws) stays recoverable inside the loop rather than crashing the host.
 
-> **Upgrading from 0.1.x?** `searchToolsTool` (id `search_tools`) is still exported as a deprecated, tools-only shim that keeps its original `{ groups }` result shape. Migrate to `searchCapabilitiesTool`; see [`src/gateway-compat.ts`](src/gateway-compat.ts).
+> **Upgrading from 0.1.x?** `searchToolsTool` (id `search_tools`) is still exported as a deprecated, tools-only shim that keeps its original `{ groups }` result shape. Migrate to `searchCapabilitiesTool`; see [`src/compat.ts`](src/compat.ts).
 
 ## `ToolRegistry`: ranking without execution
 
-Need only the ranking, and you will dispatch tool calls yourself? `ToolRegistry` is the metadata-only BM25 index underneath `ToolCatalog`, with no executors and no gateway.
+Need only the ranking, and you will dispatch tool calls yourself? `ToolRegistry` is the metadata-only BM25 index underneath `ToolCatalog`, with no executors and no capability tools.
 
 ```ts
 import { ToolRegistry, type Tool } from "@ratel-ai/sdk";

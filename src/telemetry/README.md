@@ -1,6 +1,6 @@
 # `src/telemetry/`
 
-Ratel's **remote** telemetry: OpenTelemetry conventions plus thin helper packages. Ratel telemetry *is* OpenTelemetry: LLM calls are `gen_ai.*` spans, the gateway/skill funnel is a `ratel.*` overlay, and ingest is stock OTLP. No custom schema, no custom transport, no FFI.
+Ratel's **remote** telemetry: OpenTelemetry conventions plus thin helper packages. Ratel telemetry *is* OpenTelemetry: LLM calls are `gen_ai.*` spans, the capability/skill funnel is a `ratel.*` overlay, and ingest is stock OTLP. No custom schema, no custom transport, no FFI.
 
 Distinct from the local JSONL trace stream (ADR-0007, in [`../core/`](../core/README.md)), which stays as-is; only the remote path lives here.
 

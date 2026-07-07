@@ -1,4 +1,4 @@
-"""Gateway tools — the Python mirror of `src/sdk/ts/src/gateway.ts`.
+"""Capability tools — the Python mirror of `src/sdk/ts/src/capabilities.ts`.
 
 `search_capabilities_tool` and `invoke_tool_tool` give an agent a self-service
 surface over a `ToolCatalog` (and an optional `SkillCatalog`): discover tools and

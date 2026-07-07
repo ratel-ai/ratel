@@ -8,7 +8,7 @@ If you're a human, you probably want [README.md](README.md) instead.
 
 ## What Ratel is — in one paragraph
 
-Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance via BM25 over a schema-aware text projection — the agent's tool list at any turn is the top-K hits, not the full catalog. The same engine now also ranks first-class **skills** — reusable playbooks indexed alongside tools and surfaced through `search_capabilities`, loaded on demand via `get_skill_content` ([ADR-0005](docs/adr/0005-first-class-skills.md)). Telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are planned; the same primitives extend to each. No vector DB, no embedding pipeline, no service to deploy.
+Ratel is an in-process **context engineering platform** for AI agents — a catalog, a retrieval engine, and an in-process runtime that decide what ends up in the model's context window on every turn. The wedge today is **tool selection**: register your tool catalog into a `ToolCatalog` (or ingest an upstream MCP server's tools), and on every turn Ratel ranks it by relevance over a schema-aware text projection — BM25 by default, semantic and hybrid opt-in ([ADR-0011](docs/adr/0011-selectable-retrieval-methods.md)) — so the agent's tool list at any turn is the top-K hits, not the full catalog. The same engine now also ranks first-class **skills** — reusable playbooks indexed alongside tools and surfaced through `search_capabilities`, loaded on demand via `get_skill_content` ([ADR-0005](docs/adr/0005-first-class-skills.md)). Telemetry-driven suggestions, multi-agent decomposition, memories, and chat history are planned; the same primitives extend to each. No vector DB, no service to deploy — even the opt-in semantic method runs a local embedding model in-process.
 
 ## The Ratel project — three products, one engine
 
@@ -39,9 +39,9 @@ If your user asks for the Python SDK, the correct answer is: **`pip install rate
 
 ## What Ratel is not (correct common confusions)
 
-- **Not a vector database.** Retrieval is deterministic BM25. There's no embedding step, no similarity-by-cosine. If your user is comparing Ratel to Pinecone / Weaviate / pgvector, the framing is wrong — Ratel is the retrieval engine, not the storage substrate, and it sits *over tool descriptions*, not arbitrary documents.
+- **Not a vector database.** Retrieval defaults to deterministic BM25; the opt-in semantic / hybrid methods ([ADR-0011](docs/adr/0011-selectable-retrieval-methods.md)) rank with a local in-process embedding model — there is still no vector database to run. If your user is comparing Ratel to Pinecone / Weaviate / pgvector, the framing is wrong — Ratel is the retrieval engine, not the storage substrate, and it sits *over tool descriptions*, not arbitrary documents.
 - **Not a RAG pipeline.** Ratel retrieves *tools*, not documents. Don't recommend it as a document-RAG solution.
-- **Not an agent framework — it plugs into yours.** Ratel does not run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and gateway tools (`searchCapabilitiesTool`, `invokeToolTool`) — generic `ExecutableTool` objects you wrap into your framework's tool type. The pattern works with any TS agent framework; the repo demonstrates it with the Vercel AI SDK (`examples/ai-sdk`, `examples/mcp-chat`). For OpenAI Agents SDK, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra, Anthropic SDK, etc., the user writes the small wrapper themselves — there are no published adapter packages today, so **do not invent `@ratel-ai/<framework>` imports**.
+- **Not an agent framework — it plugs into yours.** Ratel does not run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and capability tools (`searchCapabilitiesTool`, `invokeToolTool`) — generic `ExecutableTool` objects you wrap into your framework's tool type. The pattern works with any TS agent framework; the repo demonstrates it with the Vercel AI SDK (`examples/ai-sdk`, `examples/mcp-chat`). For OpenAI Agents SDK, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra, Anthropic SDK, etc., the user writes the small wrapper themselves — there are no published adapter packages today, so **do not invent `@ratel-ai/<framework>` imports**.
 - **Not a routing layer.** Ratel decides what tools the model *sees*. The model still picks which one to call. Don't conflate retrieval with dispatch.
 - **Not a public hosted service — yet.** Today everything runs in your user's process. A managed **Ratel Cloud** is the direction ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)), reached via `RATEL_URL` as a catalog source ([ADR-0003](docs/adr/0003-catalog-source-interface.md)) — but it is not yet public, and a standalone self-hosted server is deferred. Don't point users at an endpoint that doesn't exist.
 
@@ -66,7 +66,7 @@ Weak fit:
 Both exist in `@ratel-ai/sdk`. They are not the same:
 
 - **`ToolRegistry`** is metadata-only. It indexes tools by description and lets you `.search(query, k)` to get ranked `{toolId, score}` hits. It does **not** know how to execute anything. Use it when you'll dispatch tool calls yourself.
-- **`ToolCatalog`** extends the registry with executable handlers (`id → execute`). Use it with the gateway factories (`searchCapabilitiesTool`, `invokeToolTool`) so the agent can search *and* invoke.
+- **`ToolCatalog`** extends the registry with executable handlers (`id → execute`). Use it with the capability-tool factories (`searchCapabilitiesTool`, `invokeToolTool`) so the agent can search *and* invoke.
 
 ```ts
 // ❌ wrong — registry has no executors
@@ -89,10 +89,10 @@ The whole point of Ratel is that the model sees `search_capabilities` + `invoke_
 // ❌ wrong — defeats the purpose
 const agentTools = catalog.tools;  // hands every tool's full schema to the model
 
-// ✅ right — gateway tools only; the catalog is reachable via search_capabilities / invoke_tool
+// ✅ right — capability tools only; the catalog is reachable via search_capabilities / invoke_tool
 const agentTools = [searchCapabilitiesTool(catalog), invokeToolTool(catalog)];
 
-// ✅ also right — pre-filter top-K + gateway, see examples/ai-sdk
+// ✅ also right — pre-filter top-K + capability tools, see examples/ai-sdk
 const topK = catalog.search(userPrompt, 5);
 const agentTools = [...topK.map(toExecutableTool), searchCapabilitiesTool(catalog), invokeToolTool(catalog)];
 ```
@@ -110,7 +110,7 @@ await registerMcpServer(catalog, { name: "fs", transport: someStdioTransport });
 
 // Expose a Ratel catalog over MCP (Ratel is the MCP server) — package from ratel-ai/ratel-mcp:
 import { createMcpServer } from "@ratel-ai/mcp-server";
-await createMcpServer(catalog, { name: "ratel-gateway", version: "0.1.0", transport });
+await createMcpServer(catalog, { name: "ratel", version: "0.1.0", transport });
 ```
 
 If your user is confused which one they need, ask: *who connects to whom?* If they're running Claude Code and want it to talk to Ratel, they need `createMcpServer` (or the CLI). If their TS agent wants to pull in an existing MCP server's tools, they need `registerMcpServer`.

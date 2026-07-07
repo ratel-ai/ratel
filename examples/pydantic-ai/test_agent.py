@@ -23,7 +23,7 @@ async def test_bm25_selected_tool_is_actually_invocable() -> None:
     catalog = build_catalog()
     tools = build_tools(catalog, "read a file from disk", initial_top_k=3)
 
-    # The prompt must surface a real (non-gateway) sync-executor tool in the
+    # The prompt must surface a real (non-capability) sync-executor tool in the
     # top-K — that's the path the bug lived on.
     names = {t.name for t in tools}
     assert "read_file" in names, f"expected read_file in top-K, got {names}"

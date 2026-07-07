@@ -11,7 +11,7 @@ use crate::skill::Skill;
 /// verbatim. The `body` is intentionally excluded — it is the dispatch payload,
 /// not a ranking signal (a 15 KB body would otherwise drown the description's
 /// term weights). `tools` and `metadata` are likewise excluded: `tools` are a
-/// dependency edge surfaced at the gateway and `metadata` (e.g. `stacks`) biases
+/// dependency edge surfaced via `search_capabilities` and `metadata` (e.g. `stacks`) biases
 /// the push ranker — neither is a query term.
 pub(crate) fn searchable_text(skill: &Skill) -> String {
     let mut tokens: Vec<String> = Vec::new();
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn searchable_text_excludes_tools() {
-        // Declared tool deps are surfaced at the gateway, not matched as terms.
+        // Declared tool deps are surfaced via `search_capabilities`, not matched as terms.
         let skill = slides_skill();
         let text = searchable_text(&skill);
         assert!(
