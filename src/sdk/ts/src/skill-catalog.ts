@@ -1,5 +1,7 @@
+import { SearchTarget } from "@ratel-ai/telemetry";
 import { type Skill, type SkillHit, SkillRegistry } from "../native/index.cjs";
 import type { SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import { traceSearch, traceSkillLoad } from "./telemetry.js";
 
 export type { Skill, SkillHit };
 
@@ -48,7 +50,9 @@ export class SkillCatalog {
     origin: SearchOrigin = "direct",
     method?: SearchMethod,
   ): SkillHit[] {
-    return this.registry.searchWithMethod(query, topK, origin, method ?? this.method);
+    return traceSearch(SearchTarget.Skill, query, topK, origin, () =>
+      this.registry.searchWithMethod(query, topK, origin, method ?? this.method),
+    );
   }
 
   has(skillId: string): boolean {
@@ -81,13 +85,15 @@ export class SkillCatalog {
     if (!skill) {
       throw new Error(`unknown skillId: ${skillId}`);
     }
-    const started = Date.now();
-    const body = skill.body ?? "";
-    this.registry.recordEvent({
-      type: "skill_invoke",
-      skill_id: skillId,
-      took_ms: Date.now() - started,
+    return traceSkillLoad(skillId, () => {
+      const started = Date.now();
+      const body = skill.body ?? "";
+      this.registry.recordEvent({
+        type: "skill_invoke",
+        skill_id: skillId,
+        took_ms: Date.now() - started,
+      });
+      return body;
     });
-    return body;
   }
 }

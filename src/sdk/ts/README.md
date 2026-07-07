@@ -238,6 +238,21 @@ Sink kinds:
 
 `searchCapabilitiesTool` tags its emitted `search` event with `origin: "agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
 
+### OpenTelemetry export
+
+Independently of the local sink above, the SDK **emits OpenTelemetry spans** for the same funnel — `execute_tool`, `ratel.search`, `ratel.skill.load`, `ratel.upstream.register`, `ratel.auth.flow` (the `gen_ai.*` / `ratel.*` vocabulary). This is transparent: spans go to whatever OpenTelemetry provider is registered, and are a no-op until one is. Two ways to turn export on:
+
+```ts
+import { configureTelemetry } from "@ratel-ai/sdk";
+
+// Greenfield: ship the SDK's spans to Ratel Cloud (needs the optional
+// @ratel-ai/telemetry-otlp peer). RATEL_URL or { endpoint } sets the destination.
+const handle = await configureTelemetry({ apiKey: process.env.RATEL_API_KEY });
+// ... later: await handle.shutdown();
+```
+
+If you already run OpenTelemetry (Langfuse, the Vercel AI SDK, your own collector), **skip `configureTelemetry`** — the spans already flow to your provider — and add `ratelSpanProcessor` from `@ratel-ai/telemetry-otlp` to dual-export the Ratel cut to Cloud. Message/tool content (`ratel.search.query`, tool args/result) rides span attributes only when `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` selects a span mode (`SPAN_ONLY` or `SPAN_AND_EVENT`); it is off by default, and `EVENT_ONLY` does not put content on spans.
+
 ## Package shape
 
 - Package name: `@ratel-ai/sdk` (ESM, entry `dist/index.js`); the underlying NAPI loader is CJS, statically bridged at build time.

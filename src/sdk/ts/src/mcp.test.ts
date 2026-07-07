@@ -1,6 +1,12 @@
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { trace } from "@opentelemetry/api";
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { registerMcpServer, ToolCatalog } from "./index.js";
 
@@ -80,6 +86,7 @@ describe("registerMcpServer", () => {
 
   afterEach(async () => {
     await fake.server.close();
+    trace.disable(); // drop any provider a span test registered globally
   });
 
   it("registers each upstream tool with a server-namespaced id", async () => {
@@ -220,6 +227,28 @@ describe("registerMcpServer", () => {
     expect(inv?.server).toBe("demo");
     expect(inv?.tool_id).toBe("demo__read_file");
     expect(typeof inv?.took_ms).toBe("number");
+
+    await handle.close();
+  });
+
+  it("emits a ratel.upstream.register OTel span with server, transport, and tool_count", async () => {
+    const exporter = new InMemorySpanExporter();
+    trace.setGlobalTracerProvider(
+      new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] }),
+    );
+    const catalog = new ToolCatalog();
+    const handle = await registerMcpServer(catalog, {
+      name: "demo",
+      transport: fake.clientTransport,
+    });
+
+    const [span] = exporter.getFinishedSpans().filter((s) => s.name === "ratel.upstream.register");
+    expect(span, "one ratel.upstream.register span").toBeTruthy();
+    const a = span.attributes as Record<string, unknown>;
+    expect(a["ratel.upstream.server"]).toBe("demo");
+    expect(a["ratel.upstream.tool_count"]).toBe(1);
+    expect(typeof a["ratel.upstream.transport"]).toBe("string");
+    expect(span.status.code).toBe(1); // OK
 
     await handle.close();
   });

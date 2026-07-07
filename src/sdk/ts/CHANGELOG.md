@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- `configureTelemetry()` no longer misreports a broken install as a missing peer. It now checks whether `@ratel-ai/telemetry-otlp` *resolves* before importing it, so a failure to load the peer (e.g. a missing or clashing transitive OpenTelemetry dependency) surfaces the real error instead of the "install the peer" guidance, which only fires when the peer is genuinely absent.
+
+## [0.4.0-rc.2] - 2026-07-06
+
+### Fixed
+
+- Packaging: the published loader now pins its `@ratel-ai/telemetry` dependency and optional `@ratel-ai/telemetry-otlp` peer to real version ranges. `0.4.0-rc.1` shipped them as `workspace:^` (npm publishes the workspace protocol verbatim), which made `@ratel-ai/sdk@0.4.0-rc.1` uninstallable outside the monorepo.
+
+## [0.4.0-rc.1] - 2026-07-06
+
+### Added
+
+- **OpenTelemetry emission.** The SDK now opens an OTel span at each funnel boundary — `execute_tool` (`gen_ai.operation.name`, `gen_ai.tool.name`, `ratel.tool.args_size_bytes`, plus `ratel.upstream.server` for MCP-proxied tools), `ratel.search` (target, `top_k`, origin, `hit_count`), `ratel.skill.load`, `ratel.upstream.register`, and `ratel.auth.flow` — alongside the existing local `recordEvent` stream, which is unchanged. Emission is transparent and free by default: spans flow to whatever OpenTelemetry provider is registered and are a no-op until one is, so a host already running OTel sees Ratel's funnel on its traces with no setup. Built on `@opentelemetry/api` + the OTel-free `@ratel-ai/telemetry` vocabulary, so the base install stays OTel-SDK-free.
+- `configureTelemetry({ apiKey })` convenience wiring (with `TelemetryHandle` / `InitOptions`): lazily loads the optional `@ratel-ai/telemetry-otlp` peer to ship the SDK's spans to Ratel Cloud (or any OTLP endpoint). Hosts already running OpenTelemetry skip it and add `ratelSpanProcessor` from `@ratel-ai/telemetry-otlp` instead.
+- Message/tool content (`ratel.search.query`, `gen_ai.tool.call.arguments` / `.result`) rides span attributes only when `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` selects a span mode (`SPAN_ONLY` / `SPAN_AND_EVENT`); default off. `ratel.tool.args_size_bytes` is measured in UTF-8 bytes.
+
 ## [0.3.0] - 2026-07-06
 
 ### Added
