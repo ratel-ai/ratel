@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .catalog import ExecutableTool, ToolCatalog
+from .telemetry import trace_upstream_register
 
 
 def _require_mcp() -> None:
@@ -74,37 +75,43 @@ async def register_mcp_server(
     """
     _require_mcp()
 
-    list_result = await session.list_tools()
-    tools = list_result.tools
-    catalog.record_event(
-        {
-            "type": "upstream_register",
-            "server": name,
-            "transport": transport_label,
-            "tool_count": len(tools),
-        }
-    )
-
-    tool_ids: list[str] = []
-    for tool in tools:
-        tool_id = f"{name}__{tool.name}"
-        catalog.register(
-            ExecutableTool(
-                id=tool_id,
-                name=tool.name,
-                description=getattr(tool, "description", None) or "",
-                input_schema=getattr(tool, "inputSchema", None) or {},
-                output_schema=getattr(tool, "outputSchema", None) or {"type": "object"},
-                execute=_make_executor(catalog, session, name, tool_id, tool.name),
-            )
+    # The whole registration (list + ingest) is one `ratel.upstream.register` span;
+    # per-tool invocations later get their own `execute_tool` spans (ADR-0007).
+    async def _run(report_tool_count: Callable[[int], None]) -> McpServerHandle:
+        list_result = await session.list_tools()
+        tools = list_result.tools
+        report_tool_count(len(tools))
+        catalog.record_event(
+            {
+                "type": "upstream_register",
+                "server": name,
+                "transport": transport_label,
+                "tool_count": len(tools),
+            }
         )
-        tool_ids.append(tool_id)
 
-    return McpServerHandle(
-        tool_ids=tool_ids,
-        server_instructions=instructions,
-        close=on_close or _noop_close,
-    )
+        tool_ids: list[str] = []
+        for tool in tools:
+            tool_id = f"{name}__{tool.name}"
+            catalog.register(
+                ExecutableTool(
+                    id=tool_id,
+                    name=tool.name,
+                    description=getattr(tool, "description", None) or "",
+                    input_schema=getattr(tool, "inputSchema", None) or {},
+                    output_schema=getattr(tool, "outputSchema", None) or {"type": "object"},
+                    execute=_make_executor(catalog, session, name, tool_id, tool.name),
+                )
+            )
+            tool_ids.append(tool_id)
+
+        return McpServerHandle(
+            tool_ids=tool_ids,
+            server_instructions=instructions,
+            close=on_close or _noop_close,
+        )
+
+    return await trace_upstream_register(name, transport_label, _run)
 
 
 def _make_executor(

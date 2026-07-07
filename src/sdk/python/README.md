@@ -238,6 +238,21 @@ Sink kinds:
 
 `search_capabilities_tool` tags its emitted `search` event with `origin="agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
 
+### OpenTelemetry export
+
+Independently of the local sink above, the SDK **emits OpenTelemetry spans** for the same funnel — `execute_tool`, `ratel.search`, `ratel.skill.load`, `ratel.upstream.register`, `ratel.auth.flow` (the `gen_ai.*` / `ratel.*` vocabulary, [ADR 0011](../../../docs/adr/0011-sdk-otel-auto-instrumentation.md)). This is transparent: spans go to whatever OpenTelemetry provider is registered, and are a pass-through no-op when OpenTelemetry isn't installed. Two ways to turn export on:
+
+```python
+from ratel_ai import configure_telemetry
+
+# Greenfield: ship the SDK's spans to Ratel Cloud (needs the [otlp] extra:
+# pip install 'ratel-ai[otlp]'). RATEL_URL or endpoint= sets the destination.
+provider = configure_telemetry(api_key=os.environ["RATEL_API_KEY"])
+# ... later: provider.shutdown()
+```
+
+If you already run OpenTelemetry (your own collector, another instrumentation), **skip `configure_telemetry`** — the spans already flow to your provider — and add `ratel_span_processor` from `ratel_ai_telemetry` to dual-export the Ratel cut to Cloud. Message/tool content is captured on spans only when `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` is set (default off).
+
 ## Develop
 
 This package is part of the Cargo workspace at the repo root and builds into a local venv. From `src/sdk/python/`:

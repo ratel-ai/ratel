@@ -17,6 +17,7 @@ from typing import Any, Callable, Union
 
 from .catalog import ExecutableTool, ToolCatalog
 from .skill_catalog import SkillCatalog
+from .telemetry import record_auth_needed
 
 SEARCH_CAPABILITIES_ID = "search_capabilities"
 INVOKE_TOOL_ID = "invoke_tool"
@@ -339,6 +340,7 @@ def invoke_tool_tool(
                     maybe = on_unauthorized(upstream)
                     if inspect.isawaitable(maybe):
                         await maybe
+                record_auth_needed(upstream)
                 catalog.record_event(
                     {"type": "gateway_error", "tool_id": tool_id, "error": "needs_auth"}
                 )

@@ -13,6 +13,7 @@ from typing import Any
 
 from ._native import SkillHit, SkillRegistry
 from .catalog import SearchMethod, SearchOrigin, TraceSinkConfig
+from .telemetry import SEARCH_TARGET_SKILL, trace_search, trace_skill_load
 
 __all__ = ["Skill", "SkillCatalog", "SkillHit"]
 
@@ -77,7 +78,13 @@ class SkillCatalog:
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
     ) -> list[SkillHit]:
-        return self._registry.search_with_method(query, top_k, origin, method or self._method)
+        return trace_search(
+            SEARCH_TARGET_SKILL,
+            query,
+            top_k,
+            origin,
+            lambda: self._registry.search_with_method(query, top_k, origin, method or self._method),
+        )
 
     def has(self, skill_id: str) -> bool:
         return skill_id in self._skills
@@ -103,13 +110,17 @@ class SkillCatalog:
         skill = self._skills.get(skill_id)
         if skill is None:
             raise ValueError(f"unknown skillId: {skill_id}")
-        started = time.monotonic()
-        body = skill.body
-        self._registry.record_event(
-            {
-                "type": "skill_invoke",
-                "skill_id": skill_id,
-                "took_ms": int((time.monotonic() - started) * 1000),
-            }
-        )
-        return body
+
+        def _run() -> str:
+            started = time.monotonic()
+            body = skill.body
+            self._registry.record_event(
+                {
+                    "type": "skill_invoke",
+                    "skill_id": skill_id,
+                    "took_ms": int((time.monotonic() - started) * 1000),
+                }
+            )
+            return body
+
+        return trace_skill_load(skill_id, _run)
