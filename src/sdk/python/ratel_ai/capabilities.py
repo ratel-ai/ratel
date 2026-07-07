@@ -102,6 +102,28 @@ def _build_search_description(has_skills: bool, upstreams: Sequence[UpstreamServ
     )
 
 
+class _LiveDescriptionTool(ExecutableTool):
+    """An `ExecutableTool` whose `description` is recomputed at read time — so a
+    skill catalog hydrated or mutated after construction advertises correctly.
+    NOTE: copying the field (`dataclasses.replace`, `tool.description`) freezes
+    the text at read time; hosts that cache it should resnapshot on
+    `SkillCatalog.on_change`.
+    """
+
+    def __init__(self, describe: Callable[[], str], **kwargs: Any) -> None:
+        self._describe = describe
+        super().__init__(description="", **kwargs)
+
+    @property
+    def description(self) -> str:
+        return self._describe()
+
+    @description.setter
+    def description(self, value: str) -> None:
+        # The dataclass __init__ assigns the placeholder; the live value wins.
+        pass
+
+
 def search_capabilities_tool(
     catalog: ToolCatalog,
     skill_catalog: SkillCatalog | None = None,
@@ -116,7 +138,6 @@ def search_capabilities_tool(
     """
     upstreams = list(upstream_servers or [])
     upstream_by_name = {u.name: u for u in upstreams}
-    has_skills = skill_catalog is not None and skill_catalog.size() > 0
 
     async def execute(input: dict[str, Any]) -> dict[str, Any]:
         query = input["query"]
@@ -197,10 +218,14 @@ def search_capabilities_tool(
 
         return {"tools": {"groups": [groups[n] for n in order]}, "skills": skills}
 
-    return ExecutableTool(
+    def describe() -> str:
+        has_skills = skill_catalog is not None and skill_catalog.size() > 0
+        return _build_search_description(has_skills, upstreams)
+
+    return _LiveDescriptionTool(
+        describe,
         id=SEARCH_CAPABILITIES_ID,
         name=SEARCH_CAPABILITIES_ID,
-        description=_build_search_description(has_skills, upstreams),
         input_schema={
             "type": "object",
             "properties": {

@@ -64,6 +64,17 @@ class SkillRegistry:
         metadata: dict[str, list[str]],
         body: str,
     ) -> None: ...
+    def upsert(
+        self,
+        id: str,
+        name: str,
+        description: str,
+        tags: list[str],
+        tools: list[str],
+        metadata: dict[str, list[str]],
+        body: str,
+    ) -> bool: ...
+    def remove(self, skill_id: str) -> bool: ...
     def search(self, query: str, top_k: int) -> list[SkillHit]: ...
     def search_with_origin(self, query: str, top_k: int, origin: str) -> list[SkillHit]: ...
     def search_with_method(

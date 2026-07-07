@@ -79,3 +79,27 @@ def test_memory_sink_requires_session_id() -> None:
     reg = ToolRegistry()
     with pytest.raises(ValueError, match="session_id"):
         reg.set_trace_sink("memory")
+
+
+def _skill_args(description: str) -> tuple:
+    return ("api-design", "api-design", description, ["api"], [], {}, "# body")
+
+
+def test_skill_registry_upsert_replaces_by_id_and_reports_replacement() -> None:
+    from ratel_ai import SkillRegistry
+
+    reg = SkillRegistry()
+    assert reg.upsert(*_skill_args("REST API design patterns")) is False
+    assert reg.upsert(*_skill_args("GraphQL schema modeling")) is True
+    assert reg.search("GraphQL schema", 5)[0].skill_id == "api-design"
+    assert reg.search("REST patterns", 5) == []
+
+
+def test_skill_registry_remove_drops_the_skill_and_reports_membership() -> None:
+    from ratel_ai import SkillRegistry
+
+    reg = SkillRegistry()
+    reg.register(*_skill_args("REST API design patterns"))
+    assert reg.remove("api-design") is True
+    assert reg.remove("api-design") is False
+    assert reg.search("REST API", 5) == []
