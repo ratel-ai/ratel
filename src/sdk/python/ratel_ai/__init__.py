@@ -37,7 +37,7 @@ from .mcp import McpServerHandle, register_mcp_server
 from .skill_catalog import Skill, SkillCatalog
 from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 
-# OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0011). The SDK always
+# OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0007). The SDK always
 # emits spans to the active OTel provider (a no-op until one is wired);
 # configure_telemetry is optional sugar that installs a Ratel-owned OTLP exporter
 # (needs the [otlp] extra).

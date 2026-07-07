@@ -1,7 +1,7 @@
 # Ratel telemetry conventions
 
 The wire contract for Ratel's **remote** telemetry. Ratel telemetry *is* OpenTelemetry:
-LLM calls are `gen_ai.*` spans, Ratel's gateway/skill funnel is a `ratel.*` overlay on the
+LLM calls are `gen_ai.*` spans, Ratel's capability/skill funnel is a `ratel.*` overlay on the
 same traces, and ingest is stock OTLP. This document is what every consumer (Ratel Cloud,
 dashboards, a self-hosted receiver) reads against; the per-language helpers under
 `core/`, `ts/`, `python/` codify the `ratel.*` half as constants.
@@ -36,7 +36,7 @@ helper, and note the move in a superseding ADR if the shape (not just keys) chan
 | Tier | Namespace | Owner | Carries |
 |---|---|---|---|
 | Base | `gen_ai.*` | OpenTelemetry (pinned v1.42.0) | the LLM call: operation, provider, model, params, usage, finish; message/tool content on the details event |
-| Overlay | `ratel.*` | this repo | the gateway/skill funnel (the ADR-0007 local event set + the ADR-0005 skill events) as spans + attributes on the same trace |
+| Overlay | `ratel.*` | this repo | the capability/skill funnel (the ADR-0007 local event set + the ADR-0005 skill events) as spans + attributes on the same trace |
 
 `gen_ai.*` is adopted **verbatim**, not one key renamed or re-nested. `ratel.*` is the only vocabulary
 Ratel designs and versions. A Ratel-instrumented agent and a plain-`gen_ai.*` agent land in the same trace,
@@ -155,7 +155,7 @@ the same content flag; the span itself carries only counts.
 
 ### tool invocation: `execute_tool` span + `ratel.*`
 
-A gateway `invoke_tool` (unifying `invoke_start/end/error`, `gateway_invoke/error`, `upstream_invoke/error`)
+An `invoke_tool` call (unifying `invoke_start/end/error`, `gateway_invoke/error`, `upstream_invoke/error`)
 is modelled as a standard **`gen_ai.operation.name = execute_tool`** span (interop: a generic OTel backend
 already understands it) enriched with `ratel.*`:
 

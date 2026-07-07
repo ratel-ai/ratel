@@ -1,6 +1,6 @@
 /**
  * OpenTelemetry emission for the SDK's `ratel.*` / `gen_ai.*` funnel (ADR-0007).
- * The catalog, gateway, skills, and MCP paths call these helpers to
+ * The catalog, capability-tool, skill, and MCP paths call these helpers to
  * open a span around each operation; the span names and attribute keys come from
  * the OTel-free `@ratel-ai/telemetry` vocabulary.
  *
