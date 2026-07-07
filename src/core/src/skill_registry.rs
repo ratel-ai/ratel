@@ -74,10 +74,41 @@ impl SkillRegistry {
         self.skills.push(skill);
         // Append only — the new skill is embedded by the next `build_embeddings`
         // (a search never embeds); see [`crate::ToolRegistry::register`].
+        // Duplicate ids are possible and all get indexed (last wins at search
+        // time); id-stable callers (catalog sync) should use [`Self::upsert`].
         self.sink.record(TraceEvent::SkillChurn {
             kind: ChurnKind::Add,
             skill_id,
         });
+    }
+
+    /// Registers the skill, replacing any existing skill with the same id
+    /// (historical duplicates collapse). Emits `Remove` then `Add` churn on
+    /// replacement. Returns `true` when something was replaced.
+    pub fn upsert(&mut self, skill: Skill) -> bool {
+        let replaced = self.remove(&skill.id);
+        self.register(skill);
+        replaced
+    }
+
+    /// Removes every skill with the given id (tolerating historical duplicates
+    /// from [`Self::register`]). Returns `true` when anything was removed;
+    /// unknown ids are a no-op with no churn event.
+    pub fn remove(&mut self, skill_id: &str) -> bool {
+        let before = self.skills.len();
+        self.skills.retain(|s| s.id != skill_id);
+        let removed = self.skills.len() < before;
+        if removed {
+            // Removal breaks the dense cache's index alignment (and can leave
+            // it longer than the corpus); drop it and let the next
+            // `build_embeddings` re-embed. Covers `upsert`'s replace path too.
+            self.dense.clear();
+            self.sink.record(TraceEvent::SkillChurn {
+                kind: ChurnKind::Remove,
+                skill_id: skill_id.to_string(),
+            });
+        }
+        removed
     }
 
     pub fn search(&self, query: &str, top_k: usize) -> Vec<SkillHit> {
@@ -357,6 +388,197 @@ mod tests {
             &["backend", "api"],
         ));
         reg
+    }
+
+    #[test]
+    fn upsert_new_id_registers_and_emits_add() {
+        let sink = Arc::new(MemorySink::new("test-session"));
+        let mut reg = SkillRegistry::with_trace_sink(sink.clone());
+
+        let replaced = reg.upsert(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+
+        assert!(!replaced);
+        let hits = reg.search("REST API design", 5);
+        assert_eq!(
+            hits.first().map(|h| h.skill_id.as_str()),
+            Some("api-design")
+        );
+        assert!(sink.drain().iter().any(|e| matches!(
+            e.event,
+            TraceEvent::SkillChurn {
+                kind: ChurnKind::Add,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn upsert_existing_id_replaces_and_reindexes_with_remove_then_add() {
+        let sink = Arc::new(MemorySink::new("test-session"));
+        let mut reg = SkillRegistry::with_trace_sink(sink.clone());
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        sink.drain();
+
+        let replaced = reg.upsert(skill(
+            "api-design",
+            "api-design",
+            "GraphQL schema modeling",
+            &["graphql"],
+        ));
+
+        assert!(replaced);
+        let hits = reg.search("GraphQL schema", 5);
+        assert_eq!(
+            hits.first().map(|h| h.skill_id.as_str()),
+            Some("api-design")
+        );
+        assert!(reg.search("REST", 5).is_empty());
+        let churn: Vec<ChurnKind> = sink
+            .drain()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                TraceEvent::SkillChurn { kind, .. } => Some(kind),
+                _ => None,
+            })
+            .collect();
+        assert!(matches!(
+            churn.as_slice(),
+            [ChurnKind::Remove, ChurnKind::Add]
+        ));
+    }
+
+    #[test]
+    fn remove_deletes_the_skill_and_emits_remove() {
+        let sink = Arc::new(MemorySink::new("test-session"));
+        let mut reg = SkillRegistry::with_trace_sink(sink.clone());
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        sink.drain();
+
+        let removed = reg.remove("api-design");
+
+        assert!(removed);
+        assert!(reg.search("REST API design", 5).is_empty());
+        assert!(sink.drain().iter().any(|e| matches!(
+            e.event,
+            TraceEvent::SkillChurn {
+                kind: ChurnKind::Remove,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn remove_unknown_id_is_a_noop_without_events() {
+        let sink = Arc::new(MemorySink::new("test-session"));
+        let mut reg = SkillRegistry::with_trace_sink(sink.clone());
+
+        let removed = reg.remove("ghost");
+
+        assert!(!removed);
+        assert!(sink.drain().is_empty());
+    }
+
+    #[test]
+    fn remove_after_duplicate_registers_removes_all_occurrences() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill("dup", "dup", "REST API design", &["api"]));
+        reg.register(skill("dup", "dup", "REST API design", &["api"]));
+
+        assert!(reg.remove("dup"));
+
+        assert!(reg.search("REST API design", 5).is_empty());
+    }
+
+    #[test]
+    fn upsert_after_duplicate_registers_normalizes_to_one_skill() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill("dup", "dup", "REST API design", &["api"]));
+        reg.register(skill("dup", "dup", "REST API design", &["api"]));
+
+        assert!(reg.upsert(skill("dup", "dup", "GraphQL schema modeling", &["graphql"])));
+
+        assert!(reg.search("REST", 5).is_empty());
+        assert_eq!(reg.search("GraphQL schema", 5).len(), 1);
+    }
+
+    #[test]
+    fn upsert_replace_invalidates_dense_cache_and_rebuild_reflects_the_new_text() {
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        // Neutral id: the stub embedder keys on the searchable text, which
+        // includes the name, so the id must not collide with its keywords.
+        reg.register(skill("writer", "writer", "REST API design", &["rest"]));
+        reg.register(skill("notes", "notes", "meeting notes", &["notes"]));
+        reg.build_embeddings().unwrap();
+
+        reg.upsert(skill("writer", "writer", "frontend slides", &["slides"]));
+
+        // The stale vectors are gone: semantic search demands a rebuild instead
+        // of silently ranking old embeddings against the mutated corpus.
+        assert!(matches!(
+            reg.search_with_method("frontend slides", 5, Origin::Direct, SearchMethod::Semantic),
+            Err(EmbedderError::EmbeddingsNotBuilt)
+        ));
+
+        reg.build_embeddings().unwrap();
+        let hits = reg
+            .search_with_method("frontend slides", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(hits.first().map(|h| h.skill_id.as_str()), Some("writer"));
+        assert!(hits[0].score > 0.9, "ranks with the replacement's vector");
+    }
+
+    #[test]
+    fn remove_invalidates_dense_cache_so_stale_vectors_never_outlive_the_corpus() {
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        reg.register(skill(
+            "frontend-slides",
+            "frontend-slides",
+            "frontend slides",
+            &["frontend"],
+        ));
+        reg.build_embeddings().unwrap();
+
+        reg.remove("api-design");
+
+        // Without invalidation the cache would be LONGER than the corpus:
+        // build_embeddings would early-return and the survivor would rank
+        // against the removed skill's vector.
+        assert!(matches!(
+            reg.search_with_method("frontend slides", 5, Origin::Direct, SearchMethod::Semantic),
+            Err(EmbedderError::EmbeddingsNotBuilt)
+        ));
+
+        reg.build_embeddings().unwrap();
+        let hits = reg
+            .search_with_method("frontend slides", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].skill_id, "frontend-slides");
+        assert!(
+            hits[0].score > 0.9,
+            "ranks with its own vector, not a stale one"
+        );
     }
 
     #[test]
