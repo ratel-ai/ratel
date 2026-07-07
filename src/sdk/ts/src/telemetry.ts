@@ -16,6 +16,7 @@
  * ADR-0007.
  */
 
+import { createRequire } from "node:module";
 import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import {
   AuthOutcome,
@@ -224,6 +225,8 @@ export interface TelemetryHandle {
   shutdown(): Promise<void>;
 }
 
+const OTLP_PACKAGE = "@ratel-ai/telemetry-otlp";
+
 /**
  * Convenience wiring for the greenfield case: register a Ratel-owned OTLP exporter
  * so the spans this SDK emits are shipped to Ratel Cloud (or any OTLP endpoint).
@@ -233,25 +236,41 @@ export interface TelemetryHandle {
  * provider automatically — and add `ratelSpanProcessor` from `@ratel-ai/telemetry-otlp`.
  */
 export async function configureTelemetry(options: InitOptions = {}): Promise<TelemetryHandle> {
-  let otlp: typeof import("@ratel-ai/telemetry-otlp");
-  try {
-    otlp = await import("@ratel-ai/telemetry-otlp");
-  } catch (err) {
-    // A dynamic import both resolves and *executes* the module, so this catch
-    // fires for a genuinely-absent package and for one that throws while
-    // loading (a broken/clashing OTel dependency). Only substitute the install
-    // guidance for the former; rethrow the real load error so it stays visible.
-    if (!isModuleNotFound(err)) throw err;
+  // Split "the peer is absent" from "the peer is present but fails to load": a
+  // plain `import().catch` can't, because a missing *transitive* OTel dep throws
+  // the same MODULE_NOT_FOUND code as an absent peer, so it would mislabel a
+  // broken install as "not installed". Resolve (no execution) answers the first
+  // question; the import then surfaces any genuine load error unmasked.
+  if (!isPeerInstalled(OTLP_PACKAGE)) {
     throw new Error(
-      "configureTelemetry() needs the optional @ratel-ai/telemetry-otlp package. Install it " +
-        "(e.g. `npm i @ratel-ai/telemetry-otlp`), or register your own OpenTelemetry provider — " +
+      `configureTelemetry() needs the optional ${OTLP_PACKAGE} package. Install it ` +
+        `(e.g. \`npm i ${OTLP_PACKAGE}\`), or register your own OpenTelemetry provider — ` +
         "the SDK emits ratel.*/gen_ai.* spans to whatever provider is active.",
     );
   }
+  const otlp: typeof import("@ratel-ai/telemetry-otlp") = await import(OTLP_PACKAGE);
   return otlp.init(options);
 }
 
-/** A dynamic import reports a module-not-found code only when the package is absent. */
+/**
+ * Whether `specifier` resolves from this module (i.e. is installed), without
+ * executing it. Lets {@link configureTelemetry} tell an absent optional peer
+ * (show install guidance) apart from a present-but-broken one (let the real load
+ * error surface), which a MODULE_NOT_FOUND code alone cannot.
+ */
+export function isPeerInstalled(specifier: string): boolean {
+  try {
+    createRequire(import.meta.url).resolve(specifier);
+    return true;
+  } catch (err) {
+    if (isModuleNotFound(err)) return false;
+    // Resolvable-but-quirky (e.g. an exports-map edge case): assume present, so
+    // the subsequent import surfaces the real failure rather than "not installed".
+    return true;
+  }
+}
+
+/** A resolve/import reports a module-not-found code only when the package is absent. */
 export function isModuleNotFound(err: unknown): boolean {
   const code = (err as { code?: unknown })?.code;
   return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND";

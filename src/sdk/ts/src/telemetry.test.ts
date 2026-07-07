@@ -1,4 +1,5 @@
-import { trace } from "@opentelemetry/api";
+import { context, trace } from "@opentelemetry/api";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -7,7 +8,7 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { configureTelemetry, type ExecutableTool, SkillCatalog, ToolCatalog } from "./index.js";
-import { isModuleNotFound, recordAuthNeeded } from "./telemetry.js";
+import { isModuleNotFound, isPeerInstalled, recordAuthNeeded } from "./telemetry.js";
 
 /**
  * Instrumentation is verified through the public OTel API: register an in-memory
@@ -264,6 +265,43 @@ describe("no provider configured", () => {
   });
 });
 
+describe("span nesting", () => {
+  // The attribute/status tests above register no ContextManager, so context.active()
+  // is always ROOT and every span is rootless — parent/child linkage is invisible to
+  // them. Register a real AsyncLocalStorageContextManager here so a regression that
+  // swaps startActiveSpan for a non-active startSpan (which would detach nested spans)
+  // is actually caught.
+  it("parents an inner span to the wrapping execute_tool span", async () => {
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+    try {
+      const catalog = new ToolCatalog();
+      catalog.register(readFile);
+      // Executor triggers a nested ratel.search while the outer execute_tool span is active.
+      catalog.register({
+        id: "outer",
+        name: "outer",
+        description: "invokes a nested search",
+        inputSchema: { properties: {} },
+        outputSchema: { properties: {} },
+        execute: async () => {
+          catalog.search("read", 3);
+          return { ok: true };
+        },
+      });
+      await catalog.invoke("outer", {});
+
+      const [outer] = spansNamed("execute_tool outer");
+      const [inner] = spansNamed("ratel.search");
+      expect(outer, "outer execute_tool span").toBeTruthy();
+      expect(inner, "inner ratel.search span").toBeTruthy();
+      expect(inner.parentSpanContext?.spanId).toBe(outer.spanContext().spanId);
+      expect(inner.spanContext().traceId).toBe(outer.spanContext().traceId);
+    } finally {
+      context.disable(); // drop the context manager so other tests keep ROOT context
+    }
+  });
+});
+
 describe("configureTelemetry", () => {
   it("loads the optional peer and delegates to its init()", async () => {
     // beforeEach already registered a global provider, so init()'s takeover guard
@@ -275,7 +313,17 @@ describe("configureTelemetry", () => {
   });
 });
 
-describe("isModuleNotFound (configureTelemetry import guard)", () => {
+describe("isPeerInstalled (configureTelemetry install probe)", () => {
+  it("detects an installed package and an absent one without executing them", () => {
+    // The optional peer is a workspace dep, so it resolves; a nonsense name does not.
+    // This is the crux of the transitive-dep fix: a *present* peer must read as
+    // installed so a later load error surfaces instead of being masked as "not installed".
+    expect(isPeerInstalled("@ratel-ai/telemetry-otlp")).toBe(true);
+    expect(isPeerInstalled("@ratel-ai/definitely-not-a-real-package")).toBe(false);
+  });
+});
+
+describe("isModuleNotFound (install-probe error classifier)", () => {
   it("is true only for a genuine module-not-found code", () => {
     expect(isModuleNotFound(Object.assign(new Error("x"), { code: "ERR_MODULE_NOT_FOUND" }))).toBe(
       true,
