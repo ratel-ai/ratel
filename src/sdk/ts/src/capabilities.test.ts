@@ -1,4 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { trace } from "@opentelemetry/api";
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   type ExecutableTool,
   INVOKE_TOOL_ID,
@@ -10,6 +16,10 @@ import {
   searchCapabilitiesTool,
   ToolCatalog,
 } from "./index.js";
+
+// A span test may register a global OTel provider; drop it after every test so it
+// can't leak into the others (which assert on the local recordEvent stream).
+afterEach(() => trace.disable());
 
 const readFile: ExecutableTool = {
   id: "fs__read_file",
@@ -299,6 +309,37 @@ describe("invokeToolTool", () => {
     expect(result.isError).toBe(true);
     expect(result.upstream).toBe("stripe");
     expect(seen).toEqual(["stripe"]);
+  });
+
+  it("emits a ratel.auth.flow span (outcome=needs_auth, upstream) on the needs_auth path", async () => {
+    const exporter = new InMemorySpanExporter();
+    trace.setGlobalTracerProvider(
+      new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] }),
+    );
+    const tools = new ToolCatalog();
+    class UnauthorizedError extends Error {
+      constructor(m: string) {
+        super(m);
+        this.name = "UnauthorizedError";
+      }
+    }
+    tools.register({
+      id: "stripe__charges",
+      name: "charges",
+      description: "...",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => {
+        throw new UnauthorizedError("expired");
+      },
+    });
+    const tool = invokeToolTool(tools);
+    await tool.execute({ toolId: "stripe__charges", args: {} });
+
+    const [span] = exporter.getFinishedSpans().filter((s) => s.name === "ratel.auth.flow");
+    expect(span, "one ratel.auth.flow span").toBeTruthy();
+    expect(span.attributes["ratel.auth.outcome"]).toBe("needs_auth");
+    expect(span.attributes["ratel.upstream.server"]).toBe("stripe");
   });
 
   it("emits gateway_invoke on success", async () => {

@@ -1,4 +1,6 @@
+import { SearchTarget } from "@ratel-ai/telemetry";
 import { type SearchHit, type Tool, ToolRegistry } from "../native/index.cjs";
+import { argsSizeBytes, errorMessage, traceExecuteTool, traceSearch } from "./telemetry.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: tool inputs are heterogeneous across the catalog
 export type Executor = (input: any) => Promise<unknown> | unknown;
@@ -14,17 +16,28 @@ export type TraceSinkConfig =
 
 export type SearchOrigin = "direct" | "agent";
 
+export type SearchMethod = "bm25" | "semantic" | "hybrid";
+
 export interface ToolCatalogOptions {
   trace?: TraceSinkConfig;
+  /** Default retrieval method for `search` (default `"bm25"`, model-free). A
+   * per-call `method` argument overrides it. */
+  method?: SearchMethod;
 }
 
 export class ToolCatalog {
   private readonly registry: ToolRegistry;
   private readonly executors = new Map<string, Executor>();
   private readonly tools = new Map<string, Tool>();
+  private readonly method: SearchMethod;
+  private readonly eager: boolean;
 
   constructor(options: ToolCatalogOptions = {}) {
     this.registry = new ToolRegistry();
+    this.method = options.method ?? "bm25";
+    // Semantic/hybrid default → embed each tool at registration so searches
+    // never pay the embedding cost. BM25 default does nothing.
+    this.eager = this.method === "semantic" || this.method === "hybrid";
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
@@ -35,10 +48,33 @@ export class ToolCatalog {
     this.registry.register(metadata);
     this.executors.set(tool.id, execute);
     this.tools.set(tool.id, metadata);
+    if (this.eager) {
+      // Embed the just-registered tool now (incremental). Throws if the model
+      // fails to load.
+      this.registry.buildEmbeddings();
+    }
   }
 
-  search(query: string, topK: number, origin: SearchOrigin = "direct"): SearchHit[] {
-    return this.registry.searchWithOrigin(query, topK, origin);
+  /** Pre-compute embeddings for any not-yet-embedded tools. Call after a bulk
+   * register, or rely on the automatic per-register embedding a semantic/hybrid
+   * catalog does. No-op for a BM25 catalog's cache. */
+  buildEmbeddings(): void {
+    this.registry.buildEmbeddings();
+  }
+
+  /** Search the catalog. `method` overrides the catalog default for this call.
+   * `"semantic"`/`"hybrid"` rank against the prebuilt embedding cache and throw
+   * `EmbeddingsNotBuilt` if it isn't built; they never load the model in-search (a
+   * semantic/hybrid catalog builds embeddings eagerly at register). */
+  search(
+    query: string,
+    topK: number,
+    origin: SearchOrigin = "direct",
+    method?: SearchMethod,
+  ): SearchHit[] {
+    return traceSearch(SearchTarget.Tool, query, topK, origin, () =>
+      this.registry.searchWithMethod(query, topK, origin, method ?? this.method),
+    );
   }
 
   has(toolId: string): boolean {
@@ -69,41 +105,32 @@ export class ToolCatalog {
     if (!fn) {
       throw new Error(`unknown toolId: ${toolId}`);
     }
-    this.registry.recordEvent({
-      type: "invoke_start",
-      tool_id: toolId,
-      args_size_bytes: argsSizeBytes(args),
+    // The `execute_tool` OTel span wraps the local trace stream; both record the
+    // same invocation, on their two independent channels (ADR-0007).
+    return traceExecuteTool(toolId, args, async () => {
+      this.registry.recordEvent({
+        type: "invoke_start",
+        tool_id: toolId,
+        args_size_bytes: argsSizeBytes(args),
+      });
+      const started = Date.now();
+      try {
+        const result = await fn(args);
+        this.registry.recordEvent({
+          type: "invoke_end",
+          tool_id: toolId,
+          took_ms: Date.now() - started,
+        });
+        return result;
+      } catch (err) {
+        this.registry.recordEvent({
+          type: "invoke_error",
+          tool_id: toolId,
+          took_ms: Date.now() - started,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     });
-    const started = Date.now();
-    try {
-      const result = await fn(args);
-      this.registry.recordEvent({
-        type: "invoke_end",
-        tool_id: toolId,
-        took_ms: Date.now() - started,
-      });
-      return result;
-    } catch (err) {
-      this.registry.recordEvent({
-        type: "invoke_error",
-        tool_id: toolId,
-        took_ms: Date.now() - started,
-        error: errorMessage(err),
-      });
-      throw err;
-    }
   }
-}
-
-function argsSizeBytes(args: unknown): number {
-  try {
-    return JSON.stringify(args).length;
-  } catch {
-    return 0;
-  }
-}
-
-function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return String(err);
 }

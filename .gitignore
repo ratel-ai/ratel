@@ -27,6 +27,7 @@ __pycache__/
 *.egg
 dist/
 build/
+.venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -35,6 +36,7 @@ build/
 # TypeScript
 *.tsbuildinfo
 src/sdk/ts/dist/
+src/telemetry/ts/dist/
 
 # NAPI native binding outputs
 src/sdk/ts/native/index.cjs

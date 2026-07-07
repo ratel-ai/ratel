@@ -1,6 +1,6 @@
 # `native/` — PyO3 binding to `ratel-ai-core`
 
-The Rust crate that produces the native Python extension bundled by [`ratel-ai`](../README.md). Pure pass-through over the public API of [`ratel-ai-core`](../../../core/lib/README.md); see [ADR 0011](../../../../docs/adr/0011-python-rust-binding-strategy.md) for the binding-strategy rationale.
+The Rust crate that produces the native Python extension bundled by [`ratel-ai`](../README.md). Pure pass-through over the public API of [`ratel-ai-core`](../../../core/README.md); see [ADR 0006](../../../../docs/adr/0006-native-ffi-bindings.md) for the binding-strategy rationale.
 
 ## Build
 

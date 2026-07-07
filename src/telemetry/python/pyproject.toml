@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ratel-ai-telemetry"
+version = "0.1.0"
+description = "Ratel telemetry conventions — the ratel.* overlay on OpenTelemetry gen_ai spans. init() helper and constants for the Ratel context engineering platform."
+readme = "README.md"
+license = { file = "LICENSE.md" }
+authors = [{ name = "Agentified" }]
+requires-python = ">=3.9"
+keywords = [
+    "telemetry",
+    "opentelemetry",
+    "observability",
+    "gen-ai",
+    "ai-agents",
+    "ratel",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Monitoring",
+]
+# The ratel.* vocabulary + the OTLP config/gate are pure Python and OTel-free
+# (ADR-0007), so importing the constants pulls no OpenTelemetry SDK. The SDK is an
+# optional [otlp] extra, needed only by init() (in ratel_ai_telemetry.otlp).
+dependencies = []
+
+[project.optional-dependencies]
+# init() is sugar over the standard OTel Python SDK (ADR-0007): no custom transport.
+# Pinned to the 1.41.x line and capped below 1.42, which drops Python 3.9 support
+# (this package targets >=3.9). semantic-conventions is not a direct dep: SERVICE_NAME
+# resolves to the literal "service.name" from opentelemetry-sdk.
+otlp = [
+    "opentelemetry-api>=1.41.0,<1.42",
+    "opentelemetry-sdk>=1.41.0,<1.42",
+    "opentelemetry-exporter-otlp-proto-http>=1.41.0,<1.42",
+]
+# dev pulls the [otlp] extra so the init() + conformance tests exercise the real SDK.
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "ratel-ai-telemetry[otlp]"]
+
+[project.urls]
+Homepage = "https://github.com/ratel-ai/ratel"
+Repository = "https://github.com/ratel-ai/ratel"
+Issues = "https://github.com/ratel-ai/ratel/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ratel_ai_telemetry"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+# Runtime floor is 3.9; mypy's minimum supported target is 3.10, so we type-check
+# against that (matches the Python SDK).
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,125 @@
+import { readFileSync } from "node:fs";
+import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { describe, expect, it } from "vitest";
+import {
+  EXECUTE_TOOL,
+  GEN_AI_INFERENCE_DETAILS,
+  GEN_AI_OPERATION_NAME,
+  GEN_AI_TOOL_CALL_ARGUMENTS,
+  GEN_AI_TOOL_CALL_ID,
+  GEN_AI_TOOL_CALL_RESULT,
+  GEN_AI_TOOL_NAME,
+  RATEL_AUTH_FLOW,
+  RATEL_AUTH_OUTCOME,
+  RATEL_ORIGIN,
+  RATEL_SEARCH,
+  RATEL_SEARCH_HIT_COUNT,
+  RATEL_SEARCH_QUERY,
+  RATEL_SEARCH_RESULTS,
+  RATEL_SEARCH_TARGET,
+  RATEL_SEARCH_TOP_K,
+  RATEL_SKILL_ID,
+  RATEL_SKILL_LOAD,
+  RATEL_TOOL_ARGS_SIZE_BYTES,
+  RATEL_UPSTREAM_REGISTER,
+  RATEL_UPSTREAM_SERVER,
+  RATEL_UPSTREAM_TOOL_COUNT,
+  RATEL_UPSTREAM_TRANSPORT,
+  SEMCONV_VERSION,
+} from "./index.js";
+
+// Logical span id -> the span-name constant under test.
+const SPAN_NAME: Record<string, string> = {
+  execute_tool: EXECUTE_TOOL,
+  ratel_search: RATEL_SEARCH,
+  ratel_skill_load: RATEL_SKILL_LOAD,
+  ratel_upstream_register: RATEL_UPSTREAM_REGISTER,
+  ratel_auth_flow: RATEL_AUTH_FLOW,
+};
+
+// Logical attribute id -> the attribute-key constant under test.
+const ATTR_KEY: Record<string, string> = {
+  gen_ai_operation_name: GEN_AI_OPERATION_NAME,
+  gen_ai_tool_name: GEN_AI_TOOL_NAME,
+  gen_ai_tool_call_id: GEN_AI_TOOL_CALL_ID,
+  gen_ai_tool_call_arguments: GEN_AI_TOOL_CALL_ARGUMENTS,
+  gen_ai_tool_call_result: GEN_AI_TOOL_CALL_RESULT,
+  ratel_origin: RATEL_ORIGIN,
+  ratel_tool_args_size_bytes: RATEL_TOOL_ARGS_SIZE_BYTES,
+  ratel_upstream_server: RATEL_UPSTREAM_SERVER,
+  ratel_search_target: RATEL_SEARCH_TARGET,
+  ratel_search_top_k: RATEL_SEARCH_TOP_K,
+  ratel_search_hit_count: RATEL_SEARCH_HIT_COUNT,
+  ratel_search_query: RATEL_SEARCH_QUERY,
+  ratel_skill_id: RATEL_SKILL_ID,
+  ratel_upstream_transport: RATEL_UPSTREAM_TRANSPORT,
+  ratel_upstream_tool_count: RATEL_UPSTREAM_TOOL_COUNT,
+  ratel_auth_outcome: RATEL_AUTH_OUTCOME,
+};
+
+// Logical event id -> the event-name constant under test.
+const EVENT_NAME: Record<string, string> = {
+  ratel_search_results: RATEL_SEARCH_RESULTS,
+  gen_ai_inference_details: GEN_AI_INFERENCE_DETAILS,
+};
+
+interface Fixture {
+  name: string;
+  span: string;
+  set: Record<string, string | number>;
+  add_events?: string[];
+  expect_name: string;
+  expect_attributes: Record<string, string | number>;
+  expect_events?: string[];
+}
+
+interface FixtureFile {
+  semconv_version: string;
+  fixtures: Fixture[];
+}
+
+const fixtures: FixtureFile = JSON.parse(
+  readFileSync(new URL("../../conformance/fixtures.json", import.meta.url), "utf8"),
+);
+
+function emit(fixture: Fixture): {
+  name: string;
+  attributes: Record<string, unknown>;
+  events: string[];
+} {
+  const exporter = new InMemorySpanExporter();
+  const provider = new NodeTracerProvider({
+    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  });
+  const tracer = provider.getTracer("conformance");
+  const span = tracer.startSpan(SPAN_NAME[fixture.span]);
+  for (const [field, value] of Object.entries(fixture.set)) {
+    span.setAttribute(ATTR_KEY[field], value);
+  }
+  for (const event of fixture.add_events ?? []) {
+    span.addEvent(EVENT_NAME[event]);
+  }
+  span.end();
+  const [emitted] = exporter.getFinishedSpans();
+  return {
+    name: emitted.name,
+    attributes: { ...emitted.attributes },
+    events: emitted.events.map((e) => e.name),
+  };
+}
+
+describe("telemetry conformance (contract against the pin)", () => {
+  it("shares the pinned semconv version with the vocabulary", () => {
+    expect(fixtures.semconv_version).toBe(SEMCONV_VERSION);
+  });
+
+  for (const fixture of fixtures.fixtures) {
+    it(`emits the pinned keys: ${fixture.name}`, () => {
+      const { name, attributes, events } = emit(fixture);
+      expect(name).toBe(fixture.expect_name);
+      expect(attributes).toEqual(fixture.expect_attributes);
+      expect(events).toEqual(fixture.expect_events ?? []);
+    });
+  }
+});

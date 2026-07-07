@@ -1,10 +1,14 @@
+import { SearchTarget } from "@ratel-ai/telemetry";
 import { type Skill, type SkillHit, SkillRegistry } from "../native/index.cjs";
-import type { SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import type { SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import { traceSearch, traceSkillLoad } from "./telemetry.js";
 
 export type { Skill, SkillHit };
 
 export interface SkillCatalogOptions {
   trace?: TraceSinkConfig;
+  /** Default retrieval method for `search` (default `"bm25"`). */
+  method?: SearchMethod;
 }
 
 /**
@@ -15,9 +19,13 @@ export interface SkillCatalogOptions {
 export class SkillCatalog {
   private readonly registry: SkillRegistry;
   private readonly skills = new Map<string, Skill>();
+  private readonly method: SearchMethod;
+  private readonly eager: boolean;
 
   constructor(options: SkillCatalogOptions = {}) {
     this.registry = new SkillRegistry();
+    this.method = options.method ?? "bm25";
+    this.eager = this.method === "semantic" || this.method === "hybrid";
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
@@ -26,10 +34,25 @@ export class SkillCatalog {
   register(skill: Skill): void {
     this.registry.register(skill);
     this.skills.set(skill.id, skill);
+    if (this.eager) {
+      this.registry.buildEmbeddings();
+    }
   }
 
-  search(query: string, topK: number, origin: SearchOrigin = "direct"): SkillHit[] {
-    return this.registry.searchWithOrigin(query, topK, origin);
+  /** Pre-compute embeddings for not-yet-embedded skills. See `ToolCatalog.buildEmbeddings`. */
+  buildEmbeddings(): void {
+    this.registry.buildEmbeddings();
+  }
+
+  search(
+    query: string,
+    topK: number,
+    origin: SearchOrigin = "direct",
+    method?: SearchMethod,
+  ): SkillHit[] {
+    return traceSearch(SearchTarget.Skill, query, topK, origin, () =>
+      this.registry.searchWithMethod(query, topK, origin, method ?? this.method),
+    );
   }
 
   has(skillId: string): boolean {
@@ -62,13 +85,15 @@ export class SkillCatalog {
     if (!skill) {
       throw new Error(`unknown skillId: ${skillId}`);
     }
-    const started = Date.now();
-    const body = skill.body ?? "";
-    this.registry.recordEvent({
-      type: "skill_invoke",
-      skill_id: skillId,
-      took_ms: Date.now() - started,
+    return traceSkillLoad(skillId, () => {
+      const started = Date.now();
+      const body = skill.body ?? "";
+      this.registry.recordEvent({
+        type: "skill_invoke",
+        skill_id: skillId,
+        took_ms: Date.now() - started,
+      });
+      return body;
     });
-    return body;
   }
 }

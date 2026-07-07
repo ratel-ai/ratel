@@ -1,8 +1,8 @@
 [package]
 name = "ratel-sdk-python-native"
-version.workspace = true
+version = "0.3.0" # locked to ratel-ai (PyPI); ships in the sdk-py-v* unit (ADR-0008)
 edition.workspace = true
-license.workspace = true
+license = "MIT"
 repository.workspace = true
 publish = false
 

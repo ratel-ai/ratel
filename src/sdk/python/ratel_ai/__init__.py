@@ -23,6 +23,7 @@ from .capabilities import (
 from .catalog import (
     ExecutableTool,
     Executor,
+    SearchMethod,
     SearchOrigin,
     Tool,
     ToolCatalog,
@@ -36,6 +37,12 @@ from .mcp import McpServerHandle, register_mcp_server
 from .skill_catalog import Skill, SkillCatalog
 from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 
+# OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0011). The SDK always
+# emits spans to the active OTel provider (a no-op until one is wired);
+# configure_telemetry is optional sugar that installs a Ratel-owned OTLP exporter
+# (needs the [otlp] extra).
+from .telemetry import configure_telemetry
+
 __all__ = [
     "GET_SKILL_CONTENT_ID",
     "INVOKE_TOOL_ID",
@@ -46,6 +53,7 @@ __all__ = [
     "McpServerHandle",
     "OnUnauthorized",
     "SearchHit",
+    "SearchMethod",
     "SearchOrigin",
     "Skill",
     "SkillCatalog",
@@ -56,6 +64,7 @@ __all__ = [
     "ToolRegistry",
     "TraceSinkConfig",
     "UpstreamServerInfo",
+    "configure_telemetry",
     "format_upstream_line",
     "get_skill_content_tool",
     "invoke_tool_tool",

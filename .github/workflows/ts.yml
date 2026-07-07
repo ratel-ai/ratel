@@ -33,6 +33,10 @@ jobs:
         run: pnpm -r lint
       - name: Test
         run: pnpm -r test
+      # Release tooling lives at repo root (outside the pnpm workspace), so run its
+      # dependency-free node:test suite here rather than via `pnpm -r test`.
+      - name: Test release tooling
+        run: node --test scripts/*.test.mjs
       # Example wiring (Vercel AI SDK) — folded in here to keep one TS check row.
       # Drives the real ToolLoopAgent loop with a scripted MockLanguageModel (no API
       # key), catching framework-integration drift the SDK-level tests can't see. The
@@ -40,3 +44,10 @@ jobs:
       # See examples/ai-sdk/test/agent.test.ts.
       - name: Test the AI SDK example wiring
         run: pnpm --filter @ratel-ai/example-ai-sdk exec tsx test/agent.test.ts
+      # Telemetry example — runs offline (console exporter), emitting a ratel.search
+      # + execute_tool trace through the OTel SDK, so it verifies the `ratel.*` vocab
+      # end-to-end. @ratel-ai/telemetry and @ratel-ai/telemetry-otlp (the example imports
+      # init() from the latter) are already built by `pnpm -r build` above.
+      # See examples/telemetry-ts/src/index.ts.
+      - name: Run the telemetry example
+        run: pnpm --filter @ratel-ai/example-telemetry exec tsx src/index.ts

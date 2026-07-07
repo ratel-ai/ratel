@@ -1,4 +1,5 @@
 packages:
   - 'src/sdk/ts'
-  - 'src/integrations/*'
+  - 'src/telemetry/ts'
+  - 'src/telemetry/ts-otlp'
   - 'examples/*'

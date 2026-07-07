@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-06
+
+### Added
+
+- `ToolCatalog` / `SkillCatalog` accept a default `method` (`"bm25"` | `"semantic"` | `"hybrid"`) and `search(query, top_k, origin=..., method=...)` takes a per-call override. `"bm25"` (default) is unchanged and model-free; `"semantic"` / `"hybrid"` load a local embedding model and raise `RuntimeError` if it fails to load. Exposed via the native `search_with_method` binding and the `SearchMethod` type.
+- A `"semantic"`/`"hybrid"` catalog embeds each tool/skill **eagerly at `register`** (incrementally), so searches never pay the corpus-embedding cost. New `catalog.build_embeddings()` pre-computes embeddings on demand (e.g. after a bulk register). BM25 catalogs do neither. A semantic/hybrid search on a catalog with no embeddings built raises `RuntimeError` (embeddings not computed) rather than embedding during the search.
+
+## [0.2.1-rc.1] - 2026-07-04
+
+### Changed
+
+- First release cut under the per-package release scheme (ADR-0016): `ratel-ai` now versions and ships independently of the core crate and JS SDK, tagged `sdk-py-v*`. No API changes since 0.2.0.
+
 ## [0.2.0] - 2026-06-16
 
 ### Changed

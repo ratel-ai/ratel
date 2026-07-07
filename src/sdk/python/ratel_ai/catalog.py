@@ -2,7 +2,7 @@
 
 `ToolRegistry` (the BM25 index) comes from the native binding; `ToolCatalog`
 layers executable handlers on top and emits the same trace events the TS SDK does
-(see ADR-0009 for the core-owned schema).
+(see ADR-0007 for the core-owned schema).
 """
 
 from __future__ import annotations
@@ -15,11 +15,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Union
 
 from ._native import SearchHit, ToolRegistry
+from .telemetry import SEARCH_TARGET_TOOL, trace_execute_tool, trace_search
 
 # Tool inputs are heterogeneous across the catalog; handlers may be sync or async.
 Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
 
 SearchOrigin = str  # "direct" | "agent"
+SearchMethod = str  # "bm25" | "semantic" | "hybrid"
 
 
 @dataclass
@@ -57,10 +59,20 @@ class TraceSinkConfig:
 class ToolCatalog:
     """Registry + executors. Register tools once, then search and invoke by id."""
 
-    def __init__(self, trace: TraceSinkConfig | None = None) -> None:
+    def __init__(
+        self,
+        trace: TraceSinkConfig | None = None,
+        method: SearchMethod = "bm25",
+    ) -> None:
         self._registry = ToolRegistry()
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
+        # Default retrieval method for `search`; "bm25" keeps the historical
+        # (model-free) behavior. A per-call `method=` overrides it.
+        self._method: SearchMethod = method
+        # Semantic/hybrid default → eagerly embed each tool at registration so
+        # searches never pay the embedding cost. BM25 default does nothing.
+        self._eager: bool = method in ("semantic", "hybrid")
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -82,9 +94,34 @@ class ToolCatalog:
             input_schema=tool.input_schema,
             output_schema=tool.output_schema,
         )
+        if self._eager:
+            # Embed the just-registered tool now (incremental) so semantic/hybrid
+            # searches stay fast. Raises RuntimeError if the model fails to load.
+            self._registry.build_embeddings()
 
-    def search(self, query: str, top_k: int, origin: SearchOrigin = "direct") -> list[SearchHit]:
-        return self._registry.search_with_origin(query, top_k, origin)
+    def build_embeddings(self) -> None:
+        """Pre-compute embeddings for any not-yet-embedded tools. Call after a
+        bulk register, or rely on the automatic per-register embedding that a
+        semantic/hybrid catalog does. No-op for a BM25 catalog's cache."""
+        self._registry.build_embeddings()
+
+    def search(
+        self,
+        query: str,
+        top_k: int,
+        origin: SearchOrigin = "direct",
+        method: SearchMethod | None = None,
+    ) -> list[SearchHit]:
+        """Search the catalog. `method` overrides the catalog default for this
+        call ("bm25" | "semantic" | "hybrid"); "semantic"/"hybrid" raise
+        `RuntimeError` if the embedding model fails to load."""
+        return trace_search(
+            SEARCH_TARGET_TOOL,
+            query,
+            top_k,
+            origin,
+            lambda: self._registry.search_with_method(query, top_k, origin, method or self._method),
+        )
 
     def has(self, tool_id: str) -> bool:
         return tool_id in self._executors
@@ -116,41 +153,47 @@ class ToolCatalog:
         fn = self._executors.get(tool_id)
         if fn is None:
             raise ValueError(f"unknown toolId: {tool_id}")
-        self._registry.record_event(
-            {
-                "type": "invoke_start",
-                "tool_id": tool_id,
-                "args_size_bytes": _args_size_bytes(args),
-            }
-        )
-        started = time.monotonic()
-        try:
-            # Executors may be sync (a plain dict-returning function) or async
-            # (`async def`, e.g. MCP/HTTP tools) — so call first, then await only
-            # if awaitable. Never bare-`await fn(args)`: in Python that raises on a
-            # sync result. (See docs/lessons.md — this is the canonical place that
-            # absorbs the difference; callers must route here, not re-derive it.)
-            result = fn(args)
-            if inspect.isawaitable(result):
-                result = await result
+
+        async def _run() -> Any:
             self._registry.record_event(
                 {
-                    "type": "invoke_end",
+                    "type": "invoke_start",
                     "tool_id": tool_id,
-                    "took_ms": _elapsed_ms(started),
+                    "args_size_bytes": _args_size_bytes(args),
                 }
             )
-            return result
-        except Exception as err:
-            self._registry.record_event(
-                {
-                    "type": "invoke_error",
-                    "tool_id": tool_id,
-                    "took_ms": _elapsed_ms(started),
-                    "error": _error_message(err),
-                }
-            )
-            raise
+            started = time.monotonic()
+            try:
+                # Executors may be sync (a plain dict-returning function) or async
+                # (`async def`, e.g. MCP/HTTP tools) — so call first, then await only
+                # if awaitable. Never bare-`await fn(args)`: in Python that raises on a
+                # sync result. This is the canonical place that absorbs the difference;
+                # callers must route here, not re-derive it.
+                result = fn(args)
+                if inspect.isawaitable(result):
+                    result = await result
+                self._registry.record_event(
+                    {
+                        "type": "invoke_end",
+                        "tool_id": tool_id,
+                        "took_ms": _elapsed_ms(started),
+                    }
+                )
+                return result
+            except Exception as err:
+                self._registry.record_event(
+                    {
+                        "type": "invoke_error",
+                        "tool_id": tool_id,
+                        "took_ms": _elapsed_ms(started),
+                        "error": _error_message(err),
+                    }
+                )
+                raise
+
+        # The `execute_tool` OTel span wraps the local trace stream; both record the
+        # same invocation, on their two independent channels (ADR-0007).
+        return await trace_execute_tool(tool_id, args, _run)
 
 
 def _args_size_bytes(args: Any) -> int:

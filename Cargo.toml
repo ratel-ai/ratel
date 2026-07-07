@@ -1,19 +1,21 @@
 [workspace]
 resolver = "3"
 members = [
-    "src/core/lib",
+    "src/core",
+    "src/telemetry/core",
     "src/sdk/ts/native",
     "src/sdk/python/native",
 ]
 
 [workspace.package]
-version = "0.2.0"
+# Versions are per-package (ADR-0008): each release unit carries its own version
+# in its own manifest, tagged independently (core-v*, sdk-ts-v*, sdk-py-v*). Only
+# non-version metadata is shared here.
 edition = "2024"
-license = "MIT"
 repository = "https://github.com/ratel-ai/ratel"
 homepage = "https://github.com/ratel-ai/ratel"
 documentation = "https://docs.rs/ratel-ai-core"
 authors = ["Agentified"]
 
 [workspace.dependencies]
-ratel-ai-core = { path = "src/core/lib" }
+ratel-ai-core = { path = "src/core" }

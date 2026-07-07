@@ -1,5 +1,5 @@
 {
-  "$comment": "Shared, language-neutral tool catalog used by every SDK/CLI E2E runner. Tools use distinctive descriptions so each scenario query has an unambiguous top-1 BM25 match. Keys are camelCase on the wire; the Python runner maps inputSchema->input_schema. Extend this alongside e2e/scenario.json when product surface grows. See e2e/README.md.",
+  "$comment": "Shared, language-neutral tool catalog used by every SDK E2E runner. Tools use distinctive descriptions so each scenario query has an unambiguous top-1 BM25 match. Keys are camelCase on the wire; the Python runner maps inputSchema->input_schema. Extend this alongside e2e/scenario.json when product surface grows. See e2e/README.md.",
   "tools": [
     {
       "server": "fs",

@@ -45,26 +45,27 @@ Backend / business-logic / library code: TDD is the default — write the failin
 
 ## Architecture decisions
 
-For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Status` / `Context` / `Decision` / `Consequences`), next available number, kebab-cased title. ADRs are immutable once `Accepted`; supersede, don't edit. See [ADR 0001](docs/adr/0001-record-architecture-decisions.md) for the full convention.
+For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Status` / `Context` / `Decision` / `Consequences`), next available number, kebab-cased title. The set is kept minimal and current: amend in place for small drift (paths, names, counts), supersede for real decision reversals, compact periodically (git history is the archive). See [ADR 0001](docs/adr/0001-record-architecture-decisions.md) for the full convention.
 
 ## Commit messages
 
 - Concise, imperative mood; sacrifice grammar for brevity
-- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful — these route into per-package CHANGELOGs (see Releases)
-- Use a scope when the change is package-specific: `feat(sdk):`, `fix(cli):`, `refactor(core):`. Unscoped `feat`/`fix` won't auto-route to a single package's changelog
+- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful — the prefix picks the CHANGELOG section (`feat`→Added, `fix`→Fixed, `perf`/`refactor`→Changed; `docs`/`chore`/`ci`/`build`/`test` are skipped). See Releases
+- A scope (`feat(core):`, `fix(sdk):`) is cosmetic — it's shown in the entry but does not decide which unit's CHANGELOG a commit lands in. That routing is by the files a commit touches (git-cliff scopes each unit to its own paths), so keep a commit within one unit's tree where practical
 - No tool-attribution lines (no `Co-Authored-By` for AI assistants)
 
 ## Releases
 
-We publish three artifacts from this repo in lockstep: `ratel-ai-core` (crates.io) and `@ratel-ai/sdk` / `@ratel-ai/cli` (npm). Each has a `CHANGELOG.md` in its package directory. The MCP-server library `@ratel-ai/mcp-server` is published independently from [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp); `@ratel-ai/cli` depends on it from npm.
+Independently-versioned units publish from this repo (ADR-0008): `ratel-ai-core` (crates.io, `core-v*`), `@ratel-ai/sdk` + its per-OS packages (npm, `sdk-ts-v*`), `ratel-ai` (PyPI, `sdk-py-v*`), and the four telemetry units — `ratel-ai-telemetry` (crates.io, `telemetry-core-v*`), `@ratel-ai/telemetry` (npm, `telemetry-ts-v*`), `ratel-ai-telemetry` (PyPI, `telemetry-py-v*`), and the `init()` exporter `@ratel-ai/telemetry-otlp` (npm, `telemetry-ts-otlp-v*`). Each has a `CHANGELOG.md` in its package directory and its own tag prefix. `@ratel-ai/mcp-server` publishes independently from [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp).
 
-Before tagging a release:
+To cut a release — one unit at a time; see [RELEASING.md](RELEASING.md) for the full flow:
 
-1. Bump the version in `Cargo.toml`, `src/sdk/ts/package.json`, `src/integrations/cli/package.json` (kept in lockstep — the release workflow validates).
-2. Run the `/changelog` skill (`.claude/skills/changelog/`). It drafts per-package entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the three CHANGELOGs. For GA versions (no `-rc` suffix), it collapses any existing `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]` section.
-3. Commit the version bumps and CHANGELOG updates together (typically `release: vX.Y.Z`), tag, push.
+1. `node scripts/releasable.mjs` to see which units have unreleased commits.
+2. Bump that unit's version in its manifest(s) — the release workflow validates the tag against every manifest the unit owns.
+3. Run the `/changelog` skill (`.claude/skills/changelog/`) for the unit. It drafts entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the unit's CHANGELOG; for GA versions it collapses the unit's `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]`.
+4. Commit the bump + CHANGELOG together (`release: <unit>-vX.Y.Z`), tag `<unit>-vX.Y.Z`, push.
 
-The release workflow's `tag-version-check` job rejects any tag whose CHANGELOGs don't contain a `## [<version>]` heading. See [ADR 0008](docs/adr/0008-per-package-changelogs.md) for the full rationale.
+The release workflow's `tag-version-check` job rejects any tag whose unit CHANGELOG lacks a `## [<version>]` heading. See [ADR 0008](docs/adr/0008-release-engineering.md) (per-unit versions, tags, and CHANGELOG gates) for the rationale.
 
 ## Pull requests
 
@@ -74,4 +75,4 @@ The release workflow's `tag-version-check` job rejects any tag whose CHANGELOGs 
 
 ## License
 
-Contributions are licensed under the project's [MIT License](LICENSE.md). By submitting a PR you agree your contribution is licensed accordingly.
+The engine (`ratel-ai-core`) is licensed under [Apache-2.0](LICENSE-APACHE); every other component (SDKs, telemetry helpers, examples) is [MIT](LICENSE.md) — see [ADR-0009](docs/adr/0009-licensing.md). By submitting a PR you agree your contribution is licensed under the terms governing the component it touches.

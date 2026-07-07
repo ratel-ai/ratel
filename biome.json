@@ -5,9 +5,9 @@
       "src/sdk/**/*.ts",
       "src/sdk/**/*.tsx",
       "src/sdk/**/*.js",
-      "src/integrations/**/*.ts",
-      "src/integrations/**/*.tsx",
-      "src/integrations/**/*.js",
+      "src/telemetry/**/*.ts",
+      "src/telemetry/**/*.tsx",
+      "src/telemetry/**/*.js",
       "benchmark/agent/src/**/*.ts",
       "benchmark/agent/src/**/*.tsx"
     ]

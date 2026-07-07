@@ -1,0 +1,8 @@
+# Virtualenv + build/test tool caches
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Wheel/sdist output
+dist/

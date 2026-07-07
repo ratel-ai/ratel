@@ -54,6 +54,69 @@ def test_search_ranks_the_relevant_tool_first() -> None:
     assert hits[0].tool_id == "read_file"
 
 
+def test_search_defaults_to_bm25_stage() -> None:
+    # Semantic/hybrid load a real model (network) and are covered in Rust; this
+    # stays offline and asserts the model-free default + selection plumbing.
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="m"))
+    catalog.register(_read_file_tool(lambda args: {}))
+    hits = catalog.search("read a file", 5)
+    assert hits[0].tool_id == "read_file"
+    events = catalog.drain_trace_events()
+    search = next(e for e in events if e["type"] == "search")
+    assert any(stage["name"] == "bm25" for stage in search["stages"])
+
+
+def test_per_call_bm25_matches_the_default() -> None:
+    # Stays on a BM25 catalog so no model loads. (Registering into a semantic
+    # catalog eagerly builds embeddings and would download the model — the override behaviour
+    # proper is covered offline in the Rust core tests.)
+    catalog = ToolCatalog()
+    catalog.register(_read_file_tool(lambda args: {}))
+    via_default = [h.tool_id for h in catalog.search("read a file", 5)]
+    via_explicit = [h.tool_id for h in catalog.search("read a file", 5, method="bm25")]
+    assert via_explicit == via_default
+    assert via_explicit[0] == "read_file"
+
+
+def test_per_call_method_overrides_default_and_reroutes() -> None:
+    # Default is semantic, but with no registrations no model loads. A per-call
+    # "bm25" must route to the bm25 engine — provable offline via the trace stage
+    # the semantic default (empty corpus) never emits.
+    catalog = ToolCatalog(
+        method="semantic", trace=TraceSinkConfig(kind="memory", session_id="o")
+    )
+    catalog.search("anything", 5)  # default: semantic engine
+    catalog.search("anything", 5, method="bm25")  # per-call override: bm25 engine
+    searches = [e for e in catalog.drain_trace_events() if e["type"] == "search"]
+    assert len(searches) == 2
+    assert not any(s["name"] == "bm25" for s in searches[0]["stages"])
+    assert any(s["name"] == "bm25" for s in searches[1]["stages"])
+
+
+def test_unknown_method_raises() -> None:
+    catalog = ToolCatalog()
+    catalog.register(_read_file_tool(lambda args: {}))
+    with pytest.raises(ValueError, match="unknown search method"):
+        catalog.search("read", 5, method="keyword")
+
+
+def test_build_embeddings_on_empty_catalog_is_a_noop() -> None:
+    # Empty corpus short-circuits before any embedder load — the incremental
+    # eager path proper is proven in the Rust core tests (counting embedder).
+    catalog = ToolCatalog(method="semantic")
+    catalog.build_embeddings()  # no tools → no model load, must not raise
+
+
+def test_semantic_on_bm25_without_embeddings_raises() -> None:
+    # A BM25 catalog with no embeddings built → a per-call semantic search refuses with a
+    # clear error instead of silently embedding. Guard runs before any model
+    # load, so this is offline-safe.
+    catalog = ToolCatalog()
+    catalog.register(_read_file_tool(lambda args: {}))
+    with pytest.raises(RuntimeError, match="not computed for semantic"):
+        catalog.search("read", 5, method="semantic")
+
+
 async def test_invoke_runs_sync_executor() -> None:
     catalog = ToolCatalog()
     catalog.register(_read_file_tool(lambda args: {"contents": f"read {args['path']}"}))

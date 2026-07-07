@@ -1,0 +1,22 @@
+"""Shared test fixtures for the telemetry helper."""
+
+from __future__ import annotations
+
+import pytest
+from opentelemetry import trace as trace_api
+from opentelemetry.util._once import Once
+
+
+def _reset_trace_globals() -> None:
+    # init()'s loud-fail guard throws when a provider is already registered, and OTel's
+    # global tracer provider is process-wide set-once — so reset it around every test to
+    # keep cases (and other test modules) from leaking a provider into each other.
+    trace_api._TRACER_PROVIDER_SET_ONCE = Once()
+    trace_api._TRACER_PROVIDER = None
+
+
+@pytest.fixture(autouse=True)
+def reset_trace_provider() -> object:
+    _reset_trace_globals()
+    yield
+    _reset_trace_globals()

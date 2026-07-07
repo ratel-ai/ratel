@@ -4,7 +4,6 @@
 
   <p>
     <a href="../../../docs/">Docs</a> •
-    <a href="../../../docs/roadmap.md">Roadmap</a> •
     <a href="https://discord.gg/hdKpx69NR">Discord</a>
   </p>
 
@@ -28,13 +27,13 @@ pnpm add @ratel-ai/sdk
 npm install @ratel-ai/sdk
 ```
 
-Prebuilt native bindings ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc. The right per-platform binary is selected automatically through npm `optionalDependencies` ([ADR 0002](../../../docs/adr/0002-ts-rust-binding-strategy.md)), so there is nothing to compile.
+Prebuilt native bindings ship for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc. The right per-platform binary is selected automatically through npm `optionalDependencies` ([ADR 0006](../../../docs/adr/0006-native-ffi-bindings.md)), so there is nothing to compile.
 
 ## How it works
 
 Everything starts with a **`ToolCatalog`**: register each of your tools once, pairing its metadata (id, description, JSON schemas) with the handler that runs it. From there you reach the model in one of two ways, and most agents use both at once:
 
-- **Pre-filter (top-K).** Before each model call, ask the catalog for the few tools most relevant to the user's message and put *those* in the tool list. The full catalog never enters the prompt. This is Ratel's replace-by-default tool injection ([ADR 0003](../../../docs/adr/0003-tool-selection-replace-vs-suggest.md)).
+- **Pre-filter (top-K).** Before each model call, ask the catalog for the few tools most relevant to the user's message and put *those* in the tool list. The full catalog never enters the prompt. This is Ratel's replace-by-default tool injection ([ADR 0004](../../../docs/adr/0004-retrieval-and-tool-selection.md)).
 - **Dynamic capability search.** Give the agent two always-present tools, `search_capabilities` (find more tools by description) and `invoke_tool` (run one by id), so it can reach the rest of the catalog on its own when the pre-filtered set is not enough.
 
 The two compose: the pre-filter covers the common case in the prompt, and the capability tools are the escape hatch for everything else. Tools can be local functions, an upstream MCP server's tools (via [`registerMcpServer`](#registermcpserver-ingest-an-mcp-servers-tools)), or both. The model sees one unified, ranked surface.
@@ -222,7 +221,7 @@ Errors from the upstream `tools/call` propagate as rejected promises from `catal
 
 ## Telemetry
 
-Pass `trace` to the `ToolCatalog` constructor to capture every search / invoke / gateway / upstream / auth event into a sink owned by the Rust core ([ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). The default is no-op: nothing is captured unless you opt in.
+Pass `trace` to the `ToolCatalog` constructor to capture every search / invoke / gateway / upstream / auth event into a sink owned by the Rust core ([ADR 0007](../../../docs/adr/0007-telemetry-two-streams.md)). The default is no-op: nothing is captured unless you opt in.
 
 ```ts
 const catalog = new ToolCatalog({
@@ -235,9 +234,24 @@ const catalog = new ToolCatalog({
 Sink kinds:
 - `{ kind: "noop" }`, drop everything (default).
 - `{ kind: "memory"; sessionId }`, keep events in memory; drain via `catalog.drainTraceEvents()`. Useful in tests.
-- `{ kind: "jsonl"; sessionId; path }`, append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure; see [ADR 0009](../../../docs/adr/0009-trace-events-core-owned-schema.md) for the reliability profile.
+- `{ kind: "jsonl"; sessionId; path }`, append one JSON line per event to `path` (mode `0600` on Unix). Best-effort, lossy on backpressure; see [ADR 0007](../../../docs/adr/0007-telemetry-two-streams.md) for the reliability profile.
 
 `searchCapabilitiesTool` tags its emitted `search` event with `origin: "agent"`; direct callers (`catalog.search(query, k)`) default to `"direct"`. Override per call via `catalog.search(query, k, "agent")`.
+
+### OpenTelemetry export
+
+Independently of the local sink above, the SDK **emits OpenTelemetry spans** for the same funnel — `execute_tool`, `ratel.search`, `ratel.skill.load`, `ratel.upstream.register`, `ratel.auth.flow` (the `gen_ai.*` / `ratel.*` vocabulary). This is transparent: spans go to whatever OpenTelemetry provider is registered, and are a no-op until one is. Two ways to turn export on:
+
+```ts
+import { configureTelemetry } from "@ratel-ai/sdk";
+
+// Greenfield: ship the SDK's spans to Ratel Cloud (needs the optional
+// @ratel-ai/telemetry-otlp peer). RATEL_URL or { endpoint } sets the destination.
+const handle = await configureTelemetry({ apiKey: process.env.RATEL_API_KEY });
+// ... later: await handle.shutdown();
+```
+
+If you already run OpenTelemetry (Langfuse, the Vercel AI SDK, your own collector), **skip `configureTelemetry`** — the spans already flow to your provider — and add `ratelSpanProcessor` from `@ratel-ai/telemetry-otlp` to dual-export the Ratel cut to Cloud. Message/tool content (`ratel.search.query`, tool args/result) rides span attributes only when `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` selects a span mode (`SPAN_ONLY` or `SPAN_AND_EVENT`); it is off by default, and `EVENT_ONLY` does not put content on spans.
 
 ## Package shape
 
