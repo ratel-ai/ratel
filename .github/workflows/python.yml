@@ -78,3 +78,33 @@ jobs:
       - name: Run the telemetry example
         working-directory: examples/telemetry-python
         run: uv run --python 3.11 main.py
+
+  # Cloud catalog-source loader (ADR-0003): pure Python, but it hydrates a
+  # ratel_ai.SkillCatalog, so the SDK's native extension is maturin-built into a
+  # shared venv first (mirrors the documented local dev flow in its README).
+  cloud:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/sdk/cloud-py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/python/native
+      - uses: astral-sh/setup-uv@v5
+      - name: Build ratel-ai (native extension) into the shared venv
+        working-directory: src/sdk/python
+        run: |
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv maturin
+          .venv/bin/maturin develop
+      - name: Install (editable) + dev tools
+        run: uv pip install --python ../python/.venv -e '.[dev]'
+      - name: Lint
+        run: ../python/.venv/bin/ruff check .
+      - name: Typecheck
+        run: ../python/.venv/bin/mypy ratel_ai_cloud
+      - name: Test
+        run: ../python/.venv/bin/pytest

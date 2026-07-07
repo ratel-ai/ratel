@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ratel-ai-cloud"
+version = "0.1.0rc1"
+description = "Ratel cloud catalog-source loader — pull-syncs published skills into a local SkillCatalog over the frozen protocol/v1 contract."
+readme = "README.md"
+license = { file = "LICENSE.md" }
+authors = [{ name = "Agentified" }]
+requires-python = ">=3.9"
+keywords = [
+    "skills",
+    "catalog",
+    "pull-sync",
+    "context-engineering",
+    "ai-agents",
+    "ratel",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# HTTP is stdlib urllib — the loader adds no HTTP client dependency. ratel-ai
+# supplies the SkillCatalog it hydrates and the source-config seam (ADR-0003).
+dependencies = ["ratel-ai>=0.3.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+
+[project.urls]
+Homepage = "https://github.com/ratel-ai/ratel"
+Repository = "https://github.com/ratel-ai/ratel"
+Issues = "https://github.com/ratel-ai/ratel/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ratel_ai_cloud"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+# Runtime floor is 3.9 (via `from __future__ import annotations`); mypy's minimum
+# supported target is 3.10, so we type-check against that (matches the Python SDK).
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["ratel_ai._native"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
