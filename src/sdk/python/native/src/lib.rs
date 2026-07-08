@@ -267,6 +267,36 @@ impl SkillRegistry {
         });
     }
 
+    /// See [`ratel_ai_core::SkillRegistry::remove`]: drop every skill with this
+    /// id; `True` when anything was removed.
+    fn remove(&mut self, skill_id: String) -> bool {
+        self.inner.remove(&skill_id)
+    }
+
+    /// See [`ratel_ai_core::SkillRegistry::upsert`]: register-or-replace by id;
+    /// `True` when an existing skill was replaced.
+    #[allow(clippy::too_many_arguments)]
+    fn upsert(
+        &mut self,
+        id: String,
+        name: String,
+        description: String,
+        tags: Vec<String>,
+        tools: Vec<String>,
+        metadata: HashMap<String, Vec<String>>,
+        body: String,
+    ) -> bool {
+        self.inner.upsert(core::Skill {
+            id,
+            name,
+            description,
+            tags,
+            tools,
+            metadata,
+            body,
+        })
+    }
+
     fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
         self.inner
             .search(&query, top_k as usize)

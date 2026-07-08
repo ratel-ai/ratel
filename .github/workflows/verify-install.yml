@@ -1,8 +1,9 @@
 name: Verify install
 
 # Per-unit install smoke tests (ADR-0008). Each release unit — core (crate),
-# sdk-ts (npm), sdk-py (PyPI), and the four telemetry units (telemetry-core on
-# crates.io, telemetry-ts + telemetry-ts-otlp on npm, telemetry-py on PyPI) — is verified from its
+# sdk-ts (npm), sdk-py (PyPI), the four telemetry units (telemetry-core on
+# crates.io, telemetry-ts + telemetry-ts-otlp on npm, telemetry-py on PyPI), and
+# the two cloud loaders (cloud-ts on npm, cloud-py on PyPI) — is verified from its
 # public registry with no repo checkout and no local toolchain state, so a broken
 # publish surfaces here.
 #
@@ -16,7 +17,7 @@ on:
         description: Release unit to verify
         type: choice
         default: all
-        options: [all, core, sdk-ts, sdk-py, telemetry-core, telemetry-ts, telemetry-py, telemetry-ts-otlp]
+        options: [all, core, sdk-ts, sdk-py, telemetry-core, telemetry-ts, telemetry-py, telemetry-ts-otlp, cloud-ts, cloud-py]
       version:
         description: Version to verify (e.g. 0.2.0-rc.2 or 0.2.0). Only applied when a single unit is selected; ignored for `all`.
         required: false
@@ -263,6 +264,94 @@ jobs:
           }
           EOF
           cargo run -q
+
+  # The cloud loaders are pure-language, so one linux leg each. Installing them
+  # pulls the language SDK (and its native binding) from the registry, so the
+  # smoke test proves cross-package resolution too: it runs a real pull-sync
+  # against the packaged in-process mock source and reads the synced skill back
+  # out of the hydrated catalog.
+  verify-cloud-ts:
+    name: verify cloud-ts (npm)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'cloud-ts'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.unit }}" = "cloud-ts" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "spec=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=${{ inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install + smoke-test the package
+        shell: bash
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "@ratel-ai/cloud@${{ steps.ver.outputs.spec }}"
+          cat > smoke.mjs <<'EOF'
+          import { SkillCatalog } from "@ratel-ai/sdk";
+          import { syncSkills } from "@ratel-ai/cloud";
+          import { startMockSource } from "@ratel-ai/cloud/testing";
+
+          const source = await startMockSource({ apiKey: "verify-key" });
+          source.setSkills([{ id: "s1", name: "verify", description: "verify install", tags: [], tools: [], metadata: {}, body: "# ok" }]);
+          const catalog = new SkillCatalog();
+          const result = await syncSkills(catalog, { url: source.url, apiKey: "verify-key", env: {} });
+          await source.close();
+          if (result.added !== 1 || catalog.invoke("s1") !== "# ok") {
+            console.error("sync failed", result);
+            process.exit(1);
+          }
+          console.log("OK", result);
+          EOF
+          node smoke.mjs
+
+  verify-cloud-py:
+    name: verify cloud-py (PyPI)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'cloud-py'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Resolve spec
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.unit }}" = "cloud-py" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "spec===${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install + smoke-test the package
+        shell: bash
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install "ratel-ai-cloud${{ steps.ver.outputs.spec }}"
+          python - <<'EOF'
+          from ratel_ai import SkillCatalog
+          from ratel_ai_cloud import sync_skills
+          from ratel_ai_cloud.testing.mock_source import MockSource
+
+          skill = {"id": "s1", "name": "verify", "description": "verify install",
+                   "tags": [], "tools": [], "metadata": {}, "body": "# ok"}
+          with MockSource(api_key="verify-key") as src:
+              src.set_skills([skill])
+              catalog = SkillCatalog()
+              result = sync_skills(catalog, url=src.url, api_key="verify-key", env={})
+          assert result.added == 1 and catalog.invoke("s1") == "# ok", result
+          print("OK", result)
+          EOF
 
   verify-telemetry-ts-otlp:
     name: verify telemetry-ts-otlp (npm)

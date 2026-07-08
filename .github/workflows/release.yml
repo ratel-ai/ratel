@@ -14,6 +14,10 @@ name: Release
 #   telemetry-ts-otlp-v* -> @ratel-ai/telemetry-otlp on npm (the init() exporter)
 #     The telemetry helpers release independently (one registry each; otlp is the
 #     npm exporter split from the vocabulary); tag the same commit to ship together.
+#   cloud-ts-v*       -> @ratel-ai/cloud on npm (catalog-source loader, ADR-0003)
+#   cloud-py-v*       -> ratel-ai-cloud on PyPI (catalog-source loader, ADR-0003)
+#     The cloud loaders release independently of their language SDKs (dependency
+#     ranges, not lockstep).
 
 on:
   push:
@@ -25,6 +29,8 @@ on:
       - 'telemetry-ts-v*'
       - 'telemetry-py-v*'
       - 'telemetry-ts-otlp-v*'
+      - 'cloud-ts-v*'
+      - 'cloud-py-v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -584,6 +590,112 @@ jobs:
             (cd src/telemetry/ts-otlp && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
           fi
 
+  # The cloud loaders (ADR-0003) are independent single-registry units on their own
+  # tag prefixes (cloud-ts-v* / cloud-py-v*), each with its own Trusted Publisher.
+  publish-cloud-ts:
+    name: Publish @ratel-ai/cloud to npm
+    needs: [tag-version-check]
+    if: needs.tag-version-check.outputs.unit == 'cloud-ts'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      # The loader is pure TS, but building its @ratel-ai/sdk workspace dependency
+      # (for the .d.ts surface) runs the SDK's napi typegen, which compiles the
+      # native crate — hence the Rust toolchain.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/ts/native
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - name: Verify npm CLI version
+        shell: bash
+        run: |
+          set -e
+          npm --version
+          # Trusted Publishers requires npm CLI 11.5.1+
+          node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # Build the loader and its @ratel-ai/sdk workspace dependency (topo order).
+      - name: Build TS
+        run: pnpm --filter "@ratel-ai/cloud..." run build
+      # npm keeps `workspace:` specifiers verbatim, so pin the dep to the concrete
+      # released @ratel-ai/sdk version before publishing (ephemeral CI edit; not
+      # committed). Keeps the npm-OIDC dir publish + provenance identical to the
+      # other units rather than switching to `pnpm publish`.
+      - name: Pin the @ratel-ai/sdk dependency for publish
+        shell: bash
+        run: |
+          set -e
+          sdk_ver=$(node -p "require('./src/sdk/ts/package.json').version")
+          SDK_VER="$sdk_ver" node -e "const fs=require('fs'); const f='./src/sdk/cloud/package.json'; const p=require(f); p.dependencies['@ratel-ai/sdk']='^'+process.env.SDK_VER; fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n')"
+          echo "pinned @ratel-ai/sdk -> $(node -p "require('./src/sdk/cloud/package.json').dependencies['@ratel-ai/sdk']")"
+      # Preflight dry-run BEFORE the real (immutable) publish, mirroring the SDK job.
+      - name: Preflight — dry-run npm publish
+        shell: bash
+        env:
+          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
+        run: (cd src/sdk/cloud && npm publish --access public --tag "$DIST_TAG" --dry-run)
+      - name: Publish
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
+        run: |
+          set -e
+          name=$(node -p "require('./src/sdk/cloud/package.json').name")
+          ver=$(node -p "require('./src/sdk/cloud/package.json').version")
+          # Idempotent: skip if this exact name@version is already live (npm is immutable).
+          if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
+            echo "::notice::$name@$ver already published — skipping"
+          else
+            (cd src/sdk/cloud && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+          fi
+
+  publish-cloud-py:
+    name: Publish ratel-ai-cloud to PyPI
+    needs: [tag-version-check]
+    if: needs.tag-version-check.outputs.unit == 'cloud-py'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      # Trusted Publishing (OIDC) — no PyPI token stored as a secret.
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # Pure-python (hatchling): one universal py3-none-any wheel + sdist, no matrix.
+      - name: Build wheel + sdist
+        run: |
+          set -e
+          python -m pip install --upgrade build 'packaging>=24.2' twine
+          python -m build --outdir "$PWD/dist" src/sdk/cloud-py
+      - name: Validate packaging (metadata + README rendering)
+        run: twine check dist/*
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+        # Dry runs upload nothing; gate on the workflow_dispatch flag.
+        if: ${{ !inputs.dry_run }}
+
   github-release:
     name: GitHub Release
     needs:
@@ -595,6 +707,8 @@ jobs:
       - publish-telemetry-py
       - publish-telemetry-core
       - publish-telemetry-ts-otlp
+      - publish-cloud-ts
+      - publish-cloud-py
     # Exactly one unit's publish job runs; the rest are skipped. Run when the tag
     # was pushed and that one job succeeded. Every unit is single-registry now, so
     # any one publish job succeeding is enough.
@@ -607,7 +721,9 @@ jobs:
               || needs.publish-telemetry-ts.result == 'success'
               || needs.publish-telemetry-py.result == 'success'
               || needs.publish-telemetry-core.result == 'success'
-              || needs.publish-telemetry-ts-otlp.result == 'success') }}
+              || needs.publish-telemetry-ts-otlp.result == 'success'
+              || needs.publish-cloud-ts.result == 'success'
+              || needs.publish-cloud-py.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

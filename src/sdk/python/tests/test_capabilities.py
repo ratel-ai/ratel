@@ -290,3 +290,17 @@ def test_search_capabilities_description_mentions_skills_only_when_wired() -> No
     # an empty skill catalog is treated as no skills
     empty = search_capabilities_tool(catalog, SkillCatalog())
     assert "get_skill_content" not in empty.description
+
+
+def test_search_capabilities_description_recomputes_as_the_skill_catalog_mutates() -> None:
+    # Built against an empty skill catalog, read after hydration: the
+    # description must reflect skill presence at read time, not factory time.
+    skills = SkillCatalog()
+    search = search_capabilities_tool(ToolCatalog(), skills)
+    assert "get_skill_content" not in search.description
+
+    skills.upsert(Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel."))
+    assert "get_skill_content" in search.description
+
+    skills.remove("vercel-deploy")
+    assert "get_skill_content" not in search.description

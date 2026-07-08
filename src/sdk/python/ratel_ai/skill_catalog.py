@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from ._native import SkillHit, SkillRegistry
 from .catalog import SearchMethod, SearchOrigin, TraceSinkConfig
@@ -49,6 +49,7 @@ class SkillCatalog:
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
         self._eager: bool = method in ("semantic", "hybrid")
+        self._change_listeners: list[Callable[[], None]] = []
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -65,6 +66,56 @@ class SkillCatalog:
         self._skills[skill.id] = skill
         if self._eager:
             self._registry.build_embeddings()
+        self._notify_change()
+
+    def upsert(self, skill: Skill) -> bool:
+        """Register-or-replace by id. Returns `True` when an existing skill was
+        replaced. The path catalog sync uses to hot-reload a changed skill.
+        """
+        replaced = self._registry.upsert(
+            skill.id,
+            skill.name,
+            skill.description,
+            skill.tags,
+            skill.tools,
+            skill.metadata,
+            skill.body,
+        )
+        self._skills[skill.id] = skill
+        if self._eager:
+            self._registry.build_embeddings()
+        self._notify_change()
+        return replaced
+
+    def remove(self, skill_id: str) -> bool:
+        """Remove a skill by id. Returns `True` when something was removed."""
+        removed = self._registry.remove(skill_id)
+        self._skills.pop(skill_id, None)
+        if removed:
+            self._notify_change()
+        return removed
+
+    def on_change(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Subscribe to catalog mutations (register/upsert/remove). Returns an
+        unsubscribe function. The staleness hook for hosts that cache what the
+        capability tools advertise.
+        """
+        self._change_listeners.append(listener)
+
+        def unsubscribe() -> None:
+            if listener in self._change_listeners:
+                self._change_listeners.remove(listener)
+
+        return unsubscribe
+
+    def _notify_change(self) -> None:
+        for listener in list(self._change_listeners):
+            # A listener is a best-effort observer; its failure must never
+            # break (or roll back) the mutation that triggered it.
+            try:
+                listener()
+            except Exception:
+                pass
 
     def build_embeddings(self) -> None:
         """Pre-compute embeddings for not-yet-embedded skills. See

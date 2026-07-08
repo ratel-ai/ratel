@@ -27,8 +27,9 @@ pub(crate) trait Embeddable {
 /// Per-item dense vectors, a growing prefix of a registry's corpus.
 pub(crate) struct DenseCache {
     /// `vectors[i]` is the embedding for the registry's item `i`; any item beyond
-    /// `vectors.len()` is not yet embedded. Only appended to (never invalidated),
-    /// so an existing vector is never recomputed.
+    /// `vectors.len()` is not yet embedded. Appended to on `register` (an existing
+    /// vector is never recomputed) and dropped wholesale by [`Self::clear`] when a
+    /// registry mutation breaks the index alignment.
     vectors: Mutex<Vec<Vec<f32>>>,
     /// Test-only embedder override (`None` → the shared process bge-small, loaded
     /// lazily on first use). Lets tests inject a deterministic/failing embedder
@@ -75,6 +76,19 @@ impl DenseCache {
             return Err(EmbedderError::EmbeddingsNotBuilt);
         }
         Ok(())
+    }
+
+    /// Drop every cached vector (the embedder override survives). Registry
+    /// mutation (remove, in-place replace) breaks the index alignment the
+    /// prefix relies on — and can leave the cache longer than the corpus, where
+    /// [`Self::extend`] would early-return and stale vectors would rank against
+    /// the wrong items — so mutators must clear and let the next
+    /// `build_embeddings` re-embed the corpus.
+    pub(crate) fn clear(&self) {
+        self.vectors
+            .lock()
+            .expect("embeddings mutex poisoned")
+            .clear();
     }
 
     /// Embed the items not yet in the cache and append them — the incremental
@@ -214,6 +228,27 @@ mod tests {
         // Idempotent once caught up.
         cache.extend(&items, &NoopSink).unwrap();
         assert_eq!(stub.docs(), 3);
+    }
+
+    #[test]
+    fn clear_empties_the_cache_but_keeps_the_injected_embedder() {
+        let stub = Arc::new(CountingStub::new());
+        let cache = DenseCache::with_embedder(stub.clone());
+        let items = vec![doc("a", "read"), doc("b", "write")];
+        cache.extend(&items, &NoopSink).unwrap();
+        assert_eq!(stub.docs(), 2);
+
+        cache.clear();
+
+        assert!(matches!(
+            cache.require_built(items.len()),
+            Err(EmbedderError::EmbeddingsNotBuilt)
+        ));
+        // Re-extend re-embeds the whole corpus via the same injected embedder
+        // (no fallback to the process model).
+        cache.extend(&items, &NoopSink).unwrap();
+        assert_eq!(stub.docs(), 4);
+        assert!(cache.require_built(items.len()).is_ok());
     }
 
     #[test]

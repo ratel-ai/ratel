@@ -8,6 +8,9 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `search_capabilities_tool` / `invoke_tool_tool` / `get_skill_content_tool` —
   framework-neutral capability tools.
 - `register_mcp_server` — ingest an upstream MCP server's tools (extra: mcp).
+- `resolve_source_config` / `SourceConfig` / `SourceOptions` — pure resolution of
+  the catalog-source seam (`RATEL_URL` / `RATEL_API_KEY`); loaders live in
+  `ratel-ai-cloud`.
 """
 
 from ._native import SearchHit, SkillHit, SkillRegistry, ToolRegistry
@@ -36,6 +39,7 @@ from .compat import SEARCH_TOOLS_ID, search_tools_tool
 from .mcp import McpServerHandle, register_mcp_server
 from .skill_catalog import Skill, SkillCatalog
 from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
+from .source import SourceConfig, SourceOptions, resolve_source_config
 
 # OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0007). The SDK always
 # emits spans to the active OTel provider (a no-op until one is wired);
@@ -59,6 +63,8 @@ __all__ = [
     "SkillCatalog",
     "SkillHit",
     "SkillRegistry",
+    "SourceConfig",
+    "SourceOptions",
     "Tool",
     "ToolCatalog",
     "ToolRegistry",
@@ -69,6 +75,7 @@ __all__ = [
     "get_skill_content_tool",
     "invoke_tool_tool",
     "register_mcp_server",
+    "resolve_source_config",
     "search_capabilities_tool",
     "search_tools_tool",
 ]

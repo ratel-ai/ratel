@@ -45,6 +45,11 @@ function makeRepo(version = "0.2.0", pyVersion = version) {
   // telemetry-ts-otlp: the npm exporter unit, split from the vocabulary package.
   write("src/telemetry/ts-otlp/package.json", json("@ratel-ai/telemetry-otlp"));
   write("src/telemetry/ts-otlp/CHANGELOG.md", changelog(version));
+  // cloud loaders: two independent single-registry units (npm / PyPI), one per language.
+  write("src/sdk/cloud/package.json", json("@ratel-ai/cloud"));
+  write("src/sdk/cloud/CHANGELOG.md", changelog(version));
+  write("src/sdk/cloud-py/pyproject.toml", `[project]\nname = "ratel-ai-cloud"\nversion = "${pyVersion}"\n`);
+  write("src/sdk/cloud-py/CHANGELOG.md", changelog(version));
 
   return { root, write, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -58,6 +63,9 @@ test("parseTag splits prefix and version for every unit", () => {
   assert.deepEqual(parseTag("telemetry-ts-v0.1.0"), { unit: "telemetry-ts", version: "0.1.0" });
   assert.deepEqual(parseTag("telemetry-py-v0.2.0-rc.2"), { unit: "telemetry-py", version: "0.2.0-rc.2" });
   assert.deepEqual(parseTag("telemetry-ts-otlp-v0.1.0-rc.3"), { unit: "telemetry-ts-otlp", version: "0.1.0-rc.3" });
+  // the cloud loaders are independent units, one per language (npm / PyPI).
+  assert.deepEqual(parseTag("cloud-ts-v0.1.0-rc.1"), { unit: "cloud-ts", version: "0.1.0-rc.1" });
+  assert.deepEqual(parseTag("cloud-py-v0.1.0"), { unit: "cloud-py", version: "0.1.0" });
 });
 
 test("parseTag rejects the old lockstep tag and unknown prefixes", () => {
@@ -230,6 +238,43 @@ test("the three telemetry vocabulary units release independently — one's tag i
     repo.write("src/telemetry/core/CHANGELOG.md", "# Changelog\n\n## [0.0.9] - 2026-07-04\n\n### Added\n- thing\n");
     const core = checkReleaseTag("telemetry-core-v0.0.9", { root: repo.root });
     assert.equal(core.ok, true, core.errors.join("; "));
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("cloud-ts rc tag passes when the npm loader package + its changelog match", () => {
+  const repo = makeRepo("0.1.0-rc.1");
+  try {
+    const r = checkReleaseTag("cloud-ts-v0.1.0-rc.1", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+    assert.equal(r.unit, "cloud-ts");
+    assert.equal(r.distTag, "rc");
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("cloud-ts releases independently of its @ratel-ai/sdk dependency's version", () => {
+  // The SDK sits on a different version — a cloud loader release must not be
+  // blocked by it (the dependency is a range, not lockstep).
+  const repo = makeRepo("0.1.0");
+  try {
+    repo.write("src/sdk/ts/package.json", JSON.stringify({ name: "@ratel-ai/sdk", version: "0.3.0" }, null, 2));
+    const r = checkReleaseTag("cloud-ts-v0.1.0", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("cloud-py accepts the PEP 440 normalized form in pyproject", () => {
+  // tag says 0.1.0-rc.1; the cloud pyproject stores the PEP 440 form 0.1.0rc1
+  const repo = makeRepo("0.1.0-rc.1", "0.1.0rc1");
+  try {
+    const r = checkReleaseTag("cloud-py-v0.1.0-rc.1", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+    assert.equal(r.unit, "cloud-py");
   } finally {
     repo.cleanup();
   }
