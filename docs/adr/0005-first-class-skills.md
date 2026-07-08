@@ -8,6 +8,9 @@ Accepted
 
 Compacted 2026-07 from pre-compaction ADR-0012 (first-class skills, 2026-06-09).
 
+Amended 2026-07-07: capability-tool advertising is dynamic — computed at read time from the
+live catalog — so asynchronously hydrated catalogs surface without re-registration.
+
 ## Context
 
 The gateway's wedge is tool selection; skills (SKILL.md playbooks: YAML frontmatter carrying
@@ -37,6 +40,12 @@ the only loader.
 - **`invoke_tool(toolId, args)`** runs a tool.
 - **`get_skill_content(skillId)`** returns `{ body }`; registered only when the skill catalog
   is non-empty.
+- **Dynamic advertising:** what the capability tools tell the model about themselves — the
+  `search_capabilities` description, whether it mentions the skills bucket and
+  `get_skill_content` — is computed at **read time** from the live catalog, never baked at
+  construction. A catalog hydrated after startup (a source loader pulling mid-session,
+  [ADR-0003](0003-catalog-source-interface.md)) is visible to the model on its next read of
+  the tool list; an emptied catalog stops advertising skills the same way.
 
 The agent must search to find a load-bearing tool, so bundling skills into that same response
 means the tool's necessity carries the skill: more reliable than a separate, skippable

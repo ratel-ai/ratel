@@ -107,6 +107,27 @@ export const UNITS = {
       includePaths: ["src/telemetry/python/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
     },
   },
+  // The cloud catalog-source loaders (ADR-0003) are INDEPENDENT single-registry
+  // units, one per language — like the telemetry helpers. Each depends on its
+  // language SDK by version range (not lockstep), so a loader fix ships alone.
+  "cloud-ts": {
+    tagPrefix: "cloud-ts-v",
+    label: "@ratel-ai/cloud → npm",
+    versionManifest: { path: "src/sdk/cloud/package.json", kind: "json" },
+    manifests: [{ path: "src/sdk/cloud/package.json", kind: "json" }],
+    changelogs: ["src/sdk/cloud/CHANGELOG.md"],
+    srcPaths: ["src/sdk/cloud"],
+    changelog: { name: "@ratel-ai/cloud", includePaths: ["src/sdk/cloud/**"] },
+  },
+  "cloud-py": {
+    tagPrefix: "cloud-py-v",
+    label: "ratel-ai-cloud → PyPI",
+    versionManifest: { path: "src/sdk/cloud-py/pyproject.toml", kind: "toml", pep440: true },
+    manifests: [{ path: "src/sdk/cloud-py/pyproject.toml", kind: "toml", pep440: true }],
+    changelogs: ["src/sdk/cloud-py/CHANGELOG.md"],
+    srcPaths: ["src/sdk/cloud-py"],
+    changelog: { name: "ratel-ai-cloud", includePaths: ["src/sdk/cloud-py/**"] },
+  },
   // The OTLP exporter (init()), split from the npm vocabulary package so importing
   // the constants stays OTel-free (ADR-0007). npm-only; tracks only its own source
   // (a CONVENTIONS change is a vocabulary change, not an exporter change).

@@ -11,6 +11,9 @@ auth and scope), and ADR-0021 (sync and storage), all 2026-07-05. The scope mode
 originally carried is split out to [ADR-0010](0010-catalog-scope-model.md) (Proposed); the
 loader interface, auth, and sync semantics recorded here are accepted.
 
+Amended 2026-07-07 with the shipped SDK loader-seam decisions: attach API, catalog ownership
+and mutation shape, `RATEL_API_KEY`, per-scope caching, in-memory replica.
+
 ## Context
 
 An earlier plan scheduled a standalone `ratel-ai-server` binary as the rung between the
@@ -42,6 +45,19 @@ implementation of the already-published contract, not a new design.
   Application code does not change ([ADR-0002](0002-product-split-engine-local-cloud.md)).
 - Additional sources (a local file/dir loader, git, a self-hosted endpoint) are added as
   loaders when a use case appears.
+- A loader attaches as a **free function returning a handle** (`createSkillSync(catalog)` /
+  `create_skill_sync(catalog)`), mirroring `registerMcpServer` / `register_mcp_server`: the
+  caller owns the network lifecycle and catalog construction is coupled to no source.
+  `syncSkills` / `sync_skills` is the one-shot variant (throws on failure); the handle
+  variant is offline-tolerant.
+- **Ownership rule:** a loader owns exactly the ids it synced. A host-registered skill with a
+  colliding id is never clobbered; the collision is surfaced in `SyncResult.conflicts`.
+- Hydration applies **per-id upsert/remove** diffs to the shared registries, not a snapshot
+  replace — the in-process floor and synced skills coexist in one catalog, which a snapshot
+  swap would clobber. Equality is field-wise over exactly the seven wire fields (the same set
+  the ETag projects), so resyncing identical data emits zero churn. Any remove, or an upsert
+  that replaces, invalidates the registry's dense cache in full (re-embedded on next use);
+  the BM25 path builds per call and is unaffected.
 
 ### The wire contract
 
@@ -67,13 +83,18 @@ explicit decision; `@ratel-ai/cloud` is also the developer's tap into those.
   column is not carried forward.
 - **Wire contract:** `Authorization: Bearer <key>` on every `/v1` request; missing/unknown/
   revoked → `401`, key store unreachable → `503`; TLS required.
+- **Client-side configuration:** `RATEL_API_KEY` is the companion env var to `RATEL_URL` and
+  carries the Bearer key. Explicit loader options beat the environment; resolution is a pure
+  function with an injectable env.
 - **Scope.** The served catalog is **scoped**: a project Bearer key authorizes a project, and
   an optional `?scope=<subject>` selector picks a subject layer within it. The scope model —
   the `tenant → project → subject` hierarchy, the overlay semantics, and the
   confidential-isolation policy — is [ADR-0010](0010-catalog-scope-model.md) (Proposed); the
   wire mechanics of the `?scope=` selector are frozen in
   [`protocol/v1`](../../protocol/v1/README.md). The engine stays scope-blind; the source
-  serves an already-scoped set.
+  serves an already-scoped set. Loader-side, scope is **fixed per loader instance** and
+  passed through opaquely; the ETag cache is keyed per `(url, scope)`, so a tag never
+  carries across scopes.
 - **Two credentials, never conflated:** the source API key (this contract) and upstream OAuth
   tokens (`~/.ratel/oauth/`, owned by ratel-local, used by locally-run `invoke_tool` to reach
   upstream MCP tools). The source never sees either side's other credential.
@@ -93,10 +114,16 @@ explicit decision; `@ratel-ai/cloud` is also the developer's tap into those.
   write path, deferred (PSKS-8, internal tracker), so there is no offline-write/merge class.
 - Secrets-never-sync is enforced **structurally**: no wire shape has a field that can carry a
   token, and a test fails if a secret-typed field enters a wire payload.
-- Offline: the client keeps the last-pulled catalog and runs degraded but functional;
-  staleness is unbounded and should be surfaced. `RATEL_URL` unset is the permanent offline
-  floor. Nothing moves off `~/.ratel/*`: config and oauth stay in ratel-local, so the pivot
-  deletes the mass re-auth risk a server port would have carried.
+- Offline: the replica is **in-memory only** — the client keeps the last-pulled catalog and
+  runs degraded but functional; a fresh process with an unreachable source starts on the
+  floor. Staleness is unbounded and surfaced on the loader handle (`lastSyncedAt` /
+  `consecutiveFailures`); a disk cache is deferred until a use case demands one.
+  `RATEL_URL` unset is the permanent offline floor. Nothing moves off `~/.ratel/*`: config
+  and oauth stay in ratel-local, so the pivot deletes the mass re-auth risk a server port
+  would have carried.
+- Loader-side ETag recomputation (re-deriving the hash from a returned `skills` set) is a
+  **test-only** conformance check against the vectors and the live source; at runtime the
+  wire ETag is authoritative.
 
 ### Deferred, explicitly
 
@@ -114,6 +141,10 @@ explicit decision; `@ratel-ai/cloud` is also the developer's tap into those.
 - A leaked key table yields no usable credential (hash-only storage).
 - The only server-side implementer today is the closed cloud; the conformance vectors are
   what keep the contract from silently becoming whatever the cloud does.
+- Per-id diffs keep the floor and a synced catalog in one registry; the cost is a full
+  dense-cache re-embed on churn under semantic/hybrid retrieval, accepted until finer
+  invalidation earns its complexity. Id conflicts are reported on every sync, never
+  silently resolved.
 
 ## Rejected
 
@@ -123,6 +154,11 @@ explicit decision; `@ratel-ai/cloud` is also the developer's tap into those.
   the insurance policy for the catalog rung.
 - **Bidirectional sync:** adds an offline-merge class and an upward path a secret could leak
   through; authoring is a separate explicit write path instead.
+- **Snapshot-replace hydration:** replacing the registry wholesale would clobber
+  host-registered (floor) skills; the ownership rule needs per-id upsert/remove.
+- **Constructor-coupled loaders:** a source option on the catalog constructor would tie
+  catalog construction to a network lifecycle; the free-function + handle shape keeps them
+  independent and symmetric across languages.
 - **KDF-hashed keys / mTLS:** adds weight where a 192-bit random token needs none; a lost
   key is rotated, not brute-forced. (The scope-model alternatives — per-subject keys as the
   default, confidential isolation — are weighed in [ADR-0010](0010-catalog-scope-model.md).)

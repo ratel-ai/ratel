@@ -2,7 +2,7 @@
 
 How a new version of a Ratel package is published. Read end-to-end before cutting a release.
 
-Ratel releases **per unit** (ADR-0008): seven independently-versioned release units, each on
+Ratel releases **per unit** (ADR-0008): nine independently-versioned release units, each on
 its own tag prefix, all routed through one `release.yml`. There is no workspace-shared
 version — each unit carries its own version in its own manifest and ships on its own cadence.
 
@@ -17,6 +17,8 @@ version — each unit carries its own version in its own manifest and ships on i
 | `telemetry-ts` | `telemetry-ts-v*` | `@ratel-ai/telemetry` on npm | `src/telemetry/ts/package.json` |
 | `telemetry-py` | `telemetry-py-v*` | `ratel-ai-telemetry` on PyPI | `src/telemetry/python/pyproject.toml` |
 | `telemetry-ts-otlp` | `telemetry-ts-otlp-v*` | `@ratel-ai/telemetry-otlp` on npm | `src/telemetry/ts-otlp/package.json` |
+| `cloud-ts` | `cloud-ts-v*` | `@ratel-ai/cloud` on npm | `src/sdk/cloud/package.json` |
+| `cloud-py` | `cloud-py-v*` | `ratel-ai-cloud` on PyPI | `src/sdk/cloud-py/pyproject.toml` |
 
 The units are registered once, in [`scripts/release-units.mjs`](scripts/release-units.mjs)
 — the single source of truth that the tag gate, the `releasable` helper, the changelog
@@ -37,12 +39,20 @@ to release them in one run. `telemetry-ts-otlp` (`@ratel-ai/telemetry-otlp` → 
 time. All four are pure-language, so the manual helper builds them locally (no prebuilt
 artifacts).
 
+The two **cloud** units are the catalog-source loaders (ADR-0003): `cloud-ts`
+(`@ratel-ai/cloud` → npm) and `cloud-py` (`ratel-ai-cloud` → PyPI). Each depends on its
+language SDK by version range (`@ratel-ai/sdk` / `ratel-ai`), not lockstep, so a loader fix
+ships alone. Both are pure-language; the manual helper builds them locally (`cloud-ts`
+additionally compiles the `@ratel-ai/sdk` workspace dependency, which needs a Rust toolchain
+for its napi typegen).
+
 `@ratel-ai/mcp-server` ships from a sibling repo, [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp), on its own cadence.
 
 ## How the release pipeline is wired
 
 - **`release.yml`** — fires on any `core-v*` / `sdk-ts-v*` / `sdk-py-v*` / `telemetry-core-v*` /
-  `telemetry-ts-v*` / `telemetry-py-v*` / `telemetry-ts-otlp-v*` tag push (and
+  `telemetry-ts-v*` / `telemetry-py-v*` / `telemetry-ts-otlp-v*` / `cloud-ts-v*` /
+  `cloud-py-v*` tag push (and
   supports `workflow_dispatch` with `dry_run: true` for rehearsal). Its first job,
   `tag-version-check`, runs [`scripts/check-release-tag.mjs`](scripts/check-release-tag.mjs) to
   route the tag to its unit and verify **only that unit's** manifests + CHANGELOG carry the
@@ -115,14 +125,16 @@ rstagi with a one-member team. Run the E2E locally per `e2e/README.md`.
   `ratel-ai-core` crate, and the `ratel-ai` PyPI project — each pointing at this repo /
   `release.yml` / the `release` environment. **The 4 telemetry names
   (`@ratel-ai/telemetry` + `@ratel-ai/telemetry-otlp` on npm, `ratel-ai-telemetry` on PyPI +
-  crates.io) are not yet registered** — they are added at their first-time bootstrap, taking
-  the total 8 → 12.
+  crates.io) and the 2 cloud loader names (`@ratel-ai/cloud` on npm, `ratel-ai-cloud` on
+  PyPI) are not yet registered** — they are added at their first-time bootstrap, taking the
+  total 8 → 14.
 - A `release` GitHub Environment exists whose **deployment tag policy allows the unit
   prefixes** — `core-v*`, `sdk-ts-v*`, `sdk-py-v*`. Keep the environment *name* `release`
   unchanged (it's what binds the Trusted Publishers); only its tag policy lists the prefixes.
   A tag not matched by the policy hangs the publish job at the deploy gate. **Add
   `telemetry-core-v*`, `telemetry-ts-v*`, `telemetry-py-v*`, `telemetry-ts-otlp-v*` to the policy
-  before cutting the first telemetry release** (still pending).
+  before cutting the first telemetry release, and `cloud-ts-v*`, `cloud-py-v*` before the
+  first cloud loader release** (still pending).
 
 ### Per-release flow (one unit at a time)
 
@@ -140,6 +152,8 @@ rstagi with a one-member team. Run the E2E locally per `e2e/README.md`.
    - `telemetry-py` → `src/telemetry/python/pyproject.toml` (PEP 440 spelling, e.g. `0.1.0rc1`).
    - `telemetry-ts-otlp` → `src/telemetry/ts-otlp/package.json`.
      The four telemetry units version independently; bump only the one(s) you are releasing.
+   - `cloud-ts` → `src/sdk/cloud/package.json`.
+   - `cloud-py` → `src/sdk/cloud-py/pyproject.toml` (PEP 440 spelling, e.g. `0.1.0rc1`).
 3. **Update the CHANGELOG:** run the `/changelog` skill (`.claude/skills/changelog/`) for
    `$UNIT`. It drafts entries with [git-cliff](https://git-cliff.org) scoped to the unit,
    lets you curate, and writes the unit's `CHANGELOG.md`. For GA versions (no `-rc` suffix) it
@@ -196,16 +210,20 @@ Publishers can't be configured for a package that doesn't exist yet. Do this per
    - `telemetry-core` / `telemetry-ts` / `telemetry-py` / `telemetry-ts-otlp` need no prebuilt
      artifact — they are pure-language, so `publish-rc.sh` builds the crate, the two npm
      packages, and the wheel/sdist locally.
+   - `cloud-ts` / `cloud-py` likewise build locally (`cloud-ts` needs a Rust toolchain for
+     the `@ratel-ai/sdk` dependency's napi typegen; `cloud-py` needs `pip install build twine`).
 2. Log in locally: `npm login` (npm requires 2FA on the publishing account for a first-publish
    of scoped public packages), `cargo login` for crates.io, and configure twine credentials
    (`TWINE_USERNAME=__token__` + a PyPI token, or `~/.pypirc`) for PyPI. The four telemetry
    units together need all three registries (`telemetry-ts` + `telemetry-ts-otlp` → npm,
    `telemetry-py` → PyPI, `telemetry-core` → crates.io); also `pip install build twine`.
 3. Run `scripts/publish-rc.sh --unit <unit> --from-run <run-id>` (omit `--from-run` for
-   `core` and the telemetry units). It reads the unit's version from its manifest, finds the
-   tarballs/wheels in the run's artifacts, and publishes — npm subpackages → loader for
-   `sdk-ts`, `twine upload --skip-existing` for `sdk-py`, `cargo publish` for `core`, and the
-   locally-built npm / npm / wheel / crate for `telemetry-ts` / `telemetry-ts-otlp` / `telemetry-py` / `telemetry-core`.
+   `core`, the telemetry units, and the cloud units). It reads the unit's version from its
+   manifest, finds the tarballs/wheels in the run's artifacts, and publishes — npm
+   subpackages → loader for `sdk-ts`, `twine upload --skip-existing` for `sdk-py`,
+   `cargo publish` for `core`, and locally-built artifacts for the telemetry and cloud units
+   (`telemetry-ts` / `telemetry-ts-otlp` / `cloud-ts` → npm, `telemetry-py` / `cloud-py` →
+   PyPI, `telemetry-core` → crates.io).
    It's idempotent (skips anything already on the registry), so a partial failure is safe to
    resume. First-publish from a laptop ships **without provenance** (that requires GH Actions
    OIDC); that's expected for the bootstrap.

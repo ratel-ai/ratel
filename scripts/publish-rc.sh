@@ -13,11 +13,15 @@
 #   telemetry-ts   -> @ratel-ai/telemetry on npm           (npm publish, built locally)
 #   telemetry-py   -> ratel-ai-telemetry on PyPI           (twine upload, built locally)
 #   telemetry-ts-otlp -> @ratel-ai/telemetry-otlp on npm      (npm publish, pnpm-packed locally)
+#   cloud-ts       -> @ratel-ai/cloud on npm              (npm publish, pnpm-packed locally)
+#   cloud-py       -> ratel-ai-cloud on PyPI              (twine upload, built locally)
 # Each unit's version is read from its own manifest via scripts/release-units.mjs
 # (the single source of truth) — units are NOT assumed to share a version.
 #
-# The telemetry units are pure-language (no cross-compiled native binaries), so this
-# helper BUILDS their npm/PyPI/crate artifacts locally — they need no --from-run/--from-dir.
+# The telemetry and cloud units are pure-language (no cross-compiled native binaries),
+# so this helper BUILDS their npm/PyPI/crate artifacts locally — they need no
+# --from-run/--from-dir. (cloud-ts's build compiles the @ratel-ai/sdk workspace
+# dependency, whose typegen needs a local Rust toolchain.)
 #
 # Usage:
 #   scripts/publish-rc.sh --unit sdk-ts --from-run <run-id> [--tag rc] [--dry-run]
@@ -28,7 +32,8 @@
 #
 # Options:
 #   --unit <id>        core | sdk-ts | sdk-py | telemetry-core | telemetry-ts |
-#                      telemetry-py | telemetry-ts-otlp. Repeatable. Default: all.
+#                      telemetry-py | telemetry-ts-otlp | cloud-ts | cloud-py.
+#                      Repeatable. Default: all.
 #   --from-run <id>    Download all artifacts from the given GH Actions run
 #                      (requires `gh auth login`); tarballs/wheels are found within.
 #   --from-dir <path>  Use a directory already holding the tarballs/wheels.
@@ -56,7 +61,7 @@ while [[ $# -gt 0 ]]; do
     --from-dir) FROM_DIR="$2"; shift 2 ;;
     --tag)      TAG="$2"; shift 2 ;;
     --dry-run)  DRY_RUN=1; shift ;;
-    -h|--help)  sed -n '2,36p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,41p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -296,6 +301,55 @@ publish_telemetry_ts_otlp() {
   echo "==> telemetry-ts-otlp publish complete"; echo
 }
 
+# ---------- cloud-ts: @ratel-ai/cloud on npm, packed locally ----------
+# Pure TypeScript like telemetry-ts-otlp, with a workspace:^ dep on @ratel-ai/sdk.
+# `pnpm pack` rewrites that to a real version range in the tarball. Building the
+# @ratel-ai/sdk dependency runs its napi typegen, so a Rust toolchain is required.
+publish_cloud_ts() {
+  local version; version="$(resolve_version cloud-ts)"
+  echo "===== cloud-ts @ $version (npm) ====="
+  echo "----- @ratel-ai/cloud@$version (npm) -----"
+  local status
+  status="$(curl -sS -o /dev/null -w '%{http_code}' \
+    "https://registry.npmjs.org/@ratel-ai%2Fcloud/${version}" || echo 000)"
+  if [[ "$status" == "200" ]]; then
+    echo "    already published, skipping npm"; echo; return 0
+  fi
+  if [[ $DRY_RUN -eq 0 ]] && ! npm whoami >/dev/null 2>&1; then
+    echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
+  fi
+  # Build the loader + its @ratel-ai/sdk workspace dependency (topo order).
+  ( cd "$REPO_ROOT" && pnpm --filter "@ratel-ai/cloud..." run build )
+  local tgz
+  tgz="$( cd "$REPO_ROOT/src/sdk/cloud" && pnpm pack --pack-destination "$(mktemp -d)" | tail -1 )"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] npm publish $tgz --access public --tag $TAG --provenance=false"
+  else
+    publish_one_npm "$tgz" || exit 1
+  fi
+  echo "==> cloud-ts publish complete"; echo
+}
+
+# ---------- cloud-py: ratel-ai-cloud on PyPI (pure-python wheel + sdist) ----------
+publish_cloud_py() {
+  local version; version="$(resolve_version cloud-py)"
+  echo "===== cloud-py @ $version (PyPI) ====="
+  echo "----- ratel-ai-cloud@$version (PyPI) -----"
+  if ! command -v twine >/dev/null 2>&1; then
+    echo "error: twine not found. 'pip install twine build' (auth via TWINE_* env or ~/.pypirc)." >&2; exit 1
+  fi
+  local dist; dist="$(mktemp -d)"
+  ( cd "$REPO_ROOT" && python -m build --outdir "$dist" src/sdk/cloud-py )
+  twine check "$dist"/*
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] twine upload --skip-existing $dist/*"
+  else
+    # --skip-existing keeps re-runs idempotent.
+    twine upload --skip-existing "$dist"/*
+  fi
+  echo "==> cloud-py publish complete"; echo
+}
+
 # ---------- telemetry-core: ratel-ai-telemetry on crates.io ----------
 publish_telemetry_core() {
   local version; version="$(resolve_version telemetry-core)"
@@ -330,6 +384,8 @@ selected telemetry-core && publish_telemetry_core
 selected telemetry-ts   && publish_telemetry_ts
 selected telemetry-ts-otlp && publish_telemetry_ts_otlp
 selected telemetry-py   && publish_telemetry_py
+selected cloud-ts       && publish_cloud_ts
+selected cloud-py       && publish_cloud_py
 
 echo "==> done"
 echo
