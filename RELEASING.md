@@ -151,12 +151,18 @@ rstagi with a one-member team. Run the E2E locally per `e2e/README.md`.
 5. **(Optional dry-run)** `workflow_dispatch` `release.yml` with the tag (e.g.
    `sdk-py-v0.2.1-rc.1`) and `dry_run: true` to validate the auth + publish path without
    consuming a version number.
-6. **Commit, tag, push:**
+6. **Commit, tag, push the tag:**
    ```
    git commit -am "release: <unit>-vX.Y.Z"
    git tag <unit>-vX.Y.Z          # e.g. sdk-py-v0.2.1-rc.1
-   git push origin main <unit>-vX.Y.Z
+   git push origin <branch> <unit>-vX.Y.Z   # <branch> is usually main
    ```
+   The **tag** drives the release, not the branch: `release.yml` builds from the tagged commit,
+   and the `release` environment gates on the tag *name* (`<unit>-v*`), not on which branch it
+   sits. So an `-rc.N` can be cut from a feature branch **before it merges** — tag that branch's
+   HEAD and push the tag. Only the tagged commit needs the version bump + CHANGELOG entry; the
+   published version is immutable, so land the same bump on `main` when the branch merges and
+   promote to the un-suffixed GA (step 9) from there.
 7. **Watch `release.yml`** to completion. Inspect the GitHub Release on success.
 8. **Verify the install:** run `verify-install.yml` for the unit + version
    (`gh workflow run verify-install.yml -f unit=$UNIT -f version=X.Y.Z`).
