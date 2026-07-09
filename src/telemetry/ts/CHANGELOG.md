@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.1-rc.1] - 2026-07-10
+
 ### Added
 
 - `setContentCapture(mode)`: programmatic override of the content-capture gate. While set, `contentCaptureMode()` returns the given mode regardless of `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` — code-level config wins over the environment, matching how OpenTelemetry treats env vars as the fallback for programmatic configuration. The mode is validated exactly like the env var (case-insensitive, trimmed, legacy `true`/`false`/`1`/`0` forms accepted) and throws a `TypeError` naming the valid values on anything unrecognized — failing loud at config time instead of storing a value that would both disable capture and mask the env var. Pass `null`/`undefined` to clear unconditionally. Returns a generation token identifying the call as the current owner of the override.
