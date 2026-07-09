@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-09
+
+### Fixed
+
+- Re-registering a tool or skill (MCP re-sync, hot-reload) left a stale duplicate in the corpus instead of replacing it in place, causing BM25 score drift and an unbounded memory leak. `ToolRegistry`/`SkillRegistry` are now id-keyed so `register` replaces in place, and the dense embedding cache invalidates on replace so `build_embeddings` re-embeds the changed id.
+
 ## [0.3.0] - 2026-07-06
 
 ### Added
