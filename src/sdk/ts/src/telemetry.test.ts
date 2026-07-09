@@ -7,7 +7,15 @@ import {
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { configureTelemetry, type ExecutableTool, SkillCatalog, ToolCatalog } from "./index.js";
+import {
+  type ContentCapture,
+  configureTelemetry,
+  type ExecutableTool,
+  SkillCatalog,
+  setContentCapture,
+  type TelemetryHandle,
+  ToolCatalog,
+} from "./index.js";
 import { isModuleNotFound, isPeerInstalled, recordAuthNeeded } from "./telemetry.js";
 
 /**
@@ -32,6 +40,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env[CAPTURE_ENV];
+  setContentCapture(null); // never leak a programmatic capture override across tests
   trace.disable(); // reset the global provider to the no-op default
 });
 
@@ -310,6 +319,146 @@ describe("configureTelemetry", () => {
     await expect(
       configureTelemetry({ endpoint: "http://localhost:4318/v1/traces" }),
     ).rejects.toThrow(/already registered/);
+  });
+});
+
+describe("configureTelemetry content-capture options", () => {
+  /**
+   * Run configureTelemetry for real (init() must own the global provider, so the
+   * beforeEach provider is dropped first), then swap the global back to a fresh
+   * in-memory provider so the spans can be read. The capture override set by
+   * configureTelemetry is module-level state in @ratel-ai/telemetry — not tied to
+   * the provider — so it keeps applying to the in-memory spans.
+   */
+  async function configured(
+    opts: Parameters<typeof configureTelemetry>[0],
+  ): Promise<TelemetryHandle> {
+    trace.disable();
+    const handle = await configureTelemetry({
+      endpoint: "http://localhost:4318/v1/traces",
+      ...opts,
+    });
+    trace.disable();
+    exporter = new InMemorySpanExporter();
+    trace.setGlobalTracerProvider(
+      new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] }),
+    );
+    return handle;
+  }
+
+  async function invokeAndReadArgs(): Promise<unknown> {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+    await catalog.invoke("read_file", { path: "/p" });
+    const spans = spansNamed("execute_tool read_file");
+    const [span] = spans.slice(-1); // most recent invoke
+    return attrs(span)["gen_ai.tool.call.arguments"];
+  }
+
+  it("includeSpanAndEvents: true captures content with the env unset", async () => {
+    const handle = await configured({ includeSpanAndEvents: true });
+    try {
+      expect(await invokeAndReadArgs()).toBe('{"path":"/p"}');
+    } finally {
+      await handle.shutdown();
+    }
+  });
+
+  it("captureContent: SPAN_ONLY puts content on the span", async () => {
+    const handle = await configured({ captureContent: "SPAN_ONLY" });
+    try {
+      expect(await invokeAndReadArgs()).toBe('{"path":"/p"}');
+    } finally {
+      await handle.shutdown();
+    }
+  });
+
+  it("the option beats an explicitly set env (env SPAN_AND_EVENT + false -> no content)", async () => {
+    process.env[CAPTURE_ENV] = "SPAN_AND_EVENT";
+    const handle = await configured({ includeSpanAndEvents: false });
+    try {
+      expect(await invokeAndReadArgs()).toBeUndefined();
+    } finally {
+      await handle.shutdown();
+    }
+  });
+
+  it("captureContent wins over includeSpanAndEvents", async () => {
+    const handle = await configured({ captureContent: "NO_CONTENT", includeSpanAndEvents: true });
+    try {
+      expect(await invokeAndReadArgs()).toBeUndefined();
+    } finally {
+      await handle.shutdown();
+    }
+  });
+
+  it("shutdown() restores env-driven behavior", async () => {
+    const handle = await configured({ includeSpanAndEvents: true });
+    await handle.shutdown();
+
+    // Env unset again -> back to the NO_CONTENT default.
+    expect(await invokeAndReadArgs()).toBeUndefined();
+
+    // And the env var rules again once set.
+    process.env[CAPTURE_ENV] = "SPAN_ONLY";
+    expect(await invokeAndReadArgs()).toBe('{"path":"/p"}');
+  });
+
+  it("with neither option, the env keeps ruling", async () => {
+    process.env[CAPTURE_ENV] = "SPAN_ONLY";
+    const handle = await configured({});
+    try {
+      expect(await invokeAndReadArgs()).toBe('{"path":"/p"}');
+    } finally {
+      await handle.shutdown();
+    }
+  });
+
+  it("a stale handle's shutdown does not clobber a newer override", async () => {
+    // Privacy off in code while the env says full capture: a late h1.shutdown()
+    // (SIGTERM hook, test teardown) must not clear h2's override — that would
+    // silently re-enable content capture via the env fallback.
+    process.env[CAPTURE_ENV] = "SPAN_AND_EVENT";
+    const h1 = await configured({ includeSpanAndEvents: false });
+    const h2 = await configured({ includeSpanAndEvents: false });
+
+    await h1.shutdown(); // stale generation — must no-op on the override
+    expect(await invokeAndReadArgs()).toBeUndefined(); // still h2's NO_CONTENT, not the env
+
+    await h2.shutdown(); // current owner — env-driven again
+    expect(await invokeAndReadArgs()).toBe('{"path":"/p"}');
+  });
+
+  it("accepts a lowercase captureContent (normalized like the env var)", async () => {
+    const handle = await configured({ captureContent: "span_only" as ContentCapture });
+    try {
+      expect(await invokeAndReadArgs()).toBe('{"path":"/p"}');
+    } finally {
+      await handle.shutdown();
+    }
+  });
+
+  it("throws a TypeError on garbage captureContent before any exporter side effects", async () => {
+    trace.disable();
+    await expect(
+      configureTelemetry({
+        endpoint: "http://localhost:4318/v1/traces",
+        captureContent: "garbage" as ContentCapture,
+      }),
+    ).rejects.toThrow(TypeError);
+
+    // No provider was registered by the failed call: this in-memory registration
+    // takes (it would silently lose to a leaked init() provider, and the span
+    // below would never reach `exporter`)...
+    exporter = new InMemorySpanExporter();
+    trace.setGlobalTracerProvider(
+      new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] }),
+    );
+    // ...and no garbage override was stored: the env var still rules.
+    process.env[CAPTURE_ENV] = "SPAN_ONLY";
+    expect(await invokeAndReadArgs()).toBe('{"path":"/p"}');
+    delete process.env[CAPTURE_ENV];
+    expect(await invokeAndReadArgs()).toBeUndefined();
   });
 });
 

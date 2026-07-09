@@ -14,12 +14,14 @@
 
 export {
   ContentCapture,
+  clearContentCapture,
   contentCaptureMode,
   DEFAULT_SERVICE_NAME,
   ENDPOINT_ENV,
   type InitOptions,
   type ResolvedOtlpConfig,
   resolveOtlpConfig,
+  setContentCapture,
 } from "./config.js";
 
 /**
