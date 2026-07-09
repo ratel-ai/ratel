@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use indexmap::IndexMap;
+
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
 use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
@@ -31,9 +33,12 @@ impl Embeddable for Skill {
 /// parallel type keeps the tool path untouched and lets skill telemetry stand on
 /// its own.
 pub struct SkillRegistry {
-    skills: Vec<Skill>,
+    /// Corpus keyed by skill id, in insertion order — the skill-side twin of
+    /// [`crate::ToolRegistry`]'s field. `register` replaces an existing id in
+    /// place, never duplicating it (RAT-378).
+    skills: IndexMap<String, Skill>,
     sink: Arc<dyn TraceSink>,
-    /// Dense embeddings for `skills`, a growing prefix built on demand — the
+    /// Dense embeddings for `skills`, keyed by id and built on demand — the
     /// skill-side twin of [`crate::ToolRegistry`]'s field (see [`DenseCache`]).
     dense: DenseCache,
 }
@@ -47,7 +52,7 @@ impl Default for SkillRegistry {
 impl SkillRegistry {
     pub fn new() -> Self {
         Self {
-            skills: Vec::new(),
+            skills: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::new(),
         }
@@ -55,7 +60,7 @@ impl SkillRegistry {
 
     pub fn with_trace_sink(sink: Arc<dyn TraceSink>) -> Self {
         Self {
-            skills: Vec::new(),
+            skills: IndexMap::new(),
             sink,
             dense: DenseCache::new(),
         }
@@ -69,15 +74,29 @@ impl SkillRegistry {
         self.sink.record(event);
     }
 
+    /// Register a skill, or replace one in place if its id is already present —
+    /// see [`crate::ToolRegistry::register`]. Replacing invalidates the old id's
+    /// cached embedding; the corpus never holds a duplicate.
     pub fn register(&mut self, skill: Skill) {
         let skill_id = skill.id.clone();
-        self.skills.push(skill);
-        // Append only — the new skill is embedded by the next `build_embeddings`
-        // (a search never embeds); see [`crate::ToolRegistry::register`].
+        if self.skills.insert(skill_id.clone(), skill).is_some() {
+            // Replaced an existing id: drop its stale embedding.
+            self.dense.invalidate(&skill_id);
+        }
         self.sink.record(TraceEvent::SkillChurn {
             kind: ChurnKind::Add,
             skill_id,
         });
+    }
+
+    /// Number of registered skills (distinct ids).
+    pub fn len(&self) -> usize {
+        self.skills.len()
+    }
+
+    /// Whether no skills are registered.
+    pub fn is_empty(&self) -> bool {
+        self.skills.is_empty()
     }
 
     pub fn search(&self, query: &str, top_k: usize) -> Vec<SkillHit> {
@@ -107,7 +126,7 @@ impl SkillRegistry {
     /// Pre-compute embeddings for not-yet-embedded skills — see
     /// [`crate::ToolRegistry::build_embeddings`].
     pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
-        self.dense.extend(&self.skills, self.sink.as_ref())
+        self.dense.extend(self.skills.values(), self.sink.as_ref())
     }
 
     // ---- engines -----------------------------------------------------------
@@ -116,7 +135,7 @@ impl SkillRegistry {
         let started = Instant::now();
         let hits: Vec<SkillHit> = bm25_search(
             self.skills
-                .iter()
+                .values()
                 .map(|s| (s.id.clone(), searchable_text(s))),
             query,
             top_k,
@@ -155,7 +174,7 @@ impl SkillRegistry {
         self.dense.require_built(self.skills.len())?;
         let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
         let t = Instant::now();
-        let ranked = self.dense.ranked(&self.skills, &query_vec, top_k);
+        let ranked = self.dense.ranked(self.skills.values(), &query_vec, top_k);
         let stage_ms = t.elapsed().as_millis() as u64;
         let hits: Vec<SkillHit> = ranked
             .into_iter()
@@ -194,7 +213,7 @@ impl SkillRegistry {
         let t = Instant::now();
         let bm25_ranked = bm25_search(
             self.skills
-                .iter()
+                .values()
                 .map(|s| (s.id.clone(), searchable_text(s))),
             query,
             depth,
@@ -208,7 +227,7 @@ impl SkillRegistry {
         self.dense.require_built(self.skills.len())?;
         let t = Instant::now();
         let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
-        let dense_ranked = self.dense.ranked(&self.skills, &query_vec, depth);
+        let dense_ranked = self.dense.ranked(self.skills.values(), &query_vec, depth);
         let dense_stage = SearchStage {
             name: "dense".into(),
             took_ms: t.elapsed().as_millis() as u64,
@@ -324,7 +343,7 @@ mod tests {
 
     fn with_embedder(embedder: Arc<dyn Embedder>) -> SkillRegistry {
         SkillRegistry {
-            skills: Vec::new(),
+            skills: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::with_embedder(embedder),
         }
@@ -373,6 +392,38 @@ mod tests {
     fn search_on_empty_registry_returns_no_hits() {
         let reg = SkillRegistry::new();
         assert!(reg.search("anything", 5).is_empty());
+    }
+
+    #[test]
+    fn re_register_replaces_not_appends() {
+        // Re-registering a skill id replaces it in place — the corpus holds one
+        // entry per id, no duplicate (RAT-378, mirror of the tool path).
+        let mut reg = SkillRegistry::new();
+        reg.register(skill("s", "s", "REST API design", &["api"]));
+        reg.register(skill("s", "s", "HTML slides frontend", &["frontend"]));
+        assert_eq!(reg.len(), 1, "re-register replaces, not appends");
+        let hits = reg.search("html slides frontend", 5);
+        assert_eq!(hits.first().map(|h| h.skill_id.as_str()), Some("s"));
+        assert_eq!(hits.len(), 1, "one id in the corpus yields at most one hit");
+    }
+
+    #[test]
+    fn re_register_updates_the_ranked_vector() {
+        // Replace-in-place invalidates the old embedding; after rebuild a semantic
+        // query for the new content ranks the re-registered skill first.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(skill("s", "s", "REST API design", &["api"])); // dense: api bucket
+        reg.build_embeddings().unwrap();
+        reg.register(skill("s", "s", "HTML slides frontend", &["frontend"])); // → frontend bucket
+        reg.build_embeddings().unwrap();
+        let hits = reg
+            .search_with_method("frontend slides", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(hits.first().map(|h| h.skill_id.as_str()), Some("s"));
+        assert!(
+            hits[0].score > 0.9,
+            "ranks with the re-embedded frontend vector"
+        );
     }
 
     #[test]

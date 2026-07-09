@@ -110,6 +110,29 @@ fn re_registering_same_id_replaces_entry() {
     );
     assert_eq!(fresh_hits.len(), 1);
     assert_eq!(fresh_hits[0].tool_id, "shared");
+    // Replace-in-place: the corpus holds exactly one entry for the id, not two.
+    assert_eq!(registry.len(), 1);
+}
+
+#[test]
+fn re_register_keeps_corpus_size_stable() {
+    // Repeatedly re-registering the same id must not grow the corpus — the
+    // RAT-378 regression (a duplicate would drift BM25 avgdl and leak memory).
+    let mut registry = ToolRegistry::new();
+    for i in 0..50 {
+        registry.register(Tool {
+            id: "hot".into(),
+            name: "hot".into(),
+            description: format!("revision {i} of a hot-reloaded tool"),
+            input_schema: empty_schema(),
+            output_schema: empty_schema(),
+        });
+    }
+    assert_eq!(registry.len(), 1, "50 re-registers, one entry");
+    // The single surviving entry ranks once — never a duplicate hit.
+    let hits = registry.search("hot-reloaded tool", 5);
+    assert_eq!(hits.first().map(|h| h.tool_id.as_str()), Some("hot"));
+    assert_eq!(hits.len(), 1);
 }
 
 #[test]

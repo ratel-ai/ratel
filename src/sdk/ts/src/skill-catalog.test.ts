@@ -101,4 +101,20 @@ describe("SkillCatalog tracing", () => {
     expect(invoke?.skill_id).toBe("api-design");
     expect(typeof invoke?.took_ms).toBe("number");
   });
+
+  it("re-registering an id replaces it in place — one hit, latest body wins", () => {
+    const catalog = new SkillCatalog();
+    catalog.register(apiDesign);
+    catalog.register({
+      ...apiDesign,
+      description: "Build animation-rich HTML presentations from scratch.",
+      body: "# Slides\n\nUpdated body.",
+    });
+
+    // Native corpus is deduped by id: the id ranks once, not twice (RAT-378).
+    const hits = catalog.search("animation-rich HTML presentations", 10);
+    expect(hits.filter((h) => h.skillId === "api-design")).toHaveLength(1);
+    // The latest metadata wins.
+    expect(catalog.get("api-design")?.body).toBe("# Slides\n\nUpdated body.");
+  });
 });

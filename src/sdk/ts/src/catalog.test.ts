@@ -212,4 +212,24 @@ describe("ToolCatalog tracing", () => {
     const search = events.find((e) => e.type === "search");
     expect(search?.origin).toBe("agent");
   });
+
+  it("re-registering an id replaces it in place — one hit, latest content wins", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register({
+      ...readFile,
+      description: "Read a file from local disk.",
+      execute: async () => ({ contents: "v1" }),
+    });
+    catalog.register({
+      ...readFile,
+      description: "Fetch and return a document over the network.",
+      execute: async () => ({ contents: "v2" }),
+    });
+
+    // Native corpus is deduped by id: the id ranks once, not twice (RAT-378).
+    const hits = catalog.search("fetch a document over the network", 10);
+    expect(hits.filter((h) => h.toolId === "read_file")).toHaveLength(1);
+    // The latest executor wins.
+    expect(await catalog.invoke("read_file", { path: "/x" })).toEqual({ contents: "v2" });
+  });
 });

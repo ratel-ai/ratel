@@ -14,6 +14,9 @@ categories = ["text-processing", "algorithms"]
 
 [dependencies]
 bm25 = "2.3"
+# Id-keyed, insertion-ordered corpus storage: `register` replaces in place so a
+# re-registered id never duplicates (see ToolRegistry/DenseCache, RAT-378).
+indexmap = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 

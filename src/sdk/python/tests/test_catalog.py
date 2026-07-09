@@ -166,3 +166,23 @@ async def test_invoke_emits_error_telemetry_and_reraises() -> None:
     types = [e["type"] for e in events]
     assert types == ["invoke_start", "invoke_error"]
     assert events[1]["error"] == "kaboom"
+
+
+async def test_re_register_replaces_in_place() -> None:
+    # Re-registering an id replaces it in the native corpus, not appends a
+    # duplicate: the id ranks once and the latest executor wins (RAT-378).
+    catalog = ToolCatalog()
+    catalog.register(_read_file_tool(lambda args: {"contents": "v1"}))
+    catalog.register(
+        ExecutableTool(
+            id="read_file",
+            name="read_file",
+            description="Fetch and return a document over the network.",
+            input_schema={"properties": {"path": {"type": "string"}}},
+            output_schema={"properties": {"contents": {"type": "string"}}},
+            execute=lambda args: {"contents": "v2"},
+        )
+    )
+    hits = catalog.search("fetch a document over the network", 10)
+    assert [h.tool_id for h in hits].count("read_file") == 1
+    assert await catalog.invoke("read_file", {"path": "/x"}) == {"contents": "v2"}

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use indexmap::IndexMap;
+
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
 use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
@@ -27,10 +29,13 @@ impl Embeddable for Tool {
 }
 
 pub struct ToolRegistry {
-    tools: Vec<Tool>,
+    /// Corpus keyed by tool id, in insertion order. Keying by id makes `register`
+    /// replace an existing id in place (never a duplicate), so the BM25 corpus
+    /// stays one-entry-per-id — no `avgdl` drift, no leak (RAT-378).
+    tools: IndexMap<String, Tool>,
     sink: Arc<dyn TraceSink>,
-    /// Dense embeddings for `tools`, a growing prefix built on demand. `register`
-    /// only appends a tool (never invalidates); the missing tail is embedded by
+    /// Dense embeddings for `tools`, keyed by id and built on demand. `register`
+    /// invalidates a replaced id; the missing ids are embedded by
     /// [`Self::build_embeddings`] — a search never embeds the corpus (it requires
     /// the cache built first). A pure BM25 user never populates it and never loads
     /// the model (see ADR-0011 and [`DenseCache`]).
@@ -46,7 +51,7 @@ impl Default for ToolRegistry {
 impl ToolRegistry {
     pub fn new() -> Self {
         Self {
-            tools: Vec::new(),
+            tools: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::new(),
         }
@@ -54,7 +59,7 @@ impl ToolRegistry {
 
     pub fn with_trace_sink(sink: Arc<dyn TraceSink>) -> Self {
         Self {
-            tools: Vec::new(),
+            tools: IndexMap::new(),
             sink,
             dense: DenseCache::new(),
         }
@@ -68,17 +73,31 @@ impl ToolRegistry {
         self.sink.record(event);
     }
 
+    /// Register a tool, or replace one in place if its id is already present.
+    /// Replacing invalidates the old id's cached embedding so the next
+    /// `build_embeddings` re-embeds the new content; the corpus never holds a
+    /// duplicate. Registration stays infallible and model-free (a search never
+    /// embeds), so BM25 users are unaffected (see ADR-0011).
     pub fn register(&mut self, tool: Tool) {
         let tool_id = tool.id.clone();
-        self.tools.push(tool);
-        // Just append — never touch the embeddings cache. The new tool sits
-        // beyond the cached prefix and gets embedded by the next `build_embeddings`
-        // (a search never embeds). Registration stays infallible and model-free,
-        // so BM25 users are unaffected (see ADR-0011).
+        if self.tools.insert(tool_id.clone(), tool).is_some() {
+            // Replaced an existing id: drop its stale embedding.
+            self.dense.invalidate(&tool_id);
+        }
         self.sink.record(TraceEvent::IndexChurn {
             kind: ChurnKind::Add,
             tool_id,
         });
+    }
+
+    /// Number of registered tools (distinct ids).
+    pub fn len(&self) -> usize {
+        self.tools.len()
+    }
+
+    /// Whether no tools are registered.
+    pub fn is_empty(&self) -> bool {
+        self.tools.is_empty()
     }
 
     /// Lexical BM25 retrieval. The default engine — needs no model and never
@@ -118,7 +137,7 @@ impl ToolRegistry {
     /// calls this after `register` in semantic mode so searches never pay the
     /// embedding cost; a BM25-only user never calls it and never loads the model.
     pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
-        self.dense.extend(&self.tools, self.sink.as_ref())
+        self.dense.extend(self.tools.values(), self.sink.as_ref())
     }
 
     // ---- engines -----------------------------------------------------------
@@ -127,7 +146,7 @@ impl ToolRegistry {
         let started = Instant::now();
         let hits: Vec<SearchHit> = bm25_search(
             self.tools
-                .iter()
+                .values()
                 .map(|t| (t.id.clone(), searchable_text(t))),
             query,
             top_k,
@@ -166,7 +185,7 @@ impl ToolRegistry {
         self.dense.require_built(self.tools.len())?;
         let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
         let t = Instant::now();
-        let ranked = self.dense.ranked(&self.tools, &query_vec, top_k);
+        let ranked = self.dense.ranked(self.tools.values(), &query_vec, top_k);
         let stage_ms = t.elapsed().as_millis() as u64;
         let hits: Vec<SearchHit> = ranked
             .into_iter()
@@ -211,7 +230,7 @@ impl ToolRegistry {
         let t = Instant::now();
         let bm25_ranked = bm25_search(
             self.tools
-                .iter()
+                .values()
                 .map(|t| (t.id.clone(), searchable_text(t))),
             query,
             depth,
@@ -226,7 +245,7 @@ impl ToolRegistry {
         self.dense.require_built(self.tools.len())?;
         let t = Instant::now();
         let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
-        let dense_ranked = self.dense.ranked(&self.tools, &query_vec, depth);
+        let dense_ranked = self.dense.ranked(self.tools.values(), &query_vec, depth);
         let dense_stage = SearchStage {
             name: "dense".into(),
             took_ms: t.elapsed().as_millis() as u64,
@@ -361,7 +380,7 @@ mod tests {
 
     fn with_embedder(embedder: Arc<dyn Embedder>) -> ToolRegistry {
         ToolRegistry {
-            tools: Vec::new(),
+            tools: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::with_embedder(embedder),
         }
@@ -578,13 +597,30 @@ mod tests {
     }
 
     #[test]
+    fn re_register_replaces_not_appends() {
+        // Re-registering an id must REPLACE it in place, not append a duplicate.
+        // A duplicate would inflate the BM25 corpus (avgdl drift, degrading scores
+        // corpus-wide) and leak the old Tool + its embedding. The corpus must hold
+        // exactly one entry per id (RAT-378).
+        let mut reg = ToolRegistry::new();
+        reg.register(tool("shared", "read a file"));
+        reg.register(tool("shared", "delete a file"));
+        assert_eq!(reg.len(), 1, "re-register replaces, not appends");
+        // The single surviving entry ranks with the latest content.
+        let hits = reg.search("delete a file", 5);
+        assert_eq!(hits.first().map(|h| h.tool_id.as_str()), Some("shared"));
+        assert_eq!(hits.len(), 1, "one id in the corpus yields at most one hit");
+    }
+
+    #[test]
     fn re_register_updates_the_ranked_vector() {
-        // Re-registering an id appends a fresh entry; last-wins dedup ranks with
-        // the latest embedding, so the updated content wins.
+        // Re-registering an id replaces it in place and invalidates its cached
+        // embedding; the next build_embeddings re-embeds the new content, so the
+        // updated content wins.
         let mut reg = with_embedder(Arc::new(StubEmbedder));
         reg.register(tool("t", "read a file")); // dense vec keyed on "read"
         reg.build_embeddings().unwrap();
-        reg.register(tool("t", "delete a file")); // re-register → keyed on "delete"
+        reg.register(tool("t", "delete a file")); // re-register → invalidated, keyed on "delete"
         reg.build_embeddings().unwrap();
         let hits = reg
             .search_with_method("delete", 5, Origin::Direct, SearchMethod::Semantic)
