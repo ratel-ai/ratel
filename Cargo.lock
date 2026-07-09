@@ -1649,6 +1649,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "hf-hub",
+ "indexmap",
  "serde",
  "serde_json",
  "tempfile",

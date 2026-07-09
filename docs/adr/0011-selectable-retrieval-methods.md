@@ -42,11 +42,13 @@ parallel to `SearchOrigin`.
   `Result<_, EmbedderError>`; `Bm25` is always `Ok`, while `Semantic`/`Hybrid` surface a failed
   model load (network, cache, underpowered machine) as a catchable error — a Python
   `RuntimeError` / a thrown JS error at the SDK edge.
-- **The embedding cache is incremental and in-process.** It is a growing *prefix* of the
-  corpus: `register` only appends a tool (never invalidates), and the not-yet-embedded tail is
-  embedded by `build_embeddings()` — so an existing vector is never recomputed (adding one tool
-  costs one embedding, not N). Core `register(&mut self, tool) -> ()` stays infallible and
-  model-free; a pure BM25 registry never populates the cache. The one-time model load emits a
+- **The embedding cache is incremental and in-process.** It is an **id-keyed** map of per-item
+  vectors: `register` inserts a tool by id (replacing an existing id in place and calling
+  `DenseCache::invalidate` to drop its stale vector), and `build_embeddings()` embeds every id
+  not currently cached — the newly registered *and* the invalidated-on-replace — so a cached
+  vector is recomputed only when its item changed (adding one tool, or re-registering one, costs
+  one embedding, not N). Core `register(&mut self, tool) -> ()` stays infallible and model-free;
+  a pure BM25 registry never populates the cache. The one-time model load emits a
   `TraceEvent::EmbedderLoad` flagging a slow (possibly underpowered) or failed load.
 - **Semantic is opt-in and eagerly built.** A catalog whose default method is `"semantic"` /
   `"hybrid"` (the opt-in flag) calls `build_embeddings()` after each `register`, so the cost lands at load
@@ -76,5 +78,6 @@ parallel to `SearchOrigin`.
   spikes' shape) — it made `register` fallible and loaded the model for BM25-only users; eager
   embedding is instead **opt-in** in semantic mode, driven from the SDK via `build_embeddings()`, so core
   `register` stays infallible. Rejected: full-corpus re-embed on `register` (the first cut of
-  this ADR) — the incremental prefix cache re-embeds only newly-registered tools. Rejected:
+  this ADR) — the incremental id-keyed cache re-embeds only ids not currently cached (newly
+  registered, or invalidated when a re-register replaces an id). Rejected:
   score-normalization fusion for hybrid — RRF needs no per-arm score calibration.

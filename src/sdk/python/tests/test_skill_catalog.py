@@ -49,3 +49,23 @@ def test_minimal_skill_without_tags_or_body() -> None:
     assert catalog.has("min")
     assert catalog.invoke("min") == ""
     assert catalog.search("minimal", 5)[0].skill_id == "min"
+
+
+def test_re_register_replaces_in_place() -> None:
+    # Re-registering an id replaces it in the native corpus, not appends a
+    # duplicate: the id ranks once and the latest metadata wins (RAT-378).
+    catalog = SkillCatalog()
+    catalog.register(Skill(id="s", name="s", description="REST API design", tags=["api"]))
+    catalog.register(
+        Skill(
+            id="s",
+            name="s",
+            description="Build animation-rich HTML presentations from scratch.",
+            tags=["frontend"],
+            body="# Slides\n\nUpdated body.",
+        )
+    )
+    assert catalog.size() == 1
+    hits = catalog.search("animation-rich HTML presentations", 10)
+    assert [h.skill_id for h in hits].count("s") == 1
+    assert catalog.get("s").body == "# Slides\n\nUpdated body."
