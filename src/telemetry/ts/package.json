@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/telemetry",
-  "version": "0.1.1-rc.1",
+  "version": "0.1.1",
   "description": "Ratel telemetry conventions — the ratel.* overlay on OpenTelemetry gen_ai spans. The OTel-free vocabulary + OTLP config for the Ratel context engineering platform (the init() exporter is @ratel-ai/telemetry-otlp).",
   "private": false,
   "type": "module",
