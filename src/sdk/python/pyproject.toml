@@ -63,7 +63,14 @@ line-length = 100
 target-version = "py39"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "W"]
+select = ["E", "F", "I", "UP", "B", "W", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests document themselves through their names; don't require docstrings there.
+"tests/**" = ["D"]
 
 # Runtime floor is 3.9 (via `from __future__ import annotations`); mypy's minimum
 # supported target is 3.10, so we type-check against that.

@@ -1,3 +1,16 @@
+/**
+ * `@ratel-ai/sdk` — TypeScript SDK for Ratel, the context engineering platform
+ * for AI agents. In-process, no infra: a native (Rust) BM25/semantic/hybrid
+ * index behind {@link ToolCatalog} and {@link SkillCatalog}, MCP ingestion via
+ * {@link registerMcpServer}, and the framework-neutral capability tools
+ * ({@link searchCapabilitiesTool}, {@link invokeToolTool},
+ * {@link getSkillContentTool}) that let a model discover and run what the
+ * catalogs hold. Everything emits OTel `ratel.*`/`gen_ai.*` spans plus a local
+ * trace stream (ADR-0007).
+ *
+ * @packageDocumentation
+ */
+
 export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
 export { SkillRegistry, ToolRegistry } from "../native/index.cjs";
 export type {

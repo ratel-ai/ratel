@@ -4,17 +4,73 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ToolCatalog } from "./catalog.js";
 import { traceUpstreamRegister } from "./telemetry.js";
 
+/** Options for {@link registerMcpServer}. */
 export interface RegisterMcpServerOptions {
+  /**
+   * Namespace for the server's tools inside the catalog: each tool is
+   * registered as `<name>__<toolName>`. Also the `server` name that trace
+   * events and result groups report for these tools.
+   */
   name: string;
+  /**
+   * An MCP client transport for the server (e.g. `StdioClientTransport`,
+   * `StreamableHTTPClientTransport`, or an `InMemoryTransport` pair in tests).
+   * {@link registerMcpServer} connects it; it must not be connected already.
+   */
   transport: Transport;
 }
 
+/** What {@link registerMcpServer} returns: the ingested ids plus lifecycle control. */
 export interface McpServerHandle {
+  /** Namespaced ids (`<name>__<toolName>`) of every tool registered, in server order. */
   toolIds: string[];
+  /**
+   * The usage instructions the server declared during the MCP initialize
+   * handshake, or `undefined` if it declared none. Useful as
+   * `UpstreamServerInfo.instructions` when building capability tools.
+   */
   serverInstructions: string | undefined;
+  /**
+   * Close the underlying MCP client connection. The proxied tools stay in the
+   * catalog but invoking them after close fails.
+   */
   close: () => Promise<void>;
 }
 
+/**
+ * Ingest an MCP server into a {@link ToolCatalog}: connect over the given
+ * transport, list its tools once (no live refresh), and register each as an
+ * {@link ToolCatalog.register | executable tool} whose executor proxies
+ * `callTool` on the live client. A missing tool description registers as `""`;
+ * a missing output schema as `{ type: "object" }`.
+ *
+ * The whole registration is one `ratel.upstream.register` OTel span and an
+ * `upstream_register` local trace event; each later invocation records
+ * `upstream_invoke` (or `upstream_error`) alongside the catalog's own events
+ * (ADR-0007). Rejects if connecting or listing tools fails.
+ *
+ * @param catalog - Catalog that receives the proxied tools.
+ * @param options - Server name (the id namespace) and transport.
+ * @returns A handle with the registered ids, the server's instructions, and
+ *   `close()`.
+ *
+ * @example
+ * ```ts
+ * import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+ * import { registerMcpServer, ToolCatalog } from "@ratel-ai/sdk";
+ *
+ * const catalog = new ToolCatalog();
+ * const github = await registerMcpServer(catalog, {
+ *   name: "github",
+ *   transport: new StdioClientTransport({ command: "github-mcp-server" }),
+ * });
+ * // github.toolIds → ["github__create_issue", "github__get_pull_request", ...]
+ * const result = await catalog.invoke("github__create_issue", {
+ *   title: "Flaky test on main",
+ * });
+ * await github.close();
+ * ```
+ */
 export async function registerMcpServer(
   catalog: ToolCatalog,
   options: RegisterMcpServerOptions,

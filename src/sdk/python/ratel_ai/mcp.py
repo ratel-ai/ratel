@@ -45,6 +45,19 @@ def _require_mcp() -> None:
 
 @dataclass
 class McpServerHandle:
+    """What `register_mcp_server` returns: the registration's outcome.
+
+    Attributes:
+        tool_ids: the namespaced `<server>__<tool>` ids registered into the
+            catalog, in upstream listing order.
+        server_instructions: the `instructions` value passed to
+            `register_mcp_server` (the caller reads it from its own
+            `initialize` result), or `None`.
+        close: async teardown — the `on_close` passed to
+            `register_mcp_server`, or a no-op. The session itself stays
+            caller-owned either way.
+    """
+
     tool_ids: list[str]
     server_instructions: str | None
     close: Callable[[], Awaitable[None]]
@@ -72,6 +85,13 @@ async def register_mcp_server(
         transport_label: recorded on the `upstream_register` trace event.
         instructions: the upstream's server instructions (from `initialize`), if any.
         on_close: optional async teardown invoked by the handle's `close()`.
+
+    Returns:
+        An `McpServerHandle` with the registered tool ids.
+
+    Raises:
+        ImportError: if the optional `mcp` package is not installed
+            (`pip install 'ratel-ai[mcp]'`).
     """
     _require_mcp()
 

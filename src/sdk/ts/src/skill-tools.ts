@@ -1,12 +1,26 @@
 import type { ExecutableTool } from "./catalog.js";
 import type { SkillCatalog } from "./skill-catalog.js";
 
+/**
+ * Wire id (`"get_skill_content"`) of the skill-loading capability tool built
+ * by {@link getSkillContentTool} — the name the model calls it by.
+ */
 export const GET_SKILL_CONTENT_ID = "get_skill_content" as const;
 
 /**
- * Load a skill's full instructions by id — the counterpart to `invoke_tool`.
- * Skills are *read*, not executed: the agent discovers a skill in the `skills`
- * bucket of `search_capabilities`, then pulls its playbook into context here.
+ * Build the `get_skill_content` capability tool: load a skill's full
+ * instructions by id — the counterpart to `invoke_tool`. Skills are *read*,
+ * not executed: the agent discovers a skill in the `skills` bucket of
+ * `search_capabilities`, then pulls its playbook into context here.
+ *
+ * The tool takes `{ skillId }` and resolves to `{ body }` (the skill's
+ * Markdown) on success, or `{ error, isError: true }` for an unknown id — a
+ * structured result rather than a rejection, so the model can recover. Each
+ * load records a `ratel.skill.load` span plus a `skill_invoke` trace event
+ * (unknown ids record `gateway_error`).
+ *
+ * @param catalog - Catalog whose skills this serves.
+ * @returns The tool, ready to expose to the model.
  */
 export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
   return {

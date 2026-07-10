@@ -11,29 +11,44 @@ const ENVELOPE_VERSION: u32 = 1;
 /// A best-effort sink for trace events. Implementations must be cheap on the
 /// hot path — see ADR-0007 for the query-log reliability profile (lossy on
 /// backpressure is fine, blocking the agent loop is not).
+///
+/// Three implementations ship with the crate: [`NoopSink`] (discard — the
+/// registries' default), [`MemorySink`] (in-memory buffer for tests and
+/// introspection), and [`JsonlSink`] (append-to-file local persistence).
 pub trait TraceSink: Send + Sync {
+    /// Record one event. Called synchronously on the hot path, so it must be
+    /// cheap and non-blocking; on failure, drop the event rather than
+    /// propagate (trace events are observations, never load-bearing).
     fn record(&self, event: TraceEvent);
 
-    /// Per-sink rate limit hint. Currently a documentation knob; v0.1.5 doesn't
-    /// rate-limit anywhere, but the contract is in place so consumers can
-    /// adopt it without a breaking change.
+    /// Per-sink rate limit hint. Currently a documentation knob — nothing
+    /// rate-limits yet — but the contract is in place so consumers can adopt
+    /// it without a breaking change.
     fn sample_rate(&self) -> f64 {
         1.0
     }
 }
 
+/// A sink that discards every event — the default of a registry built with
+/// [`crate::ToolRegistry::new`] / [`crate::SkillRegistry::new`], and the
+/// right choice when tracing is off.
 pub struct NoopSink;
 
 impl TraceSink for NoopSink {
     fn record(&self, _event: TraceEvent) {}
 }
 
+/// A sink that buffers enveloped events in memory, for tests and in-process
+/// introspection: record, then assert on [`Self::snapshot`] or
+/// [`Self::drain`]. The buffer is unbounded, so drain it periodically if the
+/// producer is long-lived.
 pub struct MemorySink {
     session_id: String,
     events: Mutex<Vec<TraceEnvelope>>,
 }
 
 impl MemorySink {
+    /// An empty sink whose envelopes are stamped with `session_id`.
     pub fn new(session_id: impl Into<String>) -> Self {
         Self {
             session_id: session_id.into(),
@@ -41,15 +56,20 @@ impl MemorySink {
         }
     }
 
+    /// A copy of the recorded envelopes, oldest first, leaving the buffer in
+    /// place.
     pub fn snapshot(&self) -> Vec<TraceEnvelope> {
         self.events.lock().expect("trace sink poisoned").clone()
     }
 
+    /// Remove and return the recorded envelopes, oldest first, emptying the
+    /// buffer.
     pub fn drain(&self) -> Vec<TraceEnvelope> {
         let mut guard = self.events.lock().expect("trace sink poisoned");
         std::mem::take(&mut *guard)
     }
 
+    /// The session id stamped on every envelope this sink records.
     pub fn session_id(&self) -> &str {
         &self.session_id
     }
@@ -64,12 +84,25 @@ impl TraceSink for MemorySink {
     }
 }
 
+/// A sink that appends events to a JSONL file, one [`TraceEnvelope`] per
+/// line — local persistence for the offline inspector and reporting
+/// (ADR-0007; the consuming shells bucket files under `~/.ratel/telemetry/`,
+/// but the sink accepts any path). Writes are best-effort: a serialization or
+/// I/O failure drops the event rather than disturb the agent loop.
 pub struct JsonlSink {
     session_id: String,
     file: Mutex<BufWriter<File>>,
 }
 
 impl JsonlSink {
+    /// Open (or create) the JSONL file at `path` in append mode, creating
+    /// missing parent directories. On Unix the file's permissions are
+    /// tightened to `0600` (best-effort) since traces can carry query text.
+    ///
+    /// # Errors
+    ///
+    /// Any [`std::io::Error`] from creating the parent directories or opening
+    /// the file.
     pub fn new(session_id: impl Into<String>, path: impl AsRef<Path>) -> std::io::Result<Self> {
         let path: PathBuf = path.as_ref().to_path_buf();
         if let Some(parent) = path.parent()

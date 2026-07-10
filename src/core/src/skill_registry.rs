@@ -14,8 +14,16 @@ use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchStage, SkillHitTrace, TraceEvent, TraceSink,
 };
 
+/// One ranked match from a [`SkillRegistry`] search, best-first in the
+/// returned `Vec` — the skill-side twin of [`crate::SearchHit`].
 pub struct SkillHit {
+    /// Id of the matching skill ([`Skill::id`]).
     pub skill_id: String,
+    /// Relevance score — higher is better; the scale depends on the
+    /// [`SearchMethod`] exactly as documented on [`crate::SearchHit::score`]:
+    /// raw BM25 relevance for `Bm25`, cosine similarity (at most `1.0`) for
+    /// `Semantic`, a Reciprocal Rank Fusion sum for `Hybrid`. Ties break by
+    /// `skill_id` ascending.
     pub score: f32,
 }
 
@@ -50,6 +58,8 @@ impl Default for SkillRegistry {
 }
 
 impl SkillRegistry {
+    /// An empty registry with tracing off ([`NoopSink`]) — see
+    /// [`crate::ToolRegistry::new`].
     pub fn new() -> Self {
         Self {
             skills: IndexMap::new(),
@@ -58,6 +68,8 @@ impl SkillRegistry {
         }
     }
 
+    /// An empty registry recording trace events to `sink` from the start —
+    /// see [`crate::ToolRegistry::with_trace_sink`].
     pub fn with_trace_sink(sink: Arc<dyn TraceSink>) -> Self {
         Self {
             skills: IndexMap::new(),
@@ -66,10 +78,15 @@ impl SkillRegistry {
         }
     }
 
+    /// Replace the trace sink; subsequent events go to `sink` — see
+    /// [`crate::ToolRegistry::set_trace_sink`].
     pub fn set_trace_sink(&mut self, sink: Arc<dyn TraceSink>) {
         self.sink = sink;
     }
 
+    /// Record an arbitrary [`TraceEvent`] on the registry's sink — see
+    /// [`crate::ToolRegistry::record_event`]. The SDK skill catalogs emit
+    /// their `skill_invoke` (content-load) events through this.
     pub fn record_event(&self, event: TraceEvent) {
         self.sink.record(event);
     }
@@ -99,15 +116,47 @@ impl SkillRegistry {
         self.skills.is_empty()
     }
 
+    /// Lexical BM25 retrieval — the skill-side twin of
+    /// [`crate::ToolRegistry::search`]: no model, never fails. Returns at most
+    /// `top_k` hits, best-first (see [`SkillHit::score`]). Traced as
+    /// [`Origin::Direct`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ratel_ai_core::{Skill, SkillRegistry};
+    ///
+    /// let mut registry = SkillRegistry::new();
+    /// registry.register(Skill {
+    ///     id: "api-design".into(),
+    ///     name: "api-design".into(),
+    ///     description: "REST API design patterns: resource naming, pagination".into(),
+    ///     tags: vec!["backend".into(), "api".into()],
+    ///     tools: vec![],
+    ///     metadata: std::collections::HashMap::new(),
+    ///     body: "# API design\n...".into(),
+    /// });
+    ///
+    /// let hits = registry.search("design a REST endpoint", 5);
+    /// assert_eq!(hits[0].skill_id, "api-design");
+    /// ```
     pub fn search(&self, query: &str, top_k: usize) -> Vec<SkillHit> {
         self.search_with_origin(query, top_k, Origin::Direct)
     }
 
+    /// [`Self::search`] with an explicit trace [`Origin`] — see
+    /// [`crate::ToolRegistry::search_with_origin`].
     pub fn search_with_origin(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SkillHit> {
         self.bm25_search_traced(query, top_k, origin)
     }
 
     /// Retrieve with an explicit [`SearchMethod`]. See
+    /// [`crate::ToolRegistry::search_with_method`].
+    ///
+    /// # Errors
+    ///
+    /// Never errors for [`SearchMethod::Bm25`]; for `Semantic`/`Hybrid`, the
+    /// same [`EmbedderError`] cases as
     /// [`crate::ToolRegistry::search_with_method`].
     pub fn search_with_method(
         &self,
@@ -125,6 +174,12 @@ impl SkillRegistry {
 
     /// Pre-compute embeddings for not-yet-embedded skills — see
     /// [`crate::ToolRegistry::build_embeddings`].
+    ///
+    /// # Errors
+    ///
+    /// The same [`EmbedderError`] cases as
+    /// [`crate::ToolRegistry::build_embeddings`]: model download/cache/load
+    /// failures on first use, or an `Inference` failure embedding a skill.
     pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
         self.dense.extend(self.skills.values(), self.sink.as_ref())
     }

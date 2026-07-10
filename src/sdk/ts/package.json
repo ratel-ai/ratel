@@ -42,7 +42,8 @@
     "build:ts": "tsc",
     "build": "pnpm build:native && pnpm build:ts",
     "typecheck": "pnpm build:native && tsc --noEmit",
-    "lint": "biome check src",
+    "docs:check": "typedoc",
+    "lint": "biome check src && pnpm docs:check",
     "test": "pnpm build:native && vitest run"
   },
   "napi": {
@@ -64,6 +65,7 @@
     "@napi-rs/cli": "^3.6.0",
     "@opentelemetry/context-async-hooks": "^2.9.0",
     "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "typedoc": "^0.28.20",
     "typescript": "^5.6.0",
     "vitest": "^4.1.5"
   },
