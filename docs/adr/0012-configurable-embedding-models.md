@@ -31,14 +31,14 @@ land in different vector spaces.
   Candle; `Endpoint { url, model, api_key_env }` — an OpenAI-compatible
   `/embeddings` HTTP call (OpenAI, **Ollama**, TEI, vLLM), the only path that
   supports non-BERT models. `revision` is optional (defaults to `main`).
-- **Inferred, no `kind` field.** The public option is a string shortcut
-  (`"org/name"` → HF, `"/path"` → local) or an object whose *key* names the
-  source (`{huggingface}` / `{local}` / `{ollama}` / `{url, model}`). The
-  string→source inference and all validation live in **core** (`EmbeddingModel::
-  resolve`), shared by both SDKs rather than duplicated. Config errors surface at
-  construction. Windows drive paths (`C:\…`) are never mistaken for URLs (the URL
-  rule requires `://`); an unambiguous local-intent prefix wins over a phantom HF
-  repo so a mistyped path errors as "not found", not "repo not found".
+- **Explicit source, no `kind` field.** A bare string is a **local model
+  directory path**; every other source is an object whose *key* names it —
+  `{huggingface}` / `{local}` / `{ollama}` / `{url, model}` — symmetric across
+  the board (a repo-id-looking or URL string is rejected with a pointer to the
+  right object form, rather than guessed). Resolution and all validation live in
+  **core** (`EmbeddingModel::resolve`), shared by both SDKs rather than
+  duplicated; config errors surface at construction. Windows drive paths (`C:\…`)
+  are never mistaken for URLs (the URL rule requires `://`).
 - **Per-catalog, deduplicated by identity.** The global one-model singleton
   becomes a process-wide cache **keyed by model fingerprint**, so two catalogs on
   the same model still load it once, while different models coexist. A failed

@@ -24,11 +24,11 @@ Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
 SearchOrigin = str  # "direct" | "agent"
 SearchMethod = str  # "bm25" | "semantic" | "hybrid"
 
-# Embedding-model selection for semantic/hybrid retrieval: a string shortcut (a
-# HuggingFace repo id like "BAAI/bge-base-en-v1.5", or a local dir path), or an
-# object selecting an endpoint / pinning a revision:
+# Embedding-model selection for semantic/hybrid retrieval. A bare string is a
+# local model *directory path*; every other source is a keyed dict, symmetric:
 #   {"huggingface": "org/name", "revision": "…"} | {"local": "/path"}
 #   {"ollama": "nomic-embed-text"} | {"url": "…", "model": "…", "api_key_env": "…"}
+# (A repo-id-looking string is rejected in favor of {"huggingface": ...}.)
 EmbeddingSpec = Union[str, dict[str, str]]
 
 _EMBEDDING_KEYS = frozenset(

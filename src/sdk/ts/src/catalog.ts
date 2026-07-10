@@ -24,21 +24,20 @@ export type SearchOrigin = "direct" | "agent";
 export type SearchMethod = "bm25" | "semantic" | "hybrid";
 
 /** Object form of the embedding-model selection for semantic/hybrid retrieval.
- * The discriminating key names the source. Prefer the string shortcut
- * (`"org/name"` for a HuggingFace repo, `"/path"` for a local dir) for the
- * common cases; use this object for an endpoint, or to pin a revision/prefix. */
+ * The discriminating key names the source — symmetric across all of them. Use
+ * the bare string form only for a local model *directory path*. */
 export type EmbeddingModelConfig =
   | { huggingface: string; revision?: string; queryPrefix?: string }
   | { local: string; queryPrefix?: string }
   | { ollama: string; queryPrefix?: string }
   | { url: string; model: string; apiKeyEnv?: string; queryPrefix?: string };
 
-/** Embedding-model selection: a string shortcut (HF repo id or local dir path)
- * or an explicit {@link EmbeddingModelConfig} object. */
+/** Embedding-model selection: a bare string is a **local model directory path**;
+ * every other source is an explicit {@link EmbeddingModelConfig} object. */
 export type EmbeddingSpec = string | EmbeddingModelConfig;
 
 /** Normalize the public string|object form into the native config the binding
- * expects (a string becomes the inferred `spec` field). */
+ * expects (a string is the local-path `spec`, validated in core). */
 function toNativeEmbedding(embedding: EmbeddingSpec): NativeEmbeddingConfig {
   return typeof embedding === "string" ? { spec: embedding } : embedding;
 }
@@ -48,12 +47,12 @@ export interface ToolCatalogOptions {
   /** Default retrieval method for `search` (default `"bm25"`, model-free). A
    * per-call `method` argument overrides it. */
   method?: SearchMethod;
-  /** Embedding model backing semantic/hybrid retrieval. A string is a
-   * HuggingFace repo id (`"BAAI/bge-base-en-v1.5"`) or a local dir path
-   * (`"/opt/models/bge"`); an object selects an endpoint (`{ ollama }` /
-   * `{ url, model }`) or pins a revision/prefix. Chosen once, used for both
-   * document and query embedding. Ignored (with a warning) when method is
-   * `"bm25"`, which needs no model. An invalid config throws at construction. */
+  /** Embedding model backing semantic/hybrid retrieval. A string is a local
+   * model directory path (`"/opt/models/bge"`); every other source is a keyed
+   * object: `{ huggingface: "BAAI/bge-base-en-v1.5" }`, `{ ollama: "…" }`, or
+   * `{ url, model, apiKeyEnv }`. Chosen once, used for both document and query
+   * embedding. Ignored (with a warning) when method is `"bm25"`, which needs no
+   * model. An invalid config throws at construction. */
   embedding?: EmbeddingSpec;
 }
 

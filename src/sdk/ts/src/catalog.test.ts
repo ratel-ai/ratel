@@ -154,6 +154,13 @@ describe("ToolCatalog embedding config", () => {
     ).toThrow(/model/);
   });
 
+  it("rejects a bare repo-id string, pointing to the huggingface object", () => {
+    // A string is a local path only; a repo id must use { huggingface }.
+    expect(
+      () => new ToolCatalog({ method: "semantic", embedding: "BAAI/bge-base-en-v1.5" }),
+    ).toThrow(/huggingface/);
+  });
+
   it("throws at construction on a conflicting endpoint config", () => {
     expect(
       () =>
@@ -174,8 +181,8 @@ describe("ToolCatalog embedding config", () => {
     const original = console.warn;
     console.warn = (msg: string) => warnings.push(msg);
     try {
-      // A HF repo id is a valid config; with bm25 it must be ignored (no load).
-      const catalog = new ToolCatalog({ embedding: "BAAI/bge-base-en-v1.5" });
+      // A valid config; with bm25 it must be ignored (no load, no validation).
+      const catalog = new ToolCatalog({ embedding: { huggingface: "BAAI/bge-base-en-v1.5" } });
       catalog.register(readFile);
       expect(catalog.search("read", 5)).toBeDefined(); // bm25, no model
     } finally {

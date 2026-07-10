@@ -131,6 +131,12 @@ def test_embedding_invalid_config_raises_valueerror_at_construction() -> None:
         ToolCatalog(method="semantic", embedding="https://api.openai.com/v1/embeddings")
 
 
+def test_embedding_bare_repo_id_string_points_to_huggingface() -> None:
+    # A string is a local path only; a repo id must use {"huggingface": ...}.
+    with pytest.raises(ValueError, match="huggingface"):
+        ToolCatalog(method="semantic", embedding="BAAI/bge-base-en-v1.5")
+
+
 def test_embedding_conflicting_endpoint_keys_raise() -> None:
     with pytest.raises(ValueError, match="conflicting"):
         ToolCatalog(
@@ -147,7 +153,7 @@ def test_embedding_unknown_dict_key_raises() -> None:
 def test_embedding_ignored_and_warns_under_bm25() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        catalog = ToolCatalog(embedding="BAAI/bge-base-en-v1.5")  # bm25 default
+        catalog = ToolCatalog(embedding={"huggingface": "BAAI/bge-base-en-v1.5"})  # bm25 default
         catalog.register(_read_file_tool(lambda args: {}))
         catalog.search("read", 5)  # bm25, no model loaded
     assert any("bm25" in str(w.message) for w in caught)

@@ -6,10 +6,12 @@
 //! BERT-family HuggingFace repo or on-disk directory (loaded in-process via
 //! Candle), and an OpenAI-compatible HTTP endpoint (any model, incl. Ollama).
 //!
-//! [`EmbeddingModel::resolve`] turns the cross-SDK [`EmbeddingSpec`] DTO — a raw
-//! string shortcut *or* named object fields — into a validated model. The
-//! string→source **inference lives here** (in the core) so both SDKs share one
-//! implementation instead of two that could drift. See ADR-0012.
+//! [`EmbeddingModel::resolve`] turns the cross-SDK [`EmbeddingSpec`] DTO into a
+//! validated model. The source is named explicitly: a bare string is a **local
+//! directory path**, and every other source is a keyed object
+//! (`{huggingface}` / `{local}` / `{ollama}` / `{url, model}`), symmetric across
+//! the board. Resolution/validation **lives here** (in the core) so both SDKs
+//! share one implementation instead of two that could drift. See ADR-0012.
 
 use std::path::{Path, PathBuf};
 
@@ -62,7 +64,8 @@ pub enum EmbeddingModel {
 /// modifiers.
 #[derive(Debug, Clone, Default)]
 pub struct EmbeddingSpec {
-    /// Raw string shortcut: `"org/name"` (HF) | `"/path"` (local) | a URL (error).
+    /// Raw string shortcut — a **local model directory path** only. A repo-id or
+    /// URL string is rejected in favor of the explicit `huggingface`/`url` keys.
     pub spec: Option<String>,
     pub huggingface: Option<String>,
     pub local: Option<String>,
@@ -99,7 +102,7 @@ impl EmbeddingModel {
         match set.len() {
             0 => {
                 return Err(cfg(
-                    "no embedding source given; pass a model id/path/url, or one of \
+                    "no embedding source given; pass a local directory path, or one of \
                      huggingface/local/ollama/url",
                 ));
             }
@@ -221,16 +224,21 @@ fn reject_endpoint_only(spec: &EmbeddingSpec, what: &str) -> Result<(), Embedder
     Ok(())
 }
 
-/// Infer the source from the raw string shortcut. Order: URL scheme →
-/// endpoint-without-model (error); local-intent prefix or existing dir → local;
-/// otherwise a HuggingFace repo id. Names the inference in errors so a mistaken
-/// path doesn't read as a phantom repo.
+/// Interpret the raw string shortcut, which is a **local model directory path
+/// only** — every non-path source (HuggingFace, endpoint) uses the explicit
+/// keyed object, symmetric with `{ollama}`/`{url}`. A URL or a repo-id-looking
+/// string is rejected with a pointer to the right object form, so the source is
+/// never guessed from an ambiguous string.
 fn infer_from_string(s: &str, spec: &EmbeddingSpec) -> Result<EmbeddingModel, EmbedderError> {
     if spec.model.is_some() || spec.api_key_env.is_some() {
         return Err(cfg(
-            "'model'/'api_key_env' are only valid with an endpoint 'url'; the string \
-             form infers the source from its shape",
+            "'model'/'api_key_env' are only valid with an endpoint 'url'; a bare string \
+             is only a local model directory path",
         ));
+    }
+    if spec.revision.is_some() {
+        return Err(cfg("'revision' is only valid for a HuggingFace repo; use \
+             {\"huggingface\": \"…\", \"revision\": \"…\"}"));
     }
     if looks_like_url(s) {
         return Err(cfg(format!(
@@ -239,23 +247,18 @@ fn infer_from_string(s: &str, spec: &EmbeddingSpec) -> Result<EmbeddingModel, Em
         )));
     }
     if looks_like_path(s) || Path::new(s).is_dir() {
-        if spec.revision.is_some() {
-            return Err(cfg(
-                "'revision' is only valid for a HuggingFace repo, not a local path",
-            ));
-        }
         return Ok(EmbeddingModel::Local {
             path: PathBuf::from(s),
             query_prefix: spec.query_prefix.clone(),
         });
     }
-    // Otherwise a HuggingFace repo id. If it doesn't exist upstream, the loader's
-    // download error names that it was treated as a repo (see embedding.rs).
-    Ok(EmbeddingModel::HuggingFace {
-        repo: s.to_string(),
-        revision: spec.revision.clone(),
-        query_prefix: spec.query_prefix.clone(),
-    })
+    // Not a path → most likely a HuggingFace repo id. The bare-string form is
+    // local-only, so name the explicit object rather than guess the source.
+    Err(cfg(format!(
+        "'{s}' is not a local directory path; to use a HuggingFace repo pass \
+         {{\"huggingface\": \"{s}\"}}, or give an absolute/relative directory \
+         path for a local model"
+    )))
 }
 
 /// A `scheme://…` URL. Requires `://`, so a Windows `C:\…` path never matches.
@@ -306,9 +309,22 @@ mod tests {
     }
 
     #[test]
-    fn bare_repo_id_infers_huggingface_with_default_revision() {
+    fn bare_repo_id_string_is_rejected_pointing_to_huggingface() {
+        // A repo-id-looking string is not a path → rejected with a pointer to the
+        // explicit object form, so the source is never guessed.
+        let err = from_str("BAAI/bge-base-en-v1.5").unwrap_err();
+        assert!(matches!(err, EmbedderError::Config { .. }));
+        assert!(err.to_string().contains("huggingface"), "got: {err}");
+    }
+
+    #[test]
+    fn huggingface_object_infers_default_revision() {
         assert_eq!(
-            from_str("BAAI/bge-base-en-v1.5").unwrap(),
+            EmbeddingModel::resolve(EmbeddingSpec {
+                huggingface: Some("BAAI/bge-base-en-v1.5".into()),
+                ..Default::default()
+            })
+            .unwrap(),
             EmbeddingModel::HuggingFace {
                 repo: "BAAI/bge-base-en-v1.5".into(),
                 revision: None,
