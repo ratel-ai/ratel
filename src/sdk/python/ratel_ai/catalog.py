@@ -29,10 +29,23 @@ SearchMethod = str  # "bm25" | "semantic" | "hybrid"
 #   {"huggingface": "org/name", "revision": "…"} | {"local": "/path"}
 #   {"ollama": "nomic-embed-text"} | {"url": "…", "model": "…", "api_key_env": "…"}
 # (A repo-id-looking string is rejected in favor of {"huggingface": ...}.)
+# Optional modifiers: "doc_prefix" (asymmetric docs, e.g. e5's "passage: ") on any
+# source; "pooling" ("cls"|"mean") to override auto-detection on an in-process model.
 EmbeddingSpec = Union[str, dict[str, str]]
 
 _EMBEDDING_KEYS = frozenset(
-    {"huggingface", "local", "ollama", "url", "model", "revision", "api_key_env", "query_prefix"}
+    {
+        "huggingface",
+        "local",
+        "ollama",
+        "url",
+        "model",
+        "revision",
+        "api_key_env",
+        "query_prefix",
+        "doc_prefix",
+        "pooling",
+    }
 )
 
 

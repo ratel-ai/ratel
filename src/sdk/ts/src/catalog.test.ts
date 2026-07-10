@@ -176,6 +176,36 @@ describe("ToolCatalog embedding config", () => {
     ).toThrow(/conflicting/);
   });
 
+  it("accepts a pooling override and doc prefix on an in-process model", () => {
+    expect(
+      () =>
+        new ToolCatalog({
+          method: "semantic",
+          embedding: { huggingface: "org/m", pooling: "mean", docPrefix: "passage: " },
+        }),
+    ).not.toThrow();
+  });
+
+  it("rejects an invalid pooling value at construction", () => {
+    expect(
+      () =>
+        new ToolCatalog({
+          method: "semantic",
+          embedding: { huggingface: "org/m", pooling: "median" as never },
+        }),
+    ).toThrow(/pooling/);
+  });
+
+  it("rejects pooling on an endpoint (server pools)", () => {
+    expect(
+      () =>
+        new ToolCatalog({
+          method: "semantic",
+          embedding: { ollama: "nomic", pooling: "mean" } as never,
+        }),
+    ).toThrow(/pooling/);
+  });
+
   it("warns and ignores embedding when method is bm25", () => {
     const warnings: string[] = [];
     const original = console.warn;

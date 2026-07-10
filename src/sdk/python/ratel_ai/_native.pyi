@@ -29,6 +29,8 @@ class ToolRegistry:
         revision: str | None = ...,
         api_key_env: str | None = ...,
         query_prefix: str | None = ...,
+        doc_prefix: str | None = ...,
+        pooling: str | None = ...,
     ) -> None: ...
     def register(
         self,
@@ -81,6 +83,8 @@ class SkillRegistry:
         revision: str | None = ...,
         api_key_env: str | None = ...,
         query_prefix: str | None = ...,
+        doc_prefix: str | None = ...,
+        pooling: str | None = ...,
     ) -> None: ...
     def register(
         self,

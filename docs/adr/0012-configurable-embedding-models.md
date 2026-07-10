@@ -73,9 +73,16 @@ land in different vector spaces.
   model-free (an `embedding` set with `method="bm25"` warns and is ignored). One
   new direct dependency, `ureq` (already in-tree via hf-hub, rustls — no new
   transitive cost, keeps ADR-0011's clean cross-platform wheels).
-- BERT-family only run in-process (Candle's `bert`); every other model — nomic,
-  Qwen-embed, GGUF-only — runs via a local or hosted **endpoint**. We accept this
-  rather than reintroduce an ONNX/C++ runtime, which would reverse ADR-0011's
+- BERT-family models run in-process (Candle's `bert`), pooled the way they were
+  trained: **pooling (CLS/mean) is auto-detected** from the repo's
+  `1_Pooling/config.json`, with a `pooling` override and a warn-then-assume-Mean
+  fallback when a model ships no pooling metadata — so mainstream
+  sentence-transformers models (bge, e5, gte, MiniLM, mpnet) rank correctly, not
+  just the CLS-pooled bge family. Asymmetric models are supported on both sides
+  (`query_prefix` + `doc_prefix`), and weights load from `model.safetensors` or a
+  `pytorch_model.bin` fallback. Every non-BERT model — nomic, Qwen-embed,
+  GGUF-only — still runs via a local or hosted **endpoint**. We accept this rather
+  than reintroduce an ONNX/C++ runtime, which would reverse ADR-0011's
   clean-wheels decision.
 - **Known limitation, not addressed here:** the embedding cache is in-process
   only, so every process start re-embeds the corpus — cheap for a local model,

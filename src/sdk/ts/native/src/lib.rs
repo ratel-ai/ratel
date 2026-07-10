@@ -87,6 +87,9 @@ pub struct EmbeddingConfig {
     pub revision: Option<String>,
     pub api_key_env: Option<String>,
     pub query_prefix: Option<String>,
+    pub doc_prefix: Option<String>,
+    /// `"cls"` | `"mean"` — overrides pooling auto-detection (in-process models).
+    pub pooling: Option<String>,
 }
 
 /// Resolve an optional [`EmbeddingConfig`] to a core model, throwing config
@@ -103,6 +106,8 @@ fn resolve_embedding(config: Option<EmbeddingConfig>) -> napi::Result<Option<Emb
         revision: c.revision,
         api_key_env: c.api_key_env,
         query_prefix: c.query_prefix,
+        doc_prefix: c.doc_prefix,
+        pooling: c.pooling,
     };
     EmbeddingModel::resolve(spec)
         .map(Some)

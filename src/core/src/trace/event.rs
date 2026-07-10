@@ -162,6 +162,13 @@ pub enum TraceEvent {
         built: String,
         active: String,
     },
+    /// Emitted once when an in-process model's pooling could not be detected
+    /// (no `1_Pooling/config.json`) and no override was given, so a mode was
+    /// assumed. A non-silent guess: set `pooling` to correct it. See ADR-0012.
+    EmbedderPoolingAssumed {
+        model: String,
+        pooling: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -30,31 +30,92 @@ pub(crate) const DEFAULT_QUERY_INSTRUCTION: &str =
 /// shortcut expands to this; a non-default host uses the full `{url, model}` form.
 pub(crate) const OLLAMA_DEFAULT_URL: &str = "http://localhost:11434/v1/embeddings";
 
+/// How a BERT model's per-token outputs are collapsed into one sentence vector.
+/// A model is *trained* with one mode — using the other silently degrades ranking
+/// — so it is auto-detected from the repo's `1_Pooling/config.json`, with this as
+/// an explicit override.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pooling {
+    /// The `[CLS]` (first) token's vector. bge is CLS-pooled.
+    Cls,
+    /// Masked average of all token vectors. e5/gte/MiniLM/mpnet are mean-pooled.
+    Mean,
+}
+
+impl Pooling {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Pooling::Cls => "cls",
+            Pooling::Mean => "mean",
+        }
+    }
+}
+
+impl std::str::FromStr for Pooling {
+    type Err = EmbedderError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "cls" => Ok(Pooling::Cls),
+            "mean" => Ok(Pooling::Mean),
+            other => Err(cfg(format!(
+                "unknown pooling '{other}'; expected 'cls' or 'mean'"
+            ))),
+        }
+    }
+}
+
+/// Model-identity suffix for the fingerprint / process-cache key. Pooling and the
+/// asymmetric prefixes change the produced vectors, so two configs differing only
+/// in these must not share a cached embedder or pass the drift check.
+pub(crate) fn fingerprint_suffix(
+    pooling: Option<Pooling>,
+    query_prefix: &str,
+    doc_prefix: &str,
+) -> String {
+    let mut s = String::new();
+    if let Some(p) = pooling {
+        s.push_str(&format!("|pool={}", p.as_str()));
+    }
+    if !query_prefix.is_empty() {
+        s.push_str(&format!("|q={query_prefix}"));
+    }
+    if !doc_prefix.is_empty() {
+        s.push_str(&format!("|d={doc_prefix}"));
+    }
+    s
+}
+
 /// The embedding model backing a catalog's semantic/hybrid engines.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EmbeddingModel {
     /// Built-in `bge-small-en-v1.5`, pinned. The zero-config default.
     Default,
     /// A BERT-family HuggingFace repo, loaded in-process via Candle. `revision`
-    /// defaults to `main`.
+    /// defaults to `main`; `pooling` is auto-detected when `None`.
     HuggingFace {
         repo: String,
         revision: Option<String>,
         query_prefix: Option<String>,
+        doc_prefix: Option<String>,
+        pooling: Option<Pooling>,
     },
     /// A BERT-family model directory on disk (`config.json` / `tokenizer.json` /
     /// `model.safetensors`), loaded in-process via Candle.
     Local {
         path: PathBuf,
         query_prefix: Option<String>,
+        doc_prefix: Option<String>,
+        pooling: Option<Pooling>,
     },
     /// An OpenAI-compatible `/embeddings` HTTP endpoint (OpenAI, Ollama, TEI,
     /// vLLM…). `api_key_env` names the env var holding the key (read at call time).
+    /// Pooling lives server-side, so there is no `pooling` here.
     Endpoint {
         url: String,
         model: String,
         api_key_env: Option<String>,
         query_prefix: Option<String>,
+        doc_prefix: Option<String>,
     },
 }
 
@@ -75,6 +136,10 @@ pub struct EmbeddingSpec {
     pub revision: Option<String>,
     pub api_key_env: Option<String>,
     pub query_prefix: Option<String>,
+    /// Document-side prefix for asymmetric models (e.g. e5's `"passage: "`).
+    pub doc_prefix: Option<String>,
+    /// `"cls"` | `"mean"` — overrides auto-detection for an in-process model.
+    pub pooling: Option<String>,
 }
 
 fn cfg(message: impl Into<String>) -> EmbedderError {
@@ -115,14 +180,24 @@ impl EmbeddingModel {
             }
         }
 
+        // Parse the pooling override once (validates the string); only in-process
+        // sources may carry it.
+        let pooling = spec
+            .pooling
+            .as_deref()
+            .map(str::parse::<Pooling>)
+            .transpose()?;
+
         match set[0] {
-            "spec" => infer_from_string(spec.spec.as_deref().unwrap(), &spec),
+            "spec" => infer_from_string(spec.spec.as_deref().unwrap(), &spec, pooling),
             "huggingface" => {
                 reject_endpoint_only(&spec, "a HuggingFace repo")?;
                 Ok(EmbeddingModel::HuggingFace {
                     repo: spec.huggingface.unwrap(),
                     revision: spec.revision,
                     query_prefix: spec.query_prefix,
+                    doc_prefix: spec.doc_prefix,
+                    pooling,
                 })
             }
             "local" => {
@@ -133,6 +208,8 @@ impl EmbeddingModel {
                 Ok(EmbeddingModel::Local {
                     path: PathBuf::from(spec.local.unwrap()),
                     query_prefix: spec.query_prefix,
+                    doc_prefix: spec.doc_prefix,
+                    pooling,
                 })
             }
             "ollama" => {
@@ -141,28 +218,26 @@ impl EmbeddingModel {
                         "'model' is redundant with 'ollama' (the ollama value is the model name)",
                     ));
                 }
-                if spec.revision.is_some() {
-                    return Err(cfg("'revision' is only valid for a HuggingFace repo"));
-                }
+                reject_in_process_only(&spec, pooling)?;
                 Ok(EmbeddingModel::Endpoint {
                     url: OLLAMA_DEFAULT_URL.to_string(),
                     model: spec.ollama.unwrap(),
                     api_key_env: None,
                     query_prefix: spec.query_prefix,
+                    doc_prefix: spec.doc_prefix,
                 })
             }
             "url" => {
+                reject_in_process_only(&spec, pooling)?;
                 let model = spec
                     .model
                     .ok_or_else(|| cfg("endpoint embedding requires both 'url' and 'model'"))?;
-                if spec.revision.is_some() {
-                    return Err(cfg("'revision' is only valid for a HuggingFace repo"));
-                }
                 Ok(EmbeddingModel::Endpoint {
                     url: spec.url.unwrap(),
                     model,
                     api_key_env: spec.api_key_env,
                     query_prefix: spec.query_prefix,
+                    doc_prefix: spec.doc_prefix,
                 })
             }
             _ => unreachable!("primary key set is closed"),
@@ -182,6 +257,30 @@ impl EmbeddingModel {
         }
     }
 
+    /// The document-side prefix (asymmetric models like e5 use `"passage: "`).
+    /// Empty unless the model sets one.
+    pub(crate) fn doc_prefix(&self) -> &str {
+        match self {
+            EmbeddingModel::Default => "",
+            EmbeddingModel::HuggingFace { doc_prefix, .. }
+            | EmbeddingModel::Local { doc_prefix, .. }
+            | EmbeddingModel::Endpoint { doc_prefix, .. } => doc_prefix.as_deref().unwrap_or(""),
+        }
+    }
+
+    /// The explicit pooling override, if any. The built-in default is pinned to
+    /// CLS (so it never needs the pooling-config fetch); an in-process model uses
+    /// its field (auto-detected when `None`); an endpoint pools server-side.
+    pub(crate) fn pooling_override(&self) -> Option<Pooling> {
+        match self {
+            EmbeddingModel::Default => Some(Pooling::Cls),
+            EmbeddingModel::HuggingFace { pooling, .. } | EmbeddingModel::Local { pooling, .. } => {
+                *pooling
+            }
+            EmbeddingModel::Endpoint { .. } => None,
+        }
+    }
+
     /// Human-readable model name for telemetry (the `model` field of load
     /// events). Friendlier than the fingerprint.
     pub(crate) fn display_name(&self) -> String {
@@ -198,14 +297,23 @@ impl EmbeddingModel {
     /// the resolved-with-SHA form is [`crate::embedding::Embedder::fingerprint`],
     /// stamped on the dense cache after load.
     pub(crate) fn configured_fingerprint(&self) -> String {
-        match self {
+        let base = match self {
             EmbeddingModel::Default => format!("hf:{DEFAULT_REPO}@{DEFAULT_REVISION}"),
             EmbeddingModel::HuggingFace { repo, revision, .. } => {
                 format!("hf:{repo}@{}", revision.as_deref().unwrap_or("main"))
             }
             EmbeddingModel::Local { path, .. } => format!("local:{}", path.display()),
             EmbeddingModel::Endpoint { url, model, .. } => format!("endpoint:{url}#{model}"),
-        }
+        };
+        // Pooling + prefixes change the vectors, so they are part of the identity.
+        format!(
+            "{base}{}",
+            fingerprint_suffix(
+                self.pooling_override(),
+                self.query_prefix(),
+                self.doc_prefix()
+            )
+        )
     }
 }
 
@@ -224,12 +332,34 @@ fn reject_endpoint_only(spec: &EmbeddingSpec, what: &str) -> Result<(), Embedder
     Ok(())
 }
 
+/// Reject in-process-only modifiers on an endpoint source: `revision` (no HF
+/// fetch) and `pooling` (the server pools).
+fn reject_in_process_only(
+    spec: &EmbeddingSpec,
+    pooling: Option<Pooling>,
+) -> Result<(), EmbedderError> {
+    if spec.revision.is_some() {
+        return Err(cfg("'revision' is only valid for a HuggingFace repo"));
+    }
+    if pooling.is_some() {
+        return Err(cfg(
+            "'pooling' is only valid for an in-process model (huggingface/local); \
+             an endpoint pools server-side",
+        ));
+    }
+    Ok(())
+}
+
 /// Interpret the raw string shortcut, which is a **local model directory path
 /// only** — every non-path source (HuggingFace, endpoint) uses the explicit
 /// keyed object, symmetric with `{ollama}`/`{url}`. A URL or a repo-id-looking
 /// string is rejected with a pointer to the right object form, so the source is
 /// never guessed from an ambiguous string.
-fn infer_from_string(s: &str, spec: &EmbeddingSpec) -> Result<EmbeddingModel, EmbedderError> {
+fn infer_from_string(
+    s: &str,
+    spec: &EmbeddingSpec,
+    pooling: Option<Pooling>,
+) -> Result<EmbeddingModel, EmbedderError> {
     if spec.model.is_some() || spec.api_key_env.is_some() {
         return Err(cfg(
             "'model'/'api_key_env' are only valid with an endpoint 'url'; a bare string \
@@ -250,6 +380,8 @@ fn infer_from_string(s: &str, spec: &EmbeddingSpec) -> Result<EmbeddingModel, Em
         return Ok(EmbeddingModel::Local {
             path: PathBuf::from(s),
             query_prefix: spec.query_prefix.clone(),
+            doc_prefix: spec.doc_prefix.clone(),
+            pooling,
         });
     }
     // Not a path → most likely a HuggingFace repo id. The bare-string form is
@@ -329,6 +461,8 @@ mod tests {
                 repo: "BAAI/bge-base-en-v1.5".into(),
                 revision: None,
                 query_prefix: None,
+                doc_prefix: None,
+                pooling: None,
             }
         );
     }
@@ -390,6 +524,7 @@ mod tests {
                 model: "nomic-embed-text".into(),
                 api_key_env: None,
                 query_prefix: None,
+                doc_prefix: None,
             }
         );
     }
@@ -430,6 +565,8 @@ mod tests {
                 repo: "BAAI/bge-base-en-v1.5".into(),
                 revision: Some("abc123".into()),
                 query_prefix: None,
+                doc_prefix: None,
+                pooling: None,
             }
         );
     }
@@ -451,6 +588,7 @@ mod tests {
                 model: "m".into(),
                 api_key_env: None,
                 query_prefix: None,
+                doc_prefix: None,
             }
             .query_prefix(),
             ""
@@ -459,15 +597,18 @@ mod tests {
 
     #[test]
     fn fingerprints_are_distinct_per_source() {
+        // The default carries its pinned CLS pooling + bge query prefix.
         assert_eq!(
             EmbeddingModel::Default.configured_fingerprint(),
-            format!("hf:{DEFAULT_REPO}@{DEFAULT_REVISION}")
+            format!("hf:{DEFAULT_REPO}@{DEFAULT_REVISION}|pool=cls|q={DEFAULT_QUERY_INSTRUCTION}")
         );
         assert_eq!(
             EmbeddingModel::HuggingFace {
                 repo: "r".into(),
                 revision: None,
                 query_prefix: None,
+                doc_prefix: None,
+                pooling: None,
             }
             .configured_fingerprint(),
             "hf:r@main"
@@ -478,9 +619,71 @@ mod tests {
                 model: "m".into(),
                 api_key_env: None,
                 query_prefix: None,
+                doc_prefix: None,
             }
             .configured_fingerprint(),
             "endpoint:u#m"
         );
+    }
+
+    #[test]
+    fn pooling_override_parses_and_is_rejected_on_endpoint() {
+        // Valid on huggingface.
+        assert!(matches!(
+            EmbeddingModel::resolve(EmbeddingSpec {
+                huggingface: Some("org/m".into()),
+                pooling: Some("mean".into()),
+                ..Default::default()
+            })
+            .unwrap(),
+            EmbeddingModel::HuggingFace {
+                pooling: Some(Pooling::Mean),
+                ..
+            }
+        ));
+        // A bad value is a Config error.
+        assert!(
+            EmbeddingModel::resolve(EmbeddingSpec {
+                huggingface: Some("org/m".into()),
+                pooling: Some("median".into()),
+                ..Default::default()
+            })
+            .is_err()
+        );
+        // Meaningless on an endpoint (the server pools).
+        let err = EmbeddingModel::resolve(EmbeddingSpec {
+            ollama: Some("nomic".into()),
+            pooling: Some("mean".into()),
+            ..Default::default()
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("pooling"), "got: {err}");
+    }
+
+    #[test]
+    fn doc_prefix_threads_through_and_affects_fingerprint() {
+        let m = EmbeddingModel::resolve(EmbeddingSpec {
+            huggingface: Some("intfloat/e5-small-v2".into()),
+            query_prefix: Some("query: ".into()),
+            doc_prefix: Some("passage: ".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(m.doc_prefix(), "passage: ");
+        assert!(m.configured_fingerprint().contains("|d=passage: "));
+        // Pooling is part of identity: same repo, different pooling → different key.
+        let cls = EmbeddingModel::resolve(EmbeddingSpec {
+            huggingface: Some("org/m".into()),
+            pooling: Some("cls".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        let mean = EmbeddingModel::resolve(EmbeddingSpec {
+            huggingface: Some("org/m".into()),
+            pooling: Some("mean".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_ne!(cls.configured_fingerprint(), mean.configured_fingerprint());
     }
 }

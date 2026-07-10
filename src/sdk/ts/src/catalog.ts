@@ -27,10 +27,17 @@ export type SearchMethod = "bm25" | "semantic" | "hybrid";
  * The discriminating key names the source — symmetric across all of them. Use
  * the bare string form only for a local model *directory path*. */
 export type EmbeddingModelConfig =
-  | { huggingface: string; revision?: string; queryPrefix?: string }
-  | { local: string; queryPrefix?: string }
-  | { ollama: string; queryPrefix?: string }
-  | { url: string; model: string; apiKeyEnv?: string; queryPrefix?: string };
+  | {
+      huggingface: string;
+      revision?: string;
+      queryPrefix?: string;
+      docPrefix?: string;
+      /** `"cls"` | `"mean"` — overrides pooling auto-detection. */
+      pooling?: "cls" | "mean";
+    }
+  | { local: string; queryPrefix?: string; docPrefix?: string; pooling?: "cls" | "mean" }
+  | { ollama: string; queryPrefix?: string; docPrefix?: string }
+  | { url: string; model: string; apiKeyEnv?: string; queryPrefix?: string; docPrefix?: string };
 
 /** Embedding-model selection: a bare string is a **local model directory path**;
  * every other source is an explicit {@link EmbeddingModelConfig} object. */

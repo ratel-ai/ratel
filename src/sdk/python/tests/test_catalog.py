@@ -150,6 +150,24 @@ def test_embedding_unknown_dict_key_raises() -> None:
         ToolCatalog(method="semantic", embedding={"bogus": "x"})
 
 
+def test_embedding_pooling_override_and_doc_prefix_accepted() -> None:
+    # Construction validates (does not load); a valid pooling + doc_prefix is fine.
+    ToolCatalog(
+        method="semantic",
+        embedding={"huggingface": "org/m", "pooling": "mean", "doc_prefix": "passage: "},
+    )
+
+
+def test_embedding_invalid_pooling_value_raises() -> None:
+    with pytest.raises(ValueError, match="pooling"):
+        ToolCatalog(method="semantic", embedding={"huggingface": "org/m", "pooling": "median"})
+
+
+def test_embedding_pooling_on_endpoint_raises() -> None:
+    with pytest.raises(ValueError, match="pooling"):
+        ToolCatalog(method="semantic", embedding={"ollama": "nomic", "pooling": "mean"})
+
+
 def test_embedding_ignored_and_warns_under_bm25() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

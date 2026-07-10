@@ -5,10 +5,12 @@
 //! - [`CandleEmbedder`] runs a **BERT-family** model in-process via Candle — the
 //!   built-in default (`bge-small-en-v1.5`), any HuggingFace repo, or an on-disk
 //!   directory. Pure-Rust inference (no C++/ONNX native dep) keeps the SDK
-//!   wheels/addons clean cross-platform. We pool the `[CLS]` token of the last
-//!   hidden state and L2-normalize, so cosine similarity is a dot product (see
-//!   [`crate::dense_search`]); it is asymmetric — documents plain, queries with
-//!   the model's instruction prefix.
+//!   wheels/addons clean cross-platform. Pooling (CLS or mean) is auto-detected
+//!   from the model's `1_Pooling/config.json` (overridable, warn-then-assume-mean
+//!   when absent), then we L2-normalize, so cosine similarity is a dot product
+//!   (see [`crate::dense_search`]). It supports asymmetric models on both sides —
+//!   an optional query prefix and doc prefix. Weights load from
+//!   `model.safetensors` or a `pytorch_model.bin` fallback.
 //! - [`EndpointEmbedder`] calls an OpenAI-compatible `/embeddings` HTTP endpoint
 //!   (OpenAI, Ollama, TEI, vLLM…) — any model, including non-BERT ones. Returned
 //!   vectors are **re-normalized** on ingestion (an arbitrary endpoint may not
@@ -44,7 +46,9 @@ use hf_hub::{Repo, RepoType};
 use serde::Deserialize;
 use tokenizers::{Tokenizer, TruncationDirection, TruncationParams, TruncationStrategy};
 
-use crate::embedding_config::{DEFAULT_REPO, DEFAULT_REVISION, EmbeddingModel, OLLAMA_DEFAULT_URL};
+use crate::embedding_config::{
+    DEFAULT_REPO, DEFAULT_REVISION, EmbeddingModel, OLLAMA_DEFAULT_URL, Pooling, fingerprint_suffix,
+};
 use crate::trace::{EmbedderLoadStatus, TraceEvent, TraceSink};
 
 /// HTTP timeout for a single endpoint embedding request, so a stalled endpoint
@@ -193,6 +197,16 @@ struct DownloadNotice {
     bytes: u64,
 }
 
+/// One-time notices produced by a cold load, surfaced by the telemetry layer.
+#[derive(Default)]
+struct LoadNotices {
+    /// Set when a cold HF fetch actually downloaded weights.
+    download: Option<DownloadNotice>,
+    /// The model name, set when pooling could not be detected and Mean was
+    /// assumed — so the guess is never silent (the user can set `pooling`).
+    pooling_assumed: Option<String>,
+}
+
 /// Process-wide embedder cache, **keyed by model identity**, loaded once per
 /// model on first use. Two catalogs on the same model share one resident
 /// embedder; different models coexist. A failed load is **not** cached (the key
@@ -201,40 +215,54 @@ struct DownloadNotice {
 /// latency (`Some` only on the loading call), and a download notice (`Some` only
 /// when a cold HF fetch actually downloaded).
 /// A resolved embedder plus one-time cold-load telemetry: the load latency
-/// (`Some` on the loading call) and a download notice (`Some` on a cold HF fetch).
-type ResolvedEmbedder = (Arc<dyn Embedder>, Option<u64>, Option<DownloadNotice>);
+/// (`Some` on the loading call) and any cold-load notices (download / assumed
+/// pooling).
+type ResolvedEmbedder = (Arc<dyn Embedder>, Option<u64>, LoadNotices);
 
 fn embedder_for(model: &EmbeddingModel) -> Result<ResolvedEmbedder, EmbedderError> {
     static CELL: OnceLock<Mutex<HashMap<String, Arc<dyn Embedder>>>> = OnceLock::new();
     let cache = CELL.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut notice: Option<DownloadNotice> = None;
+    let mut notices = LoadNotices::default();
     let (emb, load_ms) = get_or_load_keyed(cache, &model.configured_fingerprint(), || {
         let (emb, n) = build_embedder(model)?;
-        notice = n;
+        notices = n;
         Ok(emb)
     })?;
-    Ok((emb, load_ms, notice))
+    Ok((emb, load_ms, notices))
 }
 
-/// Construct the embedder for a model (may hit the network/disk). Returns a
-/// download notice alongside when a cold HF fetch downloaded weights.
+/// Construct the embedder for a model (may hit the network/disk). Threads the
+/// query/doc prefixes and pooling override in, and returns cold-load notices.
 fn build_embedder(
     model: &EmbeddingModel,
-) -> Result<(Arc<dyn Embedder>, Option<DownloadNotice>), EmbedderError> {
-    let prefix = model.query_prefix();
+) -> Result<(Arc<dyn Embedder>, LoadNotices), EmbedderError> {
+    let query_prefix = model.query_prefix();
+    let doc_prefix = model.doc_prefix();
+    let pooling = model.pooling_override();
     match model {
         EmbeddingModel::Default => {
-            let (e, n) = CandleEmbedder::load_hf(DEFAULT_REPO, DEFAULT_REVISION, prefix)?;
+            let (e, n) = CandleEmbedder::load_hf(
+                DEFAULT_REPO,
+                DEFAULT_REVISION,
+                query_prefix,
+                doc_prefix,
+                pooling,
+            )?;
             Ok((Arc::new(e), n))
         }
         EmbeddingModel::HuggingFace { repo, revision, .. } => {
-            let (e, n) =
-                CandleEmbedder::load_hf(repo, revision.as_deref().unwrap_or("main"), prefix)?;
+            let (e, n) = CandleEmbedder::load_hf(
+                repo,
+                revision.as_deref().unwrap_or("main"),
+                query_prefix,
+                doc_prefix,
+                pooling,
+            )?;
             Ok((Arc::new(e), n))
         }
         EmbeddingModel::Local { path, .. } => {
-            let e = CandleEmbedder::load_path(path, prefix)?;
-            Ok((Arc::new(e), None))
+            let (e, n) = CandleEmbedder::load_path(path, query_prefix, doc_prefix, pooling)?;
+            Ok((Arc::new(e), n))
         }
         EmbeddingModel::Endpoint {
             url,
@@ -246,9 +274,10 @@ fn build_embedder(
                 url.clone(),
                 model.clone(),
                 api_key_env.clone(),
-                prefix.into(),
+                query_prefix.into(),
+                doc_prefix.into(),
             )?;
-            Ok((Arc::new(e), None))
+            Ok((Arc::new(e), LoadNotices::default()))
         }
     }
 }
@@ -282,14 +311,24 @@ pub(crate) fn embedder_with_telemetry(
     sink: &dyn TraceSink,
 ) -> Result<Arc<dyn Embedder>, EmbedderError> {
     let display = model.display_name();
-    let (result, load_ms, notice) = match embedder_for(model) {
-        Ok((emb, ms, notice)) => (Ok(emb), ms, notice),
-        Err(e) => (Err(e), None, None),
+    let (result, load_ms, notices) = match embedder_for(model) {
+        Ok((emb, ms, notices)) => (Ok(emb), ms, notices),
+        Err(e) => (Err(e), None, LoadNotices::default()),
     };
-    if let Some(DownloadNotice { model, bytes }) = notice {
+    if let Some(DownloadNotice { model, bytes }) = notices.download {
         let mb = bytes as f64 / 1_048_576.0;
         eprintln!("ratel: downloaded embedding model {model} ({mb:.0} MB, one-time)");
         sink.record(TraceEvent::EmbedderDownload { model, bytes });
+    }
+    if let Some(model) = notices.pooling_assumed {
+        eprintln!(
+            "ratel: pooling not detected for {model}, assuming mean; \
+             set pooling=\"cls\"|\"mean\" to override"
+        );
+        sink.record(TraceEvent::EmbedderPoolingAssumed {
+            model,
+            pooling: "mean".to_string(),
+        });
     }
     if let Some(event) = embedder_load_event(&display, load_ms, result.as_ref().err()) {
         if let TraceEvent::EmbedderLoad {
@@ -351,36 +390,47 @@ fn slow_load_ms() -> u64 {
 
 /// A BERT-family embedding model run in-process via Candle — the backend for the
 /// built-in default, any HuggingFace repo, and any on-disk model directory.
-/// Carries its query prefix (asymmetric retrieval) and a resolved fingerprint.
+/// Carries its pooling mode, asymmetric prefixes, and a resolved fingerprint.
 pub(crate) struct CandleEmbedder {
     model: BertModel,
     tokenizer: Tokenizer,
     device: Device,
+    pooling: Pooling,
     query_prefix: String,
+    doc_prefix: String,
     fingerprint: String,
 }
 
+/// The resolved files + pooling a build needs.
+struct Loaded {
+    config: PathBuf,
+    tokenizer: PathBuf,
+    weights: PathBuf,
+    pooling: Pooling,
+}
+
 impl CandleEmbedder {
-    /// Load a BERT-family model from a HuggingFace repo, downloading the three
-    /// model files to the shared HF cache on first use. `from_env` honors
-    /// `HF_HOME` (cache location) and `HF_ENDPOINT` (mirror / offline proxy).
-    /// Returns a [`DownloadNotice`] only when the fetch was cold (an actual
-    /// download), sized from the fetched files.
+    /// Load a BERT-family model from a HuggingFace repo, downloading its files to
+    /// the shared HF cache on first use. `from_env` honors `HF_HOME` (cache
+    /// location) and `HF_ENDPOINT` (mirror / offline proxy). Weights are
+    /// `model.safetensors`, falling back to `pytorch_model.bin`. Returns cold-load
+    /// notices (download size, assumed pooling).
     fn load_hf(
         repo_id: &str,
         revision: &str,
         query_prefix: &str,
-    ) -> Result<(Self, Option<DownloadNotice>), EmbedderError> {
+        doc_prefix: &str,
+        pooling_override: Option<Pooling>,
+    ) -> Result<(Self, LoadNotices), EmbedderError> {
         let device = Device::Cpu;
         let repo_spec =
             Repo::with_revision(repo_id.to_string(), RepoType::Model, revision.to_string());
 
         // Cold-cache detection *before* fetching, so we only announce a real
         // download: `Cache` reads the cache without downloading.
-        let was_cached = hf_hub::Cache::from_env()
-            .repo(repo_spec.clone())
-            .get("model.safetensors")
-            .is_some();
+        let cache_repo = hf_hub::Cache::from_env().repo(repo_spec.clone());
+        let was_cached = cache_repo.get("model.safetensors").is_some()
+            || cache_repo.get("pytorch_model.bin").is_some();
 
         let api = ApiBuilder::from_env()
             .build()
@@ -391,73 +441,121 @@ impl CandleEmbedder {
         let repo = api.repo(repo_spec);
         let config_path = fetch_cached(&repo, "config.json", repo_id)?;
         let tokenizer_path = fetch_cached(&repo, "tokenizer.json", repo_id)?;
-        let weights_path = fetch_cached(&repo, "model.safetensors", repo_id)?;
+        // Prefer safetensors; fall back to a pickled `pytorch_model.bin`.
+        let weights_path = match fetch_cached(&repo, "model.safetensors", repo_id) {
+            Ok(p) => p,
+            Err(EmbedderError::Download { source, .. }) if is_not_found(&source) => {
+                fetch_cached(&repo, "pytorch_model.bin", repo_id)?
+            }
+            Err(e) => return Err(e),
+        };
 
-        let notice = (!was_cached).then(|| DownloadNotice {
+        // Pooling: override wins, else the repo's `1_Pooling/config.json`, else Mean.
+        let detected = pooling_override.or_else(|| {
+            fetch_optional(&repo, "1_Pooling/config.json").and_then(|p| detect_pooling_file(&p))
+        });
+        let (pooling, pooling_assumed) = resolve_pooling(detected);
+
+        let download = (!was_cached).then(|| DownloadNotice {
             model: repo_id.to_string(),
             bytes: [&config_path, &tokenizer_path, &weights_path]
                 .iter()
                 .filter_map(|p| std::fs::metadata(p).ok().map(|m| m.len()))
                 .sum(),
         });
+        let notices = LoadNotices {
+            download,
+            pooling_assumed: pooling_assumed.then(|| repo_id.to_string()),
+        };
 
         // Resolve `main` (or any ref) to the concrete commit so the fingerprint
         // pins a real snapshot, not a moving label.
         let sha = snapshot_sha(&weights_path).unwrap_or_else(|| revision.to_string());
-        let fingerprint = format!("hf:{repo_id}@{sha}");
+        let loaded = Loaded {
+            config: config_path,
+            tokenizer: tokenizer_path,
+            weights: weights_path,
+            pooling,
+        };
         let embedder = Self::build(
             device,
-            &config_path,
-            &tokenizer_path,
-            &weights_path,
+            &loaded,
             query_prefix,
-            fingerprint,
+            doc_prefix,
+            format!("hf:{repo_id}@{sha}"),
             repo_id,
         )?;
-        Ok((embedder, notice))
+        Ok((embedder, notices))
     }
 
-    /// Load a BERT-family model directly from a directory of files (no hf-hub,
-    /// no network) — the air-gapped / bring-your-own-checkpoint path.
-    fn load_path(dir: &Path, query_prefix: &str) -> Result<Self, EmbedderError> {
+    /// Load a BERT-family model directly from a directory of files (no hf-hub, no
+    /// network) — the air-gapped / bring-your-own-checkpoint path.
+    fn load_path(
+        dir: &Path,
+        query_prefix: &str,
+        doc_prefix: &str,
+        pooling_override: Option<Pooling>,
+    ) -> Result<(Self, LoadNotices), EmbedderError> {
         let device = Device::Cpu;
         let name = dir.display().to_string();
         let config_path = dir.join("config.json");
         let tokenizer_path = dir.join("tokenizer.json");
-        let weights_path = dir.join("model.safetensors");
+        // Prefer safetensors; fall back to a pickled `pytorch_model.bin`.
+        let weights_path = [dir.join("model.safetensors"), dir.join("pytorch_model.bin")]
+            .into_iter()
+            .find(|p| p.exists())
+            .ok_or_else(|| EmbedderError::Load {
+                model: name.clone(),
+                source: format!("missing model.safetensors / pytorch_model.bin in {name}"),
+            })?;
         for (p, f) in [
             (&config_path, "config.json"),
             (&tokenizer_path, "tokenizer.json"),
-            (&weights_path, "model.safetensors"),
         ] {
             if !p.exists() {
                 return Err(EmbedderError::Load {
                     model: name.clone(),
-                    source: format!("missing {f} in {name}"),
+                    source: format!(
+                        "missing {f} in {name} — a fast tokenizer.json is required; run \
+                         tokenizer.save_pretrained() upstream, or serve the model via an endpoint"
+                    ),
                 });
             }
         }
-        let fingerprint = format!("local:{name}");
-        Self::build(
+
+        let detected =
+            pooling_override.or_else(|| detect_pooling_file(&dir.join("1_Pooling/config.json")));
+        let (pooling, pooling_assumed) = resolve_pooling(detected);
+        let notices = LoadNotices {
+            download: None,
+            pooling_assumed: pooling_assumed.then(|| name.clone()),
+        };
+
+        let loaded = Loaded {
+            config: config_path,
+            tokenizer: tokenizer_path,
+            weights: weights_path,
+            pooling,
+        };
+        let embedder = Self::build(
             device,
-            &config_path,
-            &tokenizer_path,
-            &weights_path,
+            &loaded,
             query_prefix,
-            fingerprint,
+            doc_prefix,
+            format!("local:{name}"),
             &name,
-        )
+        )?;
+        Ok((embedder, notices))
     }
 
     /// Shared file→model build. A non-BERT checkpoint fails `BertModel::load`;
     /// the error signposts the endpoint/Ollama route (any model can run there).
     fn build(
         device: Device,
-        config_path: &Path,
-        tokenizer_path: &Path,
-        weights_path: &Path,
+        loaded: &Loaded,
         query_prefix: &str,
-        fingerprint: String,
+        doc_prefix: &str,
+        base_fingerprint: String,
         model_name: &str,
     ) -> Result<Self, EmbedderError> {
         let load_err = |source: String| EmbedderError::Load {
@@ -465,12 +563,12 @@ impl CandleEmbedder {
             source,
         };
 
-        let config_bytes = std::fs::read(config_path).map_err(|e| load_err(e.to_string()))?;
+        let config_bytes = std::fs::read(&loaded.config).map_err(|e| load_err(e.to_string()))?;
         let config: Config =
             serde_json::from_slice(&config_bytes).map_err(|e| load_err(e.to_string()))?;
 
         let mut tokenizer =
-            Tokenizer::from_file(tokenizer_path).map_err(|e| load_err(e.to_string()))?;
+            Tokenizer::from_file(&loaded.tokenizer).map_err(|e| load_err(e.to_string()))?;
         // Cap at the model's positional limit so long tool text can't index past
         // the position embeddings.
         tokenizer
@@ -483,8 +581,16 @@ impl CandleEmbedder {
             .map_err(|e| load_err(e.to_string()))?;
 
         // Upstream weights are f32; load them directly for reproducible CPU math.
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
+        // safetensors is mmap'd; a `.bin`/`.pth` checkpoint is loaded via pickle.
+        let is_safetensors =
+            loaded.weights.extension().and_then(|e| e.to_str()) == Some("safetensors");
+        let vb = if is_safetensors {
+            unsafe {
+                VarBuilder::from_mmaped_safetensors(&[&loaded.weights], DType::F32, &device)
+                    .map_err(|e| load_err(e.to_string()))?
+            }
+        } else {
+            VarBuilder::from_pth(&loaded.weights, DType::F32, &device)
                 .map_err(|e| load_err(e.to_string()))?
         };
         let model = BertModel::load(vb, &config).map_err(|e| EmbedderError::Load {
@@ -495,11 +601,19 @@ impl CandleEmbedder {
                  {{\"url\", \"model\"}} (e.g. Ollama at {OLLAMA_DEFAULT_URL})"
             ),
         })?;
+
+        // Pooling + prefixes change the vectors, so they are part of the identity.
+        let fingerprint = format!(
+            "{base_fingerprint}{}",
+            fingerprint_suffix(Some(loaded.pooling), query_prefix, doc_prefix)
+        );
         Ok(Self {
             model,
             tokenizer,
             device,
+            pooling: loaded.pooling,
             query_prefix: query_prefix.to_string(),
+            doc_prefix: doc_prefix.to_string(),
             fingerprint,
         })
     }
@@ -522,19 +636,37 @@ impl CandleEmbedder {
         let mask: Vec<u32> = encoding.get_attention_mask().to_vec();
         let attention_mask = Tensor::new(mask.as_slice(), &self.device)?.unsqueeze(0)?;
 
-        // (1, seq, hidden); CLS pooling = the first token's hidden state.
+        // (1, seq, hidden)
         let sequence_output =
             self.model
                 .forward(&input_ids, &token_type_ids, Some(&attention_mask))?;
-        let cls = sequence_output.i((0, 0))?; // (hidden,)
-        let vec = cls.to_vec1::<f32>()?;
+        let pooled = match self.pooling {
+            // CLS pooling = the first token's hidden state.
+            Pooling::Cls => sequence_output.i((0, 0))?, // (hidden,)
+            // Mean pooling = masked average over the real (non-pad) tokens.
+            Pooling::Mean => mean_pool(&sequence_output, &attention_mask)?,
+        };
+        let vec = pooled.to_vec1::<f32>()?;
         Ok(l2_normalize(vec))
     }
 }
 
+/// Masked mean over tokens: `Σ hidden[t]·mask[t] / Σ mask[t]`. `sequence_output`
+/// is `(1, seq, hidden)`, `attention_mask` is `(1, seq)`; returns `(hidden,)`.
+fn mean_pool(sequence_output: &Tensor, attention_mask: &Tensor) -> candle_core::Result<Tensor> {
+    let mask = attention_mask.to_dtype(DType::F32)?.unsqueeze(2)?; // (1, seq, 1)
+    let summed = sequence_output.broadcast_mul(&mask)?.sum(1)?; // (1, hidden)
+    let counts = mask.sum(1)?; // (1, 1)
+    summed.broadcast_div(&counts)?.i(0) // (hidden,)
+}
+
 impl Embedder for CandleEmbedder {
     fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
-        self.embed(text)
+        if self.doc_prefix.is_empty() {
+            self.embed(text)
+        } else {
+            self.embed(&format!("{}{}", self.doc_prefix, text))
+        }
     }
 
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
@@ -548,6 +680,56 @@ impl Embedder for CandleEmbedder {
     fn fingerprint(&self) -> String {
         self.fingerprint.clone()
     }
+}
+
+/// sentence-transformers pooling config (`1_Pooling/config.json`).
+#[derive(Deserialize)]
+struct PoolingConfig {
+    #[serde(default)]
+    pooling_mode_cls_token: bool,
+    #[serde(default)]
+    pooling_mode_mean_tokens: bool,
+}
+
+/// Read a `1_Pooling/config.json` file into a [`Pooling`], or `None` if absent /
+/// unparseable / neither cls-nor-mean.
+fn detect_pooling_file(path: &Path) -> Option<Pooling> {
+    let bytes = std::fs::read(path).ok()?;
+    parse_pooling_config(&bytes)
+}
+
+/// Pure `1_Pooling/config.json` → [`Pooling`] mapping (unit-tested offline).
+fn parse_pooling_config(bytes: &[u8]) -> Option<Pooling> {
+    let c: PoolingConfig = serde_json::from_slice(bytes).ok()?;
+    if c.pooling_mode_cls_token {
+        Some(Pooling::Cls)
+    } else if c.pooling_mode_mean_tokens {
+        Some(Pooling::Mean)
+    } else {
+        None
+    }
+}
+
+/// Resolve pooling: a detected/overridden mode, else assume Mean (and flag it so
+/// the assumption is surfaced, never silent).
+fn resolve_pooling(detected: Option<Pooling>) -> (Pooling, bool) {
+    match detected {
+        Some(p) => (p, false),
+        None => (Pooling::Mean, true),
+    }
+}
+
+/// Best-effort optional fetch of a small side file (pooling config, alt weights):
+/// `None` on any error, so a missing file never fails the load.
+fn fetch_optional(repo: &ApiRepo, file: &str) -> Option<PathBuf> {
+    repo.get(file).ok()
+}
+
+/// Whether an hf-hub fetch error is a "file not in repo" (so we try a fallback
+/// file) rather than a real network/cache failure.
+fn is_not_found(source: &str) -> bool {
+    let l = source.to_lowercase();
+    l.contains("404") || l.contains("not found") || l.contains("entry not found")
 }
 
 /// The concrete commit SHA a HuggingFace fetch resolved to, read from the cached
@@ -567,6 +749,7 @@ pub(crate) struct EndpointEmbedder {
     model: String,
     api_key_env: Option<String>,
     query_prefix: String,
+    doc_prefix: String,
     agent: ureq::Agent,
     fingerprint: String,
 }
@@ -590,17 +773,23 @@ impl EndpointEmbedder {
         model: String,
         api_key_env: Option<String>,
         query_prefix: String,
+        doc_prefix: String,
     ) -> Result<Self, EmbedderError> {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(ENDPOINT_TIMEOUT_SECS)))
             .build()
             .into();
-        let fingerprint = format!("endpoint:{url}#{model}");
+        // Prefixes are part of the identity (they change the vectors).
+        let fingerprint = format!(
+            "endpoint:{url}#{model}{}",
+            fingerprint_suffix(None, &query_prefix, &doc_prefix)
+        );
         Ok(Self {
             url,
             model,
             api_key_env,
             query_prefix,
+            doc_prefix,
             agent,
             fingerprint,
         })
@@ -724,7 +913,15 @@ impl Embedder for EndpointEmbedder {
     }
 
     fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
-        self.request(texts)
+        if self.doc_prefix.is_empty() {
+            self.request(texts)
+        } else {
+            let prefixed: Vec<String> = texts
+                .iter()
+                .map(|t| format!("{}{}", self.doc_prefix, t))
+                .collect();
+            self.request(&prefixed)
+        }
     }
 
     fn fingerprint(&self) -> String {
@@ -954,11 +1151,63 @@ mod tests {
     }
 
     #[test]
+    fn mean_pool_averages_only_unmasked_tokens() {
+        let dev = Device::Cpu;
+        // (1, 2, 2): two tokens, hidden = 2.
+        let seq = Tensor::new(&[[[1.0f32, 2.0], [3.0, 4.0]]], &dev).unwrap();
+        // Both tokens count → column means [2, 3].
+        let all = Tensor::new(&[[1u32, 1]], &dev).unwrap();
+        assert_eq!(
+            mean_pool(&seq, &all).unwrap().to_vec1::<f32>().unwrap(),
+            vec![2.0, 3.0]
+        );
+        // Only the first token counts (second is padding) → [1, 2].
+        let first = Tensor::new(&[[1u32, 0]], &dev).unwrap();
+        assert_eq!(
+            mean_pool(&seq, &first).unwrap().to_vec1::<f32>().unwrap(),
+            vec![1.0, 2.0]
+        );
+    }
+
+    #[test]
+    fn parse_pooling_config_maps_cls_mean_and_none() {
+        assert_eq!(
+            parse_pooling_config(br#"{"pooling_mode_cls_token": true}"#),
+            Some(Pooling::Cls)
+        );
+        assert_eq!(
+            parse_pooling_config(br#"{"pooling_mode_mean_tokens": true}"#),
+            Some(Pooling::Mean)
+        );
+        // A mode we don't support (max) → None → caller assumes Mean.
+        assert_eq!(
+            parse_pooling_config(br#"{"pooling_mode_max_tokens": true}"#),
+            None
+        );
+        assert_eq!(parse_pooling_config(b"not json"), None);
+    }
+
+    #[test]
+    fn resolve_pooling_assumes_mean_and_flags_it() {
+        assert_eq!(resolve_pooling(Some(Pooling::Cls)), (Pooling::Cls, false));
+        assert_eq!(resolve_pooling(Some(Pooling::Mean)), (Pooling::Mean, false));
+        assert_eq!(resolve_pooling(None), (Pooling::Mean, true));
+    }
+
+    #[test]
+    fn is_not_found_distinguishes_missing_file_from_network_error() {
+        assert!(is_not_found("Http status client error (404 Not Found)"));
+        assert!(is_not_found("Entry Not Found"));
+        assert!(!is_not_found("error sending request: connection refused"));
+    }
+
+    #[test]
     fn endpoint_missing_api_key_env_is_a_config_error() {
         let e = EndpointEmbedder::new(
             "http://localhost:11434/v1/embeddings".into(),
             "nomic".into(),
             Some("RATEL_TEST_DEFINITELY_UNSET_KEY".into()),
+            String::new(),
             String::new(),
         )
         .unwrap();
@@ -1010,6 +1259,34 @@ mod tests {
         assert!(
             dot(&q, &delete) > dot(&q, &weather),
             "semantic match should beat an unrelated tool"
+        );
+    }
+
+    #[test]
+    #[ignore = "downloads a mean-pooled model (gte-small); run with `cargo test -- --ignored`"]
+    fn mean_pooled_model_ranks_synonyms_correctly() {
+        // gte-small is *mean*-pooled and ships `1_Pooling/config.json`, so pooling
+        // must auto-detect Mean — CLS-on-a-mean-model is the silent-quality bug this
+        // guards against. Assert a synonym query still ranks the related doc first.
+        let model = EmbeddingModel::HuggingFace {
+            repo: "thenlper/gte-small".into(),
+            revision: None,
+            query_prefix: None,
+            doc_prefix: None,
+            pooling: None, // auto-detected → Mean
+        };
+        let e = embedder_for(&model).expect("load gte-small").0;
+        let q = e.embed_query("remove a file").expect("embed");
+        let delete = e
+            .embed_doc("delete a path from the filesystem")
+            .expect("embed");
+        let weather = e
+            .embed_doc("get the current weather forecast")
+            .expect("embed");
+        let dot = |a: &[f32], b: &[f32]| a.iter().zip(b).map(|(x, y)| x * y).sum::<f32>();
+        assert!(
+            dot(&q, &delete) > dot(&q, &weather),
+            "mean-pooled semantic match should beat an unrelated tool"
         );
     }
 }

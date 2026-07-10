@@ -18,7 +18,7 @@ mod tool_registry;
 mod trace;
 
 pub use embedding::EmbedderError;
-pub use embedding_config::{EmbeddingModel, EmbeddingSpec};
+pub use embedding_config::{EmbeddingModel, EmbeddingSpec, Pooling};
 pub use method::{ParseSearchMethodError, SearchMethod};
 pub use skill::Skill;
 pub use skill_registry::{SkillHit, SkillRegistry};
