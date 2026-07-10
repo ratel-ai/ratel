@@ -1,5 +1,6 @@
-"""OpenTelemetry emission for the SDK funnel — the Python mirror of
-`src/sdk/ts/src/telemetry.ts` (ADR-0007).
+"""OpenTelemetry emission for the SDK funnel (ADR-0007).
+
+The Python mirror of `src/sdk/ts/src/telemetry.ts`.
 
 The catalog / capability-tool / skill / MCP paths call these helpers to open a span around
 each operation, alongside the local `record_event` stream (untouched). Span names
@@ -91,9 +92,11 @@ async def trace_execute_tool(
     args: dict[str, Any],
     run: Callable[[], Awaitable[T]],
 ) -> T:
-    """Wrap a tool invocation in a standard `execute_tool` span (`gen_ai.operation.name
-    = execute_tool`, enriched with `ratel.*`) — the OTel gen_ai tool operation, so a
-    generic backend understands it (ADR-0007). No-op pass-through when disabled.
+    """Wrap a tool invocation in a standard `execute_tool` span.
+
+    The OTel gen_ai tool operation (`gen_ai.operation.name = execute_tool`,
+    enriched with `ratel.*`), so a generic backend understands it (ADR-0007).
+    No-op pass-through when telemetry is disabled.
     """
     if not _ENABLED:
         return await run()
@@ -120,8 +123,10 @@ def trace_search(
     origin: str,
     run: Callable[[], T],
 ) -> T:
-    """Wrap a capability search (tool or skill) in a `ratel.search` span. Synchronous:
-    the native BM25 search returns inline; the hit count becomes `ratel.search.hit_count`.
+    """Wrap a capability search (tool or skill) in a `ratel.search` span.
+
+    Synchronous: the native BM25 search returns inline; the hit count becomes
+    `ratel.search.hit_count`.
     """
     if not _ENABLED:
         return run()
@@ -153,9 +158,10 @@ async def trace_upstream_register(
     transport: str,
     run: Callable[[Callable[[int], None]], Awaitable[T]],
 ) -> T:
-    """Wrap an upstream-MCP registration in a `ratel.upstream.register` span. `run`
-    receives a `report_tool_count` callback to set `ratel.upstream.tool_count` once the
-    tool list is known.
+    """Wrap an upstream-MCP registration in a `ratel.upstream.register` span.
+
+    `run` receives a `report_tool_count` callback to set
+    `ratel.upstream.tool_count` once the tool list is known.
     """
     if not _ENABLED:
         return await run(lambda _n: None)
@@ -168,8 +174,9 @@ async def trace_upstream_register(
 
 
 def record_auth_needed(server: str | None = None) -> None:
-    """Mark an upstream tool call that failed with a 401 / needs-reauthorization: a
-    short `ratel.auth.flow` span carrying `ratel.auth.outcome = needs_auth`.
+    """Mark an upstream tool call that failed with a 401 / needs-reauthorization.
+
+    Emits a short `ratel.auth.flow` span carrying `ratel.auth.outcome = needs_auth`.
     """
     if not _ENABLED:
         return
@@ -204,23 +211,41 @@ def configure_telemetry(
     capture_content: ContentCapture | str | None = None,
     include_span_and_events: bool | None = None,
 ) -> Any:
-    """Convenience wiring for the greenfield case: register a Ratel-owned OTLP exporter
-    so the spans this SDK emits are shipped to Ratel Cloud (or any OTLP endpoint).
-    Delegates to `ratel_ai_telemetry.init`, which needs the OpenTelemetry SDK — install
-    it with ``pip install 'ratel-ai[otlp]'``. A host already running its own OpenTelemetry
-    provider should skip this (the SDK's spans flow to that provider) and add
-    `ratel_span_processor` from `ratel_ai_telemetry`. Returns the provider as a shutdown
-    handle (``provider.shutdown()`` / ``provider.force_flush()``).
+    """Register a Ratel-owned OTLP exporter (convenience wiring for the greenfield case).
 
-    ``capture_content`` / ``include_span_and_events`` opt into message/tool content capture
-    in code via `set_content_capture` (an unrecognized ``capture_content`` raises a
-    ``ValueError`` before any exporter is wired); ``capture_content`` sets an exact mode,
+    Ships the spans this SDK emits to Ratel Cloud (or any OTLP endpoint) by
+    delegating to `ratel_ai_telemetry.init`, which needs the OpenTelemetry SDK —
+    install it with ``pip install 'ratel-ai[otlp]'``. A host already running its
+    own OpenTelemetry provider should skip this (the SDK's spans flow to that
+    provider) and add `ratel_span_processor` from `ratel_ai_telemetry`.
+
+    ``capture_content`` / ``include_span_and_events`` opt into message/tool content
+    capture in code via `set_content_capture`: ``capture_content`` sets an exact mode,
     ``include_span_and_events`` is bool sugar (True -> ``SPAN_AND_EVENT``, False ->
-    ``NO_CONTENT``). A provided option beats ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT``
-    (env is the fallback, as in OTel); ``capture_content`` wins over ``include_span_and_events``.
-    The returned handle's ``shutdown()`` clears the override, so tests and hot-reloads return
-    to env-driven behavior. The clear is generation-scoped: a stale handle shutting down late
-    never clobbers an override a newer configure_telemetry/set_content_capture installed.
+    ``NO_CONTENT``); ``capture_content`` wins when both are given. A provided option
+    beats ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`` (the env var is the
+    fallback when neither is given, as in OTel). The returned handle's ``shutdown()``
+    clears the override, restoring env-driven behavior; the clear is
+    generation-scoped, so a stale handle shutting down late never clobbers an
+    override a newer `configure_telemetry`/`set_content_capture` call installed.
+
+    Args:
+        api_key: Ratel Cloud API key; omit when exporting to a self-hosted endpoint.
+        endpoint: OTLP endpoint override; defaults to the Ratel Cloud collector.
+        headers: Extra headers sent with every export request.
+        service_name: ``service.name`` resource attribute; defaults per `init`.
+        capture_content: Exact content-capture mode to set (see above).
+        include_span_and_events: Boolean sugar for `capture_content` (see above).
+
+    Returns:
+        The provider, usable as a shutdown handle (``provider.shutdown()`` /
+        ``provider.force_flush()``).
+
+    Raises:
+        ModuleNotFoundError: if the OpenTelemetry exporter is not installed
+            (``pip install 'ratel-ai[otlp]'``).
+        ValueError: if `capture_content` is not a recognized mode — raised before
+            any exporter is wired, so a bad option has no side effects.
     """
     try:
         from ratel_ai_telemetry import clear_content_capture, init, set_content_capture

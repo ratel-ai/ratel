@@ -7,9 +7,9 @@ against `ratel-ai==0.1.x` working after an upgrade, the old `search_tools_tool` 
 tools-only `{groups}` result and the `search_tools` id — not aliased to the new
 two-bucket tool.
 
-.. deprecated:: 0.2.0
-   Migrate to :func:`ratel_ai.search_capabilities_tool` /
-   :data:`ratel_ai.SEARCH_CAPABILITIES_ID`. Tracked for removal in RAT-250.
+Deprecated:
+    Since 0.2.0: migrate to `ratel_ai.search_capabilities_tool` /
+    `ratel_ai.SEARCH_CAPABILITIES_ID`. Tracked for removal in RAT-250.
 """
 
 from __future__ import annotations
@@ -22,6 +22,9 @@ from .capabilities import UpstreamServerInfo, format_upstream_line
 from .catalog import ExecutableTool, ToolCatalog
 
 SEARCH_TOOLS_ID = "search_tools"
+"""Id (and name) of the deprecated pre-0.2.0 discovery tool built by
+`search_tools_tool`; superseded by `ratel_ai.SEARCH_CAPABILITIES_ID`.
+"""
 
 _SEARCH_TOOLS_BASE_DESCRIPTION = (
     "Discover tools beyond the ones already visible in your direct tool list. "
@@ -49,14 +52,24 @@ def search_tools_tool(
     *,
     upstream_servers: Sequence[UpstreamServerInfo] | None = None,
 ) -> ExecutableTool:
-    """Pre-0.2.0 tools-only discovery tool (id ``search_tools``, ``{groups}`` result).
+    """Build the pre-0.2.0 tools-only discovery tool (id ``search_tools``).
 
-    New code should use :func:`ratel_ai.search_capabilities_tool`, which also
-    returns a reserved ``skills`` bucket. Registering both lets a host serve the
-    old and new names during a migration window.
+    Keeps the original behaviour: a flat ``{groups}`` result and no skills
+    bucket. New code should use `ratel_ai.search_capabilities_tool` instead.
+    Registering both lets a host serve the old and new names during a
+    migration window.
 
-    .. deprecated:: 0.2.0
-       Use :func:`ratel_ai.search_capabilities_tool`. Tracked for removal in RAT-250.
+    Args:
+        catalog: the tool catalog to search.
+        upstream_servers: upstream MCP servers to advertise in the tool
+            description and to enrich result server groups with.
+
+    Returns:
+        An `ExecutableTool` to put in the agent's direct tool list.
+
+    Deprecated:
+        Since 0.2.0: use `ratel_ai.search_capabilities_tool`. Tracked for
+        removal in RAT-250.
     """
     upstreams = list(upstream_servers or [])
     upstream_by_name = {u.name: u for u in upstreams}

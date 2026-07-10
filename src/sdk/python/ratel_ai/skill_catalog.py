@@ -45,6 +45,14 @@ class SkillCatalog:
         trace: TraceSinkConfig | None = None,
         method: SearchMethod = "bm25",
     ) -> None:
+        """Create an empty skill catalog.
+
+        Args:
+            trace: where trace events go; `None` keeps the default no-op sink.
+            method: default retrieval method for `search` — see
+                `ToolCatalog.__init__`; a semantic/hybrid catalog eagerly
+                embeds each skill at registration.
+        """
         self._registry = SkillRegistry()
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
@@ -53,6 +61,19 @@ class SkillCatalog:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
     def register(self, skill: Skill) -> None:
+        """Add a skill to the catalog (metadata into the index, body stored).
+
+        Registering an id that is already present replaces it in place — the
+        index never holds a duplicate. Name, description and tags are indexed
+        for ranking; `tools`, `metadata` and `body` are stored but not indexed.
+
+        Args:
+            skill: the skill to register.
+
+        Raises:
+            RuntimeError: on a semantic/hybrid catalog, if the embedding model
+                fails to load while eagerly embedding the new skill.
+        """
         self._registry.register(
             skill.id,
             skill.name,
@@ -67,8 +88,10 @@ class SkillCatalog:
             self._registry.build_embeddings()
 
     def build_embeddings(self) -> None:
-        """Pre-compute embeddings for not-yet-embedded skills. See
-        `ToolCatalog.build_embeddings`."""
+        """Pre-compute embeddings for not-yet-embedded skills.
+
+        See `ToolCatalog.build_embeddings` for when to call and what it raises.
+        """
         self._registry.build_embeddings()
 
     def search(
@@ -78,6 +101,15 @@ class SkillCatalog:
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
     ) -> list[SkillHit]:
+        """Rank registered skills against a natural-language query.
+
+        The skill twin of `ToolCatalog.search` — same arguments, same
+        method-override and `ValueError`/`RuntimeError` semantics, ranked
+        against the skill corpus.
+
+        Returns:
+            Up to `top_k` `SkillHit`s, best first.
+        """
         return trace_search(
             SEARCH_TARGET_SKILL,
             query,
@@ -87,25 +119,43 @@ class SkillCatalog:
         )
 
     def has(self, skill_id: str) -> bool:
+        """Return whether a skill with this id is registered."""
         return skill_id in self._skills
 
     def get(self, skill_id: str) -> Skill | None:
+        """Return the registered `Skill` for an id, or `None` if unknown."""
         return self._skills.get(skill_id)
 
     def size(self) -> int:
+        """Return the number of registered skills."""
         return len(self._skills)
 
     def record_event(self, event: dict[str, Any]) -> None:
+        """Record a trace event into the catalog's sink.
+
+        See `ToolCatalog.record_event` for the event contract.
+        """
         self._registry.record_event(event)
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
+        """Drain captured trace envelopes; `[]` unless the sink is "memory"."""
         return self._registry.drain_trace_events()
 
     def invoke(self, skill_id: str) -> str:
         """Return a skill's body for dispatch, recording a `skill_invoke` event.
 
-        Raises `ValueError` on an unknown id — callers at the capability-tool boundary
-        translate that into a structured error for the agent.
+        Synchronous, unlike `ToolCatalog.invoke` — the body is already in
+        memory, there is no handler to run.
+
+        Args:
+            skill_id: id of a registered skill.
+
+        Returns:
+            The skill's body (Markdown), verbatim as registered.
+
+        Raises:
+            ValueError: on an unknown id — callers at the capability-tool
+                boundary translate this into a structured error for the agent.
         """
         skill = self._skills.get(skill_id)
         if skill is None:

@@ -20,7 +20,10 @@ from .skill_catalog import SkillCatalog
 from .telemetry import record_auth_needed
 
 SEARCH_CAPABILITIES_ID = "search_capabilities"
+"""Id (and name) of the discovery tool built by `search_capabilities_tool`."""
+
 INVOKE_TOOL_ID = "invoke_tool"
+"""Id (and name) of the invocation tool built by `invoke_tool_tool`."""
 
 _DEFAULT_TOP_K_TOOLS = 5
 _DEFAULT_TOP_K_SKILLS = 3
@@ -62,15 +65,45 @@ _MAX_DESCRIPTION_LEN = 160
 
 @dataclass
 class UpstreamServerInfo:
+    """An upstream MCP server, as advertised in the capability-tool descriptions.
+
+    Pass a list of these to `search_capabilities_tool` (or the deprecated
+    `search_tools_tool`) to append a "this catalog aggregates…" listing to the
+    tool description shown to the model, and to enrich each search result's
+    server group with the upstream's description and instructions.
+
+    Attributes:
+        name: the catalog namespace of the server — the `<name>` prefix of its
+            `<name>__<tool>` tool ids.
+        description: what the server offers; compacted to one line in listings.
+        instructions: the server's usage instructions (from its MCP
+            `initialize` result), surfaced on matching server groups.
+        tool_count: number of tools the server contributed, shown in listings.
+        needs_auth: True when the upstream rejected its boot connection with a
+            401 / re-auth needed; listings append "(auth required)".
+    """
+
     name: str
     description: str | None = None
     instructions: str | None = None
     tool_count: int | None = None
-    # True when the upstream rejected its boot connection with 401 / re-auth needed.
     needs_auth: bool = False
 
 
 def format_upstream_line(s: UpstreamServerInfo) -> str:
+    """Render one upstream server as a listing bullet for a tool description.
+
+    Format: ``- <name> — <description> (<N> tools) (auth required)``, where the
+    description is whitespace-collapsed and truncated to ~160 chars, and each
+    trailing part appears only when the corresponding field is set.
+
+    Args:
+        s: the upstream server to render.
+
+    Returns:
+        A single `- `-prefixed line, ready to join into the
+        "this catalog aggregates…" listing.
+    """
     line = f"- {s.name}"
     if s.description:
         line += f" — {_compact_description(s.description)}"
@@ -108,11 +141,26 @@ def search_capabilities_tool(
     *,
     upstream_servers: Sequence[UpstreamServerInfo] | None = None,
 ) -> ExecutableTool:
-    """Unified discovery over tools AND skills.
+    """Build the `search_capabilities` tool: unified discovery over tools AND skills.
 
-    Returns two independently-ranked buckets, each with its own top-K budget — so a
-    relevant skill is never starved out of the results by a large number of matching
-    tools (and the two BM25 corpora are never score-compared).
+    The returned tool ranks two independent buckets, each with its own top-K
+    budget — so a relevant skill is never starved out of the results by a large
+    number of matching tools (and the two BM25 corpora are never
+    score-compared). Tools land grouped by upstream server; a matched skill's
+    declared tools are pulled into the tools bucket additively (score 0), so
+    the agent gets the playbook and its toolkit in one turn. The `skills`
+    bucket (and the mention of `get_skill_content` in the description) is only
+    advertised when a non-empty `skill_catalog` is wired in.
+
+    Args:
+        catalog: the tool catalog to search.
+        skill_catalog: optional skill catalog, ranked against the same query
+            in its own bucket.
+        upstream_servers: upstream MCP servers to advertise in the tool
+            description and to enrich result server groups with.
+
+    Returns:
+        An `ExecutableTool` to put in the agent's direct tool list.
     """
     upstreams = list(upstream_servers or [])
     upstream_by_name = {u.name: u for u in upstreams}
@@ -276,9 +324,10 @@ def search_capabilities_tool(
     )
 
 
-# Notified when the underlying tool raises UnauthorizedError, with the upstream
-# name inferred from the toolId. May be sync or async.
 OnUnauthorized = Callable[[str], Union[Awaitable[None], None]]
+"""Notified when the underlying tool raises `UnauthorizedError`, with the
+upstream server name inferred from the toolId. May be sync or async.
+"""
 
 
 def invoke_tool_tool(
@@ -286,6 +335,27 @@ def invoke_tool_tool(
     *,
     on_unauthorized: OnUnauthorized | None = None,
 ) -> ExecutableTool:
+    """Build the `invoke_tool` tool: run any catalog tool by id.
+
+    The returned tool resolves `toolId`, forwards the nested `args` object to
+    `ToolCatalog.invoke`, and never raises into the host: an unknown id,
+    malformed `args`, or a tool exception all come back as a structured
+    `{"error": ..., "isError": True}` payload the model can recover from. A
+    flattened call (arguments at the top level instead of nested under `args`)
+    is tolerated. When the tool raises an `UnauthorizedError`, the payload is
+    `{"error": "needs_auth", ...}` with a re-auth hint and, for namespaced
+    `<server>__<tool>` ids, the upstream server name.
+
+    Args:
+        catalog: the catalog to resolve and run tool ids against.
+        on_unauthorized: called with the upstream server name when a tool
+            raises `UnauthorizedError`; may be sync or async. Skipped when the
+            tool id has no `<server>__` namespace prefix.
+
+    Returns:
+        An `ExecutableTool` to put in the agent's direct tool list.
+    """
+
     async def execute(input: dict[str, Any]) -> Any:
         tool_id = input.get("toolId")
         if not isinstance(tool_id, str) or not catalog.has(tool_id):
