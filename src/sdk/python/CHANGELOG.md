@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-10
+
+### Added
+
+- `configure_telemetry` opts into message/tool content capture programmatically: `capture_content` sets the exact `ContentCapture` mode (validated like the env var — case-insensitive, legacy boolean forms accepted — raising a `ValueError` on garbage before any exporter is wired), and `include_span_and_events` is boolean sugar (`True` → `SPAN_AND_EVENT`, `False` → `NO_CONTENT`). `capture_content` wins over `include_span_and_events`; when neither is provided, `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` keeps ruling (a provided option beats the env var, as in OTel code-over-env precedence). The returned provider's `shutdown()` restores env-driven behavior via a generation-scoped clear (`clear_content_capture`), so a stale handle shutting down late never clobbers an override a newer `configure_telemetry` installed. The `set_content_capture` / `clear_content_capture` / `ContentCapture` primitives live in `ratel_ai_telemetry`.
+
 ## [0.4.0] - 2026-07-07
 
 ### Added

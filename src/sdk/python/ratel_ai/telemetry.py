@@ -180,12 +180,29 @@ def record_auth_needed(server: str | None = None) -> None:
     span.end()
 
 
+def _resolve_capture_override(
+    capture_content: ContentCapture | str | None,
+    include_span_and_events: bool | None,
+) -> ContentCapture | str | None:
+    """The capture mode configure_telemetry should set, or None to leave the gate
+    env-driven: `capture_content` wins over `include_span_and_events`. The bool sugar maps
+    to the wire strings set_content_capture normalizes (True -> full capture, False -> none).
+    """
+    if capture_content is not None:
+        return capture_content
+    if include_span_and_events is not None:
+        return "SPAN_AND_EVENT" if include_span_and_events else "NO_CONTENT"
+    return None
+
+
 def configure_telemetry(
     *,
     api_key: str | None = None,
     endpoint: str | None = None,
     headers: dict[str, str] | None = None,
     service_name: str | None = None,
+    capture_content: ContentCapture | str | None = None,
+    include_span_and_events: bool | None = None,
 ) -> Any:
     """Convenience wiring for the greenfield case: register a Ratel-owned OTLP exporter
     so the spans this SDK emits are shipped to Ratel Cloud (or any OTLP endpoint).
@@ -194,13 +211,51 @@ def configure_telemetry(
     provider should skip this (the SDK's spans flow to that provider) and add
     `ratel_span_processor` from `ratel_ai_telemetry`. Returns the provider as a shutdown
     handle (``provider.shutdown()`` / ``provider.force_flush()``).
+
+    ``capture_content`` / ``include_span_and_events`` opt into message/tool content capture
+    in code via `set_content_capture` (an unrecognized ``capture_content`` raises a
+    ``ValueError`` before any exporter is wired); ``capture_content`` sets an exact mode,
+    ``include_span_and_events`` is bool sugar (True -> ``SPAN_AND_EVENT``, False ->
+    ``NO_CONTENT``). A provided option beats ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT``
+    (env is the fallback, as in OTel); ``capture_content`` wins over ``include_span_and_events``.
+    The returned handle's ``shutdown()`` clears the override, so tests and hot-reloads return
+    to env-driven behavior. The clear is generation-scoped: a stale handle shutting down late
+    never clobbers an override a newer configure_telemetry/set_content_capture installed.
     """
     try:
-        from ratel_ai_telemetry import init
+        from ratel_ai_telemetry import clear_content_capture, init, set_content_capture
     except ModuleNotFoundError as exc:  # pragma: no cover - exercised only without the extra
         raise ModuleNotFoundError(
             "configure_telemetry() needs the OpenTelemetry exporter. Install the extra: "
             "pip install 'ratel-ai[otlp]' — or register your own OpenTelemetry provider, "
             "since the SDK emits ratel.*/gen_ai.* spans to whatever provider is active."
         ) from exc
-    return init(api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name)
+
+    capture = _resolve_capture_override(capture_content, include_span_and_events)
+    if capture is None:
+        # No override: the env var keeps ruling; nothing to set or undo.
+        return init(api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name)
+
+    # Apply (and validate — an unrecognized mode raises ValueError) the override *before*
+    # wiring the exporter, so a bad option fails loud with no provider side effects; unwind
+    # it if init() itself raises.
+    generation = set_content_capture(capture)
+    try:
+        provider = init(
+            api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
+        )
+    except BaseException:
+        clear_content_capture(generation)
+        raise
+
+    # Wrap shutdown so it restores env-driven behavior. Generation-scoped: a stale handle
+    # shutting down late must not clobber an override a newer configure_telemetry/
+    # set_content_capture owns by then.
+    original_shutdown = provider.shutdown
+
+    def shutdown_and_clear() -> Any:
+        clear_content_capture(generation)
+        return original_shutdown()
+
+    provider.shutdown = shutdown_and_clear
+    return provider

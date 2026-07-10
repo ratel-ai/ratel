@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "ratel-ai"
-version = "0.4.0"
+version = "0.4.1"
 description = "Python SDK for Ratel — context engineering platform for AI agents. BM25 tool retrieval, MCP ingestion, framework-neutral capability tools."
 readme = "README.md"
 license = { file = "LICENSE.md" }
@@ -36,7 +36,7 @@ mcp = ["mcp>=1.0"]
 # emits spans to whatever OTel provider is active and is a no-op without one, so it
 # stays dependency-free; this extra pulls the vocabulary + the OTLP exporter so
 # configure_telemetry() can ship spans to Ratel Cloud. Lazily imported.
-otlp = ["ratel-ai-telemetry[otlp]>=0.1.0rc4"]
+otlp = ["ratel-ai-telemetry[otlp]>=0.1.1"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",

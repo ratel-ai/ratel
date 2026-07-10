@@ -251,7 +251,11 @@ provider = configure_telemetry(api_key=os.environ["RATEL_API_KEY"])
 # ... later: provider.shutdown()
 ```
 
-If you already run OpenTelemetry (your own collector, another instrumentation), **skip `configure_telemetry`** — the spans already flow to your provider — and add `ratel_span_processor` from `ratel_ai_telemetry` to dual-export the Ratel cut to Cloud. Message/tool content is captured on spans only when `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` is set (default off).
+If you already run OpenTelemetry (your own collector, another instrumentation), **skip `configure_telemetry`** — the spans already flow to your provider — and add `ratel_span_processor` from `ratel_ai_telemetry` to dual-export the Ratel cut to Cloud. Message/tool content is captured on spans only when `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` is set (default off). Content capture can also be opted into in code — a provided option wins over the env var:
+
+```python
+provider = configure_telemetry(api_key=..., include_span_and_events=True)  # or capture_content="SPAN_ONLY"
+```
 
 ## Develop
 

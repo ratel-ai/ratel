@@ -42,5 +42,12 @@ export { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";
 // OpenTelemetry export of the ratel.*/gen_ai.* funnel. The SDK always emits
 // spans to the active OTel provider; `configureTelemetry` is optional sugar
 // that wires a Ratel-owned OTLP exporter (needs the peer @ratel-ai/telemetry-otlp).
-export type { InitOptions, TelemetryHandle } from "./telemetry.js";
-export { configureTelemetry } from "./telemetry.js";
+// `ContentCapture`/`setContentCapture`/`clearContentCapture` (re-exported from
+// @ratel-ai/telemetry) control the message/tool content-capture gate programmatically.
+export type { ConfigureTelemetryOptions, InitOptions, TelemetryHandle } from "./telemetry.js";
+export {
+  ContentCapture,
+  clearContentCapture,
+  configureTelemetry,
+  setContentCapture,
+} from "./telemetry.js";

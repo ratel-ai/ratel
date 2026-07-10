@@ -21,6 +21,7 @@ import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import {
   AuthOutcome,
   ContentCapture,
+  clearContentCapture,
   contentCaptureMode,
   EXECUTE_TOOL,
   GEN_AI_OPERATION_NAME,
@@ -44,6 +45,7 @@ import {
   RATEL_UPSTREAM_TOOL_COUNT,
   RATEL_UPSTREAM_TRANSPORT,
   type SearchTarget,
+  setContentCapture,
 } from "@ratel-ai/telemetry";
 import type { SearchOrigin } from "./catalog.js";
 
@@ -225,6 +227,39 @@ export interface TelemetryHandle {
   shutdown(): Promise<void>;
 }
 
+/**
+ * Options for {@link configureTelemetry}: the exporter wiring of {@link InitOptions}
+ * plus programmatic control of the message/tool content-capture gate.
+ */
+export interface ConfigureTelemetryOptions extends InitOptions {
+  /**
+   * Exact content-capture mode, set programmatically instead of via
+   * `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`. Code-level config wins
+   * over the env var (OTel treats env vars as the fallback for code-level
+   * configuration), and wins over {@link ConfigureTelemetryOptions.includeSpanAndEvents}.
+   */
+  captureContent?: ContentCapture;
+  /**
+   * Convenience switch over {@link ConfigureTelemetryOptions.captureContent}:
+   * `true` is full capture (`SPAN_AND_EVENT`), `false` is none (`NO_CONTENT`).
+   * Ignored when `captureContent` is set. When neither is provided, the env var
+   * keeps ruling.
+   */
+  includeSpanAndEvents?: boolean;
+}
+
+/**
+ * The capture mode {@link configureTelemetry} should set, or `undefined` to
+ * leave the gate env-driven: `captureContent` wins over `includeSpanAndEvents`.
+ */
+function resolveCaptureOverride(options: ConfigureTelemetryOptions): ContentCapture | undefined {
+  if (options.captureContent !== undefined) return options.captureContent;
+  if (options.includeSpanAndEvents !== undefined) {
+    return options.includeSpanAndEvents ? ContentCapture.SpanAndEvent : ContentCapture.NoContent;
+  }
+  return undefined;
+}
+
 const OTLP_PACKAGE = "@ratel-ai/telemetry-otlp";
 
 /**
@@ -234,8 +269,17 @@ const OTLP_PACKAGE = "@ratel-ai/telemetry-otlp";
  * the base SDK install stays OTel-SDK-free (ADR-0007). A host that already runs its
  * own OpenTelemetry provider should skip this — the SDK's spans flow to that
  * provider automatically — and add `ratelSpanProcessor` from `@ratel-ai/telemetry-otlp`.
+ *
+ * `captureContent` / `includeSpanAndEvents` opt into content capture in code via
+ * `setContentCapture` (an unrecognized `captureContent` throws a `TypeError`
+ * before any exporter is wired); the returned handle's `shutdown()` clears the
+ * override, so tests and hot-reloads return to env-driven behavior. The clear is
+ * generation-scoped: a stale handle shutting down late never clobbers an
+ * override a newer `configureTelemetry`/`setContentCapture` installed.
  */
-export async function configureTelemetry(options: InitOptions = {}): Promise<TelemetryHandle> {
+export async function configureTelemetry(
+  options: ConfigureTelemetryOptions = {},
+): Promise<TelemetryHandle> {
   // Split "the peer is absent" from "the peer is present but fails to load": a
   // plain `import().catch` can't, because a missing *transitive* OTel dep throws
   // the same MODULE_NOT_FOUND code as an absent peer, so it would mislabel a
@@ -249,7 +293,33 @@ export async function configureTelemetry(options: InitOptions = {}): Promise<Tel
     );
   }
   const otlp: typeof import("@ratel-ai/telemetry-otlp") = await import(OTLP_PACKAGE);
-  return otlp.init(options);
+  const {
+    captureContent: _captureContent,
+    includeSpanAndEvents: _include,
+    ...initOptions
+  } = options;
+  const capture = resolveCaptureOverride(options);
+  if (capture === undefined) return otlp.init(initOptions); // env keeps ruling; nothing to undo
+  // Apply (and validate — an unrecognized mode throws a TypeError) the override
+  // *before* wiring the exporter, so a bad option fails loud with no provider
+  // side effects; unwind it if init() itself throws.
+  const generation = setContentCapture(capture);
+  let handle: TelemetryHandle;
+  try {
+    handle = otlp.init(initOptions);
+  } catch (err) {
+    clearContentCapture(generation);
+    throw err;
+  }
+  return {
+    shutdown: async () => {
+      // Generation-scoped: back to env-driven behavior, unless a newer
+      // configureTelemetry/setContentCapture owns the override by now — then a
+      // stale handle shutting down late must not clobber it.
+      clearContentCapture(generation);
+      await handle.shutdown();
+    },
+  };
 }
 
 /**
@@ -277,3 +347,6 @@ export function isModuleNotFound(err: unknown): boolean {
 }
 
 export type { InitOptions };
+// Re-exported so hosts configuring capture don't need a second import from
+// @ratel-ai/telemetry.
+export { ContentCapture, clearContentCapture, setContentCapture };

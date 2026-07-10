@@ -215,21 +215,89 @@ class ContentCapture(str, Enum):
     SPAN_AND_EVENT = "SPAN_AND_EVENT"
 
 
+#: Module-level programmatic override; None means unset (env-driven).
+_content_capture_override: ContentCapture | None = None
+
+#: Monotonically increasing token identifying the most recent set_content_capture call,
+#: so a stale holder (e.g. an old telemetry handle's shutdown) cannot clear an override a
+#: newer caller owns via clear_content_capture.
+_content_capture_generation = 0
+
+
+def _parse_content_capture(raw: str) -> ContentCapture | None:
+    """The single normalizer for capture-mode strings, shared by the env parser and the
+    programmatic setter: trim + case-insensitive, with the legacy boolean forms (true/1
+    -> full capture, false/0 -> none). None when unrecognized — the two callers diverge
+    there (content_capture_mode defaults, set_content_capture raises).
+    """
+    normalized = raw.strip().upper()
+    if normalized in ("NO_CONTENT", "FALSE", "0"):
+        return ContentCapture.NO_CONTENT
+    if normalized == "SPAN_ONLY":
+        return ContentCapture.SPAN_ONLY
+    if normalized == "EVENT_ONLY":
+        return ContentCapture.EVENT_ONLY
+    if normalized in ("SPAN_AND_EVENT", "TRUE", "1"):
+        return ContentCapture.SPAN_AND_EVENT
+    return None
+
+
+def set_content_capture(mode: ContentCapture | str | None) -> int:
+    """Programmatically set the content-capture mode. While set, content_capture_mode()
+    returns this mode regardless of OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT —
+    programmatic config wins over the environment, matching how OpenTelemetry treats env
+    vars as the fallback for code-level configuration. Pass None to clear the override
+    unconditionally and return to env-driven parsing.
+
+    The mode is validated like the env var (case-insensitive, legacy true/false/1/0
+    accepted) and raises a ValueError on anything unrecognized — failing loud at config
+    time instead of storing a value that would both disable capture and mask the env var.
+
+    Returns a generation token identifying this call as the current owner of the override;
+    pass it to clear_content_capture to clear only if no newer set has happened since (the
+    safe form for shutdown/teardown hooks).
+    """
+    global _content_capture_override, _content_capture_generation
+    if mode is None:
+        _content_capture_override = None
+        _content_capture_generation += 1
+        return _content_capture_generation
+    parsed = _parse_content_capture(mode)
+    if parsed is None:
+        valid = ", ".join(member.value for member in ContentCapture)
+        raise ValueError(
+            f"set_content_capture: unrecognized mode {mode!r}. Valid values: {valid} "
+            "(case-insensitive; legacy true/false/1/0 also accepted), or None to clear."
+        )
+    _content_capture_override = parsed
+    _content_capture_generation += 1
+    return _content_capture_generation
+
+
+def clear_content_capture(generation: int) -> None:
+    """Clear the programmatic content-capture override, but only when generation — the
+    token returned by set_content_capture — still identifies the most recent set. A stale
+    token no-ops, so an old handle shutting down late cannot clobber an override a newer
+    caller installed (and silently re-enable, or disable, capture via the env fallback).
+    For an unconditional clear, use set_content_capture(None).
+    """
+    global _content_capture_override
+    if generation != _content_capture_generation:  # a newer set owns the slot
+        return
+    _content_capture_override = None
+
+
 def content_capture_mode(env: Mapping[str, str] | None = None) -> ContentCapture:
-    """Parse the ecosystem content-capture gate. Defaults to NO_CONTENT when
+    """Parse the ecosystem content-capture gate. A mode set via set_content_capture wins
+    outright (env is the fallback, as in OTel); otherwise defaults to NO_CONTENT when
     unset/empty/unrecognized. The legacy boolean form maps true to full capture
     (SPAN_AND_EVENT) and false to none.
     """
+    if _content_capture_override is not None:
+        return _content_capture_override
     resolved_env = os.environ if env is None else env
     raw = resolved_env.get(CAPTURE_CONTENT_ENV)
     if raw is None or raw.strip() == "":
         return ContentCapture.NO_CONTENT
-    mapping = {
-        "NO_CONTENT": ContentCapture.NO_CONTENT,
-        "SPAN_ONLY": ContentCapture.SPAN_ONLY,
-        "EVENT_ONLY": ContentCapture.EVENT_ONLY,
-        "SPAN_AND_EVENT": ContentCapture.SPAN_AND_EVENT,
-        "TRUE": ContentCapture.SPAN_AND_EVENT,
-        "1": ContentCapture.SPAN_AND_EVENT,
-    }
-    return mapping.get(raw.strip().upper(), ContentCapture.NO_CONTENT)
+    parsed = _parse_content_capture(raw)
+    return parsed if parsed is not None else ContentCapture.NO_CONTENT

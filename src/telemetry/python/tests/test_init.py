@@ -8,12 +8,22 @@ from ratel_ai_telemetry.otlp import (
     DEFAULT_SERVICE_NAME,
     ENDPOINT_ENV,
     ContentCapture,
+    clear_content_capture,
     content_capture_mode,
     init,
     resolve_otlp_config,
+    set_content_capture,
 )
 
 CONTENT_ENV = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
+
+
+@pytest.fixture(autouse=True)
+def _reset_content_capture_override() -> object:
+    """The programmatic override is module-level state in ratel_ai_telemetry.otlp; clear
+    it after every test so an override never leaks into another test's env parsing."""
+    yield
+    set_content_capture(None)
 
 
 class TestResolveOtlpConfig:
@@ -102,3 +112,94 @@ def test_top_level_lazy_accessor_resolves_the_otlp_surface() -> None:
 
     assert ratel_ai_telemetry.init is otlp_init
     assert ratel_ai_telemetry.resolve_otlp_config is otlp_resolve
+
+
+class TestSetContentCapture:
+    """Programmatic override of the content-capture gate. Mirrors the TS
+    `setContentCapture` suite in src/telemetry/ts/src/config.test.ts."""
+
+    def test_wins_over_an_explicitly_set_env_in_either_direction(self) -> None:
+        set_content_capture(ContentCapture.NO_CONTENT)
+        assert content_capture_mode(env={CONTENT_ENV: "SPAN_ONLY"}) == ContentCapture.NO_CONTENT
+
+        set_content_capture(ContentCapture.SPAN_AND_EVENT)
+        assert (
+            content_capture_mode(env={CONTENT_ENV: "NO_CONTENT"}) == ContentCapture.SPAN_AND_EVENT
+        )
+
+    def test_applies_when_the_env_is_unset(self) -> None:
+        set_content_capture(ContentCapture.EVENT_ONLY)
+        assert content_capture_mode(env={}) == ContentCapture.EVENT_ONLY
+
+    def test_clearing_with_none_restores_env_parsing(self) -> None:
+        set_content_capture(ContentCapture.NO_CONTENT)
+        set_content_capture(None)
+        assert content_capture_mode(env={CONTENT_ENV: "SPAN_ONLY"}) == ContentCapture.SPAN_ONLY
+        assert content_capture_mode(env={}) == ContentCapture.NO_CONTENT
+
+    def test_never_set_leaves_env_parsing_untouched(self) -> None:
+        set_content_capture(None)  # clearing with nothing set is a no-op
+        assert content_capture_mode(env={CONTENT_ENV: "event_only"}) == ContentCapture.EVENT_ONLY
+        assert content_capture_mode(env={}) == ContentCapture.NO_CONTENT
+
+    def test_normalizes_like_the_env_var(self) -> None:
+        set_content_capture("span_only")
+        assert content_capture_mode(env={}) == ContentCapture.SPAN_ONLY
+
+        set_content_capture(" SPAN_AND_EVENT ")
+        assert content_capture_mode(env={}) == ContentCapture.SPAN_AND_EVENT
+
+        set_content_capture("true")
+        assert content_capture_mode(env={}) == ContentCapture.SPAN_AND_EVENT
+
+        set_content_capture("0")
+        assert (
+            content_capture_mode(env={CONTENT_ENV: "SPAN_AND_EVENT"}) == ContentCapture.NO_CONTENT
+        )
+
+    def test_raises_valueerror_naming_the_valid_values_on_garbage(self) -> None:
+        with pytest.raises(ValueError, match="NO_CONTENT.*SPAN_ONLY.*EVENT_ONLY.*SPAN_AND_EVENT"):
+            set_content_capture("garbage")
+
+    def test_stores_nothing_on_a_failed_set(self) -> None:
+        with pytest.raises(ValueError):
+            set_content_capture("SPAN_ONLY_TYPO")
+        assert content_capture_mode(env={CONTENT_ENV: "SPAN_ONLY"}) == ContentCapture.SPAN_ONLY
+        assert content_capture_mode(env={}) == ContentCapture.NO_CONTENT
+
+
+class TestClearContentCapture:
+    """Generation-scoped clear. Mirrors the TS `clearContentCapture` suite."""
+
+    def test_only_the_most_recent_setter_can_clear(self) -> None:
+        g1 = set_content_capture(ContentCapture.NO_CONTENT)
+        g2 = set_content_capture(ContentCapture.EVENT_ONLY)
+        assert g2 > g1
+
+        clear_content_capture(g1)  # stale — must not clobber g2's override
+        assert (
+            content_capture_mode(env={CONTENT_ENV: "SPAN_AND_EVENT"}) == ContentCapture.EVENT_ONLY
+        )
+
+        clear_content_capture(g2)  # current owner — clears, env rules again
+        assert (
+            content_capture_mode(env={CONTENT_ENV: "SPAN_AND_EVENT"})
+            == ContentCapture.SPAN_AND_EVENT
+        )
+        assert content_capture_mode(env={}) == ContentCapture.NO_CONTENT
+
+    def test_is_idempotent_for_the_current_generation(self) -> None:
+        g = set_content_capture(ContentCapture.SPAN_ONLY)
+        clear_content_capture(g)
+        clear_content_capture(g)
+        assert content_capture_mode(env={}) == ContentCapture.NO_CONTENT
+
+    def test_unconditional_none_invalidates_outstanding_generations(self) -> None:
+        g1 = set_content_capture(ContentCapture.SPAN_ONLY)
+        set_content_capture(None)  # the direct user's clear is the newest config action
+        g3 = set_content_capture(ContentCapture.EVENT_ONLY)
+
+        clear_content_capture(g1)  # stale — the slot moved on twice since
+        assert content_capture_mode(env={}) == ContentCapture.EVENT_ONLY
+        clear_content_capture(g3)
+        assert content_capture_mode(env={}) == ContentCapture.NO_CONTENT
