@@ -2,6 +2,8 @@
 //!
 //! See `README.md` and the wire contract in `../CONVENTIONS.md` for design.
 
+#![warn(missing_docs)]
+
 /// The pinned OpenTelemetry semantic-conventions version this vocabulary tracks
 /// (the `gen_ai` group). The pin is the contract; consumers read against this
 /// exact version, never "latest". Bumping it is a reviewed change with its own
@@ -96,7 +98,10 @@ pub const GEN_AI_TOOL_CALL_RESULT: &str = "gen_ai.tool.call.result";
 /// local trace `Origin` (ADR-0007).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
+    /// A direct library/SDK call — wire value `direct`.
     Direct,
+    /// A call the agent synthesized inside its loop (via the capability
+    /// tools) — wire value `agent`.
     Agent,
 }
 
@@ -114,7 +119,9 @@ impl Origin {
 /// folds capability-tool search and skill search into one span shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchTarget {
+    /// The span searched the tool catalog — wire value `tool`.
     Tool,
+    /// The span searched the skill catalog — wire value `skill`.
     Skill,
 }
 
@@ -132,9 +139,15 @@ impl SearchTarget {
 /// is the 401-driven `AuthNeeds` case (ADR-0007 `auth_needs`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthOutcome {
+    /// Existing credentials were valid; no interaction needed — wire value `ok`.
     Ok,
+    /// Credentials were refreshed without user interaction — wire value
+    /// `refreshed`.
     Refreshed,
+    /// The upstream challenged for auth (e.g. a 401); user interaction is
+    /// required — wire value `needs_auth`, the ADR-0007 `auth_needs` case.
     NeedsAuth,
+    /// The flow errored without producing credentials — wire value `failed`.
     Failed,
 }
 
