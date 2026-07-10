@@ -16,12 +16,15 @@
 //!   vectors are **re-normalized** on ingestion (an arbitrary endpoint may not
 //!   normalize), so `dense_search`'s unit-vector assumption always holds.
 //!
-//! In-process weights are **not** bundled: on first use a HuggingFace model is
-//! downloaded via `hf-hub` into the shared cache (`~/.cache/huggingface`,
-//! `HF_HOME`-overridable), then loaded from cache on every later run — offline
-//! after the first fetch, deterministic when the revision is pinned. Two catalogs
-//! on the same model share one resident embedder (the cache is keyed by model
-//! fingerprint); a cold download emits a [`TraceEvent::EmbedderDownload`].
+//! In-process weights are **not** bundled and live in the shared HuggingFace
+//! cache (`~/.cache/huggingface`, `HF_HOME`-overridable). Ratel **auto-downloads
+//! only the built-in default**; an explicit HuggingFace model is **cache-only**
+//! (it must already be present, or opt in with `download=true`) — a missing one
+//! errors as [`EmbedderError::NotCached`], symmetric with Ollama's "not pulled",
+//! so a `register` never silently pulls a multi-GB model. Once cached, load is
+//! offline and deterministic when the revision is pinned. Two catalogs on the
+//! same model share one resident embedder (keyed by model fingerprint); a cold
+//! download emits a [`TraceEvent::EmbedderDownload`].
 //!
 //! **Footprint & failure modes.** A resident BERT model is ~130 MB+ of f32
 //! weights plus runtime buffers, and inference is CPU-only, so a constrained
@@ -96,6 +99,13 @@ pub enum EmbedderError {
     /// missing required field, or a named `api_key_env` that is not set. Surfaced
     /// at catalog construction or on first use.
     Config { message: String },
+    /// An explicitly-configured HuggingFace model is not in the local cache, and
+    /// Ratel auto-downloads only the built-in default. The user must fetch it
+    /// first — symmetric with Ollama's "model not pulled".
+    NotCached {
+        model: String,
+        revision: Option<String>,
+    },
 }
 
 impl EmbedderError {
@@ -120,6 +130,9 @@ impl EmbedderError {
             }
             EmbedderError::Config { .. } => {
                 "give exactly one embedding source (a model id / path / url) with its required fields"
+            }
+            EmbedderError::NotCached { .. } => {
+                "Ratel auto-downloads only the default model; pre-download this one, pass download=true, or use a local path / endpoint"
             }
         }
     }
@@ -153,6 +166,17 @@ impl std::fmt::Display for EmbedderError {
                 "embedding dimension mismatch for {model}: expected {expected}, got {got} (hint: {hint})"
             ),
             EmbedderError::Config { message } => write!(f, "{message} (hint: {hint})"),
+            EmbedderError::NotCached { model, revision } => {
+                let rev = revision
+                    .as_deref()
+                    .map(|r| format!(" --revision {r}"))
+                    .unwrap_or_default();
+                write!(
+                    f,
+                    "embedding model {model} is not in the local HuggingFace cache — download it \
+                     first: `huggingface-cli download {model}{rev}` (hint: {hint})"
+                )
+            }
             EmbedderError::EmbeddingsNotBuilt => {
                 write!(
                     f,
@@ -241,22 +265,30 @@ fn build_embedder(
     let pooling = model.pooling_override();
     match model {
         EmbeddingModel::Default => {
+            // The built-in default is the one model Ratel always auto-downloads.
             let (e, n) = CandleEmbedder::load_hf(
                 DEFAULT_REPO,
                 DEFAULT_REVISION,
                 query_prefix,
                 doc_prefix,
                 pooling,
+                true,
             )?;
             Ok((Arc::new(e), n))
         }
-        EmbeddingModel::HuggingFace { repo, revision, .. } => {
+        EmbeddingModel::HuggingFace {
+            repo,
+            revision,
+            download,
+            ..
+        } => {
             let (e, n) = CandleEmbedder::load_hf(
                 repo,
                 revision.as_deref().unwrap_or("main"),
                 query_prefix,
                 doc_prefix,
                 pooling,
+                *download,
             )?;
             Ok((Arc::new(e), n))
         }
@@ -410,59 +442,79 @@ struct Loaded {
 }
 
 impl CandleEmbedder {
-    /// Load a BERT-family model from a HuggingFace repo, downloading its files to
-    /// the shared HF cache on first use. `from_env` honors `HF_HOME` (cache
-    /// location) and `HF_ENDPOINT` (mirror / offline proxy). Weights are
-    /// `model.safetensors`, falling back to `pytorch_model.bin`. Returns cold-load
-    /// notices (download size, assumed pooling).
+    /// Load a BERT-family model from a HuggingFace repo. When `allow_download` is
+    /// set (only the built-in default, or an explicit opt-in) missing files are
+    /// fetched into the shared HF cache — `from_env` honors `HF_HOME` /
+    /// `HF_ENDPOINT`. Otherwise it is **cache-only**: a model not already present
+    /// errors as [`EmbedderError::NotCached`] (Ratel doesn't silently download
+    /// non-default models — symmetric with Ollama's "not pulled"). Weights are
+    /// `model.safetensors`, falling back to `pytorch_model.bin`.
     fn load_hf(
         repo_id: &str,
         revision: &str,
         query_prefix: &str,
         doc_prefix: &str,
         pooling_override: Option<Pooling>,
+        allow_download: bool,
     ) -> Result<(Self, LoadNotices), EmbedderError> {
         let device = Device::Cpu;
         let repo_spec =
             Repo::with_revision(repo_id.to_string(), RepoType::Model, revision.to_string());
-
-        // Cold-cache detection *before* fetching, so we only announce a real
-        // download: `Cache` reads the cache without downloading.
         let cache_repo = hf_hub::Cache::from_env().repo(repo_spec.clone());
-        let was_cached = cache_repo.get("model.safetensors").is_some()
-            || cache_repo.get("pytorch_model.bin").is_some();
 
-        let api = ApiBuilder::from_env()
-            .build()
-            .map_err(|e| EmbedderError::Download {
+        let (config_path, tokenizer_path, weights_path, pooling_file, download) = if allow_download
+        {
+            // Cold-cache detection *before* fetching, so we only announce a real
+            // download.
+            let was_cached = cache_repo.get("model.safetensors").is_some()
+                || cache_repo.get("pytorch_model.bin").is_some();
+            let api = ApiBuilder::from_env()
+                .build()
+                .map_err(|e| EmbedderError::Download {
+                    model: repo_id.to_string(),
+                    source: e.to_string(),
+                })?;
+            let repo = api.repo(repo_spec);
+            let config = fetch_cached(&repo, "config.json", repo_id)?;
+            let tokenizer = fetch_cached(&repo, "tokenizer.json", repo_id)?;
+            // Prefer safetensors; fall back to a pickled `pytorch_model.bin`.
+            let weights = match fetch_cached(&repo, "model.safetensors", repo_id) {
+                Ok(p) => p,
+                Err(EmbedderError::Download { source, .. }) if is_not_found(&source) => {
+                    fetch_cached(&repo, "pytorch_model.bin", repo_id)?
+                }
+                Err(e) => return Err(e),
+            };
+            let pooling_file = fetch_optional(&repo, "1_Pooling/config.json");
+            let notice = (!was_cached).then(|| DownloadNotice {
                 model: repo_id.to_string(),
-                source: e.to_string(),
-            })?;
-        let repo = api.repo(repo_spec);
-        let config_path = fetch_cached(&repo, "config.json", repo_id)?;
-        let tokenizer_path = fetch_cached(&repo, "tokenizer.json", repo_id)?;
-        // Prefer safetensors; fall back to a pickled `pytorch_model.bin`.
-        let weights_path = match fetch_cached(&repo, "model.safetensors", repo_id) {
-            Ok(p) => p,
-            Err(EmbedderError::Download { source, .. }) if is_not_found(&source) => {
-                fetch_cached(&repo, "pytorch_model.bin", repo_id)?
-            }
-            Err(e) => return Err(e),
+                bytes: [&config, &tokenizer, &weights]
+                    .iter()
+                    .filter_map(|p| std::fs::metadata(p).ok().map(|m| m.len()))
+                    .sum(),
+            });
+            (config, tokenizer, weights, pooling_file, notice)
+        } else {
+            // Cache-only: never touch the network. A file missing from the cache
+            // means the model was never downloaded → NotCached.
+            let not_cached = || EmbedderError::NotCached {
+                model: repo_id.to_string(),
+                revision: (revision != "main").then(|| revision.to_string()),
+            };
+            let config = cache_repo.get("config.json").ok_or_else(not_cached)?;
+            let tokenizer = cache_repo.get("tokenizer.json").ok_or_else(not_cached)?;
+            let weights = cache_repo
+                .get("model.safetensors")
+                .or_else(|| cache_repo.get("pytorch_model.bin"))
+                .ok_or_else(not_cached)?;
+            let pooling_file = cache_repo.get("1_Pooling/config.json");
+            (config, tokenizer, weights, pooling_file, None)
         };
 
         // Pooling: override wins, else the repo's `1_Pooling/config.json`, else Mean.
-        let detected = pooling_override.or_else(|| {
-            fetch_optional(&repo, "1_Pooling/config.json").and_then(|p| detect_pooling_file(&p))
-        });
+        let detected =
+            pooling_override.or_else(|| pooling_file.and_then(|p| detect_pooling_file(&p)));
         let (pooling, pooling_assumed) = resolve_pooling(detected);
-
-        let download = (!was_cached).then(|| DownloadNotice {
-            model: repo_id.to_string(),
-            bytes: [&config_path, &tokenizer_path, &weights_path]
-                .iter()
-                .filter_map(|p| std::fs::metadata(p).ok().map(|m| m.len()))
-                .sum(),
-        });
         let notices = LoadNotices {
             download,
             pooling_assumed: pooling_assumed.then(|| repo_id.to_string()),
@@ -1273,7 +1325,8 @@ mod tests {
             revision: None,
             query_prefix: None,
             doc_prefix: None,
-            pooling: None, // auto-detected → Mean
+            pooling: None,  // auto-detected → Mean
+            download: true, // ignored test: allow the fetch
         };
         let e = embedder_for(&model).expect("load gte-small").0;
         let q = e.embed_query("remove a file").expect("embed");

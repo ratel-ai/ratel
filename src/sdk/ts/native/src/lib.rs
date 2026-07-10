@@ -90,6 +90,8 @@ pub struct EmbeddingConfig {
     pub doc_prefix: Option<String>,
     /// `"cls"` | `"mean"` — overrides pooling auto-detection (in-process models).
     pub pooling: Option<String>,
+    /// Opt in to downloading a not-yet-cached HuggingFace model (default false).
+    pub download: Option<bool>,
 }
 
 /// Resolve an optional [`EmbeddingConfig`] to a core model, throwing config
@@ -108,6 +110,7 @@ fn resolve_embedding(config: Option<EmbeddingConfig>) -> napi::Result<Option<Emb
         query_prefix: c.query_prefix,
         doc_prefix: c.doc_prefix,
         pooling: c.pooling,
+        download: c.download,
     };
     EmbeddingModel::resolve(spec)
         .map(Some)

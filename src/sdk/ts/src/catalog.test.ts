@@ -206,6 +206,26 @@ describe("ToolCatalog embedding config", () => {
     ).toThrow(/pooling/);
   });
 
+  it("accepts an explicit download opt-in on a huggingface model", () => {
+    expect(
+      () =>
+        new ToolCatalog({
+          method: "semantic",
+          embedding: { huggingface: "org/m", download: true },
+        }),
+    ).not.toThrow();
+  });
+
+  it("rejects download on a non-huggingface source", () => {
+    expect(
+      () =>
+        new ToolCatalog({
+          method: "semantic",
+          embedding: { local: "/opt/models/x", download: true } as never,
+        }),
+    ).toThrow(/download/);
+  });
+
   it("warns and ignores embedding when method is bm25", () => {
     const warnings: string[] = [];
     const original = console.warn;

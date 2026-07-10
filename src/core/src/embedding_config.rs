@@ -91,13 +91,16 @@ pub enum EmbeddingModel {
     /// Built-in `bge-small-en-v1.5`, pinned. The zero-config default.
     Default,
     /// A BERT-family HuggingFace repo, loaded in-process via Candle. `revision`
-    /// defaults to `main`; `pooling` is auto-detected when `None`.
+    /// defaults to `main`; `pooling` is auto-detected when `None`. `download`
+    /// (default `false`) must be opted into for Ratel to fetch it — otherwise it
+    /// must already be in the local cache (Ratel auto-downloads only the default).
     HuggingFace {
         repo: String,
         revision: Option<String>,
         query_prefix: Option<String>,
         doc_prefix: Option<String>,
         pooling: Option<Pooling>,
+        download: bool,
     },
     /// A BERT-family model directory on disk (`config.json` / `tokenizer.json` /
     /// `model.safetensors`), loaded in-process via Candle.
@@ -140,6 +143,9 @@ pub struct EmbeddingSpec {
     pub doc_prefix: Option<String>,
     /// `"cls"` | `"mean"` — overrides auto-detection for an in-process model.
     pub pooling: Option<String>,
+    /// Opt in to letting Ratel download a HuggingFace model that is not yet
+    /// cached (default `false`; the built-in default always downloads).
+    pub download: Option<bool>,
 }
 
 fn cfg(message: impl Into<String>) -> EmbedderError {
@@ -188,6 +194,11 @@ impl EmbeddingModel {
             .map(str::parse::<Pooling>)
             .transpose()?;
 
+        // `download` is a HuggingFace-only fetch policy.
+        if spec.download.is_some() && set[0] != "huggingface" {
+            return Err(cfg("'download' is only valid for a HuggingFace repo"));
+        }
+
         match set[0] {
             "spec" => infer_from_string(spec.spec.as_deref().unwrap(), &spec, pooling),
             "huggingface" => {
@@ -198,6 +209,7 @@ impl EmbeddingModel {
                     query_prefix: spec.query_prefix,
                     doc_prefix: spec.doc_prefix,
                     pooling,
+                    download: spec.download.unwrap_or(false),
                 })
             }
             "local" => {
@@ -463,6 +475,7 @@ mod tests {
                 query_prefix: None,
                 doc_prefix: None,
                 pooling: None,
+                download: false,
             }
         );
     }
@@ -567,6 +580,7 @@ mod tests {
                 query_prefix: None,
                 doc_prefix: None,
                 pooling: None,
+                download: false,
             }
         );
     }
@@ -574,6 +588,40 @@ mod tests {
     #[test]
     fn empty_spec_is_rejected() {
         assert!(EmbeddingModel::resolve(EmbeddingSpec::default()).is_err());
+    }
+
+    #[test]
+    fn download_defaults_false_and_is_huggingface_only() {
+        // Default off — explicit HF models are cache-only unless opted in.
+        assert!(matches!(
+            EmbeddingModel::resolve(EmbeddingSpec {
+                huggingface: Some("org/m".into()),
+                ..Default::default()
+            })
+            .unwrap(),
+            EmbeddingModel::HuggingFace {
+                download: false,
+                ..
+            }
+        ));
+        // Opt in.
+        assert!(matches!(
+            EmbeddingModel::resolve(EmbeddingSpec {
+                huggingface: Some("org/m".into()),
+                download: Some(true),
+                ..Default::default()
+            })
+            .unwrap(),
+            EmbeddingModel::HuggingFace { download: true, .. }
+        ));
+        // Meaningless on a non-HF source.
+        let err = EmbeddingModel::resolve(EmbeddingSpec {
+            ollama: Some("nomic".into()),
+            download: Some(true),
+            ..Default::default()
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("download"), "got: {err}");
     }
 
     #[test]
@@ -609,6 +657,7 @@ mod tests {
                 query_prefix: None,
                 doc_prefix: None,
                 pooling: None,
+                download: false,
             }
             .configured_fingerprint(),
             "hf:r@main"

@@ -60,9 +60,14 @@ land in different vector spaces.
   round-trips would be pathological). A 404 from a localhost Ollama hints
   `ollama pull <model>`. A single sync `ureq` client with a timeout, so a stalled
   endpoint can't hang registration.
-- **Notify-then-download.** A cold HF fetch emits a `TraceEvent::EmbedderDownload`
-  with the **actual byte size** (not a hardcoded figure) plus a stderr notice, so
-  a multi-second first-run download is never silent.
+- **Ratel auto-downloads only the built-in default.** An explicitly-configured
+  HuggingFace model is **cache-only**: it must already be in the local HF cache,
+  or the caller opts in with `download=true`. A missing one errors as
+  `EmbedderError::NotCached` with a `huggingface-cli download …` hint — symmetric
+  with Ollama's "not pulled", so a `register()` never silently pulls a multi-GB
+  model on the user's behalf. When a download *does* happen (the default, or an
+  opt-in), a cold fetch emits a `TraceEvent::EmbedderDownload` with the **actual
+  byte size** plus a stderr notice, so it is never silent.
 - **Non-BERT in an in-process source** (`local`/`huggingface`) fails
   `BertModel::load` with a typed error that **signposts the endpoint/Ollama
   route** — turning a dead end into a pointer.

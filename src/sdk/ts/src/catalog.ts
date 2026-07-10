@@ -34,6 +34,9 @@ export type EmbeddingModelConfig =
       docPrefix?: string;
       /** `"cls"` | `"mean"` — overrides pooling auto-detection. */
       pooling?: "cls" | "mean";
+      /** Opt in to downloading if not already cached (default false; Ratel
+       * auto-downloads only the built-in default model). */
+      download?: boolean;
     }
   | { local: string; queryPrefix?: string; docPrefix?: string; pooling?: "cls" | "mean" }
   | { ollama: string; queryPrefix?: string; docPrefix?: string }

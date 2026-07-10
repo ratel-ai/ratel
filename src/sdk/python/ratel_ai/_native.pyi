@@ -31,6 +31,7 @@ class ToolRegistry:
         query_prefix: str | None = ...,
         doc_prefix: str | None = ...,
         pooling: str | None = ...,
+        download: bool | None = ...,
     ) -> None: ...
     def register(
         self,
@@ -85,6 +86,7 @@ class SkillRegistry:
         query_prefix: str | None = ...,
         doc_prefix: str | None = ...,
         pooling: str | None = ...,
+        download: bool | None = ...,
     ) -> None: ...
     def register(
         self,

@@ -54,23 +54,25 @@ fn resolve_embedding(
     query_prefix: Option<String>,
     doc_prefix: Option<String>,
     pooling: Option<String>,
+    download: Option<bool>,
 ) -> PyResult<Option<core::EmbeddingModel>> {
     // No fields given → no override (the default model).
-    let all_none = [
-        &spec,
-        &huggingface,
-        &local,
-        &ollama,
-        &url,
-        &model,
-        &revision,
-        &api_key_env,
-        &query_prefix,
-        &doc_prefix,
-        &pooling,
-    ]
-    .iter()
-    .all(|f| f.is_none());
+    let all_none = download.is_none()
+        && [
+            &spec,
+            &huggingface,
+            &local,
+            &ollama,
+            &url,
+            &model,
+            &revision,
+            &api_key_env,
+            &query_prefix,
+            &doc_prefix,
+            &pooling,
+        ]
+        .iter()
+        .all(|f| f.is_none());
     if all_none {
         return Ok(None);
     }
@@ -86,6 +88,7 @@ fn resolve_embedding(
         query_prefix,
         doc_prefix,
         pooling,
+        download,
     };
     core::EmbeddingModel::resolve(s)
         .map(Some)
@@ -147,7 +150,7 @@ impl ToolRegistry {
     /// semantic/hybrid model (default bge-small when none given); an invalid
     /// config raises `ValueError` here, at construction.
     #[new]
-    #[pyo3(signature = (spec=None, huggingface=None, local=None, ollama=None, url=None, model=None, revision=None, api_key_env=None, query_prefix=None, doc_prefix=None, pooling=None))]
+    #[pyo3(signature = (spec=None, huggingface=None, local=None, ollama=None, url=None, model=None, revision=None, api_key_env=None, query_prefix=None, doc_prefix=None, pooling=None, download=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         spec: Option<String>,
@@ -161,6 +164,7 @@ impl ToolRegistry {
         query_prefix: Option<String>,
         doc_prefix: Option<String>,
         pooling: Option<String>,
+        download: Option<bool>,
     ) -> PyResult<Self> {
         let inner = match resolve_embedding(
             spec,
@@ -174,6 +178,7 @@ impl ToolRegistry {
             query_prefix,
             doc_prefix,
             pooling,
+            download,
         )? {
             Some(model) => core::ToolRegistry::with_embedding(model),
             None => core::ToolRegistry::new(),
@@ -346,7 +351,7 @@ pub struct SkillRegistry {
 #[pymethods]
 impl SkillRegistry {
     #[new]
-    #[pyo3(signature = (spec=None, huggingface=None, local=None, ollama=None, url=None, model=None, revision=None, api_key_env=None, query_prefix=None, doc_prefix=None, pooling=None))]
+    #[pyo3(signature = (spec=None, huggingface=None, local=None, ollama=None, url=None, model=None, revision=None, api_key_env=None, query_prefix=None, doc_prefix=None, pooling=None, download=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         spec: Option<String>,
@@ -360,6 +365,7 @@ impl SkillRegistry {
         query_prefix: Option<String>,
         doc_prefix: Option<String>,
         pooling: Option<String>,
+        download: Option<bool>,
     ) -> PyResult<Self> {
         let inner = match resolve_embedding(
             spec,
@@ -373,6 +379,7 @@ impl SkillRegistry {
             query_prefix,
             doc_prefix,
             pooling,
+            download,
         )? {
             Some(model) => core::SkillRegistry::with_embedding(model),
             None => core::SkillRegistry::new(),

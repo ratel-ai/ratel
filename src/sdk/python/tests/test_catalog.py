@@ -168,6 +168,15 @@ def test_embedding_pooling_on_endpoint_raises() -> None:
         ToolCatalog(method="semantic", embedding={"ollama": "nomic", "pooling": "mean"})
 
 
+def test_embedding_download_opt_in_accepted() -> None:
+    ToolCatalog(method="semantic", embedding={"huggingface": "org/m", "download": True})
+
+
+def test_embedding_download_on_non_huggingface_raises() -> None:
+    with pytest.raises(ValueError, match="download"):
+        ToolCatalog(method="semantic", embedding={"local": "/opt/models/x", "download": True})
+
+
 def test_embedding_ignored_and_warns_under_bm25() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
