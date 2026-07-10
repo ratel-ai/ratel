@@ -1,5 +1,10 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
-import { type SearchHit, type Tool, ToolRegistry } from "../native/index.cjs";
+import {
+  type EmbeddingConfig as NativeEmbeddingConfig,
+  type SearchHit,
+  type Tool,
+  ToolRegistry,
+} from "../native/index.cjs";
 import { argsSizeBytes, errorMessage, traceExecuteTool, traceSearch } from "./telemetry.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: tool inputs are heterogeneous across the catalog
@@ -18,11 +23,38 @@ export type SearchOrigin = "direct" | "agent";
 
 export type SearchMethod = "bm25" | "semantic" | "hybrid";
 
+/** Object form of the embedding-model selection for semantic/hybrid retrieval.
+ * The discriminating key names the source. Prefer the string shortcut
+ * (`"org/name"` for a HuggingFace repo, `"/path"` for a local dir) for the
+ * common cases; use this object for an endpoint, or to pin a revision/prefix. */
+export type EmbeddingModelConfig =
+  | { huggingface: string; revision?: string; queryPrefix?: string }
+  | { local: string; queryPrefix?: string }
+  | { ollama: string; queryPrefix?: string }
+  | { url: string; model: string; apiKeyEnv?: string; queryPrefix?: string };
+
+/** Embedding-model selection: a string shortcut (HF repo id or local dir path)
+ * or an explicit {@link EmbeddingModelConfig} object. */
+export type EmbeddingSpec = string | EmbeddingModelConfig;
+
+/** Normalize the public string|object form into the native config the binding
+ * expects (a string becomes the inferred `spec` field). */
+function toNativeEmbedding(embedding: EmbeddingSpec): NativeEmbeddingConfig {
+  return typeof embedding === "string" ? { spec: embedding } : embedding;
+}
+
 export interface ToolCatalogOptions {
   trace?: TraceSinkConfig;
   /** Default retrieval method for `search` (default `"bm25"`, model-free). A
    * per-call `method` argument overrides it. */
   method?: SearchMethod;
+  /** Embedding model backing semantic/hybrid retrieval. A string is a
+   * HuggingFace repo id (`"BAAI/bge-base-en-v1.5"`) or a local dir path
+   * (`"/opt/models/bge"`); an object selects an endpoint (`{ ollama }` /
+   * `{ url, model }`) or pins a revision/prefix. Chosen once, used for both
+   * document and query embedding. Ignored (with a warning) when method is
+   * `"bm25"`, which needs no model. An invalid config throws at construction. */
+  embedding?: EmbeddingSpec;
 }
 
 export class ToolCatalog {
@@ -33,11 +65,19 @@ export class ToolCatalog {
   private readonly eager: boolean;
 
   constructor(options: ToolCatalogOptions = {}) {
-    this.registry = new ToolRegistry();
     this.method = options.method ?? "bm25";
     // Semantic/hybrid default → embed each tool at registration so searches
     // never pay the embedding cost. BM25 default does nothing.
     this.eager = this.method === "semantic" || this.method === "hybrid";
+    if (options.embedding && !this.eager) {
+      console.warn(
+        'ratel: `embedding` was provided but method is "bm25", which needs no model — the embedding config is ignored',
+      );
+    }
+    // A bm25 catalog ignores the model entirely (never loads it).
+    this.registry = new ToolRegistry(
+      this.eager && options.embedding ? toNativeEmbedding(options.embedding) : undefined,
+    );
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }

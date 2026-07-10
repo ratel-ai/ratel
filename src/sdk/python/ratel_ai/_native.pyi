@@ -18,7 +18,18 @@ class SearchHit:
 class ToolRegistry:
     """Metadata-only BM25 index over `ratel-ai-core`."""
 
-    def __init__(self) -> None: ...
+    def __init__(
+        self,
+        spec: str | None = ...,
+        huggingface: str | None = ...,
+        local: str | None = ...,
+        ollama: str | None = ...,
+        url: str | None = ...,
+        model: str | None = ...,
+        revision: str | None = ...,
+        api_key_env: str | None = ...,
+        query_prefix: str | None = ...,
+    ) -> None: ...
     def register(
         self,
         id: str,
@@ -42,6 +53,12 @@ class ToolRegistry:
     ) -> None: ...
     def drain_trace_events(self) -> list[dict[str, Any]]: ...
 
+class EmbedderError(RuntimeError):
+    """Embedding model load / inference failure (subclass of RuntimeError)."""
+
+class DimensionMismatchError(EmbedderError):
+    """A query/corpus embedding dimension mismatch."""
+
 class SkillHit:
     """A single skill BM25 search result."""
 
@@ -53,7 +70,18 @@ class SkillHit:
 class SkillRegistry:
     """Metadata-only BM25 index over the skill corpus (separate from tools)."""
 
-    def __init__(self) -> None: ...
+    def __init__(
+        self,
+        spec: str | None = ...,
+        huggingface: str | None = ...,
+        local: str | None = ...,
+        ollama: str | None = ...,
+        url: str | None = ...,
+        model: str | None = ...,
+        revision: str | None = ...,
+        api_key_env: str | None = ...,
+        query_prefix: str | None = ...,
+    ) -> None: ...
     def register(
         self,
         id: str,

@@ -6,12 +6,85 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use ratel_ai_core as core;
 use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
 use serde_json::Value;
+
+create_exception!(
+    _native,
+    EmbedderError,
+    PyRuntimeError,
+    "Embedding model load / inference failure (subclass of RuntimeError)."
+);
+create_exception!(
+    _native,
+    DimensionMismatchError,
+    EmbedderError,
+    "A query/corpus embedding dimension mismatch — the model changed under an existing set."
+);
+
+/// Map a core embedding error to a typed Python exception (base `EmbedderError`,
+/// with `DimensionMismatchError` for the dimension case), keeping `RuntimeError`
+/// as the common ancestor so existing `except RuntimeError` still catches them.
+fn map_embedder_err(e: core::EmbedderError) -> PyErr {
+    let msg = e.to_string();
+    match e {
+        core::EmbedderError::DimensionMismatch { .. } => DimensionMismatchError::new_err(msg),
+        _ => EmbedderError::new_err(msg),
+    }
+}
+
+/// Resolve the flat embedding-config kwargs to a core model, or `None` when none
+/// are given (→ built-in default). A config error is a construction-time
+/// `ValueError`. Mirrors the TS binding's `resolve_embedding`.
+#[allow(clippy::too_many_arguments)]
+fn resolve_embedding(
+    spec: Option<String>,
+    huggingface: Option<String>,
+    local: Option<String>,
+    ollama: Option<String>,
+    url: Option<String>,
+    model: Option<String>,
+    revision: Option<String>,
+    api_key_env: Option<String>,
+    query_prefix: Option<String>,
+) -> PyResult<Option<core::EmbeddingModel>> {
+    // No fields given → no override (the default model).
+    let all_none = [
+        &spec,
+        &huggingface,
+        &local,
+        &ollama,
+        &url,
+        &model,
+        &revision,
+        &api_key_env,
+        &query_prefix,
+    ]
+    .iter()
+    .all(|f| f.is_none());
+    if all_none {
+        return Ok(None);
+    }
+    let s = core::EmbeddingSpec {
+        spec,
+        huggingface,
+        local,
+        ollama,
+        url,
+        model,
+        revision,
+        api_key_env,
+        query_prefix,
+    };
+    core::EmbeddingModel::resolve(s)
+        .map(Some)
+        .map_err(|e| PyValueError::new_err(e.to_string()))
+}
 
 /// A single search result: the matched tool id and its BM25 score. Mirrors the
 /// TS SDK's `SearchHit` (camelCase `toolId` there → snake_case `tool_id` here).
@@ -64,12 +137,41 @@ pub struct ToolRegistry {
 
 #[pymethods]
 impl ToolRegistry {
+    /// Construct a registry. The optional embedding kwargs select the
+    /// semantic/hybrid model (default bge-small when none given); an invalid
+    /// config raises `ValueError` here, at construction.
     #[new]
-    fn new() -> Self {
-        Self {
-            inner: core::ToolRegistry::new(),
+    #[pyo3(signature = (spec=None, huggingface=None, local=None, ollama=None, url=None, model=None, revision=None, api_key_env=None, query_prefix=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        spec: Option<String>,
+        huggingface: Option<String>,
+        local: Option<String>,
+        ollama: Option<String>,
+        url: Option<String>,
+        model: Option<String>,
+        revision: Option<String>,
+        api_key_env: Option<String>,
+        query_prefix: Option<String>,
+    ) -> PyResult<Self> {
+        let inner = match resolve_embedding(
+            spec,
+            huggingface,
+            local,
+            ollama,
+            url,
+            model,
+            revision,
+            api_key_env,
+            query_prefix,
+        )? {
+            Some(model) => core::ToolRegistry::with_embedding(model),
+            None => core::ToolRegistry::new(),
+        };
+        Ok(Self {
+            inner,
             memory_sink: None,
-        }
+        })
     }
 
     fn register(
@@ -142,7 +244,7 @@ impl ToolRegistry {
         let hits = self
             .inner
             .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            .map_err(map_embedder_err)?;
         Ok(hits
             .into_iter()
             .map(|hit| SearchHit {
@@ -157,9 +259,7 @@ impl ToolRegistry {
     /// model fails to load. The catalog calls this after `register` in semantic
     /// mode; BM25-only callers never do.
     fn build_embeddings(&self) -> PyResult<()> {
-        self.inner
-            .build_embeddings()
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+        self.inner.build_embeddings().map_err(map_embedder_err)
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -236,11 +336,37 @@ pub struct SkillRegistry {
 #[pymethods]
 impl SkillRegistry {
     #[new]
-    fn new() -> Self {
-        Self {
-            inner: core::SkillRegistry::new(),
+    #[pyo3(signature = (spec=None, huggingface=None, local=None, ollama=None, url=None, model=None, revision=None, api_key_env=None, query_prefix=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        spec: Option<String>,
+        huggingface: Option<String>,
+        local: Option<String>,
+        ollama: Option<String>,
+        url: Option<String>,
+        model: Option<String>,
+        revision: Option<String>,
+        api_key_env: Option<String>,
+        query_prefix: Option<String>,
+    ) -> PyResult<Self> {
+        let inner = match resolve_embedding(
+            spec,
+            huggingface,
+            local,
+            ollama,
+            url,
+            model,
+            revision,
+            api_key_env,
+            query_prefix,
+        )? {
+            Some(model) => core::SkillRegistry::with_embedding(model),
+            None => core::SkillRegistry::new(),
+        };
+        Ok(Self {
+            inner,
             memory_sink: None,
-        }
+        })
     }
 
     // Mirrors `ToolRegistry::register`'s flat-param style (PyO3 has no by-value
@@ -311,7 +437,7 @@ impl SkillRegistry {
         let hits = self
             .inner
             .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            .map_err(map_embedder_err)?;
         Ok(hits
             .into_iter()
             .map(|hit| SkillHit {
@@ -323,9 +449,7 @@ impl SkillRegistry {
 
     /// See [`ToolRegistry::build_embeddings`].
     fn build_embeddings(&self) -> PyResult<()> {
-        self.inner
-            .build_embeddings()
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+        self.inner.build_embeddings().map_err(map_embedder_err)
     }
 
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -394,5 +518,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SearchHit>()?;
     m.add_class::<SkillRegistry>()?;
     m.add_class::<SkillHit>()?;
+    m.add("EmbedderError", m.py().get_type::<EmbedderError>())?;
+    m.add(
+        "DimensionMismatchError",
+        m.py().get_type::<DimensionMismatchError>(),
+    )?;
     Ok(())
 }

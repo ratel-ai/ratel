@@ -17,6 +17,8 @@ export {
   searchCapabilitiesTool,
 } from "./capabilities.js";
 export type {
+  EmbeddingModelConfig,
+  EmbeddingSpec,
   ExecutableTool,
   Executor,
   SearchMethod,

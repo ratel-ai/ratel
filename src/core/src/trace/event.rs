@@ -147,6 +147,21 @@ pub enum TraceEvent {
         took_ms: u64,
         reason: Option<String>,
     },
+    /// Emitted once when a configured embedding model is actually downloaded to
+    /// the HuggingFace cache (a cold fetch), carrying the real byte size — so a
+    /// multi-second first-run download is never a silent surprise. See ADR-0012.
+    EmbedderDownload {
+        model: String,
+        bytes: u64,
+    },
+    /// Emitted when a semantic/hybrid search runs against an embedding set built
+    /// with a *different* model than the one now configured (same dimension, so
+    /// no hard error). A non-blocking warning: results may be wrong until the
+    /// embeddings are rebuilt. See `dense_cache.rs` and ADR-0012.
+    EmbedderModelMismatch {
+        built: String,
+        active: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

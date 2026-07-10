@@ -34,7 +34,8 @@ parallel to `SearchOrigin`.
   change.
 - **Semantic** embeds the query with a local `BAAI/bge-small-en-v1.5` model (pure-Rust Candle,
   pinned revision, CLS-pool + L2-normalize) and cosine-ranks it against embedded tool/skill
-  text (`dense_search`). The same `searchable_text` projection feeds it.
+  text (`dense_search`). The same `searchable_text` projection feeds it. (The model is the
+  default; **ADR-0012** makes it configurable per catalog — HuggingFace/local/endpoint.)
 - **Hybrid** runs the BM25 and dense arms to a fixed retrieval depth and fuses their rankings
   by **Reciprocal Rank Fusion** (`RRF_K = 60`), no cross-encoder reranker. RRF fuses on rank
   position, so BM25's unbounded scores and cosine's `[-1, 1]` never need reconciling.

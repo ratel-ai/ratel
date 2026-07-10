@@ -5,6 +5,7 @@
 mod dense_cache;
 mod dense_search;
 mod embedding;
+mod embedding_config;
 mod fusion;
 mod indexing;
 mod method;
@@ -17,6 +18,7 @@ mod tool_registry;
 mod trace;
 
 pub use embedding::EmbedderError;
+pub use embedding_config::{EmbeddingModel, EmbeddingSpec};
 pub use method::{ParseSearchMethodError, SearchMethod};
 pub use skill::Skill;
 pub use skill_registry::{SkillHit, SkillRegistry};

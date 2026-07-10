@@ -8,11 +8,18 @@ relevance, and the matching body is fetched only on `invoke`.
 from __future__ import annotations
 
 import time
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
 from ._native import SkillHit, SkillRegistry
-from .catalog import SearchMethod, SearchOrigin, TraceSinkConfig
+from .catalog import (
+    EmbeddingSpec,
+    SearchMethod,
+    SearchOrigin,
+    TraceSinkConfig,
+    _embedding_kwargs,
+)
 from .telemetry import SEARCH_TARGET_SKILL, trace_search, trace_skill_load
 
 __all__ = ["Skill", "SkillCatalog", "SkillHit"]
@@ -44,11 +51,19 @@ class SkillCatalog:
         self,
         trace: TraceSinkConfig | None = None,
         method: SearchMethod = "bm25",
+        embedding: EmbeddingSpec | None = None,
     ) -> None:
-        self._registry = SkillRegistry()
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
         self._eager: bool = method in ("semantic", "hybrid")
+        if embedding is not None and not self._eager:
+            warnings.warn(
+                '`embedding` was provided but method is "bm25", which needs no model'
+                " — the embedding config is ignored",
+                stacklevel=2,
+            )
+        kwargs = _embedding_kwargs(embedding) if (self._eager and embedding is not None) else {}
+        self._registry = SkillRegistry(**kwargs)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 

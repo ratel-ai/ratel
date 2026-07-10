@@ -21,6 +21,7 @@ from .capabilities import (
     search_capabilities_tool,
 )
 from .catalog import (
+    EmbeddingSpec,
     ExecutableTool,
     Executor,
     SearchMethod,
@@ -33,6 +34,7 @@ from .catalog import (
 # Deprecated pre-0.2.0 surface (see compat.py) — kept so `ratel-ai==0.1.x`
 # callers keep working after upgrading to 0.2.0. Slated for removal (RAT-250).
 from .compat import SEARCH_TOOLS_ID, search_tools_tool
+from .exceptions import DimensionMismatchError, EmbedderError
 from .mcp import McpServerHandle, register_mcp_server
 from .skill_catalog import Skill, SkillCatalog
 from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
@@ -48,6 +50,9 @@ __all__ = [
     "INVOKE_TOOL_ID",
     "SEARCH_CAPABILITIES_ID",
     "SEARCH_TOOLS_ID",
+    "DimensionMismatchError",
+    "EmbedderError",
+    "EmbeddingSpec",
     "ExecutableTool",
     "Executor",
     "McpServerHandle",

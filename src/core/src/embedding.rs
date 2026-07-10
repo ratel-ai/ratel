@@ -1,28 +1,38 @@
-//! Local dense embedder — `bge-small-en-v1.5` run in-process via Candle.
+//! Dense embedders behind the semantic/hybrid engines. The model is configurable
+//! per catalog (see [`crate::embedding_config`] and ADR-0012); this module owns
+//! the two backends and the process-wide, identity-keyed embedder cache.
 //!
-//! Pure-Rust inference (no C++/ONNX native dep), so the SDK wheels/addons stay
-//! clean cross-platform. The model is BERT-family, 384-dim; we pool the `[CLS]`
-//! token of the last hidden state and L2-normalize, so cosine similarity is a
-//! dot product (see [`crate::dense_search`]). It is asymmetric: documents are
-//! embedded plain, queries with the retrieval instruction prefix below.
+//! - [`CandleEmbedder`] runs a **BERT-family** model in-process via Candle — the
+//!   built-in default (`bge-small-en-v1.5`), any HuggingFace repo, or an on-disk
+//!   directory. Pure-Rust inference (no C++/ONNX native dep) keeps the SDK
+//!   wheels/addons clean cross-platform. We pool the `[CLS]` token of the last
+//!   hidden state and L2-normalize, so cosine similarity is a dot product (see
+//!   [`crate::dense_search`]); it is asymmetric — documents plain, queries with
+//!   the model's instruction prefix.
+//! - [`EndpointEmbedder`] calls an OpenAI-compatible `/embeddings` HTTP endpoint
+//!   (OpenAI, Ollama, TEI, vLLM…) — any model, including non-BERT ones. Returned
+//!   vectors are **re-normalized** on ingestion (an arbitrary endpoint may not
+//!   normalize), so `dense_search`'s unit-vector assumption always holds.
 //!
-//! Weights are **not** bundled. On first use the model is downloaded via
-//! `hf-hub` into the shared HuggingFace cache (`~/.cache/huggingface`) at a
-//! pinned revision, then loaded from cache on every later run — offline after
-//! the first fetch, deterministic because the revision is fixed. The model is
-//! loaded once per process (kept resident for both registration and queries).
-//! See ADR-0011.
+//! In-process weights are **not** bundled: on first use a HuggingFace model is
+//! downloaded via `hf-hub` into the shared cache (`~/.cache/huggingface`,
+//! `HF_HOME`-overridable), then loaded from cache on every later run — offline
+//! after the first fetch, deterministic when the revision is pinned. Two catalogs
+//! on the same model share one resident embedder (the cache is keyed by model
+//! fingerprint); a cold download emits a [`TraceEvent::EmbedderDownload`].
 //!
-//! **Footprint & failure modes.** The resident model is ~130 MB of f32 weights
-//! plus BERT runtime buffers, and inference is CPU-only, so a constrained
+//! **Footprint & failure modes.** A resident BERT model is ~130 MB+ of f32
+//! weights plus runtime buffers, and inference is CPU-only, so a constrained
 //! machine may load or embed slowly — surfaced as a [`TraceEvent::EmbedderLoad`]
 //! with status `slow` — or, if it runs out of memory, be killed by the OS (an
 //! uncatchable SIGKILL, nothing we can flag). Load and inference are otherwise
 //! **fallible**: a failure returns a typed [`EmbedderError`] (network, unwritable
-//! cache, corrupt weights, inference) rather than aborting the process, and a
-//! failed load is **not cached**, so a later call retries once the cause clears.
+//! cache, corrupt weights, inference, dimension mismatch, config) rather than
+//! aborting the process, and a failed load is **not cached**, so a later call
+//! retries once the cause clears.
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -31,17 +41,15 @@ use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config};
 use hf_hub::api::sync::{ApiBuilder, ApiRepo};
 use hf_hub::{Repo, RepoType};
+use serde::Deserialize;
 use tokenizers::{Tokenizer, TruncationDirection, TruncationParams, TruncationStrategy};
 
+use crate::embedding_config::{DEFAULT_REPO, DEFAULT_REVISION, EmbeddingModel, OLLAMA_DEFAULT_URL};
 use crate::trace::{EmbedderLoadStatus, TraceEvent, TraceSink};
 
-/// bge asymmetric-retrieval query prefix; only the query side gets it.
-const QUERY_INSTRUCTION: &str = "Represent this sentence for searching relevant passages: ";
-
-/// HuggingFace repo and pinned commit for the embedding model. Pinning the
-/// revision keeps embeddings reproducible across machines and over time.
-const MODEL_REPO: &str = "BAAI/bge-small-en-v1.5";
-const MODEL_REVISION: &str = "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a";
+/// HTTP timeout for a single endpoint embedding request, so a stalled endpoint
+/// can't hang registration/search forever.
+const ENDPOINT_TIMEOUT_SECS: u64 = 30;
 
 /// Default cold-load latency (ms) above which the load is flagged `slow`, a hint
 /// that the machine may be underpowered. Override with `RATEL_EMBED_SLOW_MS`.
@@ -71,6 +79,19 @@ pub enum EmbedderError {
     /// built for the current corpus — `build_embeddings` was never run. No model
     /// is loaded; the caller must build the embeddings first.
     EmbeddingsNotBuilt,
+    /// A vector's dimension does not match the embedding cache's. Cosine over
+    /// mismatched dimensions is silently wrong, so this is a hard error — raised
+    /// when a query (or an endpoint's response) has a different width than the
+    /// vectors the cache was built with.
+    DimensionMismatch {
+        expected: usize,
+        got: usize,
+        model: String,
+    },
+    /// The embedding configuration is invalid — a bad source combination, a
+    /// missing required field, or a named `api_key_env` that is not set. Surfaced
+    /// at catalog construction or on first use.
+    Config { message: String },
 }
 
 impl EmbedderError {
@@ -89,6 +110,12 @@ impl EmbedderError {
             }
             EmbedderError::EmbeddingsNotBuilt => {
                 "construct the catalog with method=\"semantic\"/\"hybrid\", or build its embeddings first"
+            }
+            EmbedderError::DimensionMismatch { .. } => {
+                "the model changed under an existing embedding set; rebuild with build_embeddings()"
+            }
+            EmbedderError::Config { .. } => {
+                "give exactly one embedding source (a model id / path / url) with its required fields"
             }
         }
     }
@@ -113,6 +140,15 @@ impl std::fmt::Display for EmbedderError {
             EmbedderError::Inference { source } => {
                 write!(f, "embedding failed: {source} (hint: {hint})")
             }
+            EmbedderError::DimensionMismatch {
+                expected,
+                got,
+                model,
+            } => write!(
+                f,
+                "embedding dimension mismatch for {model}: expected {expected}, got {got} (hint: {hint})"
+            ),
+            EmbedderError::Config { message } => write!(f, "{message} (hint: {hint})"),
             EmbedderError::EmbeddingsNotBuilt => {
                 write!(
                     f,
@@ -126,42 +162,114 @@ impl std::fmt::Display for EmbedderError {
 impl std::error::Error for EmbedderError {}
 
 /// Maps a tool's searchable text (and a query) to an L2-normalized vector.
-/// A trait so the model is swappable — MiniLM or a static model can be dropped
-/// in as alternate benchmark arms without touching the registry.
+/// A trait so the model is swappable — a HuggingFace/local BERT model or a
+/// remote endpoint can back the same registries without touching them.
 pub(crate) trait Embedder: Send + Sync {
     fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError>;
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError>;
+
+    /// Embed a batch of documents. The default loops `embed_doc` (fine for an
+    /// in-process model); an endpoint embedder overrides it with a single HTTP
+    /// request, since registration embeds the whole corpus and per-doc
+    /// round-trips over the wire would be pathological.
+    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+        texts.iter().map(|t| self.embed_doc(t)).collect()
+    }
+
+    /// Resolved model identity (concrete HF revision/SHA, `local:<path>`, or
+    /// `endpoint:<url>#<model>`) — stamped on the dense cache so a later model
+    /// swap over an existing embedding set is detectable. Test stubs use the
+    /// default.
+    fn fingerprint(&self) -> String {
+        "unknown".to_string()
+    }
 }
 
-/// Process-wide embedder, loaded once on first use. A failed load is **not**
-/// cached (the slot stays empty), so a later call retries — a transient network
-/// blip must not poison the model for the whole process. Returns the shared
-/// embedder plus the cold-load latency: `Some(ms)` only on the call that
-/// actually loaded, `None` on warm reuse, so load telemetry fires exactly once.
-pub(crate) fn embedder() -> Result<(Arc<dyn Embedder>, Option<u64>), EmbedderError> {
-    static CELL: OnceLock<Mutex<Option<Arc<BgeSmallEmbedder>>>> = OnceLock::new();
-    let slot = CELL.get_or_init(|| Mutex::new(None));
-    let (emb, load_ms) = get_or_load(slot, BgeSmallEmbedder::load)?;
-    let emb: Arc<dyn Embedder> = emb;
-    Ok((emb, load_ms))
+/// A one-time notice that the embedding model was actually downloaded (cold HF
+/// cache), carrying the real byte size — surfaced so a multi-second first-run
+/// fetch is never a silent surprise.
+struct DownloadNotice {
+    model: String,
+    bytes: u64,
 }
 
-/// Load-once-into-a-slot with **no failure caching**: on `Err` the slot stays
-/// empty so a later call retries. Returns the value plus `Some(load_ms)` on the
-/// call that performed the load, `None` on warm reuse. Generic so the
-/// non-poisoning contract is unit-tested without touching the network.
-fn get_or_load<T, E>(
-    slot: &Mutex<Option<Arc<T>>>,
-    load: impl FnOnce() -> Result<T, E>,
-) -> Result<(Arc<T>, Option<u64>), E> {
-    let mut guard = slot.lock().expect("embedder mutex poisoned");
-    if let Some(existing) = guard.as_ref() {
+/// Process-wide embedder cache, **keyed by model identity**, loaded once per
+/// model on first use. Two catalogs on the same model share one resident
+/// embedder; different models coexist. A failed load is **not** cached (the key
+/// stays empty), so a later call retries — a transient network blip must not
+/// poison a model for the whole process. Returns the embedder, the cold-load
+/// latency (`Some` only on the loading call), and a download notice (`Some` only
+/// when a cold HF fetch actually downloaded).
+/// A resolved embedder plus one-time cold-load telemetry: the load latency
+/// (`Some` on the loading call) and a download notice (`Some` on a cold HF fetch).
+type ResolvedEmbedder = (Arc<dyn Embedder>, Option<u64>, Option<DownloadNotice>);
+
+fn embedder_for(model: &EmbeddingModel) -> Result<ResolvedEmbedder, EmbedderError> {
+    static CELL: OnceLock<Mutex<HashMap<String, Arc<dyn Embedder>>>> = OnceLock::new();
+    let cache = CELL.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut notice: Option<DownloadNotice> = None;
+    let (emb, load_ms) = get_or_load_keyed(cache, &model.configured_fingerprint(), || {
+        let (emb, n) = build_embedder(model)?;
+        notice = n;
+        Ok(emb)
+    })?;
+    Ok((emb, load_ms, notice))
+}
+
+/// Construct the embedder for a model (may hit the network/disk). Returns a
+/// download notice alongside when a cold HF fetch downloaded weights.
+fn build_embedder(
+    model: &EmbeddingModel,
+) -> Result<(Arc<dyn Embedder>, Option<DownloadNotice>), EmbedderError> {
+    let prefix = model.query_prefix();
+    match model {
+        EmbeddingModel::Default => {
+            let (e, n) = CandleEmbedder::load_hf(DEFAULT_REPO, DEFAULT_REVISION, prefix)?;
+            Ok((Arc::new(e), n))
+        }
+        EmbeddingModel::HuggingFace { repo, revision, .. } => {
+            let (e, n) =
+                CandleEmbedder::load_hf(repo, revision.as_deref().unwrap_or("main"), prefix)?;
+            Ok((Arc::new(e), n))
+        }
+        EmbeddingModel::Local { path, .. } => {
+            let e = CandleEmbedder::load_path(path, prefix)?;
+            Ok((Arc::new(e), None))
+        }
+        EmbeddingModel::Endpoint {
+            url,
+            model,
+            api_key_env,
+            ..
+        } => {
+            let e = EndpointEmbedder::new(
+                url.clone(),
+                model.clone(),
+                api_key_env.clone(),
+                prefix.into(),
+            )?;
+            Ok((Arc::new(e), None))
+        }
+    }
+}
+
+/// Get-or-load into a keyed cache with **no failure caching**: on `Err` the key
+/// stays empty so a later call retries. Returns the value plus `Some(load_ms)`
+/// on the call that performed the load, `None` on warm reuse. Generic so the
+/// non-poisoning + once contract is unit-tested without touching the network.
+fn get_or_load_keyed<T: ?Sized>(
+    cache: &Mutex<HashMap<String, Arc<T>>>,
+    key: &str,
+    load: impl FnOnce() -> Result<Arc<T>, EmbedderError>,
+) -> Result<(Arc<T>, Option<u64>), EmbedderError> {
+    let mut guard = cache.lock().expect("embedder cache mutex poisoned");
+    if let Some(existing) = guard.get(key) {
         return Ok((existing.clone(), None));
     }
     let started = Instant::now();
-    let loaded = Arc::new(load()?);
+    let loaded = load()?;
     let took_ms = started.elapsed().as_millis() as u64;
-    *guard = Some(loaded.clone());
+    guard.insert(key.to_string(), loaded.clone());
     Ok((loaded, Some(took_ms)))
 }
 
@@ -170,13 +278,20 @@ fn get_or_load<T, E>(
 /// the [`TraceEvent::EmbedderLoad`] flag is emitted from the layer that owns a
 /// sink; the embedder itself stays sink-agnostic.
 pub(crate) fn embedder_with_telemetry(
+    model: &EmbeddingModel,
     sink: &dyn TraceSink,
 ) -> Result<Arc<dyn Embedder>, EmbedderError> {
-    let (result, load_ms) = match embedder() {
-        Ok((emb, ms)) => (Ok(emb), ms),
-        Err(e) => (Err(e), None),
+    let display = model.display_name();
+    let (result, load_ms, notice) = match embedder_for(model) {
+        Ok((emb, ms, notice)) => (Ok(emb), ms, notice),
+        Err(e) => (Err(e), None, None),
     };
-    if let Some(event) = embedder_load_event(load_ms, result.as_ref().err()) {
+    if let Some(DownloadNotice { model, bytes }) = notice {
+        let mb = bytes as f64 / 1_048_576.0;
+        eprintln!("ratel: downloaded embedding model {model} ({mb:.0} MB, one-time)");
+        sink.record(TraceEvent::EmbedderDownload { model, bytes });
+    }
+    if let Some(event) = embedder_load_event(&display, load_ms, result.as_ref().err()) {
         if let TraceEvent::EmbedderLoad {
             status,
             took_ms,
@@ -198,10 +313,14 @@ pub(crate) fn embedder_with_telemetry(
 /// Decide the load-telemetry event for a cold-load outcome. `None` on warm reuse
 /// (no `load_ms`, no error). Pure, so the slow/failed thresholding is unit-tested
 /// without the network.
-fn embedder_load_event(load_ms: Option<u64>, error: Option<&EmbedderError>) -> Option<TraceEvent> {
+fn embedder_load_event(
+    model: &str,
+    load_ms: Option<u64>,
+    error: Option<&EmbedderError>,
+) -> Option<TraceEvent> {
     match (load_ms, error) {
         (_, Some(err)) => Some(TraceEvent::EmbedderLoad {
-            model: MODEL_REPO.to_string(),
+            model: model.to_string(),
             status: EmbedderLoadStatus::Failed,
             took_ms: load_ms.unwrap_or(0),
             reason: Some(err.to_string()),
@@ -209,7 +328,7 @@ fn embedder_load_event(load_ms: Option<u64>, error: Option<&EmbedderError>) -> O
         (Some(ms), None) => {
             let slow = ms > slow_load_ms();
             Some(TraceEvent::EmbedderLoad {
-                model: MODEL_REPO.to_string(),
+                model: model.to_string(),
                 status: if slow {
                     EmbedderLoadStatus::Slow
                 } else {
@@ -230,44 +349,119 @@ fn slow_load_ms() -> u64 {
         .unwrap_or(DEFAULT_SLOW_LOAD_MS)
 }
 
-pub(crate) struct BgeSmallEmbedder {
+/// A BERT-family embedding model run in-process via Candle — the backend for the
+/// built-in default, any HuggingFace repo, and any on-disk model directory.
+/// Carries its query prefix (asymmetric retrieval) and a resolved fingerprint.
+pub(crate) struct CandleEmbedder {
     model: BertModel,
     tokenizer: Tokenizer,
     device: Device,
+    query_prefix: String,
+    fingerprint: String,
 }
 
-impl BgeSmallEmbedder {
-    fn load() -> Result<Self, EmbedderError> {
-        Self::load_from(MODEL_REPO, MODEL_REVISION)
-    }
-
-    /// Parameterized loader (repo + revision) so tests can force a deterministic
-    /// download failure against a bogus revision without hardcoding the default.
-    fn load_from(repo_id: &str, revision: &str) -> Result<Self, EmbedderError> {
+impl CandleEmbedder {
+    /// Load a BERT-family model from a HuggingFace repo, downloading the three
+    /// model files to the shared HF cache on first use. `from_env` honors
+    /// `HF_HOME` (cache location) and `HF_ENDPOINT` (mirror / offline proxy).
+    /// Returns a [`DownloadNotice`] only when the fetch was cold (an actual
+    /// download), sized from the fetched files.
+    fn load_hf(
+        repo_id: &str,
+        revision: &str,
+        query_prefix: &str,
+    ) -> Result<(Self, Option<DownloadNotice>), EmbedderError> {
         let device = Device::Cpu;
+        let repo_spec =
+            Repo::with_revision(repo_id.to_string(), RepoType::Model, revision.to_string());
 
-        // Resolve the three model files from the HuggingFace cache, downloading
-        // them on first use. `get` returns a path to the cached blob; with a
-        // pinned revision, later runs hit the cache without re-downloading.
-        // `from_env` honors `HF_HOME` (cache location) and `HF_ENDPOINT` (mirror
-        // / offline proxy) — see the `CacheUnwritable` hint and offline setups.
+        // Cold-cache detection *before* fetching, so we only announce a real
+        // download: `Cache` reads the cache without downloading.
+        let was_cached = hf_hub::Cache::from_env()
+            .repo(repo_spec.clone())
+            .get("model.safetensors")
+            .is_some();
+
         let api = ApiBuilder::from_env()
             .build()
             .map_err(|e| EmbedderError::Download {
                 model: repo_id.to_string(),
                 source: e.to_string(),
             })?;
-        let repo = api.repo(Repo::with_revision(
-            repo_id.to_string(),
-            RepoType::Model,
-            revision.to_string(),
-        ));
+        let repo = api.repo(repo_spec);
         let config_path = fetch_cached(&repo, "config.json", repo_id)?;
         let tokenizer_path = fetch_cached(&repo, "tokenizer.json", repo_id)?;
         let weights_path = fetch_cached(&repo, "model.safetensors", repo_id)?;
 
-        let load_err = |source: String| EmbedderError::Load {
+        let notice = (!was_cached).then(|| DownloadNotice {
             model: repo_id.to_string(),
+            bytes: [&config_path, &tokenizer_path, &weights_path]
+                .iter()
+                .filter_map(|p| std::fs::metadata(p).ok().map(|m| m.len()))
+                .sum(),
+        });
+
+        // Resolve `main` (or any ref) to the concrete commit so the fingerprint
+        // pins a real snapshot, not a moving label.
+        let sha = snapshot_sha(&weights_path).unwrap_or_else(|| revision.to_string());
+        let fingerprint = format!("hf:{repo_id}@{sha}");
+        let embedder = Self::build(
+            device,
+            &config_path,
+            &tokenizer_path,
+            &weights_path,
+            query_prefix,
+            fingerprint,
+            repo_id,
+        )?;
+        Ok((embedder, notice))
+    }
+
+    /// Load a BERT-family model directly from a directory of files (no hf-hub,
+    /// no network) — the air-gapped / bring-your-own-checkpoint path.
+    fn load_path(dir: &Path, query_prefix: &str) -> Result<Self, EmbedderError> {
+        let device = Device::Cpu;
+        let name = dir.display().to_string();
+        let config_path = dir.join("config.json");
+        let tokenizer_path = dir.join("tokenizer.json");
+        let weights_path = dir.join("model.safetensors");
+        for (p, f) in [
+            (&config_path, "config.json"),
+            (&tokenizer_path, "tokenizer.json"),
+            (&weights_path, "model.safetensors"),
+        ] {
+            if !p.exists() {
+                return Err(EmbedderError::Load {
+                    model: name.clone(),
+                    source: format!("missing {f} in {name}"),
+                });
+            }
+        }
+        let fingerprint = format!("local:{name}");
+        Self::build(
+            device,
+            &config_path,
+            &tokenizer_path,
+            &weights_path,
+            query_prefix,
+            fingerprint,
+            &name,
+        )
+    }
+
+    /// Shared file→model build. A non-BERT checkpoint fails `BertModel::load`;
+    /// the error signposts the endpoint/Ollama route (any model can run there).
+    fn build(
+        device: Device,
+        config_path: &Path,
+        tokenizer_path: &Path,
+        weights_path: &Path,
+        query_prefix: &str,
+        fingerprint: String,
+        model_name: &str,
+    ) -> Result<Self, EmbedderError> {
+        let load_err = |source: String| EmbedderError::Load {
+            model: model_name.to_string(),
             source,
         };
 
@@ -293,11 +487,20 @@ impl BgeSmallEmbedder {
             VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
                 .map_err(|e| load_err(e.to_string()))?
         };
-        let model = BertModel::load(vb, &config).map_err(|e| load_err(e.to_string()))?;
+        let model = BertModel::load(vb, &config).map_err(|e| EmbedderError::Load {
+            model: model_name.to_string(),
+            source: format!(
+                "{e} — if this is not a BERT-family model it can't run in-process; \
+                 serve it in a local model server and use {{\"ollama\": \"…\"}} or \
+                 {{\"url\", \"model\"}} (e.g. Ollama at {OLLAMA_DEFAULT_URL})"
+            ),
+        })?;
         Ok(Self {
             model,
             tokenizer,
             device,
+            query_prefix: query_prefix.to_string(),
+            fingerprint,
         })
     }
 
@@ -329,13 +532,203 @@ impl BgeSmallEmbedder {
     }
 }
 
-impl Embedder for BgeSmallEmbedder {
+impl Embedder for CandleEmbedder {
     fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
         self.embed(text)
     }
 
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
-        self.embed(&format!("{QUERY_INSTRUCTION}{text}"))
+        if self.query_prefix.is_empty() {
+            self.embed(text)
+        } else {
+            self.embed(&format!("{}{}", self.query_prefix, text))
+        }
+    }
+
+    fn fingerprint(&self) -> String {
+        self.fingerprint.clone()
+    }
+}
+
+/// The concrete commit SHA a HuggingFace fetch resolved to, read from the cached
+/// snapshot path (`…/snapshots/<sha>/<file>`). `None` if the path isn't in that
+/// layout — the caller falls back to the requested revision string.
+fn snapshot_sha(weights_path: &Path) -> Option<String> {
+    let name = weights_path.parent()?.file_name()?.to_str()?;
+    (name.len() == 40 && name.chars().all(|c| c.is_ascii_hexdigit())).then(|| name.to_string())
+}
+
+/// OpenAI-compatible HTTP embedding endpoint (OpenAI, Ollama, TEI, vLLM…). Any
+/// model can back it, including non-BERT ones the in-process path can't run.
+/// Vectors are **re-normalized on ingestion** — an arbitrary endpoint may return
+/// un-normalized embeddings, and `dense_search` assumes unit vectors.
+pub(crate) struct EndpointEmbedder {
+    url: String,
+    model: String,
+    api_key_env: Option<String>,
+    query_prefix: String,
+    agent: ureq::Agent,
+    fingerprint: String,
+}
+
+/// OpenAI `/embeddings` response shape: `{ "data": [{ "embedding": [...], "index": n }] }`.
+#[derive(Deserialize)]
+struct EmbeddingsResponse {
+    data: Vec<EmbeddingData>,
+}
+
+#[derive(Deserialize)]
+struct EmbeddingData {
+    embedding: Vec<f32>,
+    #[serde(default)]
+    index: usize,
+}
+
+impl EndpointEmbedder {
+    fn new(
+        url: String,
+        model: String,
+        api_key_env: Option<String>,
+        query_prefix: String,
+    ) -> Result<Self, EmbedderError> {
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(ENDPOINT_TIMEOUT_SECS)))
+            .build()
+            .into();
+        let fingerprint = format!("endpoint:{url}#{model}");
+        Ok(Self {
+            url,
+            model,
+            api_key_env,
+            query_prefix,
+            agent,
+            fingerprint,
+        })
+    }
+
+    /// Read the API key from the named env var (at call time, so it can be set
+    /// after construction). A named-but-unset var is a clear `Config` error, not
+    /// a downstream 401.
+    fn api_key(&self) -> Result<Option<String>, EmbedderError> {
+        match &self.api_key_env {
+            None => Ok(None),
+            Some(var) => std::env::var(var)
+                .map(Some)
+                .map_err(|_| EmbedderError::Config {
+                    message: format!(
+                        "api_key_env=\"{var}\" but that environment variable is not set"
+                    ),
+                }),
+        }
+    }
+
+    fn request(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+        let key = self.api_key()?;
+        let body = serde_json::json!({ "model": self.model, "input": inputs });
+        let mut req = self
+            .agent
+            .post(&self.url)
+            .header("content-type", "application/json");
+        if let Some(k) = key {
+            req = req.header("authorization", &format!("Bearer {k}"));
+        }
+        let mut resp = req.send_json(&body).map_err(|e| self.classify(e))?;
+        let parsed: EmbeddingsResponse =
+            resp.body_mut()
+                .read_json()
+                .map_err(|e| EmbedderError::Inference {
+                    source: format!("malformed endpoint response: {e}"),
+                })?;
+        parse_embeddings(parsed, inputs.len())
+    }
+
+    /// Map an endpoint transport/HTTP error to a typed `EmbedderError`, with an
+    /// `ollama pull` hint on a 404 from a local Ollama.
+    fn classify(&self, e: ureq::Error) -> EmbedderError {
+        let status = match &e {
+            ureq::Error::StatusCode(code) => Some(*code),
+            _ => None,
+        };
+        match status {
+            Some(401) | Some(403) => EmbedderError::Config {
+                message: format!(
+                    "endpoint rejected the request ({}); check api_key_env / the key",
+                    status.unwrap()
+                ),
+            },
+            Some(404) => {
+                let is_local_ollama =
+                    self.url.contains("localhost:11434") || self.url.contains("127.0.0.1:11434");
+                let hint = if is_local_ollama {
+                    format!(" — run: ollama pull {}", self.model)
+                } else {
+                    String::new()
+                };
+                EmbedderError::Download {
+                    model: self.model.clone(),
+                    source: format!("endpoint returned 404 for model '{}'{hint}", self.model),
+                }
+            }
+            _ => EmbedderError::Download {
+                model: self.model.clone(),
+                source: e.to_string(),
+            },
+        }
+    }
+}
+
+/// Turn a parsed endpoint response into ordered, L2-normalized vectors. Pure, so
+/// the ordering + normalization guard is unit-tested without the network.
+fn parse_embeddings(
+    mut resp: EmbeddingsResponse,
+    expected_len: usize,
+) -> Result<Vec<Vec<f32>>, EmbedderError> {
+    if resp.data.len() != expected_len {
+        return Err(EmbedderError::Inference {
+            source: format!(
+                "endpoint returned {} embeddings for {expected_len} inputs",
+                resp.data.len()
+            ),
+        });
+    }
+    resp.data.sort_by_key(|d| d.index);
+    Ok(resp
+        .data
+        .into_iter()
+        .map(|d| l2_normalize(d.embedding))
+        .collect())
+}
+
+impl Embedder for EndpointEmbedder {
+    fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+        self.embed_batch(std::slice::from_ref(&text.to_string()))?
+            .into_iter()
+            .next()
+            .ok_or_else(|| EmbedderError::Inference {
+                source: "endpoint returned no embedding".into(),
+            })
+    }
+
+    fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+        let q = if self.query_prefix.is_empty() {
+            text.to_string()
+        } else {
+            format!("{}{}", self.query_prefix, text)
+        };
+        self.request(&[q])?
+            .into_iter()
+            .next()
+            .ok_or_else(|| EmbedderError::Inference {
+                source: "endpoint returned no embedding".into(),
+            })
+    }
+
+    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+        self.request(texts)
+    }
+
+    fn fingerprint(&self) -> String {
+        self.fingerprint.clone()
     }
 }
 
@@ -472,16 +865,23 @@ mod tests {
     }
 
     #[test]
-    fn get_or_load_does_not_cache_failure_and_reports_latency_once() {
-        let slot: Mutex<Option<Arc<i32>>> = Mutex::new(None);
+    fn get_or_load_keyed_does_not_cache_failure_and_reports_latency_once() {
+        let cache: Mutex<HashMap<String, Arc<i32>>> = Mutex::new(HashMap::new());
+        let boom = || {
+            Err::<Arc<i32>, _>(EmbedderError::Inference {
+                source: "boom".into(),
+            })
+        };
         // A failed load must NOT be cached.
-        assert!(get_or_load(&slot, || Err::<i32, &str>("boom")).is_err());
+        assert!(get_or_load_keyed(&cache, "k", boom).is_err());
         // The next call retries and loads; it reports the load latency.
-        let (v, ms) = get_or_load(&slot, || Ok::<i32, &str>(7)).unwrap();
+        let (v, ms) =
+            get_or_load_keyed(&cache, "k", || Ok::<_, EmbedderError>(Arc::new(7))).unwrap();
         assert_eq!(*v, 7);
         assert!(ms.is_some(), "the loading call reports latency");
         // Warm reuse keeps the first value and reports no latency.
-        let (v2, ms2) = get_or_load(&slot, || Ok::<i32, &str>(999)).unwrap();
+        let (v2, ms2) =
+            get_or_load_keyed(&cache, "k", || Ok::<_, EmbedderError>(Arc::new(999))).unwrap();
         assert_eq!(*v2, 7);
         assert!(ms2.is_none(), "warm reuse reports no load latency");
     }
@@ -490,7 +890,7 @@ mod tests {
     fn load_event_flags_slow_ok_failed_and_warm() {
         // Above the 5s default → slow (underpowered-machine flag).
         assert!(matches!(
-            embedder_load_event(Some(10_000), None),
+            embedder_load_event("m", Some(10_000), None),
             Some(TraceEvent::EmbedderLoad {
                 status: EmbedderLoadStatus::Slow,
                 took_ms: 10_000,
@@ -499,7 +899,7 @@ mod tests {
         ));
         // Comfortably under → ok.
         assert!(matches!(
-            embedder_load_event(Some(5), None),
+            embedder_load_event("m", Some(5), None),
             Some(TraceEvent::EmbedderLoad {
                 status: EmbedderLoadStatus::Ok,
                 ..
@@ -508,20 +908,71 @@ mod tests {
         // A load error → failed, carrying the reason.
         let err = EmbedderError::Inference { source: "x".into() };
         assert!(matches!(
-            embedder_load_event(None, Some(&err)),
+            embedder_load_event("m", None, Some(&err)),
             Some(TraceEvent::EmbedderLoad {
                 status: EmbedderLoadStatus::Failed,
                 ..
             })
         ));
         // Warm reuse → no event.
-        assert!(embedder_load_event(None, None).is_none());
+        assert!(embedder_load_event("m", None, None).is_none());
+    }
+
+    #[test]
+    fn endpoint_embeddings_are_normalized_and_ordered_by_index() {
+        // An endpoint may return un-normalized vectors in any order; ingestion
+        // must L2-normalize (so cosine==dot holds) and restore index order.
+        let resp = EmbeddingsResponse {
+            data: vec![
+                EmbeddingData {
+                    embedding: vec![0.0, 3.0], // index 1, un-normalized
+                    index: 1,
+                },
+                EmbeddingData {
+                    embedding: vec![4.0, 0.0], // index 0, un-normalized
+                    index: 0,
+                },
+            ],
+        };
+        let out = parse_embeddings(resp, 2).expect("parse");
+        assert_eq!(out[0], vec![1.0, 0.0], "index 0 first, normalized");
+        assert_eq!(out[1], vec![0.0, 1.0], "index 1 second, normalized");
+    }
+
+    #[test]
+    fn endpoint_response_count_mismatch_errors() {
+        let resp = EmbeddingsResponse {
+            data: vec![EmbeddingData {
+                embedding: vec![1.0],
+                index: 0,
+            }],
+        };
+        assert!(matches!(
+            parse_embeddings(resp, 2),
+            Err(EmbedderError::Inference { .. })
+        ));
+    }
+
+    #[test]
+    fn endpoint_missing_api_key_env_is_a_config_error() {
+        let e = EndpointEmbedder::new(
+            "http://localhost:11434/v1/embeddings".into(),
+            "nomic".into(),
+            Some("RATEL_TEST_DEFINITELY_UNSET_KEY".into()),
+            String::new(),
+        )
+        .unwrap();
+        let err = e.api_key().unwrap_err();
+        assert!(matches!(err, EmbedderError::Config { .. }));
+        assert!(err.to_string().contains("RATEL_TEST_DEFINITELY_UNSET_KEY"));
     }
 
     #[test]
     #[ignore = "downloads the ~130 MB bge model; run with `cargo test -- --ignored`"]
     fn embeds_to_unit_norm_384_vectors_deterministically() {
-        let (e, _) = embedder().expect("load embedder");
+        let e = embedder_for(&EmbeddingModel::Default)
+            .expect("load embedder")
+            .0;
         let a = e.embed_doc("read a file from disk").expect("embed");
         let b = e.embed_doc("read a file from disk").expect("embed");
         assert_eq!(a.len(), 384, "bge-small is 384-dim");
@@ -533,7 +984,9 @@ mod tests {
     #[test]
     #[ignore = "downloads the ~130 MB bge model; run with `cargo test -- --ignored`"]
     fn query_prefix_changes_the_embedding() {
-        let (e, _) = embedder().expect("load embedder");
+        let e = embedder_for(&EmbeddingModel::Default)
+            .expect("load embedder")
+            .0;
         let doc = e.embed_doc("delete a file").expect("embed");
         let query = e.embed_query("delete a file").expect("embed");
         assert_ne!(doc, query, "query instruction prefix must shift the vector");
@@ -543,7 +996,9 @@ mod tests {
     #[ignore = "downloads the ~130 MB bge model; run with `cargo test -- --ignored`"]
     fn ranks_synonyms_above_lexically_unrelated_text() {
         // The "missing gold" case BM25 can't see: query and doc share no words.
-        let (e, _) = embedder().expect("load embedder");
+        let e = embedder_for(&EmbeddingModel::Default)
+            .expect("load embedder")
+            .0;
         let q = e.embed_query("remove a file").expect("embed");
         let delete = e
             .embed_doc("delete a path from the filesystem")

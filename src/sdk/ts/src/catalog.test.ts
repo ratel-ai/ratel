@@ -141,6 +141,50 @@ describe("ToolCatalog search methods", () => {
   });
 });
 
+describe("ToolCatalog embedding config", () => {
+  it("accepts a bm25 catalog with no embedding (default model, no load)", () => {
+    // Construction must not load a model; offline-safe.
+    expect(() => new ToolCatalog()).not.toThrow();
+  });
+
+  it("throws at construction on an invalid embedding config (bare url, no model)", () => {
+    expect(
+      () =>
+        new ToolCatalog({ method: "semantic", embedding: "https://api.openai.com/v1/embeddings" }),
+    ).toThrow(/model/);
+  });
+
+  it("throws at construction on a conflicting endpoint config", () => {
+    expect(
+      () =>
+        new ToolCatalog({
+          method: "semantic",
+          // ollama shorthand and an explicit url are contradictory
+          embedding: {
+            ollama: "nomic",
+            url: "http://h:11434/v1/embeddings",
+            model: "nomic",
+          } as never,
+        }),
+    ).toThrow(/conflicting/);
+  });
+
+  it("warns and ignores embedding when method is bm25", () => {
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (msg: string) => warnings.push(msg);
+    try {
+      // A HF repo id is a valid config; with bm25 it must be ignored (no load).
+      const catalog = new ToolCatalog({ embedding: "BAAI/bge-base-en-v1.5" });
+      catalog.register(readFile);
+      expect(catalog.search("read", 5)).toBeDefined(); // bm25, no model
+    } finally {
+      console.warn = original;
+    }
+    expect(warnings.some((w) => /embedding.*bm25/.test(w))).toBe(true);
+  });
+});
+
 describe("ToolCatalog tracing", () => {
   it("does not capture events when no trace sink is configured (default noop)", () => {
     const catalog = new ToolCatalog();

@@ -5,6 +5,7 @@ use indexmap::IndexMap;
 
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
+use crate::embedding_config::EmbeddingModel;
 use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
 use crate::indexing::searchable_text;
 use crate::method::SearchMethod;
@@ -62,6 +63,17 @@ impl ToolRegistry {
             tools: IndexMap::new(),
             sink,
             dense: DenseCache::new(),
+        }
+    }
+
+    /// A registry whose semantic/hybrid engines use an explicit embedding model
+    /// (the configurable-model path). BM25 is unaffected — it needs no model.
+    /// The trace sink is still set separately via [`Self::set_trace_sink`].
+    pub fn with_embedding(model: EmbeddingModel) -> Self {
+        Self {
+            tools: IndexMap::new(),
+            sink: Arc::new(NoopSink),
+            dense: DenseCache::with_model(model),
         }
     }
 

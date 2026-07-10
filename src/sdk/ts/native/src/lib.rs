@@ -7,7 +7,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use ratel_ai_core as core;
-use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, SearchMethod, TraceEvent};
+use ratel_ai_core::{
+    EmbeddingModel, EmbeddingSpec, JsonlSink, MemorySink, NoopSink, Origin, SearchMethod,
+    TraceEvent,
+};
 use serde_json::Value;
 
 /// A constructed sink plus the `MemorySink` handle when the kind is `"memory"`
@@ -69,6 +72,43 @@ pub struct TraceSinkConfig {
     pub path: Option<String>,
 }
 
+/// Cross-SDK embedding-model config. The high-level catalog normalizes the
+/// public `string | object` form into these fields; core [`EmbeddingModel::resolve`]
+/// infers/validates the source. Exactly one of `spec`/`huggingface`/`local`/
+/// `ollama`/`url` is a primary source; the rest are modifiers.
+#[napi(object)]
+pub struct EmbeddingConfig {
+    pub spec: Option<String>,
+    pub huggingface: Option<String>,
+    pub local: Option<String>,
+    pub ollama: Option<String>,
+    pub url: Option<String>,
+    pub model: Option<String>,
+    pub revision: Option<String>,
+    pub api_key_env: Option<String>,
+    pub query_prefix: Option<String>,
+}
+
+/// Resolve an optional [`EmbeddingConfig`] to a core model, throwing config
+/// errors at construction. `None` → the built-in default (no override).
+fn resolve_embedding(config: Option<EmbeddingConfig>) -> napi::Result<Option<EmbeddingModel>> {
+    let Some(c) = config else { return Ok(None) };
+    let spec = EmbeddingSpec {
+        spec: c.spec,
+        huggingface: c.huggingface,
+        local: c.local,
+        ollama: c.ollama,
+        url: c.url,
+        model: c.model,
+        revision: c.revision,
+        api_key_env: c.api_key_env,
+        query_prefix: c.query_prefix,
+    };
+    EmbeddingModel::resolve(spec)
+        .map(Some)
+        .map_err(|e| napi::Error::from_reason(e.to_string()))
+}
+
 #[napi]
 pub struct ToolRegistry {
     inner: core::ToolRegistry,
@@ -77,13 +117,19 @@ pub struct ToolRegistry {
 
 #[napi]
 impl ToolRegistry {
+    /// Construct a registry. An optional `embedding` config selects the
+    /// semantic/hybrid model (default bge-small when omitted); an invalid config
+    /// throws here, at construction.
     #[napi(constructor)]
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self {
-            inner: core::ToolRegistry::new(),
+    pub fn new(embedding: Option<EmbeddingConfig>) -> napi::Result<Self> {
+        let inner = match resolve_embedding(embedding)? {
+            Some(model) => core::ToolRegistry::with_embedding(model),
+            None => core::ToolRegistry::new(),
+        };
+        Ok(Self {
+            inner,
             memory_sink: None,
-        }
+        })
     }
 
     #[napi]
@@ -234,12 +280,15 @@ pub struct SkillRegistry {
 #[napi]
 impl SkillRegistry {
     #[napi(constructor)]
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self {
-            inner: core::SkillRegistry::new(),
+    pub fn new(embedding: Option<EmbeddingConfig>) -> napi::Result<Self> {
+        let inner = match resolve_embedding(embedding)? {
+            Some(model) => core::SkillRegistry::with_embedding(model),
+            None => core::SkillRegistry::new(),
+        };
+        Ok(Self {
+            inner,
             memory_sink: None,
-        }
+        })
     }
 
     #[napi]

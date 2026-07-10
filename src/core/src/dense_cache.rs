@@ -20,7 +20,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::dense_search::dense_search;
 use crate::embedding::{Embedder, EmbedderError, embedder_with_telemetry};
-use crate::trace::TraceSink;
+use crate::embedding_config::EmbeddingModel;
+use crate::trace::{TraceEvent, TraceSink};
 
 /// An item the cache can embed and rank: its stable id and the flat searchable
 /// text fed to the embedder. Implemented by `Tool` and `Skill` in their
@@ -36,7 +37,18 @@ pub(crate) struct DenseCache {
     /// absent from the map is not yet embedded. [`Self::extend`] fills in the
     /// missing ids; [`Self::invalidate`] drops one so a replaced item re-embeds.
     vectors: Mutex<HashMap<String, Vec<f32>>>,
-    /// Test-only embedder override (`None` → the shared process bge-small, loaded
+    /// Which embedding model backs this cache. Chosen per catalog; drives which
+    /// embedder [`Self::resolve_embedder`] loads. `Default` = built-in bge-small.
+    model: EmbeddingModel,
+    /// The resolved fingerprint of the model that *built* the cache, stamped on
+    /// first [`Self::extend`]. Compared to the active model at query time to warn
+    /// on a model swap over an existing embedding set.
+    built_fingerprint: Mutex<Option<String>>,
+    /// The vector dimension of the cached embeddings, stamped on first insert.
+    /// Every later document/query vector must match — cosine over mismatched dims
+    /// is silently wrong (see `dense_search`).
+    dim: Mutex<Option<usize>>,
+    /// Test-only embedder override (`None` → the `model`'s embedder, loaded
     /// lazily on first use). Lets tests inject a deterministic/failing embedder
     /// without touching the network.
     embedder_override: Option<Arc<dyn Embedder>>,
@@ -44,8 +56,17 @@ pub(crate) struct DenseCache {
 
 impl DenseCache {
     pub(crate) fn new() -> Self {
+        Self::with_model(EmbeddingModel::Default)
+    }
+
+    /// A cache backed by an explicit embedding model (the configurable-model
+    /// path). The model is resolved lazily on first embed.
+    pub(crate) fn with_model(model: EmbeddingModel) -> Self {
         Self {
             vectors: Mutex::new(HashMap::new()),
+            model,
+            built_fingerprint: Mutex::new(None),
+            dim: Mutex::new(None),
             embedder_override: None,
         }
     }
@@ -54,16 +75,19 @@ impl DenseCache {
     pub(crate) fn with_embedder(embedder: Arc<dyn Embedder>) -> Self {
         Self {
             vectors: Mutex::new(HashMap::new()),
+            model: EmbeddingModel::Default,
+            built_fingerprint: Mutex::new(None),
+            dim: Mutex::new(None),
             embedder_override: Some(embedder),
         }
     }
 
-    /// The embedder to use: an injected one (tests) or the shared process
-    /// embedder, whose one-time load telemetry is recorded on `sink`.
+    /// The embedder to use: an injected one (tests) or the configured model's,
+    /// whose one-time load telemetry is recorded on `sink`.
     fn resolve_embedder(&self, sink: &dyn TraceSink) -> Result<Arc<dyn Embedder>, EmbedderError> {
         match &self.embedder_override {
             Some(e) => Ok(e.clone()),
-            None => embedder_with_telemetry(sink),
+            None => embedder_with_telemetry(&self.model, sink),
         }
     }
 
@@ -102,21 +126,46 @@ impl DenseCache {
         sink: &dyn TraceSink,
     ) -> Result<(), EmbedderError> {
         let mut guard = self.vectors.lock().expect("embeddings mutex poisoned");
-        // Resolve the embedder lazily on the first miss, so a fully-cached corpus
-        // never loads the model.
-        let mut embedder: Option<Arc<dyn Embedder>> = None;
-        for item in items {
-            if guard.contains_key(item.embed_id()) {
-                continue;
+        // Gather the not-yet-cached ids so a fully-cached corpus never loads the
+        // model (empty batch → early return).
+        let missing: Vec<(String, String)> = items
+            .into_iter()
+            .filter(|item| !guard.contains_key(item.embed_id()))
+            .map(|item| (item.embed_id().to_string(), item.embed_text()))
+            .collect();
+        if missing.is_empty() {
+            return Ok(());
+        }
+        let embedder = self.resolve_embedder(sink)?;
+        // One batch call: cheap for an in-process model, essential for an endpoint
+        // (register embeds the whole corpus).
+        let texts: Vec<String> = missing.iter().map(|(_, text)| text.clone()).collect();
+        let vectors = embedder.embed_batch(&texts)?;
+
+        let mut dim = self.dim.lock().expect("dim mutex poisoned");
+        for ((id, _), vector) in missing.iter().zip(vectors) {
+            match *dim {
+                None => *dim = Some(vector.len()),
+                Some(d) if d != vector.len() => {
+                    return Err(EmbedderError::DimensionMismatch {
+                        expected: d,
+                        got: vector.len(),
+                        model: embedder.fingerprint(),
+                    });
+                }
+                Some(_) => {}
             }
-            if embedder.is_none() {
-                embedder = Some(self.resolve_embedder(sink)?);
-            }
-            let vector = embedder
-                .as_ref()
-                .expect("embedder resolved on first miss")
-                .embed_doc(&item.embed_text())?;
-            guard.insert(item.embed_id().to_string(), vector);
+            guard.insert(id.clone(), vector);
+        }
+        drop(dim);
+
+        // Stamp the model that built the cache, once, for the drift check.
+        let mut fp = self
+            .built_fingerprint
+            .lock()
+            .expect("fingerprint mutex poisoned");
+        if fp.is_none() {
+            *fp = Some(embedder.fingerprint());
         }
         Ok(())
     }
@@ -132,12 +181,43 @@ impl DenseCache {
 
     /// Embed a query for cosine ranking (uses the same embedder as
     /// [`Self::extend`], so the one-time model load is shared).
+    ///
+    /// Two guards protect against silently-wrong cosine results: a **model-drift
+    /// warning** if the active model differs from the one that built the cache
+    /// (non-blocking — results may be wrong until rebuilt), and a **hard
+    /// dimension error** if the query vector's width differs from the corpus's
+    /// (cosine over mismatched dims is meaningless, not merely worse).
     pub(crate) fn embed_query(
         &self,
         query: &str,
         sink: &dyn TraceSink,
     ) -> Result<Vec<f32>, EmbedderError> {
-        self.resolve_embedder(sink)?.embed_query(query)
+        let embedder = self.resolve_embedder(sink)?;
+
+        let built = self
+            .built_fingerprint
+            .lock()
+            .expect("fingerprint mutex poisoned")
+            .clone();
+        if let Some((built, active)) = model_drift(built.as_deref(), &embedder.fingerprint()) {
+            eprintln!(
+                "ratel: embeddings were built with {built} but the active model is {active} — \
+                 results may be wrong; rebuild with build_embeddings()"
+            );
+            sink.record(TraceEvent::EmbedderModelMismatch { built, active });
+        }
+
+        let vector = embedder.embed_query(query)?;
+        if let Some(dim) = *self.dim.lock().expect("dim mutex poisoned")
+            && vector.len() != dim
+        {
+            return Err(EmbedderError::DimensionMismatch {
+                expected: dim,
+                got: vector.len(),
+                model: embedder.fingerprint(),
+            });
+        }
+        Ok(vector)
     }
 
     /// Cosine-rank `query_vec` against the cached vectors, best-first with ties
@@ -162,6 +242,17 @@ impl DenseCache {
             })
             .collect();
         dense_search(docs, query_vec, depth)
+    }
+}
+
+/// Detect a model-identity drift: the fingerprint that built the cache vs the one
+/// now in use. `None` if the cache is unbuilt (`built` is `None`) or they match.
+/// Pure, so the drift logic is unit-tested without forcing the (currently
+/// impossible in-process) state through the cache.
+fn model_drift(built: Option<&str>, active: &str) -> Option<(String, String)> {
+    match built {
+        Some(b) if b != active => Some((b.to_string(), active.to_string())),
+        _ => None,
     }
 }
 
@@ -270,6 +361,53 @@ mod tests {
         assert_eq!(ranked.len(), 1);
         assert_eq!(ranked[0].0, "x");
         assert!(ranked[0].1 > 0.9, "ranks with the re-embedded vector");
+    }
+
+    /// Embeds docs at one width but the query at another — forces the query-time
+    /// dimension guard.
+    struct WidthStub {
+        doc_dim: usize,
+        query_dim: usize,
+    }
+    impl Embedder for WidthStub {
+        fn embed_doc(&self, _text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(vec![1.0; self.doc_dim])
+        }
+        fn embed_query(&self, _text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(vec![1.0; self.query_dim])
+        }
+    }
+
+    #[test]
+    fn query_dimension_mismatch_is_a_hard_error() {
+        let cache = DenseCache::with_embedder(Arc::new(WidthStub {
+            doc_dim: 2,
+            query_dim: 3,
+        }));
+        cache.extend([&doc("a", "x")], &NoopSink).unwrap(); // stamps dim = 2
+        let err = cache.embed_query("q", &NoopSink).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                EmbedderError::DimensionMismatch {
+                    expected: 2,
+                    got: 3,
+                    ..
+                }
+            ),
+            "got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn model_drift_detects_a_changed_fingerprint() {
+        assert_eq!(model_drift(None, "a"), None, "unbuilt cache never drifts");
+        assert_eq!(model_drift(Some("a"), "a"), None, "same model never drifts");
+        assert_eq!(
+            model_drift(Some("a"), "b"),
+            Some(("a".to_string(), "b".to_string())),
+            "a changed model drifts"
+        );
     }
 
     #[test]

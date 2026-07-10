@@ -1,14 +1,26 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
-import { type Skill, type SkillHit, SkillRegistry } from "../native/index.cjs";
-import type { SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import {
+  type EmbeddingConfig as NativeEmbeddingConfig,
+  type Skill,
+  type SkillHit,
+  SkillRegistry,
+} from "../native/index.cjs";
+import type { EmbeddingSpec, SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
 import { traceSearch, traceSkillLoad } from "./telemetry.js";
 
 export type { Skill, SkillHit };
+
+function toNativeEmbedding(embedding: EmbeddingSpec): NativeEmbeddingConfig {
+  return typeof embedding === "string" ? { spec: embedding } : embedding;
+}
 
 export interface SkillCatalogOptions {
   trace?: TraceSinkConfig;
   /** Default retrieval method for `search` (default `"bm25"`). */
   method?: SearchMethod;
+  /** Embedding model for semantic/hybrid retrieval — see
+   * {@link ToolCatalogOptions.embedding}. Ignored (with a warning) for `"bm25"`. */
+  embedding?: EmbeddingSpec;
 }
 
 /**
@@ -23,9 +35,16 @@ export class SkillCatalog {
   private readonly eager: boolean;
 
   constructor(options: SkillCatalogOptions = {}) {
-    this.registry = new SkillRegistry();
     this.method = options.method ?? "bm25";
     this.eager = this.method === "semantic" || this.method === "hybrid";
+    if (options.embedding && !this.eager) {
+      console.warn(
+        'ratel: `embedding` was provided but method is "bm25", which needs no model — the embedding config is ignored',
+      );
+    }
+    this.registry = new SkillRegistry(
+      this.eager && options.embedding ? toNativeEmbedding(options.embedding) : undefined,
+    );
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }

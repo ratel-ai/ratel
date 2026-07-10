@@ -10,6 +10,7 @@ from __future__ import annotations
 import inspect
 import json
 import time
+import warnings
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any, Callable, Union
@@ -22,6 +23,33 @@ Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
 
 SearchOrigin = str  # "direct" | "agent"
 SearchMethod = str  # "bm25" | "semantic" | "hybrid"
+
+# Embedding-model selection for semantic/hybrid retrieval: a string shortcut (a
+# HuggingFace repo id like "BAAI/bge-base-en-v1.5", or a local dir path), or an
+# object selecting an endpoint / pinning a revision:
+#   {"huggingface": "org/name", "revision": "…"} | {"local": "/path"}
+#   {"ollama": "nomic-embed-text"} | {"url": "…", "model": "…", "api_key_env": "…"}
+EmbeddingSpec = Union[str, dict[str, str]]
+
+_EMBEDDING_KEYS = frozenset(
+    {"huggingface", "local", "ollama", "url", "model", "revision", "api_key_env", "query_prefix"}
+)
+
+
+def _embedding_kwargs(embedding: EmbeddingSpec) -> dict[str, str]:
+    """Normalize the public string|dict embedding form into native constructor
+    kwargs. A string becomes the inferred ``spec``; a dict is passed through after
+    a key check (the native layer validates the combination)."""
+    if isinstance(embedding, str):
+        return {"spec": embedding}
+    if isinstance(embedding, dict):
+        unknown = set(embedding) - _EMBEDDING_KEYS
+        if unknown:
+            raise ValueError(
+                f"unknown embedding keys {sorted(unknown)}; allowed: {sorted(_EMBEDDING_KEYS)}"
+            )
+        return dict(embedding)
+    raise TypeError("embedding must be a str (repo id / path) or a dict")
 
 
 @dataclass
@@ -63,8 +91,8 @@ class ToolCatalog:
         self,
         trace: TraceSinkConfig | None = None,
         method: SearchMethod = "bm25",
+        embedding: EmbeddingSpec | None = None,
     ) -> None:
-        self._registry = ToolRegistry()
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
         # Default retrieval method for `search`; "bm25" keeps the historical
@@ -73,6 +101,16 @@ class ToolCatalog:
         # Semantic/hybrid default → eagerly embed each tool at registration so
         # searches never pay the embedding cost. BM25 default does nothing.
         self._eager: bool = method in ("semantic", "hybrid")
+        if embedding is not None and not self._eager:
+            warnings.warn(
+                '`embedding` was provided but method is "bm25", which needs no model'
+                " — the embedding config is ignored",
+                stacklevel=2,
+            )
+        # A bm25 catalog ignores the model entirely (never loads it). An invalid
+        # config raises ValueError here, at construction.
+        kwargs = _embedding_kwargs(embedding) if (self._eager and embedding is not None) else {}
+        self._registry = ToolRegistry(**kwargs)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 

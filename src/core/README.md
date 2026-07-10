@@ -48,10 +48,12 @@ Tools are the first content type indexed by the core. Tool search ranks a determ
 A `SearchMethod` selects the ranker — `Bm25` (default), `Semantic`, or `Hybrid` — per registry (a construction-time default) or per call via `search_with_method`. `search` / `search_with_origin` keep their infallible BM25 behavior unchanged.
 
 - **BM25** — lexical, model-free, the default. Never fails, never loads a model.
-- **Semantic** — dense cosine ranking over a local `BAAI/bge-small-en-v1.5` embedding (pure-Rust Candle; fetched once into the HuggingFace cache on first use).
+- **Semantic** — dense cosine ranking over an embedding model (default `BAAI/bge-small-en-v1.5`, pure-Rust Candle; fetched once into the HuggingFace cache on first use).
 - **Hybrid** — BM25 and dense arms fused by Reciprocal Rank Fusion (no reranker).
 
 Semantic/hybrid load the model when embeddings are first built (eagerly at `register` in semantic/hybrid mode), never at install and never inside a search — a BM25-only registry never touches it — and `search_with_method` returns `Result<_, EmbedderError>` so a failed load (network / cache / underpowered machine) is catchable. See [ADR‑0011](../../docs/adr/0011-selectable-retrieval-methods.md).
+
+The embedding model is **configurable per registry** via `with_embedding(EmbeddingModel)`: the built-in default, any BERT-family HuggingFace repo or on-disk directory (in-process via Candle), or an OpenAI-compatible HTTP endpoint (OpenAI, Ollama, TEI, vLLM — any model). The cache guards against silently-wrong results: vectors are re-normalized on ingestion, a dimension mismatch is a hard error, and a model swap over an existing embedding set warns to rebuild. See [ADR‑0012](../../docs/adr/0012-configurable-embedding-models.md).
 
 ## Trace stream
 

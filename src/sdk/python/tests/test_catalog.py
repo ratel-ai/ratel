@@ -1,8 +1,16 @@
 """Tests for `ToolCatalog` — mirrors `src/sdk/ts/src/catalog.test.ts`."""
 
+import warnings
+
 import pytest
 
-from ratel_ai import ExecutableTool, ToolCatalog, TraceSinkConfig
+from ratel_ai import (
+    DimensionMismatchError,
+    EmbedderError,
+    ExecutableTool,
+    ToolCatalog,
+    TraceSinkConfig,
+)
 
 
 def _read_file_tool(execute) -> ExecutableTool:
@@ -115,6 +123,39 @@ def test_semantic_on_bm25_without_embeddings_raises() -> None:
     catalog.register(_read_file_tool(lambda args: {}))
     with pytest.raises(RuntimeError, match="not computed for semantic"):
         catalog.search("read", 5, method="semantic")
+
+
+def test_embedding_invalid_config_raises_valueerror_at_construction() -> None:
+    # A bare URL has no model name → construction-time ValueError.
+    with pytest.raises(ValueError, match="model"):
+        ToolCatalog(method="semantic", embedding="https://api.openai.com/v1/embeddings")
+
+
+def test_embedding_conflicting_endpoint_keys_raise() -> None:
+    with pytest.raises(ValueError, match="conflicting"):
+        ToolCatalog(
+            method="semantic",
+            embedding={"ollama": "nomic", "url": "http://h:11434/v1/embeddings", "model": "nomic"},
+        )
+
+
+def test_embedding_unknown_dict_key_raises() -> None:
+    with pytest.raises(ValueError, match="unknown embedding keys"):
+        ToolCatalog(method="semantic", embedding={"bogus": "x"})
+
+
+def test_embedding_ignored_and_warns_under_bm25() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog = ToolCatalog(embedding="BAAI/bge-base-en-v1.5")  # bm25 default
+        catalog.register(_read_file_tool(lambda args: {}))
+        catalog.search("read", 5)  # bm25, no model loaded
+    assert any("bm25" in str(w.message) for w in caught)
+
+
+def test_typed_embedder_exceptions_are_runtimeerror_subclasses() -> None:
+    assert issubclass(EmbedderError, RuntimeError)
+    assert issubclass(DimensionMismatchError, EmbedderError)
 
 
 async def test_invoke_runs_sync_executor() -> None:
