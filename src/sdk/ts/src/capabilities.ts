@@ -3,7 +3,15 @@ import { compactDescription } from "./compact.js";
 import type { SkillCatalog } from "./skill-catalog.js";
 import { recordAuthNeeded, upstreamFromToolId } from "./telemetry.js";
 
+/**
+ * Wire id (`"search_capabilities"`) of the discovery capability tool built by
+ * {@link searchCapabilitiesTool} — the name the model calls it by.
+ */
 export const SEARCH_CAPABILITIES_ID = "search_capabilities" as const;
+/**
+ * Wire id (`"invoke_tool"`) of the execution capability tool built by
+ * {@link invokeToolTool} — the name the model calls it by.
+ */
 export const INVOKE_TOOL_ID = "invoke_tool" as const;
 
 const DEFAULT_TOP_K_TOOLS = 5;
@@ -37,42 +45,105 @@ const RESULT_TOOLS_AND_SKILLS =
   "playbooks — load one's instructions via get_skill_content, then follow it). Skills have their own " +
   "result budget, so they are never crowded out by tools.";
 
+/**
+ * Descriptive metadata about one upstream MCP server behind the catalog. Fed
+ * to {@link searchCapabilitiesTool} via {@link SearchCapabilitiesOptions}: the
+ * servers are listed in the tool's description (via
+ * {@link formatUpstreamLine}), and `description`/`instructions` enrich the
+ * matching {@link CapabilityToolGroup.server} in results.
+ */
 export interface UpstreamServerInfo {
+  /**
+   * Server name; must match the `name` the server was registered under
+   * (`registerMcpServer`), i.e. the `<name>__` prefix of its tool ids.
+   */
   name: string;
+  /** One-line summary of what the server offers; compacted in the listing. */
   description?: string;
+  /** The server's own usage instructions (e.g. `McpServerHandle.serverInstructions`). */
   instructions?: string;
+  /** Number of tools the server contributes; shown in the listing when set. */
   toolCount?: number;
   /** True when the upstream rejected its boot connection with 401 / requires re-authorization. */
   needsAuth?: boolean;
 }
 
+/** Options for {@link searchCapabilitiesTool}. */
 export interface SearchCapabilitiesOptions {
+  /** Upstream MCP servers to advertise in the tool description and result groups. */
   upstreamServers?: readonly UpstreamServerInfo[];
 }
 
+/** One ranked tool in the `tools` bucket of {@link SearchCapabilitiesResult}. */
 export interface CapabilityToolHit {
+  /** Catalog id to pass to `invoke_tool` (`<server>__<tool>` for MCP-proxied tools). */
   toolId: string;
+  /**
+   * Retrieval score from the tool catalog's search (scale depends on the
+   * catalog's method — BM25 by default), or `0` when the tool was pulled in as
+   * a matched skill's declared dependency rather than by the query itself.
+   */
   score: number;
+  /** The tool's description, as registered. */
   description: string;
+  /** The tool's input JSON Schema, so the model can call it without another lookup. */
   inputSchema: Record<string, unknown>;
 }
 
+/**
+ * Tool hits grouped by upstream server. The group key is the `<server>__` id
+ * prefix (a plain, un-prefixed tool id groups under itself); `description` and
+ * `instructions` are attached when a matching {@link UpstreamServerInfo} was
+ * provided.
+ */
 export interface CapabilityToolGroup {
-  server: { name: string; description?: string; instructions?: string };
+  /** The owning server: its name, plus optional description/instructions metadata. */
+  server: {
+    /** Server name (the `<server>__` prefix of the group's tool ids). */
+    name: string;
+    /** The server's one-line summary, when known. */
+    description?: string;
+    /** The server's usage instructions, when known. */
+    instructions?: string;
+  };
+  /** The server's ranked hits, in overall result order. */
   hits: CapabilityToolHit[];
 }
 
+/** One ranked skill in the `skills` bucket of {@link SearchCapabilitiesResult}. */
 export interface CapabilitySkillHit {
+  /** Skill id to pass to `get_skill_content`. */
   skillId: string;
+  /** Retrieval score from the skill catalog's search (BM25 by default). */
   score: number;
+  /** The skill's description, compacted to ~160 chars for the listing. */
   description: string;
 }
 
+/**
+ * Result shape of the `search_capabilities` tool: two independently-ranked
+ * buckets with separate top-K budgets. Scores are comparable within a bucket,
+ * not across the two (tools and skills are indexed as different text shapes).
+ */
 export interface SearchCapabilitiesResult {
-  tools: { groups: CapabilityToolGroup[] };
+  /** Executable tool hits, grouped by upstream server. */
+  tools: {
+    /** Groups in ranking order (a server appears where its best hit ranked). */
+    groups: CapabilityToolGroup[];
+  };
+  /** Skill hits — playbooks to load via `get_skill_content`. */
   skills: CapabilitySkillHit[];
 }
 
+/**
+ * Format one upstream server as the bullet line the capability-tool
+ * descriptions embed (`- <name> — <description> (<n> tools) (auth required)`,
+ * omitting the parts that are unset). Exported for the deprecated
+ * `searchToolsTool` shim, which builds the same listing.
+ *
+ * @param s - The server to describe.
+ * @returns A single `- `-prefixed line with the description compacted.
+ */
 export function formatUpstreamLine(s: UpstreamServerInfo): string {
   let line = `- ${s.name}`;
   if (s.description) line += ` — ${compactDescription(s.description)}`;
@@ -90,10 +161,38 @@ function buildSearchDescription(hasSkills: boolean, opts?: SearchCapabilitiesOpt
 }
 
 /**
- * Unified discovery over tools AND skills. Returns two independently-ranked
- * buckets, each with its own top-K budget — so a relevant skill can never be
- * starved out of the results by a large number of matching tools (and we avoid
- * comparing BM25 scores across the two different text shapes).
+ * Build the `search_capabilities` capability tool: unified discovery over
+ * tools AND skills. Its result carries two independently-ranked buckets, each
+ * with its own top-K budget — so a relevant skill can never be starved out of
+ * the results by a large number of matching tools (and we avoid comparing BM25
+ * scores across the two different text shapes).
+ *
+ * The tool takes `{ query, topKTools?, topKSkills? }` (defaults 5 and 3;
+ * values above 50 are capped, anything else non-positive or non-integer falls
+ * back to the default) and resolves to a {@link SearchCapabilitiesResult}. A
+ * matched skill's declared tool dependencies are pulled into the `tools`
+ * bucket additively — score `0`, beyond the `topKTools` budget, deduped
+ * against query hits. The `skills` bucket (and its mention in the tool
+ * description) exists only when `skillCatalog` is non-empty at build time.
+ * Each call records a `gateway_search` event on the local trace stream.
+ *
+ * @param toolCatalog - Catalog the `tools` bucket is ranked from.
+ * @param skillCatalog - Optional catalog the `skills` bucket is ranked from.
+ * @param opts - Upstream-server metadata for the description and result groups.
+ * @returns The tool, ready to expose to the model (and to register alongside
+ *   {@link invokeToolTool}, which executes what this discovers).
+ *
+ * @example
+ * ```ts
+ * import { searchCapabilitiesTool, type SearchCapabilitiesResult } from "@ratel-ai/sdk";
+ *
+ * const discovery = searchCapabilitiesTool(toolCatalog, skillCatalog, {
+ *   upstreamServers: [{ name: "github", description: "GitHub API", toolCount: 30 }],
+ * });
+ * const result = (await discovery.execute({
+ *   query: "open a pull request",
+ * })) as SearchCapabilitiesResult;
+ * ```
  */
 export function searchCapabilitiesTool(
   toolCatalog: ToolCatalog,
@@ -262,11 +361,32 @@ export function searchCapabilitiesTool(
   };
 }
 
+/** Options for {@link invokeToolTool}. */
 export interface InvokeToolToolOptions {
   /** Notified when the underlying tool throws UnauthorizedError, with the upstream name inferred from the toolId. */
   onUnauthorized?: (upstream: string) => void | Promise<void>;
 }
 
+/**
+ * Build the `invoke_tool` capability tool: the execution counterpart to
+ * {@link searchCapabilitiesTool}. Takes `{ toolId, args }` and runs the
+ * catalog tool via {@link ToolCatalog.invoke}, returning its result.
+ *
+ * Failures come back as structured `{ error, isError: true }` results, not
+ * rejections, so the model can read and recover from them: an unknown
+ * `toolId` (with a hint to search first), a non-object `args`, or a thrown
+ * executor error. A tool that throws `UnauthorizedError` gets special
+ * handling — `opts.onUnauthorized` fires with the upstream name inferred from
+ * the `<server>__` id prefix, a `ratel.auth.flow` span records the outcome,
+ * and the result is `{ error: "needs_auth", isError: true, upstream?, hint }`.
+ * A call with `args` missing (or `null`) is tolerated by treating the
+ * remaining top-level keys as the arguments. Outcomes are recorded as
+ * `gateway_invoke` / `gateway_error` events on the local trace stream.
+ *
+ * @param catalog - Catalog whose tools this executes.
+ * @param opts - Optional auth-failure callback.
+ * @returns The tool, ready to expose to the model.
+ */
 export function invokeToolTool(
   catalog: ToolCatalog,
   opts: InvokeToolToolOptions = {},

@@ -224,6 +224,7 @@ export function recordAuthNeeded(server?: string): void {
 
 /** Handle returned by {@link configureTelemetry}; `shutdown()` flushes the exporter. */
 export interface TelemetryHandle {
+  /** Flush pending spans and shut the exporter down. Call once at process exit. */
   shutdown(): Promise<void>;
 }
 
