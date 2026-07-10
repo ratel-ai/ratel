@@ -191,9 +191,11 @@ def _resolve_capture_override(
     capture_content: ContentCapture | str | None,
     include_span_and_events: bool | None,
 ) -> ContentCapture | str | None:
-    """The capture mode configure_telemetry should set, or None to leave the gate
-    env-driven: `capture_content` wins over `include_span_and_events`. The bool sugar maps
-    to the wire strings set_content_capture normalizes (True -> full capture, False -> none).
+    """Resolve the capture mode `configure_telemetry` should set.
+
+    `capture_content` wins over `include_span_and_events`; returns None to leave the
+    gate env-driven. The bool sugar maps to the wire strings `set_content_capture`
+    normalizes (True -> full capture, False -> none).
     """
     if capture_content is not None:
         return capture_content
