@@ -116,15 +116,16 @@ async function main(): Promise<void> {
   console.log(`  serviceName: ${cfg.serviceName} (default ${DEFAULT_SERVICE_NAME})`);
   console.log(`  headers:     ${Object.keys(cfg.headers).join(", ") || "(none)"}`);
 
-  // If RATEL_URL is set, actually wire the real OTLP exporter and emit through it.
+  // One startup call for both on/off paths. When disabled, init() needs no endpoint and
+  // returns a no-op shutdown handle; when enabled it also reads RATEL_API_KEY from env.
+  const telemetry = init({ enabled: Boolean(process.env.RATEL_URL) });
   if (process.env.RATEL_URL) {
     console.log(`\n--- RATEL_URL set — exporting a real trace to ${process.env.RATEL_URL} ---`);
-    const handle = init({ apiKey: process.env.RATEL_API_KEY });
     emitRatelTrace(trace.getTracer("@ratel-ai/example-telemetry"));
-    await handle.shutdown();
   } else {
     console.log("\n(set RATEL_URL — and optionally RATEL_API_KEY — to export a real trace via init())");
   }
+  await telemetry.shutdown();
 
   console.log("\nOK");
 }

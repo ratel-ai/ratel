@@ -246,15 +246,15 @@ Independently of the local sink above, the SDK **emits OpenTelemetry spans** for
 from ratel_ai import configure_telemetry
 
 # Greenfield: ship the SDK's spans to Ratel Cloud (needs the [otlp] extra:
-# pip install 'ratel-ai[otlp]'). RATEL_URL or endpoint= sets the destination.
-provider = configure_telemetry(api_key=os.environ["RATEL_API_KEY"])
-# ... later: provider.shutdown()
+# pip install 'ratel-ai[otlp]'). Reads RATEL_URL + RATEL_API_KEY.
+handle = configure_telemetry()
+# ... later: handle.shutdown()
 ```
 
 If you already run OpenTelemetry (your own collector, another instrumentation), **skip `configure_telemetry`** — the spans already flow to your provider — and add `ratel_span_processor` from `ratel_ai_telemetry` to dual-export the Ratel cut to Cloud. Message/tool content is captured on spans only when `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` is set (default off). Content capture can also be opted into in code — a provided option wins over the env var:
 
 ```python
-provider = configure_telemetry(api_key=..., include_span_and_events=True)  # or capture_content="SPAN_ONLY"
+handle = configure_telemetry(include_span_and_events=True)  # or capture_content="SPAN_ONLY"
 ```
 
 ## Develop

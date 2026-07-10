@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  API_KEY_ENV,
   ContentCapture,
   clearContentCapture,
   contentCaptureMode,
@@ -10,6 +11,24 @@ import {
 } from "./config.js";
 
 describe("resolveOtlpConfig", () => {
+  it("uses RATEL_API_KEY as the apiKey fallback", () => {
+    const cfg = resolveOtlpConfig(
+      { endpoint: "https://collector.ratel.sh/v1/traces" },
+      { [API_KEY_ENV]: "env-secret" },
+    );
+
+    expect(cfg.headers.Authorization).toBe("Bearer env-secret");
+  });
+
+  it("prefers an explicit apiKey over RATEL_API_KEY", () => {
+    const cfg = resolveOtlpConfig(
+      { endpoint: "https://collector.ratel.sh/v1/traces", apiKey: "explicit-secret" },
+      { [API_KEY_ENV]: "env-secret" },
+    );
+
+    expect(cfg.headers.Authorization).toBe("Bearer explicit-secret");
+  });
+
   it("uses the apiKey form: endpoint from RATEL_URL, Bearer auth, default service name", () => {
     const cfg = resolveOtlpConfig(
       { apiKey: "secret" },

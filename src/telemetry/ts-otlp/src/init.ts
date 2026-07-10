@@ -15,41 +15,85 @@ import { resourceFromAttributes } from "@opentelemetry/resources";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { type InitOptions, resolveOtlpConfig } from "@ratel-ai/telemetry";
-import { ratelSpanProcessor } from "./processor.js";
+import { ratelSpanProcessor, type SpanFilter } from "./processor.js";
 
 /** Handle returned by {@link init}; `shutdown()` flushes and stops the exporter. */
 export interface TelemetryHandle {
   shutdown(): Promise<void>;
 }
 
+/** Options for the turnkey {@link init} path. */
+export interface TelemetryInitOptions extends InitOptions {
+  /** On first setup, set false to skip configuration and provider registration. */
+  enabled?: boolean;
+  /** Override the default filter; `init()` forwards every span when omitted. */
+  spanFilter?: SpanFilter;
+}
+
+const NOOP_HANDLE: TelemetryHandle = { shutdown: async () => {} };
+const ACCEPT_ALL_SPANS: SpanFilter = () => true;
+const RATEL_PROVIDER_HANDLE = Symbol.for("@ratel-ai/telemetry-otlp/provider-handle");
+const NOOP_GLOBAL_PROVIDER = new ProxyTracerProvider().getDelegate();
+
 /**
  * Wire an OTLP `http/protobuf` exporter + batch processor + `service.name` resource over
  * a `NodeTracerProvider`, register it as the global provider, and return a shutdown handle.
  * Everything else is the untouched OTel SDK.
  *
- * `init()` owns the global provider, so it exports every span (unlike {@link ratelSpanProcessor},
- * whose default `gen_ai.*`/`ratel.*` filter exists for sharing a provider). It throws with a
- * pointer to {@link ratelSpanProcessor} — rather than silently no-op'ing — if a provider is
- * already registered globally.
+ * `init()` owns the global provider, so it exports every span by default (unlike
+ * {@link ratelSpanProcessor}, whose default `gen_ai.*`/`ratel.*` filter exists for sharing a
+ * provider). Pass `spanFilter` to narrow that set, or `enabled: false` for a no-op handle on
+ * first setup. Repeated calls return the existing handle when Ratel already owns the active
+ * provider—even if a later caller is disabled. It throws with a pointer to
+ * {@link ratelSpanProcessor} when a foreign provider is registered.
  */
-export function init(opts: InitOptions = {}): TelemetryHandle {
+export function init(opts: TelemetryInitOptions = {}): TelemetryHandle {
+  const activeProvider = activeGlobalProvider();
+  const existingHandle = ratelOwnedHandle(activeProvider);
+  if (existingHandle) return existingHandle;
+
+  const { enabled = true, spanFilter = ACCEPT_ALL_SPANS, ...configOpts } = opts;
+  if (!enabled) return NOOP_HANDLE;
+  if (activeProvider !== NOOP_GLOBAL_PROVIDER) throw foreignProviderError();
+
   // Resolve first so a missing endpoint throws before we build/register anything.
-  const { serviceName } = resolveOtlpConfig(opts);
+  const { serviceName } = resolveOtlpConfig(configOpts);
   const provider = new NodeTracerProvider({
     resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName }),
-    spanProcessors: [ratelSpanProcessor({ ...opts, spanFilter: () => true })],
+    spanProcessors: [ratelSpanProcessor({ ...configOpts, spanFilter })],
   });
+  const handle: TelemetryHandle = { shutdown: () => provider.shutdown() };
+  Object.defineProperty(provider, RATEL_PROVIDER_HANDLE, { value: handle });
   provider.register();
   if (activeGlobalProvider() !== provider) {
     void provider.shutdown();
-    throw new Error(
-      "ratel telemetry init(): an OpenTelemetry TracerProvider is already registered globally, " +
-        "so init() (the turnkey path that owns the provider) cannot take over. To send Ratel " +
-        "telemetry alongside an existing provider (e.g. Langfuse + the Vercel AI SDK), add " +
-        "ratelSpanProcessor({ apiKey }) to that provider's spanProcessors instead of calling init().",
-    );
+    throw foreignProviderError();
   }
-  return { shutdown: () => provider.shutdown() };
+  return handle;
+}
+
+function foreignProviderError(): Error {
+  return new Error(
+    "ratel telemetry init(): an OpenTelemetry TracerProvider is already registered globally, " +
+      "so init() (the turnkey path that owns the provider) cannot take over. To send Ratel " +
+      "telemetry alongside an existing provider (e.g. Langfuse + the Vercel AI SDK), add " +
+      "ratelSpanProcessor({ apiKey }) to that provider's spanProcessors instead of calling init().",
+  );
+}
+
+function ratelOwnedHandle(provider: unknown): TelemetryHandle | undefined {
+  if ((typeof provider !== "object" && typeof provider !== "function") || provider === null) {
+    return undefined;
+  }
+  const handle: unknown = Reflect.get(provider, RATEL_PROVIDER_HANDLE);
+  if (
+    (typeof handle !== "object" && typeof handle !== "function") ||
+    handle === null ||
+    typeof Reflect.get(handle, "shutdown") !== "function"
+  ) {
+    return undefined;
+  }
+  return handle as TelemetryHandle;
 }
 
 /**

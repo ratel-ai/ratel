@@ -10,23 +10,25 @@
 
 import { CAPTURE_CONTENT_ENV } from "./index.js";
 
-/** Env var whose value is the default OTLP endpoint when `{ apiKey }` is used. */
+/** Env var whose value is the default OTLP endpoint. */
 export const ENDPOINT_ENV = "RATEL_URL";
+
+/** Env var whose value is the default Ratel API key. */
+export const API_KEY_ENV = "RATEL_API_KEY";
 
 /** `service.name` used when the caller does not pass one. */
 export const DEFAULT_SERVICE_NAME = "ratel";
 
 /**
- * `init()` (in `@ratel-ai/telemetry-otlp`) accepts either `{ apiKey }` (endpoint
- * defaults to `RATEL_URL`, `Authorization: Bearer <apiKey>`) or `{ endpoint,
- * headers }` (custom endpoint / collector / dual-export). The two forms compose:
- * an explicit `endpoint` always wins over `RATEL_URL`, and `apiKey` adds the
- * Bearer header on top of any `headers`.
+ * `init()` (in `@ratel-ai/telemetry-otlp`) resolves endpoint + auth from
+ * `RATEL_URL` / `RATEL_API_KEY`, with explicit `{ endpoint, apiKey }` values
+ * taking precedence. Custom `headers` compose with either form; the resolved
+ * API key is authoritative for the Bearer header.
  */
 export interface InitOptions {
   /** `service.name` resource attribute. Defaults to {@link DEFAULT_SERVICE_NAME}. */
   serviceName?: string;
-  /** Ratel API key; sent as `Authorization: Bearer <apiKey>`. */
+  /** Ratel API key; sent as `Authorization: Bearer <apiKey>`. Defaults to `RATEL_API_KEY`. */
   apiKey?: string;
   /** Full OTLP traces URL (incl. `/v1/traces`). Defaults to `RATEL_URL`. */
   endpoint?: string;
@@ -52,12 +54,13 @@ export function resolveOtlpConfig(
   const url = opts.endpoint ?? env[ENDPOINT_ENV];
   if (!url) {
     throw new Error(
-      `ratel telemetry init: no endpoint. Pass { endpoint } or set ${ENDPOINT_ENV} (use { apiKey } for Bearer auth).`,
+      `ratel telemetry init: no endpoint. Pass { endpoint } or set ${ENDPOINT_ENV} (use { apiKey } or ${API_KEY_ENV} for Bearer auth).`,
     );
   }
   const headers: Record<string, string> = { ...opts.headers };
-  if (opts.apiKey) {
-    headers.Authorization = `Bearer ${opts.apiKey}`;
+  const apiKey = opts.apiKey ?? env[API_KEY_ENV];
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
   }
   return { url, headers, serviceName: opts.serviceName ?? DEFAULT_SERVICE_NAME };
 }

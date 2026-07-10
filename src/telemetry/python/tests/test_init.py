@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import builtins
+import importlib
+from typing import Any
+
 import pytest
 
 from ratel_ai_telemetry.otlp import (
+    API_KEY_ENV,
     DEFAULT_SERVICE_NAME,
     ENDPOINT_ENV,
     ContentCapture,
@@ -27,6 +32,25 @@ def _reset_content_capture_override() -> object:
 
 
 class TestResolveOtlpConfig:
+    def test_uses_api_key_from_environment_when_not_passed(self) -> None:
+        cfg = resolve_otlp_config(
+            env={
+                ENDPOINT_ENV: "https://collector.ratel.sh/v1/traces",
+                API_KEY_ENV: "env-secret",
+            },
+        )
+        assert cfg.headers["Authorization"] == "Bearer env-secret"
+
+    def test_explicit_api_key_wins_over_environment(self) -> None:
+        cfg = resolve_otlp_config(
+            api_key="explicit-secret",
+            env={
+                ENDPOINT_ENV: "https://collector.ratel.sh/v1/traces",
+                API_KEY_ENV: "env-secret",
+            },
+        )
+        assert cfg.headers["Authorization"] == "Bearer explicit-secret"
+
     def test_api_key_form_uses_ratel_url_and_bearer_and_default_service(self) -> None:
         cfg = resolve_otlp_config(
             api_key="secret",
@@ -86,6 +110,61 @@ class TestContentCaptureMode:
 
 
 class TestInit:
+    def test_disabled_init_is_a_noop_without_config_or_otel(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ENDPOINT_ENV, raising=False)
+        real_import = builtins.__import__
+
+        def block_otel(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "opentelemetry" or name.startswith("opentelemetry."):
+                raise ModuleNotFoundError(name)
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", block_otel)
+        handle = init(enabled=False)
+
+        assert handle.force_flush()
+        assert handle.shutdown() is None
+
+    def test_respects_a_custom_span_filter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        forwarded: list[str] = []
+        monkeypatch.setattr(BatchSpanProcessor, "on_end", lambda _self, s: forwarded.append(s.name))
+        provider = init(
+            endpoint="http://localhost:4318/v1/traces",
+            span_filter=lambda span: span.name.startswith("keep."),
+        )
+        try:
+            tracer = provider.get_tracer(__name__)
+            with tracer.start_as_current_span("keep.this"):
+                pass
+            with tracer.start_as_current_span("drop.this"):
+                pass
+        finally:
+            provider.shutdown()
+
+        assert forwarded == ["keep.this"]
+
+    def test_repeated_init_returns_the_owned_provider_without_requiring_config(self) -> None:
+        provider = init(endpoint="http://localhost:4318/v1/traces")
+        try:
+            assert init() is provider
+            assert init(enabled=False) is provider
+        finally:
+            provider.shutdown()
+
+    def test_reloaded_module_recognizes_the_owned_provider(self) -> None:
+        import ratel_ai_telemetry.otlp as otlp
+
+        provider = otlp.init(endpoint="http://localhost:4318/v1/traces")
+        try:
+            reloaded = importlib.reload(otlp)
+            assert reloaded.init() is provider
+        finally:
+            provider.shutdown()
+
     def test_returns_a_provider_with_shutdown(self) -> None:
         provider = init(
             api_key="k",
@@ -96,6 +175,25 @@ class TestInit:
             assert callable(provider.shutdown)
         finally:
             provider.shutdown()
+
+    def test_raises_if_a_foreign_provider_wins_registration_race(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+
+        original_set_provider = trace.set_tracer_provider
+        foreign_provider = TracerProvider()
+
+        def install_foreign_provider(_provider: object) -> None:
+            original_set_provider(foreign_provider)
+
+        monkeypatch.setattr(trace, "set_tracer_provider", install_foreign_provider)
+        try:
+            with pytest.raises(RuntimeError, match="ratel_span_processor"):
+                init(endpoint="http://localhost:4318/v1/traces")
+        finally:
+            foreign_provider.shutdown()
 
     def test_raises_on_misconfiguration(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(ENDPOINT_ENV, raising=False)
@@ -112,6 +210,7 @@ def test_top_level_lazy_accessor_resolves_the_otlp_surface() -> None:
 
     assert ratel_ai_telemetry.init is otlp_init
     assert ratel_ai_telemetry.resolve_otlp_config is otlp_resolve
+    assert ratel_ai_telemetry.API_KEY_ENV == API_KEY_ENV
 
 
 class TestSetContentCapture:

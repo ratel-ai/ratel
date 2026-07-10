@@ -18,10 +18,11 @@ Only wiring an exporter needs the extra.
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from . import CAPTURE_CONTENT_ENV
 
@@ -32,6 +33,9 @@ if TYPE_CHECKING:
 #: Env var whose value is the default OTLP endpoint when api_key= is used.
 ENDPOINT_ENV = "RATEL_URL"
 
+#: Env var whose value is the default API key when api_key= is omitted.
+API_KEY_ENV = "RATEL_API_KEY"
+
 #: service.name used when the caller does not pass one.
 DEFAULT_SERVICE_NAME = "ratel"
 
@@ -40,6 +44,10 @@ _EXTRA_HINT = (
     "ratel telemetry needs the OpenTelemetry SDK. Install the extra: "
     "pip install 'ratel-ai-telemetry[otlp]'."
 )
+
+# Stable attribute used to recognize the provider Ratel installed, including after this
+# module is reloaded. The value is the original shutdown handle (currently the provider).
+_PROVIDER_HANDLE_ATTR = "_ratel_ai_telemetry_handle"
 
 
 @dataclass(frozen=True)
@@ -61,10 +69,11 @@ def resolve_otlp_config(
 ) -> OtlpConfig:
     """Resolve init() options into concrete exporter config.
 
-    Accepts either api_key= (endpoint defaults to RATEL_URL, Authorization: Bearer)
-    or endpoint=/headers= (custom endpoint / collector). The forms compose: an
-    explicit endpoint wins over RATEL_URL, and api_key adds the Bearer header on top
-    of any headers. env is injectable so the precedence is testable without a network.
+    Accepts either api_key= (falling back to RATEL_API_KEY; endpoint defaults to
+    RATEL_URL; Authorization: Bearer) or endpoint=/headers= (custom endpoint /
+    collector). The forms compose: explicit endpoint/api_key values win over their
+    environment fallbacks, and the resolved API key adds the Bearer header on top of
+    any headers. env is injectable so the precedence is testable without a network.
     """
     resolved_env = os.environ if env is None else env
     url = endpoint if endpoint is not None else resolved_env.get(ENDPOINT_ENV)
@@ -73,9 +82,10 @@ def resolve_otlp_config(
             f"ratel telemetry init: no endpoint. Pass endpoint= or set {ENDPOINT_ENV} "
             "(use api_key= for Bearer auth)."
         )
+    resolved_api_key = api_key if api_key is not None else resolved_env.get(API_KEY_ENV)
     resolved_headers: dict[str, str] = dict(headers or {})
-    if api_key:
-        resolved_headers["Authorization"] = f"Bearer {api_key}"
+    if resolved_api_key:
+        resolved_headers["Authorization"] = f"Bearer {resolved_api_key}"
     return OtlpConfig(
         url=url,
         headers=resolved_headers,
@@ -106,6 +116,47 @@ def _accept_all_spans(_span: ReadableSpan) -> bool:
     return True
 
 
+class _NoOpSpanProcessor:
+    """OTel-free disabled-mode processor with the standard lifecycle surface."""
+
+    def on_start(self, span: object, parent_context: object | None = None) -> None:
+        return None
+
+    def on_end(self, span: object) -> None:
+        return None
+
+    def shutdown(self) -> None:
+        return None
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        return True
+
+
+class _NoOpTracerProvider:
+    """OTel-free disabled-mode handle with the provider lifecycle methods callers use."""
+
+    def shutdown(self) -> None:
+        return None
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        return True
+
+
+def _owned_provider_handle(provider: object) -> object | None:
+    """Return the stable Ratel-owned handle marker, if this is our provider."""
+    handle = getattr(provider, _PROVIDER_HANDLE_ATTR, None)
+    return handle if handle is provider else None
+
+
+def _foreign_provider_error() -> RuntimeError:
+    return RuntimeError(
+        "ratel telemetry init(): an OpenTelemetry TracerProvider is already registered "
+        "globally, so init() (the turnkey path that owns the provider) cannot take over. "
+        "To send Ratel telemetry alongside an existing provider (e.g. Langfuse + the Vercel "
+        "AI SDK), add ratel_span_processor(api_key=...) to that provider instead of init()."
+    )
+
+
 def ratel_span_exporter(
     *,
     api_key: str | None = None,
@@ -132,15 +183,20 @@ def ratel_span_processor(
     endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
     span_filter: SpanFilter | None = None,
+    enabled: bool = True,
 ) -> SpanProcessor:
     """A BatchSpanProcessor over the Ratel OTLP exporter that forwards only the spans passing
     span_filter (default ratel_signal_filter; pass ``lambda _s: True`` to forward everything).
 
     Add it to your own provider (``provider.add_span_processor(ratel_span_processor(...))``) to
     send Ratel telemetry alongside another provider — no global side effects, no resource.
-    Greenfield apps that want Ratel to own the provider should call init() instead. Needs the
-    [otlp] extra; raises a clear error otherwise.
+    Greenfield apps that want Ratel to own the provider should call init() instead. Pass
+    enabled=False for an OTel-free no-op processor that needs no endpoint. Enabled processors
+    need the [otlp] extra and raise a clear error without it.
     """
+    if not enabled:
+        return cast("SpanProcessor", _NoOpSpanProcessor())
+
     try:
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
     except ModuleNotFoundError as exc:
@@ -162,17 +218,33 @@ def init(
     endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
     service_name: str | None = None,
+    span_filter: SpanFilter | None = None,
+    enabled: bool = True,
 ) -> TracerProvider:
     """Wire an OTLP http/protobuf exporter + batch processor + service.name resource,
     register it as the global tracer provider, and return it as the shutdown handle
     (call provider.shutdown() / provider.force_flush()). Everything else is the
     untouched OTel SDK.
 
-    init() owns the global provider, so it exports every span (unlike ratel_span_processor,
-    whose default gen_ai.*/ratel.* filter exists for sharing a provider). It raises — pointing
-    at ratel_span_processor — rather than silently no-op'ing, if a provider is already
-    registered globally. Needs the [otlp] extra; raises a clear error otherwise.
+    init() owns the global provider, so it exports every span by default (unlike
+    ratel_span_processor, whose default gen_ai.*/ratel.* filter exists for sharing a provider);
+    pass span_filter to narrow it. Repeated calls return the original Ratel-owned provider.
+    It raises — pointing at ratel_span_processor — if a foreign provider is already registered
+    globally. On first setup, pass enabled=False for an OTel-free no-op handle that needs no
+    endpoint; once Ratel owns the provider, repeated calls return it regardless of options.
+    Enabled initialization needs the [otlp] extra and raises a clear error without it.
     """
+    if not enabled:
+        # Preserve an already-active Ratel provider without importing OTel on the genuinely
+        # disabled/base-only path. A prior successful init has loaded this API module already.
+        trace_module = sys.modules.get("opentelemetry.trace")
+        if trace_module is not None:
+            current_provider = trace_module.get_tracer_provider()
+            owned_handle = _owned_provider_handle(current_provider)
+            if owned_handle is not None:
+                return cast("TracerProvider", owned_handle)
+        return cast("TracerProvider", _NoOpTracerProvider())
+
     try:
         from opentelemetry import trace
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
@@ -180,26 +252,32 @@ def init(
         from opentelemetry.trace import ProxyTracerProvider
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(_EXTRA_HINT) from exc
-    # Resolve first so a missing endpoint raises ValueError before the guard.
+    # get_tracer_provider() returns the default ProxyTracerProvider until someone installs a
+    # real one. Re-entry returns the exact handle Ratel installed; any other real provider
+    # belongs to the caller and remains a loud composition error.
+    current_provider = trace.get_tracer_provider()
+    owned_handle = _owned_provider_handle(current_provider)
+    if owned_handle is not None:
+        return cast("TracerProvider", owned_handle)
+    if not isinstance(current_provider, ProxyTracerProvider):
+        raise _foreign_provider_error()
     cfg = resolve_otlp_config(
         api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
     )
-    # get_tracer_provider() returns the default ProxyTracerProvider until someone installs a
-    # real one; a non-proxy means another provider already owns the global.
-    if not isinstance(trace.get_tracer_provider(), ProxyTracerProvider):
-        raise RuntimeError(
-            "ratel telemetry init(): an OpenTelemetry TracerProvider is already registered "
-            "globally, so init() (the turnkey path that owns the provider) cannot take over. "
-            "To send Ratel telemetry alongside an existing provider (e.g. Langfuse + the Vercel "
-            "AI SDK), add ratel_span_processor(api_key=...) to that provider instead of init()."
-        )
     provider = TracerProvider(resource=Resource.create({SERVICE_NAME: cfg.service_name}))
     provider.add_span_processor(
         ratel_span_processor(
-            api_key=api_key, endpoint=endpoint, headers=headers, span_filter=_accept_all_spans
+            api_key=api_key,
+            endpoint=endpoint,
+            headers=headers,
+            span_filter=_accept_all_spans if span_filter is None else span_filter,
         )
     )
+    setattr(provider, _PROVIDER_HANDLE_ATTR, provider)
     trace.set_tracer_provider(provider)
+    if trace.get_tracer_provider() is not provider:
+        provider.shutdown()
+        raise _foreign_provider_error()
     return provider
 
 

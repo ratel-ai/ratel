@@ -10,6 +10,9 @@ vocabulary weight-free ([ADR-0007](../../../docs/adr/0007-telemetry-two-streams.
 The `init()` exporter, which does wire the OTel SDK, lives in the companion
 [`@ratel-ai/telemetry-otlp`](../ts-otlp/README.md) package.
 
+`resolveOtlpConfig()` reads `RATEL_URL` and `RATEL_API_KEY` as fallbacks; explicit
+`endpoint` / `apiKey` values win over the environment.
+
 ## Usage
 
 ```ts
@@ -52,7 +55,7 @@ pnpm --filter @ratel-ai/telemetry test
 ```
 
 The tests cover the vocabulary (each constant asserted against the pin), `resolveOtlpConfig`'s
-endpoint/auth resolution and the content-capture gate, a purity guard that no OTel dependency
+endpoint/auth resolution and precedence, the content-capture gate, a purity guard that no OTel dependency
 or import creeps back in, and the shared contract-against-the-pin conformance in
 [`../conformance/`](../conformance/README.md) (spans built from these constants through the
 real SDK must emit the exact pinned keys).

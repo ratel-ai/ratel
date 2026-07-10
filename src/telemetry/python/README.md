@@ -33,15 +33,21 @@ Want turnkey OTLP export to Ratel? Install `ratel-ai-telemetry[otlp]` and call `
 ```python
 from ratel_ai_telemetry.otlp import init  # also importable as `from ratel_ai_telemetry import init`
 
-provider = init(api_key="sk-...")  # wires the OTLP exporter to RATEL_URL (or endpoint=/headers=)
+provider = init()  # reads RATEL_URL + RATEL_API_KEY (or pass endpoint=/api_key=/headers=)
 # ... emit spans ...
 provider.shutdown()  # flush the exporter on exit
 ```
 
-`init()` owns the global provider, so it is the turnkey path for a greenfield app; it raises —
-pointing at `ratel_span_processor` — rather than silently no-op'ing if a provider is already
-registered. A complete, offline-runnable version (console exporter + a `ratel.search` →
-`execute_tool` trace) is in [`examples/telemetry-python`](../../../examples/telemetry-python/README.md).
+Explicit arguments beat the environment. On first setup, pass `enabled=False` to get an OTel-free
+no-op shutdown handle without endpoint configuration or the `[otlp]` extra, or `span_filter=` to
+narrow the spans exported by the turnkey provider (the default exports every span). Repeated
+`init()` calls return the exact provider from the first successful Ratel-owned initialization—even
+if a later caller is disabled—so hot reload and multiple callers do not fight over the global
+provider; the first call's configuration remains authoritative. A foreign provider still produces
+the actionable `ratel_span_processor` error, including when it wins a registration race.
+
+A complete, offline-runnable version (console exporter + a `ratel.search` → `execute_tool` trace)
+is in [`examples/telemetry-python`](../../../examples/telemetry-python/README.md).
 
 ### Coexisting with another provider (Langfuse, the Vercel AI SDK, ...)
 
@@ -56,19 +62,22 @@ from ratel_ai_telemetry.otlp import ratel_span_processor
 
 provider = TracerProvider()
 provider.add_span_processor(existing_langfuse_processor)              # keeps every span
-provider.add_span_processor(ratel_span_processor(api_key="sk-..."))  # gen_ai.*/ratel.* only
+provider.add_span_processor(ratel_span_processor())  # reads RATEL_URL + RATEL_API_KEY
 ```
 
 Pass `span_filter=lambda _s: True` (or your own predicate) to override the default;
 `ratel_span_exporter()` is the bare OTLP exporter if you want to wire your own processor.
 Note that per-span filtering can orphan the AI SDK's `ai.*` wrapper from its `gen_ai.*` child;
 send everything (or tail-sample) when you need full-trace fidelity rather than just the
-gen_ai/ratel metrics.
+gen_ai/ratel metrics. `enabled=False` returns an OTel-free no-op processor without resolving
+configuration.
 
 ## Package shape
 
 - Distribution name: `ratel-ai-telemetry`; import name: `ratel_ai_telemetry`
-- Pure Python (hatchling build, no Rust extension); OTel-free constants, `init()` behind the `[otlp]` extra
+- Pure Python (hatchling build, no Rust extension); OTel-free constants, `init()` behind the
+  `[otlp]` extra. That extra installs the complete exporter/SDK stack; callers do not install
+  individual OpenTelemetry packages.
 - Targets Python >=3.9 (the `[otlp]` OTel deps are pinned below 1.42, the last line supporting 3.9)
 - Released under the `telemetry-py-v*` tag prefix ([ADR-0008](../../../docs/adr/0008-release-engineering.md))
 - MIT ([ADR-0009](../../../docs/adr/0009-licensing.md))
@@ -85,10 +94,10 @@ uv pip install --python .venv -e '.[dev]'
 
 Unlike the Python SDK there is no `maturin develop` step — the package is pure Python,
 installed editable (`[dev]` pulls the `[otlp]` extra so the tests exercise the real SDK).
-The tests cover the vocabulary (each constant asserted against the pin), `init()`'s
-endpoint/auth resolution, its already-registered guard and the content-capture gate, the
-`ratel_signal_filter` predicate and that `ratel_span_processor` forwards only the spans it
-passes, a purity guard that importing the package pulls no OTel, and the shared
+The tests cover the vocabulary (each constant asserted against the pin), disabled/filtered/
+idempotent/foreign-provider `init()` behavior, endpoint/auth resolution and the content-capture
+gate, the `ratel_signal_filter` predicate and processor no-op/filtering behavior, a purity guard
+that importing the package pulls no OTel, and the shared
 contract-against-the-pin conformance in
 [`../conformance/`](../conformance/README.md) (spans built from these constants through the
 real SDK must emit the exact pinned keys).

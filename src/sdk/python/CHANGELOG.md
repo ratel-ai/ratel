@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- `configure_telemetry()` now returns a per-call provider-like shutdown handle instead of mutating a shared provider's `shutdown` method. When idempotent telemetry initialization reuses one provider, a stale handle can no longer clear a newer caller's generation-scoped content-capture override.
+
 ## [0.4.1] - 2026-07-10
 
 ### Added

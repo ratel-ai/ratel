@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- On first setup, `TelemetryInitOptions.enabled: false` returns a no-op shutdown handle without endpoint or provider setup; once Ratel owns the provider, repeated calls return its original handle. `RatelSpanProcessorOptions.enabled: false` always returns a no-op processor.
+- `TelemetryInitOptions.spanFilter` lets the turnkey provider select spans without hand-building a `NodeTracerProvider`; omitting it preserves the export-everything default.
+- `init()` is idempotent to the provider it installed: repeated and module-reloaded calls return the exact original handle, while a foreign global provider still raises the composition error.
+
+### Changed
+
+- `@opentelemetry/api` is now a peer + development dependency so the host and Ratel share one global API instance. The exporter, resources, semantic conventions, and trace SDK packages remain runtime dependencies, preserving the one-package turnkey install.
+
 ## [0.1.0] - 2026-07-06
 
 ### Added

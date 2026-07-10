@@ -317,6 +317,25 @@ async def test_stale_handle_shutdown_does_not_clobber_a_newer_override(
 
 
 @pytest.mark.asyncio
+async def test_stale_handle_isolated_when_idempotent_init_returns_one_provider(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each configure call owns its capture teardown even when init() reuses a provider."""
+    shared_provider = _FakeProvider()
+    monkeypatch.setattr("ratel_ai_telemetry.otlp.init", lambda **_kwargs: shared_provider)
+    monkeypatch.setenv(CAPTURE_ENV, "SPAN_AND_EVENT")
+
+    h1 = configure_telemetry(include_span_and_events=False)
+    h2 = configure_telemetry(include_span_and_events=False)
+
+    h1.shutdown()
+    assert await _invoke_and_read_args(exporter) is None
+
+    h2.shutdown()
+    assert await _invoke_and_read_args(exporter) == '{"path": "/p"}'
+
+
+@pytest.mark.asyncio
 async def test_accepts_a_lowercase_capture_content(
     exporter: Any, fake_init: dict[str, int]
 ) -> None:

@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `API_KEY_ENV` (`RATEL_API_KEY`) and API-key environment fallback in `resolveOtlpConfig`; an explicit `apiKey` remains authoritative.
+
 ## [0.1.1] - 2026-07-10
 
 ### Added

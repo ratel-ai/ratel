@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `API_KEY_ENV` (`RATEL_API_KEY`) and API-key environment fallback; explicit `api_key=` remains authoritative.
+- On first setup, `init(enabled=False)` returns an OTel-free no-op handle without endpoint configuration or the `[otlp]` extra; once Ratel owns the provider, repeated calls return it. `ratel_span_processor(enabled=False)` always returns a no-op processor.
+- `init(span_filter=...)` filters the turnkey provider, and repeated/module-reloaded calls return the exact Ratel-owned provider while foreign providers still raise.
+
 ## [0.1.1] - 2026-07-10
 
 ### Added
