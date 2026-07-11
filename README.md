@@ -10,6 +10,7 @@
 
   <p>
     <a href="https://www.npmjs.com/package/@ratel-ai/sdk"><img src="https://img.shields.io/npm/v/@ratel-ai/sdk?label=npm&color=cb3837" alt="npm" /></a>
+    <a href="https://pypi.org/project/ratel-ai/"><img src="https://img.shields.io/pypi/v/ratel-ai?label=PyPI&color=3775a9" alt="PyPI" /></a>
     <a href="https://crates.io/crates/ratel-ai-core"><img src="https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300" alt="crates.io" /></a>
     <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
     <a href="#license"><img src="https://img.shields.io/badge/license-Apache--2.0%20%26%20MIT-blue" alt="license" /></a>
@@ -42,6 +43,8 @@ pnpm add @ratel-ai/sdk
 ```bash
 pip install ratel-ai
 ```
+
+Guides: [Quickstart](https://docs.ratel.sh/docs/quickstart) · [TypeScript SDK](https://docs.ratel.sh/docs/sdks/typescript) · [Python SDK](https://docs.ratel.sh/docs/sdks/python)
 
 <details>
 <summary>TypeScript example</summary>
@@ -107,16 +110,13 @@ The index uses BM25 by default, the same algorithm behind most search engines, a
 
 ## The Ratel project
 
-Ratel scales from an in-process library to a managed service — one engine, one catalog contract, all the way up:
+The open-source Ratel project is split across these repositories:
 
 | | Repo | What it is |
 |---|---|---|
-| **Engine + platform** | [ratel-ai/ratel](https://github.com/ratel-ai/ratel) (this one) | The `ratel-ai-core` engine plus TS/Python SDKs, the [`protocol/`](protocol/README.md) catalog-source contract, and the OTel telemetry helpers. Embed it in your agent process today. |
-| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution — Ratel in front of your MCP setup, today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`. |
-| **ratel-cloud** | *coming* | Managed Ratel: the first hosted catalog source plus intelligence. SDKs reach it via `RATEL_URL` over the catalog-source contract. |
+| **Engine + platform** | [ratel-ai/ratel](https://github.com/ratel-ai/ratel) (this one) | The `ratel-ai-core` engine plus TS/Python SDKs, the [`protocol/`](protocol/README.md) catalog-source contract, and the OTel telemetry helpers. Embed it in your agent process. |
+| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution — Ratel in front of your MCP setup, distributed as `ratel-mcp` / `@ratel-ai/mcp-server`. |
 | **ratel-bench** | [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) | The benchmark harness behind [benchmark.ratel.sh](https://benchmark.ratel.sh). |
-
-The hosted cloud is decided direction ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)), not yet public; a standalone server is deferred ([ADR-0003](docs/adr/0003-catalog-source-interface.md)).
 
 ## Repo layout
 
@@ -128,7 +128,9 @@ src/
 └── telemetry/         # OTel conventions + helper packages
 protocol/              # catalog-source wire contract
 examples/              # End-to-end SDK examples
-docs/                  # ADRs
+docs/
+├── adr/                # Architecture decision records
+└── assets/             # Images and other static assets
 ```
 
 ## Build & test
