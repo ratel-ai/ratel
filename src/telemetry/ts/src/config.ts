@@ -22,8 +22,10 @@ export const DEFAULT_SERVICE_NAME = "ratel";
 /**
  * `init()` (in `@ratel-ai/telemetry-otlp`) resolves endpoint + auth from
  * `RATEL_URL` / `RATEL_API_KEY`, with explicit `{ endpoint, apiKey }` values
- * taking precedence. Custom `headers` compose with either form; the resolved
- * API key is authoritative for the Bearer header.
+ * taking precedence over the environment. An explicit `apiKey` sets the Bearer
+ * header; the `RATEL_API_KEY` fallback only applies when neither `apiKey` nor an
+ * explicit `Authorization` header is given, so ambient env never overrides an
+ * auth header the caller passed on purpose.
  */
 export interface InitOptions {
   /** `service.name` resource attribute. Defaults to {@link DEFAULT_SERVICE_NAME}. */
@@ -32,7 +34,7 @@ export interface InitOptions {
   apiKey?: string;
   /** Full OTLP traces URL (incl. `/v1/traces`). Defaults to `RATEL_URL`. */
   endpoint?: string;
-  /** Extra headers merged onto the request (before the `apiKey` Bearer header). */
+  /** Extra headers merged onto the request. An explicit `Authorization` here is kept over the `RATEL_API_KEY` env fallback. */
   headers?: Record<string, string>;
 }
 
@@ -58,11 +60,20 @@ export function resolveOtlpConfig(
     );
   }
   const headers: Record<string, string> = { ...opts.headers };
-  const apiKey = opts.apiKey ?? env[API_KEY_ENV];
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
+  // An explicit apiKey sets the Bearer header (code-level config wins). The RATEL_API_KEY
+  // env fallback applies only when the caller passed neither apiKey nor an Authorization
+  // header, so ambient env never clobbers auth the caller set on purpose.
+  if (opts.apiKey) {
+    headers.Authorization = `Bearer ${opts.apiKey}`;
+  } else if (env[API_KEY_ENV] && !hasAuthorizationHeader(headers)) {
+    headers.Authorization = `Bearer ${env[API_KEY_ENV]}`;
   }
   return { url, headers, serviceName: opts.serviceName ?? DEFAULT_SERVICE_NAME };
+}
+
+/** Whether the caller already supplied an `Authorization` header (any casing). */
+function hasAuthorizationHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((key) => key.toLowerCase() === "authorization");
 }
 
 /**

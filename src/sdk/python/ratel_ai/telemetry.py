@@ -205,15 +205,15 @@ def _resolve_capture_override(
 
 
 class _TelemetryHandle:
-    """Per-call shutdown behavior over a provider that init() may reuse.
+    """Per-call shutdown behavior over the shutdown handle init() may reuse.
 
-    Attribute access delegates to the underlying provider so existing callers can still use
-    provider methods such as ``force_flush`` without configure_telemetry mutating the shared
-    provider's ``shutdown`` method.
+    Attribute access delegates to the underlying handle so callers can still use handle
+    methods such as ``force_flush`` without configure_telemetry mutating the shared handle's
+    ``shutdown`` method.
     """
 
-    def __init__(self, provider: Any, shutdown: Callable[[], Any]) -> None:
-        self._provider = provider
+    def __init__(self, inner: Any, shutdown: Callable[[], Any]) -> None:
+        self._inner = inner
         self._shutdown = shutdown
 
     def shutdown(self) -> Any:
@@ -221,7 +221,7 @@ class _TelemetryHandle:
         return self._shutdown()
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(self._provider, name)
+        return getattr(self._inner, name)
 
 
 def configure_telemetry(
@@ -260,8 +260,10 @@ def configure_telemetry(
         include_span_and_events: Boolean sugar for `capture_content` (see above).
 
     Returns:
-        A per-call provider-like shutdown handle (``handle.shutdown()`` /
-        ``handle.force_flush()``). Attribute access delegates to the shared provider.
+        A per-call shutdown handle (``handle.shutdown()`` / ``handle.force_flush()``),
+        the same shape on every path. Attribute access delegates to the shared handle
+        `init` returns; because that handle is shared across callers, shutting it down
+        stops export for all of them.
 
     Raises:
         ModuleNotFoundError: if the OpenTelemetry exporter is not installed
@@ -280,8 +282,13 @@ def configure_telemetry(
 
     capture = _resolve_capture_override(capture_content, include_span_and_events)
     if capture is None:
-        # No override: the env var keeps ruling; nothing to set or undo.
-        return init(api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name)
+        # No override: the env var keeps ruling; nothing to set or undo. Still wrap so the
+        # return shape (a per-call handle delegating to the shared provider) matches the
+        # capture path below, rather than leaking init()'s shared handle directly.
+        handle = init(
+            api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
+        )
+        return _TelemetryHandle(handle, handle.shutdown)
 
     # Apply (and validate — an unrecognized mode raises ValueError) the override *before*
     # wiring the exporter, so a bad option fails loud with no provider side effects; unwind

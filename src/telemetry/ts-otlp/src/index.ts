@@ -10,6 +10,7 @@
  */
 
 export {
+  API_KEY_ENV,
   DEFAULT_SERVICE_NAME,
   ENDPOINT_ENV,
   type InitOptions,

@@ -33,6 +33,8 @@ export interface TelemetryInitOptions extends InitOptions {
 const NOOP_HANDLE: TelemetryHandle = { shutdown: async () => {} };
 const ACCEPT_ALL_SPANS: SpanFilter = () => true;
 const RATEL_PROVIDER_HANDLE = Symbol.for("@ratel-ai/telemetry-otlp/provider-handle");
+/** Marks a Ratel-owned provider whose handle has been shut down (its exporter is dead). */
+const RATEL_PROVIDER_SHUTDOWN = Symbol.for("@ratel-ai/telemetry-otlp/provider-shutdown");
 const NOOP_GLOBAL_PROVIDER = new ProxyTracerProvider().getDelegate();
 
 /**
@@ -44,13 +46,18 @@ const NOOP_GLOBAL_PROVIDER = new ProxyTracerProvider().getDelegate();
  * {@link ratelSpanProcessor}, whose default `gen_ai.*`/`ratel.*` filter exists for sharing a
  * provider). Pass `spanFilter` to narrow that set, or `enabled: false` for a no-op handle on
  * first setup. Repeated calls return the existing handle when Ratel already owns the active
- * provider—even if a later caller is disabled. It throws with a pointer to
- * {@link ratelSpanProcessor} when a foreign provider is registered.
+ * provider—even if a later caller is disabled—so shutting that handle down stops export for
+ * every caller. It throws with a pointer to {@link ratelSpanProcessor} when a foreign provider
+ * is registered. Shutdown is terminal: after `handle.shutdown()`, a later `init()` throws
+ * rather than hand back the dead handle (call `trace.disable()` first to re-initialize).
  */
 export function init(opts: TelemetryInitOptions = {}): TelemetryHandle {
   const activeProvider = activeGlobalProvider();
   const existingHandle = ratelOwnedHandle(activeProvider);
-  if (existingHandle) return existingHandle;
+  if (existingHandle) {
+    if (providerIsShutDown(activeProvider)) throw alreadyShutDownError();
+    return existingHandle;
+  }
 
   const { enabled = true, spanFilter = ACCEPT_ALL_SPANS, ...configOpts } = opts;
   if (!enabled) return NOOP_HANDLE;
@@ -62,14 +69,38 @@ export function init(opts: TelemetryInitOptions = {}): TelemetryHandle {
     resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName }),
     spanProcessors: [ratelSpanProcessor({ ...configOpts, spanFilter })],
   });
-  const handle: TelemetryHandle = { shutdown: () => provider.shutdown() };
+  const handle: TelemetryHandle = {
+    shutdown: async () => {
+      try {
+        await provider.shutdown();
+      } finally {
+        // Flag the dead provider so a later init() fails loud instead of returning this handle.
+        Object.defineProperty(provider, RATEL_PROVIDER_SHUTDOWN, {
+          value: true,
+          configurable: true,
+        });
+      }
+    },
+  };
   Object.defineProperty(provider, RATEL_PROVIDER_HANDLE, { value: handle });
   provider.register();
-  if (activeGlobalProvider() !== provider) {
+  const winner = activeGlobalProvider();
+  if (winner !== provider) {
+    // Lost a registration race. If Ratel already owns the winner, honor idempotence and
+    // return its handle; only a truly foreign winner is a composition error.
     void provider.shutdown();
+    const winnerHandle = ratelOwnedHandle(winner);
+    if (winnerHandle) return winnerHandle;
     throw foreignProviderError();
   }
   return handle;
+}
+
+function providerIsShutDown(provider: unknown): boolean {
+  if ((typeof provider !== "object" && typeof provider !== "function") || provider === null) {
+    return false;
+  }
+  return Reflect.get(provider, RATEL_PROVIDER_SHUTDOWN) === true;
 }
 
 function foreignProviderError(): Error {
@@ -78,6 +109,14 @@ function foreignProviderError(): Error {
       "so init() (the turnkey path that owns the provider) cannot take over. To send Ratel " +
       "telemetry alongside an existing provider (e.g. Langfuse + the Vercel AI SDK), add " +
       "ratelSpanProcessor({ apiKey }) to that provider's spanProcessors instead of calling init().",
+  );
+}
+
+function alreadyShutDownError(): Error {
+  return new Error(
+    "ratel telemetry init(): telemetry was already shut down in this process. The global " +
+      "OpenTelemetry tracer provider is registered once, so a later init() cannot re-take it. " +
+      "Call trace.disable() before init() if you must re-initialize (e.g. in tests).",
   );
 }
 

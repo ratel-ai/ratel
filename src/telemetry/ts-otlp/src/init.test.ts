@@ -53,6 +53,9 @@ describe("init", () => {
     trace.getTracer("test").startSpan("GET /health").end();
 
     expect(onEnd).toHaveBeenCalledTimes(1);
+    // Assert it forwarded the accepted span, not merely "exactly one span" — an inverted
+    // predicate would also forward exactly one (the rejected one) and pass on count alone.
+    expect((onEnd.mock.calls[0]?.[0] as ReadableSpan).name).toBe("ratel.search");
     await handle.shutdown();
   });
 
@@ -75,6 +78,29 @@ describe("init", () => {
       expect(reloaded.init()).toBe(handle);
     } finally {
       await handle.shutdown().catch(() => {});
+    }
+  });
+
+  it("throws on init() after shutdown instead of returning the dead handle", async () => {
+    const handle = init({ endpoint: "http://localhost:4318/v1/traces" });
+    await handle.shutdown().catch(() => {});
+    // The provider stays the registered global after shutdown; re-init must fail loud rather
+    // than hand back a handle whose exporter is dead (spans would silently drop).
+    expect(() => init({ endpoint: "http://localhost:4318/v1/traces" })).toThrow(
+      /already shut down/,
+    );
+    expect(() => init({ enabled: false })).toThrow(/already shut down/);
+  });
+
+  it("re-initializes with a fresh handle after trace.disable() clears the global", async () => {
+    const first = init({ endpoint: "http://localhost:4318/v1/traces" });
+    await first.shutdown().catch(() => {});
+    trace.disable(); // the documented escape hatch to re-init in the same process
+    const second = init({ endpoint: "http://localhost:4318/v1/traces" });
+    try {
+      expect(second).not.toBe(first);
+    } finally {
+      await second.shutdown().catch(() => {});
     }
   });
 

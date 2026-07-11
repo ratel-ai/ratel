@@ -168,6 +168,7 @@ _OTLP_EXPORTS: Final = frozenset(
         "ratel_span_exporter",
         "ratel_span_processor",
         "SpanFilter",
+        "TelemetryHandle",
     }
 )
 
@@ -232,4 +233,5 @@ __all__ = [
     "ratel_span_exporter",
     "ratel_span_processor",
     "SpanFilter",
+    "TelemetryHandle",
 ]

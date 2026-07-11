@@ -320,7 +320,12 @@ async def test_stale_handle_shutdown_does_not_clobber_a_newer_override(
 async def test_stale_handle_isolated_when_idempotent_init_returns_one_provider(
     exporter: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Each configure call owns its capture teardown even when init() reuses a provider."""
+    """Each configure call owns its capture teardown even when init() reuses a provider.
+
+    Scope is the content-capture override only — the provider/exporter lifecycle is shared, so
+    shutting one handle down stops export for the others (documented; not asserted here, since
+    _FakeProvider.shutdown is an inert flag).
+    """
     shared_provider = _FakeProvider()
     monkeypatch.setattr("ratel_ai_telemetry.otlp.init", lambda **_kwargs: shared_provider)
     monkeypatch.setenv(CAPTURE_ENV, "SPAN_AND_EVENT")

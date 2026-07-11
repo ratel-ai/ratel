@@ -32,13 +32,16 @@ span.end();
 await telemetry.shutdown(); // flush the exporter on exit
 ```
 
-Explicit options beat the environment. On first setup, pass `enabled: false` to get a no-op
-shutdown handle without requiring endpoint configuration, or `spanFilter` to narrow the spans
-exported by the turnkey provider (the default exports every span). Repeated `init()` calls return
-the exact handle from the first successful Ratel-owned initialization—even if a later caller is
-disabled—so hot reload and multiple callers do not fight over the global provider; the first
-call's configuration remains authoritative. A foreign provider still produces the actionable
-`ratelSpanProcessor` error before endpoint validation.
+Explicit options beat the environment: an explicit `apiKey` sets the Bearer header, and the
+`RATEL_API_KEY` fallback never overrides an `Authorization` header you pass yourself. On first
+setup, pass `enabled: false` to get a no-op shutdown handle without requiring endpoint
+configuration, or `spanFilter` to narrow the spans exported by the turnkey provider (the default
+exports every span). Repeated `init()` calls return the exact handle from the first successful
+Ratel-owned initialization—even if a later caller is disabled—so hot reload and multiple callers
+do not fight over the global provider; the first call's configuration remains authoritative, and
+shutting that shared handle down stops export for every caller. A foreign provider still produces
+the actionable `ratelSpanProcessor` error before endpoint validation. Shutdown is terminal: after
+`handle.shutdown()`, a later `init()` throws (call `trace.disable()` first to re-initialize).
 
 A complete, offline-runnable version (console exporter + a `ratel.search` → `execute_tool` trace)
 is in
@@ -75,8 +78,10 @@ no-op processor without resolving configuration.
 
 - Package name: `@ratel-ai/telemetry-otlp`
 - Pure TypeScript (no native binding); installing this package brings the exporter and OTel SDK
-  implementation automatically. `@opentelemetry/api` is a peer so the host and Ratel share one
-  global API instance; callers do not install the individual SDK packages themselves.
+  implementation (exporter, resources, semantic-conventions, trace SDK) as runtime deps.
+  `@opentelemetry/api` is a peer so the host and Ratel share one global API instance — npm ≥7 and
+  pnpm auto-install it, but yarn (and pnpm with `auto-install-peers=false`) need an explicit
+  `add @opentelemetry/api`.
 - Released under the `telemetry-ts-otlp-v*` tag prefix ([ADR-0008](../../../docs/adr/0008-release-engineering.md))
 - MIT ([ADR-0009](../../../docs/adr/0009-licensing.md)); member of the pnpm workspace
 

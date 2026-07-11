@@ -33,18 +33,24 @@ Want turnkey OTLP export to Ratel? Install `ratel-ai-telemetry[otlp]` and call `
 ```python
 from ratel_ai_telemetry.otlp import init  # also importable as `from ratel_ai_telemetry import init`
 
-provider = init()  # reads RATEL_URL + RATEL_API_KEY (or pass endpoint=/api_key=/headers=)
-# ... emit spans ...
-provider.shutdown()  # flush the exporter on exit
+handle = init()  # reads RATEL_URL + RATEL_API_KEY (or pass endpoint=/api_key=/headers=)
+# ... emit spans through the global OTel API (opentelemetry.trace.get_tracer(...)) ...
+handle.shutdown()  # flush the exporter on exit
 ```
 
-Explicit arguments beat the environment. On first setup, pass `enabled=False` to get an OTel-free
-no-op shutdown handle without endpoint configuration or the `[otlp]` extra, or `span_filter=` to
-narrow the spans exported by the turnkey provider (the default exports every span). Repeated
-`init()` calls return the exact provider from the first successful Ratel-owned initialization—even
-if a later caller is disabled—so hot reload and multiple callers do not fight over the global
-provider; the first call's configuration remains authoritative. A foreign provider still produces
-the actionable `ratel_span_processor` error, including when it wins a registration race.
+`init()` returns a shutdown handle (`handle.shutdown()` / `handle.force_flush()`), not a provider —
+emit through the global OTel API. Explicit arguments beat the environment: an explicit `api_key=`
+sets the Bearer header, and the `RATEL_API_KEY` fallback never overrides an `Authorization` header
+you pass yourself. On first setup, pass `enabled=False` to get an OTel-free no-op shutdown handle
+without endpoint configuration or the `[otlp]` extra, or `span_filter=` to narrow the spans exported
+by the turnkey provider (the default exports every span). Repeated `init()` calls return the exact
+handle from the first successful Ratel-owned initialization—even if a later caller is disabled—so
+hot reload and multiple callers do not fight over the global provider; the first call's
+configuration remains authoritative, and shutting that shared handle down stops export for every
+caller. Shutdown is terminal: OTel's global provider is set once per process, so after
+`handle.shutdown()` a later `init()` raises rather than return a dead handle. A foreign provider
+still produces the actionable `ratel_span_processor` error, including when it wins a registration
+race.
 
 A complete, offline-runnable version (console exporter + a `ratel.search` → `execute_tool` trace)
 is in [`examples/telemetry-python`](../../../examples/telemetry-python/README.md).

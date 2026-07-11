@@ -22,15 +22,30 @@ import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from . import CAPTURE_CONTENT_ENV
 
 if TYPE_CHECKING:
-    from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
+    from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
     from opentelemetry.sdk.trace.export import SpanExporter
 
-#: Env var whose value is the default OTLP endpoint when api_key= is used.
+
+class TelemetryHandle(Protocol):
+    """What init() returns: a shutdown handle, not a full provider.
+
+    Both the enabled path (a live TracerProvider) and the disabled/no-op path satisfy this,
+    so the return type is honest either way. Emit spans through the global OpenTelemetry API
+    (``opentelemetry.trace.get_tracer(...)``), not off this handle — init() registers the
+    provider globally.
+    """
+
+    def shutdown(self) -> Any: ...
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool: ...
+
+
+#: Env var whose value is the default OTLP endpoint.
 ENDPOINT_ENV = "RATEL_URL"
 
 #: Env var whose value is the default API key when api_key= is omitted.
@@ -46,8 +61,13 @@ _EXTRA_HINT = (
 )
 
 # Stable attribute used to recognize the provider Ratel installed, including after this
-# module is reloaded. The value is the original shutdown handle (currently the provider).
+# module is reloaded. Its value is the provider itself, so the check is class-identity-free
+# (survives importlib.reload, which rebinds this module's classes).
 _PROVIDER_HANDLE_ATTR = "_ratel_ai_telemetry_handle"
+
+# Set True on the provider once its handle's shutdown() runs, so a later init() reports the
+# terminal state loudly instead of silently handing back a provider whose exporter is dead.
+_PROVIDER_SHUTDOWN_ATTR = "_ratel_ai_telemetry_shutdown"
 
 
 @dataclass(frozen=True)
@@ -72,25 +92,33 @@ def resolve_otlp_config(
     Accepts either api_key= (falling back to RATEL_API_KEY; endpoint defaults to
     RATEL_URL; Authorization: Bearer) or endpoint=/headers= (custom endpoint /
     collector). The forms compose: explicit endpoint/api_key values win over their
-    environment fallbacks, and the resolved API key adds the Bearer header on top of
-    any headers. env is injectable so the precedence is testable without a network.
+    environment fallbacks. An explicit api_key sets the Bearer header; the RATEL_API_KEY
+    fallback applies only when neither api_key nor an explicit Authorization header is
+    given, so ambient env never clobbers auth the caller set on purpose. env is injectable
+    so the precedence is testable without a network.
     """
     resolved_env = os.environ if env is None else env
     url = endpoint if endpoint is not None else resolved_env.get(ENDPOINT_ENV)
     if not url:
         raise ValueError(
             f"ratel telemetry init: no endpoint. Pass endpoint= or set {ENDPOINT_ENV} "
-            "(use api_key= for Bearer auth)."
+            f"(use api_key= or {API_KEY_ENV} for Bearer auth)."
         )
-    resolved_api_key = api_key if api_key is not None else resolved_env.get(API_KEY_ENV)
     resolved_headers: dict[str, str] = dict(headers or {})
-    if resolved_api_key:
-        resolved_headers["Authorization"] = f"Bearer {resolved_api_key}"
+    if api_key:
+        resolved_headers["Authorization"] = f"Bearer {api_key}"
+    elif resolved_env.get(API_KEY_ENV) and not _has_authorization_header(resolved_headers):
+        resolved_headers["Authorization"] = f"Bearer {resolved_env[API_KEY_ENV]}"
     return OtlpConfig(
         url=url,
         headers=resolved_headers,
         service_name=service_name or DEFAULT_SERVICE_NAME,
     )
+
+
+def _has_authorization_header(headers: Mapping[str, str]) -> bool:
+    """Whether the caller already supplied an Authorization header (any casing)."""
+    return any(key.lower() == "authorization" for key in headers)
 
 
 #: Predicate deciding whether a finished span is forwarded to Ratel.
@@ -132,8 +160,8 @@ class _NoOpSpanProcessor:
         return True
 
 
-class _NoOpTracerProvider:
-    """OTel-free disabled-mode handle with the provider lifecycle methods callers use."""
+class _NoOpHandle:
+    """OTel-free disabled-mode shutdown handle: the same surface as init()'s live return."""
 
     def shutdown(self) -> None:
         return None
@@ -142,8 +170,8 @@ class _NoOpTracerProvider:
         return True
 
 
-def _owned_provider_handle(provider: object) -> object | None:
-    """Return the stable Ratel-owned handle marker, if this is our provider."""
+def _owned_provider(provider: object) -> object | None:
+    """Return the Ratel-owned provider, if this is ours (identity marker, reload-safe)."""
     handle = getattr(provider, _PROVIDER_HANDLE_ATTR, None)
     return handle if handle is provider else None
 
@@ -154,6 +182,14 @@ def _foreign_provider_error() -> RuntimeError:
         "globally, so init() (the turnkey path that owns the provider) cannot take over. "
         "To send Ratel telemetry alongside an existing provider (e.g. Langfuse + the Vercel "
         "AI SDK), add ratel_span_processor(api_key=...) to that provider instead of init()."
+    )
+
+
+def _already_shut_down_error() -> RuntimeError:
+    return RuntimeError(
+        "ratel telemetry init(): telemetry was already shut down in this process. The "
+        "OpenTelemetry global tracer provider is set once per process, so re-initialization "
+        "after shutdown is not supported — init() once and shut down only at process exit."
     )
 
 
@@ -220,30 +256,34 @@ def init(
     service_name: str | None = None,
     span_filter: SpanFilter | None = None,
     enabled: bool = True,
-) -> TracerProvider:
+) -> TelemetryHandle:
     """Wire an OTLP http/protobuf exporter + batch processor + service.name resource,
-    register it as the global tracer provider, and return it as the shutdown handle
-    (call provider.shutdown() / provider.force_flush()). Everything else is the
-    untouched OTel SDK.
+    register it as the global tracer provider, and return a shutdown handle (call
+    handle.shutdown() / handle.force_flush()). Emit spans through the global OTel API
+    (``opentelemetry.trace.get_tracer(...)``); everything else is the untouched OTel SDK.
 
     init() owns the global provider, so it exports every span by default (unlike
     ratel_span_processor, whose default gen_ai.*/ratel.* filter exists for sharing a provider);
-    pass span_filter to narrow it. Repeated calls return the original Ratel-owned provider.
-    It raises — pointing at ratel_span_processor — if a foreign provider is already registered
+    pass span_filter to narrow it. Repeated calls return the original Ratel-owned handle. It
+    raises — pointing at ratel_span_processor — if a foreign provider is already registered
     globally. On first setup, pass enabled=False for an OTel-free no-op handle that needs no
     endpoint; once Ratel owns the provider, repeated calls return it regardless of options.
     Enabled initialization needs the [otlp] extra and raises a clear error without it.
+
+    Shutdown is terminal: after handle.shutdown(), a later init() raises rather than hand back
+    the dead provider (OTel's global provider is set once per process). Note that the handle is
+    shared across repeated calls, so shutting it down stops export for every caller.
     """
     if not enabled:
-        # Preserve an already-active Ratel provider without importing OTel on the genuinely
-        # disabled/base-only path. A prior successful init has loaded this API module already.
+        # Preserve an already-active, live Ratel provider without importing OTel on the
+        # genuinely disabled/base-only path. A prior successful init loaded this module already.
         trace_module = sys.modules.get("opentelemetry.trace")
         if trace_module is not None:
             current_provider = trace_module.get_tracer_provider()
-            owned_handle = _owned_provider_handle(current_provider)
-            if owned_handle is not None:
-                return cast("TracerProvider", owned_handle)
-        return cast("TracerProvider", _NoOpTracerProvider())
+            owned = _owned_provider(current_provider)
+            if owned is not None and not getattr(owned, _PROVIDER_SHUTDOWN_ATTR, False):
+                return cast("TelemetryHandle", owned)
+        return _NoOpHandle()
 
     try:
         from opentelemetry import trace
@@ -256,9 +296,11 @@ def init(
     # real one. Re-entry returns the exact handle Ratel installed; any other real provider
     # belongs to the caller and remains a loud composition error.
     current_provider = trace.get_tracer_provider()
-    owned_handle = _owned_provider_handle(current_provider)
-    if owned_handle is not None:
-        return cast("TracerProvider", owned_handle)
+    owned = _owned_provider(current_provider)
+    if owned is not None:
+        if getattr(owned, _PROVIDER_SHUTDOWN_ATTR, False):
+            raise _already_shut_down_error()
+        return cast("TelemetryHandle", owned)
     if not isinstance(current_provider, ProxyTracerProvider):
         raise _foreign_provider_error()
     cfg = resolve_otlp_config(
@@ -274,11 +316,40 @@ def init(
         )
     )
     setattr(provider, _PROVIDER_HANDLE_ATTR, provider)
+    _mark_shutdown_on_teardown(provider)
     trace.set_tracer_provider(provider)
-    if trace.get_tracer_provider() is not provider:
+    winner = trace.get_tracer_provider()
+    if winner is not provider:
+        # Lost a first-init race (OTel's global is set-once). If the winner is Ratel's own
+        # provider, honor idempotence and return it; only a truly foreign winner is an error.
         provider.shutdown()
+        owned_winner = _owned_provider(winner)
+        if owned_winner is not None:
+            return cast("TelemetryHandle", owned_winner)
         raise _foreign_provider_error()
-    return provider
+    return cast("TelemetryHandle", provider)
+
+
+def _mark_shutdown_on_teardown(provider: object) -> None:
+    """Wrap the provider's shutdown so it flags the provider as torn down.
+
+    One-time, single-owner wrap set at provider creation (unlike the removed multi-generation
+    shutdown mutation): it only records terminal state so a later init() fails loud instead of
+    returning a provider whose exporter is already stopped.
+    """
+    # provider is typed `object` (the SDK class is a lazy import); the attribute name goes
+    # through a variable so getattr/setattr stay dynamic (and ruff does not rewrite them to
+    # attribute access that would not type-check).
+    shutdown_name = "shutdown"
+    original_shutdown = getattr(provider, shutdown_name)
+
+    def _shutdown() -> Any:
+        try:
+            return original_shutdown()
+        finally:
+            setattr(provider, _PROVIDER_SHUTDOWN_ATTR, True)
+
+    setattr(provider, shutdown_name, _shutdown)
 
 
 class ContentCapture(str, Enum):

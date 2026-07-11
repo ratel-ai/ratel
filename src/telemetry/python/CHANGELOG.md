@@ -8,9 +8,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- `API_KEY_ENV` (`RATEL_API_KEY`) and API-key environment fallback; explicit `api_key=` remains authoritative.
+- `API_KEY_ENV` (`RATEL_API_KEY`) and API-key environment fallback. Explicit `api_key=` remains authoritative; the env fallback applies only when neither `api_key=` nor an explicit `Authorization` header is given, so ambient `RATEL_API_KEY` never clobbers a caller-supplied auth header.
 - On first setup, `init(enabled=False)` returns an OTel-free no-op handle without endpoint configuration or the `[otlp]` extra; once Ratel owns the provider, repeated calls return it. `ratel_span_processor(enabled=False)` always returns a no-op processor.
-- `init(span_filter=...)` filters the turnkey provider, and repeated/module-reloaded calls return the exact Ratel-owned provider while foreign providers still raise.
+- `init(span_filter=...)` filters the turnkey provider, and repeated/module-reloaded calls return the exact Ratel-owned handle while foreign providers still raise. If another `init()` wins the registration race, the loser now returns that Ratel-owned handle instead of raising.
+- Public `TelemetryHandle` protocol describing `init()`'s return (`shutdown()` / `force_flush()`).
+
+### Changed
+
+- `init()` is now typed to return a `TelemetryHandle` (shutdown handle), not a `TracerProvider` — the disabled/no-op path no longer masquerades as a full provider. Emit spans through the global OTel API (`opentelemetry.trace.get_tracer(...)`).
+- `init()` shutdown is terminal: OTel's global provider is set once per process, so after the handle's `shutdown()` a later `init()` raises instead of returning a provider whose exporter is dead. A shared handle's `shutdown()` stops export for all callers.
 
 ## [0.1.1] - 2026-07-10
 

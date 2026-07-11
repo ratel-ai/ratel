@@ -119,8 +119,9 @@ def main() -> None:
     print(f"  headers:      {', '.join(cfg.headers) or '(none)'}")
 
     # One startup call for both on/off paths. When disabled, init() needs no endpoint or
-    # OTel setup; when enabled it also reads RATEL_API_KEY from the environment.
-    provider = init(enabled=bool(os.environ.get("RATEL_URL")))
+    # OTel setup; when enabled it also reads RATEL_API_KEY from the environment. init() returns
+    # a shutdown handle — emit through the global OTel API, not off the handle.
+    telemetry = init(enabled=bool(os.environ.get("RATEL_URL")))
     if os.environ.get("RATEL_URL"):
         print(f"\n--- RATEL_URL set — exporting a real trace to {os.environ['RATEL_URL']} ---")
         from opentelemetry import trace
@@ -128,7 +129,7 @@ def main() -> None:
         emit_ratel_trace(trace.get_tracer("ratel-example-telemetry"))
     else:
         print("\n(set RATEL_URL — and optionally RATEL_API_KEY — to export a real trace via init())")
-    provider.shutdown()
+    telemetry.shutdown()
 
     print("\nOK")
 
