@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  API_KEY_ENV,
   ContentCapture,
   clearContentCapture,
   contentCaptureMode,
@@ -10,6 +11,24 @@ import {
 } from "./config.js";
 
 describe("resolveOtlpConfig", () => {
+  it("uses RATEL_API_KEY as the apiKey fallback", () => {
+    const cfg = resolveOtlpConfig(
+      { endpoint: "https://collector.ratel.sh/v1/traces" },
+      { [API_KEY_ENV]: "env-secret" },
+    );
+
+    expect(cfg.headers.Authorization).toBe("Bearer env-secret");
+  });
+
+  it("prefers an explicit apiKey over RATEL_API_KEY", () => {
+    const cfg = resolveOtlpConfig(
+      { endpoint: "https://collector.ratel.sh/v1/traces", apiKey: "explicit-secret" },
+      { [API_KEY_ENV]: "env-secret" },
+    );
+
+    expect(cfg.headers.Authorization).toBe("Bearer explicit-secret");
+  });
+
   it("uses the apiKey form: endpoint from RATEL_URL, Bearer auth, default service name", () => {
     const cfg = resolveOtlpConfig(
       { apiKey: "secret" },
@@ -58,6 +77,36 @@ describe("resolveOtlpConfig", () => {
     );
     expect(cfg.headers.Authorization).toBe("Bearer k");
     expect(cfg.headers["x-tenant"]).toBe("acme");
+  });
+
+  it("does not let the RATEL_API_KEY env fallback clobber an explicit Authorization header", () => {
+    // A partner dual-exporting through their own collector passes a custom auth header; an
+    // ambient RATEL_API_KEY (set process-wide for the SDK) must not overwrite it.
+    const cfg = resolveOtlpConfig(
+      {
+        endpoint: "https://my-collector/v1/traces",
+        headers: { Authorization: "Api-Key abc" },
+      },
+      { [API_KEY_ENV]: "ambient-env-key" },
+    );
+    expect(cfg.headers.Authorization).toBe("Api-Key abc");
+  });
+
+  it("reads RATEL_API_KEY from the default process.env binding", () => {
+    // Exercises the default env parameter (not an injected env), the actual user-facing
+    // "set RATEL_API_KEY and call init()" path.
+    const savedUrl = process.env[ENDPOINT_ENV];
+    const savedKey = process.env[API_KEY_ENV];
+    process.env[ENDPOINT_ENV] = "https://collector.ratel.sh/v1/traces";
+    process.env[API_KEY_ENV] = "process-env-secret";
+    try {
+      expect(resolveOtlpConfig().headers.Authorization).toBe("Bearer process-env-secret");
+    } finally {
+      if (savedUrl === undefined) delete process.env[ENDPOINT_ENV];
+      else process.env[ENDPOINT_ENV] = savedUrl;
+      if (savedKey === undefined) delete process.env[API_KEY_ENV];
+      else process.env[API_KEY_ENV] = savedKey;
+    }
   });
 
   it("throws when no endpoint and no RATEL_URL", () => {

@@ -10,27 +10,31 @@
 
 import { CAPTURE_CONTENT_ENV } from "./index.js";
 
-/** Env var whose value is the default OTLP endpoint when `{ apiKey }` is used. */
+/** Env var whose value is the default OTLP endpoint. */
 export const ENDPOINT_ENV = "RATEL_URL";
+
+/** Env var whose value is the default Ratel API key. */
+export const API_KEY_ENV = "RATEL_API_KEY";
 
 /** `service.name` used when the caller does not pass one. */
 export const DEFAULT_SERVICE_NAME = "ratel";
 
 /**
- * `init()` (in `@ratel-ai/telemetry-otlp`) accepts either `{ apiKey }` (endpoint
- * defaults to `RATEL_URL`, `Authorization: Bearer <apiKey>`) or `{ endpoint,
- * headers }` (custom endpoint / collector / dual-export). The two forms compose:
- * an explicit `endpoint` always wins over `RATEL_URL`, and `apiKey` adds the
- * Bearer header on top of any `headers`.
+ * `init()` (in `@ratel-ai/telemetry-otlp`) resolves endpoint + auth from
+ * `RATEL_URL` / `RATEL_API_KEY`, with explicit `{ endpoint, apiKey }` values
+ * taking precedence over the environment. An explicit `apiKey` sets the Bearer
+ * header; the `RATEL_API_KEY` fallback only applies when neither `apiKey` nor an
+ * explicit `Authorization` header is given, so ambient env never overrides an
+ * auth header the caller passed on purpose.
  */
 export interface InitOptions {
   /** `service.name` resource attribute. Defaults to {@link DEFAULT_SERVICE_NAME}. */
   serviceName?: string;
-  /** Ratel API key; sent as `Authorization: Bearer <apiKey>`. */
+  /** Ratel API key; sent as `Authorization: Bearer <apiKey>`. Defaults to `RATEL_API_KEY`. */
   apiKey?: string;
   /** Full OTLP traces URL (incl. `/v1/traces`). Defaults to `RATEL_URL`. */
   endpoint?: string;
-  /** Extra headers merged onto the request (before the `apiKey` Bearer header). */
+  /** Extra headers merged onto the request. An explicit `Authorization` here is kept over the `RATEL_API_KEY` env fallback. */
   headers?: Record<string, string>;
 }
 
@@ -52,14 +56,24 @@ export function resolveOtlpConfig(
   const url = opts.endpoint ?? env[ENDPOINT_ENV];
   if (!url) {
     throw new Error(
-      `ratel telemetry init: no endpoint. Pass { endpoint } or set ${ENDPOINT_ENV} (use { apiKey } for Bearer auth).`,
+      `ratel telemetry init: no endpoint. Pass { endpoint } or set ${ENDPOINT_ENV} (use { apiKey } or ${API_KEY_ENV} for Bearer auth).`,
     );
   }
   const headers: Record<string, string> = { ...opts.headers };
+  // An explicit apiKey sets the Bearer header (code-level config wins). The RATEL_API_KEY
+  // env fallback applies only when the caller passed neither apiKey nor an Authorization
+  // header, so ambient env never clobbers auth the caller set on purpose.
   if (opts.apiKey) {
     headers.Authorization = `Bearer ${opts.apiKey}`;
+  } else if (env[API_KEY_ENV] && !hasAuthorizationHeader(headers)) {
+    headers.Authorization = `Bearer ${env[API_KEY_ENV]}`;
   }
   return { url, headers, serviceName: opts.serviceName ?? DEFAULT_SERVICE_NAME };
+}
+
+/** Whether the caller already supplied an `Authorization` header (any casing). */
+function hasAuthorizationHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((key) => key.toLowerCase() === "authorization");
 }
 
 /**

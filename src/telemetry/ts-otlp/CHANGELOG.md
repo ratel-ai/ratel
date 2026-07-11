@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.1-rc.1] - 2026-07-11
+
+### Added
+
+- On first setup, `TelemetryInitOptions.enabled: false` returns a no-op shutdown handle without endpoint or provider setup; once Ratel owns the provider, repeated calls return its original handle. `RatelSpanProcessorOptions.enabled: false` always returns a no-op processor.
+- `TelemetryInitOptions.spanFilter` lets the turnkey provider select spans without hand-building a `NodeTracerProvider`; omitting it preserves the export-everything default.
+- `init()` is idempotent to the provider it installed: repeated and module-reloaded calls return the exact original handle, while a foreign global provider still raises the composition error. If another `init()` wins the registration race, the loser now returns that Ratel-owned handle instead of raising.
+- Re-exports `API_KEY_ENV` from `@ratel-ai/telemetry` alongside `ENDPOINT_ENV`.
+
+### Changed
+
+- `@opentelemetry/api` is now a peer + development dependency so the host and Ratel share one global API instance. The exporter, resources, semantic conventions, and trace SDK packages remain runtime dependencies, preserving the one-package turnkey install (npm/pnpm auto-install the peer; yarn needs an explicit `add @opentelemetry/api`).
+- `init()` shutdown is terminal: after `handle.shutdown()`, a later `init()` throws an already-shut-down error instead of silently returning the dead handle (call `trace.disable()` first to re-initialize). A shared handle's `shutdown()` stops export for all callers.
+
 ## [0.1.0] - 2026-07-06
 
 ### Added

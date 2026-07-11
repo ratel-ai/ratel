@@ -50,6 +50,21 @@ describe("ratelTraceExporter", () => {
 describe("ratelSpanProcessor", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it("returns a no-op processor without requiring endpoint configuration when disabled", async () => {
+    const saved = process.env[ENDPOINT_ENV];
+    delete process.env[ENDPOINT_ENV];
+    try {
+      const proc = ratelSpanProcessor({ enabled: false });
+
+      proc.onEnd(span("ratel.search"));
+      await expect(proc.forceFlush()).resolves.toBeUndefined();
+      await expect(proc.shutdown()).resolves.toBeUndefined();
+    } finally {
+      if (saved === undefined) delete process.env[ENDPOINT_ENV];
+      else process.env[ENDPOINT_ENV] = saved;
+    }
+  });
+
   it("exposes the SpanProcessor interface", async () => {
     const proc = ratelSpanProcessor({ endpoint: "http://localhost:4318/v1/traces" });
     for (const method of ["onStart", "onEnd", "forceFlush", "shutdown"] as const) {

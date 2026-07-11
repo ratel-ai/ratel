@@ -13,6 +13,7 @@
  */
 
 export {
+  API_KEY_ENV,
   ContentCapture,
   clearContentCapture,
   contentCaptureMode,

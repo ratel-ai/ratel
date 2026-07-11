@@ -204,6 +204,26 @@ def _resolve_capture_override(
     return None
 
 
+class _TelemetryHandle:
+    """Per-call shutdown behavior over the shutdown handle init() may reuse.
+
+    Attribute access delegates to the underlying handle so callers can still use handle
+    methods such as ``force_flush`` without configure_telemetry mutating the shared handle's
+    ``shutdown`` method.
+    """
+
+    def __init__(self, inner: Any, shutdown: Callable[[], Any]) -> None:
+        self._inner = inner
+        self._shutdown = shutdown
+
+    def shutdown(self) -> Any:
+        """Run this configure call's generation-scoped teardown, then stop the provider."""
+        return self._shutdown()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
 def configure_telemetry(
     *,
     api_key: str | None = None,
@@ -232,16 +252,18 @@ def configure_telemetry(
     override a newer `configure_telemetry`/`set_content_capture` call installed.
 
     Args:
-        api_key: Ratel Cloud API key; omit when exporting to a self-hosted endpoint.
-        endpoint: OTLP endpoint override; defaults to the Ratel Cloud collector.
+        api_key: Ratel Cloud API key override; defaults to ``RATEL_API_KEY``.
+        endpoint: OTLP endpoint override; defaults to ``RATEL_URL``.
         headers: Extra headers sent with every export request.
         service_name: ``service.name`` resource attribute; defaults per `init`.
         capture_content: Exact content-capture mode to set (see above).
         include_span_and_events: Boolean sugar for `capture_content` (see above).
 
     Returns:
-        The provider, usable as a shutdown handle (``provider.shutdown()`` /
-        ``provider.force_flush()``).
+        A per-call shutdown handle (``handle.shutdown()`` / ``handle.force_flush()``),
+        the same shape on every path. Attribute access delegates to the shared handle
+        `init` returns; because that handle is shared across callers, shutting it down
+        stops export for all of them.
 
     Raises:
         ModuleNotFoundError: if the OpenTelemetry exporter is not installed
@@ -260,8 +282,13 @@ def configure_telemetry(
 
     capture = _resolve_capture_override(capture_content, include_span_and_events)
     if capture is None:
-        # No override: the env var keeps ruling; nothing to set or undo.
-        return init(api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name)
+        # No override: the env var keeps ruling; nothing to set or undo. Still wrap so the
+        # return shape (a per-call handle delegating to the shared provider) matches the
+        # capture path below, rather than leaking init()'s shared handle directly.
+        handle = init(
+            api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
+        )
+        return _TelemetryHandle(handle, handle.shutdown)
 
     # Apply (and validate — an unrecognized mode raises ValueError) the override *before*
     # wiring the exporter, so a bad option fails loud with no provider side effects; unwind
@@ -275,14 +302,11 @@ def configure_telemetry(
         clear_content_capture(generation)
         raise
 
-    # Wrap shutdown so it restores env-driven behavior. Generation-scoped: a stale handle
-    # shutting down late must not clobber an override a newer configure_telemetry/
-    # set_content_capture owns by then.
-    original_shutdown = provider.shutdown
-
     def shutdown_and_clear() -> Any:
         clear_content_capture(generation)
-        return original_shutdown()
+        return provider.shutdown()
 
-    provider.shutdown = shutdown_and_clear
-    return provider
+    # Keep teardown per configure call. init() is idempotent and may return the same provider
+    # to multiple callers; mutating provider.shutdown would make every reference observe the
+    # newest generation's wrapper and let a stale handle clear a newer privacy override.
+    return _TelemetryHandle(provider, shutdown_and_clear)

@@ -161,12 +161,14 @@ _OTLP_EXPORTS: Final = frozenset(
         "clear_content_capture",
         "ContentCapture",
         "OtlpConfig",
+        "API_KEY_ENV",
         "ENDPOINT_ENV",
         "DEFAULT_SERVICE_NAME",
         "ratel_signal_filter",
         "ratel_span_exporter",
         "ratel_span_processor",
         "SpanFilter",
+        "TelemetryHandle",
     }
 )
 
@@ -224,10 +226,12 @@ __all__ = [
     "clear_content_capture",
     "ContentCapture",
     "OtlpConfig",
+    "API_KEY_ENV",
     "ENDPOINT_ENV",
     "DEFAULT_SERVICE_NAME",
     "ratel_signal_filter",
     "ratel_span_exporter",
     "ratel_span_processor",
     "SpanFilter",
+    "TelemetryHandle",
 ]

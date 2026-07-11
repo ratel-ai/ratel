@@ -24,7 +24,7 @@ uv run main.py
 
 - **The vocabulary is just constants.** `RATEL_SEARCH`, `EXECUTE_TOOL`, `RATEL_ORIGIN`, `GEN_AI_TOOL_NAME`, … are imported from `ratel_ai_telemetry` and set as attributes on stock OTel spans. `Origin` / `SearchTarget` are `str`-enums, so each member equals its exact wire string (`Origin.AGENT.value == "agent"`, and `Origin.AGENT` is itself usable as an attribute value).
 - **Tool calls are standard `gen_ai` spans.** The invocation is an `execute_tool` span (so any OTel backend understands it), enriched with `ratel.*` attributes — not a bespoke Ratel span.
-- **`init()` is optional sugar.** `resolve_otlp_config()` (pure, shown in the output) resolves the endpoint + `Authorization` header; `init()` wires that into an OTLP `http/protobuf` exporter and returns the provider as a shutdown handle. A caller already running the OTel SDK skips `init()` and takes only the constants.
+- **`init()` is optional sugar.** `resolve_otlp_config()` (pure, shown in the output) resolves `RATEL_URL` + `RATEL_API_KEY`; `init()` wires an OTLP `http/protobuf` exporter and returns a shutdown handle. The example calls it once with `enabled=bool(os.environ.get("RATEL_URL"))`, so the disabled path needs no env gate or error handling. A caller already running the OTel SDK adds `ratel_span_processor()` instead.
 - **Content capture is gated.** `content_capture_mode()` reads `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` (default `NO_CONTENT`).
 
 ## Layout

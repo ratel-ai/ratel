@@ -159,9 +159,6 @@ importers:
 
   src/telemetry/ts-otlp:
     dependencies:
-      '@opentelemetry/api':
-        specifier: ^1.9.1
-        version: 1.9.1
       '@opentelemetry/exporter-trace-otlp-proto':
         specifier: ^0.220.0
         version: 0.220.0(@opentelemetry/api@1.9.1)
@@ -184,6 +181,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.4.13
         version: 2.4.13
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
