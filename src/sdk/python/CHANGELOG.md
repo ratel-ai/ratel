@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.2-rc.1] - 2026-07-11
+
 ### Changed
 
 - `configure_telemetry()` returns a per-call shutdown handle (`handle.shutdown()` / `handle.force_flush()`) on every path — the no-override path no longer leaks `init()`'s shared provider directly. Because that provider is shared across callers, shutting one handle down stops export for all of them.

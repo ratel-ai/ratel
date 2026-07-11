@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.1-rc.1] - 2026-07-11
+
 ### Added
 
 - On first setup, `TelemetryInitOptions.enabled: false` returns a no-op shutdown handle without endpoint or provider setup; once Ratel owns the provider, repeated calls return its original handle. `RatelSpanProcessorOptions.enabled: false` always returns a no-op processor.
