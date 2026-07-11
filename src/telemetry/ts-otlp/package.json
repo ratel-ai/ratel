@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/telemetry-otlp",
-  "version": "0.1.1-rc.1",
+  "version": "0.1.1",
   "description": "init() OTLP exporter for Ratel telemetry — turnkey OpenTelemetry SDK wiring over the OTel-free @ratel-ai/telemetry vocabulary.",
   "private": false,
   "type": "module",
