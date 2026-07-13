@@ -17,7 +17,7 @@
 
 `@ratel-ai/sdk` retrieves the tools and skills relevant to each agent turn instead of sending the full catalog to the model. It bundles Ratel's Rust engine in-process: BM25 by default, with local semantic and hybrid retrieval available when needed. No API key, vector database, service, or Rust toolchain is required.
 
-Use `ToolCatalog` for ranked tools with executable handlers, or expose `searchCapabilitiesTool` and `invokeToolTool` so an agent can search and invoke the catalog on demand. Existing MCP servers can be ingested into the same catalog.
+Use `ToolCatalog` for ranked tools with executable handlers and `SkillCatalog` for ranked playbooks loaded on demand. Expose `searchCapabilitiesTool`, `invokeToolTool`, and `getSkillContentTool` so an agent can discover tools and skills, invoke tools, and load full skill instructions. Tools from existing MCP servers can be ingested into the tool catalog.
 
 ## Install
 
