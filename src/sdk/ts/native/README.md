@@ -17,7 +17,7 @@ Under the hood this runs `@napi-rs/cli` against this crate's `Cargo.toml`, produ
 ```
 Cargo.toml      cdylib crate; depends on ratel-ai-core via the workspace
 build.rs        napi-build glue
-src/lib.rs      #[napi] wrappers for Tool, SearchHit, ToolRegistry, Skill, SkillHit, SkillRegistry
+src/lib.rs      NAPI objects and registries for tool/skill search, embeddings, and local trace sinks
 ```
 
 The crate is a member of the top-level Cargo workspace, so `cargo build --workspace` picks it up automatically.

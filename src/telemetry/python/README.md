@@ -1,11 +1,11 @@
 # `ratel-ai-telemetry` (Python)
 
 The `ratel.*` telemetry vocabulary for Python: the constants that codify the Tier 2 overlay
-of [`../CONVENTIONS.md`](../CONVENTIONS.md) (attribute keys, span/event names, the
+of [`CONVENTIONS.md`](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/CONVENTIONS.md) (attribute keys, span/event names, the
 `Origin`/`SearchTarget`/`AuthOutcome` value enums, the pinned semconv version). **Importing
 the constants pulls no OpenTelemetry SDK** — the vocabulary stays weight-free for the SDK
 (emit side), the cloud (read side), and edge/serverless emitters
-([ADR-0007](../../../docs/adr/0007-telemetry-two-streams.md)). `init()` — turnkey OTLP
+([ADR-0007](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0007-telemetry-two-streams.md)). `init()` — turnkey OTLP
 exporter sugar over the standard OTel Python SDK — lives in the `ratel_ai_telemetry.otlp`
 submodule behind the optional `[otlp]` extra.
 
@@ -53,7 +53,7 @@ still produces the actionable `ratel_span_processor` error, including when it wi
 race.
 
 A complete, offline-runnable version (console exporter + a `ratel.search` → `execute_tool` trace)
-is in [`examples/telemetry-python`](../../../examples/telemetry-python/README.md).
+is in [`examples/telemetry-python`](https://github.com/ratel-ai/ratel/tree/main/examples/telemetry-python).
 
 ### Coexisting with another provider (Langfuse, the Vercel AI SDK, ...)
 
@@ -85,8 +85,8 @@ configuration.
   `[otlp]` extra. That extra installs the complete exporter/SDK stack; callers do not install
   individual OpenTelemetry packages.
 - Targets Python >=3.9 (the `[otlp]` OTel deps are pinned below 1.42, the last line supporting 3.9)
-- Released under the `telemetry-py-v*` tag prefix ([ADR-0008](../../../docs/adr/0008-release-engineering.md))
-- MIT ([ADR-0009](../../../docs/adr/0009-licensing.md))
+- Released under the `telemetry-py-v*` tag prefix ([ADR-0008](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0008-release-engineering.md))
+- MIT ([ADR-0009](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0009-licensing.md))
 
 ## Build & test
 
@@ -105,5 +105,5 @@ idempotent/foreign-provider `init()` behavior, endpoint/auth resolution and the 
 gate, the `ratel_signal_filter` predicate and processor no-op/filtering behavior, a purity guard
 that importing the package pulls no OTel, and the shared
 contract-against-the-pin conformance in
-[`../conformance/`](../conformance/README.md) (spans built from these constants through the
+[`conformance/`](https://github.com/ratel-ai/ratel/tree/main/src/telemetry/conformance) (spans built from these constants through the
 real SDK must emit the exact pinned keys).
