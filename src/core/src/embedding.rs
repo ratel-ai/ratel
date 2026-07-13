@@ -64,7 +64,7 @@ const DEFAULT_SLOW_LOAD_MS: u64 = 5_000;
 
 /// Human-readable reason attached to a `slow` load event.
 const SLOW_LOAD_REASON: &str = "embedding model load was slow — this machine may be underpowered \
-     for bge-small-en-v1.5 (~130 MB, CPU inference); expect slow registration and search";
+     for in-process CPU inference; expect slow registration and search";
 
 /// A recoverable embedder failure. Returned instead of panicking so a load or
 /// inference problem surfaces to the SDK as a **catchable** error (with a
@@ -465,9 +465,15 @@ impl CandleEmbedder {
         let (config_path, tokenizer_path, weights_path, pooling_file, download) = if allow_download
         {
             // Cold-cache detection *before* fetching, so we only announce a real
-            // download.
+            // download — and give a heads-up before the (blocking) fetch, since a
+            // multi-second/GB download with no message reads as a hang.
             let was_cached = cache_repo.get("model.safetensors").is_some()
                 || cache_repo.get("pytorch_model.bin").is_some();
+            if !was_cached {
+                eprintln!(
+                    "ratel: downloading embedding model {repo_id} (one-time; this may take a moment)…"
+                );
+            }
             let api = ApiBuilder::from_env()
                 .build()
                 .map_err(|e| EmbedderError::Download {
@@ -890,6 +896,8 @@ impl EndpointEmbedder {
             ureq::Error::StatusCode(code) => Some(*code),
             _ => None,
         };
+        let is_local_ollama =
+            self.url.contains("localhost:11434") || self.url.contains("127.0.0.1:11434");
         match status {
             Some(401) | Some(403) => EmbedderError::Config {
                 message: format!(
@@ -897,9 +905,8 @@ impl EndpointEmbedder {
                     status.unwrap()
                 ),
             },
+            // A model that isn't served yet: on a local Ollama, tell them to pull it.
             Some(404) => {
-                let is_local_ollama =
-                    self.url.contains("localhost:11434") || self.url.contains("127.0.0.1:11434");
                 let hint = if is_local_ollama {
                     format!(" — run: ollama pull {}", self.model)
                 } else {
@@ -910,6 +917,16 @@ impl EndpointEmbedder {
                     source: format!("endpoint returned 404 for model '{}'{hint}", self.model),
                 }
             }
+            // A transport error (connection refused, timeout, DNS): on a local
+            // Ollama, the server most likely isn't running — say how to start it.
+            _ if is_local_ollama => EmbedderError::Download {
+                model: self.model.clone(),
+                source: format!(
+                    "could not reach Ollama at {} ({e}) — is it running? start it with \
+                     `ollama serve`, then `ollama pull {}`",
+                    self.url, self.model
+                ),
+            },
             _ => EmbedderError::Download {
                 model: self.model.clone(),
                 source: e.to_string(),

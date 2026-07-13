@@ -51,6 +51,8 @@ src/sdk/ts/npm/*/*.node
 plan.md
 progress.md
 CLAUDE.local.md
+embedding_demo.py
+embedding_demo.ts
 
 # Claude Code — personal/runtime; commit .claude/skills and .claude/settings.json
 .claude/settings.local.json
