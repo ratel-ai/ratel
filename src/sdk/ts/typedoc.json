@@ -7,7 +7,10 @@
     "notDocumented": true
   },
   "treatValidationWarningsAsErrors": true,
-  "intentionallyNotExported": ["native/index.d.cts:TraceSinkConfig"],
+  "intentionallyNotExported": [
+    "native/index.d.cts:TraceSinkConfig",
+    "native/index.d.cts:EmbeddingConfig"
+  ],
   "externalSymbolLinkMappings": {
     "@ratel-ai/telemetry": {
       "DEFAULT_SERVICE_NAME": "https://github.com/ratel-ai/ratel/blob/main/src/telemetry/ts/src/config.ts",

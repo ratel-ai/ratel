@@ -85,9 +85,13 @@ export type SearchMethod = "bm25" | "semantic" | "hybrid";
  * the bare string form only for a local model *directory path*. */
 export type EmbeddingModelConfig =
   | {
+      /** HuggingFace repo id (e.g. `"intfloat/e5-small-v2"`), loaded in-process via Candle. */
       huggingface: string;
+      /** Git revision to pin; defaults to `main`. */
       revision?: string;
+      /** Query-side prefix for asymmetric models (e.g. e5's `"query: "`). */
       queryPrefix?: string;
+      /** Document-side prefix for asymmetric models (e.g. e5's `"passage: "`). */
       docPrefix?: string;
       /** `"cls"` | `"mean"` — overrides pooling auto-detection. */
       pooling?: "cls" | "mean";
@@ -95,9 +99,36 @@ export type EmbeddingModelConfig =
        * auto-downloads only the built-in default model). */
       download?: boolean;
     }
-  | { local: string; queryPrefix?: string; docPrefix?: string; pooling?: "cls" | "mean" }
-  | { ollama: string; queryPrefix?: string; docPrefix?: string }
-  | { url: string; model: string; apiKeyEnv?: string; queryPrefix?: string; docPrefix?: string };
+  | {
+      /** Path to a local model directory, loaded in-process via Candle. */
+      local: string;
+      /** Query-side prefix for asymmetric models. */
+      queryPrefix?: string;
+      /** Document-side prefix for asymmetric models. */
+      docPrefix?: string;
+      /** `"cls"` | `"mean"` — overrides pooling auto-detection. */
+      pooling?: "cls" | "mean";
+    }
+  | {
+      /** Ollama model name, served via the local Ollama endpoint. */
+      ollama: string;
+      /** Query-side prefix for asymmetric models. */
+      queryPrefix?: string;
+      /** Document-side prefix for asymmetric models. */
+      docPrefix?: string;
+    }
+  | {
+      /** Full OpenAI-compatible `/embeddings` endpoint URL. */
+      url: string;
+      /** Model name sent in the request body. */
+      model: string;
+      /** Env var holding the bearer key; omit for no auth. */
+      apiKeyEnv?: string;
+      /** Query-side prefix for asymmetric models. */
+      queryPrefix?: string;
+      /** Document-side prefix for asymmetric models. */
+      docPrefix?: string;
+    };
 
 /** Embedding-model selection: a bare string is a **local model directory path**;
  * every other source is an explicit {@link EmbeddingModelConfig} object. */
