@@ -33,21 +33,21 @@ The context engineering layer for AI agents. Selects only the tools and skills r
 
 Across local, open-source, and frontier model setups, Ratel cuts token usage and recovers accuracy lost to tool overload — without embeddings or a vector DB. Full results: [benchmark.ratel.sh](https://benchmark.ratel.sh)
 
-## Install
+## Quickstart
 
-**Building an agent in TypeScript or Python?** Add the SDK:
+Guides: [Quickstart](https://docs.ratel.sh/docs/quickstart) · [TypeScript SDK](https://docs.ratel.sh/docs/sdks/typescript) · [Python SDK](https://docs.ratel.sh/docs/sdks/python)
+
+Examples: [Vercel AI SDK](examples/ai-sdk/README.md) · [Pydantic AI](examples/pydantic-ai/README.md)
+
+### Typescript
+
+Install the SDK first:
 
 ```bash
 pnpm add @ratel-ai/sdk
 ```
-```bash
-pip install ratel-ai
-```
 
-Guides: [Quickstart](https://docs.ratel.sh/docs/quickstart) · [TypeScript SDK](https://docs.ratel.sh/docs/sdks/typescript) · [Python SDK](https://docs.ratel.sh/docs/sdks/python)
-
-<details>
-<summary>TypeScript example</summary>
+Then create and use your Catalogs:
 
 ```ts
 import { readFile } from "node:fs/promises";
@@ -78,15 +78,22 @@ skills.register({
   body: "Read the requested file, then ground your answer in its contents.",
 });
 
+// use the following as tools in your agent framework
 const search = searchCapabilitiesTool(catalog, skills);
 const invoke = invokeToolTool(catalog);
 const loadSkill = getSkillContentTool(skills);
 ```
 
-</details>
 
-<details>
-<summary>Python example</summary>
+### Python
+
+Install the SDK first:
+
+```bash
+pip install ratel-ai
+```
+
+Then create and use your Catalogs:
 
 ```python
 from ratel_ai import (
@@ -117,24 +124,11 @@ skills.register(Skill(
     body="Read the requested file, then ground your answer in its contents.",
 ))
 
+# use the following as tools in your agent framework
 search = search_capabilities_tool(catalog, skills)
 invoke = invoke_tool_tool(catalog)
 load_skill = get_skill_content_tool(skills)
 ```
-
-</details>
-
-Examples: [Vercel AI SDK](examples/ai-sdk/README.md) · [Pydantic AI](examples/pydantic-ai/README.md)
-
----
-
-**Using Claude Code, Cursor, or ChatGPT with MCP servers?** Drop Ratel in front of your existing setup with no code changes:
-
-```bash
-npx -y @ratel-ai/mcp-server mcp import
-```
-
-Full docs: [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp)
 
 ## How it works
 
@@ -150,7 +144,7 @@ Related open-source projects extend and validate this repository:
 
 | Project | Repo | What it is |
 |---|---|---|
-| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution — Ratel in front of your MCP setup, distributed as `ratel-mcp` / `@ratel-ai/mcp-server`. |
+| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution for your Coding Agents: Ratel in front of your MCP setup. |
 | **ratel-bench** | [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) | The benchmark harness behind [benchmark.ratel.sh](https://benchmark.ratel.sh). |
 
 ## Repo layout
