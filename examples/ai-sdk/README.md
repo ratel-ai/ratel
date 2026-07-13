@@ -24,7 +24,7 @@ Override the model with `AI_MODEL=gpt-4o`. To swap providers, replace the import
 src/tools.ts        catalog + helpers — ToolCatalog, AI SDK tool wrapping, capability tools
 src/agent.ts        runAgent — assembles the static tool set, runs ToolLoopAgent.generate
 src/index.ts        entry — parse argv, build model + catalog, run, print
-test/agent.test.ts  model-free test of direct and capability-tool paths
+test/agent.test.ts  model-free test of the capability-tool path
 ```
 
 Splitting `tools.ts` and `agent.ts` keeps the catalog declarative and the loop readable; nothing about the wiring is OpenAI-specific (`runAgent` accepts any `LanguageModel`).

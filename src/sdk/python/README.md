@@ -15,7 +15,7 @@
   </p>
 </div>
 
-`ratel-ai` retrieves the tools and skills relevant to each agent turn instead of sending the full catalog to the model. It bundles Ratel's Rust engine in-process: BM25 by default, with local semantic and hybrid retrieval available when needed. No API key, vector database, service, or Rust toolchain is required.
+`ratel-ai` retrieves the tools and skills relevant to each agent turn instead of sending the full catalog to the model. It bundles Ratel's Rust engine in-process: BM25 by default, with local semantic and hybrid retrieval available when needed. No API key, vector database, or service is required. Installing a published package on a supported prebuilt target also requires no Rust toolchain.
 
 Use `ToolCatalog` for ranked tools with sync or async handlers and `SkillCatalog` for ranked Markdown playbooks loaded on demand. Expose `search_capabilities_tool`, `invoke_tool_tool`, and `get_skill_content_tool` so an agent can discover tools and skills, invoke tools, and load full skill instructions. Tools from existing MCP servers can be ingested into the tool catalog with the `mcp` extra.
 
@@ -58,4 +58,4 @@ Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capab
 
 Telemetry export is optional. With the `otlp` extra installed, `configure_telemetry()` reads `RATEL_URL` and `RATEL_API_KEY`, wires the exporter, and returns a shutdown handle. See the [telemetry guide](https://docs.ratel.sh/docs/telemetry).
 
-Package layout: `ratel_ai/` is the Python surface, `native/` contains the PyO3 binding, and `tests/` exercises both. For local development, create `.venv` with `uv`, install `maturin`, `pytest`, `ruff`, and `mypy`, then run `.venv/bin/maturin develop` and `.venv/bin/pytest`.
+Package layout: `ratel_ai/` is the Python surface, `native/` contains the PyO3 binding, and `tests/` exercises both. For local development, create `.venv` with `uv`, install `maturin`, `pytest`, `pytest-asyncio`, `ruff`, and `mypy`, then run `.venv/bin/maturin develop` and `.venv/bin/pytest`.

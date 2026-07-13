@@ -176,7 +176,7 @@ pin the wire shapes.
   this contract.
 - **Secrets never appear on the wire.** OAuth tokens and API keys stay in the local secret
   stores; no field of any v1 shape can carry one (ADR-0003).
-- **No loopback auth exception in v1.** Every request to a networked source requires Bearer
-  authentication (ADR-0003).
+- **No loopback auth exception in v1.** Every `/v1` request to a networked source requires
+  Bearer authentication; `/healthz` remains unauthenticated (ADR-0003).
 - **No suggestion / analytics / ranking surface.** Those APIs are outside this contract; a
   conforming source is not expected to implement them (ADR-0003).

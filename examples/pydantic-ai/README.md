@@ -23,7 +23,7 @@ Without a model API key the script runs in **diagnostic mode** — prints the in
 tools.py       catalog + helpers — six stub tools registered into a ToolCatalog
 agent.py       run_agent — assembles the tool set (top-K + capability tools), runs the Pydantic AI Agent
 main.py        entry — parse argv, diagnostic mode or model run, print
-test_agent.py  model-free test of direct and capability-tool paths
+test_agent.py  model-free test of direct top-K tool invocation
 ```
 
 Splitting `tools.py` and `agent.py` keeps the catalog declarative and the loop readable; nothing about the wiring is provider-specific (`run_agent` accepts any Pydantic AI model id).

@@ -15,7 +15,7 @@
   </p>
 </div>
 
-`@ratel-ai/sdk` retrieves the tools and skills relevant to each agent turn instead of sending the full catalog to the model. It bundles Ratel's Rust engine in-process: BM25 by default, with local semantic and hybrid retrieval available when needed. No API key, vector database, service, or Rust toolchain is required.
+`@ratel-ai/sdk` retrieves the tools and skills relevant to each agent turn instead of sending the full catalog to the model. It bundles Ratel's Rust engine in-process: BM25 by default, with local semantic and hybrid retrieval available when needed. No API key, vector database, or service is required. Installing a published package on a supported prebuilt target also requires no Rust toolchain.
 
 Use `ToolCatalog` for ranked tools with executable handlers and `SkillCatalog` for ranked playbooks loaded on demand. Expose `searchCapabilitiesTool`, `invokeToolTool`, and `getSkillContentTool` so an agent can discover tools and skills, invoke tools, and load full skill instructions. Tools from existing MCP servers can be ingested into the tool catalog.
 
@@ -23,7 +23,6 @@ Use `ToolCatalog` for ranked tools with executable handlers and `SkillCatalog` f
 
 ```bash
 pnpm add @ratel-ai/sdk
-# or: npm install @ratel-ai/sdk
 ```
 
 ## Quickstart
@@ -58,4 +57,4 @@ Continue with the [TypeScript guide](https://docs.ratel.sh/docs/sdks/typescript)
 
 Telemetry export is optional. With `@ratel-ai/telemetry-otlp` installed, `configureTelemetry()` reads `RATEL_URL` and `RATEL_API_KEY`, wires the exporter, and returns a shutdown handle. See the [telemetry guide](https://docs.ratel.sh/docs/telemetry).
 
-Package layout: `src/` is the TypeScript surface, `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, run `pnpm --filter @ratel-ai/sdk build` and `pnpm --filter @ratel-ai/sdk test`.
+Package layout: `src/` is the TypeScript surface, `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, run `pnpm --filter @ratel-ai/sdk... build` and `pnpm --filter @ratel-ai/sdk test`.
