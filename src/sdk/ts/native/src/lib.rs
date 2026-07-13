@@ -45,23 +45,43 @@ fn build_trace_sink(config: TraceSinkConfig) -> napi::Result<BuiltTraceSink> {
     }
 }
 
+/// A tool's searchable metadata: what the registry indexes and what a search
+/// hit resolves back to. Execution lives a layer up (the SDK's `ToolCatalog`
+/// pairs each `Tool` with its executor).
 #[napi(object)]
 pub struct Tool {
+    /// Unique id, the registry key. Re-registering an existing id replaces the
+    /// entry in place. MCP-proxied tools use the `<server>__<tool>` convention.
     pub id: String,
+    /// Callable name (typically the same as `id` for local tools); indexed for
+    /// ranking both whole and split on `snake_case`/`camelCase` boundaries.
     pub name: String,
+    /// What the tool does and when to use it — the main ranking signal.
     pub description: String,
+    /// JSON Schema of the arguments. Property names and their `description`s
+    /// (nested included) are indexed for ranking.
     #[napi(ts_type = "import('json-schema').JSONSchema7")]
     pub input_schema: Value,
+    /// JSON Schema of the result; indexed the same way as `inputSchema`.
     #[napi(ts_type = "import('json-schema').JSONSchema7")]
     pub output_schema: Value,
 }
 
+/// One ranked tool from a registry search, best-first.
 #[napi(object)]
 pub struct SearchHit {
+    /// Id of the matched tool, as registered.
     pub tool_id: String,
+    /// Relevance score; higher is better, ties break by id ascending. The scale
+    /// depends on the method: raw BM25 (unbounded) for `"bm25"`, cosine
+    /// similarity for `"semantic"`, Reciprocal Rank Fusion for `"hybrid"` —
+    /// comparable within one result list, not across methods.
     pub score: f64,
 }
 
+/// Destination for the local trace stream (ADR-0007): `"noop"` discards,
+/// `"memory"` buffers envelopes for `drainTraceEvents`, `"jsonl"` appends one
+/// JSON envelope per line to `path`.
 #[napi(object)]
 pub struct TraceSinkConfig {
     /// One of "noop" | "memory" | "jsonl".
@@ -117,6 +137,10 @@ fn resolve_embedding(config: Option<EmbeddingConfig>) -> napi::Result<Option<Emb
         .map_err(|e| napi::Error::from_reason(e.to_string()))
 }
 
+/// Node binding over the `ratel-ai-core` tool registry: an in-process index
+/// that ranks registered tools against a natural-language query (BM25 by
+/// default; semantic/hybrid once embeddings are built). Metadata-only — the
+/// SDK's `ToolCatalog` layers executors, OTel spans, and defaults on top.
 #[napi]
 pub struct ToolRegistry {
     inner: core::ToolRegistry,
@@ -125,9 +149,9 @@ pub struct ToolRegistry {
 
 #[napi]
 impl ToolRegistry {
-    /// Construct a registry. An optional `embedding` config selects the
-    /// semantic/hybrid model (default bge-small when omitted); an invalid config
-    /// throws here, at construction.
+    /// Construct a registry with a no-op trace sink. An optional `embedding`
+    /// config selects the semantic/hybrid model (default bge-small when
+    /// omitted); an invalid config throws here, at construction.
     #[napi(constructor)]
     pub fn new(embedding: Option<EmbeddingConfig>) -> napi::Result<Self> {
         let inner = match resolve_embedding(embedding)? {
@@ -140,6 +164,9 @@ impl ToolRegistry {
         })
     }
 
+    /// Index a tool, or replace one in place if its id is already registered
+    /// (the corpus never holds a duplicate). Infallible and model-free; a
+    /// semantic caller embeds afterwards via `buildEmbeddings`.
     #[napi]
     pub fn register(&mut self, tool: Tool) {
         self.inner.register(core::Tool {
@@ -151,6 +178,9 @@ impl ToolRegistry {
         });
     }
 
+    /// Lexical BM25 search: up to `topK` hits, best-first with ties broken by
+    /// id. Model-free and infallible; an empty registry returns `[]`. Records
+    /// the query on the local trace stream with origin `"direct"`.
     #[napi]
     pub fn search(&self, query: String, top_k: u32) -> Vec<SearchHit> {
         self.inner
@@ -163,6 +193,10 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// BM25 search with an explicit origin — `"agent"` for a call the model
+    /// synthesized (capability tools), anything else counts as `"direct"`
+    /// (host code). Origin only annotates the trace event; ranking is
+    /// identical to `search`.
     #[napi]
     pub fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SearchHit> {
         let parsed = match origin.as_str() {
@@ -224,6 +258,12 @@ impl ToolRegistry {
             .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
+    /// Record a custom event on the local trace stream (ADR-0007). `event` is
+    /// the tagged wire shape — `{ type: "...", ... }` with snake_case fields —
+    /// and an object that doesn't parse as a known event throws
+    /// (`invalid trace event`). Higher layers use this to put their
+    /// invoke/upstream/auth lifecycle events on the same stream as the
+    /// registry's own search events.
     #[napi]
     pub fn record_event(&self, event: Value) -> napi::Result<()> {
         let event: TraceEvent = serde_json::from_value(event)
@@ -232,6 +272,9 @@ impl ToolRegistry {
         Ok(())
     }
 
+    /// Replace the trace sink; subsequent events go to the new destination,
+    /// already-recorded ones are not replayed. Throws on an unknown `kind`, a
+    /// missing `sessionId`/`path`, or a `"jsonl"` file that can't be opened.
     #[napi]
     pub fn set_trace_sink(&mut self, config: TraceSinkConfig) -> napi::Result<()> {
         let (sink, memory) = build_trace_sink(config)?;
@@ -254,10 +297,19 @@ impl ToolRegistry {
     }
 }
 
+/// A reusable playbook: instructions the agent *reads* and follows, in
+/// contrast to a `Tool` it executes. Name, description, and tags are indexed
+/// for ranking; the `body` is the dispatch payload, deliberately excluded from
+/// the index so it can't drown the description's term weights.
 #[napi(object)]
 pub struct Skill {
+    /// Unique id, the registry key. Re-registering an existing id replaces the
+    /// entry in place.
     pub id: String,
+    /// Human-readable name; indexed for ranking both whole and split on
+    /// `snake_case`/`camelCase` boundaries.
     pub name: String,
+    /// What the skill covers and when to reach for it — the main ranking signal.
     pub description: String,
     /// Author-declared labels and task phrases ("frontend", "login form");
     /// indexed for ranking. Optional (defaults to `[]`) — a minimal
@@ -269,16 +321,27 @@ pub struct Skill {
     /// Free-form, non-indexed context for higher layers — e.g.
     /// `{ stacks: ["react"] }` for the push ranker to boost by project context.
     pub metadata: Option<HashMap<String, Vec<String>>>,
+    /// The full instructions (Markdown) returned on load — the dispatch
+    /// payload, never indexed for ranking.
     /// Optional (defaults to `""`) — parity with the Python SDK's default body.
     pub body: Option<String>,
 }
 
+/// One ranked skill from a registry search, best-first — the skill twin of
+/// `SearchHit`, with the same score semantics per method.
 #[napi(object)]
 pub struct SkillHit {
+    /// Id of the matched skill, as registered.
     pub skill_id: String,
+    /// Relevance score; higher is better, ties break by id ascending. Scale
+    /// depends on the method (BM25 / cosine / RRF), as on `SearchHit.score`.
     pub score: f64,
 }
 
+/// Node binding over the `ratel-ai-core` skill registry — the skill twin of
+/// `ToolRegistry`, ranking registered skills against a natural-language query.
+/// Skill bodies are stored but never indexed; fetch them a layer up (the SDK's
+/// `SkillCatalog.invoke`).
 #[napi]
 pub struct SkillRegistry {
     inner: core::SkillRegistry,
@@ -287,6 +350,7 @@ pub struct SkillRegistry {
 
 #[napi]
 impl SkillRegistry {
+    /// Create an empty registry with a no-op trace sink.
     #[napi(constructor)]
     pub fn new(embedding: Option<EmbeddingConfig>) -> napi::Result<Self> {
         let inner = match resolve_embedding(embedding)? {
@@ -299,6 +363,9 @@ impl SkillRegistry {
         })
     }
 
+    /// Index a skill, or replace one in place if its id is already registered.
+    /// Omitted optional fields default to empty (`tags`/`tools`/`metadata`)
+    /// and `""` (`body`). See `ToolRegistry.register`.
     #[napi]
     pub fn register(&mut self, skill: Skill) {
         self.inner.register(core::Skill {
@@ -312,6 +379,8 @@ impl SkillRegistry {
         });
     }
 
+    /// Lexical BM25 search over skills — see `ToolRegistry.search` for the
+    /// contract (best-first, ties by id, infallible, traced as `"direct"`).
     #[napi]
     pub fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
         self.inner
@@ -324,6 +393,7 @@ impl SkillRegistry {
             .collect()
     }
 
+    /// BM25 search with an explicit origin — see `ToolRegistry.searchWithOrigin`.
     #[napi]
     pub fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SkillHit> {
         let parsed = match origin.as_str() {
@@ -380,6 +450,9 @@ impl SkillRegistry {
             .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
+    /// Record a custom event on the local trace stream — see
+    /// `ToolRegistry.recordEvent`. Throws on an object that doesn't parse as a
+    /// known trace event.
     #[napi]
     pub fn record_event(&self, event: Value) -> napi::Result<()> {
         let event: TraceEvent = serde_json::from_value(event)
@@ -388,6 +461,7 @@ impl SkillRegistry {
         Ok(())
     }
 
+    /// Replace the trace sink — see `ToolRegistry.setTraceSink`.
     #[napi]
     pub fn set_trace_sink(&mut self, config: TraceSinkConfig) -> napi::Result<()> {
         let (sink, memory) = build_trace_sink(config)?;

@@ -95,29 +95,44 @@ pub enum EmbeddingModel {
     /// (default `false`) must be opted into for Ratel to fetch it — otherwise it
     /// must already be in the local cache (Ratel auto-downloads only the default).
     HuggingFace {
+        /// HuggingFace repo id (e.g. `intfloat/e5-small-v2`).
         repo: String,
+        /// Git revision to pin; `None` → `main`.
         revision: Option<String>,
+        /// Query-side prefix for asymmetric models.
         query_prefix: Option<String>,
+        /// Document-side prefix for asymmetric models.
         doc_prefix: Option<String>,
+        /// Pooling override; `None` auto-detects.
         pooling: Option<Pooling>,
+        /// Opt in to downloading if not already cached.
         download: bool,
     },
     /// A BERT-family model directory on disk (`config.json` / `tokenizer.json` /
     /// `model.safetensors`), loaded in-process via Candle.
     Local {
+        /// Path to the model directory.
         path: PathBuf,
+        /// Query-side prefix for asymmetric models.
         query_prefix: Option<String>,
+        /// Document-side prefix for asymmetric models.
         doc_prefix: Option<String>,
+        /// Pooling override; `None` auto-detects.
         pooling: Option<Pooling>,
     },
     /// An OpenAI-compatible `/embeddings` HTTP endpoint (OpenAI, Ollama, TEI,
     /// vLLM…). `api_key_env` names the env var holding the key (read at call time).
     /// Pooling lives server-side, so there is no `pooling` here.
     Endpoint {
+        /// Full endpoint URL.
         url: String,
+        /// Model name sent in the request body.
         model: String,
+        /// Env var holding the bearer key; `None` for no auth.
         api_key_env: Option<String>,
+        /// Query-side prefix for asymmetric models.
         query_prefix: Option<String>,
+        /// Document-side prefix for asymmetric models.
         doc_prefix: Option<String>,
     },
 }
@@ -131,13 +146,21 @@ pub struct EmbeddingSpec {
     /// Raw string shortcut — a **local model directory path** only. A repo-id or
     /// URL string is rejected in favor of the explicit `huggingface`/`url` keys.
     pub spec: Option<String>,
+    /// Primary source: a HuggingFace repo id.
     pub huggingface: Option<String>,
+    /// Primary source: a local model directory path.
     pub local: Option<String>,
+    /// Primary source: an Ollama model name (served via the local Ollama endpoint).
     pub ollama: Option<String>,
+    /// Primary source: a full OpenAI-compatible endpoint URL.
     pub url: Option<String>,
+    /// Model name for an endpoint source.
     pub model: Option<String>,
+    /// Git revision for a HuggingFace source.
     pub revision: Option<String>,
+    /// Env var holding the endpoint bearer key.
     pub api_key_env: Option<String>,
+    /// Query-side prefix for asymmetric models.
     pub query_prefix: Option<String>,
     /// Document-side prefix for asymmetric models (e.g. e5's `"passage: "`).
     pub doc_prefix: Option<String>,

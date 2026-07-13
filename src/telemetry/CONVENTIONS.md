@@ -234,12 +234,32 @@ against the v1.42.0 table above.
 Each helper is `init()` sugar over the standard OTel SDK plus the `ratel.*` constants: no transport, no FFI,
 no schema crate. `init()`:
 
-- Accepts either `{ apiKey }` (default endpoint `RATEL_URL`, `Authorization: Bearer <apiKey>`) or
-  `{ endpoint, headers }` (custom endpoint / collector / dual-export).
+- Resolves endpoint + auth from `RATEL_URL` / `RATEL_API_KEY`; explicit `endpoint` / `apiKey`
+  (`endpoint=` / `api_key=` in Python) values win over the environment. Custom `headers` compose
+  with either form. An explicit `apiKey` sets `Authorization: Bearer ...`; the `RATEL_API_KEY`
+  fallback applies only when neither `apiKey` nor an explicit `Authorization` header is given, so
+  ambient env never clobbers auth the caller set on purpose.
+- On first setup, accepts `enabled: false` (`enabled=False`) before resolving configuration or
+  registering a provider, returning a no-op shutdown handle (in Python this also avoids importing
+  the OTel SDK at all; the TS package statically imports the SDK at module load either way). The
+  composable span-processor has the same switch. If Ratel already owns the global provider,
+  idempotence wins and every later `init()` call returns the original handle regardless of options.
+- Exports every span by default on the turnkey path; `spanFilter` (`span_filter`) narrows that set
+  without requiring callers to construct their own provider.
+- Is idempotent to itself: while the Ratel-owned provider is active, repeated calls (including
+  module reloads) return the exact original handle and the first call's configuration remains
+  authoritative; because that handle is shared, shutting it down stops export for every caller. A
+  foreign global provider still raises with processor-based coexistence guidance.
+- Shutdown is terminal: OTel's global provider registers once per process, so after the handle's
+  `shutdown()` a later `init()` raises rather than return a dead handle (TS callers can
+  `trace.disable()` first to re-initialize; Python has no equivalent).
 - Wires an OTLP **`http/protobuf`** exporter with sane batching + resource defaults; everything else is the
   untouched OTel SDK the caller can configure directly.
 - Exposes the `ratel.*` attribute/span constants so callers emit the vocabulary without stringly-typed keys.
 - Honors `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` for content capture (default off).
 
-A caller who already runs the OTel SDK skips `init()` entirely and adds the Ratel endpoint as a second
-exporter, taking only the `ratel.*` constants from us.
+A caller who already runs the OTel SDK skips `init()` and adds `ratelSpanProcessor()` /
+`ratel_span_processor()` to that provider. The processor defaults to the `gen_ai.*` / `ratel.*`
+signal filter and can be overridden. Installing `@ratel-ai/telemetry-otlp` or the Python `[otlp]`
+extra supplies the complete exporter/SDK implementation; callers do not assemble the individual
+OpenTelemetry packages themselves.

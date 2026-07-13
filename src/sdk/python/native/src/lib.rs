@@ -95,12 +95,17 @@ fn resolve_embedding(
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
-/// A single search result: the matched tool id and its BM25 score. Mirrors the
-/// TS SDK's `SearchHit` (camelCase `toolId` there → snake_case `tool_id` here).
+/// A single search result: the matched tool id and its relevance score. Mirrors
+/// the TS SDK's `SearchHit` (camelCase `toolId` there → snake_case `tool_id` here).
 #[pyclass(frozen)]
 pub struct SearchHit {
+    /// Id of the matched tool, as passed to `register`.
     #[pyo3(get)]
     pub tool_id: String,
+    /// Relevance score; higher ranks first. The scale depends on the search
+    /// method: raw BM25 (unbounded) for `"bm25"`, cosine similarity for
+    /// `"semantic"`, reciprocal-rank-fusion for `"hybrid"` — scores from
+    /// different methods are not comparable.
     #[pyo3(get)]
     pub score: f64,
 }
@@ -115,12 +120,15 @@ impl SearchHit {
     }
 }
 
-/// A single skill search result: the matched skill id and its BM25 score. The
-/// skill analogue of [`SearchHit`] (`tool_id` → `skill_id`).
+/// A single skill search result: the matched skill id and its relevance score.
+/// The skill analogue of [`SearchHit`] (`tool_id` → `skill_id`).
 #[pyclass(frozen)]
 pub struct SkillHit {
+    /// Id of the matched skill, as passed to `register`.
     #[pyo3(get)]
     pub skill_id: String,
+    /// Relevance score; higher ranks first. Same method-dependent scale as
+    /// [`SearchHit::score`], computed against the skill corpus.
     #[pyo3(get)]
     pub score: f64,
 }
@@ -189,6 +197,9 @@ impl ToolRegistry {
         })
     }
 
+    /// Register a tool's metadata into the index (or replace it in place when
+    /// `id` is already registered). The schemas must be JSON-serializable dicts;
+    /// anything else raises `ValueError`.
     fn register(
         &mut self,
         id: String,
@@ -211,6 +222,8 @@ impl ToolRegistry {
         Ok(())
     }
 
+    /// Lexical BM25 search: the top `top_k` tools for `query`, best first.
+    /// Model-free and infallible; the trace event records origin `"direct"`.
     fn search(&self, query: String, top_k: u32) -> Vec<SearchHit> {
         self.inner
             .search(&query, top_k as usize)
@@ -222,6 +235,9 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// BM25 search tagged with who initiated it: `"agent"` (a model calling a
+    /// capability tool) or anything else → `"direct"` (host code). The origin
+    /// only labels the emitted trace event — ranking is identical to `search`.
     fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SearchHit> {
         let parsed = match origin.as_str() {
             "agent" => Origin::Agent,
@@ -277,6 +293,9 @@ impl ToolRegistry {
         self.inner.build_embeddings().map_err(map_embedder_err)
     }
 
+    /// Record an SDK-layer trace event into the active sink. `event` must be a
+    /// dict matching one of the core-owned `TraceEvent` shapes (ADR-0007, e.g.
+    /// `{"type": "gateway_search", ...}`); anything else raises `ValueError`.
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
         let value: Value = pythonize::depythonize(event)
             .map_err(|e| PyValueError::new_err(format!("invalid trace event: {e}")))?;
@@ -286,6 +305,11 @@ impl ToolRegistry {
         Ok(())
     }
 
+    /// Route trace events to a sink. `kind` is `"noop"` (drop everything, the
+    /// initial state), `"memory"` (buffer for `drain_trace_events`; requires
+    /// `session_id`) or `"jsonl"` (append to a file; requires `session_id` and
+    /// `path`). Raises `ValueError` on an unknown kind, a missing required
+    /// argument, or a jsonl path that cannot be opened.
     #[pyo3(signature = (kind, session_id=None, path=None))]
     fn set_trace_sink(
         &mut self,
@@ -390,6 +414,10 @@ impl SkillRegistry {
         })
     }
 
+    /// Register a skill's metadata into the index (or replace it in place when
+    /// `id` is already registered). `tags` are indexed for ranking; `tools` and
+    /// `metadata` ride along un-indexed for higher layers; `body` is the full
+    /// instruction text, stored for on-demand load.
     // Mirrors `ToolRegistry::register`'s flat-param style (PyO3 has no by-value
     // object arg like the TS NAPI `Skill`); a skill simply has more fields.
     #[allow(clippy::too_many_arguments)]
@@ -414,6 +442,7 @@ impl SkillRegistry {
         });
     }
 
+    /// Lexical BM25 search over the skill corpus — see [`ToolRegistry::search`].
     fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
         self.inner
             .search(&query, top_k as usize)
@@ -425,6 +454,8 @@ impl SkillRegistry {
             .collect()
     }
 
+    /// BM25 search tagged with who initiated it — see
+    /// [`ToolRegistry::search_with_origin`].
     fn search_with_origin(&self, query: String, top_k: u32, origin: String) -> Vec<SkillHit> {
         let parsed = match origin.as_str() {
             "agent" => Origin::Agent,
@@ -473,6 +504,8 @@ impl SkillRegistry {
         self.inner.build_embeddings().map_err(map_embedder_err)
     }
 
+    /// Record an SDK-layer trace event into the active sink — see
+    /// [`ToolRegistry::record_event`].
     fn record_event(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
         let value: Value = pythonize::depythonize(event)
             .map_err(|e| PyValueError::new_err(format!("invalid trace event: {e}")))?;
@@ -482,6 +515,8 @@ impl SkillRegistry {
         Ok(())
     }
 
+    /// Route trace events to a sink — see [`ToolRegistry::set_trace_sink`] for
+    /// the kind / session_id / path rules and `ValueError` conditions.
     #[pyo3(signature = (kind, session_id=None, path=None))]
     fn set_trace_sink(
         &mut self,
@@ -519,6 +554,8 @@ impl SkillRegistry {
         Ok(())
     }
 
+    /// Drain captured envelopes from the active sink — see
+    /// [`ToolRegistry::drain_trace_events`].
     fn drain_trace_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let out = PyList::empty(py);
         let Some(sink) = self.memory_sink.as_ref() else {

@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-11
+
+### Changed
+
+- `configure_telemetry()` returns a per-call shutdown handle (`handle.shutdown()` / `handle.force_flush()`) on every path — the no-override path no longer leaks `init()`'s shared provider directly. Because that provider is shared across callers, shutting one handle down stops export for all of them.
+
+### Fixed
+
+- `configure_telemetry()` no longer mutates a shared provider's `shutdown` method. When idempotent telemetry initialization reuses one provider, a stale handle can no longer clear a newer caller's generation-scoped content-capture override.
+
+## [0.4.1] - 2026-07-10
+
+### Added
+
+- `configure_telemetry` opts into message/tool content capture programmatically: `capture_content` sets the exact `ContentCapture` mode (validated like the env var — case-insensitive, legacy boolean forms accepted — raising a `ValueError` on garbage before any exporter is wired), and `include_span_and_events` is boolean sugar (`True` → `SPAN_AND_EVENT`, `False` → `NO_CONTENT`). `capture_content` wins over `include_span_and_events`; when neither is provided, `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` keeps ruling (a provided option beats the env var, as in OTel code-over-env precedence). The returned provider's `shutdown()` restores env-driven behavior via a generation-scoped clear (`clear_content_capture`), so a stale handle shutting down late never clobbers an override a newer `configure_telemetry` installed. The `set_content_capture` / `clear_content_capture` / `ContentCapture` primitives live in `ratel_ai_telemetry`.
+
 ## [0.4.0] - 2026-07-07
 
 ### Added
@@ -25,7 +41,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
-- First release cut under the per-package release scheme (ADR-0016): `ratel-ai` now versions and ships independently of the core crate and JS SDK, tagged `sdk-py-v*`. No API changes since 0.2.0.
+- First release cut under the per-package release scheme (ADR-0008): `ratel-ai` now versions and ships independently of the core crate and JS SDK, tagged `sdk-py-v*`. No API changes since 0.2.0.
 
 ## [0.2.0] - 2026-06-16
 
@@ -52,10 +68,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- Initial release of the Python SDK. Binds the Rust core (`ratel-ai-core`) via PyO3, distributed as prebuilt `abi3` wheels for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc — no Rust toolchain required to install. (`v0.1.5` shipped TS-only on 2026-05-10; the first release carrying Python is the next version bump.) Binding strategy locked in [ADR-0011](../../../docs/adr/0011-python-rust-binding-strategy.md).
+- Initial release of the Python SDK. Binds the Rust core (`ratel-ai-core`) via PyO3, distributed as prebuilt `abi3` wheels for darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, and win32-x64-msvc — no Rust toolchain required to install. (`v0.1.5` shipped TS-only on 2026-05-10; the first release carrying Python is the next version bump.) Binding strategy locked in [ADR-0006](../../../docs/adr/0006-native-ffi-bindings.md).
 - Full feature parity with the TypeScript SDK (`@ratel-ai/sdk`):
   - `ToolRegistry` / `SearchHit` — metadata-only BM25 index (native).
-  - `ToolCatalog` accepts a `trace` config (`noop` default, `memory`, or `jsonl`); captured events flow through the Rust core sink ([ADR-0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). Exposes `record_event`, `drain_trace_events`, and an `origin` argument on `search`. `invoke` emits `invoke_start` / `invoke_end` / `invoke_error` with `args_size_bytes` and `took_ms`, and awaits coroutine executors.
+  - `ToolCatalog` accepts a `trace` config (`noop` default, `memory`, or `jsonl`); captured events flow through the Rust core sink ([ADR-0007](../../../docs/adr/0007-telemetry-two-streams.md)). Exposes `record_event`, `drain_trace_events`, and an `origin` argument on `search`. `invoke` emits `invoke_start` / `invoke_end` / `invoke_error` with `args_size_bytes` and `took_ms`, and awaits coroutine executors.
   - `search_tools_tool` / `invoke_tool_tool` gateway factories with verbatim descriptions and JSON schemas from the TS SDK. `search_tools_tool` emits `gateway_search` with `origin: "agent"`; `invoke_tool_tool` emits `gateway_invoke` / `gateway_error` and handles the `needs_auth` / `on_unauthorized` path.
   - `register_mcp_server` ingests an upstream MCP `ClientSession` (optional `mcp` extra, `pip install 'ratel-ai[mcp]'`), namespacing tool ids as `<server>__<tool>` and emitting `upstream_register` / `upstream_invoke` / `upstream_error`.
 - Ships type stubs (`_native.pyi`, `py.typed`) for a fully typed install.

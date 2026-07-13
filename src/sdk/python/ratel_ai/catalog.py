@@ -18,11 +18,23 @@ from typing import Any, Callable, Union
 from ._native import SearchHit, ToolRegistry
 from .telemetry import SEARCH_TARGET_TOOL, trace_execute_tool, trace_search
 
-# Tool inputs are heterogeneous across the catalog; handlers may be sync or async.
 Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
+"""A tool handler: takes the tool's arguments dict, returns the result.
 
-SearchOrigin = str  # "direct" | "agent"
-SearchMethod = str  # "bm25" | "semantic" | "hybrid"
+May be sync or async (tool inputs are heterogeneous across the catalog);
+`ToolCatalog.invoke` absorbs the difference.
+"""
+
+SearchOrigin = str
+"""Who initiated a search: ``"direct"`` (host code, the default) or ``"agent"``
+(a model calling a capability tool). Labels the emitted trace event only —
+ranking is unaffected.
+"""
+
+SearchMethod = str
+"""Retrieval engine: ``"bm25"`` (lexical, model-free, the default),
+``"semantic"`` (dense embeddings) or ``"hybrid"`` (both, fused).
+"""
 
 # Embedding-model selection for semantic/hybrid retrieval. A bare string is a
 # local model *directory path*; every other source is a keyed dict, symmetric:
@@ -51,10 +63,13 @@ _EMBEDDING_KEYS = frozenset(
 )
 
 
-def _embedding_kwargs(embedding: EmbeddingSpec) -> dict[str, str]:
-    """Normalize the public string|dict embedding form into native constructor
-    kwargs. A string becomes the inferred ``spec``; a dict is passed through after
-    a key check (the native layer validates the combination)."""
+def _embedding_kwargs(embedding: EmbeddingSpec) -> dict[str, Any]:
+    """Normalize the public string|dict embedding form into native constructor kwargs.
+
+    A string becomes the inferred ``spec``; a dict is passed through after a key
+    check (the native layer validates the combination). Values are heterogeneous
+    (``download`` is a bool), so the native constructor's typed params apply.
+    """
     if isinstance(embedding, str):
         return {"spec": embedding}
     if isinstance(embedding, dict):
@@ -108,13 +123,22 @@ class ToolCatalog:
         method: SearchMethod = "bm25",
         embedding: EmbeddingSpec | None = None,
     ) -> None:
+        """Create an empty catalog.
+
+        Args:
+            trace: where trace events go; `None` keeps the default no-op sink.
+            method: default retrieval method for `search` — "bm25" (the
+                historical, model-free behavior), "semantic" or "hybrid". A
+                per-call `method=` overrides it. A semantic/hybrid catalog
+                eagerly embeds each tool at registration so searches never pay
+                the embedding cost; a BM25 catalog never touches the model.
+            embedding: model for semantic/hybrid retrieval (a path string or a
+                keyed dict — see `EmbeddingSpec`); ignored with a warning under
+                "bm25", which needs no model.
+        """
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
-        # Default retrieval method for `search`; "bm25" keeps the historical
-        # (model-free) behavior. A per-call `method=` overrides it.
         self._method: SearchMethod = method
-        # Semantic/hybrid default → eagerly embed each tool at registration so
-        # searches never pay the embedding cost. BM25 default does nothing.
         self._eager: bool = method in ("semantic", "hybrid")
         if embedding is not None and not self._eager:
             warnings.warn(
@@ -130,6 +154,20 @@ class ToolCatalog:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
     def register(self, tool: ExecutableTool) -> None:
+        """Add a tool to the catalog (metadata into the index, handler by id).
+
+        Registering an id that is already present replaces it in place — the
+        index never holds a duplicate.
+
+        Args:
+            tool: the tool to register; `execute` must be set.
+
+        Raises:
+            ValueError: if `tool.execute` is `None`, or if `input_schema` /
+                `output_schema` contain values that are not JSON-serializable.
+            RuntimeError: on a semantic/hybrid catalog, if the embedding model
+                fails to load while eagerly embedding the new tool.
+        """
         if tool.execute is None:
             raise ValueError(f"tool {tool.id!r} has no execute handler")
         self._registry.register(
@@ -153,9 +191,16 @@ class ToolCatalog:
             self._registry.build_embeddings()
 
     def build_embeddings(self) -> None:
-        """Pre-compute embeddings for any not-yet-embedded tools. Call after a
-        bulk register, or rely on the automatic per-register embedding that a
-        semantic/hybrid catalog does. No-op for a BM25 catalog's cache."""
+        """Pre-compute embeddings for any not-yet-embedded tools.
+
+        Incremental: only tools registered since the last call are embedded.
+        Call after a bulk register, or rely on the automatic per-register
+        embedding that a semantic/hybrid catalog does. A BM25 catalog never
+        needs it.
+
+        Raises:
+            RuntimeError: if the embedding model fails to load.
+        """
         self._registry.build_embeddings()
 
     def search(
@@ -165,9 +210,23 @@ class ToolCatalog:
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
     ) -> list[SearchHit]:
-        """Search the catalog. `method` overrides the catalog default for this
-        call ("bm25" | "semantic" | "hybrid"); "semantic"/"hybrid" raise
-        `RuntimeError` if the embedding model fails to load."""
+        """Rank registered tools against a natural-language query.
+
+        Args:
+            query: what the caller wants to do.
+            top_k: max hits to return.
+            origin: who initiated the search — labels the trace event only.
+            method: per-call override of the catalog's default retrieval
+                method ("bm25" | "semantic" | "hybrid").
+
+        Returns:
+            Up to `top_k` `SearchHit`s, best first.
+
+        Raises:
+            ValueError: if `method` is not "bm25", "semantic" or "hybrid".
+            RuntimeError: for "semantic"/"hybrid" when the embedding cache is
+                not built (call `build_embeddings`) or query embedding fails.
+        """
         return trace_search(
             SEARCH_TARGET_TOOL,
             query,
@@ -177,12 +236,15 @@ class ToolCatalog:
         )
 
     def has(self, tool_id: str) -> bool:
+        """Return whether a tool with this id is registered."""
         return tool_id in self._executors
 
     def get(self, tool_id: str) -> Tool | None:
+        """Return the metadata-only `Tool` for an id, or `None` if unknown."""
         return self._tools.get(tool_id)
 
     def get_executable(self, tool_id: str) -> ExecutableTool | None:
+        """Return the `ExecutableTool` (metadata plus handler) for an id, or `None`."""
         tool = self._tools.get(tool_id)
         execute = self._executors.get(tool_id)
         if tool is None or execute is None:
@@ -197,12 +259,44 @@ class ToolCatalog:
         )
 
     def record_event(self, event: dict[str, Any]) -> None:
+        """Record a trace event into the catalog's sink.
+
+        Args:
+            event: a dict matching one of the core-owned `TraceEvent` shapes
+                (ADR-0007), e.g. `{"type": "gateway_search", ...}`.
+
+        Raises:
+            ValueError: if the dict doesn't match any known event shape.
+        """
         self._registry.record_event(event)
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
+        """Drain captured trace envelopes; `[]` unless the sink is "memory"."""
         return self._registry.drain_trace_events()
 
     async def invoke(self, tool_id: str, args: dict[str, Any]) -> Any:
+        """Run a registered tool's handler and return its result.
+
+        This is the canonical place that absorbs the sync/async executor
+        difference: the handler is called first and the result awaited only if
+        it is awaitable, so plain functions and `async def` executors (e.g.
+        MCP/HTTP tools) are both supported. Callers must route invocations
+        here rather than re-deriving that logic. Emits `invoke_start` /
+        `invoke_end` / `invoke_error` trace events and wraps the call in an
+        `execute_tool` OTel span (ADR-0007).
+
+        Args:
+            tool_id: id of a registered tool.
+            args: the arguments dict passed to the handler.
+
+        Returns:
+            Whatever the handler returns (awaited if it returned an awaitable).
+
+        Raises:
+            ValueError: if `tool_id` is not registered.
+            Exception: whatever the handler raises, re-raised after an
+                `invoke_error` trace event is recorded.
+        """
         fn = self._executors.get(tool_id)
         if fn is None:
             raise ValueError(f"unknown toolId: {tool_id}")
@@ -217,11 +311,8 @@ class ToolCatalog:
             )
             started = time.monotonic()
             try:
-                # Executors may be sync (a plain dict-returning function) or async
-                # (`async def`, e.g. MCP/HTTP tools) — so call first, then await only
-                # if awaitable. Never bare-`await fn(args)`: in Python that raises on a
-                # sync result. This is the canonical place that absorbs the difference;
-                # callers must route here, not re-derive it.
+                # Call first, await only if awaitable (see the `invoke` docstring).
+                # Never bare-`await fn(args)`: in Python that raises on a sync result.
                 result = fn(args)
                 if inspect.isawaitable(result):
                     result = await result

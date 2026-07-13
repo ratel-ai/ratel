@@ -27,6 +27,3 @@ keeps a small map from logical id to its own constant, and those maps are the un
 
 - **TS** — `../ts/src/conformance.test.ts`
 - **Python** — `../python/tests/test_conformance.py`
-
-The Rust conformance leg lands with the Rust `init()` builder (deferred to the server work, to
-keep the constants crate dependency-free); it will consume this same `fixtures.json`.

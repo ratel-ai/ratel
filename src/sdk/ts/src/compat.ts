@@ -29,25 +29,40 @@ const SEARCH_TOOLS_BASE_DESCRIPTION =
 
 /** @deprecated Use `SearchCapabilitiesOptions`. */
 export interface SearchToolsToolOptions {
+  /** Upstream MCP servers to advertise in the tool description and result groups. */
   upstreamServers?: readonly UpstreamServerInfo[];
 }
 
 /** @deprecated Use `CapabilityToolHit`. */
 export interface SearchToolHit {
+  /** Catalog id to pass to `invoke_tool`. */
   toolId: string;
+  /** Retrieval score from the catalog's search (BM25 by default). */
   score: number;
+  /** The tool's description, as registered. */
   description: string;
+  /** The tool's input JSON Schema. */
   inputSchema: Record<string, unknown>;
 }
 
 /** @deprecated Use `CapabilityToolGroup`. */
 export interface SearchToolsGroup {
-  server: { name: string; description?: string; instructions?: string };
+  /** The owning server: its name, plus optional description/instructions metadata. */
+  server: {
+    /** Server name (the `<server>__` prefix of the group's tool ids). */
+    name: string;
+    /** The server's one-line summary, when known. */
+    description?: string;
+    /** The server's usage instructions, when known. */
+    instructions?: string;
+  };
+  /** The server's ranked hits, in overall result order. */
   hits: SearchToolHit[];
 }
 
 /** @deprecated Use `SearchCapabilitiesResult` (the `tools.groups` field). */
 export interface SearchToolsResult {
+  /** Tool hits grouped by upstream server, in ranking order. */
   groups: SearchToolsGroup[];
 }
 

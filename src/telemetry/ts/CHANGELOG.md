@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-11
+
+### Added
+
+- `API_KEY_ENV` (`RATEL_API_KEY`) and API-key environment fallback in `resolveOtlpConfig`. An explicit `apiKey` remains authoritative; the env fallback applies only when neither `apiKey` nor an explicit `Authorization` header is given, so ambient `RATEL_API_KEY` never clobbers a caller-supplied auth header.
+
+## [0.1.1] - 2026-07-10
+
+### Added
+
+- `setContentCapture(mode)`: programmatic override of the content-capture gate. While set, `contentCaptureMode()` returns the given mode regardless of `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` — code-level config wins over the environment, matching how OpenTelemetry treats env vars as the fallback for programmatic configuration. The mode is validated exactly like the env var (case-insensitive, trimmed, legacy `true`/`false`/`1`/`0` forms accepted) and throws a `TypeError` naming the valid values on anything unrecognized — failing loud at config time instead of storing a value that would both disable capture and mask the env var. Pass `null`/`undefined` to clear unconditionally. Returns a generation token identifying the call as the current owner of the override.
+- `clearContentCapture(generation)`: clears the override only when `generation` (the token returned by `setContentCapture`) still identifies the most recent set. A stale token no-ops, so an old telemetry handle shutting down late cannot clobber an override a newer caller installed and silently flip capture back to the env value.
+
 ## [0.1.0] - 2026-07-06
 
 ### Added

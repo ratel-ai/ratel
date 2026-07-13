@@ -20,6 +20,13 @@ import { type InitOptions, resolveOtlpConfig } from "@ratel-ai/telemetry";
 /** Predicate deciding whether a finished span is forwarded to Ratel. */
 export type SpanFilter = (span: ReadableSpan) => boolean;
 
+const NOOP_SPAN_PROCESSOR: SpanProcessor = {
+  onStart: () => {},
+  onEnd: () => {},
+  forceFlush: async () => {},
+  shutdown: async () => {},
+};
+
 /**
  * Default filter: forward only signal-bearing spans — a `ratel.*` span name, or any
  * attribute key under `gen_ai.*` / `ratel.*`. This is what lets Ratel share a provider
@@ -47,6 +54,8 @@ export function ratelTraceExporter(opts: InitOptions = {}): OTLPTraceExporter {
 
 /** Options for {@link ratelSpanProcessor}: the OTLP endpoint/auth plus an optional filter. */
 export interface RatelSpanProcessorOptions extends InitOptions {
+  /** Set false to skip exporter construction and return a no-op processor. */
+  enabled?: boolean;
   /** Override the default {@link ratelSignalFilter}; `() => true` forwards every span. */
   spanFilter?: SpanFilter;
 }
@@ -56,10 +65,12 @@ export interface RatelSpanProcessorOptions extends InitOptions {
  * passing {@link RatelSpanProcessorOptions.spanFilter} (default {@link ratelSignalFilter}).
  * Add it to your own provider's `spanProcessors` to send Ratel telemetry alongside another
  * provider — no global side effects, no resource. Greenfield apps that want Ratel to own
- * the provider should call {@link init} instead.
+ * the provider should call {@link init} instead. `enabled: false` returns a no-op processor
+ * before resolving endpoint/auth configuration.
  */
 export function ratelSpanProcessor(opts: RatelSpanProcessorOptions = {}): SpanProcessor {
-  const { spanFilter = ratelSignalFilter, ...exporterOpts } = opts;
+  const { enabled = true, spanFilter = ratelSignalFilter, ...exporterOpts } = opts;
+  if (!enabled) return NOOP_SPAN_PROCESSOR;
   const inner = new BatchSpanProcessor(ratelTraceExporter(exporterOpts));
   return {
     onStart: (span, parentContext) => inner.onStart(span, parentContext),

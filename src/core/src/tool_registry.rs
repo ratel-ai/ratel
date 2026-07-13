@@ -15,8 +15,25 @@ use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchHitTrace, SearchStage, TraceEvent, TraceSink,
 };
 
+/// One ranked match from a [`ToolRegistry`] search, best-first in the
+/// returned `Vec`.
 pub struct SearchHit {
+    /// Id of the matching tool ([`Tool::id`]).
     pub tool_id: String,
+    /// Relevance score — higher is better, and the scale depends on the
+    /// [`SearchMethod`] that produced the hit:
+    ///
+    /// - `Bm25`: raw BM25 relevance (non-negative, unbounded; `k1=0.9`,
+    ///   `b=0.4`, tuned for short tool text per ADR-0004).
+    /// - `Semantic`: cosine similarity of the L2-normalized query and
+    ///   document embeddings (at most `1.0`).
+    /// - `Hybrid`: the Reciprocal Rank Fusion sum `Σ 1/(60 + rank)` over the
+    ///   BM25 and dense rankings — with two arms at most `2/60 ≈ 0.033`, so
+    ///   only the ordering is meaningful, not the magnitude.
+    ///
+    /// Scores are comparable within one result list, not across methods or
+    /// corpora. Ties are broken by `tool_id` ascending, so ordering is
+    /// deterministic across processes.
     pub score: f32,
 }
 
@@ -29,6 +46,22 @@ impl Embeddable for Tool {
     }
 }
 
+/// Retrieval index over [`Tool`]s — the registry behind the SDKs' tool
+/// catalogs.
+///
+/// Tools are [`Self::register`]ed into an id-keyed corpus (re-registering an
+/// id replaces it in place) and ranked by one of three engines selected per
+/// call via [`SearchMethod`]. The plain [`Self::search`] path is lexical BM25:
+/// infallible, model-free, ready as soon as tools are registered. Semantic
+/// and hybrid go through [`Self::search_with_method`] and require
+/// [`Self::build_embeddings`] first — a search never embeds the corpus (see
+/// ADR-0011).
+///
+/// Every register and search emits a [`TraceEvent`] on the registry's
+/// [`TraceSink`] ([`NoopSink`] by default). [`SkillRegistry`] is the
+/// skill-side twin with the same shape.
+///
+/// [`SkillRegistry`]: crate::SkillRegistry
 pub struct ToolRegistry {
     /// Corpus keyed by tool id, in insertion order. Keying by id makes `register`
     /// replace an existing id in place (never a duplicate), so the BM25 corpus
@@ -50,6 +83,8 @@ impl Default for ToolRegistry {
 }
 
 impl ToolRegistry {
+    /// An empty registry with tracing off ([`NoopSink`]); attach a real sink
+    /// later with [`Self::set_trace_sink`].
     pub fn new() -> Self {
         Self {
             tools: IndexMap::new(),
@@ -58,6 +93,7 @@ impl ToolRegistry {
         }
     }
 
+    /// An empty registry recording trace events to `sink` from the start.
     pub fn with_trace_sink(sink: Arc<dyn TraceSink>) -> Self {
         Self {
             tools: IndexMap::new(),
@@ -77,10 +113,16 @@ impl ToolRegistry {
         }
     }
 
+    /// Replace the trace sink; subsequent register/search/`record_event`
+    /// events go to `sink`. Already-recorded events are not replayed.
     pub fn set_trace_sink(&mut self, sink: Arc<dyn TraceSink>) {
         self.sink = sink;
     }
 
+    /// Record an arbitrary [`TraceEvent`] on the registry's sink. Higher
+    /// layers (the SDK catalogs and capability tools) use this to emit their
+    /// invoke/upstream/auth lifecycle events into the same stream as the
+    /// registry's own search and churn events (ADR-0007).
     pub fn record_event(&self, event: TraceEvent) {
         self.sink.record(event);
     }
@@ -90,6 +132,25 @@ impl ToolRegistry {
     /// `build_embeddings` re-embeds the new content; the corpus never holds a
     /// duplicate. Registration stays infallible and model-free (a search never
     /// embeds), so BM25 users are unaffected (see ADR-0011).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ratel_ai_core::{Tool, ToolRegistry};
+    ///
+    /// let tool = |desc: &str| Tool {
+    ///     id: "read_file".into(),
+    ///     name: "read_file".into(),
+    ///     description: desc.into(),
+    ///     input_schema: serde_json::json!({}),
+    ///     output_schema: serde_json::json!({}),
+    /// };
+    ///
+    /// let mut registry = ToolRegistry::new();
+    /// registry.register(tool("Read a file"));
+    /// registry.register(tool("Read a file from disk")); // same id: replaced
+    /// assert_eq!(registry.len(), 1);
+    /// ```
     pub fn register(&mut self, tool: Tool) {
         let tool_id = tool.id.clone();
         if self.tools.insert(tool_id.clone(), tool).is_some() {
@@ -115,10 +176,34 @@ impl ToolRegistry {
     /// Lexical BM25 retrieval. The default engine — needs no model and never
     /// fails, so the public `search`/`search_with_origin` stay infallible and
     /// byte-for-byte compatible with the BM25-only releases.
+    ///
+    /// Returns at most `top_k` hits, best-first (see [`SearchHit::score`] for
+    /// the score semantics). Traced as [`Origin::Direct`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ratel_ai_core::{Tool, ToolRegistry};
+    ///
+    /// let mut registry = ToolRegistry::new();
+    /// registry.register(Tool {
+    ///     id: "read_file".into(),
+    ///     name: "read_file".into(),
+    ///     description: "Read a file from disk".into(),
+    ///     input_schema: serde_json::json!({}),
+    ///     output_schema: serde_json::json!({}),
+    /// });
+    ///
+    /// let hits = registry.search("read a file", 5);
+    /// assert_eq!(hits[0].tool_id, "read_file");
+    /// ```
     pub fn search(&self, query: &str, top_k: usize) -> Vec<SearchHit> {
         self.search_with_origin(query, top_k, Origin::Direct)
     }
 
+    /// [`Self::search`] with an explicit trace [`Origin`], so consumers of the
+    /// trace stream can tell agent-synthesized searches from direct library
+    /// calls. Same BM25 engine, same infallibility.
     pub fn search_with_origin(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SearchHit> {
         self.bm25_search_traced(query, top_k, origin)
     }
@@ -129,6 +214,39 @@ impl ToolRegistry {
     /// the model or embed the corpus in-search (the model loads at
     /// `build_embeddings`). The SDK layer picks the method (a per-catalog default or
     /// a per-call override) and calls this.
+    ///
+    /// # Errors
+    ///
+    /// Never errors for [`SearchMethod::Bm25`]. For `Semantic` and `Hybrid`:
+    /// [`EmbedderError::EmbeddingsNotBuilt`] when the cache does not cover the
+    /// corpus (call [`Self::build_embeddings`] after registering), or any
+    /// other [`EmbedderError`] from loading the model / embedding the query.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ratel_ai_core::{Origin, SearchMethod, Tool, ToolRegistry};
+    /// # fn main() -> Result<(), ratel_ai_core::EmbedderError> {
+    /// let mut registry = ToolRegistry::new();
+    /// registry.register(Tool {
+    ///     id: "delete_file".into(),
+    ///     name: "delete_file".into(),
+    ///     description: "Delete a path from the filesystem".into(),
+    ///     input_schema: serde_json::json!({}),
+    ///     output_schema: serde_json::json!({}),
+    /// });
+    /// registry.build_embeddings()?; // loads the model on first use
+    ///
+    /// // Lexically unrelated query, semantically close:
+    /// let hits = registry.search_with_method(
+    ///     "remove a document",
+    ///     5,
+    ///     Origin::Direct,
+    ///     SearchMethod::Semantic,
+    /// )?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn search_with_method(
         &self,
         query: &str,
@@ -148,6 +266,14 @@ impl ToolRegistry {
     /// Incremental — embeds only tools registered since the last call. The SDK
     /// calls this after `register` in semantic mode so searches never pay the
     /// embedding cost; a BM25-only user never calls it and never loads the model.
+    ///
+    /// # Errors
+    ///
+    /// Any [`EmbedderError`] from the embedding model: `Download` /
+    /// `CacheUnwritable` / `Load` on the first-use model fetch (network, cache
+    /// permissions, corrupt weights — see ADR-0011), or `Inference` if
+    /// embedding a tool's text fails. A failed load is not cached, so a later
+    /// call retries once the cause clears.
     pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
         self.dense.extend(self.tools.values(), self.sink.as_ref())
     }

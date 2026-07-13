@@ -12,17 +12,17 @@ so a behavior divergence between SDKs (they all wrap the same Rust BM25 core) ma
 exactly one runner fail:
 
 - `fixtures/catalog.json` — the shared tool catalog (the input).
-- `fixtures/skills.json` — the shared skill catalog (the on-demand analogue, added in 0.2.0).
+- `fixtures/skills.json` — the shared skill catalog (the on-demand analogue).
 - `scenario.json` — the assertions (the source of truth): per-query top-1 ranking for
-  tools and skills, direct invoke, the capability `search_tools` / `invoke_tool` surfaces,
-  `get_skill_content`, the unified `search_capabilities` (tools + skills) surface, and the
-  skill→tool cross-pollination (a matched skill's declared `tools` ride into the tools
-  bucket at score 0).
+  tools and skills, direct invoke, the unified `search_capabilities` (tools + skills),
+  `invoke_tool`, `get_skill_content`, the deprecated tools-only `search_tools` compatibility
+  shim, and skill→tool cross-pollination (a matched skill's declared `tools` ride into the
+  tools bucket at score 0).
 
 | Runner | Package under test | Surface exercised |
 |--------|--------------------|-------------------|
-| `python/run_e2e.py` | `ratel-ai` wheel | `ToolCatalog` + `SkillCatalog` search/invoke; `search_tools_tool` / `invoke_tool_tool` / `get_skill_content_tool` / `search_capabilities_tool` |
-| `ts/run_e2e.mjs` | `@ratel-ai/sdk` (+ native binary) | `ToolCatalog` + `SkillCatalog` search/invoke; `searchToolsTool` / `invokeToolTool` / `getSkillContentTool` / `searchCapabilitiesTool` |
+| `python/run_e2e.py` | `ratel-ai` wheel | `ToolCatalog` + `SkillCatalog` search/invoke; current `search_capabilities_tool` / `invoke_tool_tool` / `get_skill_content_tool`; deprecated `search_tools_tool` compatibility shim |
+| `ts/run_e2e.mjs` | `@ratel-ai/sdk` (+ native binary) | `ToolCatalog` + `SkillCatalog` search/invoke; current `searchCapabilitiesTool` / `invokeToolTool` / `getSkillContentTool`; deprecated `searchToolsTool` compatibility shim |
 
 ## Run locally
 

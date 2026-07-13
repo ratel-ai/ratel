@@ -1,3 +1,16 @@
+/**
+ * `@ratel-ai/sdk` — TypeScript SDK for Ratel, the context engineering platform
+ * for AI agents. In-process, no infra: a native (Rust) BM25/semantic/hybrid
+ * index behind {@link ToolCatalog} and {@link SkillCatalog}, MCP ingestion via
+ * {@link registerMcpServer}, and the framework-neutral capability tools
+ * ({@link searchCapabilitiesTool}, {@link invokeToolTool},
+ * {@link getSkillContentTool}) that let a model discover and run what the
+ * catalogs hold. Everything emits OTel `ratel.*`/`gen_ai.*` spans plus a local
+ * trace stream (ADR-0007).
+ *
+ * @packageDocumentation
+ */
+
 export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
 export { SkillRegistry, ToolRegistry } from "../native/index.cjs";
 export type {
@@ -44,5 +57,12 @@ export { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";
 // OpenTelemetry export of the ratel.*/gen_ai.* funnel. The SDK always emits
 // spans to the active OTel provider; `configureTelemetry` is optional sugar
 // that wires a Ratel-owned OTLP exporter (needs the peer @ratel-ai/telemetry-otlp).
-export type { InitOptions, TelemetryHandle } from "./telemetry.js";
-export { configureTelemetry } from "./telemetry.js";
+// `ContentCapture`/`setContentCapture`/`clearContentCapture` (re-exported from
+// @ratel-ai/telemetry) control the message/tool content-capture gate programmatically.
+export type { ConfigureTelemetryOptions, InitOptions, TelemetryHandle } from "./telemetry.js";
+export {
+  ContentCapture,
+  clearContentCapture,
+  configureTelemetry,
+  setContentCapture,
+} from "./telemetry.js";

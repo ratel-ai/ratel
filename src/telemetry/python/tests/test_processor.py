@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from types import SimpleNamespace
 from typing import Any
 
@@ -51,6 +52,25 @@ class TestRatelSpanExporter:
 
 
 class TestRatelSpanProcessor:
+    def test_disabled_processor_is_a_noop_without_config_or_otel(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ENDPOINT_ENV, raising=False)
+        real_import = builtins.__import__
+
+        def block_otel(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "opentelemetry" or name.startswith("opentelemetry."):
+                raise ModuleNotFoundError(name)
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", block_otel)
+        proc = ratel_span_processor(enabled=False)
+
+        proc.on_start(span("ratel.search"))
+        proc.on_end(span("ratel.search"))
+        assert proc.force_flush()
+        assert proc.shutdown() is None
+
     def test_forwards_only_signal_bearing_spans_by_default(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

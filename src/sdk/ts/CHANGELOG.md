@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-10
+
+### Added
+
+- `configureTelemetry` opts into message/tool content capture programmatically: `captureContent` sets the exact `ContentCapture` mode (validated like the env var — case-insensitive, legacy boolean forms accepted — throwing a `TypeError` on garbage before any exporter is wired), and `includeSpanAndEvents` is boolean sugar (`true` → `SPAN_AND_EVENT`, `false` → `NO_CONTENT`). `captureContent` wins over `includeSpanAndEvents`; when neither is provided, `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` keeps ruling (a provided option beats the env var, as in OTel code-over-env precedence). The handle's `shutdown()` restores env-driven behavior via a generation-scoped clear (`clearContentCapture`), so a stale handle shutting down late never clobbers an override a newer `configureTelemetry` installed. `ContentCapture`, `setContentCapture`, and `clearContentCapture` are re-exported from `@ratel-ai/sdk` (new `ConfigureTelemetryOptions` type).
+
 ## [0.4.0] - 2026-07-07
 
 ### Added
@@ -25,7 +31,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
-- First release cut under the per-package release scheme (ADR-0016): `@ratel-ai/sdk` (loader + platform packages) now versions and ships independently, tagged `sdk-js-v*`. No API changes since 0.2.0.
+- First release cut under the per-package release scheme (ADR-0008): `@ratel-ai/sdk` (loader + platform packages) now versions and ships independently, tagged `sdk-js-v*`. No API changes since 0.2.0.
 
 ## [0.2.0] - 2026-06-16
 
@@ -61,7 +67,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - Initial release on the v1 (revamp) line. TypeScript SDK over the Rust core: BM25 tool retrieval, MCP ingestion, framework-neutral gateway tools. See the [package README](README.md) for the full surface.
-- `ToolCatalog` accepts `{ trace }` config in its constructor — `noop` (default), `memory`, or `jsonl`. Captured events flow through the Rust core sink ([ADR-0009](../../../docs/adr/0009-trace-events-core-owned-schema.md)). New `recordEvent`, `drainTraceEvents`, and an optional third `origin` argument on `search`.
+- `ToolCatalog` accepts `{ trace }` config in its constructor — `noop` (default), `memory`, or `jsonl`. Captured events flow through the Rust core sink ([ADR-0007](../../../docs/adr/0007-telemetry-two-streams.md)). New `recordEvent`, `drainTraceEvents`, and an optional third `origin` argument on `search`.
 - `searchToolsTool` emits `gateway_search` with `origin: "agent"`. `invokeToolTool` emits `gateway_invoke` on success and `gateway_error` for unknown ids, `needs_auth`, and underlying throws.
 - `ToolCatalog.invoke` emits `invoke_start` / `invoke_end` / `invoke_error` around the executor with `args_size_bytes` and `took_ms`.
 - `registerMcpServer` emits `upstream_register` on connect and `upstream_invoke` / `upstream_error` per upstream call. New `searchWithOrigin` and trace plumbing on the underlying NAPI `ToolRegistry`. `SearchOrigin` is now `"direct" | "agent"` (was `"user" | "agent"`); the union is exported from the package entry point.

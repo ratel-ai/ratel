@@ -6,6 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-11
+
+### Added
+
+- `API_KEY_ENV` (`RATEL_API_KEY`) and API-key environment fallback. Explicit `api_key=` remains authoritative; the env fallback applies only when neither `api_key=` nor an explicit `Authorization` header is given, so ambient `RATEL_API_KEY` never clobbers a caller-supplied auth header.
+- On first setup, `init(enabled=False)` returns an OTel-free no-op handle without endpoint configuration or the `[otlp]` extra; once Ratel owns the provider, repeated calls return it. `ratel_span_processor(enabled=False)` always returns a no-op processor.
+- `init(span_filter=...)` filters the turnkey provider, and repeated/module-reloaded calls return the exact Ratel-owned handle while foreign providers still raise. If another `init()` wins the registration race, the loser now returns that Ratel-owned handle instead of raising.
+- Public `TelemetryHandle` protocol describing `init()`'s return (`shutdown()` / `force_flush()`).
+
+### Changed
+
+- `init()` is now typed to return a `TelemetryHandle` (shutdown handle), not a `TracerProvider` — the disabled/no-op path no longer masquerades as a full provider. Emit spans through the global OTel API (`opentelemetry.trace.get_tracer(...)`).
+- `init()` shutdown is terminal: OTel's global provider is set once per process, so after the handle's `shutdown()` a later `init()` raises instead of returning a provider whose exporter is dead. A shared handle's `shutdown()` stops export for all callers.
+
+## [0.1.1] - 2026-07-10
+
+### Added
+
+- `set_content_capture(mode)`: programmatic override of the content-capture gate. While set, `content_capture_mode()` returns the given mode regardless of `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` — code-level config wins over the environment, matching how OpenTelemetry treats env vars as the fallback for programmatic configuration. The mode is validated exactly like the env var (case-insensitive, trimmed, legacy `true`/`false`/`1`/`0` forms accepted) and raises a `ValueError` naming the valid values on anything unrecognized — failing loud at config time instead of storing a value that would both disable capture and mask the env var. Pass `None` to clear unconditionally. Returns a generation token identifying the call as the current owner of the override.
+- `clear_content_capture(generation)`: clears the override only when `generation` (the token returned by `set_content_capture`) still identifies the most recent set. A stale token no-ops, so an old telemetry handle shutting down late cannot clobber an override a newer caller installed and silently flip capture back to the env value.
+
 ## [0.1.0] - 2026-07-06
 
 ### Added

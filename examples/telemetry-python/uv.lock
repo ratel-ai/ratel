@@ -248,7 +248,7 @@ wheels = [
 
 [[package]]
 name = "ratel-ai-telemetry"
-version = "0.1.0rc3"
+version = "0.1.2"
 source = { directory = "../../src/telemetry/python" }
 
 [package.optional-dependencies]

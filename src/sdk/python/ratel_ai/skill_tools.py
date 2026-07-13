@@ -14,11 +14,28 @@ from .catalog import ExecutableTool
 from .skill_catalog import SkillCatalog
 
 GET_SKILL_CONTENT_ID = "get_skill_content"
+"""Id (and name) of the skill-loading tool built by `get_skill_content_tool`."""
 
 __all__ = ["GET_SKILL_CONTENT_ID", "get_skill_content_tool"]
 
 
 def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
+    """Build the `get_skill_content` tool: load a skill's full body by id.
+
+    The returned tool resolves `skillId` and answers `{"body": <markdown>}` via
+    `SkillCatalog.invoke` (which records a `skill_invoke` trace event). It
+    never raises into the host: an unknown or non-string id comes back as a
+    structured `{"error": ..., "isError": True}` payload the model can recover
+    from, mirroring `invoke_tool`.
+
+    Args:
+        catalog: the skill catalog to load bodies from.
+
+    Returns:
+        An `ExecutableTool` to put in the agent's direct tool list alongside
+        `search_capabilities`.
+    """
+
     async def execute(input: dict[str, Any]) -> dict[str, Any]:
         skill_id = input.get("skillId")
         if not isinstance(skill_id, str) or not catalog.has(skill_id):

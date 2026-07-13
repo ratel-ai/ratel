@@ -1,13 +1,34 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
+  API_KEY_ENV,
   ContentCapture,
+  clearContentCapture,
   contentCaptureMode,
   DEFAULT_SERVICE_NAME,
   ENDPOINT_ENV,
   resolveOtlpConfig,
+  setContentCapture,
 } from "./config.js";
 
 describe("resolveOtlpConfig", () => {
+  it("uses RATEL_API_KEY as the apiKey fallback", () => {
+    const cfg = resolveOtlpConfig(
+      { endpoint: "https://collector.ratel.sh/v1/traces" },
+      { [API_KEY_ENV]: "env-secret" },
+    );
+
+    expect(cfg.headers.Authorization).toBe("Bearer env-secret");
+  });
+
+  it("prefers an explicit apiKey over RATEL_API_KEY", () => {
+    const cfg = resolveOtlpConfig(
+      { endpoint: "https://collector.ratel.sh/v1/traces", apiKey: "explicit-secret" },
+      { [API_KEY_ENV]: "env-secret" },
+    );
+
+    expect(cfg.headers.Authorization).toBe("Bearer explicit-secret");
+  });
+
   it("uses the apiKey form: endpoint from RATEL_URL, Bearer auth, default service name", () => {
     const cfg = resolveOtlpConfig(
       { apiKey: "secret" },
@@ -58,6 +79,36 @@ describe("resolveOtlpConfig", () => {
     expect(cfg.headers["x-tenant"]).toBe("acme");
   });
 
+  it("does not let the RATEL_API_KEY env fallback clobber an explicit Authorization header", () => {
+    // A partner dual-exporting through their own collector passes a custom auth header; an
+    // ambient RATEL_API_KEY (set process-wide for the SDK) must not overwrite it.
+    const cfg = resolveOtlpConfig(
+      {
+        endpoint: "https://my-collector/v1/traces",
+        headers: { Authorization: "Api-Key abc" },
+      },
+      { [API_KEY_ENV]: "ambient-env-key" },
+    );
+    expect(cfg.headers.Authorization).toBe("Api-Key abc");
+  });
+
+  it("reads RATEL_API_KEY from the default process.env binding", () => {
+    // Exercises the default env parameter (not an injected env), the actual user-facing
+    // "set RATEL_API_KEY and call init()" path.
+    const savedUrl = process.env[ENDPOINT_ENV];
+    const savedKey = process.env[API_KEY_ENV];
+    process.env[ENDPOINT_ENV] = "https://collector.ratel.sh/v1/traces";
+    process.env[API_KEY_ENV] = "process-env-secret";
+    try {
+      expect(resolveOtlpConfig().headers.Authorization).toBe("Bearer process-env-secret");
+    } finally {
+      if (savedUrl === undefined) delete process.env[ENDPOINT_ENV];
+      else process.env[ENDPOINT_ENV] = savedUrl;
+      if (savedKey === undefined) delete process.env[API_KEY_ENV];
+      else process.env[API_KEY_ENV] = savedKey;
+    }
+  });
+
   it("throws when no endpoint and no RATEL_URL", () => {
     expect(() => resolveOtlpConfig({ apiKey: "k" }, {})).toThrow(ENDPOINT_ENV);
   });
@@ -87,5 +138,113 @@ describe("contentCaptureMode", () => {
     });
     expect(contentCaptureMode(env("true"))).toBe(ContentCapture.SpanAndEvent);
     expect(contentCaptureMode(env("false"))).toBe(ContentCapture.NoContent);
+  });
+});
+
+describe("setContentCapture (programmatic override)", () => {
+  const env = (v: string) => ({
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: v,
+  });
+
+  afterEach(() => {
+    setContentCapture(null); // module-level state; never leak an override across tests
+  });
+
+  it("wins over an explicitly set env, in either direction", () => {
+    setContentCapture(ContentCapture.NoContent);
+    expect(contentCaptureMode(env("SPAN_ONLY"))).toBe(ContentCapture.NoContent);
+
+    setContentCapture(ContentCapture.SpanAndEvent);
+    expect(contentCaptureMode(env("NO_CONTENT"))).toBe(ContentCapture.SpanAndEvent);
+  });
+
+  it("applies when the env is unset", () => {
+    setContentCapture(ContentCapture.EventOnly);
+    expect(contentCaptureMode({})).toBe(ContentCapture.EventOnly);
+  });
+
+  it("clearing (null or undefined) restores env parsing", () => {
+    setContentCapture(ContentCapture.NoContent);
+    setContentCapture(null);
+    expect(contentCaptureMode(env("SPAN_ONLY"))).toBe(ContentCapture.SpanOnly);
+
+    setContentCapture(ContentCapture.NoContent);
+    setContentCapture(undefined);
+    expect(contentCaptureMode(env("SPAN_AND_EVENT"))).toBe(ContentCapture.SpanAndEvent);
+    expect(contentCaptureMode({})).toBe(ContentCapture.NoContent);
+  });
+
+  it("never set: env parsing is untouched (clearing with nothing set is a no-op)", () => {
+    setContentCapture(null);
+    expect(contentCaptureMode(env("event_only"))).toBe(ContentCapture.EventOnly);
+    expect(contentCaptureMode({})).toBe(ContentCapture.NoContent);
+  });
+
+  it("normalizes like the env var: case-insensitive, trimmed, legacy boolean forms", () => {
+    setContentCapture("span_only" as ContentCapture);
+    expect(contentCaptureMode({})).toBe(ContentCapture.SpanOnly);
+
+    setContentCapture(" SPAN_AND_EVENT " as ContentCapture);
+    expect(contentCaptureMode({})).toBe(ContentCapture.SpanAndEvent);
+
+    setContentCapture("true" as ContentCapture);
+    expect(contentCaptureMode({})).toBe(ContentCapture.SpanAndEvent);
+
+    setContentCapture("0" as ContentCapture);
+    expect(contentCaptureMode(env("SPAN_AND_EVENT"))).toBe(ContentCapture.NoContent);
+  });
+
+  it("throws a TypeError naming the valid values on an unrecognized mode", () => {
+    expect(() => setContentCapture("garbage" as ContentCapture)).toThrow(TypeError);
+    expect(() => setContentCapture("garbage" as ContentCapture)).toThrow(
+      /NO_CONTENT.*SPAN_ONLY.*EVENT_ONLY.*SPAN_AND_EVENT/,
+    );
+  });
+
+  it("stores nothing on a failed set: env parsing keeps ruling after the throw", () => {
+    expect(() => setContentCapture("SPAN_ONLY_TYPO" as ContentCapture)).toThrow(TypeError);
+    expect(contentCaptureMode(env("SPAN_ONLY"))).toBe(ContentCapture.SpanOnly);
+    expect(contentCaptureMode({})).toBe(ContentCapture.NoContent);
+  });
+});
+
+describe("clearContentCapture (generation-scoped clear)", () => {
+  const env = (v: string) => ({
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: v,
+  });
+
+  afterEach(() => {
+    setContentCapture(null);
+  });
+
+  it("only the most recent setter can clear: a stale generation no-ops", () => {
+    const g1 = setContentCapture(ContentCapture.NoContent);
+    const g2 = setContentCapture(ContentCapture.EventOnly);
+    expect(g2).toBeGreaterThan(g1);
+
+    clearContentCapture(g1); // stale — must not clobber g2's override
+    expect(contentCaptureMode(env("SPAN_AND_EVENT"))).toBe(ContentCapture.EventOnly);
+
+    clearContentCapture(g2); // current owner — clears, env rules again
+    expect(contentCaptureMode(env("SPAN_AND_EVENT"))).toBe(ContentCapture.SpanAndEvent);
+    expect(contentCaptureMode({})).toBe(ContentCapture.NoContent);
+  });
+
+  it("is idempotent for the current generation", () => {
+    const g = setContentCapture(ContentCapture.SpanOnly);
+    clearContentCapture(g);
+    clearContentCapture(g);
+    expect(contentCaptureMode({})).toBe(ContentCapture.NoContent);
+  });
+
+  it("an unconditional setContentCapture(null) invalidates outstanding generations", () => {
+    const g1 = setContentCapture(ContentCapture.SpanOnly);
+    setContentCapture(null); // the direct user's clear is the newest config action
+    const g3 = setContentCapture(ContentCapture.EventOnly);
+
+    clearContentCapture(g1); // stale — the slot moved on twice since
+    expect(contentCaptureMode({})).toBe(ContentCapture.EventOnly);
+    clearContentCapture(g3);
+    expect(contentCaptureMode({})).toBe(ContentCapture.NoContent);
   });
 });

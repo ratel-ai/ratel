@@ -1,5 +1,6 @@
-"""OpenTelemetry emission for the SDK funnel — the Python mirror of
-`src/sdk/ts/src/telemetry.ts` (ADR-0007).
+"""OpenTelemetry emission for the SDK funnel (ADR-0007).
+
+The Python mirror of `src/sdk/ts/src/telemetry.ts`.
 
 The catalog / capability-tool / skill / MCP paths call these helpers to open a span around
 each operation, alongside the local `record_event` stream (untouched). Span names
@@ -91,9 +92,11 @@ async def trace_execute_tool(
     args: dict[str, Any],
     run: Callable[[], Awaitable[T]],
 ) -> T:
-    """Wrap a tool invocation in a standard `execute_tool` span (`gen_ai.operation.name
-    = execute_tool`, enriched with `ratel.*`) — the OTel gen_ai tool operation, so a
-    generic backend understands it (ADR-0007). No-op pass-through when disabled.
+    """Wrap a tool invocation in a standard `execute_tool` span.
+
+    The OTel gen_ai tool operation (`gen_ai.operation.name = execute_tool`,
+    enriched with `ratel.*`), so a generic backend understands it (ADR-0007).
+    No-op pass-through when telemetry is disabled.
     """
     if not _ENABLED:
         return await run()
@@ -120,8 +123,10 @@ def trace_search(
     origin: str,
     run: Callable[[], T],
 ) -> T:
-    """Wrap a capability search (tool or skill) in a `ratel.search` span. Synchronous:
-    the native BM25 search returns inline; the hit count becomes `ratel.search.hit_count`.
+    """Wrap a capability search (tool or skill) in a `ratel.search` span.
+
+    Synchronous: the native BM25 search returns inline; the hit count becomes
+    `ratel.search.hit_count`.
     """
     if not _ENABLED:
         return run()
@@ -153,9 +158,10 @@ async def trace_upstream_register(
     transport: str,
     run: Callable[[Callable[[int], None]], Awaitable[T]],
 ) -> T:
-    """Wrap an upstream-MCP registration in a `ratel.upstream.register` span. `run`
-    receives a `report_tool_count` callback to set `ratel.upstream.tool_count` once the
-    tool list is known.
+    """Wrap an upstream-MCP registration in a `ratel.upstream.register` span.
+
+    `run` receives a `report_tool_count` callback to set
+    `ratel.upstream.tool_count` once the tool list is known.
     """
     if not _ENABLED:
         return await run(lambda _n: None)
@@ -168,8 +174,9 @@ async def trace_upstream_register(
 
 
 def record_auth_needed(server: str | None = None) -> None:
-    """Mark an upstream tool call that failed with a 401 / needs-reauthorization: a
-    short `ratel.auth.flow` span carrying `ratel.auth.outcome = needs_auth`.
+    """Mark an upstream tool call that failed with a 401 / needs-reauthorization.
+
+    Emits a short `ratel.auth.flow` span carrying `ratel.auth.outcome = needs_auth`.
     """
     if not _ENABLED:
         return
@@ -180,27 +187,126 @@ def record_auth_needed(server: str | None = None) -> None:
     span.end()
 
 
+def _resolve_capture_override(
+    capture_content: ContentCapture | str | None,
+    include_span_and_events: bool | None,
+) -> ContentCapture | str | None:
+    """Resolve the capture mode `configure_telemetry` should set.
+
+    `capture_content` wins over `include_span_and_events`; returns None to leave the
+    gate env-driven. The bool sugar maps to the wire strings `set_content_capture`
+    normalizes (True -> full capture, False -> none).
+    """
+    if capture_content is not None:
+        return capture_content
+    if include_span_and_events is not None:
+        return "SPAN_AND_EVENT" if include_span_and_events else "NO_CONTENT"
+    return None
+
+
+class _TelemetryHandle:
+    """Per-call shutdown behavior over the shutdown handle init() may reuse.
+
+    Attribute access delegates to the underlying handle so callers can still use handle
+    methods such as ``force_flush`` without configure_telemetry mutating the shared handle's
+    ``shutdown`` method.
+    """
+
+    def __init__(self, inner: Any, shutdown: Callable[[], Any]) -> None:
+        self._inner = inner
+        self._shutdown = shutdown
+
+    def shutdown(self) -> Any:
+        """Run this configure call's generation-scoped teardown, then stop the provider."""
+        return self._shutdown()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
 def configure_telemetry(
     *,
     api_key: str | None = None,
     endpoint: str | None = None,
     headers: dict[str, str] | None = None,
     service_name: str | None = None,
+    capture_content: ContentCapture | str | None = None,
+    include_span_and_events: bool | None = None,
 ) -> Any:
-    """Convenience wiring for the greenfield case: register a Ratel-owned OTLP exporter
-    so the spans this SDK emits are shipped to Ratel Cloud (or any OTLP endpoint).
-    Delegates to `ratel_ai_telemetry.init`, which needs the OpenTelemetry SDK — install
-    it with ``pip install 'ratel-ai[otlp]'``. A host already running its own OpenTelemetry
-    provider should skip this (the SDK's spans flow to that provider) and add
-    `ratel_span_processor` from `ratel_ai_telemetry`. Returns the provider as a shutdown
-    handle (``provider.shutdown()`` / ``provider.force_flush()``).
+    """Register a Ratel-owned OTLP exporter (convenience wiring for the greenfield case).
+
+    Ships the spans this SDK emits to Ratel Cloud (or any OTLP endpoint) by
+    delegating to `ratel_ai_telemetry.init`, which needs the OpenTelemetry SDK —
+    install it with ``pip install 'ratel-ai[otlp]'``. A host already running its
+    own OpenTelemetry provider should skip this (the SDK's spans flow to that
+    provider) and add `ratel_span_processor` from `ratel_ai_telemetry`.
+
+    ``capture_content`` / ``include_span_and_events`` opt into message/tool content
+    capture in code via `set_content_capture`: ``capture_content`` sets an exact mode,
+    ``include_span_and_events`` is bool sugar (True -> ``SPAN_AND_EVENT``, False ->
+    ``NO_CONTENT``); ``capture_content`` wins when both are given. A provided option
+    beats ``OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`` (the env var is the
+    fallback when neither is given, as in OTel). The returned handle's ``shutdown()``
+    clears the override, restoring env-driven behavior; the clear is
+    generation-scoped, so a stale handle shutting down late never clobbers an
+    override a newer `configure_telemetry`/`set_content_capture` call installed.
+
+    Args:
+        api_key: Ratel Cloud API key override; defaults to ``RATEL_API_KEY``.
+        endpoint: OTLP endpoint override; defaults to ``RATEL_URL``.
+        headers: Extra headers sent with every export request.
+        service_name: ``service.name`` resource attribute; defaults per `init`.
+        capture_content: Exact content-capture mode to set (see above).
+        include_span_and_events: Boolean sugar for `capture_content` (see above).
+
+    Returns:
+        A per-call shutdown handle (``handle.shutdown()`` / ``handle.force_flush()``),
+        the same shape on every path. Attribute access delegates to the shared handle
+        `init` returns; because that handle is shared across callers, shutting it down
+        stops export for all of them.
+
+    Raises:
+        ModuleNotFoundError: if the OpenTelemetry exporter is not installed
+            (``pip install 'ratel-ai[otlp]'``).
+        ValueError: if `capture_content` is not a recognized mode — raised before
+            any exporter is wired, so a bad option has no side effects.
     """
     try:
-        from ratel_ai_telemetry import init
+        from ratel_ai_telemetry import clear_content_capture, init, set_content_capture
     except ModuleNotFoundError as exc:  # pragma: no cover - exercised only without the extra
         raise ModuleNotFoundError(
             "configure_telemetry() needs the OpenTelemetry exporter. Install the extra: "
             "pip install 'ratel-ai[otlp]' — or register your own OpenTelemetry provider, "
             "since the SDK emits ratel.*/gen_ai.* spans to whatever provider is active."
         ) from exc
-    return init(api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name)
+
+    capture = _resolve_capture_override(capture_content, include_span_and_events)
+    if capture is None:
+        # No override: the env var keeps ruling; nothing to set or undo. Still wrap so the
+        # return shape (a per-call handle delegating to the shared provider) matches the
+        # capture path below, rather than leaking init()'s shared handle directly.
+        handle = init(
+            api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
+        )
+        return _TelemetryHandle(handle, handle.shutdown)
+
+    # Apply (and validate — an unrecognized mode raises ValueError) the override *before*
+    # wiring the exporter, so a bad option fails loud with no provider side effects; unwind
+    # it if init() itself raises.
+    generation = set_content_capture(capture)
+    try:
+        provider = init(
+            api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
+        )
+    except BaseException:
+        clear_content_capture(generation)
+        raise
+
+    def shutdown_and_clear() -> Any:
+        clear_content_capture(generation)
+        return provider.shutdown()
+
+    # Keep teardown per configure call. init() is idempotent and may return the same provider
+    # to multiple callers; mutating provider.shutdown would make every reference observe the
+    # newest generation's wrapper and let a stale handle clear a newer privacy override.
+    return _TelemetryHandle(provider, shutdown_and_clear)

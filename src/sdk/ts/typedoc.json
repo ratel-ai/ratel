@@ -1,0 +1,17 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "readme": "none",
+  "emit": "none",
+  "validation": {
+    "notDocumented": true
+  },
+  "treatValidationWarningsAsErrors": true,
+  "intentionallyNotExported": ["native/index.d.cts:TraceSinkConfig"],
+  "externalSymbolLinkMappings": {
+    "@ratel-ai/telemetry": {
+      "DEFAULT_SERVICE_NAME": "https://github.com/ratel-ai/ratel/blob/main/src/telemetry/ts/src/config.ts",
+      "contentCaptureMode": "https://github.com/ratel-ai/ratel/blob/main/src/telemetry/ts/src/config.ts"
+    }
+  }
+}

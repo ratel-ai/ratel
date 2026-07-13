@@ -60,6 +60,23 @@ impl std::error::Error for ParseSearchMethodError {}
 impl FromStr for SearchMethod {
     type Err = ParseSearchMethodError;
 
+    /// Parse the SDK identifier: `"bm25"`, `"semantic"` (with `"dense"`
+    /// accepted as an alias), or `"hybrid"`.
+    ///
+    /// # Errors
+    ///
+    /// Any other string is a [`ParseSearchMethodError`] naming the rejected
+    /// input.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ratel_ai_core::SearchMethod;
+    ///
+    /// assert_eq!("hybrid".parse::<SearchMethod>(), Ok(SearchMethod::Hybrid));
+    /// assert_eq!("dense".parse::<SearchMethod>(), Ok(SearchMethod::Semantic));
+    /// assert!("keyword".parse::<SearchMethod>().is_err());
+    /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "bm25" => Ok(SearchMethod::Bm25),

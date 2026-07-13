@@ -73,15 +73,31 @@ const SLOW_LOAD_REASON: &str = "embedding model load was slow — this machine m
 pub enum EmbedderError {
     /// Model files could not be fetched: offline, DNS/TLS, timeout, or the
     /// pinned revision returned a 4xx.
-    Download { model: String, source: String },
+    Download {
+        /// The embedding model's HuggingFace repo id.
+        model: String,
+        /// The underlying fetch error.
+        source: String,
+    },
     /// The HuggingFace cache could not be written: permissions, disk full, or a
     /// read-only filesystem.
-    CacheUnwritable { source: String },
+    CacheUnwritable {
+        /// The underlying filesystem error.
+        source: String,
+    },
     /// The fetched model is unusable: corrupt weights, or a config/tokenizer that
     /// failed to parse.
-    Load { model: String, source: String },
+    Load {
+        /// The embedding model's HuggingFace repo id.
+        model: String,
+        /// The underlying load error.
+        source: String,
+    },
     /// Embedding a specific text failed (tokenization or the forward pass).
-    Inference { source: String },
+    Inference {
+        /// The underlying tokenizer/inference error.
+        source: String,
+    },
     /// A semantic/hybrid search was requested but the embedding cache is not
     /// built for the current corpus — `build_embeddings` was never run. No model
     /// is loaded; the caller must build the embeddings first.
@@ -91,19 +107,27 @@ pub enum EmbedderError {
     /// when a query (or an endpoint's response) has a different width than the
     /// vectors the cache was built with.
     DimensionMismatch {
+        /// Vector width the cache was built with.
         expected: usize,
+        /// Vector width actually seen.
         got: usize,
+        /// The active model, named for diagnosis.
         model: String,
     },
     /// The embedding configuration is invalid — a bad source combination, a
     /// missing required field, or a named `api_key_env` that is not set. Surfaced
     /// at catalog construction or on first use.
-    Config { message: String },
+    Config {
+        /// What is wrong with the configuration.
+        message: String,
+    },
     /// An explicitly-configured HuggingFace model is not in the local cache, and
     /// Ratel auto-downloads only the built-in default. The user must fetch it
     /// first — symmetric with Ollama's "model not pulled".
     NotCached {
+        /// The repo id that is not cached.
         model: String,
+        /// The requested revision, if pinned.
         revision: Option<String>,
     },
 }

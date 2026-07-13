@@ -10,6 +10,7 @@
 
   <p>
     <a href="https://www.npmjs.com/package/@ratel-ai/sdk"><img src="https://img.shields.io/npm/v/@ratel-ai/sdk?label=npm&color=cb3837" alt="npm" /></a>
+    <a href="https://pypi.org/project/ratel-ai/"><img src="https://img.shields.io/pypi/v/ratel-ai?label=PyPI&color=3775a9" alt="PyPI" /></a>
     <a href="https://crates.io/crates/ratel-ai-core"><img src="https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300" alt="crates.io" /></a>
     <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
     <a href="#license"><img src="https://img.shields.io/badge/license-Apache--2.0%20%26%20MIT-blue" alt="license" /></a>
@@ -26,97 +27,125 @@ The context engineering layer for AI agents. Selects only the tools and skills r
 
 ## Why
 
-- **Cost:** Every tool schema sent to the model is tokens you pay for. Fewer tools in context means lower spend on every call.
-- **Accuracy:** Models get worse as tool lists grow. Some drop from 77% to 8% accuracy just from having too many options.
-- **Ratel fixes both:** by indexing your full catalog and injecting only the tools that match the current task, keeping the rest out of context entirely.
+- **Cost:** Every tool schema, every skill, and a growing list of instructions in the system prompt are tokens you pay for on every call. Send them all up front and you pay for them all, every turn.
+- **Accuracy:** Models get worse as that context grows. Crowd it with tools, skills, and instructions a turn doesn't need and the model picks the wrong option and drifts off task.
+- **Ratel fixes both:** it indexes your tools and skills into a catalog the agent *progressively discloses*, searching for what each turn needs and injecting only the matching capabilities instead of loading everything up front.
 
-Across local, open-source, and frontier model setups, Ratel cuts token usage and recovers accuracy lost to tool overload — without embeddings or a vector DB. Full results: [benchmark.ratel.sh](https://benchmark.ratel.sh)
+Across local, open-source, and frontier model setups, Ratel cuts token usage and recovers accuracy lost to tool overload, with no vector DB required. Full results: [benchmark.ratel.sh](https://benchmark.ratel.sh)
 
-## Install
+## Quickstart
 
-**Building an agent in TypeScript or Python?** Add the SDK:
+Guides: [Quickstart](https://docs.ratel.sh/docs/quickstart) · [TypeScript SDK](https://docs.ratel.sh/docs/sdks/typescript) · [Python SDK](https://docs.ratel.sh/docs/sdks/python)
+
+Examples: [Vercel AI SDK](examples/ai-sdk/README.md) · [Pydantic AI](examples/pydantic-ai/README.md)
+
+### Typescript
+
+Install the SDK first:
 
 ```bash
 pnpm add @ratel-ai/sdk
 ```
-```bash
-pip install ratel-ai
-```
 
-<details>
-<summary>TypeScript example</summary>
+Then create and use your Catalogs:
 
 ```ts
-import { ToolCatalog, searchCapabilitiesTool, invokeToolTool } from "@ratel-ai/sdk";
+import { readFile } from "node:fs/promises";
+import {
+  SkillCatalog,
+  ToolCatalog,
+  getSkillContentTool,
+  invokeToolTool,
+  searchCapabilitiesTool,
+} from "@ratel-ai/sdk";
 
 const catalog = new ToolCatalog();
 catalog.register({
   id: "read_file",
   name: "read_file",
   description: "Read a file from local disk.",
-  inputSchema: { properties: { path: { type: "string" } } },
-  execute: async ({ path }) => ({ contents: await fs.readFile(path, "utf8") }),
+  inputSchema: { type: "object", properties: { path: { type: "string" } } },
+  outputSchema: { type: "object", properties: { contents: { type: "string" } } },
+  execute: async ({ path }) => ({ contents: await readFile(path, "utf8") }),
 });
 
-const search = searchCapabilitiesTool(catalog);
+const skills = new SkillCatalog();
+skills.register({
+  id: "inspect-local-file",
+  name: "inspect-local-file",
+  description: "Inspect a local file before answering questions about it.",
+  tools: ["read_file"],
+  body: "Read the requested file, then ground your answer in its contents.",
+});
+
+// use the following as tools in your agent framework
+const search = searchCapabilitiesTool(catalog, skills);
 const invoke = invokeToolTool(catalog);
+const loadSkill = getSkillContentTool(skills);
 ```
 
-</details>
 
-<details>
-<summary>Python example</summary>
+### Python
+
+Install the SDK first:
+
+```bash
+pip install ratel-ai
+```
+
+Then create and use your Catalogs:
 
 ```python
-from ratel_ai import ToolCatalog, ExecutableTool, search_capabilities_tool, invoke_tool_tool
+from ratel_ai import (
+    ExecutableTool,
+    Skill,
+    SkillCatalog,
+    ToolCatalog,
+    get_skill_content_tool,
+    invoke_tool_tool,
+    search_capabilities_tool,
+)
 
 catalog = ToolCatalog()
 catalog.register(ExecutableTool(
-  id="read_file",
-  name="read_file",
-  description="Read a file from local disk.",
-  input_schema={"properties": {"path": {"type": "string"}}},
-  execute=lambda args: {"contents": open(args["path"]).read()},
+    id="read_file",
+    name="read_file",
+    description="Read a file from local disk.",
+    input_schema={"properties": {"path": {"type": "string"}}},
+    execute=lambda args: {"contents": open(args["path"]).read()},
 ))
 
-search = search_capabilities_tool(catalog)
+skills = SkillCatalog()
+skills.register(Skill(
+    id="inspect-local-file",
+    name="inspect-local-file",
+    description="Inspect a local file before answering questions about it.",
+    tools=["read_file"],
+    body="Read the requested file, then ground your answer in its contents.",
+))
+
+# use the following as tools in your agent framework
+search = search_capabilities_tool(catalog, skills)
 invoke = invoke_tool_tool(catalog)
+load_skill = get_skill_content_tool(skills)
 ```
-
-</details>
-
-Examples: [Vercel AI SDK](examples/ai-sdk/README.md) · [Pydantic AI](examples/pydantic-ai/README.md)
-
----
-
-**Using Claude Code, Cursor, or ChatGPT with MCP servers?** Drop Ratel in front of your existing setup with no code changes:
-
-```bash
-npx -y @ratel-ai/mcp-server mcp import
-```
-
-Full docs: [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp)
 
 ## How it works
 
-When your agent needs to act, it calls `search_capabilities`. Ratel searches its internal index and returns only the most relevant tools. The model sees a short, focused list and picks correctly far more often.
+When your agent needs to act, it calls `search_capabilities`. Ratel searches separate tool and skill indexes and returns focused results from each. Tools can be invoked by id; skill instructions stay out of context until the agent loads a relevant playbook with `get_skill_content`.
 
-The index uses BM25 by default, the same algorithm behind most search engines, applied to each tool's name and description. It is fast, deterministic, and adds no latency to your agent loop. Semantic and hybrid ranking are opt-in per catalog or per call, running a local embedding model in the same process.
+The indexes use BM25 by default, the same algorithm behind most search engines, applied to schema-aware tool metadata and skill names, descriptions, and tags. Retrieval is fast and deterministic. Semantic and hybrid ranking are opt-in per catalog or per call, running a local embedding model in the same process.
 
 [Full docs](https://docs.ratel.sh)
 
-## The Ratel project
+## Related projects
 
-Ratel scales from an in-process library to a managed service — one engine, one catalog contract, all the way up:
+Related open-source projects extend and validate this repository:
 
-| | Repo | What it is |
+| Project | Repo | What it is |
 |---|---|---|
-| **Engine + platform** | [ratel-ai/ratel](https://github.com/ratel-ai/ratel) (this one) | The `ratel-ai-core` engine plus TS/Python SDKs, the [`protocol/`](protocol/README.md) catalog-source contract, and the OTel telemetry helpers. Embed it in your agent process today. |
-| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution — Ratel in front of your MCP setup, today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`. |
-| **ratel-cloud** | *coming* | Managed Ratel: the first hosted catalog source plus intelligence. SDKs reach it via `RATEL_URL` over the catalog-source contract. |
+| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution for your Coding Agents: Ratel in front of your MCP setup. |
 | **ratel-bench** | [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) | The benchmark harness behind [benchmark.ratel.sh](https://benchmark.ratel.sh). |
-
-The hosted cloud is decided direction ([ADR-0002](docs/adr/0002-product-split-engine-local-cloud.md)), not yet public; a standalone server is deferred ([ADR-0003](docs/adr/0003-catalog-source-interface.md)).
 
 ## Repo layout
 
@@ -128,7 +157,9 @@ src/
 └── telemetry/         # OTel conventions + helper packages
 protocol/              # catalog-source wire contract
 examples/              # End-to-end SDK examples
-docs/                  # ADRs
+docs/
+├── adr/                # Architecture decision records
+└── assets/             # Images and other static assets
 ```
 
 ## Build & test
