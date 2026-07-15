@@ -21,8 +21,9 @@ jobs:
             --no-progress
             --hidden
             --include-fragments=anchor-only
-            --max-retries 3
-            --retry-wait-time 2
+            --max-retries 5
+            --retry-wait-time 5
+            --timeout 30
             --root-dir "${{ github.workspace }}"
             .
           fail: true
