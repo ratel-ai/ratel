@@ -76,7 +76,14 @@ skills.register({
   name: "inspect-local-file",
   description: "Inspect a local file before answering questions about it.",
   tools: ["read_file"],
+  skills: ["summarize-file"], // a dependency on another skill, expandable via maxDepth
   body: "Read the requested file, then ground your answer in its contents.",
+});
+skills.register({
+  id: "summarize-file",
+  name: "summarize-file",
+  description: "Summarize a file's contents into a few bullet points.",
+  body: "Keep summaries to three bullets; quote key lines verbatim.",
 });
 
 // use the following as tools in your agent framework
@@ -122,7 +129,14 @@ skills.register(Skill(
     name="inspect-local-file",
     description="Inspect a local file before answering questions about it.",
     tools=["read_file"],
+    skills=["summarize-file"],  # a dependency on another skill, expandable via maxDepth
     body="Read the requested file, then ground your answer in its contents.",
+))
+skills.register(Skill(
+    id="summarize-file",
+    name="summarize-file",
+    description="Summarize a file's contents into a few bullet points.",
+    body="Keep summaries to three bullets; quote key lines verbatim.",
 ))
 
 # use the following as tools in your agent framework
@@ -133,7 +147,7 @@ load_skill = get_skill_content_tool(skills)
 
 ## How it works
 
-When your agent needs to act, it calls `search_capabilities`. Ratel searches separate tool and skill indexes and returns focused results from each. Tools can be invoked by id; skill instructions stay out of context until the agent loads a relevant playbook with `get_skill_content`.
+When your agent needs to act, it calls `search_capabilities`. Ratel searches separate tool and skill indexes and returns focused results from each. Tools can be invoked by id; skill instructions stay out of context until the agent loads a relevant playbook with `get_skill_content`. A skill can also declare the tools and other skills its instructions build on: declared tools ride into the results with the skill, and skill dependencies are listed on load — or expanded into the results on request (`maxDepth`).
 
 The indexes use BM25 by default, the same algorithm behind most search engines, applied to schema-aware tool metadata and skill names, descriptions, and tags. Retrieval is fast and deterministic. Semantic and hybrid ranking are opt-in per catalog or per call, running a local embedding model in the same process.
 
