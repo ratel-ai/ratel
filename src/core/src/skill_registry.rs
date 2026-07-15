@@ -133,6 +133,7 @@ impl SkillRegistry {
     ///     description: "REST API design patterns: resource naming, pagination".into(),
     ///     tags: vec!["backend".into(), "api".into()],
     ///     tools: vec![],
+    ///     skills: vec![],
     ///     metadata: std::collections::HashMap::new(),
     ///     body: "# API design\n...".into(),
     /// });
@@ -411,6 +412,7 @@ mod tests {
             description: description.into(),
             tags: tags.iter().map(|t| (*t).into()).collect(),
             tools: vec![],
+            skills: vec![],
             metadata: std::collections::HashMap::new(),
             body: format!("# {name}\n\nbody"),
         }

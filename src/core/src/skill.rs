@@ -9,6 +9,9 @@ use std::collections::HashMap;
 /// instructions call — an explicit dependency edge, **not** indexed;
 /// `search_capabilities` pulls them into its tools bucket so the agent gets a
 /// skill and the tools it needs in one turn instead of a second search.
+/// `skills` are the ids of skills the body's instructions reference — the same
+/// kind of dependency edge, over skills instead of tools; `search_capabilities`
+/// can expand them into its skills bucket when asked (`maxDepth`).
 /// `metadata` is free-form, non-indexed context for higher layers — e.g.
 /// `{"stacks": ["react"]}` for the push-path ranker to boost/filter by project
 /// context, deliberately *not* matched as query terms. `body` is the dispatch
@@ -29,6 +32,9 @@ pub struct Skill {
     /// Ids of tools the body's instructions call — a dependency edge for
     /// higher layers, not indexed.
     pub tools: Vec<String>,
+    /// Ids of skills this skill's instructions reference — a dependency edge
+    /// for higher layers, not indexed.
+    pub skills: Vec<String>,
     /// Free-form, non-indexed context for higher layers (push-path
     /// boosting/filtering); never matched as query terms.
     pub metadata: HashMap<String, Vec<String>>,
