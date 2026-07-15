@@ -1,28 +1,34 @@
 """Skill catalog — the Python mirror of `src/sdk/ts/src/skill-catalog.ts`.
 
-`SkillRegistry` (the BM25 index) comes from the native binding; `SkillCatalog` is
-the on-demand analogue of `ToolCatalog`: registered skills are ranked by
+`SkillRegistry` is a typed facade over the private native index; `SkillCatalog`
+is the on-demand analogue of `ToolCatalog`: registered skills are ranked by
 relevance, and the matching body is fetched only on `invoke`.
 """
 
 from __future__ import annotations
 
+import asyncio
+import threading
 import time
-import warnings
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, TypeVar, overload
 
-from ._native import SkillHit, SkillRegistry
+from ._native import SkillHit
+from ._native import SkillRegistry as _NativeSkillRegistry
 from .catalog import (
+    _REGISTRY_BUSY,
     EmbeddingSpec,
     SearchMethod,
     SearchOrigin,
     TraceSinkConfig,
-    _embedding_kwargs,
+    _registry_embedding_kwargs,
 )
-from .telemetry import SEARCH_TARGET_SKILL, trace_search, trace_skill_load
+from .telemetry import SEARCH_TARGET_SKILL, trace_search, trace_search_async, trace_skill_load
 
-__all__ = ["Skill", "SkillCatalog", "SkillHit"]
+__all__ = ["Skill", "SkillCatalog", "SkillHit", "SkillRegistry"]
+
+_DenseResult = TypeVar("_DenseResult")
 
 
 @dataclass
@@ -44,6 +50,277 @@ class Skill:
     body: str = ""
 
 
+class SkillRegistry:
+    """Typed Python facade over the private native skill registry."""
+
+    @overload
+    def __init__(self, embedding: EmbeddingSpec | None = None) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        spec: str,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+        pooling: Literal["cls", "mean"] | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        huggingface: str,
+        revision: str | None = None,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+        pooling: Literal["cls", "mean"] | None = None,
+        download: bool | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        local: str,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+        pooling: Literal["cls", "mean"] | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        ollama: str,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        url: str,
+        model: str,
+        api_key_env: str | None = None,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        embedding: EmbeddingSpec | None = None,
+        *,
+        spec: str | None = None,
+        huggingface: str | None = None,
+        local: str | None = None,
+        ollama: str | None = None,
+        url: str | None = None,
+        model: str | None = None,
+        revision: str | None = None,
+        api_key_env: str | None = None,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+        pooling: str | None = None,
+        download: bool | None = None,
+    ) -> None:
+        """Create a metadata registry with an optional embedding model."""
+        kwargs = _registry_embedding_kwargs(
+            embedding,
+            spec=spec,
+            huggingface=huggingface,
+            local=local,
+            ollama=ollama,
+            url=url,
+            model=model,
+            revision=revision,
+            api_key_env=api_key_env,
+            query_prefix=query_prefix,
+            doc_prefix=doc_prefix,
+            pooling=pooling,
+            download=download,
+        )
+        self._native = _NativeSkillRegistry(**kwargs)
+        self._dense_gate = threading.Lock()
+        self._dense_state = threading.Lock()
+        self._dense_pending = 0
+        self._dense_tasks: set[asyncio.Task[Any]] = set()
+
+    @overload
+    def register(self, item: Skill) -> None: ...
+
+    @overload
+    def register(
+        self,
+        item: str,
+        name: str,
+        description: str,
+        tags: list[str],
+        tools: list[str],
+        metadata: dict[str, list[str]],
+        body: str,
+    ) -> None: ...
+
+    def register(
+        self,
+        item: Skill | str,
+        name: str | None = None,
+        description: str | None = None,
+        tags: list[str] | None = None,
+        tools: list[str] | None = None,
+        metadata: dict[str, list[str]] | None = None,
+        body: str | None = None,
+    ) -> None:
+        """Register a `Skill`; the legacy flat native arguments remain accepted."""
+        if isinstance(item, Skill):
+            if any(
+                value is not None
+                for value in (name, description, tags, tools, metadata, body)
+            ):
+                raise TypeError("item register accepts only the Skill argument")
+            skill = item
+        else:
+            if (
+                name is None
+                or description is None
+                or tags is None
+                or tools is None
+                or metadata is None
+                or body is None
+            ):
+                raise TypeError("flat register requires all metadata arguments")
+            skill = Skill(item, name, description, tags, tools, metadata, body)
+        self._register_items((skill,))
+
+    def register_many(self, items: Iterable[Skill]) -> None:
+        """Register skills in iteration order."""
+        skills = list(items)
+        if not all(isinstance(item, Skill) for item in skills):
+            raise TypeError("register_many requires Skill items")
+        self._register_items(skills)
+
+    def search(self, query: str, top_k: int) -> list[SkillHit]:
+        """Run synchronous, model-free BM25 retrieval."""
+        return self._native.search(query, top_k)
+
+    def search_with_origin(self, query: str, top_k: int, origin: SearchOrigin) -> list[SkillHit]:
+        """Run BM25 retrieval with an explicit trace origin."""
+        return self._native.search_with_origin(query, top_k, origin)
+
+    def search_with_method(
+        self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
+    ) -> list[SkillHit]:
+        """Run BM25 synchronously; dense retrieval is async-only."""
+        if method not in ("bm25", "semantic", "hybrid"):
+            raise ValueError(f"unknown search method: {method}")
+        if method != "bm25":
+            raise RuntimeError(
+                f'{method} search is asynchronous; use `await registry.search_async(..., '
+                f'method="{method}")`'
+            )
+        return self.search_with_origin(query, top_k, origin)
+
+    async def build_embeddings(self) -> None:
+        """Incrementally build missing embeddings without blocking Python."""
+        await self._run_dense(self._native._build_embeddings)
+
+    async def rebuild_embeddings(self) -> None:
+        """Recompute and atomically replace the full embedding cache."""
+        await self._run_dense(self._native._rebuild_embeddings)
+
+    async def search_async(
+        self,
+        query: str,
+        top_k: int,
+        origin: SearchOrigin = "direct",
+        method: SearchMethod = "bm25",
+    ) -> list[SkillHit]:
+        """Search immediately with BM25 or run dense retrieval on a worker thread."""
+        if method not in ("bm25", "semantic", "hybrid"):
+            raise ValueError(f"unknown search method: {method}")
+        if method == "bm25":
+            return self.search_with_origin(query, top_k, origin)
+        return await self._run_dense(
+            lambda: self._native._search_with_method(query, top_k, origin, method)
+        )
+
+    def record_event(self, event: dict[str, Any]) -> None:
+        """Record an SDK-layer trace event."""
+        self._native.record_event(event)
+
+    def set_trace_sink(
+        self, kind: str, session_id: str | None = None, path: str | None = None
+    ) -> None:
+        """Replace the native trace sink."""
+        with self._dense_state:
+            self._raise_if_busy()
+            self._native.set_trace_sink(kind, session_id, path)
+
+    def drain_trace_events(self) -> list[dict[str, Any]]:
+        """Drain captured native trace events."""
+        return self._native.drain_trace_events()
+
+    async def _run_dense(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+        self._queue_dense()
+        runner = self._run_dense_task(operation)
+        try:
+            task = asyncio.create_task(runner)
+        except BaseException:
+            runner.close()
+            self._finish_dense()
+            raise
+        self._dense_tasks.add(task)
+        task.add_done_callback(self._dense_task_done)
+        return await asyncio.shield(task)
+
+    async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+        try:
+            return await asyncio.to_thread(self._run_dense_worker, operation)
+        finally:
+            self._finish_dense()
+
+    def _run_dense_worker(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+        with self._dense_gate:
+            return operation()
+
+    def _dense_task_done(self, task: asyncio.Task[Any]) -> None:
+        self._dense_tasks.discard(task)
+        if not task.cancelled():
+            task.exception()
+
+    def _queue_dense(self) -> None:
+        with self._dense_state:
+            self._dense_pending += 1
+
+    def _finish_dense(self) -> None:
+        with self._dense_state:
+            self._dense_pending -= 1
+
+    def _register_items(self, skills: Iterable[Skill]) -> None:
+        skills = list(skills)
+        with self._dense_state:
+            self._raise_if_busy()
+            self._native._register_many(
+                [
+                    (
+                        skill.id,
+                        skill.name,
+                        skill.description,
+                        skill.tags,
+                        skill.tools,
+                        skill.metadata,
+                        skill.body,
+                    )
+                    for skill in skills
+                ]
+            )
+
+    def _raise_if_busy(self) -> None:
+        if self._dense_pending:
+            raise RuntimeError(_REGISTRY_BUSY)
+
+
 class SkillCatalog:
     """Registry of skills. Register once, then search and load bodies by id."""
 
@@ -58,22 +335,14 @@ class SkillCatalog:
         Args:
             trace: where trace events go; `None` keeps the default no-op sink.
             method: default retrieval method for `search` — see
-                `ToolCatalog.__init__`; a semantic/hybrid catalog eagerly
-                embeds each skill at registration.
+                `ToolCatalog.__init__`; dense defaults use `search_async` after
+                an explicit `build_embeddings`.
             embedding: model for semantic/hybrid retrieval — see
-                `ToolCatalog.__init__`; ignored with a warning under "bm25".
+                `ToolCatalog.__init__`; retained and validated under "bm25" too.
         """
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
-        self._eager: bool = method in ("semantic", "hybrid")
-        if embedding is not None and not self._eager:
-            warnings.warn(
-                '`embedding` was provided but method is "bm25", which needs no model'
-                " — the embedding config is ignored",
-                stacklevel=2,
-            )
-        kwargs = _embedding_kwargs(embedding) if (self._eager and embedding is not None) else {}
-        self._registry = SkillRegistry(**kwargs)
+        self._registry = SkillRegistry(embedding)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -88,28 +357,28 @@ class SkillCatalog:
             skill: the skill to register.
 
         Raises:
-            RuntimeError: on a semantic/hybrid catalog, if the embedding model
-                fails to load while eagerly embedding the new skill.
+            RuntimeError: if a queued or running dense operation owns the registry.
         """
-        self._registry.register(
-            skill.id,
-            skill.name,
-            skill.description,
-            skill.tags,
-            skill.tools,
-            skill.metadata,
-            skill.body,
-        )
+        self._registry.register(skill)
         self._skills[skill.id] = skill
-        if self._eager:
-            self._registry.build_embeddings()
 
-    def build_embeddings(self) -> None:
+    def register_many(self, skills: Iterable[Skill]) -> None:
+        """Register skills in iteration order without embedding them."""
+        batch = list(skills)
+        self._registry.register_many(batch)
+        for skill in batch:
+            self._skills[skill.id] = skill
+
+    async def build_embeddings(self) -> None:
         """Pre-compute embeddings for not-yet-embedded skills.
 
         See `ToolCatalog.build_embeddings` for when to call and what it raises.
         """
-        self._registry.build_embeddings()
+        await self._registry.build_embeddings()
+
+    async def rebuild_embeddings(self) -> None:
+        """Recompute and atomically replace every skill embedding."""
+        await self._registry.rebuild_embeddings()
 
     def search(
         self,
@@ -118,21 +387,48 @@ class SkillCatalog:
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
     ) -> list[SkillHit]:
-        """Rank registered skills against a natural-language query.
+        """Rank registered skills synchronously with BM25.
 
-        The skill twin of `ToolCatalog.search` — same arguments, same
-        method-override and `ValueError`/`RuntimeError` semantics, ranked
-        against the skill corpus.
+        The skill twin of `ToolCatalog.search`: a dense resolved method raises
+        immediately with guidance to use `search_async`.
 
         Returns:
             Up to `top_k` `SkillHit`s, best first.
         """
+        resolved_method = method or self._method
+        if resolved_method not in ("bm25", "semantic", "hybrid"):
+            raise ValueError(f"unknown search method: {resolved_method}")
+        if resolved_method != "bm25":
+            raise RuntimeError(
+                f'{resolved_method} search is asynchronous; use `await catalog.search_async(..., '
+                f'method="{resolved_method}")`'
+            )
         return trace_search(
             SEARCH_TARGET_SKILL,
             query,
             top_k,
             origin,
-            lambda: self._registry.search_with_method(query, top_k, origin, method or self._method),
+            lambda: self._registry.search_with_origin(query, top_k, origin),
+        )
+
+    async def search_async(
+        self,
+        query: str,
+        top_k: int,
+        origin: SearchOrigin = "direct",
+        method: SearchMethod | None = None,
+    ) -> list[SkillHit]:
+        """Rank skills asynchronously with BM25, semantic, or hybrid retrieval.
+
+        Dense methods require a complete cache built explicitly beforehand.
+        """
+        resolved_method = method or self._method
+        return await trace_search_async(
+            SEARCH_TARGET_SKILL,
+            query,
+            top_k,
+            origin,
+            lambda: self._registry.search_async(query, top_k, origin, resolved_method),
         )
 
     def has(self, skill_id: str) -> bool:

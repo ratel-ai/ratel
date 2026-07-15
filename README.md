@@ -134,7 +134,7 @@ load_skill = get_skill_content_tool(skills)
 
 When your agent needs to act, it calls `search_capabilities`. Ratel searches separate tool and skill indexes and returns focused results from each. Tools can be invoked by id; skill instructions stay out of context until the agent loads a relevant playbook with `get_skill_content`.
 
-The indexes use BM25 by default, the same algorithm behind most search engines, applied to schema-aware tool metadata and skill names, descriptions, and tags. Retrieval is fast and deterministic. Semantic and hybrid ranking are opt-in per catalog or per call, running a local embedding model in the same process.
+The indexes use BM25 by default, the same algorithm behind most search engines, applied to schema-aware tool metadata and skill names, descriptions, and tags. Retrieval is fast and deterministic. Semantic and hybrid ranking are opt-in per catalog or per call; SDK callers build and search dense indexes asynchronously, using either an in-process model or an OpenAI-compatible embedding endpoint.
 
 [Full docs](https://docs.ratel.sh)
 
@@ -151,7 +151,7 @@ Related open-source projects extend and validate this repository:
 
 ```
 src/
-├── core/              # ratel-ai-core — Rust BM25 engine
+├── core/              # ratel-ai-core — Rust retrieval engine
 ├── sdk/ts/            # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
 ├── sdk/python/        # ratel-ai — Python SDK (PyO3-bound)
 └── telemetry/         # OTel conventions + helper packages

@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (next minor):** tool and skill registration is metadata-only. `build_embeddings()` and new `rebuild_embeddings()` are coroutines; `search()` is synchronous BM25 only, while new `search_async()` supports BM25, semantic, and hybrid retrieval without blocking the asyncio loop or holding the GIL.
+- Capability tools now await async retrieval. MCP ingestion can register several upstream catalogs before one explicit batched embedding build.
+- Embedding configuration is validated and retained on BM25-default catalogs for later async semantic/hybrid overrides; typed config variants are mutually exclusive.
+
+### Added
+
+- `register_many()` parity across tool/skill registries and catalogs.
+- Configurable default, HuggingFace, local Candle, Ollama, and OpenAI-compatible
+  endpoint embedding sources, with public `EmbeddingSpec`,
+  `EmbeddingModelConfig`, and source-specific `TypedDict` variants.
+
 ## [0.4.2] - 2026-07-11
 
 ### Changed

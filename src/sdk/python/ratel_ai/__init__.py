@@ -1,8 +1,8 @@
 """Python SDK for Ratel — context engineering for AI agents.
 
 Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
-- `ToolRegistry` / `SearchHit`, `SkillRegistry` / `SkillHit` — metadata-only BM25
-  indexes (native), one per corpus.
+- `ToolRegistry` / `SearchHit`, `SkillRegistry` / `SkillHit` — metadata registries
+  with synchronous BM25 and explicit async dense retrieval, one per corpus.
 - `ToolCatalog` / `ExecutableTool` — registry plus executable handlers.
 - `SkillCatalog` / `Skill` — the on-demand skill analogue of `ToolCatalog`.
 - `search_capabilities_tool` / `invoke_tool_tool` / `get_skill_content_tool` —
@@ -10,7 +10,7 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `register_mcp_server` — ingest an upstream MCP server's tools (extra: mcp).
 """
 
-from ._native import SearchHit, SkillHit, SkillRegistry, ToolRegistry
+from ._native import SearchHit, SkillHit
 from .capabilities import (
     INVOKE_TOOL_ID,
     SEARCH_CAPABILITIES_ID,
@@ -21,13 +21,19 @@ from .capabilities import (
     search_capabilities_tool,
 )
 from .catalog import (
+    EmbeddingModelConfig,
     EmbeddingSpec,
+    EndpointEmbeddingConfig,
     ExecutableTool,
     Executor,
+    HuggingFaceEmbeddingConfig,
+    LocalEmbeddingConfig,
+    OllamaEmbeddingConfig,
     SearchMethod,
     SearchOrigin,
     Tool,
     ToolCatalog,
+    ToolRegistry,
     TraceSinkConfig,
 )
 
@@ -36,7 +42,7 @@ from .catalog import (
 from .compat import SEARCH_TOOLS_ID, search_tools_tool
 from .exceptions import DimensionMismatchError, EmbedderError
 from .mcp import McpServerHandle, register_mcp_server
-from .skill_catalog import Skill, SkillCatalog
+from .skill_catalog import Skill, SkillCatalog, SkillRegistry
 from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 
 # OpenTelemetry export of the ratel.*/gen_ai.* funnel (ADR-0007). The SDK always
@@ -52,11 +58,16 @@ __all__ = [
     "SEARCH_TOOLS_ID",
     "DimensionMismatchError",
     "EmbedderError",
+    "EmbeddingModelConfig",
     "EmbeddingSpec",
+    "EndpointEmbeddingConfig",
     "ExecutableTool",
     "Executor",
+    "HuggingFaceEmbeddingConfig",
+    "LocalEmbeddingConfig",
     "McpServerHandle",
     "OnUnauthorized",
+    "OllamaEmbeddingConfig",
     "SearchHit",
     "SearchMethod",
     "SearchOrigin",

@@ -1,22 +1,24 @@
 """Tool catalog with executors — the Python mirror of `src/sdk/ts/src/catalog.ts`.
 
-`ToolRegistry` (the BM25 index) comes from the native binding; `ToolCatalog`
+`ToolRegistry` is a typed facade over the private native index; `ToolCatalog`
 layers executable handlers on top and emits the same trace events the TS SDK does
 (see ADR-0007 for the core-owned schema).
 """
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
+import threading
 import time
-import warnings
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Union
+from typing import Any, Callable, Literal, TypedDict, TypeVar, Union, overload
 
-from ._native import SearchHit, ToolRegistry
-from .telemetry import SEARCH_TARGET_TOOL, trace_execute_tool, trace_search
+from ._native import SearchHit
+from ._native import ToolRegistry as _NativeToolRegistry
+from .telemetry import SEARCH_TARGET_TOOL, trace_execute_tool, trace_search, trace_search_async
 
 Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
 """A tool handler: takes the tool's arguments dict, returns the result.
@@ -36,15 +38,64 @@ SearchMethod = str
 ``"semantic"`` (dense embeddings) or ``"hybrid"`` (both, fused).
 """
 
-# Embedding-model selection for semantic/hybrid retrieval. A bare string is a
-# local model *directory path*; every other source is a keyed dict, symmetric:
-#   {"huggingface": "org/name", "revision": "…"} | {"local": "/path"}
-#   {"ollama": "nomic-embed-text"} | {"url": "…", "model": "…", "api_key_env": "…"}
-# (A repo-id-looking string is rejected in favor of {"huggingface": ...}.)
-# Optional modifiers: "doc_prefix" (asymmetric docs, e.g. e5's "passage: ") on any
-# source; "pooling" ("cls"|"mean") to override auto-detection on an in-process model;
-# "download" (bool) to opt into fetching a not-yet-cached HuggingFace model.
-EmbeddingSpec = Union[str, dict[str, Any]]
+
+class _PrefixOptions(TypedDict, total=False):
+    query_prefix: str
+    doc_prefix: str
+
+
+class _HuggingFaceOptions(_PrefixOptions, total=False):
+    revision: str
+    pooling: Literal["cls", "mean"]
+    download: bool
+
+
+class HuggingFaceEmbeddingConfig(_HuggingFaceOptions):
+    """In-process HuggingFace embedding model configuration."""
+
+    huggingface: str
+
+
+class _LocalOptions(_PrefixOptions, total=False):
+    pooling: Literal["cls", "mean"]
+
+
+class LocalEmbeddingConfig(_LocalOptions):
+    """In-process local-directory embedding model configuration."""
+
+    local: str
+
+
+class OllamaEmbeddingConfig(_PrefixOptions):
+    """Local Ollama embedding endpoint configuration."""
+
+    ollama: str
+
+
+class _EndpointOptions(_PrefixOptions, total=False):
+    api_key_env: str
+
+
+class EndpointEmbeddingConfig(_EndpointOptions):
+    """OpenAI-compatible embedding endpoint configuration."""
+
+    url: str
+    model: str
+
+
+EmbeddingModelConfig = Union[
+    HuggingFaceEmbeddingConfig,
+    LocalEmbeddingConfig,
+    OllamaEmbeddingConfig,
+    EndpointEmbeddingConfig,
+]
+"""Mutually exclusive keyed embedding-source configurations."""
+
+EmbeddingSpec = Union[str, EmbeddingModelConfig]
+"""Embedding selection; a bare string is a local model directory path."""
+
+_DenseResult = TypeVar("_DenseResult")
+_REGISTRY_BUSY = "registry busy; await the active operation"
 
 _EMBEDDING_KEYS = frozenset(
     {
@@ -73,13 +124,56 @@ def _embedding_kwargs(embedding: EmbeddingSpec) -> dict[str, Any]:
     if isinstance(embedding, str):
         return {"spec": embedding}
     if isinstance(embedding, dict):
+        if not embedding:
+            raise ValueError("embedding config must not be empty")
         unknown = set(embedding) - _EMBEDDING_KEYS
         if unknown:
             raise ValueError(
                 f"unknown embedding keys {sorted(unknown)}; allowed: {sorted(_EMBEDDING_KEYS)}"
             )
         return dict(embedding)
-    raise TypeError("embedding must be a str (repo id / path) or a dict")
+    raise TypeError("embedding must be a local-path string or a keyed config dict")
+
+
+def _registry_embedding_kwargs(
+    embedding: EmbeddingSpec | None,
+    *,
+    spec: str | None,
+    huggingface: str | None,
+    local: str | None,
+    ollama: str | None,
+    url: str | None,
+    model: str | None,
+    revision: str | None,
+    api_key_env: str | None,
+    query_prefix: str | None,
+    doc_prefix: str | None,
+    pooling: str | None,
+    download: bool | None,
+) -> dict[str, Any]:
+    legacy = {
+        key: value
+        for key, value in {
+            "spec": spec,
+            "huggingface": huggingface,
+            "local": local,
+            "ollama": ollama,
+            "url": url,
+            "model": model,
+            "revision": revision,
+            "api_key_env": api_key_env,
+            "query_prefix": query_prefix,
+            "doc_prefix": doc_prefix,
+            "pooling": pooling,
+            "download": download,
+        }.items()
+        if value is not None
+    }
+    if embedding is not None:
+        if legacy:
+            raise TypeError("pass either embedding or legacy embedding kwargs, not both")
+        return _embedding_kwargs(embedding)
+    return legacy
 
 
 @dataclass
@@ -114,6 +208,272 @@ class TraceSinkConfig:
     path: str | None = None
 
 
+class ToolRegistry:
+    """Typed Python facade over the private native tool registry."""
+
+    @overload
+    def __init__(self, embedding: EmbeddingSpec | None = None) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        spec: str,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+        pooling: Literal["cls", "mean"] | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        huggingface: str,
+        revision: str | None = None,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+        pooling: Literal["cls", "mean"] | None = None,
+        download: bool | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        local: str,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+        pooling: Literal["cls", "mean"] | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        ollama: str,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        url: str,
+        model: str,
+        api_key_env: str | None = None,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        embedding: EmbeddingSpec | None = None,
+        *,
+        spec: str | None = None,
+        huggingface: str | None = None,
+        local: str | None = None,
+        ollama: str | None = None,
+        url: str | None = None,
+        model: str | None = None,
+        revision: str | None = None,
+        api_key_env: str | None = None,
+        query_prefix: str | None = None,
+        doc_prefix: str | None = None,
+        pooling: str | None = None,
+        download: bool | None = None,
+    ) -> None:
+        """Create a metadata registry with an optional embedding model."""
+        kwargs = _registry_embedding_kwargs(
+            embedding,
+            spec=spec,
+            huggingface=huggingface,
+            local=local,
+            ollama=ollama,
+            url=url,
+            model=model,
+            revision=revision,
+            api_key_env=api_key_env,
+            query_prefix=query_prefix,
+            doc_prefix=doc_prefix,
+            pooling=pooling,
+            download=download,
+        )
+        self._native = _NativeToolRegistry(**kwargs)
+        self._dense_gate = threading.Lock()
+        self._dense_state = threading.Lock()
+        self._dense_pending = 0
+        self._dense_tasks: set[asyncio.Task[Any]] = set()
+
+    @overload
+    def register(self, item: Tool) -> None: ...
+
+    @overload
+    def register(
+        self,
+        item: str,
+        name: str,
+        description: str,
+        input_schema: dict[str, Any],
+        output_schema: dict[str, Any],
+    ) -> None: ...
+
+    def register(
+        self,
+        item: Tool | str,
+        name: str | None = None,
+        description: str | None = None,
+        input_schema: dict[str, Any] | None = None,
+        output_schema: dict[str, Any] | None = None,
+    ) -> None:
+        """Register a `Tool`; the legacy flat native arguments remain accepted."""
+        if isinstance(item, Tool):
+            if any(value is not None for value in (name, description, input_schema, output_schema)):
+                raise TypeError("item register accepts only the Tool argument")
+            tool = item
+        else:
+            if (
+                name is None
+                or description is None
+                or input_schema is None
+                or output_schema is None
+            ):
+                raise TypeError("flat register requires all metadata arguments")
+            tool = Tool(item, name, description, input_schema, output_schema)
+        self._register_items((tool,))
+
+    def register_many(self, items: Iterable[Tool]) -> None:
+        """Register tools in iteration order."""
+        tools = list(items)
+        if not all(isinstance(item, Tool) for item in tools):
+            raise TypeError("register_many requires Tool items")
+        self._register_items(tools)
+
+    def search(self, query: str, top_k: int) -> list[SearchHit]:
+        """Run synchronous, model-free BM25 retrieval."""
+        return self._native.search(query, top_k)
+
+    def search_with_origin(self, query: str, top_k: int, origin: SearchOrigin) -> list[SearchHit]:
+        """Run BM25 retrieval with an explicit trace origin."""
+        return self._native.search_with_origin(query, top_k, origin)
+
+    def search_with_method(
+        self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
+    ) -> list[SearchHit]:
+        """Run BM25 synchronously; dense retrieval is async-only."""
+        if method not in ("bm25", "semantic", "hybrid"):
+            raise ValueError(f"unknown search method: {method}")
+        if method != "bm25":
+            raise RuntimeError(
+                f'{method} search is asynchronous; use `await registry.search_async(..., '
+                f'method="{method}")`'
+            )
+        return self.search_with_origin(query, top_k, origin)
+
+    async def build_embeddings(self) -> None:
+        """Incrementally build missing embeddings without blocking Python."""
+        await self._run_dense(self._native._build_embeddings)
+
+    async def rebuild_embeddings(self) -> None:
+        """Recompute and atomically replace the full embedding cache."""
+        await self._run_dense(self._native._rebuild_embeddings)
+
+    async def search_async(
+        self,
+        query: str,
+        top_k: int,
+        origin: SearchOrigin = "direct",
+        method: SearchMethod = "bm25",
+    ) -> list[SearchHit]:
+        """Search immediately with BM25 or run dense retrieval on a worker thread."""
+        if method not in ("bm25", "semantic", "hybrid"):
+            raise ValueError(f"unknown search method: {method}")
+        if method == "bm25":
+            return self.search_with_origin(query, top_k, origin)
+        return await self._run_dense(
+            lambda: self._native._search_with_method(query, top_k, origin, method)
+        )
+
+    def record_event(self, event: dict[str, Any]) -> None:
+        """Record an SDK-layer trace event."""
+        self._native.record_event(event)
+
+    def set_trace_sink(
+        self, kind: str, session_id: str | None = None, path: str | None = None
+    ) -> None:
+        """Replace the native trace sink."""
+        with self._dense_state:
+            self._raise_if_busy()
+            self._native.set_trace_sink(kind, session_id, path)
+
+    def drain_trace_events(self) -> list[dict[str, Any]]:
+        """Drain captured native trace events."""
+        return self._native.drain_trace_events()
+
+    async def _run_dense(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+        self._queue_dense()
+        runner = self._run_dense_task(operation)
+        try:
+            task = asyncio.create_task(runner)
+        except BaseException:
+            runner.close()
+            self._finish_dense()
+            raise
+        self._dense_tasks.add(task)
+        task.add_done_callback(self._dense_task_done)
+        # Shielding prevents cancellation from cancelling queued executor work;
+        # the retained runner clears busy state only after native work ends.
+        return await asyncio.shield(task)
+
+    async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+        try:
+            return await asyncio.to_thread(self._run_dense_worker, operation)
+        finally:
+            # Also runs when the default executor rejects submission, before a
+            # worker exists to clear the queued-operation state.
+            self._finish_dense()
+
+    def _run_dense_worker(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+        with self._dense_gate:
+            return operation()
+
+    def _dense_task_done(self, task: asyncio.Task[Any]) -> None:
+        self._dense_tasks.discard(task)
+        if not task.cancelled():
+            # A shielded worker outlives a cancelled caller. Retrieve any later
+            # failure so asyncio does not report an unhandled task exception.
+            task.exception()
+
+    def _queue_dense(self) -> None:
+        with self._dense_state:
+            self._dense_pending += 1
+
+    def _finish_dense(self) -> None:
+        with self._dense_state:
+            self._dense_pending -= 1
+
+    def _register_items(self, tools: Iterable[Tool]) -> None:
+        tools = list(tools)
+        with self._dense_state:
+            self._raise_if_busy()
+            self._native._register_many(
+                [
+                    (
+                        tool.id,
+                        tool.name,
+                        tool.description,
+                        tool.input_schema,
+                        tool.output_schema,
+                    )
+                    for tool in tools
+                ]
+            )
+
+    def _raise_if_busy(self) -> None:
+        if self._dense_pending:
+            raise RuntimeError(_REGISTRY_BUSY)
+
+
 class ToolCatalog:
     """Registry + executors. Register tools once, then search and invoke by id."""
 
@@ -129,27 +489,18 @@ class ToolCatalog:
             trace: where trace events go; `None` keeps the default no-op sink.
             method: default retrieval method for `search` — "bm25" (the
                 historical, model-free behavior), "semantic" or "hybrid". A
-                per-call `method=` overrides it. A semantic/hybrid catalog
-                eagerly embeds each tool at registration so searches never pay
-                the embedding cost; a BM25 catalog never touches the model.
+                per-call `method=` overrides it. Dense defaults must use
+                `search_async` after an explicit `build_embeddings`.
             embedding: model for semantic/hybrid retrieval (a path string or a
-                keyed dict — see `EmbeddingSpec`); ignored with a warning under
-                "bm25", which needs no model.
+                keyed dict — see `EmbeddingSpec`). Retained and validated even
+                under "bm25" so a later async semantic override can use it.
         """
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
         self._method: SearchMethod = method
-        self._eager: bool = method in ("semantic", "hybrid")
-        if embedding is not None and not self._eager:
-            warnings.warn(
-                '`embedding` was provided but method is "bm25", which needs no model'
-                " — the embedding config is ignored",
-                stacklevel=2,
-            )
-        # A bm25 catalog ignores the model entirely (never loads it). An invalid
-        # config raises ValueError here, at construction.
-        kwargs = _embedding_kwargs(embedding) if (self._eager and embedding is not None) else {}
-        self._registry = ToolRegistry(**kwargs)
+        # Keep and validate the model even for a BM25-default catalog: callers may
+        # build once, then opt into semantic retrieval per search.
+        self._registry = ToolRegistry(embedding)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -165,18 +516,11 @@ class ToolCatalog:
         Raises:
             ValueError: if `tool.execute` is `None`, or if `input_schema` /
                 `output_schema` contain values that are not JSON-serializable.
-            RuntimeError: on a semantic/hybrid catalog, if the embedding model
-                fails to load while eagerly embedding the new tool.
+            RuntimeError: if a queued or running dense operation owns the registry.
         """
         if tool.execute is None:
             raise ValueError(f"tool {tool.id!r} has no execute handler")
-        self._registry.register(
-            tool.id,
-            tool.name,
-            tool.description,
-            tool.input_schema,
-            tool.output_schema,
-        )
+        self._registry.register(tool)
         self._executors[tool.id] = tool.execute
         self._tools[tool.id] = Tool(
             id=tool.id,
@@ -185,23 +529,39 @@ class ToolCatalog:
             input_schema=tool.input_schema,
             output_schema=tool.output_schema,
         )
-        if self._eager:
-            # Embed the just-registered tool now (incremental) so semantic/hybrid
-            # searches stay fast. Raises RuntimeError if the model fails to load.
-            self._registry.build_embeddings()
 
-    def build_embeddings(self) -> None:
+    def register_many(self, tools: Iterable[ExecutableTool]) -> None:
+        """Register executable tools in iteration order without embedding them."""
+        batch = list(tools)
+        for tool in batch:
+            if tool.execute is None:
+                raise ValueError(f"tool {tool.id!r} has no execute handler")
+        self._registry.register_many(batch)
+        for tool in batch:
+            self._executors[tool.id] = tool.execute
+            self._tools[tool.id] = Tool(
+                id=tool.id,
+                name=tool.name,
+                description=tool.description,
+                input_schema=tool.input_schema,
+                output_schema=tool.output_schema,
+            )
+
+    async def build_embeddings(self) -> None:
         """Pre-compute embeddings for any not-yet-embedded tools.
 
         Incremental: only tools registered since the last call are embedded.
-        Call after a bulk register, or rely on the automatic per-register
-        embedding that a semantic/hybrid catalog does. A BM25 catalog never
-        needs it.
+        Registration itself is always metadata-only. This coroutine performs
+        model loading, HTTP, and inference on a worker thread.
 
         Raises:
             RuntimeError: if the embedding model fails to load.
         """
-        self._registry.build_embeddings()
+        await self._registry.build_embeddings()
+
+    async def rebuild_embeddings(self) -> None:
+        """Recompute and atomically replace every tool embedding."""
+        await self._registry.rebuild_embeddings()
 
     def search(
         self,
@@ -210,7 +570,7 @@ class ToolCatalog:
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
     ) -> list[SearchHit]:
-        """Rank registered tools against a natural-language query.
+        """Rank registered tools synchronously with BM25.
 
         Args:
             query: what the caller wants to do.
@@ -224,15 +584,44 @@ class ToolCatalog:
 
         Raises:
             ValueError: if `method` is not "bm25", "semantic" or "hybrid".
-            RuntimeError: for "semantic"/"hybrid" when the embedding cache is
-                not built (call `build_embeddings`) or query embedding fails.
+            RuntimeError: if the resolved method is semantic/hybrid; use
+                `search_async` for dense retrieval.
         """
+        resolved_method = method or self._method
+        if resolved_method not in ("bm25", "semantic", "hybrid"):
+            raise ValueError(f"unknown search method: {resolved_method}")
+        if resolved_method != "bm25":
+            raise RuntimeError(
+                f'{resolved_method} search is asynchronous; use `await catalog.search_async(..., '
+                f'method="{resolved_method}")`'
+            )
         return trace_search(
             SEARCH_TARGET_TOOL,
             query,
             top_k,
             origin,
-            lambda: self._registry.search_with_method(query, top_k, origin, method or self._method),
+            lambda: self._registry.search_with_origin(query, top_k, origin),
+        )
+
+    async def search_async(
+        self,
+        query: str,
+        top_k: int,
+        origin: SearchOrigin = "direct",
+        method: SearchMethod | None = None,
+    ) -> list[SearchHit]:
+        """Rank tools asynchronously with BM25, semantic, or hybrid retrieval.
+
+        Dense methods require a complete cache built by `build_embeddings` or
+        `rebuild_embeddings`; searching never builds missing corpus embeddings.
+        """
+        resolved_method = method or self._method
+        return await trace_search_async(
+            SEARCH_TARGET_TOOL,
+            query,
+            top_k,
+            origin,
+            lambda: self._registry.search_async(query, top_k, origin, resolved_method),
         )
 
     def has(self, tool_id: str) -> bool:

@@ -79,7 +79,7 @@ def search_tools_tool(
         top_k = input.get("topK")
         k = top_k if isinstance(top_k, int) and not isinstance(top_k, bool) and top_k > 0 else 5
         started_at = time.monotonic()
-        hits = catalog.search(query, k, "agent")
+        hits = await catalog.search_async(query, k, "agent")
         catalog.record_event(
             {
                 "type": "gateway_search",

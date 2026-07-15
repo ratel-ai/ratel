@@ -10,7 +10,7 @@ import importlib.util
 
 import pytest
 
-from ratel_ai import ToolCatalog, TraceSinkConfig, register_mcp_server
+from ratel_ai import EmbedderError, ToolCatalog, TraceSinkConfig, register_mcp_server
 
 
 class _FakeTool:
@@ -86,6 +86,17 @@ async def test_register_mcp_server_records_upstream_error(monkeypatch) -> None:
         await catalog.invoke("github__create_issue", {})
     errors = [e for e in catalog.drain_trace_events() if e["type"] == "upstream_error"]
     assert errors[0]["server"] == "github"
+
+
+async def test_register_mcp_server_defers_embedding_build(monkeypatch) -> None:
+    monkeypatch.setattr("ratel_ai.mcp._require_mcp", lambda: None)
+    catalog = ToolCatalog(method="semantic", embedding={"local": "/missing/ratel-model"})
+
+    await register_mcp_server(catalog, name="github", session=_FakeSession())
+
+    assert catalog.has("github__create_issue")
+    with pytest.raises(EmbedderError, match="/missing/ratel-model"):
+        await catalog.build_embeddings()
 
 
 async def test_register_mcp_server_requires_mcp_when_absent() -> None:

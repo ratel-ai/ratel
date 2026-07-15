@@ -39,10 +39,12 @@ land in different vector spaces.
   **core** (`EmbeddingModel::resolve`), shared by both SDKs rather than
   duplicated; config errors surface at construction. Windows drive paths (`C:\…`)
   are never mistaken for URLs (the URL rule requires `://`).
-- **Per-catalog, deduplicated by identity.** The global one-model singleton
-  becomes a process-wide cache **keyed by model fingerprint**, so two catalogs on
-  the same model still load it once, while different models coexist. A failed
-  load is not cached (retries), preserving ADR-0011's non-poisoning contract.
+- **Per-catalog, deduplicated by client identity.** The global one-model singleton
+  becomes a process-wide cache keyed by model configuration. Endpoint client keys
+  include the `api_key_env` *name*, never its secret value, preventing credential
+  cross-talk. Vector identity is separate: URL, resolved response model, pooling,
+  and prefixes define the vector space. A failed load is not cached (retries),
+  preserving ADR-0011's non-poisoning contract.
 - **Three correctness guards** against silently-wrong cosine results — the danger
   when vectors from different models/dimensions are ranked together, which does
   not error on its own. (1) **Normalize at the embedder boundary**: every vector
@@ -50,16 +52,25 @@ land in different vector spaces.
   so an endpoint returning un-normalized vectors can't break the cosine==dot
   assumption. (2) **Dimension mismatch is a hard `EmbedderError`** (the cache
   stamps its width; a query or doc of another width is rejected, never
-  zip-truncated). (3) **Model-identity drift is a non-blocking warning** (a trace
-  event + stderr): the cache stamps the fingerprint that built it, and a query
-  under a different model warns "rebuild with build_embeddings()" but proceeds.
+  zip-truncated). (3) **Model-identity drift is a hard `ModelMismatch` error**:
+  the cache stamps the fingerprint that built it and never mixes or queries a
+  different vector space. The remediation is `rebuild_embeddings()`, which
+  atomically replaces the full cache.
 - **Endpoint specifics.** `api_key_env` names the env var holding the key (read
   at call time), keeping secrets out of code and serialized config; a
-  named-but-unset var is a clear error, not a downstream 401. `embed_batch` sends
-  one request per batch (registration embeds the whole corpus — per-doc
-  round-trips would be pathological). A 404 from a localhost Ollama hints
-  `ollama pull <model>`. A single sync `ureq` client with a timeout, so a stalled
-  endpoint can't hang registration.
+  named-but-unset var is a clear error, not a downstream 401. Document requests
+  are chunked into at most 64 inputs and each response is capped at 64 MiB. The
+  response indices must be the exact `0..n` permutation, and vectors must be
+  present, finite, non-zero, and one dimension. Chunks preserve global order and
+  commit only after all succeed. An optional response `model` becomes the resolved
+  vector identity; drift is `ModelMismatch`. A 404 from localhost Ollama hints
+  `ollama pull <model>`. The sync `ureq` client has a timeout and runs only on an
+  SDK worker thread.
+- **All SDK dense work is explicit and asynchronous.** Registration stores metadata
+  only. TypeScript uses NAPI async tasks; Python invokes GIL-releasing private native
+  calls through `asyncio.to_thread`. Dense operations serialize per catalog, and
+  registration during an active or queued dense operation fails promptly instead of
+  blocking the event loop or GIL. Synchronous SDK search remains BM25-only.
 - **Ratel auto-downloads only the built-in default.** An explicitly-configured
   HuggingFace model is **cache-only**: it must already be in the local HF cache,
   or the caller opts in with `download=true`. A missing one errors as
@@ -75,26 +86,25 @@ land in different vector spaces.
 ## Consequences
 
 - The default path is unchanged and stays reproducible (SHA-pinned); BM25 remains
-  model-free (an `embedding` set with `method="bm25"` warns and is ignored). One
+  model-free. A BM25-default catalog still validates and retains `embedding`, so it
+  can build once and later use an async semantic/hybrid override. One
   new direct dependency, `ureq` (already in-tree via hf-hub, rustls — no new
   transitive cost, keeps ADR-0011's clean cross-platform wheels).
 - BERT-family models run in-process (Candle's `bert`), pooled the way they were
   trained: **pooling (CLS/mean) is auto-detected** from the repo's
   `1_Pooling/config.json`, with a `pooling` override and a warn-then-assume-Mean
-  fallback when a model ships no pooling metadata — so mainstream
-  sentence-transformers models (bge, e5, gte, MiniLM, mpnet) rank correctly, not
-  just the CLS-pooled bge family. Asymmetric models are supported on both sides
+  fallback when a model ships no pooling metadata — so compatible BERT-family
+  sentence-transformers models (bge, e5, gte, MiniLM) rank correctly, not just
+  the CLS-pooled bge family. Asymmetric models are supported on both sides
   (`query_prefix` + `doc_prefix`), and weights load from `model.safetensors` or a
   `pytorch_model.bin` fallback. Every non-BERT model — nomic, Qwen-embed,
   GGUF-only — still runs via a local or hosted **endpoint**. We accept this rather
   than reintroduce an ONNX/C++ runtime, which would reverse ADR-0011's
-  clean-wheels decision.
+  clean-wheels decision. MPNet-specific architecture/pooling corrections remain
+  deferred; use an endpoint for MPNet models in the meantime.
 - **Known limitation, not addressed here:** the embedding cache is in-process
   only, so every process start re-embeds the corpus — cheap for a local model,
   but real latency and cost over an endpoint. A **persistent on-disk embedding
   cache** is the natural follow-up; the model-fingerprint stamped on the cache is
-  the invalidation key it will need. Also deferred: async/non-blocking downloads,
-  non-OpenAI endpoint request shapes, and in-process GGUF/ONNX.
-- The model-drift warning is latent under today's in-process, model-immutable
-  cache (drift can't occur within one process); it is wired and unit-tested now
-  so it is live the moment a persisted/shared cache exists.
+  the invalidation key it will need. Also deferred: non-OpenAI endpoint request
+  shapes and in-process GGUF/ONNX.

@@ -1,5 +1,96 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createInterface } from "node:readline";
 import { describe, expect, it } from "vitest";
 import { type ExecutableTool, ToolCatalog } from "./index.js";
+
+interface DelayedEmbeddingServer {
+  url: string;
+  requests: string[][];
+  close: () => Promise<void>;
+}
+
+async function startDelayedEmbeddingServer(delayMs = 120): Promise<DelayedEmbeddingServer> {
+  const source = `
+    const http = require("node:http");
+    const server = http.createServer((request, response) => {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => { body += chunk; });
+      request.on("end", () => {
+        const payload = JSON.parse(body);
+        const inputs = Array.isArray(payload.input) ? payload.input : [payload.input];
+        process.stdout.write(JSON.stringify(inputs) + "\\n");
+        setTimeout(() => {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({
+            model: payload.model,
+            data: inputs.map((_, index) => ({ index, embedding: [index + 1, 1] })),
+          }));
+        }, ${delayMs});
+      });
+    });
+    server.listen(0, "127.0.0.1", () => process.stdout.write(String(server.address().port) + "\\n"));
+    process.on("SIGTERM", () => server.close(() => process.exit(0)));
+  `;
+  const child = spawn(process.execPath, ["-e", source], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  const lines = createInterface({ input: child.stdout });
+  let startupTimer: ReturnType<typeof setTimeout> | undefined;
+  const [line] = (await Promise.race([
+    once(lines, "line"),
+    once(child, "exit").then(([code]) => {
+      throw new Error(`embedding test server exited during startup (${String(code)})`);
+    }),
+    new Promise<never>((_, reject) => {
+      startupTimer = setTimeout(
+        () => reject(new Error("embedding test server startup timed out")),
+        5_000,
+      );
+    }),
+  ]).finally(() => clearTimeout(startupTimer))) as [string];
+  const requests: string[][] = [];
+  lines.on("line", (requestLine) => requests.push(JSON.parse(requestLine) as string[]));
+  return {
+    url: `http://127.0.0.1:${Number(line)}/v1/embeddings`,
+    requests,
+    close: async () => {
+      lines.close();
+      if (child.exitCode !== null) return;
+      const exited = once(child, "exit");
+      child.kill("SIGKILL");
+      await exited;
+    },
+  };
+}
+
+async function expectTimerBefore<T>(operation: Promise<T>): Promise<T> {
+  const first = await Promise.race([
+    operation.then(() => "operation" as const),
+    new Promise<"timer">((resolve) => setTimeout(() => resolve("timer"), 20)),
+  ]);
+  expect(first).toBe("timer");
+  return operation;
+}
+
+const huggingFaceHub =
+  process.env.HF_HUB_CACHE ??
+  join(process.env.HF_HOME ?? join(homedir(), ".cache", "huggingface"), "hub");
+const cachedCandleModel = join(
+  huggingFaceHub,
+  "models--BAAI--bge-small-en-v1.5",
+  "snapshots",
+  "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+);
+const hasCachedCandleModel =
+  existsSync(join(cachedCandleModel, "config.json")) &&
+  existsSync(join(cachedCandleModel, "tokenizer.json")) &&
+  (existsSync(join(cachedCandleModel, "model.safetensors")) ||
+    existsSync(join(cachedCandleModel, "pytorch_model.bin")));
 
 const readFile: ExecutableTool = {
   id: "read_file",
@@ -30,6 +121,22 @@ describe("ToolCatalog", () => {
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].toolId).toBe("read_file");
     expect(hits[0].score).toBeGreaterThan(0);
+  });
+
+  it("registers many tools as one metadata batch", () => {
+    const catalog = new ToolCatalog();
+    catalog.registerMany([
+      readFile,
+      {
+        ...readFile,
+        id: "send_email",
+        name: "send_email",
+        description: "Send an email message to a recipient.",
+      },
+    ]);
+
+    expect(catalog.has("read_file")).toBe(true);
+    expect(catalog.has("send_email")).toBe(true);
   });
 
   it("invokes a registered tool by id with args", async () => {
@@ -70,6 +177,130 @@ describe("ToolCatalog", () => {
 describe("ToolCatalog search methods", () => {
   // Semantic/hybrid load a real model (network) and are covered in Rust; these
   // stay offline and assert the selection plumbing + the model-free default.
+  it("registers semantic metadata without loading the configured model", () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+
+    expect(() => catalog.register(readFile)).not.toThrow();
+    expect(catalog.has("read_file")).toBe(true);
+  });
+
+  it("surfaces embedding load failures through the build Promise", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    catalog.register(readFile);
+
+    let build: unknown;
+    expect(() => {
+      build = catalog.buildEmbeddings();
+    }).not.toThrow();
+    expect(build).toBeInstanceOf(Promise);
+    await expect(build).rejects.toThrow(/failed to load embedding model/);
+  });
+
+  it("surfaces embedding load failures through the rebuild Promise", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    catalog.register(readFile);
+
+    let rebuild: unknown;
+    expect(() => {
+      rebuild = catalog.rebuildEmbeddings();
+    }).not.toThrow();
+    expect(rebuild).toBeInstanceOf(Promise);
+    await expect(rebuild).rejects.toThrow(/failed to load embedding model/);
+  });
+
+  it("keeps dense search behind the asynchronous API", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    catalog.register(readFile);
+
+    expect(() => catalog.search("read", 5)).toThrow(/searchAsync/);
+    await expect(catalog.searchAsync("read", 5)).rejects.toThrow(/not computed for semantic/);
+  });
+
+  it("keeps Node timers responsive during endpoint build and query", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const catalog = new ToolCatalog({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      });
+      catalog.registerMany([
+        readFile,
+        {
+          ...readFile,
+          id: "send_email",
+          name: "send_email",
+          description: "Send an email message to a recipient.",
+        },
+      ]);
+
+      await expectTimerBefore(catalog.buildEmbeddings());
+      expect(server.requests).toHaveLength(1);
+      expect(server.requests[0]).toHaveLength(2);
+      expect(server.requests[0]?.[0]).toContain("Read a file");
+      expect(server.requests[0]?.[1]).toContain("Send an email");
+      const hits = await expectTimerBefore(catalog.searchAsync("read a file", 5));
+      expect(hits[0]?.toolId).toBe("read_file");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serializes queued dense searches and rejects registration until they settle", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const catalog = new ToolCatalog({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      });
+      catalog.register(readFile);
+      await catalog.buildEmbeddings();
+
+      const started = Date.now();
+      const first = catalog.searchAsync("read one", 5);
+      const second = catalog.searchAsync("read two", 5);
+      expect(() => catalog.register({ ...readFile, id: "later" })).toThrow(/registry busy; await/);
+      await Promise.all([first, second]);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(200);
+      expect(() => catalog.register({ ...readFile, id: "later" })).not.toThrow();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.skipIf(!hasCachedCandleModel)(
+    "keeps Node timers responsive during cached Candle model loading and inference",
+    async () => {
+      const catalog = new ToolCatalog({
+        method: "semantic",
+        embedding: { local: cachedCandleModel, pooling: "cls" },
+      });
+      catalog.register(readFile);
+      let ticks = 0;
+      const heartbeat = setInterval(() => {
+        ticks += 1;
+      }, 1);
+      try {
+        await catalog.buildEmbeddings();
+      } finally {
+        clearInterval(heartbeat);
+      }
+      expect(ticks).toBeGreaterThan(0);
+    },
+    60_000,
+  );
+
   it("defaults to bm25 and never loads a model", () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "m" } });
     catalog.register(readFile);
@@ -84,15 +315,23 @@ describe("ToolCatalog search methods", () => {
   });
 
   it("accepts an explicit per-call bm25 method matching the default", () => {
-    // Stays on a BM25 catalog so no model loads. (Registering into a semantic
-    // catalog eagerly builds embeddings and would download the model — the override
-    // behaviour proper is covered offline in the Rust core tests.)
+    // Dense behavior is covered separately; this compares the synchronous BM25 path.
     const catalog = new ToolCatalog();
     catalog.register(readFile);
     const viaDefault = catalog.search("read file", 5).map((h) => h.toolId);
     const viaExplicit = catalog.search("read file", 5, "direct", "bm25").map((h) => h.toolId);
     expect(viaExplicit).toEqual(viaDefault);
     expect(viaExplicit[0]).toBe("read_file");
+  });
+
+  it("rejects an unknown asynchronous method without making the registry busy", async () => {
+    const catalog = new ToolCatalog();
+    catalog.register(readFile);
+
+    const search = catalog.searchAsync("read file", 5, "direct", "keyword" as never);
+    const rejection = expect(search).rejects.toThrow(/unknown search method/);
+    expect(() => catalog.register({ ...readFile, id: "registered_after_invalid" })).not.toThrow();
+    await rejection;
   });
 
   it("per-call method overrides the catalog default and reroutes the engine", () => {
@@ -103,14 +342,13 @@ describe("ToolCatalog search methods", () => {
       method: "semantic",
       trace: { kind: "memory", sessionId: "o" },
     });
-    catalog.search("anything", 5); // default: semantic engine
+    expect(() => catalog.search("anything", 5)).toThrow(/searchAsync/);
     catalog.search("anything", 5, "direct", "bm25"); // per-call override: bm25 engine
     const searches = (
       catalog.drainTraceEvents() as Array<{ type: string; stages?: { name: string }[] }>
     ).filter((e) => e.type === "search");
-    expect(searches).toHaveLength(2);
-    expect(searches[0].stages?.some((s) => s.name === "bm25")).toBe(false);
-    expect(searches[1].stages?.some((s) => s.name === "bm25")).toBe(true);
+    expect(searches).toHaveLength(1);
+    expect(searches[0].stages?.some((s) => s.name === "bm25")).toBe(true);
   });
 
   it("rejects an unknown method", () => {
@@ -122,22 +360,16 @@ describe("ToolCatalog search methods", () => {
     ).toThrow(/unknown search method/);
   });
 
-  it("buildEmbeddings() on an empty catalog is a no-op and loads no model", () => {
-    // Empty corpus short-circuits before any embedder load — the incremental
-    // eager path proper is proven in the Rust core tests (counting embedder).
+  it("buildEmbeddings() on an empty catalog is an asynchronous no-op", async () => {
+    // The empty corpus short-circuits before any model load.
     const catalog = new ToolCatalog({ method: "semantic" });
-    expect(() => catalog.buildEmbeddings()).not.toThrow();
+    await expect(catalog.buildEmbeddings()).resolves.toBeUndefined();
   });
 
-  it("semantic on a BM25 catalog with no embeddings errors (no model load)", () => {
-    // A BM25 catalog never built embeddings → a per-call semantic search refuses with a
-    // clear error instead of silently embedding the corpus. The guard runs
-    // before any model load, so this is offline-safe.
+  it("synchronous semantic override points to searchAsync", () => {
     const catalog = new ToolCatalog();
     catalog.register(readFile);
-    expect(() => catalog.search("read", 5, "direct", "semantic")).toThrow(
-      /not computed for semantic/,
-    );
+    expect(() => catalog.search("read", 5, "direct", "semantic")).toThrow(/searchAsync/);
   });
 });
 
@@ -145,6 +377,10 @@ describe("ToolCatalog embedding config", () => {
   it("accepts a bm25 catalog with no embedding (default model, no load)", () => {
     // Construction must not load a model; offline-safe.
     expect(() => new ToolCatalog()).not.toThrow();
+  });
+
+  it("rejects an explicitly empty embedding string", () => {
+    expect(() => new ToolCatalog({ embedding: "" })).toThrow(/must not be blank/);
   });
 
   it("throws at construction on an invalid embedding config (bare url, no model)", () => {
@@ -226,19 +462,15 @@ describe("ToolCatalog embedding config", () => {
     ).toThrow(/download/);
   });
 
-  it("warns and ignores embedding when method is bm25", () => {
-    const warnings: string[] = [];
-    const original = console.warn;
-    console.warn = (msg: string) => warnings.push(msg);
-    try {
-      // A valid config; with bm25 it must be ignored (no load, no validation).
-      const catalog = new ToolCatalog({ embedding: { huggingface: "BAAI/bge-base-en-v1.5" } });
-      catalog.register(readFile);
-      expect(catalog.search("read", 5)).toBeDefined(); // bm25, no model
-    } finally {
-      console.warn = original;
-    }
-    expect(warnings.some((w) => /embedding.*bm25/.test(w))).toBe(true);
+  it("retains and validates embedding configuration for a bm25 catalog", async () => {
+    const catalog = new ToolCatalog({
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    catalog.register(readFile);
+
+    expect(catalog.search("read", 5)[0]?.toolId).toBe("read_file");
+    await expect(catalog.buildEmbeddings()).rejects.toThrow(/failed to load embedding model/);
+    expect(() => new ToolCatalog({ embedding: {} as never })).toThrow(/embedding source/);
   });
 });
 

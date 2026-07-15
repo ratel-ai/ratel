@@ -14,6 +14,17 @@ use ratel_ai_core as core;
 use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
 use serde_json::Value;
 
+type ToolBatchItem = (String, String, String, Py<PyAny>, Py<PyAny>);
+type SkillBatchItem = (
+    String,
+    String,
+    String,
+    Vec<String>,
+    Vec<String>,
+    HashMap<String, Vec<String>>,
+    String,
+);
+
 create_exception!(
     _native,
     EmbedderError,
@@ -143,9 +154,9 @@ impl SkillHit {
     }
 }
 
-/// Metadata-only BM25 index over `ratel-ai-core`. Executors and the
-/// capability-tool / MCP layers live in the pure-Python `ratel_ai` package
-/// above this binding.
+/// Metadata registry over `ratel-ai-core`. BM25 is exposed synchronously;
+/// GIL-releasing dense primitives are private to the pure-Python async facade.
+/// Executors and capability-tool / MCP layers also live above this binding.
 #[pyclass]
 pub struct ToolRegistry {
     inner: core::ToolRegistry,
@@ -222,6 +233,31 @@ impl ToolRegistry {
         Ok(())
     }
 
+    /// Convert the complete batch before mutating the core registry, so a bad
+    /// schema in a later item cannot leave earlier items partially registered.
+    fn _register_many(&mut self, py: Python<'_>, tools: Vec<ToolBatchItem>) -> PyResult<()> {
+        let tools = tools
+            .into_iter()
+            .map(|(id, name, description, input_schema, output_schema)| {
+                let input_schema: Value = pythonize::depythonize(input_schema.bind(py))
+                    .map_err(|e| PyValueError::new_err(format!("invalid input_schema: {e}")))?;
+                let output_schema: Value = pythonize::depythonize(output_schema.bind(py))
+                    .map_err(|e| PyValueError::new_err(format!("invalid output_schema: {e}")))?;
+                Ok(core::Tool {
+                    id,
+                    name,
+                    description,
+                    input_schema,
+                    output_schema,
+                })
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        for tool in tools {
+            self.inner.register(tool);
+        }
+        Ok(())
+    }
+
     /// Lexical BM25 search: the top `top_k` tools for `query`, best first.
     /// Model-free and infallible; the trace event records origin `"direct"`.
     fn search(&self, query: String, top_k: u32) -> Vec<SearchHit> {
@@ -256,10 +292,11 @@ impl ToolRegistry {
     /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
     /// `bm25` is infallible; `semantic`/`hybrid` rank against the prebuilt embedding
     /// cache and raise `RuntimeError` (`EmbeddingsNotBuilt`) if it isn't built — the
-    /// model loads at `build_embeddings`, never inside a search. An unknown method
-    /// string raises `ValueError`.
-    fn search_with_method(
+    /// model loads at `_build_embeddings`, never inside a search. Private worker
+    /// primitive; releases the GIL. An unknown method raises `ValueError`.
+    fn _search_with_method(
         &self,
+        py: Python<'_>,
         query: String,
         top_k: u32,
         origin: String,
@@ -272,9 +309,11 @@ impl ToolRegistry {
         let parsed_method = method
             .parse::<core::SearchMethod>()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let hits = self
-            .inner
-            .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+        let hits = py
+            .allow_threads(|| {
+                self.inner
+                    .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+            })
             .map_err(map_embedder_err)?;
         Ok(hits
             .into_iter()
@@ -286,11 +325,17 @@ impl ToolRegistry {
     }
 
     /// Pre-compute embeddings for not-yet-embedded tools (incremental) so a later
-    /// semantic/hybrid search only embeds the query. Raises `RuntimeError` if the
-    /// model fails to load. The catalog calls this after `register` in semantic
-    /// mode; BM25-only callers never do.
-    fn build_embeddings(&self) -> PyResult<()> {
-        self.inner.build_embeddings().map_err(map_embedder_err)
+    /// semantic/hybrid search only embeds the query. Private worker primitive;
+    /// releases the GIL while loading models, calling HTTP, and running inference.
+    fn _build_embeddings(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.build_embeddings())
+            .map_err(map_embedder_err)
+    }
+
+    /// Recompute the complete tool embedding cache without holding the GIL.
+    fn _rebuild_embeddings(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.rebuild_embeddings())
+            .map_err(map_embedder_err)
     }
 
     /// Record an SDK-layer trace event into the active sink. `event` must be a
@@ -363,9 +408,8 @@ impl ToolRegistry {
     }
 }
 
-/// Metadata-only BM25 index over the skill corpus — the on-demand analogue of
-/// [`ToolRegistry`]. A separate index, so skills are ranked independently of
-/// tools (own corpus statistics, own top-K).
+/// Metadata registry over the skill corpus — the on-demand analogue of
+/// [`ToolRegistry`]. A separate index keeps skill ranking independent of tools.
 #[pyclass]
 pub struct SkillRegistry {
     inner: core::SkillRegistry,
@@ -442,6 +486,22 @@ impl SkillRegistry {
         });
     }
 
+    /// Register a batch only after PyO3 has converted every item's full shape.
+    /// A bad later item therefore fails before this method mutates the registry.
+    fn _register_many(&mut self, skills: Vec<SkillBatchItem>) {
+        for (id, name, description, tags, tools, metadata, body) in skills {
+            self.inner.register(core::Skill {
+                id,
+                name,
+                description,
+                tags,
+                tools,
+                metadata,
+                body,
+            });
+        }
+    }
+
     /// Lexical BM25 search over the skill corpus — see [`ToolRegistry::search`].
     fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
         self.inner
@@ -471,9 +531,10 @@ impl SkillRegistry {
             .collect()
     }
 
-    /// Search with an explicit method — see [`ToolRegistry::search_with_method`].
-    fn search_with_method(
+    /// Private GIL-releasing method search — see [`ToolRegistry::_search_with_method`].
+    fn _search_with_method(
         &self,
+        py: Python<'_>,
         query: String,
         top_k: u32,
         origin: String,
@@ -486,9 +547,11 @@ impl SkillRegistry {
         let parsed_method = method
             .parse::<core::SearchMethod>()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let hits = self
-            .inner
-            .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+        let hits = py
+            .allow_threads(|| {
+                self.inner
+                    .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+            })
             .map_err(map_embedder_err)?;
         Ok(hits
             .into_iter()
@@ -499,9 +562,16 @@ impl SkillRegistry {
             .collect())
     }
 
-    /// See [`ToolRegistry::build_embeddings`].
-    fn build_embeddings(&self) -> PyResult<()> {
-        self.inner.build_embeddings().map_err(map_embedder_err)
+    /// See [`ToolRegistry::_build_embeddings`].
+    fn _build_embeddings(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.build_embeddings())
+            .map_err(map_embedder_err)
+    }
+
+    /// Recompute the complete skill embedding cache without holding the GIL.
+    fn _rebuild_embeddings(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.rebuild_embeddings())
+            .map_err(map_embedder_err)
     }
 
     /// Record an SDK-layer trace event into the active sink — see

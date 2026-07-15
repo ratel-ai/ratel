@@ -23,6 +23,10 @@ describe("SkillCatalog", () => {
     expect(catalog.search("anything", 5)).toEqual([]);
   });
 
+  it("rejects an explicitly empty embedding string", () => {
+    expect(() => new SkillCatalog({ embedding: "" })).toThrow(/must not be blank/);
+  });
+
   it("registers skills and ranks the relevant one first", () => {
     const catalog = new SkillCatalog();
     catalog.register(slides);
@@ -32,6 +36,30 @@ describe("SkillCatalog", () => {
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].skillId).toBe("api-design");
     expect(hits[0].score).toBeGreaterThan(0);
+  });
+
+  it("matches the tool catalog's metadata-only asynchronous dense contract", async () => {
+    const catalog = new SkillCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+
+    expect(() => catalog.registerMany([slides, apiDesign])).not.toThrow();
+    expect(() => catalog.search("slides", 5)).toThrow(/searchAsync/);
+    await expect(catalog.searchAsync("slides", 5)).rejects.toThrow(/not computed for semantic/);
+    await expect(catalog.buildEmbeddings()).rejects.toThrow(/failed to load embedding model/);
+  });
+
+  it("surfaces embedding load failures through the rebuild Promise", async () => {
+    const catalog = new SkillCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    catalog.register(slides);
+
+    const rebuild = catalog.rebuildEmbeddings();
+    expect(rebuild).toBeInstanceOf(Promise);
+    await expect(rebuild).rejects.toThrow(/failed to load embedding model/);
   });
 
   it("invoke(id) returns the body; has/get report membership and metadata", () => {

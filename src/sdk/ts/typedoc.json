@@ -9,7 +9,7 @@
   "treatValidationWarningsAsErrors": true,
   "intentionallyNotExported": [
     "native/index.d.cts:TraceSinkConfig",
-    "native/index.d.cts:EmbeddingConfig"
+    "src/catalog.ts:ExclusiveEmbeddingFields"
   ],
   "externalSymbolLinkMappings": {
     "@ratel-ai/telemetry": {

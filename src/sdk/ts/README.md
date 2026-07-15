@@ -21,6 +21,17 @@ Use `ToolCatalog` for ranked tools with executable handlers and `SkillCatalog` f
 
 Semantic and hybrid retrieval use a configurable embedding model ([ADR 0012](../../../docs/adr/0012-configurable-embedding-models.md)), set per catalog via the `embedding` option: the built-in default, a HuggingFace repo or local directory (in-process), or an OpenAI-compatible endpoint (OpenAI, Ollama, TEI, vLLM).
 
+Registration is always metadata-only. For semantic or hybrid retrieval, register the full corpus, then explicitly build and search asynchronously so model loading, HTTP, and inference never block Node's event loop:
+
+```ts
+const catalog = new ToolCatalog({ method: "semantic", embedding: { ollama: "nomic-embed-text" } });
+catalog.registerMany(tools);
+await catalog.buildEmbeddings();
+const hits = await catalog.searchAsync("deploy the service", 5);
+```
+
+Use `await catalog.rebuildEmbeddings()` after changing the endpoint's model or vector dimension. Synchronous `search()` remains available for BM25 only.
+
 ## Install
 
 ```bash

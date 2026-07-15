@@ -74,15 +74,27 @@ pub(crate) fn fingerprint_suffix(
 ) -> String {
     let mut s = String::new();
     if let Some(p) = pooling {
-        s.push_str(&format!("|pool={}", p.as_str()));
+        push_fingerprint_field(&mut s, "pool", p.as_str());
     }
     if !query_prefix.is_empty() {
-        s.push_str(&format!("|q={query_prefix}"));
+        push_fingerprint_field(&mut s, "q", query_prefix);
     }
     if !doc_prefix.is_empty() {
-        s.push_str(&format!("|d={doc_prefix}"));
+        push_fingerprint_field(&mut s, "d", doc_prefix);
     }
     s
+}
+
+pub(crate) fn huggingface_fingerprint(repo: &str, revision: &str) -> String {
+    fingerprint("hf", &[("repo", repo), ("revision", revision)])
+}
+
+pub(crate) fn local_fingerprint(path: &str) -> String {
+    fingerprint("local", &[("path", path)])
+}
+
+pub(crate) fn endpoint_fingerprint(url: &str, model: &str) -> String {
+    fingerprint("endpoint", &[("url", url), ("model", model)])
 }
 
 /// The embedding model backing a catalog's semantic/hybrid engines.
@@ -178,9 +190,54 @@ fn cfg(message: impl Into<String>) -> EmbedderError {
 }
 
 impl EmbeddingModel {
+    /// Validate a concrete Rust model value. SDK configs normally enter through
+    /// [`Self::resolve`], but Rust callers can construct public enum variants
+    /// directly; this keeps that path subject to the same nonblank-field rules.
+    ///
+    /// # Errors
+    ///
+    /// [`EmbedderError::Config`] when a required source, model, URL, or env-var
+    /// name is blank.
+    pub fn validate(&self) -> Result<(), EmbedderError> {
+        match self {
+            EmbeddingModel::Default => Ok(()),
+            EmbeddingModel::HuggingFace { repo, .. } => validate_nonblank("huggingface", repo),
+            EmbeddingModel::Local { path, .. } => {
+                validate_nonblank("local", &path.to_string_lossy())
+            }
+            EmbeddingModel::Endpoint {
+                url,
+                model,
+                api_key_env,
+                ..
+            } => {
+                validate_nonblank("url", url)?;
+                validate_nonblank("model", model)?;
+                if let Some(api_key_env) = api_key_env {
+                    validate_nonblank("api_key_env", api_key_env)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     /// Validate and resolve a spec into a concrete model. Runs at catalog
     /// construction, so config mistakes surface immediately (not at first search).
     pub fn resolve(spec: EmbeddingSpec) -> Result<EmbeddingModel, EmbedderError> {
+        for (name, value) in [
+            ("spec", spec.spec.as_deref()),
+            ("huggingface", spec.huggingface.as_deref()),
+            ("local", spec.local.as_deref()),
+            ("ollama", spec.ollama.as_deref()),
+            ("url", spec.url.as_deref()),
+            ("model", spec.model.as_deref()),
+            ("api_key_env", spec.api_key_env.as_deref()),
+        ] {
+            if value.is_some_and(|value| value.trim().is_empty()) {
+                return Err(cfg(format!("embedding '{name}' must not be blank")));
+            }
+        }
+
         let primaries = [
             ("spec", spec.spec.is_some()),
             ("huggingface", spec.huggingface.is_some()),
@@ -222,7 +279,7 @@ impl EmbeddingModel {
             return Err(cfg("'download' is only valid for a HuggingFace repo"));
         }
 
-        match set[0] {
+        let model = match set[0] {
             "spec" => infer_from_string(spec.spec.as_deref().unwrap(), &spec, pooling),
             "huggingface" => {
                 reject_endpoint_only(&spec, "a HuggingFace repo")?;
@@ -253,6 +310,11 @@ impl EmbeddingModel {
                         "'model' is redundant with 'ollama' (the ollama value is the model name)",
                     ));
                 }
+                if spec.api_key_env.is_some() {
+                    return Err(cfg(
+                        "'api_key_env' is not valid with the Ollama shortcut; use a full endpoint 'url'",
+                    ));
+                }
                 reject_in_process_only(&spec, pooling)?;
                 Ok(EmbeddingModel::Endpoint {
                     url: OLLAMA_DEFAULT_URL.to_string(),
@@ -276,7 +338,9 @@ impl EmbeddingModel {
                 })
             }
             _ => unreachable!("primary key set is closed"),
-        }
+        }?;
+        model.validate()?;
+        Ok(model)
     }
 
     /// The query-side instruction prefix (bge is asymmetric). Empty unless the
@@ -333,12 +397,12 @@ impl EmbeddingModel {
     /// stamped on the dense cache after load.
     pub(crate) fn configured_fingerprint(&self) -> String {
         let base = match self {
-            EmbeddingModel::Default => format!("hf:{DEFAULT_REPO}@{DEFAULT_REVISION}"),
+            EmbeddingModel::Default => huggingface_fingerprint(DEFAULT_REPO, DEFAULT_REVISION),
             EmbeddingModel::HuggingFace { repo, revision, .. } => {
-                format!("hf:{repo}@{}", revision.as_deref().unwrap_or("main"))
+                huggingface_fingerprint(repo, revision.as_deref().unwrap_or("main"))
             }
-            EmbeddingModel::Local { path, .. } => format!("local:{}", path.display()),
-            EmbeddingModel::Endpoint { url, model, .. } => format!("endpoint:{url}#{model}"),
+            EmbeddingModel::Local { path, .. } => local_fingerprint(&path.display().to_string()),
+            EmbeddingModel::Endpoint { url, model, .. } => endpoint_fingerprint(url, model),
         };
         // Pooling + prefixes change the vectors, so they are part of the identity.
         format!(
@@ -350,6 +414,44 @@ impl EmbeddingModel {
             )
         )
     }
+
+    /// Process-cache identity for the client/embedder instance. Credentials do
+    /// not change the vector space, so [`Self::configured_fingerprint`] excludes
+    /// them; the cached endpoint client does capture the *name* of the env var it
+    /// reads, however, so that non-secret name must distinguish client instances.
+    pub(crate) fn embedder_cache_key(&self) -> String {
+        let vector_identity = self.configured_fingerprint();
+        match self {
+            EmbeddingModel::Endpoint { api_key_env, .. } => match api_key_env {
+                Some(name) => {
+                    let mut key = vector_identity;
+                    push_fingerprint_field(&mut key, "api_key_env", name);
+                    key
+                }
+                None => format!("{vector_identity}|api_key_env=none"),
+            },
+            _ => vector_identity,
+        }
+    }
+}
+
+fn fingerprint(kind: &str, fields: &[(&str, &str)]) -> String {
+    let mut fingerprint = kind.to_string();
+    for (name, value) in fields {
+        push_fingerprint_field(&mut fingerprint, name, value);
+    }
+    fingerprint
+}
+
+fn push_fingerprint_field(fingerprint: &mut String, name: &str, value: &str) {
+    fingerprint.push_str(&format!("|{name}={}:{}", value.len(), value));
+}
+
+fn validate_nonblank(name: &str, value: &str) -> Result<(), EmbedderError> {
+    if value.trim().is_empty() {
+        return Err(cfg(format!("embedding '{name}' must not be blank")));
+    }
+    Ok(())
 }
 
 /// Reject endpoint-only modifiers on an in-process (HF/local) source.
@@ -614,6 +716,57 @@ mod tests {
     }
 
     #[test]
+    fn blank_source_and_endpoint_fields_are_rejected() {
+        for spec in [
+            EmbeddingSpec {
+                huggingface: Some("   ".into()),
+                ..Default::default()
+            },
+            EmbeddingSpec {
+                local: Some("\t".into()),
+                ..Default::default()
+            },
+            EmbeddingSpec {
+                ollama: Some("\n".into()),
+                ..Default::default()
+            },
+            EmbeddingSpec {
+                url: Some(" ".into()),
+                model: Some("model".into()),
+                ..Default::default()
+            },
+            EmbeddingSpec {
+                url: Some("http://localhost/v1/embeddings".into()),
+                model: Some(" ".into()),
+                ..Default::default()
+            },
+            EmbeddingSpec {
+                url: Some("http://localhost/v1/embeddings".into()),
+                model: Some("model".into()),
+                api_key_env: Some(" ".into()),
+                ..Default::default()
+            },
+        ] {
+            assert!(matches!(
+                EmbeddingModel::resolve(spec),
+                Err(EmbedderError::Config { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn ollama_rejects_api_key_env_instead_of_ignoring_it() {
+        let err = EmbeddingModel::resolve(EmbeddingSpec {
+            ollama: Some("nomic-embed-text".into()),
+            api_key_env: Some("OLLAMA_KEY".into()),
+            ..Default::default()
+        })
+        .unwrap_err();
+        assert!(matches!(err, EmbedderError::Config { .. }));
+        assert!(err.to_string().contains("api_key_env"));
+    }
+
+    #[test]
     fn download_defaults_false_and_is_huggingface_only() {
         // Default off — explicit HF models are cache-only unless opted in.
         assert!(matches!(
@@ -671,7 +824,15 @@ mod tests {
         // The default carries its pinned CLS pooling + bge query prefix.
         assert_eq!(
             EmbeddingModel::Default.configured_fingerprint(),
-            format!("hf:{DEFAULT_REPO}@{DEFAULT_REVISION}|pool=cls|q={DEFAULT_QUERY_INSTRUCTION}")
+            format!(
+                "hf|repo={}:{}|revision={}:{}|pool=3:cls|q={}:{}",
+                DEFAULT_REPO.len(),
+                DEFAULT_REPO,
+                DEFAULT_REVISION.len(),
+                DEFAULT_REVISION,
+                DEFAULT_QUERY_INSTRUCTION.len(),
+                DEFAULT_QUERY_INSTRUCTION
+            )
         );
         assert_eq!(
             EmbeddingModel::HuggingFace {
@@ -683,7 +844,7 @@ mod tests {
                 download: false,
             }
             .configured_fingerprint(),
-            "hf:r@main"
+            "hf|repo=1:r|revision=4:main"
         );
         assert_eq!(
             EmbeddingModel::Endpoint {
@@ -694,7 +855,62 @@ mod tests {
                 doc_prefix: None,
             }
             .configured_fingerprint(),
-            "endpoint:u#m"
+            "endpoint|url=1:u|model=1:m"
+        );
+    }
+
+    #[test]
+    fn endpoint_client_cache_key_includes_env_name_but_vector_identity_does_not() {
+        let endpoint = |api_key_env: &str| EmbeddingModel::Endpoint {
+            url: "https://example.test/v1/embeddings".into(),
+            model: "embed-v1".into(),
+            api_key_env: Some(api_key_env.into()),
+            query_prefix: None,
+            doc_prefix: None,
+        };
+        let a = endpoint("KEY_A");
+        let b = endpoint("KEY_B");
+
+        assert_eq!(a.configured_fingerprint(), b.configured_fingerprint());
+        assert_ne!(a.embedder_cache_key(), b.embedder_cache_key());
+        assert!(a.embedder_cache_key().contains("KEY_A"));
+    }
+
+    #[test]
+    fn fingerprint_fields_cannot_collide_through_delimiters() {
+        let endpoint = |url: &str, model: &str, query_prefix: &str, doc_prefix: Option<&str>| {
+            EmbeddingModel::Endpoint {
+                url: url.into(),
+                model: model.into(),
+                api_key_env: None,
+                query_prefix: Some(query_prefix.into()),
+                doc_prefix: doc_prefix.map(str::to_string),
+            }
+        };
+
+        assert_ne!(
+            endpoint("https://example.test#a", "b", "", None).configured_fingerprint(),
+            endpoint("https://example.test", "a#b", "", None).configured_fingerprint()
+        );
+        assert_ne!(
+            endpoint("u", "m", "x|d=y", None).configured_fingerprint(),
+            endpoint("u", "m", "x", Some("y")).configured_fingerprint()
+        );
+    }
+
+    #[test]
+    fn endpoint_cache_key_distinguishes_no_key_from_literal_sentinel_name() {
+        let endpoint = |api_key_env| EmbeddingModel::Endpoint {
+            url: "u".into(),
+            model: "m".into(),
+            api_key_env,
+            query_prefix: None,
+            doc_prefix: None,
+        };
+
+        assert_ne!(
+            endpoint(None).embedder_cache_key(),
+            endpoint(Some("<none>".into())).embedder_cache_key()
         );
     }
 
@@ -742,7 +958,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(m.doc_prefix(), "passage: ");
-        assert!(m.configured_fingerprint().contains("|d=passage: "));
+        assert!(m.configured_fingerprint().contains("|d=9:passage: "));
         // Pooling is part of identity: same repo, different pooling → different key.
         let cls = EmbeddingModel::resolve(EmbeddingSpec {
             huggingface: Some("org/m".into()),

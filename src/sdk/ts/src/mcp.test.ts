@@ -103,6 +103,21 @@ describe("registerMcpServer", () => {
     await handle.close();
   });
 
+  it("ingests semantic-catalog metadata without loading its embedding model", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+
+    const handle = await registerMcpServer(catalog, {
+      name: "demo",
+      transport: fake.clientTransport,
+    });
+
+    expect(catalog.has("demo__read_file")).toBe(true);
+    await handle.close();
+  });
+
   it("makes upstream tools discoverable via catalog.search using their description", async () => {
     const catalog = new ToolCatalog();
     const handle = await registerMcpServer(catalog, {

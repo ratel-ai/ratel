@@ -104,7 +104,9 @@ impl ToolRegistry {
 
     /// A registry whose semantic/hybrid engines use an explicit embedding model
     /// (the configurable-model path). BM25 is unaffected — it needs no model.
-    /// The trace sink is still set separately via [`Self::set_trace_sink`].
+    /// Direct enum variants are validated on the first embedding build; call
+    /// [`EmbeddingModel::validate`] first when construction-time feedback is
+    /// required. The trace sink is set separately via [`Self::set_trace_sink`].
     pub fn with_embedding(model: EmbeddingModel) -> Self {
         Self {
             tools: IndexMap::new(),
@@ -263,19 +265,30 @@ impl ToolRegistry {
 
     /// Pre-compute embeddings for any not-yet-embedded tools so a later
     /// semantic/hybrid search only has to embed the query (never the corpus).
-    /// Incremental — embeds only tools registered since the last call. The SDK
-    /// calls this after `register` in semantic mode so searches never pay the
-    /// embedding cost; a BM25-only user never calls it and never loads the model.
+    /// Incremental — embeds only tools registered since the last call. Callers
+    /// invoke this explicitly before semantic/hybrid search; a BM25-only user
+    /// never calls it and never loads the model.
     ///
     /// # Errors
     ///
-    /// Any [`EmbedderError`] from the embedding model: `Download` /
-    /// `CacheUnwritable` / `Load` on the first-use model fetch (network, cache
-    /// permissions, corrupt weights — see ADR-0011), or `Inference` if
-    /// embedding a tool's text fails. A failed load is not cached, so a later
-    /// call retries once the cause clears.
+    /// Any [`EmbedderError`] from resolving or using the embedding source,
+    /// including `Config`, `NotCached`, `Download`, `CacheUnwritable`, `Load`,
+    /// or `Inference`; retained caches can also surface `DimensionMismatch` or
+    /// `ModelMismatch`. A failed build leaves the prior cache unchanged and a
+    /// later call can retry once the cause clears.
     pub fn build_embeddings(&self) -> Result<(), EmbedderError> {
         self.dense.extend(self.tools.values(), self.sink.as_ref())
+    }
+
+    /// Recompute embeddings for the full tool corpus and atomically replace the
+    /// dense cache. Unlike [`Self::build_embeddings`], this adopts a changed model
+    /// identity or dimension. A failed rebuild preserves the prior cache.
+    ///
+    /// # Errors
+    ///
+    /// Any [`EmbedderError`] from loading or embedding the complete corpus.
+    pub fn rebuild_embeddings(&self) -> Result<(), EmbedderError> {
+        self.dense.rebuild(self.tools.values(), self.sink.as_ref())
     }
 
     // ---- engines -----------------------------------------------------------
@@ -320,10 +333,10 @@ impl ToolRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.dense.require_built(self.tools.len())?;
-        let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
         let t = Instant::now();
-        let ranked = self.dense.ranked(self.tools.values(), &query_vec, top_k);
+        let ranked = self
+            .dense
+            .search(self.tools.values(), query, top_k, self.sink.as_ref())?;
         let stage_ms = t.elapsed().as_millis() as u64;
         let hits: Vec<SearchHit> = ranked
             .into_iter()
@@ -380,10 +393,10 @@ impl ToolRegistry {
         };
 
         // 2. Dense (semantic) — requires embeddings to be built; never embeds in-search.
-        self.dense.require_built(self.tools.len())?;
         let t = Instant::now();
-        let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
-        let dense_ranked = self.dense.ranked(self.tools.values(), &query_vec, depth);
+        let dense_ranked =
+            self.dense
+                .search(self.tools.values(), query, depth, self.sink.as_ref())?;
         let dense_stage = SearchStage {
             name: "dense".into(),
             took_ms: t.elapsed().as_millis() as u64,
@@ -447,8 +460,12 @@ impl ToolRegistry {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Barrier, mpsc};
+    use std::time::Duration;
+
     use super::*;
-    use crate::embedding::Embedder;
+    use crate::embedding::{Embedded, Embedder};
     use crate::trace::MemorySink;
 
     /// Deterministic, network-free embedder: a 3-d one-hot keyed on a keyword so
@@ -732,6 +749,175 @@ mod tests {
         reg.build_embeddings().unwrap();
         reg.build_embeddings().unwrap();
         assert_eq!(counter.doc_calls(), 1);
+    }
+
+    #[test]
+    fn rebuild_embeddings_recomputes_the_full_corpus() {
+        let counter = Arc::new(CountingEmbedder::new());
+        let mut reg = with_embedder(counter.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a file"));
+        reg.build_embeddings().unwrap();
+        reg.rebuild_embeddings().unwrap();
+        assert_eq!(counter.doc_calls(), 4, "rebuild embeds every tool again");
+    }
+
+    struct FailSecondBatch {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Embedder for FailSecondBatch {
+        fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(StubEmbedder::vec_for(text))
+        }
+
+        fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(StubEmbedder::vec_for(text))
+        }
+
+        fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+            if self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+                return Err(EmbedderError::Inference {
+                    source: "rebuild failed".into(),
+                });
+            }
+            texts.iter().map(|text| self.embed_doc(text)).collect()
+        }
+    }
+
+    #[test]
+    fn failed_rebuild_preserves_the_previous_searchable_cache() {
+        let mut reg = with_embedder(Arc::new(FailSecondBatch {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        }));
+        reg.register(tool("read_file", "read a file"));
+        reg.build_embeddings().unwrap();
+
+        assert!(matches!(
+            reg.rebuild_embeddings(),
+            Err(EmbedderError::Inference { .. })
+        ));
+        let hits = reg
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(
+            hits.first().map(|hit| hit.tool_id.as_str()),
+            Some("read_file")
+        );
+    }
+
+    struct RebuildRaceEmbedder {
+        rebuilding: AtomicBool,
+        query_started: Barrier,
+        release_query: Barrier,
+        rebuild_entered: mpsc::Sender<()>,
+    }
+
+    impl RebuildRaceEmbedder {
+        fn batch(&self, texts: &[String], rebuilding: bool) -> Vec<Vec<f32>> {
+            texts
+                .iter()
+                .map(|text| match (text.contains("alpha"), rebuilding) {
+                    (true, false) | (false, true) => vec![1.0, 0.0],
+                    (false, false) | (true, true) => vec![0.0, 1.0],
+                })
+                .collect()
+        }
+    }
+
+    impl Embedder for RebuildRaceEmbedder {
+        fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(self.batch(&[text.to_string()], false).remove(0))
+        }
+
+        fn embed_query(&self, _: &str) -> Result<Vec<f32>, EmbedderError> {
+            Ok(vec![1.0, 0.0])
+        }
+
+        fn embed_query_with_identity(&self, _: &str) -> Result<Embedded<Vec<f32>>, EmbedderError> {
+            self.query_started.wait();
+            self.release_query.wait();
+            Ok(Embedded {
+                value: vec![1.0, 0.0],
+                fingerprint: "old".into(),
+            })
+        }
+
+        fn embed_batch_with_identity(
+            &self,
+            texts: &[String],
+        ) -> Result<Embedded<Vec<Vec<f32>>>, EmbedderError> {
+            let rebuilding = self.rebuilding.load(Ordering::SeqCst);
+            if rebuilding {
+                self.rebuild_entered.send(()).unwrap();
+            }
+            Ok(Embedded {
+                value: self.batch(texts, rebuilding),
+                fingerprint: if rebuilding { "new" } else { "old" }.into(),
+            })
+        }
+    }
+
+    #[test]
+    fn rebuild_cannot_swap_vector_space_during_dense_search() {
+        let (rebuild_entered_tx, rebuild_entered_rx) = mpsc::channel();
+        let embedder = Arc::new(RebuildRaceEmbedder {
+            rebuilding: AtomicBool::new(false),
+            query_started: Barrier::new(2),
+            release_query: Barrier::new(2),
+            rebuild_entered: rebuild_entered_tx,
+        });
+        let mut reg = with_embedder(embedder.clone());
+        reg.register(tool("alpha", "alpha"));
+        reg.register(tool("beta", "beta"));
+        reg.build_embeddings().unwrap();
+        embedder.rebuilding.store(true, Ordering::SeqCst);
+        let reg = Arc::new(reg);
+
+        let search_reg = reg.clone();
+        let search = std::thread::spawn(move || {
+            search_reg.search_with_method("query", 2, Origin::Direct, SearchMethod::Semantic)
+        });
+        embedder.query_started.wait();
+
+        let rebuild_started = Arc::new(Barrier::new(2));
+        let rebuild_reg = reg.clone();
+        let rebuild_thread_started = rebuild_started.clone();
+        let rebuild = std::thread::spawn(move || {
+            rebuild_thread_started.wait();
+            rebuild_reg.rebuild_embeddings()
+        });
+        rebuild_started.wait();
+        let swapped_during_query = rebuild_entered_rx
+            .recv_timeout(Duration::from_millis(500))
+            .is_ok();
+
+        embedder.release_query.wait();
+        let hits = search.join().unwrap().unwrap();
+        rebuild.join().unwrap().unwrap();
+
+        assert!(
+            !swapped_during_query,
+            "rebuild entered the embedder while a query from the old vector space was in flight"
+        );
+        assert_eq!(hits.first().map(|hit| hit.tool_id.as_str()), Some("alpha"));
+    }
+
+    #[test]
+    fn direct_embedding_model_is_validated_before_loading() {
+        let mut reg = ToolRegistry::with_embedding(EmbeddingModel::Endpoint {
+            url: " ".into(),
+            model: "model".into(),
+            api_key_env: None,
+            query_prefix: None,
+            doc_prefix: None,
+        });
+        reg.register(tool("alpha", "alpha"));
+
+        assert!(matches!(
+            reg.build_embeddings(),
+            Err(EmbedderError::Config { .. })
+        ));
     }
 
     #[test]

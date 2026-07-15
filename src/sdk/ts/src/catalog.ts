@@ -5,7 +5,13 @@ import {
   type Tool,
   ToolRegistry,
 } from "../native/index.cjs";
-import { argsSizeBytes, errorMessage, traceExecuteTool, traceSearch } from "./telemetry.js";
+import {
+  argsSizeBytes,
+  errorMessage,
+  traceExecuteTool,
+  traceSearch,
+  traceSearchAsync,
+} from "./telemetry.js";
 
 /**
  * The function that runs a tool. Receives the arguments object and may return
@@ -75,16 +81,32 @@ export type SearchOrigin = "direct" | "agent";
  * - `"hybrid"` — BM25 and semantic rankings fused with Reciprocal Rank Fusion
  *   (ADR-0011).
  *
- * `"semantic"`/`"hybrid"` require the embedding cache (built eagerly at
- * registration when they are the catalog default, or via `buildEmbeddings()`).
+ * `"semantic"`/`"hybrid"` require an explicit asynchronous
+ * `buildEmbeddings()` followed by `searchAsync()`.
  */
 export type SearchMethod = "bm25" | "semantic" | "hybrid";
 
+type EmbeddingConfigKey =
+  | "huggingface"
+  | "local"
+  | "ollama"
+  | "url"
+  | "model"
+  | "revision"
+  | "apiKeyEnv"
+  | "pooling"
+  | "download";
+
+type ExclusiveEmbeddingFields<Allowed extends EmbeddingConfigKey> = {
+  [Key in Exclude<EmbeddingConfigKey, Allowed>]?: never;
+};
+
 /** Object form of the embedding-model selection for semantic/hybrid retrieval.
- * The discriminating key names the source — symmetric across all of them. Use
- * the bare string form only for a local model *directory path*. */
+ * Each variant accepts exactly one source; fields from other variants are
+ * rejected at compile time. Use the bare string form only for a local model
+ * directory path. */
 export type EmbeddingModelConfig =
-  | {
+  | (ExclusiveEmbeddingFields<"huggingface" | "revision" | "pooling" | "download"> & {
       /** HuggingFace repo id (e.g. `"intfloat/e5-small-v2"`), loaded in-process via Candle. */
       huggingface: string;
       /** Git revision to pin; defaults to `main`. */
@@ -98,8 +120,8 @@ export type EmbeddingModelConfig =
       /** Opt in to downloading if not already cached (default false; Ratel
        * auto-downloads only the built-in default model). */
       download?: boolean;
-    }
-  | {
+    })
+  | (ExclusiveEmbeddingFields<"local" | "pooling"> & {
       /** Path to a local model directory, loaded in-process via Candle. */
       local: string;
       /** Query-side prefix for asymmetric models. */
@@ -108,16 +130,16 @@ export type EmbeddingModelConfig =
       docPrefix?: string;
       /** `"cls"` | `"mean"` — overrides pooling auto-detection. */
       pooling?: "cls" | "mean";
-    }
-  | {
+    })
+  | (ExclusiveEmbeddingFields<"ollama"> & {
       /** Ollama model name, served via the local Ollama endpoint. */
       ollama: string;
       /** Query-side prefix for asymmetric models. */
       queryPrefix?: string;
       /** Document-side prefix for asymmetric models. */
       docPrefix?: string;
-    }
-  | {
+    })
+  | (ExclusiveEmbeddingFields<"url" | "model" | "apiKeyEnv"> & {
       /** Full OpenAI-compatible `/embeddings` endpoint URL. */
       url: string;
       /** Model name sent in the request body. */
@@ -128,7 +150,7 @@ export type EmbeddingModelConfig =
       queryPrefix?: string;
       /** Document-side prefix for asymmetric models. */
       docPrefix?: string;
-    };
+    });
 
 /** Embedding-model selection: a bare string is a **local model directory path**;
  * every other source is an explicit {@link EmbeddingModelConfig} object. */
@@ -151,8 +173,8 @@ export interface ToolCatalogOptions {
    * model directory path (`"/opt/models/bge"`); every other source is a keyed
    * object: `{ huggingface: "BAAI/bge-base-en-v1.5" }`, `{ ollama: "…" }`, or
    * `{ url, model, apiKeyEnv }`. Chosen once, used for both document and query
-   * embedding. Ignored (with a warning) when method is `"bm25"`, which needs no
-   * model. An invalid config throws at construction. */
+   * embedding. Retained and validated even when the default method is `"bm25"`,
+   * allowing a later asynchronous semantic override. */
   embedding?: EmbeddingSpec;
 }
 
@@ -193,29 +215,17 @@ export class ToolCatalog {
   private readonly executors = new Map<string, Executor>();
   private readonly tools = new Map<string, Tool>();
   private readonly method: SearchMethod;
-  private readonly eager: boolean;
 
   /**
    * Create an empty catalog.
    *
-   * @param options - Trace sink and default retrieval method. A `"semantic"`/
-   *   `"hybrid"` default makes every subsequent `register` embed the new tool
-   *   immediately (loading the embedding model on first use); the `"bm25"`
-   *   default stays model-free.
+   * @param options - Trace sink, default retrieval method, and embedding model.
+   *   Construction validates configuration but never loads a model.
    */
   constructor(options: ToolCatalogOptions = {}) {
     this.method = options.method ?? "bm25";
-    // Semantic/hybrid default → embed each tool at registration so searches
-    // never pay the embedding cost. BM25 default does nothing.
-    this.eager = this.method === "semantic" || this.method === "hybrid";
-    if (options.embedding && !this.eager) {
-      console.warn(
-        'ratel: `embedding` was provided but method is "bm25", which needs no model — the embedding config is ignored',
-      );
-    }
-    // A bm25 catalog ignores the model entirely (never loads it).
     this.registry = new ToolRegistry(
-      this.eager && options.embedding ? toNativeEmbedding(options.embedding) : undefined,
+      options.embedding !== undefined ? toNativeEmbedding(options.embedding) : undefined,
     );
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
@@ -225,8 +235,7 @@ export class ToolCatalog {
   /**
    * Add a tool to the catalog, or replace it in place when the id is already
    * registered (metadata, executor, and index entry — the corpus never holds a
-   * duplicate). On a semantic/hybrid catalog this also embeds the new tool
-   * immediately, and throws if the embedding model fails to load.
+   * duplicate). Registration is metadata-only and never loads a model.
    *
    * @param tool - The tool's searchable metadata plus its `execute` function.
    */
@@ -235,39 +244,46 @@ export class ToolCatalog {
     this.registry.register(metadata);
     this.executors.set(tool.id, execute);
     this.tools.set(tool.id, metadata);
-    if (this.eager) {
-      // Embed the just-registered tool now (incremental). Throws if the model
-      // fails to load.
-      this.registry.buildEmbeddings();
+  }
+
+  /** Add or replace a batch of tools without building embeddings. */
+  registerMany(tools: readonly ExecutableTool[]): void {
+    const entries = tools.map(({ execute, ...metadata }) => ({ execute, metadata }));
+    this.registry.registerMany(entries.map(({ metadata }) => metadata));
+    for (const { execute, metadata } of entries) {
+      this.executors.set(metadata.id, execute);
+      this.tools.set(metadata.id, metadata);
     }
   }
 
   /**
-   * Pre-compute embeddings for any not-yet-embedded tools. Call after a bulk
-   * register, or rely on the automatic per-register embedding a semantic/hybrid
-   * catalog does. No-op for a BM25 catalog's cache. Incremental: only tools
+   * Pre-compute embeddings for any not-yet-embedded tools. Call after metadata
+   * registration. Incremental: only tools
    * registered since the last call are embedded. Throws if the embedding model
    * fails to load.
    */
-  buildEmbeddings(): void {
-    this.registry.buildEmbeddings();
+  buildEmbeddings(): Promise<void> {
+    return this.registry.buildEmbeddings();
+  }
+
+  /** Recompute the full corpus and atomically replace the dense cache. */
+  rebuildEmbeddings(): Promise<void> {
+    return this.registry.rebuildEmbeddings();
   }
 
   /**
    * Search the catalog. `method` overrides the catalog default for this call.
    * `"semantic"`/`"hybrid"` rank against the prebuilt embedding cache and throw
-   * `EmbeddingsNotBuilt` if it isn't built; they never load the model in-search (a
-   * semantic/hybrid catalog builds embeddings eagerly at register).
+   * synchronously with guidance to use {@link ToolCatalog.searchAsync}.
    *
    * @param query - Natural-language description of what the caller wants to do.
    * @param topK - Maximum number of hits to return.
    * @param origin - Who initiated the call (default `"direct"`); recorded on
    *   the trace event and span, never affects ranking.
    * @param method - Per-call override of the catalog's default retrieval method.
-   * @returns Up to `topK` hits, best-first with ties broken by tool id. The
-   *   `score` scale depends on the method: a raw BM25 relevance score, a cosine
-   *   similarity, or an RRF fusion score — comparable within one result list,
-   *   not across methods.
+   * @returns Up to `topK` BM25 hits, best-first with ties broken by tool id.
+   *   Semantic/dense/hybrid methods throw migration guidance; use
+   *   {@link ToolCatalog.searchAsync} for those methods.
    */
   search(
     query: string,
@@ -277,6 +293,18 @@ export class ToolCatalog {
   ): SearchHit[] {
     return traceSearch(SearchTarget.Tool, query, topK, origin, () =>
       this.registry.searchWithMethod(query, topK, origin, method ?? this.method),
+    );
+  }
+
+  /** Search with any retrieval method without blocking the Node.js event loop. */
+  searchAsync(
+    query: string,
+    topK: number,
+    origin: SearchOrigin = "direct",
+    method?: SearchMethod,
+  ): Promise<SearchHit[]> {
+    return traceSearchAsync(SearchTarget.Tool, query, topK, origin, () =>
+      this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method),
     );
   }
 

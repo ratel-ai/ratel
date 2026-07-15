@@ -1,8 +1,12 @@
-"""Tests for the PyO3 native binding (`ratel_ai._native`)."""
+"""Tests for public registry facades backed by the PyO3 extension."""
+
+import asyncio
+import threading
+from typing import Any
 
 import pytest
 
-from ratel_ai import SearchHit, ToolRegistry
+from ratel_ai import SearchHit, Skill, SkillRegistry, Tool, ToolRegistry
 
 
 def _register_read_file(reg: ToolRegistry) -> None:
@@ -23,6 +27,98 @@ def test_register_and_search_returns_hit() -> None:
     assert isinstance(hits[0], SearchHit)
     assert hits[0].tool_id == "read_file"
     assert hits[0].score > 0
+
+
+def test_register_item_and_register_many() -> None:
+    reg = ToolRegistry()
+    reg.register(
+        Tool(id="read", name="read", description="Read a file from disk")
+    )
+    reg.register_many(
+        [Tool(id="send", name="send", description="Send an email message")]
+    )
+
+    assert reg.search("send email", 5)[0].tool_id == "send"
+
+
+def test_skill_registry_register_item_and_register_many() -> None:
+    reg = SkillRegistry()
+    reg.register(Skill(id="auth", name="auth", description="Set up login"))
+    reg.register_many([Skill(id="deploy", name="deploy", description="Deploy an app")])
+
+    assert reg.search("deploy", 5)[0].skill_id == "deploy"
+
+
+@pytest.mark.parametrize(
+    ("registry", "item"),
+    [
+        (ToolRegistry(), Tool(id="read", name="read", description="Read a file")),
+        (SkillRegistry(), Skill(id="auth", name="auth", description="Set up auth")),
+    ],
+)
+def test_dense_submission_failure_releases_registry_busy_state(registry, item) -> None:
+    async def exercise() -> None:
+        await asyncio.get_running_loop().shutdown_default_executor()
+        with pytest.raises(RuntimeError, match="Executor shutdown"):
+            await registry.build_embeddings()
+        registry.register(item)
+
+    asyncio.run(exercise())
+
+
+async def test_registry_async_lifecycle_has_tool_and_skill_parity() -> None:
+    tools = ToolRegistry()
+    skills = SkillRegistry()
+
+    await tools.build_embeddings()
+    await tools.rebuild_embeddings()
+    await skills.build_embeddings()
+    await skills.rebuild_embeddings()
+
+    assert await tools.search_async("anything", 5) == []
+    assert await skills.search_async("anything", 5) == []
+
+
+@pytest.mark.parametrize(
+    ("registry_type", "item", "hit_attribute"),
+    [
+        (
+            ToolRegistry,
+            Tool(id="read", name="read", description="Read a file"),
+            "tool_id",
+        ),
+        (
+            SkillRegistry,
+            Skill(id="auth", name="auth", description="Set up authentication"),
+            "skill_id",
+        ),
+    ],
+)
+async def test_async_bm25_does_not_queue_behind_dense_operation(
+    controlled_embedding_endpoint: tuple[str, threading.Event, threading.Event],
+    registry_type: type[ToolRegistry] | type[SkillRegistry],
+    item: Tool | Skill,
+    hit_attribute: str,
+) -> None:
+    endpoint, request_started, send_response = controlled_embedding_endpoint
+    registry: Any = registry_type(embedding={"url": endpoint, "model": "test-model"})
+    registry.register(item)
+    build = asyncio.create_task(registry.build_embeddings())
+    for _ in range(200):
+        if request_started.is_set():
+            break
+        await asyncio.sleep(0.01)
+    assert request_started.is_set()
+    try:
+        hits = await asyncio.wait_for(
+            registry.search_async("read authentication", 5, method="bm25"),
+            timeout=0.1,
+        )
+    finally:
+        send_response.set()
+        await build
+
+    assert getattr(hits[0], hit_attribute) == item.id
 
 
 def test_search_empty_registry_returns_empty() -> None:

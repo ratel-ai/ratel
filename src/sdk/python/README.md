@@ -15,11 +15,23 @@
   </p>
 </div>
 
-`ratel-ai` retrieves the tools and skills relevant to each agent turn instead of sending the full catalog to the model. It bundles Ratel's Rust engine in-process: BM25 by default, with local semantic and hybrid retrieval available when needed. No API key, vector database, or service is required. Installing a published package on a supported prebuilt target also requires no Rust toolchain.
+`ratel-ai` retrieves the tools and skills relevant to each agent turn instead of sending the full catalog to the model. It bundles Ratel's Rust engine in-process: BM25 by default, with configurable semantic and hybrid retrieval available when needed. The default and local-model paths require no API key, vector database, or service. Installing a published package on a supported prebuilt target also requires no Rust toolchain.
 
 Use `ToolCatalog` for ranked tools with sync or async handlers and `SkillCatalog` for ranked Markdown playbooks loaded on demand. Expose `search_capabilities_tool`, `invoke_tool_tool`, and `get_skill_content_tool` so an agent can discover tools and skills, invoke tools, and load full skill instructions. Tools from existing MCP servers can be ingested into the tool catalog with the `mcp` extra.
 
 Semantic and hybrid retrieval use a configurable embedding model ([ADR 0012](../../../docs/adr/0012-configurable-embedding-models.md)), set per catalog via the `embedding` argument: the built-in default, a HuggingFace repo or local directory (in-process), or an OpenAI-compatible endpoint (OpenAI, Ollama, TEI, vLLM).
+
+Registration is always metadata-only. For semantic or hybrid retrieval, register the full corpus, then explicitly build and search asynchronously so model loading, HTTP, and inference never block the asyncio loop or hold the GIL:
+
+```python
+async def retrieve(tools):
+    catalog = ToolCatalog(method="semantic", embedding={"ollama": "nomic-embed-text"})
+    catalog.register_many(tools)
+    await catalog.build_embeddings()
+    return await catalog.search_async("deploy the service", 5)
+```
+
+Use `await catalog.rebuild_embeddings()` after changing the endpoint's model or vector dimension. Synchronous `search()` remains available for BM25 only.
 
 ## Install
 

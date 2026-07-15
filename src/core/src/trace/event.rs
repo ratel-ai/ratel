@@ -265,7 +265,8 @@ pub enum TraceEvent {
     /// flags a slow load (possibly underpowered machine) or a failed one;
     /// `reason` carries the hint / error. See `embedding.rs` and ADR-0011.
     EmbedderLoad {
-        /// The embedding model's HuggingFace repo id.
+        /// Resolved model display name: repo id, local path, or endpoint model
+        /// and URL.
         model: String,
         /// Load outcome: ok, slow, or failed.
         status: EmbedderLoadStatus,
@@ -285,9 +286,9 @@ pub enum TraceEvent {
         bytes: u64,
     },
     /// Emitted when a semantic/hybrid search runs against an embedding set built
-    /// with a *different* model than the one now configured (same dimension, so
-    /// no hard error). A non-blocking warning: results may be wrong until the
-    /// embeddings are rebuilt. See `dense_cache.rs` and ADR-0012.
+    /// with a *different* model than the one now configured. Retrieval fails
+    /// rather than mixing vector spaces; the caller must rebuild the complete
+    /// embedding cache. See `dense_cache.rs` and ADR-0012.
     EmbedderModelMismatch {
         /// The model the existing embeddings were built with.
         built: String,

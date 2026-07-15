@@ -4,8 +4,9 @@
 //! Agents degrade when every tool definition is stuffed into the context
 //! window. This crate keeps the full catalog *outside* the context and
 //! retrieves only the entries relevant to the task at hand: register tools
-//! and skills once, then search them per turn. Everything runs in-process —
-//! no server, no infrastructure.
+//! and skills once, then search them per turn. The engine runs in-process;
+//! BM25 and local dense retrieval need no server, while dense retrieval may
+//! instead use a configured OpenAI-compatible embedding endpoint.
 //!
 //! # Mental model
 //!
@@ -22,8 +23,8 @@
 //!   never fails; [`ToolRegistry::search`] and [`SkillRegistry::search`] use
 //!   it unconditionally.
 //! - [`SearchMethod::Semantic`] — cosine similarity over dense embeddings
-//!   from a local `bge-small-en-v1.5` model, downloaded into the HuggingFace
-//!   cache on first use (ADR-0011).
+//!   from a configurable in-process HuggingFace/local model (default
+//!   `bge-small-en-v1.5`) or OpenAI-compatible endpoint (ADR-0011/ADR-0012).
 //! - [`SearchMethod::Hybrid`] — the BM25 and dense rankings fused with
 //!   Reciprocal Rank Fusion.
 //!
