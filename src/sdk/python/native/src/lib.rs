@@ -268,9 +268,9 @@ impl SkillRegistry {
     }
 
     /// Register a skill's metadata into the index (or replace it in place when
-    /// `id` is already registered). `tags` are indexed for ranking; `tools` and
-    /// `metadata` ride along un-indexed for higher layers; `body` is the full
-    /// instruction text, stored for on-demand load.
+    /// `id` is already registered). `tags` are indexed for ranking; `tools`,
+    /// `skills` and `metadata` ride along un-indexed for higher layers; `body`
+    /// is the full instruction text, stored for on-demand load.
     // Mirrors `ToolRegistry::register`'s flat-param style (PyO3 has no by-value
     // object arg like the TS NAPI `Skill`); a skill simply has more fields.
     #[allow(clippy::too_many_arguments)]
@@ -281,6 +281,7 @@ impl SkillRegistry {
         description: String,
         tags: Vec<String>,
         tools: Vec<String>,
+        skills: Vec<String>,
         metadata: HashMap<String, Vec<String>>,
         body: String,
     ) {
@@ -290,6 +291,7 @@ impl SkillRegistry {
             description,
             tags,
             tools,
+            skills,
             metadata,
             body,
         });

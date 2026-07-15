@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .capabilities import _compact_description
 from .catalog import ExecutableTool
 from .skill_catalog import SkillCatalog
 
@@ -23,10 +24,13 @@ def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
     """Build the `get_skill_content` tool: load a skill's full body by id.
 
     The returned tool resolves `skillId` and answers `{"body": <markdown>}` via
-    `SkillCatalog.invoke` (which records a `skill_invoke` trace event). It
-    never raises into the host: an unknown or non-string id comes back as a
-    structured `{"error": ..., "isError": True}` payload the model can recover
-    from, mirroring `invoke_tool`.
+    `SkillCatalog.invoke` (which records a `skill_invoke` trace event). When
+    the skill declares dependencies on other skills, the result also carries
+    `skills` — `[{skillId, description}]` for the declared ids the catalog
+    knows, so the agent can recall them without another search; it is omitted
+    when there are none. It never raises into the host: an unknown or
+    non-string id comes back as a structured `{"error": ..., "isError": True}`
+    payload the model can recover from, mirroring `invoke_tool`.
 
     Args:
         catalog: the skill catalog to load bodies from.
@@ -55,7 +59,18 @@ def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
                 ),
                 "isError": True,
             }
-        return {"body": catalog.invoke(skill_id)}
+        body = catalog.invoke(skill_id)
+        # Surface the skill's declared skill deps (known ids only) so the agent
+        # can recall them with another get_skill_content call, no search needed.
+        skill = catalog.get(skill_id)
+        deps = []
+        for dep_id in skill.skills if skill else []:
+            dep = catalog.get(dep_id)
+            if dep is not None:
+                deps.append(
+                    {"skillId": dep_id, "description": _compact_description(dep.description)}
+                )
+        return {"body": body, "skills": deps} if deps else {"body": body}
 
     return ExecutableTool(
         id=GET_SKILL_CONTENT_ID,
@@ -65,7 +80,8 @@ def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
             "search_capabilities surfaces a relevant skill: pull the complete "
             "playbook into your context, then follow it. Returns the skill body "
             "(Markdown); any bundled scripts or files are referenced by absolute "
-            "path inside it."
+            "path inside it. When the skill depends on other skills, a `skills` "
+            "listing names them so you can load them the same way."
         ),
         input_schema={
             "type": "object",
@@ -85,6 +101,17 @@ def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
             "type": "object",
             "properties": {
                 "body": {"type": "string"},
+                "skills": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "skillId": {"type": "string"},
+                            "description": {"type": "string"},
+                        },
+                        "required": ["skillId", "description"],
+                    },
+                },
                 "error": {"type": "string"},
                 "isError": {"type": "boolean"},
             },

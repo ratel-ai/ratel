@@ -141,14 +141,16 @@ class SkillRegistry:
         description: str,
         tags: list[str],
         tools: list[str],
+        skills: list[str],
         metadata: dict[str, list[str]],
         body: str,
     ) -> None:
         """Register a skill's metadata into the index.
 
         Replaces in place when `id` is already registered. `tags` are indexed
-        for ranking; `tools` and `metadata` ride along un-indexed for higher
-        layers; `body` is the full instruction text, stored for on-demand load.
+        for ranking; `tools`, `skills` and `metadata` ride along un-indexed for
+        higher layers; `body` is the full instruction text, stored for
+        on-demand load.
         """
 
     def search(self, query: str, top_k: int) -> list[SkillHit]:
