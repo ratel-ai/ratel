@@ -147,6 +147,7 @@ upstream-MCP ingest, auth / `needs_auth`. Each becomes a span (or attributes on 
 | `ratel.search.target` | enum | `tool \| skill` (folds tool-search and skill-search into one span shape) |
 | `ratel.search.top_k` | int | requested result count |
 | `ratel.search.hit_count` | int | results returned |
+| `ratel.search.dep_count` | int | skills pulled in via dependency expansion (`search_capabilities`' `maxDepth`), beyond the ranked hits; `hit_count` stays query-matched only. Only meaningful for `target = skill` |
 | `ratel.search.query` | string | **content, gated** like message content; may hold user/agent text |
 | `ratel.origin` | enum | `direct \| agent` |
 

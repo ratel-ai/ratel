@@ -419,6 +419,29 @@ async def test_dep_that_is_also_a_query_hit_keeps_its_query_score() -> None:
     assert rollback_hits[0]["score"] > 0
 
 
+async def test_expansion_records_skill_search_event_with_dep_count() -> None:
+    skills = SkillCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    skills.register(_vercel_deploy(skills=["deck-outlining"]))
+    skills.register(_deck_outlining())
+    search = search_capabilities_tool(ToolCatalog(), skills)
+    skills.drain_trace_events()
+
+    await search.execute({"query": "deploy to vercel", "maxDepth": 1})
+    events = skills.drain_trace_events()
+    # the registry's own skill_search for the query carries dep_count 0…
+    assert any(e["type"] == "skill_search" and e["dep_count"] == 0 for e in events)
+    # …and the capability layer records a second one for the expansion.
+    expansion = next(e for e in events if e["type"] == "skill_search" and e["dep_count"] > 0)
+    assert expansion["dep_count"] == 1
+    assert expansion["origin"] == "agent"
+    assert expansion["hits"] == [{"skill_id": "deck-outlining", "score": 0}]
+
+    # no expansion event at the default depth (nothing was pulled)
+    await search.execute({"query": "deploy to vercel"})
+    defaults = skills.drain_trace_events()
+    assert [e for e in defaults if e["type"] == "skill_search" and e["dep_count"] > 0] == []
+
+
 async def test_clamps_max_depth() -> None:
     search = search_capabilities_tool(ToolCatalog(), _chain_catalog())
 

@@ -260,6 +260,8 @@ def search_capabilities_tool(
             # topKSkills, deduped against query hits and each other (cycles
             # terminate), unknown ids skipped.
             if depth > 0:
+                expansion_start = time.monotonic()
+                dep_hits: list[dict[str, Any]] = []
                 seen_skills = {s["skillId"] for s in skills}
                 frontier = [s["skillId"] for s in skills]
                 for _level in range(depth):
@@ -275,15 +277,33 @@ def search_capabilities_tool(
                             if dep is None:  # a declared id the catalog doesn't have: skip
                                 continue
                             seen_skills.add(dep_id)
-                            skills.append(
-                                {
-                                    "skillId": dep_id,
-                                    "score": 0,
-                                    "description": _compact_description(dep.description),
-                                }
-                            )
+                            hit = {
+                                "skillId": dep_id,
+                                "score": 0,
+                                "description": _compact_description(dep.description),
+                            }
+                            skills.append(hit)
+                            dep_hits.append(hit)
                             next_frontier.append(dep_id)
                     frontier = next_frontier
+                # Record the expansion as its own skill_search: the deps as hits
+                # at score 0, dep_count >= 1. The registry's event for the query
+                # itself always carries dep_count 0, so the two are distinguishable.
+                if dep_hits:
+                    skill_catalog.record_event(
+                        {
+                            "type": "skill_search",
+                            "query": query,
+                            "origin": "agent",
+                            "top_k": k_skills,
+                            "hits": [
+                                {"skill_id": h["skillId"], "score": h["score"]} for h in dep_hits
+                            ],
+                            "stages": [],
+                            "took_ms": int((time.monotonic() - expansion_start) * 1000),
+                            "dep_count": len(dep_hits),
+                        }
+                    )
 
             # A surfaced skill's instructions name the tools they call. Pull those
             # into the tools bucket — for query-matched skills and dep-expanded

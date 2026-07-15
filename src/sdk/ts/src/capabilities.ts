@@ -375,6 +375,8 @@ export function searchCapabilitiesTool(
       // one level per depth — additively (score 0), beyond topKSkills, deduped
       // against query hits and each other (cycles terminate), unknown ids skipped.
       if (skillCatalog && depth > 0) {
+        const expansionStart = Date.now();
+        const depHits: CapabilitySkillHit[] = [];
         const seenSkills = new Set(skills.map((s) => s.skillId));
         let frontier = skills.map((s) => s.skillId);
         for (let level = 0; level < depth && frontier.length > 0; level++) {
@@ -385,15 +387,32 @@ export function searchCapabilitiesTool(
               const dep = skillCatalog.get(depId);
               if (!dep) continue; // a declared id the catalog doesn't have: skip
               seenSkills.add(depId);
-              skills.push({
+              const hit = {
                 skillId: depId,
                 score: 0,
                 description: compactDescription(dep.description ?? ""),
-              });
+              };
+              skills.push(hit);
+              depHits.push(hit);
               next.push(depId);
             }
           }
           frontier = next;
+        }
+        // Record the expansion as its own skill_search: the deps as hits at
+        // score 0, dep_count >= 1. The registry's event for the query itself
+        // always carries dep_count 0, so the two are distinguishable.
+        if (depHits.length > 0) {
+          skillCatalog.recordEvent({
+            type: "skill_search",
+            query,
+            origin: "agent",
+            top_k: kSkills,
+            hits: depHits.map((h) => ({ skill_id: h.skillId, score: h.score })),
+            stages: [],
+            took_ms: Date.now() - expansionStart,
+            dep_count: depHits.length,
+          });
         }
       }
 

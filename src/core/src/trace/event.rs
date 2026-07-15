@@ -130,6 +130,14 @@ pub enum TraceEvent {
         stages: Vec<SearchStage>,
         /// Total search wall time, in milliseconds.
         took_ms: u64,
+        /// Skills pulled in via dependency expansion (`search_capabilities`'
+        /// `maxDepth`), beyond the ranked `hits`. Always `0` on the event a
+        /// registry emits for the search itself; the SDK capability layer
+        /// records a separate `skill_search` carrying the expansion (its
+        /// `hits` are the dep skills at score 0) with `dep_count` >= 1.
+        /// Defaults on the wire so pre-existing streams stay readable.
+        #[serde(default)]
+        dep_count: u32,
     },
     /// The skill corpus changed — the skill-side twin of
     /// [`TraceEvent::IndexChurn`], emitted by [`crate::SkillRegistry::register`].
@@ -293,4 +301,36 @@ pub struct TraceEnvelope {
     /// The event itself, flattened into the envelope on the wire.
     #[serde(flatten)]
     pub event: TraceEvent,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skill_search_dep_count_defaults_to_zero_on_old_wire() {
+        // Additive wire evolution (ADR-0007): a skill_search recorded before
+        // dep_count existed must still deserialize, defaulting to 0.
+        let old = r#"{"type":"skill_search","query":"q","origin":"agent","top_k":3,"hits":[],"stages":[],"took_ms":1}"#;
+        let event: TraceEvent = serde_json::from_str(old).unwrap();
+        assert!(matches!(
+            event,
+            TraceEvent::SkillSearch { dep_count: 0, .. }
+        ));
+    }
+
+    #[test]
+    fn skill_search_serializes_dep_count() {
+        let event = TraceEvent::SkillSearch {
+            query: "q".into(),
+            origin: Origin::Agent,
+            top_k: 3,
+            hits: vec![],
+            stages: vec![],
+            took_ms: 1,
+            dep_count: 2,
+        };
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["dep_count"], 2);
+    }
 }

@@ -344,6 +344,32 @@ describe("searchCapabilitiesTool skill-dependency expansion (maxDepth)", () => {
     expect(rollbackHits[0].score).toBeGreaterThan(0);
   });
 
+  it("records a skill_search event carrying the expansion: deps as hits at score 0, dep_count set", async () => {
+    const skillCatalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    skillCatalog.register(deployWithSkillDep);
+    skillCatalog.register(deckOutlining);
+    const tool = searchCapabilitiesTool(new ToolCatalog(), skillCatalog);
+    skillCatalog.drainTraceEvents();
+
+    await tool.execute({ query: "deploy to vercel", maxDepth: 1 });
+    const events = skillCatalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    // the registry's own skill_search for the query carries dep_count 0…
+    const query = events.find((e) => e.type === "skill_search" && e.dep_count === 0);
+    expect(query, "registry skill_search with dep_count 0").toBeTruthy();
+    // …and the capability layer records a second one for the expansion.
+    const expansion = events.find((e) => e.type === "skill_search" && (e.dep_count as number) > 0);
+    expect(expansion?.dep_count).toBe(1);
+    expect(expansion?.origin).toBe("agent");
+    expect(expansion?.hits).toEqual([{ skill_id: "deck-outlining", score: 0 }]);
+
+    // no expansion event at the default depth (nothing was pulled)
+    await tool.execute({ query: "deploy to vercel" });
+    const defaults = skillCatalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    expect(
+      defaults.filter((e) => e.type === "skill_search" && (e.dep_count as number) > 0),
+    ).toEqual([]);
+  });
+
   it("clamps maxDepth: negative/fractional fall back to 0, huge values cap at 3", async () => {
     const tool = searchCapabilitiesTool(new ToolCatalog(), chainCatalog());
     const ids = async (maxDepth: number): Promise<string[]> => {

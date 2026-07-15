@@ -14,6 +14,7 @@ import {
   RATEL_AUTH_OUTCOME,
   RATEL_ORIGIN,
   RATEL_SEARCH,
+  RATEL_SEARCH_DEP_COUNT,
   RATEL_SEARCH_HIT_COUNT,
   RATEL_SEARCH_QUERY,
   RATEL_SEARCH_RESULTS,
@@ -61,6 +62,7 @@ describe("ratel telemetry vocabulary", () => {
     expect(RATEL_SEARCH_TARGET).toBe("ratel.search.target");
     expect(RATEL_SEARCH_TOP_K).toBe("ratel.search.top_k");
     expect(RATEL_SEARCH_HIT_COUNT).toBe("ratel.search.hit_count");
+    expect(RATEL_SEARCH_DEP_COUNT).toBe("ratel.search.dep_count");
     expect(RATEL_SEARCH_QUERY).toBe("ratel.search.query");
     expect(RATEL_TOOL_ARGS_SIZE_BYTES).toBe("ratel.tool.args_size_bytes");
     expect(RATEL_UPSTREAM_SERVER).toBe("ratel.upstream.server");
@@ -94,6 +96,7 @@ describe("ratel telemetry vocabulary", () => {
       RATEL_SEARCH_TARGET,
       RATEL_SEARCH_TOP_K,
       RATEL_SEARCH_HIT_COUNT,
+      RATEL_SEARCH_DEP_COUNT,
       RATEL_SEARCH_QUERY,
       RATEL_TOOL_ARGS_SIZE_BYTES,
       RATEL_UPSTREAM_SERVER,
@@ -112,6 +115,7 @@ describe("ratel telemetry vocabulary", () => {
       RATEL_SEARCH_TARGET,
       RATEL_SEARCH_TOP_K,
       RATEL_SEARCH_HIT_COUNT,
+      RATEL_SEARCH_DEP_COUNT,
       RATEL_SEARCH_QUERY,
       RATEL_TOOL_ARGS_SIZE_BYTES,
       RATEL_UPSTREAM_SERVER,

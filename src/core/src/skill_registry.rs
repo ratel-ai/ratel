@@ -340,6 +340,9 @@ impl SkillRegistry {
                 .collect(),
             stages,
             took_ms,
+            // The registry only ranks; dependency expansion happens a layer up
+            // (the SDK capability tools), which records its own event.
+            dep_count: 0,
         });
     }
 }
