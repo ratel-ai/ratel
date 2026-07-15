@@ -323,6 +323,49 @@ describe("searchCapabilitiesTool skill-dependency expansion (maxDepth)", () => {
     expect(result.skills.map((s) => s.skillId)).toEqual(["vercel-deploy"]);
   });
 
+  it("lists a dep declared by two surfaced skills once", async () => {
+    const rollback: Skill = {
+      id: "vercel-rollback",
+      name: "vercel-rollback",
+      description: "Roll back a bad Vercel deployment to the previous build.",
+      tags: ["vercel"],
+      skills: ["deck-outlining"],
+      body: "# Vercel Rollback",
+    };
+    const tool = searchCapabilitiesTool(
+      new ToolCatalog(),
+      skillCatalogWith({ ...vercelSkill, skills: ["deck-outlining"] }, rollback, deckOutlining),
+    );
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      maxDepth: 1,
+    })) as SearchCapabilitiesResult;
+    // both query hits declare the same dep — it rides in exactly once
+    expect(result.skills.filter((s) => s.skillId === "deck-outlining")).toHaveLength(1);
+  });
+
+  it("seeds expansion from surfaced hits only: a query match cut by the topKSkills budget contributes no deps", async () => {
+    const billing: Skill = {
+      id: "vercel-billing",
+      name: "vercel-billing",
+      description: "Understand the Vercel invoice line items.",
+      tags: [],
+      skills: ["deck-outlining"],
+      body: "# Vercel Billing",
+    };
+    const tool = searchCapabilitiesTool(
+      new ToolCatalog(),
+      skillCatalogWith(vercelSkill, billing, deckOutlining),
+    );
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      topKSkills: 1,
+      maxDepth: 1,
+    })) as SearchCapabilitiesResult;
+    // budget 1 keeps only the best hit; the cut billing skill's dep must not ride in
+    expect(result.skills.map((s) => s.skillId)).toEqual(["vercel-deploy"]);
+  });
+
   it("keeps the query score when a dep is also a query hit, without duplicating it", async () => {
     const rollback: Skill = {
       id: "vercel-rollback",

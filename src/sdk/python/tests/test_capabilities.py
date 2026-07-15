@@ -403,6 +403,40 @@ async def test_expansion_silently_skips_unknown_dep_ids() -> None:
     assert [s["skillId"] for s in result["skills"]] == ["vercel-deploy"]
 
 
+async def test_dep_declared_by_two_surfaced_skills_lists_once() -> None:
+    rollback = Skill(
+        id="vercel-rollback",
+        name="vercel-rollback",
+        description="Roll back a bad Vercel deployment to the previous build.",
+        tags=["vercel"],
+        skills=["deck-outlining"],
+    )
+    search = search_capabilities_tool(
+        ToolCatalog(),
+        _skills(_vercel_deploy(skills=["deck-outlining"]), rollback, _deck_outlining()),
+    )
+    result = await search.execute({"query": "deploy to vercel", "maxDepth": 1})
+    # both query hits declare the same dep — it rides in exactly once
+    assert [s["skillId"] for s in result["skills"]].count("deck-outlining") == 1
+
+
+async def test_expansion_seeds_from_surfaced_hits_only_not_budget_cut_matches() -> None:
+    billing = Skill(
+        id="vercel-billing",
+        name="vercel-billing",
+        description="Understand the Vercel invoice line items.",
+        skills=["deck-outlining"],
+    )
+    search = search_capabilities_tool(
+        ToolCatalog(), _skills(_vercel_deploy(), billing, _deck_outlining())
+    )
+    result = await search.execute(
+        {"query": "deploy to vercel", "topKSkills": 1, "maxDepth": 1}
+    )
+    # budget 1 keeps only the best hit; the cut billing skill's dep must not ride in
+    assert [s["skillId"] for s in result["skills"]] == ["vercel-deploy"]
+
+
 async def test_dep_that_is_also_a_query_hit_keeps_its_query_score() -> None:
     rollback = Skill(
         id="vercel-rollback",
