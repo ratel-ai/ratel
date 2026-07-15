@@ -91,7 +91,7 @@ export async function startMockCloud(
     }
 
     if (path?.startsWith("/api/v1/suggestions")) {
-      handleSuggestions(req, res, path, body, mock);
+      handleSuggestions(req, res, path, mock);
       return;
     }
 
@@ -135,7 +135,6 @@ function handleSuggestions(
   req: IncomingMessage,
   res: ServerResponse,
   path: string,
-  body: unknown,
   mock: MockCloud,
 ): void {
   const json = (status: number, payload: unknown): void => {
@@ -191,7 +190,6 @@ function handleSuggestions(
       return;
     }
     suggestion.status = "rejected";
-    void body;
     json(200, { suggestion });
     return;
   }

@@ -1,6 +1,6 @@
 import { ToolCatalog, TraceSession } from "@ratel-ai/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CloudAuthError, CloudClient } from "./index.js";
+import { CloudApiError, CloudAuthError, CloudClient } from "./index.js";
 import { type MockCloud, startMockCloud } from "./testing/mock-cloud.js";
 
 let mock: MockCloud;
@@ -212,5 +212,63 @@ describe("CloudClient.reportRunMetrics", () => {
 
     await expect(client.reportRunMetrics(new Array(501).fill(one))).rejects.toThrow(/500/);
     expect(mock.requests.filter((r) => r.path === "/api/v1/events")).toHaveLength(0);
+  });
+
+  // Cloud validates with an all-or-nothing zod parse (one bad record 400s the
+  // whole batch), so invalid records must fail fast client-side, pre-network.
+  it("rejects invalid records client-side, naming the field, without calling the network", async () => {
+    mock = await startMockCloud();
+    const client = new CloudClient({ baseUrl: mock.url, apiKey: mock.apiKey });
+    const categories = { skills: 0, tools: 0, history: 0, memory: 0, user_input: 0 };
+
+    const bad: Array<[Record<string, unknown>, RegExp]> = [
+      [{ tokens_by_category: { ...categories, tools: -1 } }, /tokens_by_category\.tools/],
+      [{ tokens_by_category: categories, input_tokens: 42.5 }, /input_tokens/],
+      [{ tokens_by_category: categories, output_tokens: -1 }, /output_tokens/],
+      [{ tokens_by_category: categories, model: "m".repeat(201) }, /model/],
+      [{ tokens_by_category: categories, latency_ms: -5 }, /latency_ms/],
+      [{ tokens_by_category: categories, cost_usd: -0.01 }, /cost_usd/],
+      [{ tokens_by_category: categories, occurred_at: "not-a-date" }, /occurred_at/],
+      [
+        { tokens_by_category: categories, saved_by_category: { skills: -1 } },
+        /saved_by_category\.skills/,
+      ],
+      [
+        { tokens_by_category: { skills: 0, tools: 0, history: 0, memory: 0 } },
+        /tokens_by_category\.user_input/,
+      ],
+    ];
+    for (const [record, field] of bad) {
+      const err = await client.reportRunMetrics(record as never).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CloudApiError);
+      expect((err as CloudApiError).status).toBe(400);
+      expect((err as CloudApiError).message).toMatch(field);
+    }
+    expect(mock.requests.filter((r) => r.path === "/api/v1/events")).toHaveLength(0);
+  });
+
+  it("names the offending batch index in the error", async () => {
+    mock = await startMockCloud();
+    const client = new CloudClient({ baseUrl: mock.url, apiKey: mock.apiKey });
+    const ok = {
+      tokens_by_category: { skills: 0, tools: 0, history: 0, memory: 0, user_input: 0 },
+    };
+
+    const err = await client
+      .reportRunMetrics([ok, { ...ok, input_tokens: 1.5 }])
+      .catch((e: unknown) => e);
+    expect((err as CloudApiError).message).toMatch(/\[1\]/);
+  });
+
+  it("still posts float category values (Cloud only requires integers on input/output_tokens)", async () => {
+    mock = await startMockCloud();
+    const client = new CloudClient({ baseUrl: mock.url, apiKey: mock.apiKey });
+
+    await client.reportRunMetrics({
+      tokens_by_category: { skills: 1.5, tools: 0, history: 0, memory: 0, user_input: 0 },
+      input_tokens: 3,
+      occurred_at: "2026-07-01T00:00:00.000Z",
+    });
+    expect(mock.requests.filter((r) => r.path === "/api/v1/events")).toHaveLength(1);
   });
 });

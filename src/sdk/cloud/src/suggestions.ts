@@ -54,10 +54,10 @@ export class SuggestionsClient {
     return payload.suggestion;
   }
 
-  async reject(id: string, opts: { reason?: string } = {}): Promise<Suggestion> {
+  async reject(id: string): Promise<Suggestion> {
     const response = await this.http.request(
       `/api/v1/suggestions/${encodeURIComponent(id)}/reject`,
-      { method: "POST", body: JSON.stringify(opts) },
+      { method: "POST", body: "{}" },
     );
     const payload = (await this.parse(response)) as { suggestion: Suggestion };
     return payload.suggestion;

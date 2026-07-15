@@ -55,6 +55,12 @@ export interface Suggestion {
   targetSkillId: string | null;
   targetSkillExpectedVersion: number | null;
   sourceQueryIntentId: string | null;
+  /** Scope: null = project-global; set = drafted for one opaque end-user (the
+   * `end_user_id` stamped on the trace events this proposal's evidence came
+   * from). A user-scoped `new_skill` still doesn't sync via `syncSkills`/
+   * `SkillSync` even after approval — Cloud's catalog pull is global-only until
+   * the SDK can identify its end-user at pull time. */
+  endUserId: string | null;
   /** Partial `{description?, tags?, body?}` for edit_skill; full skill fields for new_skill. */
   patch: unknown;
   retrievabilityPreview: RetrievabilityPreview | null;

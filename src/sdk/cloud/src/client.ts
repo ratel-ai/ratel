@@ -5,7 +5,7 @@ import {
   SkillSync,
   type SkillSyncOptions,
 } from "./catalog-sync.js";
-import { CloudConfigError } from "./errors.js";
+import { CloudApiError, CloudConfigError } from "./errors.js";
 import { CloudExporter, type CloudExporterOptions } from "./exporter.js";
 import { CloudHttp } from "./http.js";
 import { reportRunMetrics } from "./run-metrics.js";
@@ -87,5 +87,31 @@ export class CloudClient {
    */
   reportRunMetrics(metrics: RunMetrics | RunMetrics[]): Promise<void> {
     return reportRunMetrics(this.http, metrics);
+  }
+
+  /**
+   * Force Cloud to fold this project's `search`/`skill_search` trace events
+   * into `query_intents` right now, bypassing the ~hourly cron throttle that
+   * otherwise governs categorization. Most hosts don't need this (the cron
+   * catches up within the hour); it's here for fast local iteration and
+   * demos that want a `suggestions.generate()` call to see fresh evidence
+   * immediately after `exporter.flush()`.
+   */
+  async categorizeQueries(): Promise<{ jobId: string; coalesced: boolean }> {
+    const response = await this.http.request("/api/v1/query-intents/categorize", {
+      method: "POST",
+      body: "{}",
+    });
+    const payload = (await response.json().catch(() => undefined)) as
+      | { error?: string; jobId?: string; coalesced?: boolean }
+      | undefined;
+    if (!response.ok) {
+      throw new CloudApiError(
+        `categorize request failed (HTTP ${response.status})`,
+        response.status,
+        payload?.error,
+      );
+    }
+    return { jobId: payload?.jobId ?? "", coalesced: payload?.coalesced ?? false };
   }
 }

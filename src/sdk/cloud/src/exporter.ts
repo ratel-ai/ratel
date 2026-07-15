@@ -22,6 +22,14 @@ export interface CloudExporterOptions {
   onError?: (err: Error) => void;
   /** Per-item 202 rejections — logged, never retried. */
   onRejected?: (rejected: RejectedTraceEvent[]) => void;
+  /**
+   * Opaque id of the customer's end-user this session serves (Cloud's
+   * end-user dimension), stamped onto every buffered envelope that doesn't
+   * already carry its own `end_user_id`. There is no per-event override at the
+   * `TraceSession`/native layer today, so a host serving multiple end-users
+   * from one process should use one `TraceSession` (and exporter) per end-user.
+   */
+  endUserId?: string;
 }
 
 const MAX_BATCH_HARD_CAP = 1000;
@@ -48,6 +56,7 @@ export class CloudExporter {
   private readonly maxBackoffMs: number;
   private readonly onError?: (err: Error) => void;
   private readonly onRejected?: (rejected: RejectedTraceEvent[]) => void;
+  private readonly endUserId?: string;
 
   private pending: Envelope[] = [];
   private dropped = 0;
@@ -70,6 +79,7 @@ export class CloudExporter {
     this.currentBackoffMs = this.retryBackoffMs;
     if (opts.onError) this.onError = opts.onError;
     if (opts.onRejected) this.onRejected = opts.onRejected;
+    if (opts.endUserId) this.endUserId = opts.endUserId;
   }
 
   /** Begin periodic flushing (unref'd — won't hold the process open). */
@@ -171,8 +181,10 @@ export class CloudExporter {
 
   private buffer(events: Envelope[]): void {
     for (const envelope of events) {
+      const endUserId = (envelope.end_user_id as string | undefined) ?? this.endUserId;
       this.pending.push({
         ...envelope,
+        ...(endUserId !== undefined ? { end_user_id: endUserId } : {}),
         client_event_id: `${envelope.session_id}:${envelope.seq ?? cryptoFallbackId()}`,
         occurred_at: new Date(envelope.ts).toISOString(),
       });

@@ -85,14 +85,14 @@ describe("CloudClient.suggestions", () => {
     );
   });
 
-  it("rejects a pending suggestion with an optional reason", async () => {
+  it("rejects a pending suggestion with an empty body (Cloud reads nothing from it)", async () => {
     mock = await startMockCloud();
     mock.suggestions.push(suggestion());
 
-    const rejected = await client().suggestions.reject("sug-1", { reason: "not our domain" });
+    const rejected = await client().suggestions.reject("sug-1");
     expect(rejected.status).toBe("rejected");
     const post = mock.requests.find((r) => r.path === "/api/v1/suggestions/sug-1/reject");
-    expect((post?.body as Record<string, unknown>)?.reason).toBe("not our domain");
+    expect(post?.body).toEqual({});
   });
 
   it("generate() enqueues and returns the job handle", async () => {
