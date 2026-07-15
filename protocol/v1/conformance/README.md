@@ -27,15 +27,17 @@ No dependencies — Node's standard library only.
 - **`etag`** — for each fixture catalog and scope, the resolved skill ids and the exact ETag.
 - **`equalEtags`** — inputs that MUST hash identically: `basic` = `basic-reordered` (skill
   order, object-key order, and `metadata`-key order are all normalized away) = `field-noise`
-  (timestamps / status / version / unknown fields are projected out). `scoped-global` =
-  `scoped-bob` (empty subject layer) = `scoped-unknown` (unrecognised subject falls back to the
-  global layer).
+  (timestamps / status / version / unknown fields are projected out) = `dep-carrying` (the
+  optional `skills` dependency edge is carried on the wire but projected out of the hash).
+  `scoped-global` = `scoped-bob` (empty subject layer) = `scoped-unknown` (unrecognised subject
+  falls back to the global layer).
 - **`distinctEtags`** — inputs that MUST differ, e.g. `tags-reordered` (array order is
   significant) and `unicode` (raw-UTF-8, byte-ordered `metadata` keys).
 - **`inm`** — the conditional-GET matcher: exact, `W/` weak, `*`, comma-lists, an absent
   header, and a cross-scope tag that must miss.
-- **`wire`** — the secrets-never-sync rule: a projection emits exactly the seven skill fields,
-  and no field whose name looks like a credential may appear on the wire.
+- **`wire`** — the secrets-never-sync rule: a projection emits exactly the listed skill fields
+  (the optional `skills` may be omitted), and no field whose name looks like a credential may
+  appear on the wire.
 
 ## Consuming the vectors from another implementation
 

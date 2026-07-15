@@ -82,6 +82,7 @@ the last body and revalidates.
   "description": string,
   "tags":        string[],
   "tools":       string[],             // skill's referenced tool ids
+  "skills":      string[],             // OPTIONAL — skill's referenced skill ids (not hashed, see ETag)
   "metadata":    { [key: string]: string[] },
   "body":        string                // SKILL.md payload
 }
@@ -99,6 +100,16 @@ local definition behaves as unknown-tool at invoke time, though the skill stays 
 search. A source-published skill is therefore a coupling contract: it should reference only
 tools the consuming client registers locally.
 
+### Skill-dependency resolution (same resolved set)
+
+A synced skill's optional `skills` are skill **ids** — a dependency edge to other skills its
+instructions reference. Unlike `tools`, they resolve against the **same resolved set the pull
+delivered**: the client's retrieval layer expands them into its results on request
+(`search_capabilities`' `maxDepth`) and lists them on load (`get_skill_content`). An id with
+no match in the set is silently skipped, so a source SHOULD publish a skill's dependencies in
+the same catalog (or scope overlay) as the skill itself. The ids are never indexed as query
+terms.
+
 ### ETag algorithm (frozen at v1)
 
 The ETag is a SHA-256 over a **canonical serialization of the resolved published set for the
@@ -108,8 +119,8 @@ identical ETag:
 1. **Resolve** the set for the scope (see `scope` above): the global layer, or the subject
    layer overlaid on it.
 2. **Project** each skill to exactly `{id, name, description, tags, tools, metadata, body}`.
-   Every other field — timestamps, status, version, anything unrecognised — is dropped, so a
-   byte-identical republish keeps the ETag stable.
+   Every other field — the optional `skills`, timestamps, status, version, anything
+   unrecognised — is dropped, so a byte-identical republish keeps the ETag stable.
 3. **Canonicalize** each projected skill to JSON: the seven keys in the order above;
    `metadata` keys sorted ascending by UTF-8 byte order; `tags`, `tools`, and every `metadata`
    value array in **authored order** (order is significant); minimal JSON string escaping;
@@ -127,6 +138,11 @@ Because the ETag is part of the compatibility surface, **this projection and ser
 frozen at v1**: changing which fields are hashed, their order, the sort, or the escaping
 invalidates every client's cache and is a breaking (v2) change. The vectors in
 [`conformance/`](conformance/) pin the exact bytes.
+
+Staleness caveat: because `skills` is carried but never hashed, an edit that changes **only** a
+skill's dependency list does not bust the ETag — a revalidating client keeps serving its cached
+replica. A source that edits dependencies alone SHOULD also touch a hashed field (e.g. a
+revision counter in `metadata`) so the change propagates.
 
 ## Operational endpoints
 
@@ -160,7 +176,9 @@ pin the wire shapes.
 ## Versioning
 
 - Major version is the URL prefix `/v1`. Additive changes (new optional fields, new
-  endpoints) stay within `/v1`; clients MUST ignore unknown fields.
+  endpoints) stay within `/v1`; clients MUST ignore unknown fields. The optional `skills`
+  field on `CatalogSkillWire` is such an addition: a v1 client that predates it ignores it,
+  and the ETag projection is unaffected.
 - The frozen v1 surface: the `Authorization: Bearer` scheme and 401/503 contract, the
   `GET /v1/catalog` shape, the `scope` selector semantics, `CatalogSkillWire`, and the ETag
   content projection. A break in any of these is a `/v2`.

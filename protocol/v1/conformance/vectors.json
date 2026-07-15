@@ -129,6 +129,49 @@
         }
       ]
     },
+    "dep-carrying": {
+      "global": [
+        {
+          "id": "b-skill",
+          "name": "beta-tool",
+          "description": "Second tool.",
+          "tags": [
+            "z"
+          ],
+          "tools": [],
+          "metadata": {
+            "cat": [
+              "b"
+            ],
+            "area": [
+              "core"
+            ]
+          },
+          "body": "# Beta\n"
+        },
+        {
+          "id": "a-skill",
+          "name": "alpha-tool",
+          "description": "First tool.",
+          "tags": [
+            "x",
+            "y"
+          ],
+          "tools": [
+            "t1"
+          ],
+          "skills": [
+            "b-skill"
+          ],
+          "metadata": {
+            "cat": [
+              "a"
+            ]
+          },
+          "body": "# Alpha\n"
+        }
+      ]
+    },
     "tags-reordered": {
       "global": [
         {
@@ -295,6 +338,18 @@
       }
     },
     {
+      "name": "dep-carrying",
+      "catalog": "dep-carrying",
+      "scope": null,
+      "expect": {
+        "resolvedIds": [
+          "a-skill",
+          "b-skill"
+        ],
+        "etag": "\"3aea293d57cad3253b9884b62b765c8becccbe4d372a60de5c15b85cc87bb460\""
+      }
+    },
+    {
       "name": "tags-reordered",
       "catalog": "tags-reordered",
       "scope": null,
@@ -380,7 +435,8 @@
     [
       "basic",
       "basic-reordered",
-      "field-noise"
+      "field-noise",
+      "dep-carrying"
     ],
     [
       "scoped-global",
@@ -464,6 +520,7 @@
       "description",
       "tags",
       "tools",
+      "skills",
       "metadata",
       "body"
     ],
@@ -479,6 +536,6 @@
       "privatekey",
       "private_key"
     ],
-    "note": "Secrets never appear on the wire. A conforming projection emits exactly `skillFields`; any field whose lowercased name contains one of `forbiddenFieldSubstrings` MUST NOT appear in a v1 payload. Implementations assert this structurally (a test fails if such a field enters a wire shape)."
+    "note": "Secrets never appear on the wire. A conforming projection emits exactly `skillFields` (`skills` is optional and MAY be omitted; it is carried, never hashed — see dep-carrying); any field whose lowercased name contains one of `forbiddenFieldSubstrings` MUST NOT appear in a v1 payload. Implementations assert this structurally (a test fails if such a field enters a wire shape)."
   }
 }
