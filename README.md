@@ -19,7 +19,7 @@
 </div>
 
 <div align="center">
-  <img src="./docs/assets/hero.webp" width="960" alt="Ratel hero animation" />
+  <img src="./docs/assets/ratel-hero.gif" width="960" alt="Ratel hero animation" />
 </div>
 
 ## Introduction
