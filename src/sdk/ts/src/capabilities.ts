@@ -17,6 +17,7 @@ export const INVOKE_TOOL_ID = "invoke_tool" as const;
 const DEFAULT_TOP_K_TOOLS = 5;
 const DEFAULT_TOP_K_SKILLS = 3;
 const MAX_TOP_K = 50;
+const MAX_DEPTH = 3;
 
 /**
  * Clamp a model-supplied top-K to a positive integer in [1, MAX_TOP_K], falling
@@ -28,6 +29,18 @@ const MAX_TOP_K = 50;
 function clampTopK(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
   return Math.min(value, MAX_TOP_K);
+}
+
+/**
+ * Clamp a model-supplied `maxDepth` to an integer in [0, MAX_DEPTH], falling
+ * back to `0` — no dependency expansion — for anything else (undefined,
+ * negative, non-integer, NaN). The TS and Python SDKs run the same input
+ * through this, so a stray `maxDepth` can't expand unboundedly (or, via a
+ * negative wrapping in a lower layer, at all).
+ */
+function clampDepth(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return 0;
+  return Math.min(value, MAX_DEPTH);
 }
 
 // The discovery prompt the model sees. The skills clause is only included when a
@@ -114,7 +127,11 @@ export interface CapabilityToolGroup {
 export interface CapabilitySkillHit {
   /** Skill id to pass to `get_skill_content`. */
   skillId: string;
-  /** Retrieval score from the skill catalog's search (BM25 by default). */
+  /**
+   * Retrieval score from the skill catalog's search (BM25 by default), or `0`
+   * when the skill was pulled in as another skill's declared dependency
+   * (`maxDepth` ≥ 1) rather than by the query itself.
+   */
   score: number;
   /** The skill's description, compacted to ~160 chars for the listing. */
   description: string;
@@ -167,14 +184,19 @@ function buildSearchDescription(hasSkills: boolean, opts?: SearchCapabilitiesOpt
  * the results by a large number of matching tools (and we avoid comparing BM25
  * scores across the two different text shapes).
  *
- * The tool takes `{ query, topKTools?, topKSkills? }` (defaults 5 and 3;
- * values above 50 are capped, anything else non-positive or non-integer falls
- * back to the default) and resolves to a {@link SearchCapabilitiesResult}. A
- * matched skill's declared tool dependencies are pulled into the `tools`
- * bucket additively — score `0`, beyond the `topKTools` budget, deduped
- * against query hits. The `skills` bucket (and its mention in the tool
- * description) exists only when `skillCatalog` is non-empty at build time.
- * Each call records a `gateway_search` event on the local trace stream.
+ * The tool takes `{ query, topKTools?, topKSkills?, maxDepth? }` (defaults 5,
+ * 3, and 0; top-K values above 50 are capped, anything else non-positive or
+ * non-integer falls back to the default) and resolves to a
+ * {@link SearchCapabilitiesResult}. `maxDepth` (capped at 3) expands the
+ * declared skill dependencies of query-matched skills into the `skills`
+ * bucket, breadth-first — score `0`, beyond the `topKSkills` budget, deduped
+ * against query hits, unknown ids skipped. A surfaced skill's declared tool
+ * dependencies — whether it matched the query or rode in as a dep — are
+ * pulled into the `tools` bucket additively: score `0`, beyond the
+ * `topKTools` budget, deduped against query hits. The `skills` bucket (and
+ * its mention in the tool description) exists only when `skillCatalog` is
+ * non-empty at build time. Each call records a `gateway_search` event on the
+ * local trace stream.
  *
  * @param toolCatalog - Catalog the `tools` bucket is ranked from.
  * @param skillCatalog - Optional catalog the `skills` bucket is ranked from.
@@ -215,6 +237,12 @@ export function searchCapabilitiesTool(
           type: "integer",
           minimum: 1,
           description: "max skills to return (default 3)",
+        },
+        maxDepth: {
+          type: "integer",
+          minimum: 0,
+          description:
+            "dependency levels to expand into the skills bucket (default 0: no expansion, max 3)",
         },
       },
       required: ["query"],
@@ -274,13 +302,15 @@ export function searchCapabilitiesTool(
       required: ["tools", "skills"],
     },
     execute: async (input) => {
-      const { query, topKTools, topKSkills } = input as {
+      const { query, topKTools, topKSkills, maxDepth } = input as {
         query: string;
         topKTools?: number;
         topKSkills?: number;
+        maxDepth?: number;
       };
       const kTools = clampTopK(topKTools, DEFAULT_TOP_K_TOOLS);
       const kSkills = clampTopK(topKSkills, DEFAULT_TOP_K_SKILLS);
+      const depth = clampDepth(maxDepth);
       const startedAt = Date.now();
 
       const toolHits = toolCatalog.search(query, kTools, "agent");
@@ -340,9 +370,37 @@ export function searchCapabilitiesTool(
           }))
         : [];
 
-      // A matched skill's instructions name the tools they call. Pull those into
-      // the tools bucket so the agent gets the playbook and its toolkit in one
-      // turn — additively (score 0), beyond topKTools, deduped against query hits.
+      // A matched skill's instructions may reference other skills. Expand those
+      // declared deps into the skills bucket, breadth-first from the query hits,
+      // one level per depth — additively (score 0), beyond topKSkills, deduped
+      // against query hits and each other (cycles terminate), unknown ids skipped.
+      if (skillCatalog && depth > 0) {
+        const seenSkills = new Set(skills.map((s) => s.skillId));
+        let frontier = skills.map((s) => s.skillId);
+        for (let level = 0; level < depth && frontier.length > 0; level++) {
+          const next: string[] = [];
+          for (const id of frontier) {
+            for (const depId of skillCatalog.get(id)?.skills ?? []) {
+              if (seenSkills.has(depId)) continue;
+              const dep = skillCatalog.get(depId);
+              if (!dep) continue; // a declared id the catalog doesn't have: skip
+              seenSkills.add(depId);
+              skills.push({
+                skillId: depId,
+                score: 0,
+                description: compactDescription(dep.description ?? ""),
+              });
+              next.push(depId);
+            }
+          }
+          frontier = next;
+        }
+      }
+
+      // A surfaced skill's instructions name the tools they call. Pull those into
+      // the tools bucket — for query-matched skills and dep-expanded ones alike —
+      // so the agent gets the playbook and its toolkit in one turn: additively
+      // (score 0), beyond topKTools, deduped against query hits.
       if (skillCatalog) {
         for (const s of skills) {
           for (const toolId of skillCatalog.get(s.skillId)?.tools ?? []) {

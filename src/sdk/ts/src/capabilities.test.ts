@@ -200,6 +200,166 @@ describe("searchCapabilitiesTool", () => {
   });
 });
 
+describe("searchCapabilitiesTool skill-dependency expansion (maxDepth)", () => {
+  // Depended-on by the vercel skill below; its description shares no terms with
+  // the "deploy to vercel" query, so it can only enter the results as a dep.
+  const deckOutlining: Skill = {
+    id: "deck-outlining",
+    name: "deck-outlining",
+    description: "Outline the narrative structure of a slide deck.",
+    tags: ["outlining"],
+    tools: ["fs__read_file"],
+    body: "# Deck Outlining",
+  };
+  const deployWithSkillDep: Skill = { ...vercelSkill, skills: ["deck-outlining"] };
+
+  /** Chain head → l1 → l2 → l3 → l4; only the head matches "deploy to vercel". */
+  function chainCatalog(): SkillCatalog {
+    const link = (id: string, dep?: string): Skill => ({
+      id,
+      name: id,
+      description: `Unrelated playbook ${id.replace(/-/g, " ")}.`,
+      tags: [],
+      ...(dep ? { skills: [dep] } : {}),
+      body: `# ${id}`,
+    });
+    return skillCatalogWith(
+      { ...vercelSkill, skills: ["chain-l1"] },
+      link("chain-l1", "chain-l2"),
+      link("chain-l2", "chain-l3"),
+      link("chain-l3", "chain-l4"),
+      link("chain-l4"),
+    );
+  }
+
+  it("does not expand deps by default or at an explicit maxDepth: 0", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = searchCapabilitiesTool(tools, skillCatalogWith(deployWithSkillDep, deckOutlining));
+    for (const input of [
+      { query: "deploy to vercel" },
+      { query: "deploy to vercel", maxDepth: 0 },
+    ]) {
+      const result = (await tool.execute(input)) as SearchCapabilitiesResult;
+      expect(result.skills.map((s) => s.skillId)).toEqual(["vercel-deploy"]);
+      // the dep skill stayed out, so its declared tool must not ride in either
+      const toolIds = result.tools.groups.flatMap((g) => g.hits.map((h) => h.toolId));
+      expect(toolIds).not.toContain("fs__read_file");
+    }
+  });
+
+  it("maxDepth: 1 appends the dep skill at score 0, beyond the topKSkills budget", async () => {
+    const tool = searchCapabilitiesTool(
+      new ToolCatalog(),
+      skillCatalogWith(deployWithSkillDep, deckOutlining),
+    );
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      topKSkills: 1,
+      maxDepth: 1,
+    })) as SearchCapabilitiesResult;
+    // budget of 1 holds the query hit; the dep rides in additively beyond it
+    expect(result.skills.map((s) => s.skillId)).toEqual(["vercel-deploy", "deck-outlining"]);
+    expect(result.skills[1].score).toBe(0);
+    expect(result.skills[1].description).toContain("narrative structure");
+  });
+
+  it("maxDepth: 1 pulls the dep skill's declared tools into the tools bucket at score 0", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    const tool = searchCapabilitiesTool(tools, skillCatalogWith(deployWithSkillDep, deckOutlining));
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      maxDepth: 1,
+    })) as SearchCapabilitiesResult;
+    const hit = result.tools.groups
+      .flatMap((g) => g.hits)
+      .find((h) => h.toolId === "fs__read_file");
+    expect(hit, "dep skill's declared tool rode in").toBeTruthy();
+    expect(hit?.score).toBe(0);
+  });
+
+  it("expands transitively level by level: depth 1 stops at the direct dep, depth 2 reaches its dep", async () => {
+    const tool = searchCapabilitiesTool(new ToolCatalog(), chainCatalog());
+    const depth1 = (await tool.execute({
+      query: "deploy to vercel",
+      maxDepth: 1,
+    })) as SearchCapabilitiesResult;
+    expect(depth1.skills.map((s) => s.skillId)).toEqual(["vercel-deploy", "chain-l1"]);
+    const depth2 = (await tool.execute({
+      query: "deploy to vercel",
+      maxDepth: 2,
+    })) as SearchCapabilitiesResult;
+    expect(depth2.skills.map((s) => s.skillId)).toEqual(["vercel-deploy", "chain-l1", "chain-l2"]);
+  });
+
+  it("terminates on a dependency cycle, listing each skill once", async () => {
+    const a: Skill = { ...vercelSkill, skills: ["cycle-b"] };
+    const b: Skill = {
+      id: "cycle-b",
+      name: "cycle-b",
+      description: "Unrelated playbook that references its parent skill.",
+      tags: [],
+      skills: ["vercel-deploy"],
+      body: "# Cycle B",
+    };
+    const tool = searchCapabilitiesTool(new ToolCatalog(), skillCatalogWith(a, b));
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      maxDepth: 3,
+    })) as SearchCapabilitiesResult;
+    expect(result.skills.map((s) => s.skillId)).toEqual(["vercel-deploy", "cycle-b"]);
+  });
+
+  it("silently skips a declared dep id the catalog doesn't have", async () => {
+    const tool = searchCapabilitiesTool(
+      new ToolCatalog(),
+      skillCatalogWith({ ...vercelSkill, skills: ["ghost-skill"] }),
+    );
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      maxDepth: 1,
+    })) as SearchCapabilitiesResult;
+    expect(result.skills.map((s) => s.skillId)).toEqual(["vercel-deploy"]);
+  });
+
+  it("keeps the query score when a dep is also a query hit, without duplicating it", async () => {
+    const rollback: Skill = {
+      id: "vercel-rollback",
+      name: "vercel-rollback",
+      description: "Roll back a bad Vercel deployment to the previous build.",
+      tags: ["vercel"],
+      body: "# Vercel Rollback",
+    };
+    const tool = searchCapabilitiesTool(
+      new ToolCatalog(),
+      skillCatalogWith({ ...vercelSkill, skills: ["vercel-rollback"] }, rollback),
+    );
+    const result = (await tool.execute({
+      query: "deploy to vercel",
+      maxDepth: 1,
+    })) as SearchCapabilitiesResult;
+    const rollbackHits = result.skills.filter((s) => s.skillId === "vercel-rollback");
+    expect(rollbackHits).toHaveLength(1);
+    expect(rollbackHits[0].score).toBeGreaterThan(0);
+  });
+
+  it("clamps maxDepth: negative/fractional fall back to 0, huge values cap at 3", async () => {
+    const tool = searchCapabilitiesTool(new ToolCatalog(), chainCatalog());
+    const ids = async (maxDepth: number): Promise<string[]> => {
+      const r = (await tool.execute({
+        query: "deploy to vercel",
+        maxDepth,
+      })) as SearchCapabilitiesResult;
+      return r.skills.map((s) => s.skillId);
+    };
+    expect(await ids(-1)).toEqual(["vercel-deploy"]);
+    expect(await ids(1.5)).toEqual(["vercel-deploy"]);
+    // 99 clamps to the cap of 3: chain-l4 sits at depth 4 and stays out
+    expect(await ids(99)).toEqual(["vercel-deploy", "chain-l1", "chain-l2", "chain-l3"]);
+  });
+});
+
 describe("invokeToolTool", () => {
   it("uses the canonical id and invokes by nested args", async () => {
     const tools = new ToolCatalog();

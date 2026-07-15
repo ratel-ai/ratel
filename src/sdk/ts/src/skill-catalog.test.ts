@@ -64,6 +64,19 @@ describe("SkillCatalog", () => {
     expect(catalog.invoke("min")).toBe(""); // missing body resolves to "", never undefined
     expect(catalog.search("minimal", 5)[0]?.skillId).toBe("min");
   });
+
+  it("round-trips declared tool and skill deps through register/get", () => {
+    const catalog = new SkillCatalog();
+    catalog.register({
+      ...apiDesign,
+      tools: ["http__request"],
+      skills: ["deck-outlining"],
+    });
+
+    const skill = catalog.get("api-design");
+    expect(skill?.tools).toEqual(["http__request"]);
+    expect(skill?.skills).toEqual(["deck-outlining"]);
+  });
 });
 
 describe("SkillCatalog tracing", () => {

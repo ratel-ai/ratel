@@ -53,6 +53,63 @@ describe("getSkillContentTool", () => {
     expect(schema.properties).toHaveProperty("error");
   });
 
+  it("lists declared skill deps with id and compacted description", async () => {
+    const outline: Skill = {
+      id: "deck-outlining",
+      name: "deck-outlining",
+      description: "Outline the narrative structure of a slide deck.",
+      body: "# Deck Outlining",
+    };
+    const withDeps: Skill = { ...apiDesign, skills: ["deck-outlining"] };
+    const tool = getSkillContentTool(catalogWith(withDeps, outline));
+    const result = (await tool.execute({ skillId: "api-design" })) as {
+      body: string;
+      skills?: Array<{ skillId: string; description: string }>;
+    };
+    expect(result.body).toContain("Use nouns for resources");
+    expect(result.skills).toEqual([
+      {
+        skillId: "deck-outlining",
+        description: "Outline the narrative structure of a slide deck.",
+      },
+    ]);
+  });
+
+  it("omits the skills listing when the skill declares no deps", async () => {
+    const tool = getSkillContentTool(catalogWith(apiDesign));
+    const result = (await tool.execute({ skillId: "api-design" })) as Record<string, unknown>;
+    expect(result).not.toHaveProperty("skills");
+  });
+
+  it("skips declared dep ids the catalog doesn't have, omitting the listing if none remain", async () => {
+    const outline: Skill = {
+      id: "deck-outlining",
+      name: "deck-outlining",
+      description: "Outline the narrative structure of a slide deck.",
+      body: "# Deck Outlining",
+    };
+    const mixed: Skill = { ...apiDesign, skills: ["ghost-skill", "deck-outlining"] };
+    const tool = getSkillContentTool(catalogWith(mixed, outline));
+    const result = (await tool.execute({ skillId: "api-design" })) as {
+      skills?: Array<{ skillId: string }>;
+    };
+    expect(result.skills?.map((s) => s.skillId)).toEqual(["deck-outlining"]);
+
+    const allUnknown: Skill = { ...apiDesign, skills: ["ghost-skill"] };
+    const tool2 = getSkillContentTool(catalogWith(allUnknown));
+    const result2 = (await tool2.execute({ skillId: "api-design" })) as Record<string, unknown>;
+    expect(result2).not.toHaveProperty("skills");
+  });
+
+  it("declares skills in the output schema without requiring it", () => {
+    const schema = getSkillContentTool(new SkillCatalog()).outputSchema as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+    expect(schema.properties).toHaveProperty("skills");
+    expect(schema.required ?? []).not.toContain("skills");
+  });
+
   it("emits gateway_error with unknown_skill_id for an unknown id", async () => {
     const catalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
     const tool = getSkillContentTool(catalog);

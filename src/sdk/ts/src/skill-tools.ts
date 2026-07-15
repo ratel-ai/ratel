@@ -1,4 +1,5 @@
 import type { ExecutableTool } from "./catalog.js";
+import { compactDescription } from "./compact.js";
 import type { SkillCatalog } from "./skill-catalog.js";
 
 /**
@@ -15,9 +16,12 @@ export const GET_SKILL_CONTENT_ID = "get_skill_content" as const;
  *
  * The tool takes `{ skillId }` and resolves to `{ body }` (the skill's
  * Markdown) on success, or `{ error, isError: true }` for an unknown id — a
- * structured result rather than a rejection, so the model can recover. Each
- * load records a `ratel.skill.load` span plus a `skill_invoke` trace event
- * (unknown ids record `gateway_error`).
+ * structured result rather than a rejection, so the model can recover. When
+ * the skill declares dependencies on other skills, the result also carries
+ * `skills` — `[{ skillId, description }]` for the declared ids the catalog
+ * knows, so the agent can recall them without another search; it is omitted
+ * when there are none. Each load records a `ratel.skill.load` span plus a
+ * `skill_invoke` trace event (unknown ids record `gateway_error`).
  *
  * @param catalog - Catalog whose skills this serves.
  * @returns The tool, ready to expose to the model.
@@ -30,7 +34,8 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
       "Load a skill's full instructions by its id. Use this after search_capabilities surfaces a " +
       "relevant skill: pull the complete playbook into your context, then follow it. " +
       "Returns the skill body (Markdown); any bundled scripts or files are referenced by absolute " +
-      "path inside it.",
+      "path inside it. When the skill depends on other skills, a `skills` listing names them so " +
+      "you can load them the same way.",
     inputSchema: {
       type: "object",
       properties: {
@@ -50,6 +55,17 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
       type: "object",
       properties: {
         body: { type: "string" },
+        skills: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              skillId: { type: "string" },
+              description: { type: "string" },
+            },
+            required: ["skillId", "description"],
+          },
+        },
         error: { type: "string" },
         isError: { type: "boolean" },
       },
@@ -68,7 +84,15 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
         };
       }
       const body = catalog.invoke(skillId);
-      return { body };
+      // Surface the skill's declared skill deps (known ids only) so the agent
+      // can recall them with another get_skill_content call, no search needed.
+      const deps = (catalog.get(skillId)?.skills ?? []).flatMap((depId) => {
+        const dep = catalog.get(depId);
+        return dep
+          ? [{ skillId: depId, description: compactDescription(dep.description ?? "") }]
+          : [];
+      });
+      return deps.length > 0 ? { body, skills: deps } : { body };
     },
   };
 }
