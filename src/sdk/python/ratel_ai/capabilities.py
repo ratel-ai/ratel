@@ -28,6 +28,7 @@ INVOKE_TOOL_ID = "invoke_tool"
 _DEFAULT_TOP_K_TOOLS = 5
 _DEFAULT_TOP_K_SKILLS = 3
 _MAX_TOP_K = 50
+_MAX_DEPTH = 3
 
 
 def _clamp_top_k(value: Any, fallback: int) -> int:
@@ -40,6 +41,19 @@ def _clamp_top_k(value: Any, fallback: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         return fallback
     return min(value, _MAX_TOP_K)
+
+
+def _clamp_depth(value: Any) -> int:
+    """Clamp a model-supplied maxDepth to an int in [0, _MAX_DEPTH].
+
+    Falls back to `0` — no dependency expansion — for anything else (None,
+    negative, bool, float). Mirrors the TS SDK's `clampDepth` so the two SDKs
+    treat the same input the same way (`bool` is excluded even though it
+    subclasses `int`).
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return 0
+    return min(value, _MAX_DEPTH)
 
 
 # The discovery prompt shown to the model. The skills clause is only included
@@ -146,11 +160,15 @@ def search_capabilities_tool(
     The returned tool ranks two independent buckets, each with its own top-K
     budget — so a relevant skill is never starved out of the results by a large
     number of matching tools (and the two BM25 corpora are never
-    score-compared). Tools land grouped by upstream server; a matched skill's
-    declared tools are pulled into the tools bucket additively (score 0), so
-    the agent gets the playbook and its toolkit in one turn. The `skills`
-    bucket (and the mention of `get_skill_content` in the description) is only
-    advertised when a non-empty `skill_catalog` is wired in.
+    score-compared). Tools land grouped by upstream server. `maxDepth`
+    (default 0, capped at 3) expands the declared skill dependencies of
+    query-matched skills into the skills bucket, breadth-first — score 0,
+    beyond the `topKSkills` budget, deduped against query hits, unknown ids
+    skipped. A surfaced skill's declared tools — query-matched or dep-expanded
+    — are pulled into the tools bucket additively (score 0), so the agent gets
+    the playbook and its toolkit in one turn. The `skills` bucket (and the
+    mention of `get_skill_content` in the description) is only advertised when
+    a non-empty `skill_catalog` is wired in.
 
     Args:
         catalog: the tool catalog to search.
@@ -170,6 +188,7 @@ def search_capabilities_tool(
         query = input["query"]
         k_tools = _clamp_top_k(input.get("topKTools"), _DEFAULT_TOP_K_TOOLS)
         k_skills = _clamp_top_k(input.get("topKSkills"), _DEFAULT_TOP_K_SKILLS)
+        depth = _clamp_depth(input.get("maxDepth"))
         started_at = time.monotonic()
         tool_hits = catalog.search(query, k_tools, "agent")
         catalog.record_event(
@@ -235,9 +254,61 @@ def search_capabilities_tool(
                     }
                 )
 
-            # A matched skill's instructions name the tools they call. Pull those
-            # into the tools bucket so the agent gets the playbook and its toolkit
-            # in one turn — additively (score 0), beyond topKTools, deduped.
+            # A matched skill's instructions may reference other skills. Expand
+            # those declared deps into the skills bucket, breadth-first from the
+            # query hits, one level per depth — additively (score 0), beyond
+            # topKSkills, deduped against query hits and each other (cycles
+            # terminate), unknown ids skipped.
+            if depth > 0:
+                expansion_start = time.monotonic()
+                dep_hits: list[dict[str, Any]] = []
+                seen_skills = {s["skillId"] for s in skills}
+                frontier = [s["skillId"] for s in skills]
+                for _level in range(depth):
+                    if not frontier:
+                        break
+                    next_frontier: list[str] = []
+                    for skill_id in frontier:
+                        sk = skill_catalog.get(skill_id)
+                        for dep_id in sk.skills if sk else []:
+                            if dep_id in seen_skills:
+                                continue
+                            dep = skill_catalog.get(dep_id)
+                            if dep is None:  # a declared id the catalog doesn't have: skip
+                                continue
+                            seen_skills.add(dep_id)
+                            hit = {
+                                "skillId": dep_id,
+                                "score": 0,
+                                "description": _compact_description(dep.description),
+                            }
+                            skills.append(hit)
+                            dep_hits.append(hit)
+                            next_frontier.append(dep_id)
+                    frontier = next_frontier
+                # Record the expansion as its own skill_search: the deps as hits
+                # at score 0, dep_count >= 1. The registry's event for the query
+                # itself always carries dep_count 0, so the two are distinguishable.
+                if dep_hits:
+                    skill_catalog.record_event(
+                        {
+                            "type": "skill_search",
+                            "query": query,
+                            "origin": "agent",
+                            "top_k": k_skills,
+                            "hits": [
+                                {"skill_id": h["skillId"], "score": h["score"]} for h in dep_hits
+                            ],
+                            "stages": [],
+                            "took_ms": int((time.monotonic() - expansion_start) * 1000),
+                            "dep_count": len(dep_hits),
+                        }
+                    )
+
+            # A surfaced skill's instructions name the tools they call. Pull those
+            # into the tools bucket — for query-matched skills and dep-expanded
+            # ones alike — so the agent gets the playbook and its toolkit in one
+            # turn: additively (score 0), beyond topKTools, deduped.
             for s in skills:
                 sk = skill_catalog.get(s["skillId"])
                 for tool_id in sk.tools if sk else []:
@@ -262,6 +333,14 @@ def search_capabilities_tool(
                     "type": "integer",
                     "minimum": 1,
                     "description": "max skills to return (default 3)",
+                },
+                "maxDepth": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": (
+                        "dependency levels to expand into the skills bucket "
+                        "(default 0: no expansion, max 3)"
+                    ),
                 },
             },
             "required": ["query"],

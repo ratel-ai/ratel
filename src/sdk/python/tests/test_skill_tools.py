@@ -47,3 +47,61 @@ def test_output_schema_accepts_error_shape_not_just_body() -> None:
     assert "body" not in schema.get("required", [])
     assert "body" in schema["properties"]
     assert "error" in schema["properties"]
+
+
+def _deck_outlining() -> Skill:
+    return Skill(
+        id="deck-outlining",
+        name="deck-outlining",
+        description="Outline the narrative structure of a slide deck.",
+        body="# Deck Outlining",
+    )
+
+
+def _api_design(**overrides) -> Skill:
+    fields = {
+        "id": "api-design",
+        "name": "api-design",
+        "description": "REST API design patterns.",
+        "body": "# API\n\nUse nouns.",
+        **overrides,
+    }
+    return Skill(**fields)
+
+
+async def test_lists_declared_skill_deps_with_id_and_compacted_description() -> None:
+    tool = get_skill_content_tool(
+        _catalog(_api_design(skills=["deck-outlining"]), _deck_outlining())
+    )
+    result = await tool.execute({"skillId": "api-design"})
+    assert "Use nouns" in result["body"]
+    assert result["skills"] == [
+        {
+            "skillId": "deck-outlining",
+            "description": "Outline the narrative structure of a slide deck.",
+        }
+    ]
+
+
+async def test_omits_skills_listing_when_no_deps() -> None:
+    tool = get_skill_content_tool(_catalog(_api_design()))
+    result = await tool.execute({"skillId": "api-design"})
+    assert "skills" not in result
+
+
+async def test_skips_unknown_dep_ids_omitting_listing_if_none_remain() -> None:
+    tool = get_skill_content_tool(
+        _catalog(_api_design(skills=["ghost-skill", "deck-outlining"]), _deck_outlining())
+    )
+    result = await tool.execute({"skillId": "api-design"})
+    assert [s["skillId"] for s in result["skills"]] == ["deck-outlining"]
+
+    all_unknown = get_skill_content_tool(_catalog(_api_design(skills=["ghost-skill"])))
+    result2 = await all_unknown.execute({"skillId": "api-design"})
+    assert "skills" not in result2
+
+
+def test_output_schema_declares_skills_without_requiring_it() -> None:
+    schema = get_skill_content_tool(SkillCatalog()).output_schema
+    assert "skills" in schema["properties"]
+    assert "skills" not in schema.get("required", [])

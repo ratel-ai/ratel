@@ -15,9 +15,11 @@ exactly one runner fail:
 - `fixtures/skills.json` — the shared skill catalog (the on-demand analogue).
 - `scenario.json` — the assertions (the source of truth): per-query top-1 ranking for
   tools and skills, direct invoke, the unified `search_capabilities` (tools + skills),
-  `invoke_tool`, `get_skill_content`, the deprecated tools-only `search_tools` compatibility
-  shim, and skill→tool cross-pollination (a matched skill's declared `tools` ride into the
-  tools bucket at score 0).
+  `invoke_tool`, `get_skill_content` (body + declared skill-deps listing), the deprecated
+  tools-only `search_tools` compatibility shim, skill→tool cross-pollination (a matched
+  skill's declared `tools` ride into the tools bucket at score 0), and skill-dependency
+  expansion (a matched skill's declared `skills` enter the skills bucket at score 0 at
+  `maxDepth: 1`, and stay out at the default `maxDepth` 0).
 
 | Runner | Package under test | Surface exercised |
 |--------|--------------------|-------------------|
@@ -64,9 +66,11 @@ When you add product surface (new tools, new skills, a new SDK method):
 
 1. Add the tool(s) to `fixtures/catalog.json`, or the skill(s) to `fixtures/skills.json`
    (give each a distinctive description; most skills set only `id`/`name`/`description`/`body`,
-   while `deploy-web-service` also declares a `tools` dependency for the cross-pollination case.
-   The TS and Python `Skill` types are in parity, so `tags`/`tools`/`metadata` work identically
-   on both).
+   while `deploy-web-service` also declares a `tools` dependency for the cross-pollination case
+   and a `skills` dependency for the dep-expansion case. The TS and Python `Skill` types are in
+   parity, so `tags`/`tools`/`skills`/`metadata` work identically on both. Mind the dep-expansion
+   assertions: the dep skill (`debug-flaky-tests`) must share no indexed terms with the
+   "deploy the web service to production" query, or the default-absent / score-0 checks break).
 2. Add a query with an unambiguous expected top-1 to `scenario.json` — `searches` for tools,
    `skillSearches` for skills (write the description so the query's terms clearly match it;
    assertions check top-1 / membership, not full ordering, to stay robust to score ties).

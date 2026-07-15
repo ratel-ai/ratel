@@ -50,6 +50,8 @@ projection the catalog contract syncs, [ADR-0003](0003-catalog-source-interface.
 - **`tags`**: indexed. Author labels and task phrases ("frontend", "login form") folded into
   the BM25 text so a terse intent prompt matches.
 - **`tools`**: a typed dependency edge, not indexed; surfaced additively in the tools bucket.
+  [ADR-0012](0012-skill-dependencies.md) adds the parallel `skills` edge (skill → skill),
+  expanded on request via `maxDepth`.
 - **`metadata`** (`map<string, string[]>`): free-form, not indexed; context for higher layers
   (e.g. `{"stacks": ["react"]}` for the push-path ranker).
 

@@ -59,6 +59,9 @@ pub const RATEL_SEARCH_TARGET: &str = "ratel.search.target";
 pub const RATEL_SEARCH_TOP_K: &str = "ratel.search.top_k";
 /// `ratel.search.hit_count` — results returned.
 pub const RATEL_SEARCH_HIT_COUNT: &str = "ratel.search.hit_count";
+/// `ratel.search.dep_count` — skills pulled in via dependency expansion
+/// (`maxDepth`), beyond the ranked hits; `hit_count` stays query-matched only.
+pub const RATEL_SEARCH_DEP_COUNT: &str = "ratel.search.dep_count";
 /// `ratel.search.query` — the search text (content, gated like message content).
 pub const RATEL_SEARCH_QUERY: &str = "ratel.search.query";
 /// `ratel.tool.args_size_bytes` — argument payload size on the `execute_tool` span.
@@ -193,6 +196,7 @@ mod tests {
         assert_eq!(RATEL_SEARCH_TARGET, "ratel.search.target");
         assert_eq!(RATEL_SEARCH_TOP_K, "ratel.search.top_k");
         assert_eq!(RATEL_SEARCH_HIT_COUNT, "ratel.search.hit_count");
+        assert_eq!(RATEL_SEARCH_DEP_COUNT, "ratel.search.dep_count");
         assert_eq!(RATEL_SEARCH_QUERY, "ratel.search.query");
         assert_eq!(RATEL_TOOL_ARGS_SIZE_BYTES, "ratel.tool.args_size_bytes");
         assert_eq!(RATEL_UPSTREAM_SERVER, "ratel.upstream.server");
@@ -273,6 +277,7 @@ mod tests {
             RATEL_SEARCH_TARGET,
             RATEL_SEARCH_TOP_K,
             RATEL_SEARCH_HIT_COUNT,
+            RATEL_SEARCH_DEP_COUNT,
             RATEL_SEARCH_QUERY,
             RATEL_TOOL_ARGS_SIZE_BYTES,
             RATEL_UPSTREAM_SERVER,
@@ -294,6 +299,7 @@ mod tests {
             RATEL_SEARCH_TARGET,
             RATEL_SEARCH_TOP_K,
             RATEL_SEARCH_HIT_COUNT,
+            RATEL_SEARCH_DEP_COUNT,
             RATEL_SEARCH_QUERY,
             RATEL_TOOL_ARGS_SIZE_BYTES,
             RATEL_UPSTREAM_SERVER,

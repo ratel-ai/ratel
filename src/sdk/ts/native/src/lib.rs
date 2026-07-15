@@ -265,6 +265,9 @@ pub struct Skill {
     /// Ids of tools this skill's instructions call; surfaced into the
     /// `search_capabilities` tools bucket — not indexed as query terms.
     pub tools: Option<Vec<String>>,
+    /// Ids of skills this skill's instructions reference — a dependency edge
+    /// for higher layers, not indexed as query terms.
+    pub skills: Option<Vec<String>>,
     /// Free-form, non-indexed context for higher layers — e.g.
     /// `{ stacks: ["react"] }` for the push ranker to boost by project context.
     pub metadata: Option<HashMap<String, Vec<String>>>,
@@ -318,6 +321,7 @@ impl SkillRegistry {
             description: skill.description,
             tags: skill.tags.unwrap_or_default(),
             tools: skill.tools.unwrap_or_default(),
+            skills: skill.skills.unwrap_or_default(),
             metadata: skill.metadata.unwrap_or_default(),
             body: skill.body.unwrap_or_default(),
         });

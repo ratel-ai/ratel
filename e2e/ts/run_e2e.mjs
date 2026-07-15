@@ -15,6 +15,7 @@
  *   6. getSkillContentTool      — load a skill body by id (+ unknown-id error path)
  *   7. searchCapabilitiesTool   — unified capability search over tools AND skills (two buckets)
  *   8. searchCapabilitiesTool   — skill->tool cross-pollination (declared tools, score 0)
+ *   9. searchCapabilitiesTool   — skill-dependency expansion (declared skills, score 0 at maxDepth 1, absent at default)
  *
  * Exits non-zero on any mismatch. The same assertions run from the Python runner, so
  * a cross-SDK divergence makes exactly one side fail.
@@ -74,6 +75,7 @@ function buildSkillCatalog() {
       description: skill.description,
       tags: skill.tags ?? [],
       tools: skill.tools ?? [],
+      skills: skill.skills ?? [],
       metadata: skill.metadata ?? {},
       body: skill.body ?? "",
     });
@@ -149,7 +151,13 @@ async function main() {
   const scOut = await getSkill.execute({ skillId: sc.skillId });
   const wantBody = skillsById.get(sc.skillId).body;
   if (scOut.body !== wantBody) fail(`get_skill_content body for ${sc.skillId} was ${JSON.stringify(scOut.body)}, expected ${JSON.stringify(wantBody)}`);
-  console.log(`  get_skill_content OK: ${sc.skillId} -> ${wantBody.length} bytes`);
+  const wantDeps = sc.expectDepSkillIds ?? [];
+  const gotDeps = (scOut.skills ?? []).map((d) => d.skillId);
+  if (!deepEqual(gotDeps, wantDeps)) fail(`get_skill_content deps for ${sc.skillId} were ${gotDeps}, expected ${wantDeps}`);
+  for (const d of scOut.skills ?? []) {
+    if (!d.description) fail(`get_skill_content dep ${d.skillId} has no description`);
+  }
+  console.log(`  get_skill_content OK: ${sc.skillId} -> ${wantBody.length} bytes, deps=[${gotDeps}]`);
 
   const unk = SCENARIO.skillContentUnknown;
   const unkOut = await getSkill.execute({ skillId: unk.skillId });
@@ -183,7 +191,27 @@ async function main() {
   }
   console.log(`  cross-pollination OK: ${xp.expectSkillId} -> pulled in ${wantTool} (score 0)`);
 
-  console.log(`PASS (ts): ${nTools} tools, ${SCENARIO.searches.length} search cases, ${nSkills} skills, ${SCENARIO.skillSearches.length} skill-search cases, capability search + cross-pollination OK`);
+  // 9. searchCapabilities — skill-dependency expansion. A matched skill's declared
+  //    skills ride into the skills bucket at score 0 when maxDepth >= 1, and stay
+  //    out on the same call without maxDepth (default 0 keeps today's behavior).
+  //    The dep shares no terms with the query, so presence + score 0 proves it
+  //    arrived via the dependency edge, not a BM25 match.
+  const dx = SCENARIO.capabilitiesDepExpansion;
+  const dxDefault = await searchCaps.execute({ query: dx.query, topKTools: dx.topKTools, topKSkills: dx.topKSkills });
+  const dxDefaultIds = (dxDefault.skills ?? []).map((s) => s.skillId);
+  if (dxDefaultIds.includes(dx.expectDepSkillId)) {
+    fail(`dep expansion: ${dx.expectDepSkillId} present without maxDepth; default must not expand (got ${dxDefaultIds})`);
+  }
+  const dxOut = await searchCaps.execute({ query: dx.query, topKTools: dx.topKTools, topKSkills: dx.topKSkills, maxDepth: 1 });
+  const dxHits = new Map((dxOut.skills ?? []).map((s) => [s.skillId, s]));
+  if (!dxHits.has(dx.expectSkillId)) fail(`dep expansion: skills bucket missing ${dx.expectSkillId}; got ${[...dxHits.keys()]}`);
+  if (!dxHits.has(dx.expectDepSkillId)) fail(`dep expansion: skills bucket missing dep ${dx.expectDepSkillId}; got ${[...dxHits.keys()]}`);
+  if (dxHits.get(dx.expectDepSkillId).score !== 0) {
+    fail(`dep expansion: ${dx.expectDepSkillId} score was ${dxHits.get(dx.expectDepSkillId).score}, expected 0 (non-zero means it matched the query directly, not via the dependency edge)`);
+  }
+  console.log(`  dep expansion OK: ${dx.expectSkillId} -> pulled in ${dx.expectDepSkillId} (score 0, maxDepth 1 only)`);
+
+  console.log(`PASS (ts): ${nTools} tools, ${SCENARIO.searches.length} search cases, ${nSkills} skills, ${SCENARIO.skillSearches.length} skill-search cases, capability search + cross-pollination + dep expansion OK`);
 }
 
 main().catch((err) => {

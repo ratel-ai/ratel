@@ -31,6 +31,9 @@ class Skill:
     # Ids of tools this skill's instructions call; surfaced into the
     # search_capabilities tools bucket — not indexed as query terms.
     tools: list[str] = field(default_factory=list)
+    # Ids of skills this skill's instructions reference — a dependency edge for
+    # higher layers, not indexed as query terms.
+    skills: list[str] = field(default_factory=list)
     # Free-form, non-indexed context for higher layers — e.g.
     # {"stacks": ["react"]} for the push ranker to boost by project context.
     metadata: dict[str, list[str]] = field(default_factory=dict)
@@ -65,7 +68,8 @@ class SkillCatalog:
 
         Registering an id that is already present replaces it in place — the
         index never holds a duplicate. Name, description and tags are indexed
-        for ranking; `tools`, `metadata` and `body` are stored but not indexed.
+        for ranking; `tools`, `skills`, `metadata` and `body` are stored but
+        not indexed.
 
         Args:
             skill: the skill to register.
@@ -75,13 +79,14 @@ class SkillCatalog:
                 fails to load while eagerly embedding the new skill.
         """
         self._registry.register(
-            skill.id,
-            skill.name,
-            skill.description,
-            skill.tags,
-            skill.tools,
-            skill.metadata,
-            skill.body,
+            id=skill.id,
+            name=skill.name,
+            description=skill.description,
+            tags=skill.tags,
+            tools=skill.tools,
+            skills=skill.skills,
+            metadata=skill.metadata,
+            body=skill.body,
         )
         self._skills[skill.id] = skill
         if self._eager:

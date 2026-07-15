@@ -1,5 +1,5 @@
 {
-  "$comment": "Single source of truth for the cross-SDK E2E. Every runner (Python, TS) loads e2e/fixtures/catalog.json + e2e/fixtures/skills.json, registers all tools and skills, and asserts the behavior below. Because the Python and TS SDKs wrap the same Rust BM25 core, identical assertions here enforce cross-SDK parity: a divergence makes exactly one runner fail. Queries are written so each has an unambiguous top-1 match; assertions intentionally check top-1 / membership (not full ordering) to stay robust to score ties while still catching real regressions, packaging breaks, and binding-load failures. The skill* / capabilities blocks cover the skills surface added in 0.2.0: SkillCatalog ranking, get_skill_content, the unified search_capabilities surface, and the skill->tool cross-pollination (a matched skill's declared `tools` are pulled into the tools bucket at score 0, even when the query doesn't match them).",
+  "$comment": "Single source of truth for the cross-SDK E2E. Every runner (Python, TS) loads e2e/fixtures/catalog.json + e2e/fixtures/skills.json, registers all tools and skills, and asserts the behavior below. Because the Python and TS SDKs wrap the same Rust BM25 core, identical assertions here enforce cross-SDK parity: a divergence makes exactly one runner fail. Queries are written so each has an unambiguous top-1 match; assertions intentionally check top-1 / membership (not full ordering) to stay robust to score ties while still catching real regressions, packaging breaks, and binding-load failures. The skill* / capabilities blocks cover the skills surface added in 0.2.0: SkillCatalog ranking, get_skill_content (body + declared skill-deps listing), the unified search_capabilities surface, the skill->tool cross-pollination (a matched skill's declared `tools` are pulled into the tools bucket at score 0, even when the query doesn't match them), and skill-dependency expansion (a matched skill's declared `skills` enter the skills bucket at score 0 when maxDepth >= 1, and stay out at the default maxDepth 0).",
   "searches": [
     { "query": "read a file from local disk", "topK": 5, "expectTop1": "fs__read_file" },
     { "query": "list the entries of a directory", "topK": 5, "expectTop1": "fs__list_directory" },
@@ -27,7 +27,8 @@
     { "query": "onboard a newly hired engineer", "topK": 5, "expectTop1": "onboard-new-engineer" }
   ],
   "skillContent": {
-    "skillId": "deploy-web-service"
+    "skillId": "deploy-web-service",
+    "expectDepSkillIds": ["debug-flaky-tests"]
   },
   "skillContentUnknown": {
     "skillId": "no-such-skill"
@@ -46,5 +47,13 @@
     "topKSkills": 3,
     "expectSkillId": "deploy-web-service",
     "expectCrossPollinatedToolId": "github__merge_pull_request"
+  },
+  "capabilitiesDepExpansion": {
+    "$comment": "The matched skill (deploy-web-service) declares skills=[debug-flaky-tests]; the query shares no terms with that skill's description, so it can only enter the skills bucket via dependency expansion — asserted by its presence AND score 0 at maxDepth 1, and by its absence on the same call without maxDepth (default 0 keeps today's behavior).",
+    "query": "deploy the web service to production",
+    "topKTools": 5,
+    "topKSkills": 3,
+    "expectSkillId": "deploy-web-service",
+    "expectDepSkillId": "debug-flaky-tests"
   }
 }

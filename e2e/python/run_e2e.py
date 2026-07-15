@@ -13,6 +13,8 @@ surface through the PUBLIC API, and asserts behavior against e2e/scenario.json:
   6. get_skill_content_tool   — load a skill body by id (+ unknown-id error path)
   7. search_capabilities_tool — unified capability search over tools AND skills (two buckets)
   8. search_capabilities_tool — skill->tool cross-pollination (declared tools, score 0)
+  9. search_capabilities_tool — skill-dependency expansion (declared skills, score 0 at
+     maxDepth 1, absent at default)
 
 Exits non-zero on any mismatch. The same assertions run from the TS runner, so a
 cross-SDK divergence makes exactly one side fail.
@@ -77,6 +79,7 @@ def build_skill_catalog() -> SkillCatalog:
                 description=skill["description"],
                 tags=skill.get("tags", []),
                 tools=skill.get("tools", []),
+                skills=skill.get("skills", []),
                 metadata=skill.get("metadata", {}),
                 body=skill.get("body", ""),
             )
@@ -167,7 +170,14 @@ async def main() -> None:
     want_body = skills_by_id[sc["skillId"]]["body"]
     if sc_out.get("body") != want_body:
         fail(f"get_skill_content body for {sc['skillId']} was {sc_out.get('body')!r}, expected {want_body!r}")
-    print(f"  get_skill_content OK: {sc['skillId']} -> {len(want_body)} bytes")
+    want_deps = sc.get("expectDepSkillIds", [])
+    got_deps = [d["skillId"] for d in sc_out.get("skills", [])]
+    if got_deps != want_deps:
+        fail(f"get_skill_content deps for {sc['skillId']} were {got_deps}, expected {want_deps}")
+    for d in sc_out.get("skills", []):
+        if not d.get("description"):
+            fail(f"get_skill_content dep {d['skillId']} has no description")
+    print(f"  get_skill_content OK: {sc['skillId']} -> {len(want_body)} bytes, deps={got_deps}")
 
     unk = SCENARIO["skillContentUnknown"]
     unk_out = await get_skill.execute({"skillId": unk["skillId"]})
@@ -213,10 +223,52 @@ async def main() -> None:
         )
     print(f"  cross-pollination OK: {xp['expectSkillId']} -> pulled in {want_tool} (score 0)")
 
+    # 9. search_capabilities — skill-dependency expansion. A matched skill's declared
+    #    skills ride into the skills bucket at score 0 when maxDepth >= 1, and stay
+    #    out on the same call without maxDepth (default 0 keeps today's behavior).
+    #    The dep shares no terms with the query, so presence + score 0 proves it
+    #    arrived via the dependency edge, not a BM25 match.
+    dx = SCENARIO["capabilitiesDepExpansion"]
+    dx_default = await search_caps.execute(
+        {"query": dx["query"], "topKTools": dx["topKTools"], "topKSkills": dx["topKSkills"]}
+    )
+    dx_default_ids = [s["skillId"] for s in dx_default["skills"]]
+    if dx["expectDepSkillId"] in dx_default_ids:
+        fail(
+            f"dep expansion: {dx['expectDepSkillId']!r} present without maxDepth; "
+            f"default must not expand (got {dx_default_ids})"
+        )
+    dx_out = await search_caps.execute(
+        {
+            "query": dx["query"],
+            "topKTools": dx["topKTools"],
+            "topKSkills": dx["topKSkills"],
+            "maxDepth": 1,
+        }
+    )
+    dx_hits = {s["skillId"]: s for s in dx_out["skills"]}
+    if dx["expectSkillId"] not in dx_hits:
+        fail(f"dep expansion: skills bucket missing {dx['expectSkillId']!r}; got {list(dx_hits)}")
+    if dx["expectDepSkillId"] not in dx_hits:
+        fail(
+            f"dep expansion: skills bucket missing dep {dx['expectDepSkillId']!r}; "
+            f"got {list(dx_hits)}"
+        )
+    if dx_hits[dx["expectDepSkillId"]]["score"] != 0:
+        fail(
+            f"dep expansion: {dx['expectDepSkillId']!r} score was "
+            f"{dx_hits[dx['expectDepSkillId']]['score']!r}, expected 0 "
+            "(non-zero means it matched the query directly, not via the dependency edge)"
+        )
+    print(
+        f"  dep expansion OK: {dx['expectSkillId']} -> pulled in "
+        f"{dx['expectDepSkillId']} (score 0, maxDepth 1 only)"
+    )
+
     print(
         f"PASS (python): {n_tools} tools, {len(SCENARIO['searches'])} search cases, "
         f"{n_skills} skills, {len(SCENARIO['skillSearches'])} skill-search cases, "
-        "capability search + cross-pollination OK"
+        "capability search + cross-pollination + dep expansion OK"
     )
 
 

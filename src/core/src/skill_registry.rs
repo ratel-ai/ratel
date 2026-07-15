@@ -133,6 +133,7 @@ impl SkillRegistry {
     ///     description: "REST API design patterns: resource naming, pagination".into(),
     ///     tags: vec!["backend".into(), "api".into()],
     ///     tools: vec![],
+    ///     skills: vec![],
     ///     metadata: std::collections::HashMap::new(),
     ///     body: "# API design\n...".into(),
     /// });
@@ -339,6 +340,9 @@ impl SkillRegistry {
                 .collect(),
             stages,
             took_ms,
+            // The registry only ranks; dependency expansion happens a layer up
+            // (the SDK capability tools), which records its own event.
+            dep_count: 0,
         });
     }
 }
@@ -411,6 +415,7 @@ mod tests {
             description: description.into(),
             tags: tags.iter().map(|t| (*t).into()).collect(),
             tools: vec![],
+            skills: vec![],
             metadata: std::collections::HashMap::new(),
             body: format!("# {name}\n\nbody"),
         }

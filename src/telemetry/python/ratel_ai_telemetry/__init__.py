@@ -73,6 +73,10 @@ RATEL_SEARCH_TOP_K: Final = "ratel.search.top_k"
 #: ratel.search.hit_count — results returned.
 RATEL_SEARCH_HIT_COUNT: Final = "ratel.search.hit_count"
 
+#: ratel.search.dep_count — skills pulled in via dependency expansion
+#: (maxDepth), beyond the ranked hits; hit_count stays query-matched only.
+RATEL_SEARCH_DEP_COUNT: Final = "ratel.search.dep_count"
+
 #: ratel.search.query — the search text (content, gated like message content).
 RATEL_SEARCH_QUERY: Final = "ratel.search.query"
 
@@ -200,6 +204,7 @@ __all__ = [
     "RATEL_AUTH_OUTCOME",
     "RATEL_ORIGIN",
     "RATEL_SEARCH",
+    "RATEL_SEARCH_DEP_COUNT",
     "RATEL_SEARCH_HIT_COUNT",
     "RATEL_SEARCH_QUERY",
     "RATEL_SEARCH_RESULTS",

@@ -276,6 +276,222 @@ async def test_search_capabilities_clamps_non_positive_top_k() -> None:
     assert await count({"topKTools": 1}) == 1
 
 
+# ---- skill-dependency expansion (maxDepth) — mirrors the TS describe block ----
+
+
+def _skills(*items: Skill) -> SkillCatalog:
+    c = SkillCatalog()
+    for s in items:
+        c.register(s)
+    return c
+
+
+def _deck_outlining() -> Skill:
+    # Depended-on by the vercel skill below; its description shares no terms with
+    # the "deploy to vercel" query, so it can only enter the results as a dep.
+    return Skill(
+        id="deck-outlining",
+        name="deck-outlining",
+        description="Outline the narrative structure of a slide deck.",
+        tags=["outlining"],
+        tools=["fs__read_file"],
+    )
+
+
+def _vercel_deploy(**overrides) -> Skill:
+    fields = {
+        "id": "vercel-deploy",
+        "name": "vercel-deploy",
+        "description": "How to deploy to Vercel: env vars, preview vs production, rollbacks.",
+        "tags": ["vercel", "deployment"],
+        **overrides,
+    }
+    return Skill(**fields)
+
+
+def _chain_catalog() -> SkillCatalog:
+    """Chain head -> l1 -> l2 -> l3 -> l4; only the head matches "deploy to vercel"."""
+
+    def link(skill_id: str, dep: str | None = None) -> Skill:
+        return Skill(
+            id=skill_id,
+            name=skill_id,
+            description=f"Unrelated playbook {skill_id.replace('-', ' ')}.",
+            skills=[dep] if dep else [],
+        )
+
+    return _skills(
+        _vercel_deploy(skills=["chain-l1"]),
+        link("chain-l1", "chain-l2"),
+        link("chain-l2", "chain-l3"),
+        link("chain-l3", "chain-l4"),
+        link("chain-l4"),
+    )
+
+
+async def test_no_dep_expansion_by_default_or_at_explicit_depth_zero() -> None:
+    tools = ToolCatalog()
+    tools.register(_tool("fs__read_file", "Read a file from local disk."))
+    search = search_capabilities_tool(
+        tools, _skills(_vercel_deploy(skills=["deck-outlining"]), _deck_outlining())
+    )
+    for extra in ({}, {"maxDepth": 0}):
+        result = await search.execute({"query": "deploy to vercel", **extra})
+        assert [s["skillId"] for s in result["skills"]] == ["vercel-deploy"]
+        # the dep skill stayed out, so its declared tool must not ride in either
+        tool_ids = [h["toolId"] for g in result["tools"]["groups"] for h in g["hits"]]
+        assert "fs__read_file" not in tool_ids
+
+
+async def test_max_depth_one_appends_dep_skill_at_score_zero_beyond_budget() -> None:
+    search = search_capabilities_tool(
+        ToolCatalog(), _skills(_vercel_deploy(skills=["deck-outlining"]), _deck_outlining())
+    )
+    result = await search.execute(
+        {"query": "deploy to vercel", "topKSkills": 1, "maxDepth": 1}
+    )
+    # budget of 1 holds the query hit; the dep rides in additively beyond it
+    assert [s["skillId"] for s in result["skills"]] == ["vercel-deploy", "deck-outlining"]
+    assert result["skills"][1]["score"] == 0
+    assert "narrative structure" in result["skills"][1]["description"]
+
+
+async def test_max_depth_one_pulls_dep_skill_tools_at_score_zero() -> None:
+    tools = ToolCatalog()
+    tools.register(_tool("fs__read_file", "Read a file from local disk."))
+    search = search_capabilities_tool(
+        tools, _skills(_vercel_deploy(skills=["deck-outlining"]), _deck_outlining())
+    )
+    result = await search.execute({"query": "deploy to vercel", "maxDepth": 1})
+    hits = [h for g in result["tools"]["groups"] for h in g["hits"]]
+    hit = next((h for h in hits if h["toolId"] == "fs__read_file"), None)
+    assert hit is not None  # dep skill's declared tool rode in
+    assert hit["score"] == 0
+
+
+async def test_expansion_is_transitive_level_by_level() -> None:
+    search = search_capabilities_tool(ToolCatalog(), _chain_catalog())
+    depth1 = await search.execute({"query": "deploy to vercel", "maxDepth": 1})
+    assert [s["skillId"] for s in depth1["skills"]] == ["vercel-deploy", "chain-l1"]
+    depth2 = await search.execute({"query": "deploy to vercel", "maxDepth": 2})
+    assert [s["skillId"] for s in depth2["skills"]] == [
+        "vercel-deploy",
+        "chain-l1",
+        "chain-l2",
+    ]
+
+
+async def test_expansion_terminates_on_cycle_listing_each_skill_once() -> None:
+    cycle_b = Skill(
+        id="cycle-b",
+        name="cycle-b",
+        description="Unrelated playbook that references its parent skill.",
+        skills=["vercel-deploy"],
+    )
+    search = search_capabilities_tool(
+        ToolCatalog(), _skills(_vercel_deploy(skills=["cycle-b"]), cycle_b)
+    )
+    result = await search.execute({"query": "deploy to vercel", "maxDepth": 3})
+    assert [s["skillId"] for s in result["skills"]] == ["vercel-deploy", "cycle-b"]
+
+
+async def test_expansion_silently_skips_unknown_dep_ids() -> None:
+    search = search_capabilities_tool(
+        ToolCatalog(), _skills(_vercel_deploy(skills=["ghost-skill"]))
+    )
+    result = await search.execute({"query": "deploy to vercel", "maxDepth": 1})
+    assert [s["skillId"] for s in result["skills"]] == ["vercel-deploy"]
+
+
+async def test_dep_declared_by_two_surfaced_skills_lists_once() -> None:
+    rollback = Skill(
+        id="vercel-rollback",
+        name="vercel-rollback",
+        description="Roll back a bad Vercel deployment to the previous build.",
+        tags=["vercel"],
+        skills=["deck-outlining"],
+    )
+    search = search_capabilities_tool(
+        ToolCatalog(),
+        _skills(_vercel_deploy(skills=["deck-outlining"]), rollback, _deck_outlining()),
+    )
+    result = await search.execute({"query": "deploy to vercel", "maxDepth": 1})
+    # both query hits declare the same dep — it rides in exactly once
+    assert [s["skillId"] for s in result["skills"]].count("deck-outlining") == 1
+
+
+async def test_expansion_seeds_from_surfaced_hits_only_not_budget_cut_matches() -> None:
+    billing = Skill(
+        id="vercel-billing",
+        name="vercel-billing",
+        description="Understand the Vercel invoice line items.",
+        skills=["deck-outlining"],
+    )
+    search = search_capabilities_tool(
+        ToolCatalog(), _skills(_vercel_deploy(), billing, _deck_outlining())
+    )
+    result = await search.execute(
+        {"query": "deploy to vercel", "topKSkills": 1, "maxDepth": 1}
+    )
+    # budget 1 keeps only the best hit; the cut billing skill's dep must not ride in
+    assert [s["skillId"] for s in result["skills"]] == ["vercel-deploy"]
+
+
+async def test_dep_that_is_also_a_query_hit_keeps_its_query_score() -> None:
+    rollback = Skill(
+        id="vercel-rollback",
+        name="vercel-rollback",
+        description="Roll back a bad Vercel deployment to the previous build.",
+        tags=["vercel"],
+    )
+    search = search_capabilities_tool(
+        ToolCatalog(), _skills(_vercel_deploy(skills=["vercel-rollback"]), rollback)
+    )
+    result = await search.execute({"query": "deploy to vercel", "maxDepth": 1})
+    rollback_hits = [s for s in result["skills"] if s["skillId"] == "vercel-rollback"]
+    assert len(rollback_hits) == 1
+    assert rollback_hits[0]["score"] > 0
+
+
+async def test_expansion_records_skill_search_event_with_dep_count() -> None:
+    skills = SkillCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    skills.register(_vercel_deploy(skills=["deck-outlining"]))
+    skills.register(_deck_outlining())
+    search = search_capabilities_tool(ToolCatalog(), skills)
+    skills.drain_trace_events()
+
+    await search.execute({"query": "deploy to vercel", "maxDepth": 1})
+    events = skills.drain_trace_events()
+    # the registry's own skill_search for the query carries dep_count 0…
+    assert any(e["type"] == "skill_search" and e["dep_count"] == 0 for e in events)
+    # …and the capability layer records a second one for the expansion.
+    expansion = next(e for e in events if e["type"] == "skill_search" and e["dep_count"] > 0)
+    assert expansion["dep_count"] == 1
+    assert expansion["origin"] == "agent"
+    assert expansion["hits"] == [{"skill_id": "deck-outlining", "score": 0}]
+
+    # no expansion event at the default depth (nothing was pulled)
+    await search.execute({"query": "deploy to vercel"})
+    defaults = skills.drain_trace_events()
+    assert [e for e in defaults if e["type"] == "skill_search" and e["dep_count"] > 0] == []
+
+
+async def test_clamps_max_depth() -> None:
+    search = search_capabilities_tool(ToolCatalog(), _chain_catalog())
+
+    async def ids(max_depth) -> list[str]:
+        result = await search.execute({"query": "deploy to vercel", "maxDepth": max_depth})
+        return [s["skillId"] for s in result["skills"]]
+
+    # negative / fractional / bool fall back to 0 — no expansion (bool is
+    # excluded even though it subclasses int, mirroring _clamp_top_k)
+    assert await ids(-1) == ["vercel-deploy"]
+    assert await ids(1.5) == ["vercel-deploy"]
+    assert await ids(True) == ["vercel-deploy"]
+    # 99 clamps to the cap of 3: chain-l4 sits at depth 4 and stays out
+    assert await ids(99) == ["vercel-deploy", "chain-l1", "chain-l2", "chain-l3"]
+
+
 def test_search_capabilities_description_mentions_skills_only_when_wired() -> None:
     catalog = ToolCatalog()
     catalog.register(_tool("a__read", "read a file"))

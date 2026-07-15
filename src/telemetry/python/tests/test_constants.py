@@ -16,6 +16,7 @@ from ratel_ai_telemetry import (
     RATEL_AUTH_OUTCOME,
     RATEL_ORIGIN,
     RATEL_SEARCH,
+    RATEL_SEARCH_DEP_COUNT,
     RATEL_SEARCH_HIT_COUNT,
     RATEL_SEARCH_QUERY,
     RATEL_SEARCH_RESULTS,
@@ -65,6 +66,7 @@ def test_ratel_attribute_keys_match_the_pin() -> None:
     assert RATEL_SEARCH_TARGET == "ratel.search.target"
     assert RATEL_SEARCH_TOP_K == "ratel.search.top_k"
     assert RATEL_SEARCH_HIT_COUNT == "ratel.search.hit_count"
+    assert RATEL_SEARCH_DEP_COUNT == "ratel.search.dep_count"
     assert RATEL_SEARCH_QUERY == "ratel.search.query"
     assert RATEL_TOOL_ARGS_SIZE_BYTES == "ratel.tool.args_size_bytes"
     assert RATEL_UPSTREAM_SERVER == "ratel.upstream.server"
@@ -97,6 +99,7 @@ def test_every_ratel_attribute_key_is_namespaced() -> None:
         RATEL_SEARCH_TARGET,
         RATEL_SEARCH_TOP_K,
         RATEL_SEARCH_HIT_COUNT,
+        RATEL_SEARCH_DEP_COUNT,
         RATEL_SEARCH_QUERY,
         RATEL_TOOL_ARGS_SIZE_BYTES,
         RATEL_UPSTREAM_SERVER,
@@ -114,6 +117,7 @@ def test_attribute_keys_are_unique() -> None:
         RATEL_SEARCH_TARGET,
         RATEL_SEARCH_TOP_K,
         RATEL_SEARCH_HIT_COUNT,
+        RATEL_SEARCH_DEP_COUNT,
         RATEL_SEARCH_QUERY,
         RATEL_TOOL_ARGS_SIZE_BYTES,
         RATEL_UPSTREAM_SERVER,

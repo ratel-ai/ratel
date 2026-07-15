@@ -30,6 +30,21 @@ def test_ranks_by_relevance_and_round_trips_metadata() -> None:
     assert catalog.size() == 2
 
 
+def test_round_trips_declared_tool_and_skill_deps() -> None:
+    catalog = _catalog(
+        Skill(
+            id="api-design",
+            name="api-design",
+            description="REST API design patterns.",
+            tools=["http__request"],
+            skills=["deck-outlining"],
+        )
+    )
+    skill = catalog.get("api-design")
+    assert skill.tools == ["http__request"]
+    assert skill.skills == ["deck-outlining"]
+
+
 def test_invoke_returns_body_and_records_event() -> None:
     catalog = SkillCatalog()
     catalog.register(Skill(id="s", name="s", description="d", body="# Body\n\nsteps"))

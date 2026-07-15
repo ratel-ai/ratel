@@ -45,6 +45,7 @@ mod tests {
                 "slide deck".into(),
             ],
             tools: vec!["fs__write_file".into()],
+            skills: vec!["deck-outlining".into()],
             metadata: HashMap::from([("stacks".into(), vec!["react".into()])]),
             body: "# Frontend Slides\n\nLong body that must not affect ranking…".into(),
         }
@@ -87,6 +88,7 @@ mod tests {
             description: String::new(),
             tags: vec![],
             tools: vec![],
+            skills: vec![],
             metadata: HashMap::new(),
             body: String::new(),
         };
@@ -123,6 +125,17 @@ mod tests {
         assert!(
             !text.contains("write_file"),
             "tool dep leaked into index: {text}"
+        );
+    }
+
+    #[test]
+    fn searchable_text_excludes_skills() {
+        // Declared skill deps are a dependency edge for higher layers, not query terms.
+        let skill = slides_skill();
+        let text = searchable_text(&skill);
+        assert!(
+            !text.contains("deck-outlining"),
+            "skill dep leaked into index: {text}"
         );
     }
 }

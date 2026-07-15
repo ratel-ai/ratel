@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ratel.sh/protocol/v1/catalog-skill.schema.json",
   "title": "CatalogSkillWire",
-  "description": "The wire projection of an engine Skill, served in a v1 catalog pull. The ETag content projection hashes exactly these seven fields; a source MAY carry additional fields (a conforming client ignores them), but none may carry a secret.",
+  "description": "The wire projection of an engine Skill, served in a v1 catalog pull. The ETag content projection hashes exactly the seven required fields; a source MAY carry additional fields — including the optional `skills` — (a conforming client ignores unknown ones), but none may carry a secret.",
   "type": "object",
   "required": ["id", "name", "description", "tags", "tools", "metadata", "body"],
   "additionalProperties": true,
@@ -12,6 +12,7 @@
     "description": { "type": "string" },
     "tags": { "type": "array", "items": { "type": "string" } },
     "tools": { "type": "array", "items": { "type": "string" }, "description": "referenced tool ids, resolved against the client-owned registry" },
+    "skills": { "type": "array", "items": { "type": "string" }, "description": "referenced skill ids — a dependency edge resolved against the same resolved set; carried on the wire but NOT part of the ETag content projection (a dep-only edit does not bust the ETag)" },
     "metadata": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } } },
     "body": { "type": "string", "description": "the SKILL.md payload" }
   }

@@ -97,6 +97,12 @@ export const RATEL_SEARCH_TOP_K = "ratel.search.top_k";
 /** `ratel.search.hit_count` — results returned. */
 export const RATEL_SEARCH_HIT_COUNT = "ratel.search.hit_count";
 
+/**
+ * `ratel.search.dep_count` — skills pulled in via dependency expansion
+ * (`maxDepth`), beyond the ranked hits; `hit_count` stays query-matched only.
+ */
+export const RATEL_SEARCH_DEP_COUNT = "ratel.search.dep_count";
+
 /** `ratel.search.query` — the search text (content, gated like message content). */
 export const RATEL_SEARCH_QUERY = "ratel.search.query";
 
