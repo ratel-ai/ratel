@@ -1,0 +1,28 @@
+{
+  "name": "@ratel-ai/example-end-user-skills-app",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -F @ratel-ai/cloud build && next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.3",
+    "@ai-sdk/react": "^4.0.9",
+    "@ratel-ai/cloud": "workspace:*",
+    "@ratel-ai/sdk": "workspace:*",
+    "ai": "^7.0.8",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}
