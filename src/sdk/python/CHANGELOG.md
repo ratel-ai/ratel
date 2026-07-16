@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.0-rc.1] - 2026-07-16
+
 ### Changed
 
 - **BREAKING (next minor):** `register()` is now an async coroutine that accepts a single tool/skill **or an iterable of them**, and folds embedding in: on a `"semantic"`/`"hybrid"` catalog it embeds the batch off the asyncio loop (GIL released), so embedding errors (model load / endpoint / auth / dimension) surface from `await register(...)`. A `"bm25"` catalog registers metadata only and never loads a model. `search()` stays synchronous BM25-only; `search_async()` covers BM25/semantic/hybrid. There is **no** `register_many()`, `build_embeddings()`, or `rebuild_embeddings()` — `register()` embeds, and recovery from a model/dimension change is to construct a new catalog and re-register.
