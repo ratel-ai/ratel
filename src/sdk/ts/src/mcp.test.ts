@@ -103,6 +103,24 @@ describe("registerMcpServer", () => {
     await handle.close();
   });
 
+  it("embeds during registration; a broken model surfaces the error from registerMcpServer, but metadata persists", async () => {
+    // Embedding now happens inside `catalog.register` (RAT-379/async-register),
+    // which `registerMcpServer` awaits — so a broken model surfaces the error
+    // right out of `registerMcpServer` itself, not from a later, separate build.
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+
+    await expect(
+      registerMcpServer(catalog, { name: "demo", transport: fake.clientTransport }),
+    ).rejects.toThrow(/failed to load embedding model/);
+
+    // Metadata registration happens before the embedding pass inside
+    // `catalog.register`, so it persists even though the embed itself failed.
+    expect(catalog.has("demo__read_file")).toBe(true);
+  });
+
   it("makes upstream tools discoverable via catalog.search using their description", async () => {
     const catalog = new ToolCatalog();
     const handle = await registerMcpServer(catalog, {

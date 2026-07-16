@@ -38,9 +38,9 @@ def test_factories_set_ids_and_descriptions() -> None:
 
 async def test_search_capabilities_groups_tool_hits_by_upstream() -> None:
     catalog = ToolCatalog()
-    catalog.register(_tool("github__create_issue", "Create a GitHub issue on a repo."))
-    catalog.register(_tool("github__list_issues", "List GitHub issues on a repo."))
-    catalog.register(_tool("local_read", "Read a file from disk."))
+    await catalog.register(_tool("github__create_issue", "Create a GitHub issue on a repo."))
+    await catalog.register(_tool("github__list_issues", "List GitHub issues on a repo."))
+    await catalog.register(_tool("local_read", "Read a file from disk."))
     search = search_capabilities_tool(
         catalog,
         upstream_servers=[
@@ -62,9 +62,9 @@ async def test_search_capabilities_groups_tool_hits_by_upstream() -> None:
 
 async def test_search_capabilities_returns_skills_bucket_when_wired() -> None:
     tools = ToolCatalog()
-    tools.register(_tool("local_read", "Read a file from disk."))
+    await tools.register(_tool("local_read", "Read a file from disk."))
     skills = SkillCatalog()
-    skills.register(
+    await skills.register(
         Skill(
             id="vercel-deploy",
             name="vercel-deploy",
@@ -82,10 +82,10 @@ async def test_search_capabilities_pulls_skill_declared_tools() -> None:
     # A matched skill's declared tools ride into the tools bucket, additively
     # and deduped against query hits; an unknown declared id is skipped.
     tools = ToolCatalog()
-    tools.register(_tool("vercel__push", "Deploy the project to Vercel production."))
-    tools.register(_tool("fs__read_file", "Read a file from local disk."))
+    await tools.register(_tool("vercel__push", "Deploy the project to Vercel production."))
+    await tools.register(_tool("fs__read_file", "Read a file from local disk."))
     skills = SkillCatalog()
-    skills.register(
+    await skills.register(
         Skill(
             id="vercel-deploy",
             name="vercel-deploy",
@@ -108,9 +108,9 @@ async def test_search_capabilities_never_starves_skills() -> None:
     # Many matching tools must not crowd the skill out of its own bucket.
     tools = ToolCatalog()
     for i in range(8):
-        tools.register(_tool(f"deploy__tool_{i}", "deploy the project to production"))
+        await tools.register(_tool(f"deploy__tool_{i}", "deploy the project to production"))
     skills = SkillCatalog()
-    skills.register(
+    await skills.register(
         Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel.")
     )
     search = search_capabilities_tool(tools, skills)
@@ -124,7 +124,7 @@ async def test_search_capabilities_never_starves_skills() -> None:
 
 async def test_search_capabilities_records_gateway_search_event() -> None:
     catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
-    catalog.register(_tool("local_read", "Read a file from disk."))
+    await catalog.register(_tool("local_read", "Read a file from disk."))
     catalog.drain_trace_events()
     search = search_capabilities_tool(catalog)
     await search.execute({"query": "read", "topKTools": 3})
@@ -149,7 +149,7 @@ def test_format_upstream_line_flags_auth() -> None:
 
 async def test_invoke_tool_runs_a_catalog_tool() -> None:
     catalog = ToolCatalog()
-    catalog.register(
+    await catalog.register(
         _tool("echo", "Echo the message back.", execute=lambda args: {"echo": args["msg"]})
     )
     invoke = invoke_tool_tool(catalog)
@@ -167,7 +167,9 @@ async def test_invoke_tool_unknown_id_returns_error_payload() -> None:
 
 async def test_invoke_tool_accepts_flattened_args() -> None:
     catalog = ToolCatalog()
-    catalog.register(_tool("echo", "Echo back.", execute=lambda args: {"echo": args.get("msg")}))
+    await catalog.register(
+        _tool("echo", "Echo back.", execute=lambda args: {"echo": args.get("msg")})
+    )
     invoke = invoke_tool_tool(catalog)
     # args not nested under "args" — fall back to top-level minus toolId
     result = await invoke.execute({"toolId": "echo", "msg": "flat"})
@@ -176,7 +178,9 @@ async def test_invoke_tool_accepts_flattened_args() -> None:
 
 async def test_invoke_tool_rejects_non_object_args() -> None:
     catalog = ToolCatalog()
-    catalog.register(_tool("echo", "Echo back.", execute=lambda args: {"echo": args.get("msg")}))
+    await catalog.register(
+        _tool("echo", "Echo back.", execute=lambda args: {"echo": args.get("msg")})
+    )
     invoke = invoke_tool_tool(catalog)
     # `args` present but a string → reject rather than forwarding stray keys
     result = await invoke.execute({"toolId": "echo", "args": "oops", "msg": "x"})
@@ -197,7 +201,7 @@ async def test_invoke_tool_unauthorized_triggers_callback_and_needs_auth() -> No
         seen.append(upstream)
 
     catalog = ToolCatalog()
-    catalog.register(_tool("github__create_issue", "Create issue.", execute=boom))
+    await catalog.register(_tool("github__create_issue", "Create issue.", execute=boom))
     invoke = invoke_tool_tool(catalog, on_unauthorized=on_unauthorized)
     result = await invoke.execute({"toolId": "github__create_issue", "args": {}})
     assert result["error"] == "needs_auth"
@@ -212,7 +216,7 @@ async def test_invoke_tool_generic_error_is_reported() -> None:
         raise RuntimeError("nope")
 
     catalog = ToolCatalog()
-    catalog.register(_tool("flaky", "Flaky tool.", execute=boom))
+    await catalog.register(_tool("flaky", "Flaky tool.", execute=boom))
     invoke = invoke_tool_tool(catalog)
     result = await invoke.execute({"toolId": "flaky", "args": {}})
     assert "threw: nope" in result["error"]
@@ -222,7 +226,7 @@ async def test_invoke_tool_generic_error_is_reported() -> None:
 async def test_invoke_tool_explicit_none_args_is_not_forwarded() -> None:
     catalog = ToolCatalog()
     # Echo returns exactly the args dict it was invoked with.
-    catalog.register(_tool("x__echo", "Echo args.", execute=lambda args: dict(args)))
+    await catalog.register(_tool("x__echo", "Echo args.", execute=lambda args: dict(args)))
     invoke = invoke_tool_tool(catalog)
     # explicit None → {} (no leftover "args" key), not {"args": None}
     assert await invoke.execute({"toolId": "x__echo", "args": None}) == {}
@@ -250,16 +254,18 @@ async def test_invoke_tool_guidance_is_discovery_tool_neutral() -> None:
     assert "search_capabilities" not in result["error"]
 
 
-def _skill_catalog() -> SkillCatalog:
+async def _skill_catalog() -> SkillCatalog:
     c = SkillCatalog()
-    c.register(Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel."))
+    await c.register(
+        Skill(id="vercel-deploy", name="vercel-deploy", description="Deploy to Vercel.")
+    )
     return c
 
 
 async def test_search_capabilities_clamps_non_positive_top_k() -> None:
     catalog = ToolCatalog()
-    catalog.register(_tool("a__read", "read a file from disk"))
-    catalog.register(_tool("a__send", "send an email message"))
+    await catalog.register(_tool("a__read", "read a file from disk"))
+    await catalog.register(_tool("a__send", "send an email message"))
     search = search_capabilities_tool(catalog)
 
     async def count(extra: dict) -> int:
@@ -276,15 +282,15 @@ async def test_search_capabilities_clamps_non_positive_top_k() -> None:
     assert await count({"topKTools": 1}) == 1
 
 
-def test_search_capabilities_description_mentions_skills_only_when_wired() -> None:
+async def test_search_capabilities_description_mentions_skills_only_when_wired() -> None:
     catalog = ToolCatalog()
-    catalog.register(_tool("a__read", "read a file"))
+    await catalog.register(_tool("a__read", "read a file"))
 
     tools_only = search_capabilities_tool(catalog)
     assert "get_skill_content" not in tools_only.description
     assert "skill" not in tools_only.description.lower()
 
-    with_skills = search_capabilities_tool(catalog, _skill_catalog())
+    with_skills = search_capabilities_tool(catalog, await _skill_catalog())
     assert "get_skill_content" in with_skills.description
 
     # an empty skill catalog is treated as no skills

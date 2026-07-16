@@ -39,9 +39,9 @@ const sendEmail: ExecutableTool = {
   execute: async ({ to }) => ({ messageId: "abc", to }),
 };
 
-function skillCatalogWith(...skills: Skill[]): SkillCatalog {
+async function skillCatalogWith(...skills: Skill[]): Promise<SkillCatalog> {
   const c = new SkillCatalog();
-  for (const s of skills) c.register(s);
+  for (const s of skills) await c.register(s);
   return c;
 }
 
@@ -62,8 +62,8 @@ describe("searchCapabilitiesTool", () => {
 
   it("returns tools grouped by server and an empty skills bucket when no skill catalog", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
-    tools.register(sendEmail);
+    await tools.register(readFile);
+    await tools.register(sendEmail);
     const tool = searchCapabilitiesTool(tools);
 
     const result = (await tool.execute({ query: "read a file" })) as SearchCapabilitiesResult;
@@ -74,8 +74,8 @@ describe("searchCapabilitiesTool", () => {
 
   it("returns a skills bucket alongside tools when a skill catalog is wired", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
-    const tool = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill));
+    await tools.register(readFile);
+    const tool = searchCapabilitiesTool(tools, await skillCatalogWith(vercelSkill));
 
     const result = (await tool.execute({ query: "deploy to vercel" })) as SearchCapabilitiesResult;
     expect(result.skills[0]?.skillId).toBe("vercel-deploy");
@@ -85,7 +85,7 @@ describe("searchCapabilitiesTool", () => {
   it("never starves skills: many matching tools do not crowd the skill out of its own bucket", async () => {
     const tools = new ToolCatalog();
     for (let i = 0; i < 8; i++) {
-      tools.register({
+      await tools.register({
         id: `deploy__tool_${i}`,
         name: `deploy_${i}`,
         description: "deploy the project to production",
@@ -94,7 +94,7 @@ describe("searchCapabilitiesTool", () => {
         execute: async () => ({}),
       });
     }
-    const tool = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill));
+    const tool = searchCapabilitiesTool(tools, await skillCatalogWith(vercelSkill));
 
     const result = (await tool.execute({
       query: "deploy to production",
@@ -117,14 +117,14 @@ describe("searchCapabilitiesTool", () => {
       execute: async () => ({}),
     };
     const tools = new ToolCatalog();
-    tools.register(deployPush); // matches the query "deploy to vercel"
-    tools.register(readFile); // declared by the skill but does NOT match the query
+    await tools.register(deployPush); // matches the query "deploy to vercel"
+    await tools.register(readFile); // declared by the skill but does NOT match the query
     const deployWithDeps: Skill = {
       ...vercelSkill,
       // one dep already query-matched (vercel__push), one not (fs__read_file), one absent
       tools: ["vercel__push", "fs__read_file", "ghost__missing"],
     };
-    const tool = searchCapabilitiesTool(tools, skillCatalogWith(deployWithDeps));
+    const tool = searchCapabilitiesTool(tools, await skillCatalogWith(deployWithDeps));
 
     const result = (await tool.execute({
       query: "deploy to vercel",
@@ -143,7 +143,7 @@ describe("searchCapabilitiesTool", () => {
 
   it("includes upstream server description in the tool group", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
+    await tools.register(readFile);
     const tool = searchCapabilitiesTool(tools, undefined, {
       upstreamServers: [{ name: "fs", description: "filesystem helpers" }],
     });
@@ -155,7 +155,7 @@ describe("searchCapabilitiesTool", () => {
 
   it("emits gateway_search telemetry for the tool search", async () => {
     const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    tools.register(readFile);
+    await tools.register(readFile);
     tools.drainTraceEvents();
     const tool = searchCapabilitiesTool(tools);
     await tool.execute({ query: "read a file", topKTools: 3 });
@@ -166,8 +166,8 @@ describe("searchCapabilitiesTool", () => {
 
   it("clamps a non-positive / non-integer topK back to the default", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
-    tools.register(sendEmail);
+    await tools.register(readFile);
+    await tools.register(sendEmail);
     const tool = searchCapabilitiesTool(tools);
     const count = async (input: object): Promise<number> => {
       const r = (await tool.execute(input)) as SearchCapabilitiesResult;
@@ -183,15 +183,15 @@ describe("searchCapabilitiesTool", () => {
     expect(await count({ query: q, topKTools: 1 })).toBe(1); // a valid positive int is honored
   });
 
-  it("advertises skills in its description only when a non-empty skill catalog is wired", () => {
+  it("advertises skills in its description only when a non-empty skill catalog is wired", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
+    await tools.register(readFile);
 
     const toolsOnly = searchCapabilitiesTool(tools);
     expect(toolsOnly.description).not.toContain("get_skill_content");
     expect(toolsOnly.description.toLowerCase()).not.toContain("skill");
 
-    const withSkills = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill));
+    const withSkills = searchCapabilitiesTool(tools, await skillCatalogWith(vercelSkill));
     expect(withSkills.description).toContain("get_skill_content");
 
     // an empty catalog is treated as no skills
@@ -203,7 +203,7 @@ describe("searchCapabilitiesTool", () => {
 describe("invokeToolTool", () => {
   it("uses the canonical id and invokes by nested args", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
+    await tools.register(readFile);
     const tool = invokeToolTool(tools);
     expect(tool.id).toBe(INVOKE_TOOL_ID);
     const result = await tool.execute({ toolId: "fs__read_file", args: { path: "/tmp/x" } });
@@ -212,7 +212,7 @@ describe("invokeToolTool", () => {
 
   it("tolerates flattened args", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
+    await tools.register(readFile);
     const tool = invokeToolTool(tools);
     const result = await tool.execute({ toolId: "fs__read_file", path: "/tmp/y" });
     expect(result).toEqual({ contents: "contents of /tmp/y" });
@@ -220,7 +220,7 @@ describe("invokeToolTool", () => {
 
   it("returns a raw result (no relatedSkills wrapping)", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
+    await tools.register(readFile);
     const tool = invokeToolTool(tools);
     const out = await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });
     expect(out).toEqual({ contents: "contents of /x" });
@@ -238,7 +238,7 @@ describe("invokeToolTool", () => {
 
   it("rejects non-object args instead of forwarding stray top-level keys", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
+    await tools.register(readFile);
     const tool = invokeToolTool(tools);
     // `args` present but a string → reject, don't silently flatten.
     const result = (await tool.execute({ toolId: "fs__read_file", args: "oops", path: "/x" })) as {
@@ -252,7 +252,7 @@ describe("invokeToolTool", () => {
   it("treats explicit args: null as no args, not a stray `args` key", async () => {
     const tools = new ToolCatalog();
     // Echo tool returns exactly the args object it was invoked with.
-    tools.register({
+    await tools.register({
       id: "x__echo",
       name: "echo",
       description: "echoes its args",
@@ -287,7 +287,7 @@ describe("invokeToolTool", () => {
         this.name = "UnauthorizedError";
       }
     }
-    tools.register({
+    await tools.register({
       id: "stripe__charges",
       name: "charges",
       description: "...",
@@ -323,7 +323,7 @@ describe("invokeToolTool", () => {
         this.name = "UnauthorizedError";
       }
     }
-    tools.register({
+    await tools.register({
       id: "stripe__charges",
       name: "charges",
       description: "...",
@@ -344,7 +344,7 @@ describe("invokeToolTool", () => {
 
   it("emits gateway_invoke on success", async () => {
     const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    tools.register(readFile);
+    await tools.register(readFile);
     tools.drainTraceEvents();
     const tool = invokeToolTool(tools);
     await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });

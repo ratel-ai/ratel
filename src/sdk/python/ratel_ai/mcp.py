@@ -111,9 +111,10 @@ async def register_mcp_server(
         )
 
         tool_ids: list[str] = []
+        registered: list[ExecutableTool] = []
         for tool in tools:
             tool_id = f"{name}__{tool.name}"
-            catalog.register(
+            registered.append(
                 ExecutableTool(
                     id=tool_id,
                     name=tool.name,
@@ -124,6 +125,7 @@ async def register_mcp_server(
                 )
             )
             tool_ids.append(tool_id)
+        await catalog.register(registered)
 
         return McpServerHandle(
             tool_ids=tool_ids,

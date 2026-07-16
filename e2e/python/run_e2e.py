@@ -51,10 +51,10 @@ def _echo_executor(tool_id: str):
     return run
 
 
-def build_catalog() -> ToolCatalog:
+async def build_catalog() -> ToolCatalog:
     catalog = ToolCatalog()
-    for tool in CATALOG["tools"]:
-        catalog.register(
+    await catalog.register(
+        [
             ExecutableTool(
                 id=tool["id"],
                 name=tool["name"],
@@ -63,14 +63,16 @@ def build_catalog() -> ToolCatalog:
                 output_schema=tool.get("outputSchema", {}),
                 execute=_echo_executor(tool["id"]),
             )
-        )
+            for tool in CATALOG["tools"]
+        ]
+    )
     return catalog
 
 
-def build_skill_catalog() -> SkillCatalog:
+async def build_skill_catalog() -> SkillCatalog:
     catalog = SkillCatalog()
-    for skill in SKILLS["skills"]:
-        catalog.register(
+    await catalog.register(
+        [
             Skill(
                 id=skill["id"],
                 name=skill["name"],
@@ -80,7 +82,9 @@ def build_skill_catalog() -> SkillCatalog:
                 metadata=skill.get("metadata", {}),
                 body=skill.get("body", ""),
             )
-        )
+            for skill in SKILLS["skills"]
+        ]
+    )
     return catalog
 
 
@@ -90,7 +94,7 @@ def fail(msg: str) -> None:
 
 
 async def main() -> None:
-    catalog = build_catalog()
+    catalog = await build_catalog()
     n_tools = len(CATALOG["tools"])
 
     # 1. Search ranking parity.
@@ -138,7 +142,7 @@ async def main() -> None:
     print(f"  capability invoke OK: {gi['toolId']} -> {gi_out}")
 
     # --- Skills surface (0.2.0) ---------------------------------------------
-    skill_catalog = build_skill_catalog()
+    skill_catalog = await build_skill_catalog()
     n_skills = len(SKILLS["skills"])
     skills_by_id = {s["id"]: s for s in SKILLS["skills"]}
 

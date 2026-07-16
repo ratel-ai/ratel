@@ -9,9 +9,9 @@ const apiDesign: Skill = {
   body: "# API Design\n\nUse nouns for resources.",
 };
 
-function catalogWith(...skills: Skill[]): SkillCatalog {
+async function catalogWith(...skills: Skill[]): Promise<SkillCatalog> {
   const c = new SkillCatalog();
-  for (const s of skills) c.register(s);
+  for (const s of skills) await c.register(s);
   return c;
 }
 
@@ -24,7 +24,7 @@ describe("getSkillContentTool", () => {
   });
 
   it("returns the skill body by id", async () => {
-    const tool = getSkillContentTool(catalogWith(apiDesign));
+    const tool = getSkillContentTool(await catalogWith(apiDesign));
     const result = (await tool.execute({ skillId: "api-design" })) as { body: string };
     expect(result.body).toContain("Use nouns for resources");
   });

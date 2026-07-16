@@ -265,7 +265,8 @@ pub enum TraceEvent {
     /// flags a slow load (possibly underpowered machine) or a failed one;
     /// `reason` carries the hint / error. See `embedding.rs` and ADR-0011.
     EmbedderLoad {
-        /// The embedding model's HuggingFace repo id.
+        /// Resolved model display name: repo id, local path, or endpoint model
+        /// and URL.
         model: String,
         /// Load outcome: ok, slow, or failed.
         status: EmbedderLoadStatus,
@@ -274,6 +275,34 @@ pub enum TraceEvent {
         took_ms: u64,
         /// The slow-load hint or the load error; `None` on a normal load.
         reason: Option<String>,
+    },
+    /// Emitted once when a configured embedding model is actually downloaded to
+    /// the HuggingFace cache (a cold fetch), carrying the real byte size — so a
+    /// multi-second first-run download is never a silent surprise. See ADR-0012.
+    EmbedderDownload {
+        /// The model that was downloaded.
+        model: String,
+        /// Real download size, in bytes.
+        bytes: u64,
+    },
+    /// Emitted when a semantic/hybrid search runs against an embedding set built
+    /// with a *different* model than the one now configured. Retrieval fails
+    /// rather than mixing vector spaces; the caller must rebuild the complete
+    /// embedding cache. See `dense_cache.rs` and ADR-0012.
+    EmbedderModelMismatch {
+        /// The model the existing embeddings were built with.
+        built: String,
+        /// The model now configured.
+        active: String,
+    },
+    /// Emitted once when an in-process model's pooling could not be detected
+    /// (no `1_Pooling/config.json`) and no override was given, so a mode was
+    /// assumed. A non-silent guess: set `pooling` to correct it. See ADR-0012.
+    EmbedderPoolingAssumed {
+        /// The model whose pooling could not be detected.
+        model: String,
+        /// The pooling mode that was assumed (`"cls"` or `"mean"`).
+        pooling: String,
     },
 }
 

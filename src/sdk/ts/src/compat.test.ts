@@ -19,7 +19,7 @@ const deployTool: ExecutableTool = {
 describe("searchToolsTool (deprecated 0.1.x compatibility shim)", () => {
   it("keeps the old `search_tools` id and the tools-only `{ groups }` result shape", async () => {
     const tools = new ToolCatalog();
-    tools.register(deployTool);
+    await tools.register(deployTool);
     const tool = searchToolsTool(tools);
 
     expect(tool.id).toBe(SEARCH_TOOLS_ID);
@@ -36,7 +36,7 @@ describe("searchToolsTool (deprecated 0.1.x compatibility shim)", () => {
   it("respects the old `topK` parameter", async () => {
     const tools = new ToolCatalog();
     for (let i = 0; i < 5; i++) {
-      tools.register({
+      await tools.register({
         id: `ci__t${i}`,
         name: `t${i}`,
         description: "deploy the project to production",

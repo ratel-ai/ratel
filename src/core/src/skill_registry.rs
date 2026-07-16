@@ -5,6 +5,7 @@ use indexmap::IndexMap;
 
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
+use crate::embedding_config::EmbeddingModel;
 use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
 use crate::method::SearchMethod;
 use crate::search::bm25_search;
@@ -75,6 +76,19 @@ impl SkillRegistry {
             skills: IndexMap::new(),
             sink,
             dense: DenseCache::new(),
+        }
+    }
+
+    /// A registry whose semantic/hybrid engines use an explicit embedding model
+    /// (the configurable-model path). BM25 is unaffected. Direct enum variants
+    /// are validated on the first embedding build; call
+    /// [`EmbeddingModel::validate`] first for construction-time feedback. The
+    /// trace sink is set separately via [`Self::set_trace_sink`].
+    pub fn with_embedding(model: EmbeddingModel) -> Self {
+        Self {
+            skills: IndexMap::new(),
+            sink: Arc::new(NoopSink),
+            dense: DenseCache::with_model(model),
         }
     }
 
@@ -184,6 +198,17 @@ impl SkillRegistry {
         self.dense.extend(self.skills.values(), self.sink.as_ref())
     }
 
+    /// Recompute embeddings for the full skill corpus and atomically replace the
+    /// dense cache. A changed model identity or dimension is adopted only after
+    /// the complete rebuild succeeds; failures preserve the prior cache.
+    ///
+    /// # Errors
+    ///
+    /// Any [`EmbedderError`] from loading or embedding the complete corpus.
+    pub fn rebuild_embeddings(&self) -> Result<(), EmbedderError> {
+        self.dense.rebuild(self.skills.values(), self.sink.as_ref())
+    }
+
     // ---- engines -----------------------------------------------------------
 
     fn bm25_search_traced(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SkillHit> {
@@ -226,10 +251,10 @@ impl SkillRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
-        self.dense.require_built(self.skills.len())?;
-        let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
         let t = Instant::now();
-        let ranked = self.dense.ranked(self.skills.values(), &query_vec, top_k);
+        let ranked = self
+            .dense
+            .search(self.skills.values(), query, top_k, self.sink.as_ref())?;
         let stage_ms = t.elapsed().as_millis() as u64;
         let hits: Vec<SkillHit> = ranked
             .into_iter()
@@ -279,10 +304,10 @@ impl SkillRegistry {
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        self.dense.require_built(self.skills.len())?;
         let t = Instant::now();
-        let query_vec = self.dense.embed_query(query, self.sink.as_ref())?;
-        let dense_ranked = self.dense.ranked(self.skills.values(), &query_vec, depth);
+        let dense_ranked =
+            self.dense
+                .search(self.skills.values(), query, depth, self.sink.as_ref())?;
         let dense_stage = SearchStage {
             name: "dense".into(),
             took_ms: t.elapsed().as_millis() as u64,
@@ -543,6 +568,22 @@ mod tests {
             1,
             "a search after build_embeddings embeds only the query"
         );
+    }
+
+    #[test]
+    fn rebuild_embeddings_recomputes_the_full_skill_corpus() {
+        let counter = Arc::new(CountingEmbedder::new());
+        let mut reg = with_embedder(counter.clone());
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        reg.register(skill("frontend", "frontend", "HTML slides", &["frontend"]));
+        reg.build_embeddings().unwrap();
+        reg.rebuild_embeddings().unwrap();
+        assert_eq!(counter.doc_calls(), 4, "rebuild embeds every skill again");
     }
 
     #[test]

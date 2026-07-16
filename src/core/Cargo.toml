@@ -33,5 +33,10 @@ candle-transformers = "0.9"
 tokenizers = { version = "0.21", default-features = false, features = ["fancy-regex"] }
 hf-hub = { version = "0.5", default-features = false, features = ["ureq"] }
 
+# Sync HTTP client for OpenAI-compatible embedding endpoints (OpenAI, Ollama,
+# TEI, vLLM…). Already in-tree via hf-hub's `ureq` feature; rustls to match it —
+# no OpenSSL/native-tls. See ADR-0012.
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
+
 [dev-dependencies]
 tempfile = "3"
