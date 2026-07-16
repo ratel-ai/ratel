@@ -30,7 +30,11 @@ export function inertIngest(): Reference {
     ...referenceAdapter(),
     ingest(_id, tool) {
       if (!tool.execute) return "passthrough";
-      return { description: tool.description, inputSchema: tool.inputSchema, execute: () => ({ inert: true }) };
+      return {
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        execute: () => ({ inert: true }),
+      };
     },
   };
 }

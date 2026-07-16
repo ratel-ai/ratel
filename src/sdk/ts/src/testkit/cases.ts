@@ -3,8 +3,8 @@ import {
   type ExecutableTool,
   GET_SKILL_CONTENT_ID,
   INVOKE_TOOL_ID,
-  ratel,
   type RatelAdapter,
+  ratel,
   SEARCH_CAPABILITIES_ID,
   type SearchCapabilitiesResult,
   SkillCatalog,
@@ -253,7 +253,10 @@ export function adapterConformanceCases<TTool, TMessage>(
         const view = core.adaptTo(options.adapter());
         for (const id of CAPABILITY_IDS) {
           assert.throws(
-            () => view.tools.register({ [id]: options.makeExecutableTool({ description: "impostor" }) }),
+            () =>
+              view.tools.register({
+                [id]: options.makeExecutableTool({ description: "impostor" }),
+              }),
             /reserved/,
             `registering ${id} throws`,
           );
@@ -336,7 +339,10 @@ export function adapterConformanceCases<TTool, TMessage>(
         const provider = makePassthrough({ description: "provider-run search" });
         a.tools.register({ provider_search: provider });
         assert.strictEqual(a.expose().provider_search, provider, "view a exposes it");
-        assert.ok(!("provider_search" in b.expose()), "view b does not — passthroughs are per view");
+        assert.ok(
+          !("provider_search" in b.expose()),
+          "view b does not — passthroughs are per view",
+        );
       },
     },
     {
@@ -351,11 +357,22 @@ export function adapterConformanceCases<TTool, TMessage>(
         // A passthrough claims its id: a later executable must not shadow it.
         const provider = makePassthrough({ description: "provider-run" });
         view.tools.register({ claimed: provider });
-        view.tools.register({ claimed: options.makeExecutableTool({ description: "late executable" }) });
-        assert.ok(!view.tools.catalog.has("claimed"), "the executable did not shadow the passthrough");
-        assert.strictEqual(view.expose().claimed, provider, "the first passthrough still owns the id");
+        view.tools.register({
+          claimed: options.makeExecutableTool({ description: "late executable" }),
+        });
+        assert.ok(
+          !view.tools.catalog.has("claimed"),
+          "the executable did not shadow the passthrough",
+        );
+        assert.strictEqual(
+          view.expose().claimed,
+          provider,
+          "the first passthrough still owns the id",
+        );
         // The reverse: an executable claims its id, a later passthrough must not shadow it.
-        view.tools.register({ dup: options.makeExecutableTool({ description: "first description" }) });
+        view.tools.register({
+          dup: options.makeExecutableTool({ description: "first description" }),
+        });
         view.tools.register({ dup: makePassthrough({ description: "late passthrough" }) });
         assert.ok(view.tools.catalog.has("dup"), "the executable kept its id");
         assert.ok(!("dup" in view.expose()), "the late passthrough is not exposed");
@@ -437,7 +454,11 @@ export function adapterConformanceCases<TTool, TMessage>(
         const expected = await core.recall("shared grep");
         assert.ok(expected, "the core recall matched");
         const first = await a.recall("shared grep");
-        options.validateRecallPair(first, { callId: "recall_0", query: "shared grep", recall: expected });
+        options.validateRecallPair(first, {
+          callId: "recall_0",
+          query: "shared grep",
+          recall: expected,
+        });
         const second = await b.recall("shared grep");
         options.validateRecallPair(second, {
           callId: "recall_1",
@@ -489,7 +510,9 @@ export function adapterConformanceCases<TTool, TMessage>(
         };
         const view = ratel().adaptTo(counting);
         view.tools.register({ fresh: options.makeExecutableTool({ description: "Fresh tool." }) });
-        view.tools.register({ fresh: options.makeExecutableTool({ description: "Duplicate call." }) });
+        view.tools.register({
+          fresh: options.makeExecutableTool({ description: "Duplicate call." }),
+        });
         assert.strictEqual(ingestCalls, 1, "ingest ran once despite the repeated register");
       },
     },

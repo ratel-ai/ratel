@@ -15,7 +15,11 @@ import {
   adapterConformanceCases,
   describeAdapterConformance,
 } from "./index.js";
-import { type FakeMessage, type FakeTool, referenceConformanceOptions } from "./reference-adapter.js";
+import {
+  type FakeMessage,
+  type FakeTool,
+  referenceConformanceOptions,
+} from "./reference-adapter.js";
 
 // A runner that records every describe/it/it.skip call instead of executing the
 // case bodies — so the harness's registration and skip semantics can be asserted

@@ -1,11 +1,7 @@
 import { deepStrictEqual, ok, strictEqual } from "node:assert/strict";
 import type { JSONSchema7 } from "../index.js";
 import { type RatelAdapter, ToolCatalog } from "../index.js";
-import type {
-  AdapterConformanceOptions,
-  ConformanceToolSpec,
-  RecallExpectation,
-} from "./cases.js";
+import type { AdapterConformanceOptions, ConformanceToolSpec, RecallExpectation } from "./cases.js";
 
 /**
  * The tool shape of the {@link referenceAdapter | reference adapter} — a

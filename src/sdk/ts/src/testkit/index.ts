@@ -1,6 +1,6 @@
 /**
  * `@ratel-ai/sdk/testkit` — the adapter conformance battery. A runner-agnostic
- * set of cases every {@link RatelAdapter} package must pass, covering the whole
+ * set of cases every `RatelAdapter` package must pass, covering the whole
  * SPI contract (ADR-0013): ingest/expose round-trip, the reserved-id guard,
  * recall top-K clamping, passthrough semantics, and recall-pair shape. Drive it
  * with {@link describeAdapterConformance} (a `{ describe, it }` from
