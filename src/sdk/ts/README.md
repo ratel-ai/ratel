@@ -19,6 +19,18 @@
 
 Use `ToolCatalog` for ranked tools with executable handlers and `SkillCatalog` for ranked playbooks loaded on demand. Expose `searchCapabilitiesTool`, `invokeToolTool`, and `getSkillContentTool` so an agent can discover tools and skills, invoke tools, and load full skill instructions. Tools from existing MCP servers can be ingested into the tool catalog.
 
+Semantic and hybrid retrieval use a configurable embedding model ([ADR 0012](../../../docs/adr/0012-configurable-embedding-models.md)), set per catalog via the `embedding` option: the built-in default, a HuggingFace repo or local directory (in-process), or an OpenAI-compatible endpoint (OpenAI, Ollama, TEI, vLLM).
+
+For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole array and embeds on a libuv worker, so model loading, HTTP, and inference never block Node's event loop — and embedding errors surface right at `register()`:
+
+```ts
+const catalog = new ToolCatalog({ method: "semantic", embedding: { ollama: "nomic-embed-text" } });
+await catalog.register(tools);                              // embeds the batch here
+const hits = await catalog.searchAsync("deploy the service", 5);
+```
+
+`register()` returns a promise for every method (BM25 too); `search()` stays synchronous for BM25 only, and `searchAsync()` covers all three. To change the endpoint's model or vector dimension, construct a new catalog and re-register.
+
 ## Install
 
 ```bash
@@ -33,7 +45,7 @@ Save as `quickstart.mjs`, then run `node quickstart.mjs`:
 import { ToolCatalog } from "@ratel-ai/sdk";
 
 const catalog = new ToolCatalog();
-catalog.register({
+await catalog.register({
   id: "get_weather",
   name: "get_weather",
   description: "Get the current weather for a city.",
@@ -80,7 +92,7 @@ framework-independent guard (reserved capability-tool ids, top-K clamp, first-re
 on the adapted path, passthrough of provider-run tools); an adapter is just three codecs
 (`ingest` / `expose` / `recallMessages`) plus its framework idioms. `adaptTo` infers the
 framework's tool and message types, so app code needs no casts. A framework tool registered on
-the un-adapted core throws an error pointing at the adapter package to install. See ADR-0012.
+the un-adapted core throws an error pointing at the adapter package to install. See ADR-0013.
 
 Continue with the [TypeScript guide](https://docs.ratel.sh/docs/sdks/typescript), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-typescript), or the [Vercel AI SDK example](https://github.com/ratel-ai/ratel/tree/main/examples/ai-sdk).
 

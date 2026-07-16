@@ -54,7 +54,7 @@ async function main() {
   const result = await runAgent({
     prompt: "read a file from local disk",
     model: model as unknown as LanguageModel,
-    catalog: buildCatalog(),
+    catalog: await buildCatalog(),
     initialTopK: 3,
     maxSteps: 8,
   });

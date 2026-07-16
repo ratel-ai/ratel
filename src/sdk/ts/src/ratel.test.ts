@@ -207,19 +207,19 @@ describe("ratel() standalone core", () => {
     );
   });
 
-  it("recall() is a pure query: canonical result or null, no call ids", () => {
+  it("recall() is a pure query: canonical result or null, no call ids", async () => {
     const r = ratel();
-    expect(r.recall("anything")).toBeNull(); // empty catalog
+    expect(await r.recall("anything")).toBeNull(); // empty catalog
 
     r.tools.register(native("deploy_app", "Deploy the app to production."));
-    expect(r.recall("zzzqqq totally unrelated")).toBeNull(); // no hits
+    expect(await r.recall("zzzqqq totally unrelated")).toBeNull(); // no hits
 
-    const result = r.recall("deploy to production");
+    const result = await r.recall("deploy to production");
     expect(result?.tools.groups[0]?.hits[0]?.toolId).toBe("deploy_app");
     expect(result).not.toHaveProperty("callId"); // pure shape, id-free
   });
 
-  it("recall() includes the skills bucket when a skill is registered", () => {
+  it("recall() includes the skills bucket when a skill is registered", async () => {
     const r = ratel();
     r.skills.register({
       id: "vercel-deploy",
@@ -228,44 +228,50 @@ describe("ratel() standalone core", () => {
       tags: ["vercel"],
       body: "# Vercel",
     });
-    expect(r.recall("deploy to vercel")?.skills.map((s) => s.skillId)).toContain("vercel-deploy");
+    expect((await r.recall("deploy to vercel"))?.skills.map((s) => s.skillId)).toContain(
+      "vercel-deploy",
+    );
   });
 
-  it("caps recallTopK at 50 and falls back to the default on invalid values", () => {
+  it("caps recallTopK at 50 and falls back to the default on invalid values", async () => {
     const many = Array.from({ length: 60 }, (_, i) =>
       native(`grep_${i}`, `Search files variant ${i}: grep ripgrep.`),
     );
 
     const high = ratel({ recallTopK: 999 });
     high.tools.register(...many);
-    const hi = high
-      .recall("search files grep")
-      ?.tools.groups.reduce((n, g) => n + g.hits.length, 0);
+    const hi = (await high.recall("search files grep"))?.tools.groups.reduce(
+      (n, g) => n + g.hits.length,
+      0,
+    );
     expect(hi).toBeLessThanOrEqual(50);
     expect(hi).toBeGreaterThan(5); // 999 honored past the default, capped at 50
 
     const low = ratel({ recallTopK: -1 });
     low.tools.register(...many);
-    const lo = low.recall("search files grep")?.tools.groups.reduce((n, g) => n + g.hits.length, 0);
+    const lo = (await low.recall("search files grep"))?.tools.groups.reduce(
+      (n, g) => n + g.hits.length,
+      0,
+    );
     expect(lo).toBeLessThanOrEqual(5); // invalid → default 5
   });
 
-  it("derives server groups by the '__' prefix, treating a leading '__' as no prefix", () => {
+  it("derives server groups by the '__' prefix, treating a leading '__' as no prefix", async () => {
     const r = ratel();
     r.tools.register(
       native("github__create_issue", "Open a GitHub issue tracker ticket."),
       native("__weird_internal", "An internal GitHub issue tracker tool with leading underscores."),
     );
-    const names = r.recall("github issue tracker")?.tools.groups.map((g) => g.server.name);
+    const names = (await r.recall("github issue tracker"))?.tools.groups.map((g) => g.server.name);
     expect(names).toContain("github"); // sep > 0 → "github"
     expect(names).toContain("__weird_internal"); // sep === 0 → whole id
   });
 
-  it("records a direct-origin gateway_search on recall", () => {
+  it("records a direct-origin gateway_search on recall", async () => {
     const r = ratel({ trace: { kind: "memory", sessionId: "t" } });
     r.tools.register(native("deploy_grep", "Deploy grep search tool."));
     r.tools.catalog.drainTraceEvents();
-    r.recall("deploy grep");
+    await r.recall("deploy grep");
     const ev = (r.tools.catalog.drainTraceEvents() as Array<Record<string, unknown>>).find(
       (e) => e.type === "gateway_search",
     );
@@ -395,11 +401,11 @@ describe("ratel().adaptTo(adapter)", () => {
     expect(a.expose().claimed).toBe(provider);
   });
 
-  it("recall returns the adapter's message pair with a private-counter call id", () => {
+  it("recall returns the adapter's message pair with a private-counter call id", async () => {
     const a = ratel().adaptTo(fakeAdapter());
     a.tools.register({ deploy_app: exec("Deploy the app to production servers.") });
 
-    const first = a.recall("deploy to production");
+    const first = await a.recall("deploy to production");
     expect(first).toHaveLength(2);
     expect(first[0].callId).toBe("recall_0");
     expect(first[0].body).toEqual({ query: "deploy to production" }); // ref carries the query
@@ -407,22 +413,22 @@ describe("ratel().adaptTo(adapter)", () => {
     const recall = first[1].body as SearchCapabilitiesResult;
     expect(recall.tools.groups.length).toBeGreaterThan(0);
 
-    const second = a.recall("deploy to production");
+    const second = await a.recall("deploy to production");
     expect(second[0].callId).toBe("recall_1"); // monotonic private counter
   });
 
-  it("recall returns [] and spends no call id when nothing matches", () => {
+  it("recall returns [] and spends no call id when nothing matches", async () => {
     const a = ratel().adaptTo(fakeAdapter());
-    expect(a.recall("anything at all")).toEqual([]); // empty catalog, no skills
+    expect(await a.recall("anything at all")).toEqual([]); // empty catalog, no skills
 
     a.tools.register({ deploy_app: exec("Deploy the app to production.") });
     // A query that shares no terms with the only tool → no hits → still [].
-    expect(a.recall("zzzqqq totally unrelated")).toEqual([]);
+    expect(await a.recall("zzzqqq totally unrelated")).toEqual([]);
     // The counter was never spent, so the next real hit is still recall_0.
-    expect((a.recall("deploy production") as FakeMessage[])[0].callId).toBe("recall_0");
+    expect(((await a.recall("deploy production")) as FakeMessage[])[0].callId).toBe("recall_0");
   });
 
-  it("shares one core's catalog and recall counter across adapter views", () => {
+  it("shares one core's catalog and recall counter across adapter views", async () => {
     const core = ratel();
     const a = core.adaptTo(fakeAdapter());
     const b = core.adaptTo(fakeAdapter());
@@ -430,11 +436,11 @@ describe("ratel().adaptTo(adapter)", () => {
     expect(b.tools.has("shared_tool")).toBe(true); // one catalog
     expect(core.tools.has("shared_tool")).toBe(true); // …the core's own
 
-    expect((a.recall("shared grep") as FakeMessage[])[0].callId).toBe("recall_0");
-    expect((b.recall("shared grep") as FakeMessage[])[0].callId).toBe("recall_1"); // shared counter
+    expect(((await a.recall("shared grep")) as FakeMessage[])[0].callId).toBe("recall_0");
+    expect(((await b.recall("shared grep")) as FakeMessage[])[0].callId).toBe("recall_1"); // shared counter
   });
 
-  it("recall carries a skills-only match: the pair is built even with zero tool hits", () => {
+  it("recall carries a skills-only match: the pair is built even with zero tool hits", async () => {
     const a = ratel().adaptTo(fakeAdapter());
     a.skills.register({
       id: "vercel-deploy",
@@ -443,7 +449,7 @@ describe("ratel().adaptTo(adapter)", () => {
       tags: ["vercel"],
       body: "# Vercel",
     });
-    const msgs = a.recall("deploy to vercel");
+    const msgs = await a.recall("deploy to vercel");
     expect(msgs).toHaveLength(2);
     const recall = msgs[1].body as SearchCapabilitiesResult;
     expect(recall.tools.groups).toEqual([]);

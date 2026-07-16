@@ -3,10 +3,10 @@
 from ratel_ai import GET_SKILL_CONTENT_ID, Skill, SkillCatalog, get_skill_content_tool
 
 
-def _catalog(*skills: Skill) -> SkillCatalog:
+async def _catalog(*skills: Skill) -> SkillCatalog:
     c = SkillCatalog()
     for s in skills:
-        c.register(s)
+        await c.register(s)
     return c
 
 
@@ -17,7 +17,7 @@ def test_uses_the_canonical_id() -> None:
 
 async def test_returns_skill_body_by_id() -> None:
     tool = get_skill_content_tool(
-        _catalog(
+        await _catalog(
             Skill(id="api-design", name="api-design", description="d", body="# API\n\nUse nouns.")
         )
     )

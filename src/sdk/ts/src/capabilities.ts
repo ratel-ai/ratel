@@ -330,13 +330,13 @@ export interface FormatSearchCapabilitiesOptions {
  * @param toolCatalog - Catalog the `tools` bucket is ranked from.
  * @param query - Natural-language description of what the caller wants to do.
  * @param opts - Bucket sizes, skill catalog, origin, and upstream metadata.
- * @returns The {@link SearchCapabilitiesResult}.
+ * @returns A promise for the {@link SearchCapabilitiesResult}.
  */
-export function formatSearchCapabilities(
+export async function formatSearchCapabilities(
   toolCatalog: ToolCatalog,
   query: string,
   opts: FormatSearchCapabilitiesOptions = {},
-): SearchCapabilitiesResult {
+): Promise<SearchCapabilitiesResult> {
   const kTools = clampTopK(opts.topKTools, DEFAULT_TOP_K_TOOLS);
   const kSkills = clampTopK(opts.topKSkills, DEFAULT_TOP_K_SKILLS);
   const origin = opts.origin ?? "agent";
@@ -344,7 +344,7 @@ export function formatSearchCapabilities(
   const skillCatalog = opts.skillCatalog;
   const startedAt = Date.now();
 
-  const toolHits = toolCatalog.search(query, kTools, origin);
+  const toolHits = await toolCatalog.searchAsync(query, kTools, origin);
   toolCatalog.recordEvent({
     type: "gateway_search",
     query,
@@ -394,7 +394,7 @@ export function formatSearchCapabilities(
   // budget → never starved by tools). SkillCatalog.search emits its own
   // skill_search trace for the funnel.
   const skills: CapabilitySkillHit[] = skillCatalog
-    ? skillCatalog.search(query, kSkills, origin).map((h) => ({
+    ? (await skillCatalog.searchAsync(query, kSkills, origin)).map((h) => ({
         skillId: h.skillId,
         score: h.score,
         description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),

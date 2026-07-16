@@ -16,7 +16,7 @@
   </p>
 </div>
 
-`ratel-ai-core` is Ratel's Rust retrieval engine. Register tool or skill metadata once, then rank the catalog for each agent turn. BM25 is the model-free default; semantic and hybrid retrieval use a local embedding model. Everything runs in-process, with no vector database or service to deploy.
+`ratel-ai-core` is Ratel's Rust retrieval engine. Register tool or skill metadata once, then rank the catalog for each agent turn. BM25 is the model-free default; semantic and hybrid retrieval use either an in-process model or a configured OpenAI-compatible embedding endpoint. The retrieval engine and cache stay in-process, with no vector database or Ratel service to deploy.
 
 This crate owns retrieval and its local trace stream. Tool execution, MCP connections, and authentication integrations live in the SDK and local distribution.
 

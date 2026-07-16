@@ -11,6 +11,12 @@ def test_public_exports_present() -> None:
         "ExecutableTool",
         "Tool",
         "TraceSinkConfig",
+        "EmbeddingModelConfig",
+        "EmbeddingSpec",
+        "EndpointEmbeddingConfig",
+        "HuggingFaceEmbeddingConfig",
+        "LocalEmbeddingConfig",
+        "OllamaEmbeddingConfig",
         "SEARCH_CAPABILITIES_ID",
         "INVOKE_TOOL_ID",
         "search_capabilities_tool",
@@ -32,10 +38,10 @@ def test_public_exports_present() -> None:
         assert hasattr(ratel_ai, name), name
 
 
-def test_end_to_end_register_search_invoke_is_wired() -> None:
+async def test_end_to_end_register_search_invoke_is_wired() -> None:
     # The README quickstart path, condensed.
     catalog = ratel_ai.ToolCatalog()
-    catalog.register(
+    await catalog.register(
         ratel_ai.ExecutableTool(
             id="read_file",
             name="read_file",

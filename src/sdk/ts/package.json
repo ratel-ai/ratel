@@ -41,7 +41,7 @@
     "build:native": "napi build --platform --release --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts",
     "build:ts": "tsc",
     "build": "pnpm build:native && pnpm build:ts",
-    "typecheck": "pnpm build:native && tsc --noEmit",
+    "typecheck": "pnpm build:native && tsc --noEmit && tsc -p tsconfig.type-tests.json",
     "docs:check": "typedoc",
     "lint": "biome check src && pnpm docs:check",
     "test": "pnpm build:native && vitest run"

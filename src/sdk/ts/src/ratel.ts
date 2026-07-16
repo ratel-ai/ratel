@@ -150,7 +150,7 @@ export interface AdaptedBase<TTool, TMessage> {
    * (spending no call id). Pure: it builds fresh messages and never mutates a
    * host array.
    */
-  recall(query: string): TMessage[];
+  recall(query: string): Promise<TMessage[]>;
 }
 
 /**
@@ -191,7 +191,7 @@ export interface Ratel {
    * pure query: no call id is minted — ids exist only on the adapted views,
    * whose synthetic message pairs need them.
    */
-  recall(query: string): SearchCapabilitiesResult | null;
+  recall(query: string): Promise<SearchCapabilitiesResult | null>;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
   adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A>;
 }
@@ -278,8 +278,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
     };
   }
 
-  function recall(query: string): SearchCapabilitiesResult | null {
-    const result = formatSearchCapabilities(catalog, query, {
+  async function recall(query: string): Promise<SearchCapabilitiesResult | null> {
+    const result = await formatSearchCapabilities(catalog, query, {
       topKTools: config.recallTopK, // capped/validated inside the formatter
       skillCatalog: skills,
       origin: "direct",
@@ -330,8 +330,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
         }
         return out;
       },
-      recall(query) {
-        const result = recall(query);
+      async recall(query) {
+        const result = await recall(query);
         if (result === null) return []; // nothing matched: don't spend a call id
         return adapter.recallMessages({ callId: `recall_${recallSeq++}`, query }, result);
       },

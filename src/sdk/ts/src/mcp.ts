@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
-import type { ToolCatalog } from "./catalog.js";
+import type { ExecutableTool, ToolCatalog } from "./catalog.js";
 import { traceUpstreamRegister } from "./telemetry.js";
 
 /** Options for {@link registerMcpServer}. */
@@ -95,9 +95,10 @@ export async function registerMcpServer(
       tool_count: tools.length,
     });
     const toolIds: string[] = [];
+    const registered: ExecutableTool[] = [];
     for (const tool of tools) {
       const id = `${name}__${tool.name}`;
-      catalog.register({
+      registered.push({
         id,
         name: tool.name,
         description: tool.description ?? "",
@@ -130,6 +131,7 @@ export async function registerMcpServer(
       });
       toolIds.push(id);
     }
+    await catalog.register(registered);
 
     return {
       toolIds,

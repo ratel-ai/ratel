@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type Skill, SkillCatalog } from "./index.js";
+import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
 
 const slides: Skill = {
   id: "frontend-slides",
@@ -23,10 +24,14 @@ describe("SkillCatalog", () => {
     expect(catalog.search("anything", 5)).toEqual([]);
   });
 
-  it("registers skills and ranks the relevant one first", () => {
+  it("rejects an explicitly empty embedding string", () => {
+    expect(() => new SkillCatalog({ embedding: "" })).toThrow(/must not be blank/);
+  });
+
+  it("registers skills and ranks the relevant one first", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(slides);
-    catalog.register(apiDesign);
+    await catalog.register(slides);
+    await catalog.register(apiDesign);
 
     const hits = catalog.search("design a REST endpoint with pagination", 5);
     expect(hits.length).toBeGreaterThan(0);
@@ -34,9 +39,96 @@ describe("SkillCatalog", () => {
     expect(hits[0].score).toBeGreaterThan(0);
   });
 
-  it("invoke(id) returns the body; has/get report membership and metadata", () => {
+  it("registers an iterable of skills as one batch", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(slides);
+    await catalog.register([
+      { id: "auth", name: "auth", description: "Set up login" },
+      { id: "deploy", name: "deploy", description: "Deploy an app" },
+    ]);
+
+    expect(catalog.has("auth")).toBe(true);
+    expect(catalog.has("deploy")).toBe(true);
+    expect(catalog.size()).toBe(2);
+  });
+
+  it("registers on a semantic catalog: embeds inline and search_async finds the hit", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const catalog = new SkillCatalog({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      });
+      await catalog.register(slides);
+
+      expect(catalog.has("frontend-slides")).toBe(true);
+      const hits = await catalog.searchAsync("slides", 5);
+      expect(hits[0]?.skillId).toBe("frontend-slides");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("surfaces embedding load failures through register, but metadata persists", async () => {
+    const catalog = new SkillCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+
+    await expect(catalog.register(slides)).rejects.toThrow(/failed to load embedding model/);
+    // Metadata registration happens before the embedding pass inside `register`,
+    // so it persists even though the embed itself failed.
+    expect(catalog.has("frontend-slides")).toBe(true);
+  });
+
+  it("keeps dense search behind the asynchronous API", () => {
+    // search() rejects a resolved semantic/hybrid method before ever touching
+    // the registry, so this needs no registration (and no working model).
+    const catalog = new SkillCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    expect(() => catalog.search("slides", 5)).toThrow(/searchAsync/);
+  });
+
+  it("rejects a semantic override on a bm25 catalog with no embeddings built", async () => {
+    const catalog = new SkillCatalog();
+    await catalog.register(slides);
+    await expect(catalog.searchAsync("slides", 5, "direct", "semantic")).rejects.toThrow(
+      /not computed for semantic/,
+    );
+  });
+
+  it("register([]) on a semantic catalog is an asynchronous no-op", async () => {
+    const catalog = new SkillCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    await expect(catalog.register([])).resolves.toBeUndefined();
+    expect(catalog.size()).toBe(0);
+  });
+
+  it("serializes queued dense searches and rejects registration until they settle", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const catalog = new SkillCatalog({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      });
+      await catalog.register(slides);
+
+      const first = catalog.searchAsync("slides", 5);
+      const second = catalog.searchAsync("frontend", 5);
+      await expect(catalog.register(apiDesign)).rejects.toThrow(/registry busy; await/);
+      await Promise.all([first, second]);
+      await expect(catalog.register(apiDesign)).resolves.toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("invoke(id) returns the body; has/get report membership and metadata", async () => {
+    const catalog = new SkillCatalog();
+    await catalog.register(slides);
 
     expect(catalog.has("frontend-slides")).toBe(true);
     expect(catalog.has("missing")).toBe(false);
@@ -50,7 +142,7 @@ describe("SkillCatalog", () => {
     expect(() => catalog.invoke("nope")).toThrow(/unknown skillId: nope/);
   });
 
-  it("accepts a minimal skill with no tags or body (parity with the Python SDK)", () => {
+  it("accepts a minimal skill with no tags or body (parity with the Python SDK)", async () => {
     const catalog = new SkillCatalog();
     // `tags` and `body` are optional — this object must type-check and register.
     const minimal: Skill = {
@@ -58,7 +150,7 @@ describe("SkillCatalog", () => {
       name: "min",
       description: "a minimal skill, no tags or body",
     };
-    catalog.register(minimal);
+    await catalog.register(minimal);
 
     expect(catalog.has("min")).toBe(true);
     expect(catalog.invoke("min")).toBe(""); // missing body resolves to "", never undefined
@@ -66,17 +158,27 @@ describe("SkillCatalog", () => {
   });
 });
 
+describe("SkillCatalog removed methods", () => {
+  it("registerMany / buildEmbeddings / rebuildEmbeddings are gone at runtime", () => {
+    // Folded into the variadic, self-embedding `register` (RAT-379/async-register).
+    const catalog = new SkillCatalog() as unknown as Record<string, unknown>;
+    expect(catalog.registerMany).toBeUndefined();
+    expect(catalog.buildEmbeddings).toBeUndefined();
+    expect(catalog.rebuildEmbeddings).toBeUndefined();
+  });
+});
+
 describe("SkillCatalog tracing", () => {
-  it("does not capture events under the default noop sink", () => {
+  it("does not capture events under the default noop sink", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(slides);
+    await catalog.register(slides);
     catalog.search("slides", 5);
     expect(catalog.drainTraceEvents()).toEqual([]);
   });
 
-  it("captures skill_churn on register and skill_search on search", () => {
+  it("captures skill_churn on register and skill_search on search", async () => {
     const catalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(apiDesign);
+    await catalog.register(apiDesign);
     catalog.search("api", 5, "agent");
 
     const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
@@ -89,9 +191,9 @@ describe("SkillCatalog tracing", () => {
     expect((search?.hits as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("emits skill_invoke on invoke", () => {
+  it("emits skill_invoke on invoke", async () => {
     const catalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(apiDesign);
+    await catalog.register(apiDesign);
     catalog.drainTraceEvents();
 
     catalog.invoke("api-design");
@@ -102,10 +204,10 @@ describe("SkillCatalog tracing", () => {
     expect(typeof invoke?.took_ms).toBe("number");
   });
 
-  it("re-registering an id replaces it in place — one hit, latest body wins", () => {
+  it("re-registering an id replaces it in place — one hit, latest body wins", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(apiDesign);
-    catalog.register({
+    await catalog.register(apiDesign);
+    await catalog.register({
       ...apiDesign,
       description: "Build animation-rich HTML presentations from scratch.",
       body: "# Slides\n\nUpdated body.",

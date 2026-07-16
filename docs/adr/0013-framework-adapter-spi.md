@@ -1,4 +1,4 @@
-# 12. Framework adapter SPI: `ratel(config).adaptTo(adapter)`
+# 13. Framework adapter SPI: `ratel(config).adaptTo(adapter)`
 
 Date: 2026-07-15
 

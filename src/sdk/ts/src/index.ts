@@ -15,7 +15,6 @@
 // their CatalogRegistration schemas without a cast.
 export type { JSONSchema7 } from "json-schema";
 export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
-export { SkillRegistry, ToolRegistry } from "../native/index.cjs";
 export type {
   CapabilitySkillHit,
   CapabilityToolGroup,
@@ -35,6 +34,8 @@ export {
   searchCapabilitiesTool,
 } from "./capabilities.js";
 export type {
+  EmbeddingModelConfig,
+  EmbeddingSpec,
   ExecutableTool,
   Executor,
   SearchMethod,
@@ -54,7 +55,7 @@ export type {
 export { SEARCH_TOOLS_ID, searchToolsTool } from "./compat.js";
 export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
 export { registerMcpServer } from "./mcp.js";
-// The framework-adapter SPI and factory (ADR-0012): `ratel(config).adaptTo(adapter)`.
+// The framework-adapter SPI and factory (ADR-0013): `ratel(config).adaptTo(adapter)`.
 export type {
   AdaptedBase,
   AdaptedRatel,
@@ -67,6 +68,7 @@ export type {
   ToolCollection,
 } from "./ratel.js";
 export { ratel } from "./ratel.js";
+export { SkillRegistry, ToolRegistry } from "./registry.js";
 export type { SkillCatalogOptions } from "./skill-catalog.js";
 export { SkillCatalog } from "./skill-catalog.js";
 export { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";

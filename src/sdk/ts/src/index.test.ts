@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type SearchHit, type Tool, ToolRegistry } from "./index.js";
+import { type SearchHit, type Skill, SkillRegistry, type Tool, ToolRegistry } from "./index.js";
+import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
 
 const readFile: Tool = {
   id: "read_file",
@@ -48,15 +49,21 @@ const searchFiles: Tool = {
   outputSchema: {},
 };
 
+const BM25_CONCURRENCY_CORPUS_SIZE = 50_000;
+
 describe("ToolRegistry", () => {
+  it("normalizes a public bare string embedding spec", () => {
+    expect(() => new ToolRegistry("")).toThrow(/must not be blank/);
+  });
+
   it("returns no hits from an empty registry", () => {
     const registry = new ToolRegistry();
     expect(registry.search("anything", 5)).toEqual([]);
   });
 
-  it("finds a registered tool by name with a positive score", () => {
+  it("finds a registered tool by name with a positive score", async () => {
     const registry = new ToolRegistry();
-    registry.register(readFile);
+    await registry.register(readFile);
 
     const hits = registry.search("read file", 5);
     expect(hits.length).toBeGreaterThan(0);
@@ -64,32 +71,28 @@ describe("ToolRegistry", () => {
     expect(hits[0].score).toBeGreaterThan(0);
   });
 
-  it("indexes content nested inside inputSchema property descriptions", () => {
+  it("indexes content nested inside inputSchema property descriptions", async () => {
     // Tool's only signal for "regular expression" lives inside inputSchema.properties.pattern.description.
     // Verifies the binding forwards serde_json::Value across the FFI without dropping nested fields.
     const registry = new ToolRegistry();
-    registry.register(readFile);
-    registry.register(writeFile);
-    registry.register(searchFiles);
+    await registry.register([readFile, writeFile, searchFiles]);
 
     const hits = registry.search("regular expression", 3);
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].toolId).toBe("search_files");
   });
 
-  it("bounds the result count by topK", () => {
+  it("bounds the result count by topK", async () => {
     const registry = new ToolRegistry();
-    registry.register(readFile);
-    registry.register(writeFile);
-    registry.register(searchFiles);
+    await registry.register([readFile, writeFile, searchFiles]);
 
     const hits = registry.search("file", 2);
     expect(hits.length).toBeLessThanOrEqual(2);
   });
 
-  it("exposes hit fields in camelCase (toolId, score)", () => {
+  it("exposes hit fields in camelCase (toolId, score)", async () => {
     const registry = new ToolRegistry();
-    registry.register(readFile);
+    await registry.register(readFile);
 
     const [hit] = registry.search("read file", 1);
     expect(hit).toBeDefined();
@@ -97,5 +100,110 @@ describe("ToolRegistry", () => {
     expect(typeof typedHit.toolId).toBe("string");
     expect(typeof typedHit.score).toBe("number");
     expect(typedHit.score).toBeGreaterThan(0);
+  });
+
+  it("rejects a semantic search when embeddings were never built (bm25-default registry)", async () => {
+    const registry = new ToolRegistry({ local: "/definitely/missing/ratel-embedding-model" });
+    await registry.register([readFile, writeFile]);
+
+    expect(() => registry.searchWithMethod("read", 5, "direct", "semantic")).toThrow(
+      /searchWithMethodAsync/,
+    );
+    await expect(registry.searchWithMethodAsync("read", 5, "direct", "semantic")).rejects.toThrow(
+      /not computed for semantic/,
+    );
+  });
+
+  it("surfaces embedding load failures through register on a semantic registry", async () => {
+    const registry = new ToolRegistry(
+      { local: "/definitely/missing/ratel-embedding-model" },
+      "semantic",
+    );
+    await expect(registry.register(readFile)).rejects.toThrow(/failed to load embedding model/);
+  });
+
+  it("serializes the raw dense method alias as semantic work", async () => {
+    const registry = new ToolRegistry({ local: "/definitely/missing/ratel-embedding-model" });
+    await registry.register(readFile);
+
+    const search = registry.searchWithMethodAsync("read", 5, "direct", "dense");
+    const rejection = expect(search).rejects.toThrow(/not computed for semantic/);
+    await expect(registry.register(writeFile)).rejects.toThrow(/registry busy; await/);
+    await rejection;
+  });
+
+  it("rejects registration promptly instead of blocking behind active asynchronous bm25 reads", async () => {
+    const registry = new ToolRegistry();
+    await registry.register(
+      Array.from({ length: BM25_CONCURRENCY_CORPUS_SIZE }, (_, index) => ({
+        id: `concurrent_${index}`,
+        name: `concurrent_${index}`,
+        description: `Deploy database file search operation ${index}`,
+        inputSchema: {},
+        outputSchema: {},
+      })),
+    );
+
+    const searches = Array.from({ length: 4 }, () =>
+      registry.searchWithMethodAsync("deploy database file", 10, "direct", "bm25"),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const startedAt = performance.now();
+    await expect(registry.register(writeFile)).rejects.toThrow(/registry busy; await/);
+    expect(performance.now() - startedAt).toBeLessThan(100);
+
+    await Promise.all(searches);
+  }, 15_000);
+});
+
+describe("ToolRegistry removed methods", () => {
+  it("registerMany / buildEmbeddings / rebuildEmbeddings are gone at runtime", () => {
+    const registry = new ToolRegistry() as unknown as Record<string, unknown>;
+    expect(registry.registerMany).toBeUndefined();
+    expect(registry.buildEmbeddings).toBeUndefined();
+    expect(registry.rebuildEmbeddings).toBeUndefined();
+  });
+});
+
+describe("SkillRegistry", () => {
+  it("embeds inline on register and search_async finds the hit", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const registry = new SkillRegistry({ url: server.url, model: "test-model" }, "semantic");
+      const skill: Skill = {
+        id: "api-design",
+        name: "api-design",
+        description: "Design a REST API.",
+      };
+      await registry.register(skill);
+
+      const hits = await registry.searchWithMethodAsync("REST API", 5, "direct", "semantic");
+      expect(hits[0]?.skillId).toBe("api-design");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("surfaces embedding load failures through register", async () => {
+    const registry = new SkillRegistry(
+      { local: "/definitely/missing/ratel-embedding-model" },
+      "semantic",
+    );
+    const skill: Skill = {
+      id: "api-design",
+      name: "api-design",
+      description: "Design a REST API.",
+    };
+    await expect(registry.register(skill)).rejects.toThrow(/failed to load embedding model/);
+  });
+});
+
+describe("SkillRegistry removed methods", () => {
+  it("registerMany / buildEmbeddings / rebuildEmbeddings are gone at runtime", () => {
+    const registry = new SkillRegistry() as unknown as Record<string, unknown>;
+    expect(registry.registerMany).toBeUndefined();
+    expect(registry.buildEmbeddings).toBeUndefined();
+    expect(registry.rebuildEmbeddings).toBeUndefined();
   });
 });

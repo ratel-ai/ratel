@@ -34,7 +34,8 @@ parallel to `SearchOrigin`.
   change.
 - **Semantic** embeds the query with a local `BAAI/bge-small-en-v1.5` model (pure-Rust Candle,
   pinned revision, CLS-pool + L2-normalize) and cosine-ranks it against embedded tool/skill
-  text (`dense_search`). The same `searchable_text` projection feeds it.
+  text (`dense_search`). The same `searchable_text` projection feeds it. (The model is the
+  default; **ADR-0012** makes it configurable per catalog — HuggingFace/local/endpoint.)
 - **Hybrid** runs the BM25 and dense arms to a fixed retrieval depth and fuses their rankings
   by **Reciprocal Rank Fusion** (`RRF_K = 60`), no cross-encoder reranker. RRF fuses on rank
   position, so BM25's unbounded scores and cosine's `[-1, 1]` never need reconciling.
@@ -42,23 +43,27 @@ parallel to `SearchOrigin`.
   `Result<_, EmbedderError>`; `Bm25` is always `Ok`, while `Semantic`/`Hybrid` surface a failed
   model load (network, cache, underpowered machine) as a catchable error — a Python
   `RuntimeError` / a thrown JS error at the SDK edge.
-- **The embedding cache is incremental and in-process.** It is an **id-keyed** map of per-item
-  vectors: `register` inserts a tool by id (replacing an existing id in place and calling
-  `DenseCache::invalidate` to drop its stale vector), and `build_embeddings()` embeds every id
-  not currently cached — the newly registered *and* the invalidated-on-replace — so a cached
-  vector is recomputed only when its item changed (adding one tool, or re-registering one, costs
-  one embedding, not N). Core `register(&mut self, tool) -> ()` stays infallible and model-free;
-  a pure BM25 registry never populates the cache. The one-time model load emits a
-  `TraceEvent::EmbedderLoad` flagging a slow (possibly underpowered) or failed load.
-- **Semantic is opt-in and eagerly built.** A catalog whose default method is `"semantic"` /
-  `"hybrid"` (the opt-in flag) calls `build_embeddings()` after each `register`, so the cost lands at load
-  time and a search only ever embeds the *query* — no search pays the corpus-embedding cost, and
-  a model-load failure surfaces at `register` (fail-fast). A BM25 catalog does none of this. A
-  public `catalog.build_embeddings()` is also exposed for the bulk-register-then-build pattern.
+- **The embedding cache is incremental, transactional, and in-process.** It is an **id-keyed**
+  map of per-item vectors: `register` inserts metadata by id (replacing an existing id in place
+  and invalidating its stale vector), and `build_embeddings()` embeds every id not currently
+  cached. Each batch is fully validated before one atomic commit, so a failed incremental build
+  adds nothing. `rebuild_embeddings()` recomputes the full corpus and atomically swaps it in;
+  failure preserves the prior complete cache. A shared/exclusive operation guard keeps query
+  validation and ranking in one vector space while a rebuild waits. Core
+  `register(&mut self, tool) -> ()` stays infallible and model-free. The one-time model load emits
+  a `TraceEvent::EmbedderLoad` flagging a slow (possibly underpowered) or failed load.
+- **SDK registration folds embedding in.** An SDK caller `await register(...)`s one item or
+  many; on a semantic/hybrid catalog that embeds the batch on a worker thread (so a model /
+  endpoint failure surfaces from `register`), while a BM25 catalog registers metadata only.
+  Model loading, downloads, HTTP, corpus embedding, and dense queries run on worker threads at
+  the TypeScript/Python boundary; a model or dimension change is recovered by constructing a new
+  catalog. Synchronous SDK `search` is BM25-only; `searchAsync` / `search_async` supports all
+  three methods. Rust core APIs remain synchronous, exposing the incremental `build_embeddings`
+  and atomic `rebuild_embeddings` primitives the SDK drives internally.
 - **A search never embeds the corpus.** A semantic/hybrid search over a corpus whose cache is not
   fully built returns `EmbedderError::EmbeddingsNotBuilt` (a catchable `RuntimeError` / thrown error) —
   it does *not* silently embed inside the search path. So a BM25 catalog handed a per-call
-  `"semantic"` errors with a remediation hint (construct with the method, or `build_embeddings()`), rather
+  `"semantic"` override errors with a remediation hint to build, then use async search, rather
   than incurring a one-off slow search. The guard loads no model.
 
 ## Consequences
@@ -67,17 +72,16 @@ parallel to `SearchOrigin`.
   pure-Rust `fancy-regex` backend, `hf-hub`) is compiled in but never exercised unless a caller
   opts into semantic/hybrid. The `searchable_text` contract (ADR-0004) is unchanged, so all
   three engines rank the same projection.
-- The external MCP gateway package, which calls the catalog with no method argument, inherits
-  the catalog's construction-time default — a deployment picks its engine without upgrading
-  that package.
+- Capability tools inherit the catalog's construction-time default and await async search. MCP
+  ingestion registers metadata only, so several upstreams can be ingested before one batched
+  embedding build.
 - The ML native deps (`ring`, Candle's `esaxx-rs`) do not zig-cross-compile, so the linux-arm64
   SDK binaries build on a native ARM64 runner instead of `--use-napi-cross`.
 - Rejected: a compile-time feature flag to pick the engine (the earlier spikes' shape) —
   runtime selection is required for per-call and per-catalog choice, and for one binary serving
-  all three. Rejected: forcing eager embedding at `register` on *every* registry (the earlier
-  spikes' shape) — it made `register` fallible and loaded the model for BM25-only users; eager
-  embedding is instead **opt-in** in semantic mode, driven from the SDK via `build_embeddings()`, so core
-  `register` stays infallible. Rejected: full-corpus re-embed on `register` (the first cut of
+  all three. Rejected: embedding at `register` — it makes registration fallible and can block a
+  Node event loop or Python interpreter on model/HTTP work. Explicit asynchronous build keeps
+  registration metadata-only in every mode. Rejected: full-corpus re-embed on `register` (the first cut of
   this ADR) — the incremental id-keyed cache re-embeds only ids not currently cached (newly
   registered, or invalidated when a re-register replaces an id). Rejected:
   score-normalization fusion for hybrid — RRF needs no per-arm score calibration.
