@@ -12,9 +12,12 @@ SkillRegistry(huggingface="org/model", ollama="nomic-embed-text")
 SkillRegistry(embedding={})
 
 tools = ToolRegistry()
-tools.register("id", "name", "description")
-tools.register(Tool(id="id", name="name", description="description"), "extra")
-
 skills = SkillRegistry()
-skills.register("id", "name", "description", [], [], {})
-skills.register(Skill(id="id", name="name", description="description"), "extra")
+
+
+async def _register() -> None:
+    await tools.register("id", "name", "description")
+    await tools.register(Tool(id="id", name="name", description="description"), "extra")
+
+    await skills.register("id", "name", "description", [], [], {})
+    await skills.register(Skill(id="id", name="name", description="description"), "extra")

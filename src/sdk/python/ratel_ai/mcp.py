@@ -125,7 +125,7 @@ async def register_mcp_server(
                 )
             )
             tool_ids.append(tool_id)
-        catalog.register_many(registered)
+        await catalog.register(registered)
 
         return McpServerHandle(
             tool_ids=tool_ids,

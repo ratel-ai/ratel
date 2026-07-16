@@ -1,10 +1,6 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
-import {
-  type EmbeddingConfig as NativeEmbeddingConfig,
-  type SearchHit,
-  type Tool,
-  ToolRegistry,
-} from "../native/index.cjs";
+import type { SearchHit, Tool } from "../native/index.cjs";
+import { ToolRegistry } from "./registry.js";
 import {
   argsSizeBytes,
   errorMessage,
@@ -81,8 +77,8 @@ export type SearchOrigin = "direct" | "agent";
  * - `"hybrid"` — BM25 and semantic rankings fused with Reciprocal Rank Fusion
  *   (ADR-0011).
  *
- * `"semantic"`/`"hybrid"` require an explicit asynchronous
- * `buildEmbeddings()` followed by `searchAsync()`.
+ * `"semantic"`/`"hybrid"` embed inline during {@link ToolCatalog.register};
+ * ranking against that cache needs `searchAsync()`.
  */
 export type SearchMethod = "bm25" | "semantic" | "hybrid";
 
@@ -156,12 +152,6 @@ export type EmbeddingModelConfig =
  * every other source is an explicit {@link EmbeddingModelConfig} object. */
 export type EmbeddingSpec = string | EmbeddingModelConfig;
 
-/** Normalize the public string|object form into the native config the binding
- * expects (a string is the local-path `spec`, validated in core). */
-function toNativeEmbedding(embedding: EmbeddingSpec): NativeEmbeddingConfig {
-  return typeof embedding === "string" ? { spec: embedding } : embedding;
-}
-
 /** Construction options for {@link ToolCatalog}. */
 export interface ToolCatalogOptions {
   /** Local trace stream destination (default: discard). See {@link TraceSinkConfig}. */
@@ -193,7 +183,7 @@ export interface ToolCatalogOptions {
  * import { readFile } from "node:fs/promises";
  *
  * const catalog = new ToolCatalog();
- * catalog.register({
+ * await catalog.register({
  *   id: "read_file",
  *   name: "read_file",
  *   description: "Read a file from local disk and return its textual contents.",
@@ -224,51 +214,44 @@ export class ToolCatalog {
    */
   constructor(options: ToolCatalogOptions = {}) {
     this.method = options.method ?? "bm25";
-    this.registry = new ToolRegistry(
-      options.embedding !== undefined ? toNativeEmbedding(options.embedding) : undefined,
-    );
+    this.registry = new ToolRegistry(options.embedding, this.method);
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
   }
 
   /**
-   * Add a tool to the catalog, or replace it in place when the id is already
-   * registered (metadata, executor, and index entry — the corpus never holds a
-   * duplicate). Registration is metadata-only and never loads a model.
+   * Add one tool or a batch to the catalog — the single entry point for
+   * both. Replaces an id in place when already registered (metadata,
+   * executor, and index entry; the corpus never holds a duplicate). On a
+   * `"semantic"`/`"hybrid"` catalog, embeds the batch in one pass on a libuv
+   * worker after metadata is indexed, so the event loop is never blocked;
+   * embedding errors (model load / endpoint / auth / dimension) surface
+   * **here**, at registration — metadata still persists even if the
+   * embedding pass that follows fails. A `"bm25"` catalog never loads a
+   * model and resolves as soon as metadata is indexed.
    *
-   * @param tool - The tool's searchable metadata plus its `execute` function.
+   * A model or dimension change is not recovered in place — construct a new
+   * catalog and re-register.
+   *
+   * @param tools - A single tool or a readonly array of tools; each
+   *   `execute` must be set. Pass the whole batch at once for a single
+   *   embedding request — separate `register` calls embed separately.
    */
-  register(tool: ExecutableTool): void {
-    const { execute, ...metadata } = tool;
-    this.registry.register(metadata);
-    this.executors.set(tool.id, execute);
-    this.tools.set(tool.id, metadata);
-  }
-
-  /** Add or replace a batch of tools without building embeddings. */
-  registerMany(tools: readonly ExecutableTool[]): void {
-    const entries = tools.map(({ execute, ...metadata }) => ({ execute, metadata }));
-    this.registry.registerMany(entries.map(({ metadata }) => metadata));
-    for (const { execute, metadata } of entries) {
-      this.executors.set(metadata.id, execute);
-      this.tools.set(metadata.id, metadata);
+  async register(tools: ExecutableTool | readonly ExecutableTool[]): Promise<void> {
+    const batch = Array.isArray(tools) ? tools : [tools];
+    for (const tool of batch) {
+      if (typeof tool.execute !== "function") {
+        throw new Error(`tool ${tool.id} has no execute handler`);
+      }
     }
-  }
-
-  /**
-   * Pre-compute embeddings for any not-yet-embedded tools. Call after metadata
-   * registration. Incremental: only tools
-   * registered since the last call are embedded. Throws if the embedding model
-   * fails to load.
-   */
-  buildEmbeddings(): Promise<void> {
-    return this.registry.buildEmbeddings();
-  }
-
-  /** Recompute the full corpus and atomically replace the dense cache. */
-  rebuildEmbeddings(): Promise<void> {
-    return this.registry.rebuildEmbeddings();
+    this.registry.registerItems(batch.map(({ execute, ...metadata }) => metadata));
+    for (const tool of batch) {
+      const { execute, ...metadata } = tool;
+      this.executors.set(tool.id, execute);
+      this.tools.set(tool.id, metadata);
+    }
+    await this.registry.buildDense();
   }
 
   /**

@@ -1,72 +1,9 @@
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { describe, expect, it } from "vitest";
 import { type ExecutableTool, ToolCatalog } from "./index.js";
-
-interface DelayedEmbeddingServer {
-  url: string;
-  requests: string[][];
-  close: () => Promise<void>;
-}
-
-async function startDelayedEmbeddingServer(delayMs = 120): Promise<DelayedEmbeddingServer> {
-  const source = `
-    const http = require("node:http");
-    const server = http.createServer((request, response) => {
-      let body = "";
-      request.setEncoding("utf8");
-      request.on("data", (chunk) => { body += chunk; });
-      request.on("end", () => {
-        const payload = JSON.parse(body);
-        const inputs = Array.isArray(payload.input) ? payload.input : [payload.input];
-        process.stdout.write(JSON.stringify(inputs) + "\\n");
-        setTimeout(() => {
-          response.writeHead(200, { "content-type": "application/json" });
-          response.end(JSON.stringify({
-            model: payload.model,
-            data: inputs.map((_, index) => ({ index, embedding: [index + 1, 1] })),
-          }));
-        }, ${delayMs});
-      });
-    });
-    server.listen(0, "127.0.0.1", () => process.stdout.write(String(server.address().port) + "\\n"));
-    process.on("SIGTERM", () => server.close(() => process.exit(0)));
-  `;
-  const child = spawn(process.execPath, ["-e", source], {
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  const lines = createInterface({ input: child.stdout });
-  let startupTimer: ReturnType<typeof setTimeout> | undefined;
-  const [line] = (await Promise.race([
-    once(lines, "line"),
-    once(child, "exit").then(([code]) => {
-      throw new Error(`embedding test server exited during startup (${String(code)})`);
-    }),
-    new Promise<never>((_, reject) => {
-      startupTimer = setTimeout(
-        () => reject(new Error("embedding test server startup timed out")),
-        5_000,
-      );
-    }),
-  ]).finally(() => clearTimeout(startupTimer))) as [string];
-  const requests: string[][] = [];
-  lines.on("line", (requestLine) => requests.push(JSON.parse(requestLine) as string[]));
-  return {
-    url: `http://127.0.0.1:${Number(line)}/v1/embeddings`,
-    requests,
-    close: async () => {
-      lines.close();
-      if (child.exitCode !== null) return;
-      const exited = once(child, "exit");
-      child.kill("SIGKILL");
-      await exited;
-    },
-  };
-}
+import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
 
 async function expectTimerBefore<T>(operation: Promise<T>): Promise<T> {
   const first = await Promise.race([
@@ -113,9 +50,9 @@ describe("ToolCatalog", () => {
     expect(catalog.search("anything", 5)).toEqual([]);
   });
 
-  it("registers a tool and finds it by name", () => {
+  it("registers a tool and finds it by name", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
 
     const hits = catalog.search("read file", 5);
     expect(hits.length).toBeGreaterThan(0);
@@ -123,9 +60,9 @@ describe("ToolCatalog", () => {
     expect(hits[0].score).toBeGreaterThan(0);
   });
 
-  it("registers many tools as one metadata batch", () => {
+  it("registers an iterable of tools as one batch", async () => {
     const catalog = new ToolCatalog();
-    catalog.registerMany([
+    await catalog.register([
       readFile,
       {
         ...readFile,
@@ -139,9 +76,32 @@ describe("ToolCatalog", () => {
     expect(catalog.has("send_email")).toBe(true);
   });
 
+  it("rejects a tool without an execute handler; nothing commits", async () => {
+    const catalog = new ToolCatalog();
+    await expect(
+      catalog.register({
+        id: "x",
+        name: "x",
+        description: "d",
+        inputSchema: {},
+        outputSchema: {},
+        execute: undefined as never,
+      }),
+    ).rejects.toThrow(/no execute handler/);
+    expect(catalog.has("x")).toBe(false);
+  });
+
+  it("a validation failure across a batch commits nothing", async () => {
+    const catalog = new ToolCatalog();
+    const invalid = { ...readFile, id: "invalid", execute: undefined as never };
+    await expect(catalog.register([readFile, invalid])).rejects.toThrow(/no execute handler/);
+    expect(catalog.has("read_file")).toBe(false);
+    expect(catalog.search("read a file", 5)).toEqual([]);
+  });
+
   it("invokes a registered tool by id with args", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
 
     const result = await catalog.invoke("read_file", { path: "/tmp/x" });
     expect(result).toEqual({ contents: "contents of /tmp/x" });
@@ -152,9 +112,9 @@ describe("ToolCatalog", () => {
     await expect(catalog.invoke("nope", {})).rejects.toThrow(/unknown toolId: nope/);
   });
 
-  it("get(id) returns metadata; has(id) reports membership", () => {
+  it("get(id) returns metadata; has(id) reports membership", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
 
     expect(catalog.has("read_file")).toBe(true);
     expect(catalog.has("missing")).toBe(false);
@@ -164,7 +124,7 @@ describe("ToolCatalog", () => {
 
   it("getExecutable(id) returns metadata + execute together", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
 
     const exec = catalog.getExecutable("read_file");
     expect(exec).toBeDefined();
@@ -174,78 +134,88 @@ describe("ToolCatalog", () => {
   });
 });
 
+describe("ToolCatalog removed methods", () => {
+  it("registerMany / buildEmbeddings / rebuildEmbeddings are gone at runtime", () => {
+    // Folded into the variadic, self-embedding `register` (RAT-379/async-register).
+    const catalog = new ToolCatalog() as unknown as Record<string, unknown>;
+    expect(catalog.registerMany).toBeUndefined();
+    expect(catalog.buildEmbeddings).toBeUndefined();
+    expect(catalog.rebuildEmbeddings).toBeUndefined();
+  });
+});
+
 describe("ToolCatalog search methods", () => {
   // Semantic/hybrid load a real model (network) and are covered in Rust; these
-  // stay offline and assert the selection plumbing + the model-free default.
-  it("registers semantic metadata without loading the configured model", () => {
-    const catalog = new ToolCatalog({
-      method: "semantic",
-      embedding: { local: "/definitely/missing/ratel-embedding-model" },
-    });
-
-    expect(() => catalog.register(readFile)).not.toThrow();
-    expect(catalog.has("read_file")).toBe(true);
-  });
-
-  it("surfaces embedding load failures through the build Promise", async () => {
-    const catalog = new ToolCatalog({
-      method: "semantic",
-      embedding: { local: "/definitely/missing/ratel-embedding-model" },
-    });
-    catalog.register(readFile);
-
-    let build: unknown;
-    expect(() => {
-      build = catalog.buildEmbeddings();
-    }).not.toThrow();
-    expect(build).toBeInstanceOf(Promise);
-    await expect(build).rejects.toThrow(/failed to load embedding model/);
-  });
-
-  it("surfaces embedding load failures through the rebuild Promise", async () => {
-    const catalog = new ToolCatalog({
-      method: "semantic",
-      embedding: { local: "/definitely/missing/ratel-embedding-model" },
-    });
-    catalog.register(readFile);
-
-    let rebuild: unknown;
-    expect(() => {
-      rebuild = catalog.rebuildEmbeddings();
-    }).not.toThrow();
-    expect(rebuild).toBeInstanceOf(Promise);
-    await expect(rebuild).rejects.toThrow(/failed to load embedding model/);
-  });
-
-  it("keeps dense search behind the asynchronous API", async () => {
-    const catalog = new ToolCatalog({
-      method: "semantic",
-      embedding: { local: "/definitely/missing/ratel-embedding-model" },
-    });
-    catalog.register(readFile);
-
-    expect(() => catalog.search("read", 5)).toThrow(/searchAsync/);
-    await expect(catalog.searchAsync("read", 5)).rejects.toThrow(/not computed for semantic/);
-  });
-
-  it("keeps Node timers responsive during endpoint build and query", async () => {
+  // stay offline except where a working (fake) endpoint is needed to prove the
+  // end-to-end embed-then-search effect.
+  it("registers on a semantic catalog: embeds inline and search_async finds the hit", async () => {
     const server = await startDelayedEmbeddingServer();
     try {
       const catalog = new ToolCatalog({
         method: "semantic",
         embedding: { url: server.url, model: "test-model" },
       });
-      catalog.registerMany([
-        readFile,
-        {
-          ...readFile,
-          id: "send_email",
-          name: "send_email",
-          description: "Send an email message to a recipient.",
-        },
-      ]);
+      await catalog.register(readFile);
 
-      await expectTimerBefore(catalog.buildEmbeddings());
+      expect(catalog.has("read_file")).toBe(true);
+      const hits = await catalog.searchAsync("read a file", 5);
+      expect(hits[0]?.toolId).toBe("read_file");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("surfaces embedding load failures through register, but metadata persists", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+
+    await expect(catalog.register(readFile)).rejects.toThrow(/failed to load embedding model/);
+    // Metadata registration happens before the embedding pass inside `register`,
+    // so it persists even though the embed itself failed.
+    expect(catalog.has("read_file")).toBe(true);
+  });
+
+  it("keeps dense search behind the asynchronous API", () => {
+    // search() rejects a resolved semantic/hybrid method before ever touching
+    // the registry, so this needs no registration (and no working model).
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    expect(() => catalog.search("read", 5)).toThrow(/searchAsync/);
+  });
+
+  it("rejects a semantic override on a bm25 catalog with no embeddings built", async () => {
+    // A bm25-default catalog's register never embeds; overriding searchAsync's
+    // method to semantic hits the "not built" guard rather than a silent full scan.
+    const catalog = new ToolCatalog();
+    await catalog.register(readFile);
+    await expect(catalog.searchAsync("read", 5, "direct", "semantic")).rejects.toThrow(
+      /not computed for semantic/,
+    );
+  });
+
+  it("keeps Node timers responsive during registration and query on a semantic catalog", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const catalog = new ToolCatalog({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      });
+
+      await expectTimerBefore(
+        catalog.register([
+          readFile,
+          {
+            ...readFile,
+            id: "send_email",
+            name: "send_email",
+            description: "Send an email message to a recipient.",
+          },
+        ]),
+      );
       expect(server.requests).toHaveLength(1);
       expect(server.requests[0]).toHaveLength(2);
       expect(server.requests[0]?.[0]).toContain("Read a file");
@@ -264,16 +234,17 @@ describe("ToolCatalog search methods", () => {
         method: "semantic",
         embedding: { url: server.url, model: "test-model" },
       });
-      catalog.register(readFile);
-      await catalog.buildEmbeddings();
+      await catalog.register(readFile);
 
       const started = Date.now();
       const first = catalog.searchAsync("read one", 5);
       const second = catalog.searchAsync("read two", 5);
-      expect(() => catalog.register({ ...readFile, id: "later" })).toThrow(/registry busy; await/);
+      await expect(catalog.register({ ...readFile, id: "later" })).rejects.toThrow(
+        /registry busy; await/,
+      );
       await Promise.all([first, second]);
       expect(Date.now() - started).toBeGreaterThanOrEqual(200);
-      expect(() => catalog.register({ ...readFile, id: "later" })).not.toThrow();
+      await expect(catalog.register({ ...readFile, id: "later" })).resolves.toBeUndefined();
     } finally {
       await server.close();
     }
@@ -286,13 +257,12 @@ describe("ToolCatalog search methods", () => {
         method: "semantic",
         embedding: { local: cachedCandleModel, pooling: "cls" },
       });
-      catalog.register(readFile);
       let ticks = 0;
       const heartbeat = setInterval(() => {
         ticks += 1;
       }, 1);
       try {
-        await catalog.buildEmbeddings();
+        await catalog.register(readFile);
       } finally {
         clearInterval(heartbeat);
       }
@@ -301,9 +271,9 @@ describe("ToolCatalog search methods", () => {
     60_000,
   );
 
-  it("defaults to bm25 and never loads a model", () => {
+  it("defaults to bm25 and never loads a model", async () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "m" } });
-    catalog.register(readFile);
+    await catalog.register(readFile);
     const hits = catalog.search("read file", 5);
     expect(hits[0]?.toolId).toBe("read_file");
     const events = catalog.drainTraceEvents() as Array<{
@@ -314,10 +284,10 @@ describe("ToolCatalog search methods", () => {
     expect(search?.stages?.some((s) => s.name === "bm25")).toBe(true);
   });
 
-  it("accepts an explicit per-call bm25 method matching the default", () => {
+  it("accepts an explicit per-call bm25 method matching the default", async () => {
     // Dense behavior is covered separately; this compares the synchronous BM25 path.
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     const viaDefault = catalog.search("read file", 5).map((h) => h.toolId);
     const viaExplicit = catalog.search("read file", 5, "direct", "bm25").map((h) => h.toolId);
     expect(viaExplicit).toEqual(viaDefault);
@@ -326,11 +296,13 @@ describe("ToolCatalog search methods", () => {
 
   it("rejects an unknown asynchronous method without making the registry busy", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
 
     const search = catalog.searchAsync("read file", 5, "direct", "keyword" as never);
     const rejection = expect(search).rejects.toThrow(/unknown search method/);
-    expect(() => catalog.register({ ...readFile, id: "registered_after_invalid" })).not.toThrow();
+    await expect(
+      catalog.register({ ...readFile, id: "registered_after_invalid" }),
+    ).resolves.toBeUndefined();
     await rejection;
   });
 
@@ -351,24 +323,28 @@ describe("ToolCatalog search methods", () => {
     expect(searches[0].stages?.some((s) => s.name === "bm25")).toBe(true);
   });
 
-  it("rejects an unknown method", () => {
+  it("rejects an unknown method", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     expect(() =>
       // biome-ignore lint/suspicious/noExplicitAny: exercising the runtime guard
       catalog.search("read", 5, "direct", "keyword" as any),
     ).toThrow(/unknown search method/);
   });
 
-  it("buildEmbeddings() on an empty catalog is an asynchronous no-op", async () => {
-    // The empty corpus short-circuits before any model load.
-    const catalog = new ToolCatalog({ method: "semantic" });
-    await expect(catalog.buildEmbeddings()).resolves.toBeUndefined();
+  it("register([]) on a semantic catalog is an asynchronous no-op", async () => {
+    // The empty batch short-circuits before any model load.
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    await expect(catalog.register([])).resolves.toBeUndefined();
+    expect(catalog.has("anything")).toBe(false);
   });
 
-  it("synchronous semantic override points to searchAsync", () => {
+  it("synchronous semantic override points to searchAsync", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     expect(() => catalog.search("read", 5, "direct", "semantic")).toThrow(/searchAsync/);
   });
 });
@@ -462,29 +438,35 @@ describe("ToolCatalog embedding config", () => {
     ).toThrow(/download/);
   });
 
-  it("retains and validates embedding configuration for a bm25 catalog", async () => {
-    const catalog = new ToolCatalog({
-      embedding: { local: "/definitely/missing/ratel-embedding-model" },
-    });
-    catalog.register(readFile);
-
+  it("retains embedding configuration for a bm25 catalog without eager model load", async () => {
+    // A bm25-default catalog never loads the model during register — even with a
+    // config that would fail to load. Constructing a semantic catalog with the
+    // very same (broken) config proves it is the mode, not the model spec, that
+    // decides whether register embeds and can fail.
+    const embedding = { local: "/definitely/missing/ratel-embedding-model" } as const;
+    const catalog = new ToolCatalog({ embedding });
+    await catalog.register(readFile);
     expect(catalog.search("read", 5)[0]?.toolId).toBe("read_file");
-    await expect(catalog.buildEmbeddings()).rejects.toThrow(/failed to load embedding model/);
+
+    const semanticCatalog = new ToolCatalog({ method: "semantic", embedding });
+    await expect(semanticCatalog.register(readFile)).rejects.toThrow(
+      /failed to load embedding model/,
+    );
     expect(() => new ToolCatalog({ embedding: {} as never })).toThrow(/embedding source/);
   });
 });
 
 describe("ToolCatalog tracing", () => {
-  it("does not capture events when no trace sink is configured (default noop)", () => {
+  it("does not capture events when no trace sink is configured (default noop)", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     catalog.search("read", 5);
     expect(catalog.drainTraceEvents()).toEqual([]);
   });
 
-  it("captures index_churn on register and search on search via memory sink", () => {
+  it("captures index_churn on register and search on search via memory sink", async () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(readFile);
+    await catalog.register(readFile);
     catalog.search("read", 5);
 
     const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
@@ -499,7 +481,7 @@ describe("ToolCatalog tracing", () => {
 
   it("emits invoke_start + invoke_end around a successful invoke", async () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(readFile);
+    await catalog.register(readFile);
     catalog.drainTraceEvents(); // discard register/search noise
 
     await catalog.invoke("read_file", { path: "/x" });
@@ -515,7 +497,7 @@ describe("ToolCatalog tracing", () => {
 
   it("emits invoke_error when the executor throws and re-throws to the caller", async () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register({
+    await catalog.register({
       id: "boom",
       name: "boom",
       description: "x",
@@ -535,9 +517,9 @@ describe("ToolCatalog tracing", () => {
     expect(err?.error).toMatch(/kaboom/);
   });
 
-  it("search() defaults origin=direct; explicit origin=agent flows through to the event", () => {
+  it("search() defaults origin=direct; explicit origin=agent flows through to the event", async () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(readFile);
+    await catalog.register(readFile);
     catalog.drainTraceEvents();
 
     catalog.search("read", 5, "agent");
@@ -548,12 +530,12 @@ describe("ToolCatalog tracing", () => {
 
   it("re-registering an id replaces it in place — one hit, latest content wins", async () => {
     const catalog = new ToolCatalog();
-    catalog.register({
+    await catalog.register({
       ...readFile,
       description: "Read a file from local disk.",
       execute: async () => ({ contents: "v1" }),
     });
-    catalog.register({
+    await catalog.register({
       ...readFile,
       description: "Fetch and return a document over the network.",
       execute: async () => ({ contents: "v2" }),

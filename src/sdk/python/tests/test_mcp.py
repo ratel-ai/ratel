@@ -88,15 +88,19 @@ async def test_register_mcp_server_records_upstream_error(monkeypatch) -> None:
     assert errors[0]["server"] == "github"
 
 
-async def test_register_mcp_server_defers_embedding_build(monkeypatch) -> None:
+async def test_register_mcp_server_embeds_during_registration(monkeypatch) -> None:
+    # Embedding now happens inside `catalog.register` (RAT-379/async-register),
+    # which `register_mcp_server` awaits — so a broken model surfaces the error
+    # right out of `register_mcp_server` itself, not from a later, separate build.
     monkeypatch.setattr("ratel_ai.mcp._require_mcp", lambda: None)
     catalog = ToolCatalog(method="semantic", embedding={"local": "/missing/ratel-model"})
 
-    await register_mcp_server(catalog, name="github", session=_FakeSession())
-
-    assert catalog.has("github__create_issue")
     with pytest.raises(EmbedderError, match="/missing/ratel-model"):
-        await catalog.build_embeddings()
+        await register_mcp_server(catalog, name="github", session=_FakeSession())
+
+    # Metadata registration happens before the embedding pass inside
+    # `catalog.register`, so it persists even though the embed itself failed.
+    assert catalog.has("github__create_issue")
 
 
 async def test_register_mcp_server_requires_mcp_when_absent() -> None:

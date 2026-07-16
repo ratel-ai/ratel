@@ -1,18 +1,10 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
-import {
-  type EmbeddingConfig as NativeEmbeddingConfig,
-  type Skill,
-  type SkillHit,
-  SkillRegistry,
-} from "../native/index.cjs";
+import type { Skill, SkillHit } from "../native/index.cjs";
 import type { EmbeddingSpec, SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import { SkillRegistry } from "./registry.js";
 import { traceSearch, traceSearchAsync, traceSkillLoad } from "./telemetry.js";
 
 export type { Skill, SkillHit };
-
-function toNativeEmbedding(embedding: EmbeddingSpec): NativeEmbeddingConfig {
-  return typeof embedding === "string" ? { spec: embedding } : embedding;
-}
 
 /** Construction options for {@link SkillCatalog}. */
 export interface SkillCatalogOptions {
@@ -44,41 +36,35 @@ export class SkillCatalog {
    */
   constructor(options: SkillCatalogOptions = {}) {
     this.method = options.method ?? "bm25";
-    this.registry = new SkillRegistry(
-      options.embedding !== undefined ? toNativeEmbedding(options.embedding) : undefined,
-    );
+    this.registry = new SkillRegistry(options.embedding, this.method);
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
   }
 
   /**
-   * Add a skill to the catalog, or replace it in place when the id is already
-   * registered. Name, description, and tags are indexed for ranking; the
-   * `body` is not (it is the dispatch payload, fetched by
-   * {@link SkillCatalog.invoke}). Registration is metadata-only.
+   * Add one skill or a batch to the catalog — the single entry point for
+   * both. Replaces an id in place when already registered. Name,
+   * description, and tags are indexed for ranking; `tools`, `metadata`, and
+   * `body` are stored but not indexed (`body` is the dispatch payload,
+   * fetched by {@link SkillCatalog.invoke}). On a `"semantic"`/`"hybrid"`
+   * catalog, embeds the batch in one pass on a libuv worker after metadata is
+   * indexed — embedding errors surface **here**, at registration. A
+   * `"bm25"` catalog never loads a model.
    *
-   * @param skill - The skill to register; `id` is its lookup key.
+   * A model or dimension change is not recovered in place — construct a new
+   * catalog and re-register.
+   *
+   * @param skills - A single skill or a readonly array of them. Pass the
+   *   whole batch at once for a single embedding request.
    */
-  register(skill: Skill): void {
-    this.registry.register(skill);
-    this.skills.set(skill.id, skill);
-  }
-
-  /** Add or replace a batch of skills without building embeddings. */
-  registerMany(skills: readonly Skill[]): void {
-    this.registry.registerMany([...skills]);
-    for (const skill of skills) this.skills.set(skill.id, skill);
-  }
-
-  /** Pre-compute embeddings for not-yet-embedded skills. See `ToolCatalog.buildEmbeddings`. */
-  buildEmbeddings(): Promise<void> {
-    return this.registry.buildEmbeddings();
-  }
-
-  /** Recompute the full corpus and atomically replace the dense cache. */
-  rebuildEmbeddings(): Promise<void> {
-    return this.registry.rebuildEmbeddings();
+  async register(skills: Skill | readonly Skill[]): Promise<void> {
+    const batch = Array.isArray(skills) ? skills : [skills];
+    this.registry.registerItems(batch);
+    for (const skill of batch) {
+      this.skills.set(skill.id, skill);
+    }
+    await this.registry.buildDense();
   }
 
   /**

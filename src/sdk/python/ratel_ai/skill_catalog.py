@@ -54,7 +54,9 @@ class SkillRegistry:
     """Typed Python facade over the private native skill registry."""
 
     @overload
-    def __init__(self, embedding: EmbeddingSpec | None = None) -> None: ...
+    def __init__(
+        self, embedding: EmbeddingSpec | None = None, *, method: SearchMethod = "bm25"
+    ) -> None: ...
 
     @overload
     def __init__(
@@ -112,6 +114,7 @@ class SkillRegistry:
         self,
         embedding: EmbeddingSpec | None = None,
         *,
+        method: SearchMethod = "bm25",
         spec: str | None = None,
         huggingface: str | None = None,
         local: str | None = None,
@@ -125,7 +128,11 @@ class SkillRegistry:
         pooling: str | None = None,
         download: bool | None = None,
     ) -> None:
-        """Create a metadata registry with an optional embedding model."""
+        """Create a metadata registry with an optional embedding model.
+
+        A "semantic"/"hybrid" `method` makes `register` embed eagerly (inside the
+        call, on a worker thread); "bm25" keeps registration model-free.
+        """
         kwargs = _registry_embedding_kwargs(
             embedding,
             spec=spec,
@@ -142,16 +149,20 @@ class SkillRegistry:
             download=download,
         )
         self._native = _NativeSkillRegistry(**kwargs)
+        self._eager = method in ("semantic", "hybrid")
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
         self._dense_tasks: set[asyncio.Task[Any]] = set()
 
     @overload
-    def register(self, item: Skill) -> None: ...
+    async def register(self, item: Skill) -> None: ...
 
     @overload
-    def register(
+    async def register(self, item: Iterable[Skill]) -> None: ...
+
+    @overload
+    async def register(
         self,
         item: str,
         name: str,
@@ -162,9 +173,9 @@ class SkillRegistry:
         body: str,
     ) -> None: ...
 
-    def register(
+    async def register(
         self,
-        item: Skill | str,
+        item: Skill | Iterable[Skill] | str,
         name: str | None = None,
         description: str | None = None,
         tags: list[str] | None = None,
@@ -172,33 +183,30 @@ class SkillRegistry:
         metadata: dict[str, list[str]] | None = None,
         body: str | None = None,
     ) -> None:
-        """Register a `Skill`; the legacy flat native arguments remain accepted."""
-        if isinstance(item, Skill):
-            if any(
-                value is not None
-                for value in (name, description, tags, tools, metadata, body)
-            ):
-                raise TypeError("item register accepts only the Skill argument")
-            skill = item
-        else:
-            if (
-                name is None
-                or description is None
-                or tags is None
-                or tools is None
-                or metadata is None
-                or body is None
-            ):
-                raise TypeError("flat register requires all metadata arguments")
-            skill = Skill(item, name, description, tags, tools, metadata, body)
-        self._register_items((skill,))
+        """Register one `Skill`, many `Skill`s, or a flat (id, name, …) tuple.
 
-    def register_many(self, items: Iterable[Skill]) -> None:
-        """Register skills in iteration order."""
-        skills = list(items)
-        if not all(isinstance(item, Skill) for item in skills):
-            raise TypeError("register_many requires Skill items")
+        Stores metadata and — on a "semantic"/"hybrid" registry — embeds in one
+        batched, off-thread pass (embedding errors surface here). "bm25" registers
+        metadata only.
+        """
+        flat_args = (name, description, tags, tools, metadata, body)
+        if isinstance(item, Skill):
+            if any(value is not None for value in flat_args):
+                raise TypeError("item register accepts only the Skill argument")
+            skills: list[Skill] = [item]
+        elif isinstance(item, str):
+            if any(value is None for value in flat_args):
+                raise TypeError("flat register requires all metadata arguments")
+            skills = [Skill(item, name, description, tags, tools, metadata, body)]  # type: ignore[arg-type]
+        else:
+            if any(value is not None for value in flat_args):
+                raise TypeError("iterable register accepts only the items argument")
+            skills = list(item)
+            if not all(isinstance(skill, Skill) for skill in skills):
+                raise TypeError("register requires Skill items")
         self._register_items(skills)
+        if self._eager:
+            await self._build()
 
     def search(self, query: str, top_k: int) -> list[SkillHit]:
         """Run synchronous, model-free BM25 retrieval."""
@@ -221,12 +229,12 @@ class SkillRegistry:
             )
         return self.search_with_origin(query, top_k, origin)
 
-    async def build_embeddings(self) -> None:
-        """Incrementally build missing embeddings without blocking Python."""
+    async def _build(self) -> None:
+        """Embed not-yet-embedded items on a worker thread (used by `register`)."""
         await self._run_dense(self._native._build_embeddings)
 
-    async def rebuild_embeddings(self) -> None:
-        """Recompute and atomically replace the full embedding cache."""
+    async def _rebuild(self) -> None:
+        """Recompute and atomically replace the full embedding cache (internal)."""
         await self._run_dense(self._native._rebuild_embeddings)
 
     async def search_async(
@@ -342,43 +350,36 @@ class SkillCatalog:
         """
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
-        self._registry = SkillRegistry(embedding)
+        self._registry = SkillRegistry(embedding, method=method)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
-    def register(self, skill: Skill) -> None:
-        """Add a skill to the catalog (metadata into the index, body stored).
+    async def register(self, skills: Skill | Iterable[Skill]) -> None:
+        """Register one skill or many — the single entry point for both.
 
-        Registering an id that is already present replaces it in place — the
-        index never holds a duplicate. Name, description and tags are indexed
-        for ranking; `tools`, `metadata` and `body` are stored but not indexed.
+        Stores metadata (name/description/tags are indexed; `tools`, `metadata`,
+        `body` are stored but not indexed), then — on a "semantic"/"hybrid"
+        catalog — embeds the skills in one batched, off-thread pass. Embedding
+        errors surface **here**, at registration; a BM25 catalog never loads a
+        model. Re-registering an id replaces it in place.
+
+        A model or dimension change is not recovered in place — construct a new
+        catalog and re-register.
 
         Args:
-            skill: the skill to register.
+            skills: a single `Skill` or an iterable of them. Pass the whole batch
+                at once for a single embedding request.
 
         Raises:
-            RuntimeError: if a queued or running dense operation owns the registry.
+            EmbedderError: on a semantic/hybrid catalog, if embedding fails.
+            RuntimeError: if a dense operation already owns the registry.
         """
-        self._registry.register(skill)
-        self._skills[skill.id] = skill
-
-    def register_many(self, skills: Iterable[Skill]) -> None:
-        """Register skills in iteration order without embedding them."""
-        batch = list(skills)
-        self._registry.register_many(batch)
+        batch = [skills] if isinstance(skills, Skill) else list(skills)
+        self._registry._register_items(batch)
         for skill in batch:
             self._skills[skill.id] = skill
-
-    async def build_embeddings(self) -> None:
-        """Pre-compute embeddings for not-yet-embedded skills.
-
-        See `ToolCatalog.build_embeddings` for when to call and what it raises.
-        """
-        await self._registry.build_embeddings()
-
-    async def rebuild_embeddings(self) -> None:
-        """Recompute and atomically replace every skill embedding."""
-        await self._registry.rebuild_embeddings()
+        if self._method in ("semantic", "hybrid"):
+            await self._registry._build()
 
     def search(
         self,
