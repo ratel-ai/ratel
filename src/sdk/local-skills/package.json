@@ -1,0 +1,59 @@
+{
+  "name": "@ratel-ai/local-skills",
+  "version": "0.1.0",
+  "description": "Ratel local SKILL.md directory loader — the reference CatalogLoader that hydrates a SkillCatalog from a folder of <name>/SKILL.md files (default ~/.ratel/skills). ADR-0003/0005.",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "author": "Agentified",
+  "homepage": "https://github.com/ratel-ai/ratel",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ratel-ai/ratel.git",
+    "directory": "src/sdk/local-skills"
+  },
+  "bugs": {
+    "url": "https://github.com/ratel-ai/ratel/issues"
+  },
+  "keywords": [
+    "ratel",
+    "skills",
+    "skill-md",
+    "catalog-loader",
+    "context-engineering",
+    "ai-agents"
+  ],
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src",
+    "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  },
+  "peerDependencies": {
+    "@ratel-ai/sdk": "workspace:^"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
+    "@ratel-ai/sdk": "workspace:^",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  }
+}

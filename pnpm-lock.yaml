@@ -93,6 +93,28 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  src/sdk/local-skills:
+    dependencies:
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.4.13
+        version: 2.4.13
+      '@ratel-ai/sdk':
+        specifier: workspace:^
+        version: link:../ts
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.2
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.9.0))
+
   src/sdk/ts:
     dependencies:
       '@modelcontextprotocol/sdk':
