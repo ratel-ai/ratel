@@ -1,5 +1,11 @@
+import { deepStrictEqual, ok, strictEqual } from "node:assert/strict";
 import type { JSONSchema7 } from "../index.js";
 import { type RatelAdapter, ToolCatalog } from "../index.js";
+import type {
+  AdapterConformanceOptions,
+  ConformanceToolSpec,
+  RecallExpectation,
+} from "./cases.js";
 
 /**
  * The tool shape of the {@link referenceAdapter | reference adapter} — a
@@ -21,8 +27,8 @@ export interface FakeTool {
  * The message shape of the {@link referenceAdapter | reference adapter}: a
  * fully observable synthetic recall pair. `role` distinguishes the call from
  * its result, `callId` is the core's minted id, and `body` carries the query
- * (on the call) or the {@link SearchCapabilitiesResult} (on the result) — so a
- * conformance validator can read every part back without a real framework.
+ * (on the call) or the recall result (on the result) — so a conformance
+ * validator can read every part back without a real framework.
  */
 export interface FakeMessage {
   /** `"call"` for the synthetic tool call, `"result"` for its response. */
@@ -43,14 +49,6 @@ export interface FakeExt {
   label: string;
 }
 
-/** How the reference tool builders describe a tool to construct. */
-export interface ReferenceToolSpec {
-  /** The tool's description — retrieval ranks on it, so make it query-matchable. */
-  description: string;
-  /** What the built tool's executor returns; defaults to `{ ok: true }`. */
-  result?: unknown;
-}
-
 /**
  * Build a reference {@link FakeTool} that {@link RatelAdapter.ingest | ingests}
  * as an executable — its `execute` returns `spec.result` (default
@@ -60,7 +58,7 @@ export interface ReferenceToolSpec {
  * @param spec - The description to rank on and the result to observe.
  * @returns A framework tool with an executor.
  */
-export function makeExecutableTool(spec: ReferenceToolSpec): FakeTool {
+export function makeExecutableTool(spec: ConformanceToolSpec): FakeTool {
   const result = spec.result ?? { ok: true };
   return {
     description: spec.description,
@@ -77,7 +75,7 @@ export function makeExecutableTool(spec: ReferenceToolSpec): FakeTool {
  * @param spec - The description to rank on (the result is unused for a passthrough).
  * @returns A framework tool without an executor.
  */
-export function makePassthroughTool(spec: ReferenceToolSpec): FakeTool {
+export function makePassthroughTool(spec: ConformanceToolSpec): FakeTool {
   return {
     description: spec.description,
     inputSchema: { type: "object" },
@@ -122,4 +120,48 @@ export function referenceAdapter(): RatelAdapter<FakeTool, FakeMessage, FakeExt>
       return { label: `adapted:${base.tools.catalog instanceof ToolCatalog}` };
     },
   };
+}
+
+/**
+ * The {@link AdapterConformanceOptions} for the {@link referenceAdapter}: the
+ * hooks that teach the battery how to build {@link FakeTool}s, call exposed
+ * ones, and validate the recall pair. Both the SDK's own conformance test and
+ * this package's meta-tests run the battery through it, so it is the worked
+ * example a real adapter's options copy.
+ *
+ * @returns Conformance options wired to the reference adapter.
+ */
+export function referenceConformanceOptions(): AdapterConformanceOptions<FakeTool, FakeMessage> {
+  return {
+    adapter: referenceAdapter,
+    makeExecutableTool,
+    makePassthroughTool,
+    callExposedTool: (tool, args) => tool.execute?.(args),
+    validateRecallPair,
+    validateExposedTool,
+  };
+}
+
+/** Assert the reference recall pair encodes the testkit's {@link RecallExpectation}. */
+function validateRecallPair(messages: FakeMessage[], expected: RecallExpectation): void {
+  strictEqual(messages.length, 2, "recall pair must have exactly two messages");
+  const [call, result] = messages;
+  strictEqual(call.role, "call", "first message is the call");
+  strictEqual(result.role, "result", "second message is the result");
+  strictEqual(call.callId, expected.callId, "call message carries the expected call id");
+  strictEqual(result.callId, expected.callId, "result message shares the call id");
+  deepStrictEqual(call.body, { query: expected.query }, "call message carries the query");
+  deepStrictEqual(result.body, expected.recall, "result message carries the canonical recall");
+}
+
+/**
+ * Assert an exposed reference tool went through the `expose` codec: a codec
+ * output has description/inputSchema/execute but — unlike a raw
+ * `ExecutableTool` — no `id`/`outputSchema`.
+ */
+function validateExposedTool(tool: FakeTool): void {
+  ok(typeof tool.description === "string", "exposed tool keeps a description");
+  ok(typeof tool.execute === "function", "exposed tool is callable");
+  ok(!("id" in tool), "exposed tool is framework-shaped, not a raw ExecutableTool (has id)");
+  ok(!("outputSchema" in tool), "exposed tool is framework-shaped (has outputSchema)");
 }
