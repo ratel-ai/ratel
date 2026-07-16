@@ -10,6 +10,7 @@ Each SDK bundles the core (binding strategy varies per language; see the relevan
 ts/                @ratel-ai/sdk — TypeScript SDK
 python/            ratel-ai — Python SDK
 local-skills/      @ratel-ai/local-skills — reference SKILL.md directory loader (TS)
+local-skills-py/   ratel-ai-local-skills — reference SKILL.md directory loader (Python)
 ```
 
 ## `ts/` — `@ratel-ai/sdk`
@@ -27,3 +28,7 @@ Binding strategy is documented in [ADR 0006](../../docs/adr/0006-native-ffi-bind
 ## `local-skills/` — `@ratel-ai/local-skills`
 
 The reference catalog loader: hydrates a `SkillCatalog` from a directory of `<name>/SKILL.md` files (default `~/.ratel/skills`). Ships as a separate package so the SDK stays dependency-lean, the first implementation of the loader seam ([ADR 0003](../../docs/adr/0003-catalog-source-interface.md), [ADR 0005](../../docs/adr/0005-first-class-skills.md)). See [`local-skills/README.md`](local-skills/README.md) for usage.
+
+## `local-skills-py/` — `ratel-ai-local-skills`
+
+The Python mirror of `@ratel-ai/local-skills`: same reference catalog loader, same layout contract, pure Python (depends on `ratel-ai` + `pyyaml`). See [`local-skills-py/README.md`](local-skills-py/README.md) for usage.

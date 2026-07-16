@@ -78,3 +78,35 @@ jobs:
       - name: Run the telemetry example
         working-directory: examples/telemetry-python
         run: uv run --python 3.11 main.py
+
+  # Reference SKILL.md loader (ADR-0003/0005): pure Python, but depends on the SDK
+  # for the CatalogLoader seam, so it builds the local ratel-ai (maturin/native)
+  # before installing itself. Separate job because that build is maturin-specific.
+  local-skills:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/sdk/local-skills-py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/python/native
+      - uses: astral-sh/setup-uv@v5
+      - name: Create venv + install (local ratel-ai via maturin, then this loader)
+        run: |
+          uv venv --python 3.11 .venv
+          # Install ratel-ai from the local source so the CatalogLoader seam this
+          # loader targets is present (the published wheel predates it). Then install
+          # this loader and its dev tools with --no-deps, so the local ratel-ai build
+          # is never replaced by the same-versioned published wheel.
+          uv pip install --python .venv ../python
+          uv pip install --python .venv --no-deps -e .
+          uv pip install --python .venv pyyaml types-PyYAML pytest pytest-asyncio ruff mypy
+      - name: Lint
+        run: .venv/bin/ruff check .
+      - name: Typecheck
+        run: .venv/bin/mypy ratel_ai_local_skills
+      - name: Test
+        run: .venv/bin/pytest
