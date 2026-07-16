@@ -146,6 +146,36 @@ describe("LocalSkillsLoader — start & parse", () => {
     expect(loader.diagnostics[0]?.reason).toMatch(/tags/);
   });
 
+  it("parses YAML 1.1 like the Python mirror: unquoted on/off/yes/no are booleans", async () => {
+    // `on` resolves to a boolean under YAML 1.1, so an unquoted one in a tag list is not a
+    // string — rejected here exactly as `pyyaml.safe_load` rejects it in the Python loader.
+    await writeSkill("bool-tag", "---\ndescription: d\ntags: [ci, on]\n---\nbody");
+    // Quoting keeps it a string, and loads in both SDKs.
+    await writeSkill("quoted-tag", '---\ndescription: d\ntags: ["ci", "on"]\n---\nbody');
+    const catalog = new SkillCatalog();
+    const loader = new LocalSkillsLoader({ dir: root });
+
+    await loader.start(catalog);
+
+    expect(catalog.has("bool-tag")).toBe(false);
+    expect(
+      loader.diagnostics.some((d) => d.path.includes("bool-tag") && d.reason.includes("tags")),
+    ).toBe(true);
+    expect(catalog.get("quoted-tag")?.tags).toEqual(["ci", "on"]);
+  });
+
+  it("takes the last value of a duplicate frontmatter key (lenient, like the Python mirror)", async () => {
+    await writeSkill("dup", "---\ndescription: first\ndescription: second\n---\nbody");
+    const catalog = new SkillCatalog();
+    const loader = new LocalSkillsLoader({ dir: root });
+
+    await loader.start(catalog);
+
+    expect(catalog.has("dup")).toBe(true);
+    expect(catalog.get("dup")?.description).toBe("second");
+    expect(loader.diagnostics).toEqual([]);
+  });
+
   it("starts empty (no diagnostics) when the directory does not exist", async () => {
     const catalog = new SkillCatalog();
     const loader = new LocalSkillsLoader({ dir: join(root, "does-not-exist") });

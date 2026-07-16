@@ -61,9 +61,12 @@ From this directory (needs [uv](https://docs.astral.sh/uv/)):
 ```bash
 uv venv --python 3.11 .venv
 # ratel-ai is a native (maturin) build; install it from the local source so the
-# CatalogLoader seam this loader targets is present, then this pure-Python package.
+# CatalogLoader seam this loader targets is present. Then install this package with
+# --no-deps and its tools, so the local ratel-ai build is never replaced by the
+# same-versioned published wheel (which predates the seam).
 uv pip install --python .venv ../python
-uv pip install --python .venv -e '.[dev]'
+uv pip install --python .venv --no-deps -e .
+uv pip install --python .venv pyyaml types-PyYAML pytest pytest-asyncio ruff mypy
 .venv/bin/ruff check . && .venv/bin/mypy ratel_ai_local_skills && .venv/bin/pytest
 ```
 

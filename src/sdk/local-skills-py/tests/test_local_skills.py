@@ -148,6 +148,34 @@ def test_diagnoses_wrong_typed_field(tmp_path: Path) -> None:
     assert "tags" in loader.diagnostics[0].reason
 
 
+def test_yaml_1_1_unquoted_boolean_keywords_are_booleans(tmp_path: Path) -> None:
+    # `on` resolves to a boolean under pyyaml (YAML 1.1), so an unquoted one in a tag
+    # list is not a string — rejected here exactly as the TS mirror rejects it. Quoting
+    # keeps it a string and loads in both SDKs.
+    _write_skill(tmp_path, "bool-tag", "---\ndescription: d\ntags: [ci, on]\n---\nbody")
+    _write_skill(tmp_path, "quoted-tag", '---\ndescription: d\ntags: ["ci", "on"]\n---\nbody')
+    catalog = SkillCatalog()
+    loader = LocalSkillsLoader(tmp_path)
+
+    loader.start(catalog)
+
+    assert not catalog.has("bool-tag")
+    assert any("bool-tag" in d.path and "tags" in d.reason for d in loader.diagnostics)
+    assert catalog.get("quoted-tag").tags == ["ci", "on"]
+
+
+def test_duplicate_frontmatter_key_takes_last_value(tmp_path: Path) -> None:
+    _write_skill(tmp_path, "dup", "---\ndescription: first\ndescription: second\n---\nbody")
+    catalog = SkillCatalog()
+    loader = LocalSkillsLoader(tmp_path)
+
+    loader.start(catalog)
+
+    assert catalog.has("dup")
+    assert catalog.get("dup").description == "second"
+    assert loader.diagnostics == []
+
+
 def test_starts_empty_when_directory_missing(tmp_path: Path) -> None:
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path / "does-not-exist")

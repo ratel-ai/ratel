@@ -181,7 +181,10 @@ function parseSkillFile(raw: string, dirName: string): ParseResult {
 
   let data: unknown;
   try {
-    data = parseYaml(split.yaml);
+    // YAML 1.1 + lenient duplicate keys to match the Python mirror's `pyyaml.safe_load`
+    // exactly: `on`/`off`/`yes`/`no` resolve to booleans (so an unquoted one in a tag list
+    // is rejected in both SDKs), and a repeated key takes the last value rather than throwing.
+    data = parseYaml(split.yaml, { version: "1.1", uniqueKeys: false });
   } catch (err) {
     return { ok: false, reason: `invalid YAML frontmatter: ${errMessage(err)}` };
   }
