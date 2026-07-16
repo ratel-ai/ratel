@@ -79,7 +79,9 @@ class SkillCatalog:
 
         Raises:
             RuntimeError: on a semantic/hybrid catalog, if the embedding model
-                fails to load while eagerly embedding the new skill.
+                fails to load while eagerly embedding the new skill — the skill
+                is registered by then, so subscribers are still notified before
+                the error propagates.
         """
         self._registry.register(
             skill.id,
@@ -91,9 +93,13 @@ class SkillCatalog:
             skill.body,
         )
         self._skills[skill.id] = skill
-        if self._eager:
-            self._registry.build_embeddings()
-        self._notify_change()
+        try:
+            if self._eager:
+                self._registry.build_embeddings()
+        finally:
+            # The mutation is committed above; a failed eager embed must not
+            # swallow the staleness signal.
+            self._notify_change()
 
     def upsert(self, skill: Skill) -> bool:
         """`register` that also reports whether the id was already present.

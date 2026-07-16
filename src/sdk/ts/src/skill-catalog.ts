@@ -53,17 +53,23 @@ export class SkillCatalog {
    * `body` is not (it is the dispatch payload, fetched by
    * {@link SkillCatalog.invoke}). On a semantic/hybrid catalog this also
    * embeds the new skill immediately, and throws if the embedding model fails
-   * to load.
+   * to load — the skill is registered by then, so subscribers are still
+   * notified before the error propagates.
    *
    * @param skill - The skill to register; `id` is its lookup key.
    */
   register(skill: Skill): void {
     this.registry.register(skill);
     this.skills.set(skill.id, skill);
-    if (this.eager) {
-      this.registry.buildEmbeddings();
+    try {
+      if (this.eager) {
+        this.registry.buildEmbeddings();
+      }
+    } finally {
+      // The mutation is committed above; a failed eager embed must not
+      // swallow the staleness signal.
+      this.notifyChange();
     }
-    this.notifyChange();
   }
 
   /**

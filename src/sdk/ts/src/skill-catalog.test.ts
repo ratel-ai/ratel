@@ -144,6 +144,78 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
     expect(calls).toBe(1);
   });
 
+  it("notifies subscribers even when eager embedding fails mid-register", () => {
+    // On a semantic catalog the mutation commits before the eager embed; if the
+    // embedder then fails, the error propagates but the staleness hook must
+    // still fire — the host has a committed mutation to react to.
+    const catalog = new SkillCatalog({ method: "semantic" });
+    const internals = catalog as unknown as { registry: { buildEmbeddings: () => void } };
+    internals.registry.buildEmbeddings = () => {
+      throw new Error("stub embed failure");
+    };
+    let calls = 0;
+    catalog.onChange(() => {
+      calls += 1;
+    });
+
+    expect(() => catalog.register(slides)).toThrow(/stub embed failure/);
+    expect(catalog.has("frontend-slides")).toBe(true);
+    expect(calls).toBe(1);
+  });
+
+  it("a listener unsubscribing itself mid-notify breaks neither the mutation nor siblings", () => {
+    const catalog = new SkillCatalog();
+    let siblingCalls = 0;
+    const unsubscribes: Array<() => void> = [];
+    unsubscribes.push(
+      catalog.onChange(() => {
+        unsubscribes[0]();
+      }),
+    );
+    catalog.onChange(() => {
+      siblingCalls += 1;
+    });
+
+    expect(() => catalog.register(slides)).not.toThrow();
+    expect(siblingCalls).toBe(1);
+    catalog.register(apiDesign);
+    expect(siblingCalls).toBe(2);
+  });
+
+  it("a listener subscribed mid-notify fires on the next mutation, not the current one", () => {
+    const catalog = new SkillCatalog();
+    let lateCalls = 0;
+    let subscribed = false;
+    catalog.onChange(() => {
+      if (!subscribed) {
+        subscribed = true;
+        catalog.onChange(() => {
+          lateCalls += 1;
+        });
+      }
+    });
+
+    catalog.register(slides);
+    expect(lateCalls).toBe(0);
+    catalog.register(apiDesign);
+    expect(lateCalls).toBe(1);
+  });
+
+  it("listeners observe the settled post-mutation catalog", () => {
+    const catalog = new SkillCatalog();
+    const seen: Array<[number, boolean]> = [];
+    catalog.onChange(() => {
+      seen.push([catalog.size(), catalog.has("frontend-slides")]);
+    });
+
+    catalog.register(slides);
+    catalog.remove("frontend-slides");
+    expect(seen).toEqual([
+      [1, true],
+      [0, false],
+    ]);
+  });
+
   it("a throwing listener breaks neither the mutation nor its siblings", () => {
     const catalog = new SkillCatalog();
     let calls = 0;

@@ -127,6 +127,75 @@ def test_on_change_same_listener_twice_fires_once() -> None:
     assert len(calls) == 1
 
 
+def test_notifies_even_when_eager_embedding_fails_mid_register() -> None:
+    # On a semantic catalog the mutation commits before the eager embed; if the
+    # embedder then fails, the error propagates but the staleness hook must
+    # still fire — the host has a committed mutation to react to.
+    class _FailingBuild:
+        def __init__(self, inner: object) -> None:
+            self._inner = inner
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+        def build_embeddings(self) -> None:
+            raise RuntimeError("stub embed failure")
+
+    catalog = SkillCatalog(method="semantic")
+    catalog._registry = _FailingBuild(catalog._registry)  # type: ignore[assignment]
+    calls = []
+    catalog.on_change(lambda: calls.append(1))
+
+    with pytest.raises(RuntimeError, match="stub embed failure"):
+        catalog.register(Skill(id="s", name="s", description="d"))
+    assert catalog.has("s")
+    assert len(calls) == 1
+
+
+def test_listener_unsubscribing_itself_mid_notify_is_isolated() -> None:
+    catalog = SkillCatalog()
+    sibling_calls = []
+    unsubscribes = []
+
+    def self_removing() -> None:
+        unsubscribes[0]()
+
+    unsubscribes.append(catalog.on_change(self_removing))
+    catalog.on_change(lambda: sibling_calls.append(1))
+
+    catalog.register(Skill(id="s", name="s", description="d"))
+    assert len(sibling_calls) == 1
+    catalog.register(Skill(id="t", name="t", description="d"))
+    assert len(sibling_calls) == 2
+
+
+def test_listener_subscribed_mid_notify_fires_on_next_mutation() -> None:
+    catalog = SkillCatalog()
+    late_calls = []
+    subscribed = []
+
+    def subscriber() -> None:
+        if not subscribed:
+            subscribed.append(True)
+            catalog.on_change(lambda: late_calls.append(1))
+
+    catalog.on_change(subscriber)
+    catalog.register(Skill(id="s", name="s", description="d"))
+    assert late_calls == []
+    catalog.register(Skill(id="t", name="t", description="d"))
+    assert len(late_calls) == 1
+
+
+def test_listeners_observe_settled_post_mutation_state() -> None:
+    catalog = SkillCatalog()
+    seen = []
+    catalog.on_change(lambda: seen.append((catalog.size(), catalog.has("s"))))
+
+    catalog.register(Skill(id="s", name="s", description="d"))
+    catalog.remove("s")
+    assert seen == [(1, True), (0, False)]
+
+
 def test_throwing_listener_breaks_neither_mutation_nor_siblings() -> None:
     catalog = SkillCatalog()
     calls = []
