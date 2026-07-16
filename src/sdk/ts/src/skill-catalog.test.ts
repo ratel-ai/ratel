@@ -66,6 +66,100 @@ describe("SkillCatalog", () => {
   });
 });
 
+describe("SkillCatalog mutation seam (loader-facing)", () => {
+  it("upsert returns false for a new id and true when replacing", () => {
+    const catalog = new SkillCatalog();
+    expect(catalog.upsert(slides)).toBe(false);
+    expect(catalog.upsert({ ...slides, body: "# Updated" })).toBe(true);
+    expect(catalog.size()).toBe(1);
+    expect(catalog.get("frontend-slides")?.body).toBe("# Updated");
+  });
+
+  it("remove drops the skill and returns whether it was present", () => {
+    const catalog = new SkillCatalog();
+    catalog.register(slides);
+    catalog.register(apiDesign);
+
+    expect(catalog.remove("frontend-slides")).toBe(true);
+    expect(catalog.has("frontend-slides")).toBe(false);
+    expect(catalog.size()).toBe(1);
+    const hits = catalog.search("animation-rich HTML presentations", 5);
+    expect(hits.some((h) => h.skillId === "frontend-slides")).toBe(false);
+
+    expect(catalog.remove("frontend-slides")).toBe(false);
+  });
+
+  it("remove emits a skill_churn remove trace event", () => {
+    const catalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    catalog.register(slides);
+    catalog.drainTraceEvents();
+
+    catalog.remove("frontend-slides");
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const churn = events.filter((e) => e.type === "skill_churn");
+    expect(churn).toHaveLength(1);
+    expect(churn[0].kind).toBe("remove");
+    expect(churn[0].skill_id).toBe("frontend-slides");
+  });
+
+  it("onChange fires on register, upsert, and remove; unsubscribe stops it", () => {
+    const catalog = new SkillCatalog();
+    let calls = 0;
+    const unsubscribe = catalog.onChange(() => {
+      calls += 1;
+    });
+
+    catalog.register(slides);
+    expect(calls).toBe(1);
+    catalog.upsert({ ...slides, body: "# Updated" });
+    expect(calls).toBe(2);
+    catalog.remove("frontend-slides");
+    expect(calls).toBe(3);
+
+    unsubscribe();
+    catalog.register(apiDesign);
+    expect(calls).toBe(3);
+  });
+
+  it("onChange does not fire when removing an unknown id", () => {
+    const catalog = new SkillCatalog();
+    let calls = 0;
+    catalog.onChange(() => {
+      calls += 1;
+    });
+    expect(catalog.remove("missing")).toBe(false);
+    expect(calls).toBe(0);
+  });
+
+  it("a subscribed listener registered twice fires once per change", () => {
+    const catalog = new SkillCatalog();
+    let calls = 0;
+    const listener = () => {
+      calls += 1;
+    };
+    catalog.onChange(listener);
+    catalog.onChange(listener);
+    catalog.register(slides);
+    expect(calls).toBe(1);
+  });
+
+  it("a throwing listener breaks neither the mutation nor its siblings", () => {
+    const catalog = new SkillCatalog();
+    let calls = 0;
+    catalog.onChange(() => {
+      throw new Error("bad subscriber");
+    });
+    catalog.onChange(() => {
+      calls += 1;
+    });
+
+    expect(() => catalog.register(slides)).not.toThrow();
+    expect(calls).toBe(1);
+    expect(catalog.has("frontend-slides")).toBe(true);
+  });
+});
+
 describe("SkillCatalog tracing", () => {
   it("does not capture events under the default noop sink", () => {
     const catalog = new SkillCatalog();

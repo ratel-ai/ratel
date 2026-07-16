@@ -17,12 +17,18 @@ export interface SkillCatalogOptions {
  * In-memory catalog of skills, ranked by the native BM25 `SkillRegistry`. The
  * on-demand analog of {@link ToolCatalog}: registered skills are searched by
  * relevance; the matching body is fetched only on {@link SkillCatalog.invoke}.
+ *
+ * The catalog is mutable at runtime — the loader-facing seam: an external
+ * loader (any package holding a catalog and mirroring a source into it) pushes
+ * with {@link SkillCatalog.upsert}, drops with {@link SkillCatalog.remove},
+ * and the host observes churn via {@link SkillCatalog.onChange}.
  */
 export class SkillCatalog {
   private readonly registry: SkillRegistry;
   private readonly skills = new Map<string, Skill>();
   private readonly method: SearchMethod;
   private readonly eager: boolean;
+  private readonly listeners = new Set<() => void>();
 
   /**
    * Create an empty catalog.
@@ -57,6 +63,61 @@ export class SkillCatalog {
     if (this.eager) {
       this.registry.buildEmbeddings();
     }
+    this.notifyChange();
+  }
+
+  /**
+   * {@link SkillCatalog.register} that also reports whether the id was already
+   * present — the added-vs-replaced signal an external loader needs to mirror
+   * a source into the catalog. Same replace-in-place, eager-embedding, and
+   * change-notification behavior as `register`.
+   *
+   * @param skill - The skill to add or replace; `id` is its lookup key.
+   * @returns `true` when an already-registered id was replaced, `false` when
+   *   the skill is new.
+   */
+  upsert(skill: Skill): boolean {
+    const replaced = this.skills.has(skill.id);
+    this.register(skill);
+    return replaced;
+  }
+
+  /**
+   * Remove a skill by id. The index entry and its cached embedding drop
+   * together, so a semantic/hybrid catalog keeps searching with no rebuild.
+   * Notifies {@link SkillCatalog.onChange} subscribers on a hit; an unknown id
+   * is a silent no-op (no notification).
+   *
+   * @param skillId - Id of the skill to remove.
+   * @returns `true` when the id was present, `false` otherwise.
+   */
+  remove(skillId: string): boolean {
+    const removed = this.registry.remove(skillId);
+    this.skills.delete(skillId);
+    if (removed) {
+      this.notifyChange();
+    }
+    return removed;
+  }
+
+  /**
+   * Subscribe to catalog churn: the listener fires after every mutation —
+   * `register`, `upsert`, and a `remove` that hit. It is a low-level signal
+   * (an initial registration burst fires it per skill; debouncing is the
+   * subscriber's job) and the single staleness hook for hosts: re-emit
+   * `tools/list_changed` from it, and if the `search_capabilities` description
+   * was cached, re-read it on an empty↔non-empty transition. A listener that
+   * throws is swallowed — it breaks neither the mutation nor other listeners.
+   * Subscribing the same function twice keeps one subscription.
+   *
+   * @param listener - Called (with no arguments) after each mutation.
+   * @returns An unsubscribe function; call it to stop the notifications.
+   */
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   /** Pre-compute embeddings for not-yet-embedded skills. See `ToolCatalog.buildEmbeddings`. */
@@ -164,5 +225,16 @@ export class SkillCatalog {
       });
       return body;
     });
+  }
+
+  /** Fire every subscriber over a snapshot; a throwing one is isolated. */
+  private notifyChange(): void {
+    for (const listener of [...this.listeners]) {
+      try {
+        listener();
+      } catch {
+        // A bad subscriber must not break the mutation or its siblings.
+      }
+    }
   }
 }
