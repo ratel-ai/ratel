@@ -7,6 +7,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type ExecutableTool,
+  formatSearchCapabilities,
   INVOKE_TOOL_ID,
   invokeToolTool,
   SEARCH_CAPABILITIES_ID,
@@ -197,6 +198,41 @@ describe("searchCapabilitiesTool", () => {
     // an empty catalog is treated as no skills
     const emptyCatalog = searchCapabilitiesTool(tools, new SkillCatalog());
     expect(emptyCatalog.description).not.toContain("get_skill_content");
+  });
+});
+
+describe("formatSearchCapabilities", () => {
+  it("records one gateway_search event stamped with the given origin", () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    tools.register(readFile);
+    tools.drainTraceEvents();
+
+    formatSearchCapabilities(tools, "read a file", { topKTools: 3, origin: "direct" });
+
+    const ev = (tools.drainTraceEvents() as Array<Record<string, unknown>>).find(
+      (e) => e.type === "gateway_search",
+    );
+    // Every field of the behavior-identity contract, not just origin: a dropped
+    // hits/query would silently break gateway_search analytics on both paths.
+    expect(ev?.origin).toBe("direct");
+    expect(ev?.top_k).toBe(3);
+    expect(ev?.query).toBe("read a file");
+    expect(ev?.hits).toBe(1); // only readFile is registered and it matches
+  });
+
+  it("produces the same shape searchCapabilitiesTool returns (single source of truth)", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    tools.register(sendEmail);
+    const skills = skillCatalogWith(vercelSkill);
+
+    const direct = formatSearchCapabilities(tools, "read a file", { skillCatalog: skills });
+    const viaTool = (await searchCapabilitiesTool(tools, skills).execute({
+      query: "read a file",
+    })) as SearchCapabilitiesResult;
+
+    expect(direct.tools.groups[0].server.name).toBe(viaTool.tools.groups[0].server.name);
+    expect(direct.tools.groups[0].hits[0].toolId).toBe(viaTool.tools.groups[0].hits[0].toolId);
   });
 });
 

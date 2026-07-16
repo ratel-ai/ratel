@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Framework-adapter SPI + `ratel()` factory (ADR-0012).** `ratel(config).adaptTo(adapter)` gives a framework-shaped view (`tools` / `recall` / `catalog` / `skills`) whose types are inferred from the adapter (`AdaptedRatel<A>`), so app code needs no casts. A `RatelAdapter` is three codecs — `ingest` (framework tool → catalog registration, or `"passthrough"`), `expose` (capability tool → framework tool), `recallMessages` (synthetic `search_capabilities` pair) — plus an optional `extend` for framework idioms; the framework packages (`@ratel-ai/ai-sdk-adapter`, `@ratel-ai/mastra-adapter`) ship separately. The core owns all state (one `ToolCatalog` + `SkillCatalog` + private recall-id counter, shared across adapter views) and every framework-independent guard: reserved gateway ids throw, recall top-K is clamped to `[1, 50]`, first registration of an id wins, non-executable tools pass through eagerly, and recall ids come from a private counter (never a transcript position). A `ratel()` core used framework-shaped without `.adaptTo(...)` throws an actionable install-the-adapter error, probing known frameworks via `isPeerInstalled` (message only). The existing piecemeal API (`ToolCatalog`, capability-tool builders) is unchanged.
+- `formatSearchCapabilities(toolCatalog, query, opts)` — the exported single source of truth for the `search_capabilities` result shape, shared by `searchCapabilitiesTool` (origin `agent`) and the host-driven recall path (origin `direct`). `JSONSchema7` is re-exported as the SDK's public JSON-Schema spelling so adapters type their registrations without casts.
+
 ## [0.4.1] - 2026-07-10
 
 ### Added

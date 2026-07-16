@@ -1,4 +1,4 @@
-import type { ExecutableTool, ToolCatalog } from "./catalog.js";
+import type { ExecutableTool, SearchOrigin, ToolCatalog } from "./catalog.js";
 import { compactDescription } from "./compact.js";
 import type { SkillCatalog } from "./skill-catalog.js";
 import { recordAuthNeeded, upstreamFromToolId } from "./telemetry.js";
@@ -200,7 +200,6 @@ export function searchCapabilitiesTool(
   opts?: SearchCapabilitiesOptions,
 ): ExecutableTool {
   const upstreams = opts?.upstreamServers ?? [];
-  const upstreamByName = new Map(upstreams.map((u) => [u.name, u]));
   const hasSkills = skillCatalog !== undefined && skillCatalog.size() > 0;
   return {
     id: SEARCH_CAPABILITIES_ID,
@@ -279,85 +278,133 @@ export function searchCapabilitiesTool(
         topKTools?: number;
         topKSkills?: number;
       };
-      const kTools = clampTopK(topKTools, DEFAULT_TOP_K_TOOLS);
-      const kSkills = clampTopK(topKSkills, DEFAULT_TOP_K_SKILLS);
-      const startedAt = Date.now();
-
-      const toolHits = toolCatalog.search(query, kTools, "agent");
-      toolCatalog.recordEvent({
-        type: "gateway_search",
-        query,
+      return formatSearchCapabilities(toolCatalog, query, {
+        topKTools,
+        topKSkills,
+        skillCatalog,
         origin: "agent",
-        top_k: kTools,
-        hits: toolHits.length,
-        took_ms: Date.now() - startedAt,
+        upstreamServers: upstreams,
       });
-
-      const order: string[] = [];
-      const groups = new Map<string, CapabilityToolGroup>();
-      const seenTools = new Set<string>();
-      // Add a tool to its server group, deduped. `score` is the BM25 query score
-      // for a real match, or 0 for a skill-declared dependency (it rode in on the
-      // skill, it was never matched by the query).
-      const addTool = (toolId: string, score: number): void => {
-        if (seenTools.has(toolId)) return;
-        const tool = toolCatalog.get(toolId);
-        if (!tool) return; // a declared id the catalog doesn't have: skip
-        seenTools.add(toolId);
-        const sep = toolId.indexOf("__");
-        const serverName = sep > 0 ? toolId.slice(0, sep) : toolId;
-        let group = groups.get(serverName);
-        if (!group) {
-          const meta = upstreamByName.get(serverName);
-          group = {
-            server: {
-              name: serverName,
-              ...(meta?.description ? { description: meta.description } : {}),
-              ...(meta?.instructions ? { instructions: meta.instructions } : {}),
-            },
-            hits: [],
-          };
-          groups.set(serverName, group);
-          order.push(serverName);
-        }
-        group.hits.push({
-          toolId,
-          score,
-          description: tool.description ?? "",
-          inputSchema: (tool.inputSchema ?? {}) as Record<string, unknown>,
-        });
-      };
-      for (const h of toolHits) addTool(h.toolId, h.score);
-
-      // Skills are ranked in their own bucket against the same query (reserved
-      // budget → never starved by tools). SkillCatalog.search emits its own
-      // skill_search trace for the funnel.
-      const skills: CapabilitySkillHit[] = skillCatalog
-        ? skillCatalog.search(query, kSkills, "agent").map((h) => ({
-            skillId: h.skillId,
-            score: h.score,
-            description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),
-          }))
-        : [];
-
-      // A matched skill's instructions name the tools they call. Pull those into
-      // the tools bucket so the agent gets the playbook and its toolkit in one
-      // turn — additively (score 0), beyond topKTools, deduped against query hits.
-      if (skillCatalog) {
-        for (const s of skills) {
-          for (const toolId of skillCatalog.get(s.skillId)?.tools ?? []) {
-            addTool(toolId, 0);
-          }
-        }
-      }
-
-      const result: SearchCapabilitiesResult = {
-        // biome-ignore lint/style/noNonNullAssertion: order entries are guaranteed by construction
-        tools: { groups: order.map((n) => groups.get(n)!) },
-        skills,
-      };
-      return result;
     },
+  };
+}
+
+/** Options for {@link formatSearchCapabilities}. */
+export interface FormatSearchCapabilitiesOptions {
+  /** Max tools bucket size; clamped to [1, 50], default 5 (same as the tool). */
+  topKTools?: number;
+  /** Max skills bucket size; clamped to [1, 50], default 3. */
+  topKSkills?: number;
+  /** Catalog the `skills` bucket is ranked from (and whose declared tool deps ride in). */
+  skillCatalog?: SkillCatalog;
+  /**
+   * Who initiated the search — stamped on the `gateway_search` trace event and
+   * the `ratel.search` span. Default `"agent"` (a model-synthesized call); the
+   * host-driven recall path passes `"direct"`.
+   */
+  origin?: SearchOrigin;
+  /** Upstream-server metadata attached to the matching result groups. */
+  upstreamServers?: readonly UpstreamServerInfo[];
+}
+
+/**
+ * Rank a query into the `search_capabilities` result shape — the single source
+ * of truth for that shape, shared by {@link searchCapabilitiesTool} (agent
+ * origin) and the `ratel().adaptTo(...)` recall path (direct origin), so the two
+ * can never drift. Ranks the `tools` bucket (grouped by upstream server, a
+ * matched skill's declared tool deps pulled in additively at score `0`, deduped)
+ * and the independently-budgeted `skills` bucket, clamps both top-Ks to [1, 50],
+ * and records one `gateway_search` event with the given `origin`.
+ *
+ * @param toolCatalog - Catalog the `tools` bucket is ranked from.
+ * @param query - Natural-language description of what the caller wants to do.
+ * @param opts - Bucket sizes, skill catalog, origin, and upstream metadata.
+ * @returns The {@link SearchCapabilitiesResult}.
+ */
+export function formatSearchCapabilities(
+  toolCatalog: ToolCatalog,
+  query: string,
+  opts: FormatSearchCapabilitiesOptions = {},
+): SearchCapabilitiesResult {
+  const kTools = clampTopK(opts.topKTools, DEFAULT_TOP_K_TOOLS);
+  const kSkills = clampTopK(opts.topKSkills, DEFAULT_TOP_K_SKILLS);
+  const origin = opts.origin ?? "agent";
+  const upstreamByName = new Map((opts.upstreamServers ?? []).map((u) => [u.name, u]));
+  const skillCatalog = opts.skillCatalog;
+  const startedAt = Date.now();
+
+  const toolHits = toolCatalog.search(query, kTools, origin);
+  toolCatalog.recordEvent({
+    type: "gateway_search",
+    query,
+    origin,
+    top_k: kTools,
+    hits: toolHits.length,
+    took_ms: Date.now() - startedAt,
+  });
+
+  const order: string[] = [];
+  const groups = new Map<string, CapabilityToolGroup>();
+  const seenTools = new Set<string>();
+  // Add a tool to its server group, deduped. `score` is the BM25 query score
+  // for a real match, or 0 for a skill-declared dependency (it rode in on the
+  // skill, it was never matched by the query).
+  const addTool = (toolId: string, score: number): void => {
+    if (seenTools.has(toolId)) return;
+    const tool = toolCatalog.get(toolId);
+    if (!tool) return; // a declared id the catalog doesn't have: skip
+    seenTools.add(toolId);
+    const sep = toolId.indexOf("__");
+    const serverName = sep > 0 ? toolId.slice(0, sep) : toolId;
+    let group = groups.get(serverName);
+    if (!group) {
+      const meta = upstreamByName.get(serverName);
+      group = {
+        server: {
+          name: serverName,
+          ...(meta?.description ? { description: meta.description } : {}),
+          ...(meta?.instructions ? { instructions: meta.instructions } : {}),
+        },
+        hits: [],
+      };
+      groups.set(serverName, group);
+      order.push(serverName);
+    }
+    group.hits.push({
+      toolId,
+      score,
+      description: tool.description ?? "",
+      inputSchema: (tool.inputSchema ?? {}) as Record<string, unknown>,
+    });
+  };
+  for (const h of toolHits) addTool(h.toolId, h.score);
+
+  // Skills are ranked in their own bucket against the same query (reserved
+  // budget → never starved by tools). SkillCatalog.search emits its own
+  // skill_search trace for the funnel.
+  const skills: CapabilitySkillHit[] = skillCatalog
+    ? skillCatalog.search(query, kSkills, origin).map((h) => ({
+        skillId: h.skillId,
+        score: h.score,
+        description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),
+      }))
+    : [];
+
+  // A matched skill's instructions name the tools they call. Pull those into
+  // the tools bucket so the agent gets the playbook and its toolkit in one
+  // turn — additively (score 0), beyond topKTools, deduped against query hits.
+  if (skillCatalog) {
+    for (const s of skills) {
+      for (const toolId of skillCatalog.get(s.skillId)?.tools ?? []) {
+        addTool(toolId, 0);
+      }
+    }
+  }
+
+  return {
+    // biome-ignore lint/style/noNonNullAssertion: order entries are guaranteed by construction
+    tools: { groups: order.map((n) => groups.get(n)!) },
+    skills,
   };
 }
 

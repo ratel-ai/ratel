@@ -53,6 +53,27 @@ const [hit] = catalog.search("What is the weather in Rome?", 1);
 console.log(await catalog.invoke(hit.toolId, { city: "Rome" }));
 ```
 
+## Framework adapters
+
+To work in a host framework's native tool and message shapes, adapt the core with a
+`RatelAdapter` from a framework package instead of wiring the capability tools by hand:
+
+```js
+import { ratel } from "@ratel-ai/sdk";
+import { aiSdk } from "@ratel-ai/ai-sdk-adapter"; // ships separately
+
+const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
+const tools = r.tools(myTools);              // stable gateway set for the model
+const messages = r.appendRecall(history);    // per-turn recall (AI SDK idiom)
+```
+
+`ratel(config)` owns one `ToolCatalog` + `SkillCatalog` + recall-id counter and every
+framework-independent guard (reserved gateway ids, top-K clamp, first-registration-wins,
+passthrough of provider-run tools); an adapter is just three codecs (`ingest` / `expose` /
+`recallMessages`) plus its framework idioms. `adaptTo` infers the framework's tool and message
+types, so app code needs no casts. Used without `.adaptTo(...)`, `ratel()` throws an error
+pointing at the adapter package to install. See ADR-0012.
+
 Continue with the [TypeScript guide](https://docs.ratel.sh/docs/sdks/typescript), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-typescript), or the [Vercel AI SDK example](https://github.com/ratel-ai/ratel/tree/main/examples/ai-sdk).
 
 Telemetry export is optional. With `@ratel-ai/telemetry-otlp` installed, `configureTelemetry()` reads `RATEL_URL` and `RATEL_API_KEY`, wires the exporter, and returns a shutdown handle. See the [telemetry guide](https://docs.ratel.sh/docs/telemetry).
