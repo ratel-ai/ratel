@@ -38,10 +38,18 @@ implementation of the already-published contract, not a new design.
   in-process registration (the floor) or from a **source loader** that pulls a published
   catalog and hydrates the local registries. Retrieval (`search_capabilities` /
   `invoke_tool` / `get_skill_content`) always runs locally over those registries.
-- `RATEL_URL` names a remote source and selects its loader; unset is the embedded floor.
-  Application code does not change ([ADR-0002](0002-product-split-engine-local-cloud.md)).
-- Additional sources (a local file/dir loader, git, a self-hosted endpoint) are added as
-  loaders when a use case appears.
+- The seam the SDK ships is the **mutable-catalog surface**, not a loader framework: a
+  loader pushes skills with `SkillCatalog.upsert` (returns the added-vs-replaced signal),
+  drops them with `remove`, reads current state with `get`/`has`, and the host observes
+  churn via `onChange` — the single staleness hook to re-emit `tools/list_changed` and
+  re-read a cached `search_capabilities` description on an empty↔non-empty transition. A
+  loader is any separate package that holds a catalog and drives it to mirror its source
+  (the managed cloud, a DB, a local file/dir, git, a self-hosted endpoint); no formal
+  loader lifecycle interface is prescribed until interchangeable loaders are wanted.
+- Loader-specific source selection and config — e.g. the Cloud loader's `RATEL_URL` and
+  bearer key — live in the loader package, not the SDK; the SDK stays source-agnostic.
+  Application code still does not change
+  ([ADR-0002](0002-product-split-engine-local-cloud.md)).
 
 ### The wire contract
 
