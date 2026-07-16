@@ -131,7 +131,7 @@ export async function registerMcpServer(
       });
       toolIds.push(id);
     }
-    catalog.registerMany(registered);
+    await catalog.register(registered);
 
     return {
       toolIds,

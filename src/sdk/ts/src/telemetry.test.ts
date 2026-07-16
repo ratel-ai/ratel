@@ -86,7 +86,7 @@ function attrs(span: ReadableSpan): Record<string, unknown> {
 describe("execute_tool span", () => {
   it("wraps a tool invocation with gen_ai + ratel attributes", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     await catalog.invoke("read_file", { path: "/tmp/x" });
 
     const [span] = spansNamed("execute_tool read_file");
@@ -99,7 +99,7 @@ describe("execute_tool span", () => {
 
   it("does not capture argument/result content by default", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     await catalog.invoke("read_file", { path: "/secret" });
 
     const [span] = spansNamed("execute_tool read_file");
@@ -110,7 +110,7 @@ describe("execute_tool span", () => {
   it("captures content when the ecosystem gate is set", async () => {
     process.env[CAPTURE_ENV] = "SPAN_AND_EVENT";
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     await catalog.invoke("read_file", { path: "/p" });
 
     const [span] = spansNamed("execute_tool read_file");
@@ -121,7 +121,7 @@ describe("execute_tool span", () => {
   it("keeps content off the span under EVENT_ONLY (content rides events, not spans)", async () => {
     process.env[CAPTURE_ENV] = "EVENT_ONLY";
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     await catalog.invoke("read_file", { path: "/p" });
 
     const [span] = spansNamed("execute_tool read_file");
@@ -132,7 +132,7 @@ describe("execute_tool span", () => {
   it("keeps content off the span under explicit NO_CONTENT", async () => {
     process.env[CAPTURE_ENV] = "NO_CONTENT";
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     await catalog.invoke("read_file", { path: "/p" });
 
     const [span] = spansNamed("execute_tool read_file");
@@ -142,7 +142,7 @@ describe("execute_tool span", () => {
 
   it("records args_size_bytes as UTF-8 bytes, not UTF-16 characters", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     // "café" is 4 UTF-16 chars but 5 UTF-8 bytes; the JSON wrapper adds ASCII bytes.
     await catalog.invoke("read_file", { path: "café" });
 
@@ -153,8 +153,8 @@ describe("execute_tool span", () => {
 
   it("tags an MCP-proxied invoke with ratel.upstream.server and omits it for a plain tool", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(gmailSend);
-    catalog.register(readFile);
+    await catalog.register(gmailSend);
+    await catalog.register(readFile);
     await catalog.invoke("gmail__send_email", { to: "a@b.com" });
     await catalog.invoke("read_file", { path: "/x" });
 
@@ -166,7 +166,7 @@ describe("execute_tool span", () => {
 
   it("marks the span ERROR and rethrows when the tool throws", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(boom);
+    await catalog.register(boom);
     await expect(catalog.invoke("boom", {})).rejects.toThrow("kaboom");
 
     const [span] = spansNamed("execute_tool boom");
@@ -176,7 +176,7 @@ describe("execute_tool span", () => {
 
   it("leaves the local trace stream intact alongside the span", async () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "s" } });
-    catalog.register(readFile);
+    await catalog.register(readFile);
     await catalog.invoke("read_file", { path: "/tmp/x" });
 
     const local = catalog.drainTraceEvents() as Array<{ type: string }>;
@@ -187,9 +187,9 @@ describe("execute_tool span", () => {
 });
 
 describe("ratel.search span", () => {
-  it("records target=tool with top_k, origin, and hit_count", () => {
+  it("records target=tool with top_k, origin, and hit_count", async () => {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     catalog.search("read file", 5, "agent");
 
     const [span] = spansNamed("ratel.search");
@@ -200,10 +200,10 @@ describe("ratel.search span", () => {
     expect(attrs(span)["ratel.search.query"]).toBeUndefined(); // content off by default
   });
 
-  it("records target=skill for the skill catalog and captures the query when gated", () => {
+  it("records target=skill for the skill catalog and captures the query when gated", async () => {
     process.env[CAPTURE_ENV] = "SPAN_ONLY";
     const skills = new SkillCatalog();
-    skills.register({
+    await skills.register({
       id: "pdf",
       name: "pdf",
       description: "fill pdf forms",
@@ -220,9 +220,9 @@ describe("ratel.search span", () => {
 });
 
 describe("ratel.skill.load span", () => {
-  it("wraps a skill load with the skill id", () => {
+  it("wraps a skill load with the skill id", async () => {
     const skills = new SkillCatalog();
-    skills.register({
+    await skills.register({
       id: "pdf",
       name: "pdf",
       description: "d",
@@ -264,7 +264,7 @@ describe("no provider configured", () => {
     // (e.g. by caching a tracer) this would catch it.
     trace.disable();
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
 
     expect(catalog.search("read", 5).length).toBeGreaterThan(0);
     await expect(catalog.invoke("read_file", { path: "/x" })).resolves.toEqual({
@@ -284,9 +284,9 @@ describe("span nesting", () => {
     context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
     try {
       const catalog = new ToolCatalog();
-      catalog.register(readFile);
+      await catalog.register(readFile);
       // Executor triggers a nested ratel.search while the outer execute_tool span is active.
-      catalog.register({
+      await catalog.register({
         id: "outer",
         name: "outer",
         description: "invokes a nested search",
@@ -348,7 +348,7 @@ describe("configureTelemetry content-capture options", () => {
 
   async function invokeAndReadArgs(): Promise<unknown> {
     const catalog = new ToolCatalog();
-    catalog.register(readFile);
+    await catalog.register(readFile);
     await catalog.invoke("read_file", { path: "/p" });
     const spans = spansNamed("execute_tool read_file");
     const [span] = spans.slice(-1); // most recent invoke

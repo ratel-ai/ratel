@@ -53,6 +53,8 @@ progress.md
 CLAUDE.local.md
 embedding_demo.py
 embedding_demo.ts
+embedding_usage_demo.py
+embedding_usage_demo.ts
 
 # Claude Code — personal/runtime; commit .claude/skills and .claude/settings.json
 .claude/settings.local.json

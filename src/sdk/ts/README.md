@@ -21,16 +21,15 @@ Use `ToolCatalog` for ranked tools with executable handlers and `SkillCatalog` f
 
 Semantic and hybrid retrieval use a configurable embedding model ([ADR 0012](../../../docs/adr/0012-configurable-embedding-models.md)), set per catalog via the `embedding` option: the built-in default, a HuggingFace repo or local directory (in-process), or an OpenAI-compatible endpoint (OpenAI, Ollama, TEI, vLLM).
 
-Registration is always metadata-only. For semantic or hybrid retrieval, register the full corpus, then explicitly build and search asynchronously so model loading, HTTP, and inference never block Node's event loop:
+For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole array and embeds on a libuv worker, so model loading, HTTP, and inference never block Node's event loop — and embedding errors surface right at `register()`:
 
 ```ts
 const catalog = new ToolCatalog({ method: "semantic", embedding: { ollama: "nomic-embed-text" } });
-catalog.registerMany(tools);
-await catalog.buildEmbeddings();
+await catalog.register(tools);                              // embeds the batch here
 const hits = await catalog.searchAsync("deploy the service", 5);
 ```
 
-Use `await catalog.rebuildEmbeddings()` after changing the endpoint's model or vector dimension. Synchronous `search()` remains available for BM25 only.
+`register()` returns a promise for every method (BM25 too); `search()` stays synchronous for BM25 only, and `searchAsync()` covers all three. To change the endpoint's model or vector dimension, construct a new catalog and re-register.
 
 ## Install
 
@@ -46,7 +45,7 @@ Save as `quickstart.mjs`, then run `node quickstart.mjs`:
 import { ToolCatalog } from "@ratel-ai/sdk";
 
 const catalog = new ToolCatalog();
-catalog.register({
+await catalog.register({
   id: "get_weather",
   name: "get_weather",
   description: "Get the current weather for a city.",

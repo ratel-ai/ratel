@@ -212,7 +212,9 @@ class ToolRegistry:
     """Typed Python facade over the private native tool registry."""
 
     @overload
-    def __init__(self, embedding: EmbeddingSpec | None = None) -> None: ...
+    def __init__(
+        self, embedding: EmbeddingSpec | None = None, *, method: SearchMethod = "bm25"
+    ) -> None: ...
 
     @overload
     def __init__(
@@ -270,6 +272,7 @@ class ToolRegistry:
         self,
         embedding: EmbeddingSpec | None = None,
         *,
+        method: SearchMethod = "bm25",
         spec: str | None = None,
         huggingface: str | None = None,
         local: str | None = None,
@@ -283,7 +286,11 @@ class ToolRegistry:
         pooling: str | None = None,
         download: bool | None = None,
     ) -> None:
-        """Create a metadata registry with an optional embedding model."""
+        """Create a metadata registry with an optional embedding model.
+
+        A "semantic"/"hybrid" `method` makes `register` embed eagerly (inside the
+        call, on a worker thread); "bm25" keeps registration model-free.
+        """
         kwargs = _registry_embedding_kwargs(
             embedding,
             spec=spec,
@@ -300,16 +307,20 @@ class ToolRegistry:
             download=download,
         )
         self._native = _NativeToolRegistry(**kwargs)
+        self._eager = method in ("semantic", "hybrid")
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
         self._dense_tasks: set[asyncio.Task[Any]] = set()
 
     @overload
-    def register(self, item: Tool) -> None: ...
+    async def register(self, item: Tool) -> None: ...
 
     @overload
-    def register(
+    async def register(self, item: Iterable[Tool]) -> None: ...
+
+    @overload
+    async def register(
         self,
         item: str,
         name: str,
@@ -318,36 +329,38 @@ class ToolRegistry:
         output_schema: dict[str, Any],
     ) -> None: ...
 
-    def register(
+    async def register(
         self,
-        item: Tool | str,
+        item: Tool | Iterable[Tool] | str,
         name: str | None = None,
         description: str | None = None,
         input_schema: dict[str, Any] | None = None,
         output_schema: dict[str, Any] | None = None,
     ) -> None:
-        """Register a `Tool`; the legacy flat native arguments remain accepted."""
-        if isinstance(item, Tool):
-            if any(value is not None for value in (name, description, input_schema, output_schema)):
-                raise TypeError("item register accepts only the Tool argument")
-            tool = item
-        else:
-            if (
-                name is None
-                or description is None
-                or input_schema is None
-                or output_schema is None
-            ):
-                raise TypeError("flat register requires all metadata arguments")
-            tool = Tool(item, name, description, input_schema, output_schema)
-        self._register_items((tool,))
+        """Register one `Tool`, many `Tool`s, or a flat (id, name, …) tuple.
 
-    def register_many(self, items: Iterable[Tool]) -> None:
-        """Register tools in iteration order."""
-        tools = list(items)
-        if not all(isinstance(item, Tool) for item in tools):
-            raise TypeError("register_many requires Tool items")
+        Stores metadata and — on a "semantic"/"hybrid" registry — embeds in one
+        batched, off-thread pass (embedding errors surface here). "bm25" registers
+        metadata only.
+        """
+        flat_args = (name, description, input_schema, output_schema)
+        if isinstance(item, Tool):
+            if any(value is not None for value in flat_args):
+                raise TypeError("item register accepts only the Tool argument")
+            tools: list[Tool] = [item]
+        elif isinstance(item, str):
+            if any(value is None for value in flat_args):
+                raise TypeError("flat register requires all metadata arguments")
+            tools = [Tool(item, name, description, input_schema, output_schema)]  # type: ignore[arg-type]
+        else:
+            if any(value is not None for value in flat_args):
+                raise TypeError("iterable register accepts only the items argument")
+            tools = list(item)
+            if not all(isinstance(tool, Tool) for tool in tools):
+                raise TypeError("register requires Tool items")
         self._register_items(tools)
+        if self._eager:
+            await self._build()
 
     def search(self, query: str, top_k: int) -> list[SearchHit]:
         """Run synchronous, model-free BM25 retrieval."""
@@ -370,12 +383,12 @@ class ToolRegistry:
             )
         return self.search_with_origin(query, top_k, origin)
 
-    async def build_embeddings(self) -> None:
-        """Incrementally build missing embeddings without blocking Python."""
+    async def _build(self) -> None:
+        """Embed not-yet-embedded items on a worker thread (used by `register`)."""
         await self._run_dense(self._native._build_embeddings)
 
-    async def rebuild_embeddings(self) -> None:
-        """Recompute and atomically replace the full embedding cache."""
+    async def _rebuild(self) -> None:
+        """Recompute and atomically replace the full embedding cache (internal)."""
         await self._run_dense(self._native._rebuild_embeddings)
 
     async def search_async(
@@ -498,45 +511,40 @@ class ToolCatalog:
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
         self._method: SearchMethod = method
-        # Keep and validate the model even for a BM25-default catalog: callers may
-        # build once, then opt into semantic retrieval per search.
-        self._registry = ToolRegistry(embedding)
+        # A semantic/hybrid catalog embeds inside `register`; a bm25 catalog stays
+        # model-free. The model is validated at construction regardless.
+        self._registry = ToolRegistry(embedding, method=method)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
-    def register(self, tool: ExecutableTool) -> None:
-        """Add a tool to the catalog (metadata into the index, handler by id).
+    async def register(self, tools: ExecutableTool | Iterable[ExecutableTool]) -> None:
+        """Register one tool or many — the single entry point for both.
 
-        Registering an id that is already present replaces it in place — the
-        index never holds a duplicate.
+        Stores metadata and the executor handler, then — on a "semantic"/"hybrid"
+        catalog — embeds the tools in one batched pass on a worker thread (so the
+        event loop is never blocked). Embedding errors (model load / endpoint /
+        auth / dimension) surface **here**, at registration. A BM25 catalog never
+        loads a model and resolves immediately. Re-registering an id replaces it
+        in place; the index never holds a duplicate.
+
+        A model or dimension change is not recovered in place — construct a new
+        catalog and re-register.
 
         Args:
-            tool: the tool to register; `execute` must be set.
+            tools: a single `ExecutableTool` or an iterable of them; each
+                `execute` must be set. Pass the whole batch at once for a single
+                embedding request; separate `register` calls embed separately.
 
         Raises:
-            ValueError: if `tool.execute` is `None`, or if `input_schema` /
-                `output_schema` contain values that are not JSON-serializable.
-            RuntimeError: if a queued or running dense operation owns the registry.
+            ValueError: if any `execute` is `None`, or a schema isn't JSON-serializable.
+            EmbedderError: on a semantic/hybrid catalog, if embedding fails.
+            RuntimeError: if a dense operation already owns the registry.
         """
-        if tool.execute is None:
-            raise ValueError(f"tool {tool.id!r} has no execute handler")
-        self._registry.register(tool)
-        self._executors[tool.id] = tool.execute
-        self._tools[tool.id] = Tool(
-            id=tool.id,
-            name=tool.name,
-            description=tool.description,
-            input_schema=tool.input_schema,
-            output_schema=tool.output_schema,
-        )
-
-    def register_many(self, tools: Iterable[ExecutableTool]) -> None:
-        """Register executable tools in iteration order without embedding them."""
-        batch = list(tools)
+        batch = [tools] if isinstance(tools, ExecutableTool) else list(tools)
         for tool in batch:
             if tool.execute is None:
                 raise ValueError(f"tool {tool.id!r} has no execute handler")
-        self._registry.register_many(batch)
+        self._registry._register_items(batch)
         for tool in batch:
             self._executors[tool.id] = tool.execute
             self._tools[tool.id] = Tool(
@@ -546,22 +554,8 @@ class ToolCatalog:
                 input_schema=tool.input_schema,
                 output_schema=tool.output_schema,
             )
-
-    async def build_embeddings(self) -> None:
-        """Pre-compute embeddings for any not-yet-embedded tools.
-
-        Incremental: only tools registered since the last call are embedded.
-        Registration itself is always metadata-only. This coroutine performs
-        model loading, HTTP, and inference on a worker thread.
-
-        Raises:
-            RuntimeError: if the embedding model fails to load.
-        """
-        await self._registry.build_embeddings()
-
-    async def rebuild_embeddings(self) -> None:
-        """Recompute and atomically replace every tool embedding."""
-        await self._registry.rebuild_embeddings()
+        if self._method in ("semantic", "hybrid"):
+            await self._registry._build()
 
     def search(
         self,

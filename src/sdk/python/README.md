@@ -21,17 +21,16 @@ Use `ToolCatalog` for ranked tools with sync or async handlers and `SkillCatalog
 
 Semantic and hybrid retrieval use a configurable embedding model ([ADR 0012](../../../docs/adr/0012-configurable-embedding-models.md)), set per catalog via the `embedding` argument: the built-in default, a HuggingFace repo or local directory (in-process), or an OpenAI-compatible endpoint (OpenAI, Ollama, TEI, vLLM).
 
-Registration is always metadata-only. For semantic or hybrid retrieval, register the full corpus, then explicitly build and search asynchronously so model loading, HTTP, and inference never block the asyncio loop or hold the GIL:
+For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole batch and embeds on a worker thread, so model loading, HTTP, and inference never block the asyncio loop or hold the GIL — and embedding errors surface right at `register()`:
 
 ```python
 async def retrieve(tools):
     catalog = ToolCatalog(method="semantic", embedding={"ollama": "nomic-embed-text"})
-    catalog.register_many(tools)
-    await catalog.build_embeddings()
+    await catalog.register(tools)                              # embeds the batch here
     return await catalog.search_async("deploy the service", 5)
 ```
 
-Use `await catalog.rebuild_embeddings()` after changing the endpoint's model or vector dimension. Synchronous `search()` remains available for BM25 only.
+`register()` is async for every method (BM25 too); `search()` stays synchronous for BM25 only, and `search_async()` covers all three. To change the endpoint's model or vector dimension, construct a new catalog and re-register.
 
 ## Install
 
@@ -50,7 +49,7 @@ from ratel_ai import ExecutableTool, ToolCatalog
 
 async def main():
     catalog = ToolCatalog()
-    catalog.register(
+    await catalog.register(
         ExecutableTool(
             id="get_weather",
             name="get_weather",

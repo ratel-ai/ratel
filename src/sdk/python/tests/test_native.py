@@ -9,8 +9,8 @@ import pytest
 from ratel_ai import SearchHit, Skill, SkillRegistry, Tool, ToolRegistry
 
 
-def _register_read_file(reg: ToolRegistry) -> None:
-    reg.register(
+async def _register_read_file(reg: ToolRegistry) -> None:
+    await reg.register(
         "read_file",
         "read_file",
         "Read a file from local disk and return its textual contents.",
@@ -19,9 +19,9 @@ def _register_read_file(reg: ToolRegistry) -> None:
     )
 
 
-def test_register_and_search_returns_hit() -> None:
+async def test_register_and_search_returns_hit() -> None:
     reg = ToolRegistry()
-    _register_read_file(reg)
+    await _register_read_file(reg)
     hits = reg.search("read a text file", 5)
     assert len(hits) >= 1
     assert isinstance(hits[0], SearchHit)
@@ -29,22 +29,27 @@ def test_register_and_search_returns_hit() -> None:
     assert hits[0].score > 0
 
 
-def test_register_item_and_register_many() -> None:
+async def test_registry_register_many_no_longer_exists() -> None:
+    # register_many / build_embeddings / rebuild_embeddings were folded into
+    # the variadic, self-embedding `register` (RAT-379/async-register).
+    for registry in (ToolRegistry(), SkillRegistry()):
+        assert not hasattr(registry, "register_many")
+        assert not hasattr(registry, "build_embeddings")
+        assert not hasattr(registry, "rebuild_embeddings")
+
+
+async def test_register_item_and_register_iterable() -> None:
     reg = ToolRegistry()
-    reg.register(
-        Tool(id="read", name="read", description="Read a file from disk")
-    )
-    reg.register_many(
-        [Tool(id="send", name="send", description="Send an email message")]
-    )
+    await reg.register(Tool(id="read", name="read", description="Read a file from disk"))
+    await reg.register([Tool(id="send", name="send", description="Send an email message")])
 
     assert reg.search("send email", 5)[0].tool_id == "send"
 
 
-def test_skill_registry_register_item_and_register_many() -> None:
+async def test_skill_registry_register_item_and_register_iterable() -> None:
     reg = SkillRegistry()
-    reg.register(Skill(id="auth", name="auth", description="Set up login"))
-    reg.register_many([Skill(id="deploy", name="deploy", description="Deploy an app")])
+    await reg.register(Skill(id="auth", name="auth", description="Set up login"))
+    await reg.register([Skill(id="deploy", name="deploy", description="Deploy an app")])
 
     assert reg.search("deploy", 5)[0].skill_id == "deploy"
 
@@ -59,9 +64,14 @@ def test_skill_registry_register_item_and_register_many() -> None:
 def test_dense_submission_failure_releases_registry_busy_state(registry, item) -> None:
     async def exercise() -> None:
         await asyncio.get_running_loop().shutdown_default_executor()
+        # `_build` is the internal dense-build primitive an eager `register` now
+        # drives; exercised directly since these bm25-default registries have no
+        # embedding config to route a real `register(..., method="semantic")`
+        # eager build through, but the executor-submission failure it triggers
+        # here is model-independent.
         with pytest.raises(RuntimeError, match="Executor shutdown"):
-            await registry.build_embeddings()
-        registry.register(item)
+            await registry._build()
+        await registry.register(item)
 
     asyncio.run(exercise())
 
@@ -70,10 +80,10 @@ async def test_registry_async_lifecycle_has_tool_and_skill_parity() -> None:
     tools = ToolRegistry()
     skills = SkillRegistry()
 
-    await tools.build_embeddings()
-    await tools.rebuild_embeddings()
-    await skills.build_embeddings()
-    await skills.rebuild_embeddings()
+    await tools._build()
+    await tools._rebuild()
+    await skills._build()
+    await skills._rebuild()
 
     assert await tools.search_async("anything", 5) == []
     assert await skills.search_async("anything", 5) == []
@@ -102,8 +112,8 @@ async def test_async_bm25_does_not_queue_behind_dense_operation(
 ) -> None:
     endpoint, request_started, send_response = controlled_embedding_endpoint
     registry: Any = registry_type(embedding={"url": endpoint, "model": "test-model"})
-    registry.register(item)
-    build = asyncio.create_task(registry.build_embeddings())
+    await registry.register(item)
+    build = asyncio.create_task(registry._build())
     for _ in range(200):
         if request_started.is_set():
             break
@@ -126,17 +136,17 @@ def test_search_empty_registry_returns_empty() -> None:
     assert reg.search("anything", 5) == []
 
 
-def test_search_with_origin_accepts_agent_and_direct() -> None:
+async def test_search_with_origin_accepts_agent_and_direct() -> None:
     reg = ToolRegistry()
-    _register_read_file(reg)
+    await _register_read_file(reg)
     assert reg.search_with_origin("read file", 3, "agent")[0].tool_id == "read_file"
     assert reg.search_with_origin("read file", 3, "direct")[0].tool_id == "read_file"
 
 
-def test_memory_sink_captures_and_drains_events() -> None:
+async def test_memory_sink_captures_and_drains_events() -> None:
     reg = ToolRegistry()
     reg.set_trace_sink("memory", "sess-1")
-    _register_read_file(reg)  # emits an index_churn event
+    await _register_read_file(reg)  # emits an index_churn event
     reg.search("read file", 3)  # emits a search event
     events = reg.drain_trace_events()
     types = [e["type"] for e in events]
@@ -148,9 +158,9 @@ def test_memory_sink_captures_and_drains_events() -> None:
     assert reg.drain_trace_events() == []
 
 
-def test_noop_sink_drains_nothing() -> None:
+async def test_noop_sink_drains_nothing() -> None:
     reg = ToolRegistry()
-    _register_read_file(reg)
+    await _register_read_file(reg)
     reg.search("read file", 3)
     assert reg.drain_trace_events() == []
 
