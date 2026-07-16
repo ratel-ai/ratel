@@ -38,14 +38,23 @@ implementation of the already-published contract, not a new design.
   in-process registration (the floor) or from a **source loader** that pulls a published
   catalog and hydrates the local registries. Retrieval (`search_capabilities` /
   `invoke_tool` / `get_skill_content`) always runs locally over those registries.
-- The seam the SDK ships is the **mutable-catalog surface**, not a loader framework: a
-  loader pushes skills with `SkillCatalog.upsert` (returns the added-vs-replaced signal),
-  drops them with `remove`, reads current state with `get`/`has`, and the host observes
-  churn via `onChange` — the single staleness hook to re-emit `tools/list_changed` and
-  re-read a cached `search_capabilities` description on an empty↔non-empty transition. A
-  loader is any separate package that holds a catalog and drives it to mirror its source
-  (the managed cloud, a DB, a local file/dir, git, a self-hosted endpoint); no formal
-  loader lifecycle interface is prescribed until interchangeable loaders are wanted.
+- The seam the SDK ships has two layers, not a loader framework. The floor is the
+  **mutable-catalog surface**: a loader pushes skills with `SkillCatalog.upsert` (returns the
+  added-vs-replaced signal), drops them with `remove`, reads current state with `get`/`has`,
+  and the host observes churn via `onChange` — the single staleness hook to re-emit
+  `tools/list_changed` and re-read a cached `search_capabilities` description on an
+  empty↔non-empty transition. On top of it the SDK formalizes a **loader lifecycle contract**,
+  `CatalogLoader` (`start(catalog)` / `stop` / `refresh`, each sync-or-async), attached with the
+  free function `attachLoader(catalog, loader)` (mirrors `registerMcpServer`) which starts the
+  loader and returns a `detach`/`refresh` handle; the catalog itself stays loader-blind. The
+  loader still **owns its own sync loop** and drives the catalog through `upsert`/`remove` — the
+  contract is lifecycle-only, with no SDK-owned snapshot diffing. A loader is any separate
+  package that holds a catalog and mirrors its source (the managed cloud, a DB, a local
+  file/dir, git, a self-hosted endpoint); loaders ship as separate packages,
+  `@ratel-ai/local-skills` / `ratel-ai-local-skills` (a directory of SKILL.md files,
+  [ADR-0005](0005-first-class-skills.md)) being the first, reference implementation.
+  Loader-scoped telemetry is deferred to the Cloud loader: an attach-scoped span would
+  misrepresent loop-based hydration, and a new local-trace event family is core work.
 - Loader-specific source selection and config — e.g. the Cloud loader's `RATEL_URL` and
   bearer key — live in the loader package, not the SDK; the SDK stays source-agnostic.
   Application code still does not change

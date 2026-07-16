@@ -23,10 +23,12 @@ sole loader of the skills it manages: the host must not auto-scan them.
 ### Source
 
 Skills load from a Ratel-managed folder (default `~/.ratel/skills/`) that the host does not
-auto-scan. With a remote source configured, the same catalog hydrates from the pull-sync
-contract instead ([ADR-0003](0003-catalog-source-interface.md)); either way the gateway is
-the only loader. The catalog is mutable at runtime (`upsert`/`remove`) and emits change
-notifications (`onChange`), so a loader can hydrate and evolve it after construction.
+auto-scan, served by the reference **local-skills loader** package (`@ratel-ai/local-skills` /
+`ratel-ai-local-skills`) that implements the [ADR-0003](0003-catalog-source-interface.md)
+`CatalogLoader` contract. With a remote source configured, the same catalog hydrates from the
+pull-sync contract instead ([ADR-0003](0003-catalog-source-interface.md)); either way the
+gateway is the only loader. The catalog is mutable at runtime (`upsert`/`remove`) and emits
+change notifications (`onChange`), so a loader can hydrate and evolve it after construction.
 
 ### Surface: one search call, two reserved buckets
 
