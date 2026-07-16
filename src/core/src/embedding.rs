@@ -165,13 +165,13 @@ impl EmbedderError {
                 "check model input/configuration or the endpoint response and retry"
             }
             EmbedderError::EmbeddingsNotBuilt => {
-                "build the catalog embeddings before semantic/hybrid search"
+                "embed the corpus before running a semantic/hybrid search"
             }
             EmbedderError::DimensionMismatch { .. } => {
-                "the model changed under an existing embedding set; rebuild with rebuild_embeddings()"
+                "the configured model changed; re-embed the corpus with the new model"
             }
             EmbedderError::ModelMismatch { .. } => {
-                "the model changed under an existing embedding set; rebuild with rebuild_embeddings()"
+                "the configured model changed; re-embed the corpus with the new model"
             }
             EmbedderError::Config { .. } => {
                 "give exactly one embedding source (a model id / path / url) with its required fields"

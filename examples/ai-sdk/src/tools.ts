@@ -115,9 +115,9 @@ export const tools: ExecutableTool[] = [
   },
 ];
 
-export function buildCatalog(): ToolCatalog {
+export async function buildCatalog(): Promise<ToolCatalog> {
   const catalog = new ToolCatalog();
-  for (const t of tools) catalog.register(t);
+  await catalog.register(tools);
   return catalog;
 }
 

@@ -434,9 +434,14 @@ class ToolRegistry:
             raise
         self._dense_tasks.add(task)
         task.add_done_callback(self._dense_task_done)
-        # Shielding prevents cancellation from cancelling queued executor work;
-        # the retained runner clears busy state only after native work ends.
-        return await asyncio.shield(task)
+        # Wait for the worker WITHOUT asyncio.shield. Like shield, `asyncio.wait`
+        # never cancels the awaited task, so a cancelled caller leaves the worker
+        # running (it holds the dense gate and must finish) — but it avoids
+        # shield's Python-3.14 `_log_on_exception` callback, which would
+        # unconditionally re-report the inner exception even after
+        # `_dense_task_done` has already consumed it.
+        await asyncio.wait({task})
+        return task.result()
 
     async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
         try:
@@ -502,8 +507,8 @@ class ToolCatalog:
             trace: where trace events go; `None` keeps the default no-op sink.
             method: default retrieval method for `search` — "bm25" (the
                 historical, model-free behavior), "semantic" or "hybrid". A
-                per-call `method=` overrides it. Dense defaults must use
-                `search_async` after an explicit `build_embeddings`.
+                per-call `method=` overrides it. A "semantic"/"hybrid" catalog
+                embeds inside `register`; dense results come from `search_async`.
             embedding: model for semantic/hybrid retrieval (a path string or a
                 keyed dict — see `EmbeddingSpec`). Retained and validated even
                 under "bm25" so a later async semantic override can use it.
@@ -606,8 +611,8 @@ class ToolCatalog:
     ) -> list[SearchHit]:
         """Rank tools asynchronously with BM25, semantic, or hybrid retrieval.
 
-        Dense methods require a complete cache built by `build_embeddings` or
-        `rebuild_embeddings`; searching never builds missing corpus embeddings.
+        Dense methods require the corpus to have been embedded by `register` on a
+        semantic/hybrid catalog; searching never embeds missing corpus vectors.
         """
         resolved_method = method or self._method
         return await trace_search_async(

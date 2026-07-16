@@ -54,8 +54,9 @@ land in different vector spaces.
   stamps its width; a query or doc of another width is rejected, never
   zip-truncated). (3) **Model-identity drift is a hard `ModelMismatch` error**:
   the cache stamps the fingerprint that built it and never mixes or queries a
-  different vector space. The remediation is `rebuild_embeddings()`, which
-  atomically replaces the full cache.
+  different vector space. The remediation is to re-embed the corpus against the new
+  model — the core `rebuild_embeddings` primitive atomically replaces the full cache;
+  an SDK caller constructs a fresh catalog and re-registers.
 - **Endpoint specifics.** `api_key_env` names the env var holding the key (read
   at call time), keeping secrets out of code and serialized config; a
   named-but-unset var is a clear error, not a downstream 401. Document requests
@@ -66,11 +67,13 @@ land in different vector spaces.
   vector identity; drift is `ModelMismatch`. A 404 from localhost Ollama hints
   `ollama pull <model>`. The sync `ureq` client has a timeout and runs only on an
   SDK worker thread.
-- **All SDK dense work is explicit and asynchronous.** Registration stores metadata
-  only. TypeScript uses NAPI async tasks; Python invokes GIL-releasing private native
-  calls through `asyncio.to_thread`. Dense operations serialize per catalog, and
-  registration during an active or queued dense operation fails promptly instead of
-  blocking the event loop or GIL. Synchronous SDK search remains BM25-only.
+- **SDK dense work is asynchronous and folded into `register`.** A semantic/hybrid
+  `register` embeds the batch off the host runtime (TypeScript via NAPI async tasks;
+  Python via GIL-releasing native calls through `asyncio.to_thread`), so a model /
+  endpoint failure surfaces from `register`; a BM25 catalog registers metadata only.
+  Dense operations serialize per catalog, and a register during an active or queued
+  dense operation fails promptly instead of blocking the event loop or GIL. Synchronous
+  SDK search remains BM25-only.
 - **Ratel auto-downloads only the built-in default.** An explicitly-configured
   HuggingFace model is **cache-only**: it must already be in the local HF cache,
   or the caller opts in with `download=true`. A missing one errors as
@@ -86,10 +89,10 @@ land in different vector spaces.
 ## Consequences
 
 - The default path is unchanged and stays reproducible (SHA-pinned); BM25 remains
-  model-free. A BM25-default catalog still validates and retains `embedding`, so it
-  can build once and later use an async semantic/hybrid override. One
-  new direct dependency, `ureq` (already in-tree via hf-hub, rustls — no new
-  transitive cost, keeps ADR-0011's clean cross-platform wheels).
+  model-free. A BM25-default catalog still validates its `embedding` config at
+  construction (a malformed config errors immediately) even though it stays
+  model-free. One new direct dependency, `ureq` (already in-tree via hf-hub, rustls
+  — no new transitive cost, keeps ADR-0011's clean cross-platform wheels).
 - BERT-family models run in-process (Candle's `bert`), pooled the way they were
   trained: **pooling (CLS/mean) is auto-detected** from the repo's
   `1_Pooling/config.json`, with a `pooling` override and a warn-then-assume-Mean

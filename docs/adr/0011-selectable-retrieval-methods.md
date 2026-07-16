@@ -52,11 +52,14 @@ parallel to `SearchOrigin`.
   validation and ranking in one vector space while a rebuild waits. Core
   `register(&mut self, tool) -> ()` stays infallible and model-free. The one-time model load emits
   a `TraceEvent::EmbedderLoad` flagging a slow (possibly underpowered) or failed load.
-- **Registration is always metadata-only.** SDK callers register one or many items, then
-  explicitly `await buildEmbeddings()` / `await build_embeddings()` once. Model loading,
-  downloads, HTTP, corpus embedding, rebuilds, and dense queries run on worker threads at the
-  TypeScript/Python boundary. Synchronous SDK `search` is BM25-only; `searchAsync` /
-  `search_async` supports all three methods. Rust core APIs remain synchronous.
+- **SDK registration folds embedding in.** An SDK caller `await register(...)`s one item or
+  many; on a semantic/hybrid catalog that embeds the batch on a worker thread (so a model /
+  endpoint failure surfaces from `register`), while a BM25 catalog registers metadata only.
+  Model loading, downloads, HTTP, corpus embedding, and dense queries run on worker threads at
+  the TypeScript/Python boundary; a model or dimension change is recovered by constructing a new
+  catalog. Synchronous SDK `search` is BM25-only; `searchAsync` / `search_async` supports all
+  three methods. Rust core APIs remain synchronous, exposing the incremental `build_embeddings`
+  and atomic `rebuild_embeddings` primitives the SDK drives internally.
 - **A search never embeds the corpus.** A semantic/hybrid search over a corpus whose cache is not
   fully built returns `EmbedderError::EmbeddingsNotBuilt` (a catchable `RuntimeError` / thrown error) —
   it does *not* silently embed inside the search path. So a BM25 catalog handed a per-call

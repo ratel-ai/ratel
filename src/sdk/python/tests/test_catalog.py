@@ -347,19 +347,6 @@ async def test_cancelled_dense_register_keeps_registration_busy_until_worker_fin
     assert catalog.has("send")
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Pre-existing, unrelated to RAT-379: reproduces on the pristine base commit "
-        "too. On Python 3.14, asyncio.shield()'s _outer_done_callback attaches its own "
-        "_log_on_exception to the shielded inner future once the outer await is "
-        "cancelled; that callback unconditionally reports the inner future's exception "
-        "via loop.call_exception_handler even though ToolRegistry._dense_task_done "
-        "already retrieved it via task.exception() to suppress exactly this. Needs a "
-        "source-level fix in ratel_ai/catalog.py's _run_dense/_dense_task_done (out of "
-        "scope here: tests-only change)."
-    ),
-    strict=False,
-)
 async def test_cancelled_failing_dense_worker_exception_is_consumed(
     delayed_embedding_endpoint: str,
 ) -> None:

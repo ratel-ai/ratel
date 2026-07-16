@@ -2734,7 +2734,7 @@ wheels = [
 
 [[package]]
 name = "ratel-ai"
-version = "0.1.5"
+version = "0.4.2"
 source = { directory = "../../src/sdk/python" }
 
 [package.metadata]
@@ -2744,9 +2744,10 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "ratel-ai-telemetry", extras = ["otlp"], marker = "extra == 'otlp'", specifier = ">=0.1.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
-provides-extras = ["mcp", "dev"]
+provides-extras = ["mcp", "otlp", "dev"]
 
 [[package]]
 name = "ratel-example-pydantic-ai"
