@@ -280,7 +280,12 @@ class SkillRegistry:
             raise
         self._dense_tasks.add(task)
         task.add_done_callback(self._dense_task_done)
-        return await asyncio.shield(task)
+        # Wait for the worker WITHOUT asyncio.shield (see `ToolRegistry._run_dense`):
+        # `asyncio.wait` never cancels the awaited task, so a cancelled caller leaves
+        # the worker running, but it avoids shield's Python-3.14 callback that
+        # re-reports the inner exception after `_dense_task_done` consumed it.
+        await asyncio.wait({task})
+        return task.result()
 
     async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
         try:

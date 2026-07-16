@@ -434,9 +434,14 @@ class ToolRegistry:
             raise
         self._dense_tasks.add(task)
         task.add_done_callback(self._dense_task_done)
-        # Shielding prevents cancellation from cancelling queued executor work;
-        # the retained runner clears busy state only after native work ends.
-        return await asyncio.shield(task)
+        # Wait for the worker WITHOUT asyncio.shield. Like shield, `asyncio.wait`
+        # never cancels the awaited task, so a cancelled caller leaves the worker
+        # running (it holds the dense gate and must finish) — but it avoids
+        # shield's Python-3.14 `_log_on_exception` callback, which would
+        # unconditionally re-report the inner exception even after
+        # `_dense_task_done` has already consumed it.
+        await asyncio.wait({task})
+        return task.result()
 
     async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
         try:
