@@ -343,8 +343,8 @@ class SkillCatalog:
         Args:
             trace: where trace events go; `None` keeps the default no-op sink.
             method: default retrieval method for `search` — see
-                `ToolCatalog.__init__`; dense defaults use `search_async` after
-                an explicit `build_embeddings`.
+                `ToolCatalog.__init__`; a "semantic"/"hybrid" catalog embeds
+                inside `register`, and dense results come from `search_async`.
             embedding: model for semantic/hybrid retrieval — see
                 `ToolCatalog.__init__`; retained and validated under "bm25" too.
         """
