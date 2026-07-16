@@ -63,16 +63,24 @@ import { ratel } from "@ratel-ai/sdk";
 import { aiSdk } from "@ratel-ai/ai-sdk-adapter"; // ships separately
 
 const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
-const tools = r.tools(myTools);              // stable gateway set for the model
+r.tools.register(myTools);                   // callable any time, also after expose()
+const tools = r.expose();                    // stable capability set — take once, reuse
 const messages = r.appendRecall(history);    // per-turn recall (AI SDK idiom)
 ```
 
+`r.tools` is a handle over the core's one shared catalog — registration and exposure are separate
+acts, and tools registered after `expose()` are still discoverable because the capability tools
+search the live catalog. The core also works standalone, without any adapter:
+`ratel().tools.register(...)` takes native `ExecutableTool`s, `expose()` returns the three
+capability tools in native shape, and `recall(query)` is a pure query returning the canonical
+`search_capabilities` result.
+
 `ratel(config)` owns one `ToolCatalog` + `SkillCatalog` + recall-id counter and every
-framework-independent guard (reserved gateway ids, top-K clamp, first-registration-wins,
-passthrough of provider-run tools); an adapter is just three codecs (`ingest` / `expose` /
-`recallMessages`) plus its framework idioms. `adaptTo` infers the framework's tool and message
-types, so app code needs no casts. Used without `.adaptTo(...)`, `ratel()` throws an error
-pointing at the adapter package to install. See ADR-0012.
+framework-independent guard (reserved capability-tool ids, top-K clamp, first-registration-wins
+on the adapted path, passthrough of provider-run tools); an adapter is just three codecs
+(`ingest` / `expose` / `recallMessages`) plus its framework idioms. `adaptTo` infers the
+framework's tool and message types, so app code needs no casts. A framework tool registered on
+the un-adapted core throws an error pointing at the adapter package to install. See ADR-0012.
 
 Continue with the [TypeScript guide](https://docs.ratel.sh/docs/sdks/typescript), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-typescript), or the [Vercel AI SDK example](https://github.com/ratel-ai/ratel/tree/main/examples/ai-sdk).
 

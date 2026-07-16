@@ -30,10 +30,10 @@ function clampTopK(value: unknown, fallback: number): number {
   return Math.min(value, MAX_TOP_K);
 }
 
-// The discovery prompt the model sees. The skills clause is only included when a
-// non-empty skill catalog is wired in — otherwise the tool would advertise a
-// `skills` bucket and `get_skill_content` that don't exist (the result would
-// always be `skills: []`).
+// The discovery prompt the model sees. By default the skills clause is only
+// included when a non-empty skill catalog is wired in — otherwise the tool would
+// advertise a `skills` bucket and `get_skill_content` that don't exist. Hosts
+// that always expose `get_skill_content` pin the clause via `advertiseSkills`.
 const SEARCH_INTRO =
   "Discover capabilities beyond the ones already in your direct tool list. Call this BEFORE refusing " +
   "a request, falling back to a generic capability (web fetch, shell, built-in search), or improvising " +
@@ -72,6 +72,13 @@ export interface UpstreamServerInfo {
 export interface SearchCapabilitiesOptions {
   /** Upstream MCP servers to advertise in the tool description and result groups. */
   upstreamServers?: readonly UpstreamServerInfo[];
+  /**
+   * Override the skills clause in the tool description. Default: present only
+   * when the skill catalog is non-empty at build time. Hosts that always expose
+   * `get_skill_content` (the `ratel()` facade) pass `true` so the description is
+   * byte-identical regardless of when the first skill registers.
+   */
+  advertiseSkills?: boolean;
 }
 
 /** One ranked tool in the `tools` bucket of {@link SearchCapabilitiesResult}. */
@@ -172,9 +179,11 @@ function buildSearchDescription(hasSkills: boolean, opts?: SearchCapabilitiesOpt
  * back to the default) and resolves to a {@link SearchCapabilitiesResult}. A
  * matched skill's declared tool dependencies are pulled into the `tools`
  * bucket additively — score `0`, beyond the `topKTools` budget, deduped
- * against query hits. The `skills` bucket (and its mention in the tool
- * description) exists only when `skillCatalog` is non-empty at build time.
- * Each call records a `gateway_search` event on the local trace stream.
+ * against query hits. The skills clause of the tool description appears when
+ * `skillCatalog` is non-empty at build time (override with
+ * {@link SearchCapabilitiesOptions.advertiseSkills}); the result's `skills`
+ * bucket always ranks the live catalog. Each call records a `gateway_search`
+ * event on the local trace stream.
  *
  * @param toolCatalog - Catalog the `tools` bucket is ranked from.
  * @param skillCatalog - Optional catalog the `skills` bucket is ranked from.
@@ -200,7 +209,8 @@ export function searchCapabilitiesTool(
   opts?: SearchCapabilitiesOptions,
 ): ExecutableTool {
   const upstreams = opts?.upstreamServers ?? [];
-  const hasSkills = skillCatalog !== undefined && skillCatalog.size() > 0;
+  const hasSkills =
+    opts?.advertiseSkills ?? (skillCatalog !== undefined && skillCatalog.size() > 0);
   return {
     id: SEARCH_CAPABILITIES_ID,
     name: SEARCH_CAPABILITIES_ID,
@@ -291,9 +301,9 @@ export function searchCapabilitiesTool(
 
 /** Options for {@link formatSearchCapabilities}. */
 export interface FormatSearchCapabilitiesOptions {
-  /** Max tools bucket size; clamped to [1, 50], default 5 (same as the tool). */
+  /** Max tools bucket size; capped at 50, default 5 (same as the tool); 0, negative, or non-integer values fall back to the default. */
   topKTools?: number;
-  /** Max skills bucket size; clamped to [1, 50], default 3. */
+  /** Max skills bucket size; capped at 50, default 3; invalid values fall back to the default. */
   topKSkills?: number;
   /** Catalog the `skills` bucket is ranked from (and whose declared tool deps ride in). */
   skillCatalog?: SkillCatalog;
@@ -310,11 +320,12 @@ export interface FormatSearchCapabilitiesOptions {
 /**
  * Rank a query into the `search_capabilities` result shape — the single source
  * of truth for that shape, shared by {@link searchCapabilitiesTool} (agent
- * origin) and the `ratel().adaptTo(...)` recall path (direct origin), so the two
- * can never drift. Ranks the `tools` bucket (grouped by upstream server, a
- * matched skill's declared tool deps pulled in additively at score `0`, deduped)
- * and the independently-budgeted `skills` bucket, clamps both top-Ks to [1, 50],
- * and records one `gateway_search` event with the given `origin`.
+ * origin) and both `ratel()` recall paths, standalone core and adapted views
+ * (direct origin), so they can never drift. Ranks the `tools` bucket (grouped by
+ * upstream server, a matched skill's declared tool deps pulled in additively at
+ * score `0`, deduped) and the independently-budgeted `skills` bucket, caps both
+ * top-Ks at 50 (invalid values fall back to their defaults), and records one
+ * `gateway_search` event with the given `origin`.
  *
  * @param toolCatalog - Catalog the `tools` bucket is ranked from.
  * @param query - Natural-language description of what the caller wants to do.

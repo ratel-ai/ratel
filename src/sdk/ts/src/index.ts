@@ -58,11 +58,13 @@ export { registerMcpServer } from "./mcp.js";
 export type {
   AdaptedBase,
   AdaptedRatel,
+  AdaptedToolCollection,
   CatalogRegistration,
+  Ratel,
   RatelAdapter,
   RatelConfig,
-  RatelCore,
   RecallRef,
+  ToolCollection,
 } from "./ratel.js";
 export { ratel } from "./ratel.js";
 export type { SkillCatalogOptions } from "./skill-catalog.js";

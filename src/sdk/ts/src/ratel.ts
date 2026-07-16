@@ -1,4 +1,5 @@
 import type { JSONSchema7 } from "json-schema";
+import type { SearchHit, Tool } from "../native/index.cjs";
 import {
   formatSearchCapabilities,
   INVOKE_TOOL_ID,
@@ -21,7 +22,8 @@ import { isPeerInstalled } from "./telemetry.js";
 export interface RatelConfig {
   /** Default retrieval method for the tool and skill catalogs (default `"bm25"`, model-free). */
   method?: SearchMethod;
-  /** Max tools each host-driven `recall` injects, clamped to [1, 50] (default 5). */
+  /** Max tools each host-driven `recall` returns: capped at 50; 0, negative, or
+   * non-integer values fall back to the default 5. */
   recallTopK?: number;
   /** Local trace-stream destination for both catalogs (default: discard). */
   trace?: TraceSinkConfig;
@@ -40,7 +42,7 @@ export interface CatalogRegistration {
   inputSchema: JSONSchema7;
   /** Output JSON Schema; defaults to `{ type: "object" }` when omitted. */
   outputSchema?: JSONSchema7;
-  /** Runs the tool through the gateway with just the args object. */
+  /** Runs the tool through the capability funnel with just the args object. */
   execute(input: unknown): Promise<unknown> | unknown;
 }
 
@@ -75,7 +77,7 @@ export interface RatelAdapter<
    * catalog can't execute (provider-executed) that must stay eagerly exposed.
    */
   ingest(id: string, tool: TTool): CatalogRegistration | "passthrough";
-  /** Ratel capability tool → framework tool (gateway exposure). */
+  /** Ratel capability tool → framework tool. */
   expose(tool: ExecutableTool): TTool;
   /** Synthetic recall pair in the framework's message shape. */
   recallMessages(ref: RecallRef, recall: SearchCapabilitiesResult): TMessage[];
@@ -84,57 +86,117 @@ export interface RatelAdapter<
 }
 
 /**
+ * The core's handle over its shared {@link ToolCatalog} — registration and
+ * lookup in the SDK's native shapes, callable at any time (also after
+ * {@link Ratel.expose}: the capability tools search the live catalog at
+ * invocation time). Guards live here: the reserved capability-tool ids throw,
+ * and a framework-shaped tool throws an actionable install-the-adapter error.
+ * Registration keeps the catalog's own replace-in-place semantics — the native
+ * path is authoritative, unlike the first-wins adapted path — and embeds
+ * incrementally on a semantic/hybrid catalog.
+ */
+export interface ToolCollection {
+  /** Register native tools (replace-in-place on a duplicate id). Chainable. */
+  register(...tools: ExecutableTool[]): this;
+  /** Whether a tool with this id is registered. */
+  has(id: string): boolean;
+  /** The tool's searchable metadata, or `undefined` when unregistered. */
+  get(id: string): Tool | undefined;
+  /** Rank the catalog for `query` (host-driven, origin `"direct"`). */
+  search(query: string, topK: number, method?: SearchMethod): SearchHit[];
+  /** Execute a registered tool by id with the args object. */
+  invoke(id: string, args: Record<string, unknown>): Promise<unknown>;
+  /** The shared catalog itself — the unguarded driver-level escape hatch. */
+  readonly catalog: ToolCatalog;
+}
+
+/**
+ * An adapted view's handle over the same shared catalog, speaking the
+ * framework's tool shape. Registration runs the adapter's `ingest` codec;
+ * first registration of an id wins across every view of the core (and across
+ * this view's passthroughs), so repeated calls are idempotent.
+ */
+export interface AdaptedToolCollection<TTool> {
+  /** Ingest framework tools (keyed by tool id) into the shared catalog. Chainable. */
+  register(tools: Record<string, TTool>): this;
+  /** Whether this id is registered — in the catalog or as this view's passthrough. */
+  has(id: string): boolean;
+  /** The shared catalog itself — the unguarded driver-level escape hatch. */
+  readonly catalog: ToolCatalog;
+}
+
+/**
  * The framework-shaped surface every adapter inherits from the core. Adapters
  * add their idioms via {@link RatelAdapter.extend}; universal capability lives
  * here.
  */
 export interface AdaptedBase<TTool, TMessage> {
+  /** This view's handle over the shared catalog, in the framework's tool shape. */
+  readonly tools: AdaptedToolCollection<TTool>;
+  /** The shared skill catalog (skills are framework-neutral). */
+  readonly skills: SkillCatalog;
   /**
-   * Ingest the app's framework tools into the catalog and return the stable
-   * gateway set (`search_capabilities` + `invoke_tool`, plus `get_skill_content`
-   * when a skill is registered) alongside any passthroughs. The set never
-   * changes across turns, so the prompt cache survives. First registration of an
-   * id wins; the gateway ids are reserved.
+   * The model-facing toolset in the framework's shape: this view's passthroughs
+   * plus the three capability tools run through the adapter's `expose` codec.
+   * Fresh objects per call — take it once per agent instance and reuse it, so
+   * the prompt cache survives. Tools registered later are still discoverable
+   * (the capability tools search the live catalog); only a *passthrough*
+   * registered later needs a re-expose to reach the model.
    */
-  tools(tools: Record<string, TTool>): Record<string, TTool>;
+  expose(): Record<string, TTool>;
   /**
    * Rank `query` and return the synthetic `search_capabilities` message pair in
-   * the framework's shape (origin `"direct"`), or `[]` when nothing matched.
-   * Pure: it builds fresh messages and never mutates a host array.
+   * the framework's shape (origin `"direct"`), or `[]` when nothing matched
+   * (spending no call id). Pure: it builds fresh messages and never mutates a
+   * host array.
    */
   recall(query: string): TMessage[];
-  /** Escape hatch: the shared tool catalog. */
-  readonly catalog: ToolCatalog;
-  /** Escape hatch: the shared skill catalog. */
-  readonly skills: SkillCatalog;
 }
 
-/** The object {@link RatelCore.adaptTo} returns: the base surface plus the adapter's `extend` helpers. */
+/**
+ * The object {@link Ratel.adaptTo} returns: the base surface plus the adapter's
+ * `extend` helpers. An adapter whose `extend` returns a non-object degrades to
+ * the bare base type here (instead of collapsing the whole view to `never`,
+ * which would surface as a cryptic error far from the broken adapter).
+ */
 export type AdaptedRatel<A extends RatelAdapter> =
   A extends RatelAdapter<infer TTool, infer TMessage, infer TExt>
-    ? AdaptedBase<TTool, TMessage> & TExt
+    ? AdaptedBase<TTool, TMessage> & (TExt extends object ? TExt : unknown)
     : never;
 
 /**
  * One `ratel(config)` core: a single {@link ToolCatalog} + {@link SkillCatalog}
- * + recall-id counter shared by every {@link RatelCore.adaptTo} view. The
- * framework-free escape hatches (`catalog`, `skills`) stay available; the
- * framework-shaped `tools` / `recall` throw until adapted.
+ * + recall-id counter shared by every {@link Ratel.adaptTo} view. Genuinely
+ * usable standalone — register native tools on {@link Ratel.tools}, expose the
+ * capability tools with {@link Ratel.expose}, rank with {@link Ratel.recall} —
+ * and adaptable on top for a framework's native shapes.
  */
-export interface RatelCore {
+export interface Ratel {
+  /** Handle over the shared tool catalog (native shapes, guarded). */
+  readonly tools: ToolCollection;
+  /** The shared skill catalog. */
+  readonly skills: SkillCatalog;
+  /**
+   * The three capability tools (`search_capabilities`, `invoke_tool`,
+   * `get_skill_content`) in native shape, for framework-free hosts. All three
+   * are always advertised — the set never depends on registration order, so the
+   * prompt cache survives; loading a skill from an empty catalog returns a
+   * structured error, not a missing tool. Fresh objects per call: take it once
+   * and reuse it. Tools and skills registered later are still discoverable.
+   */
+  expose(): Record<string, ExecutableTool>;
+  /**
+   * Rank `query` into the canonical `search_capabilities` result (origin
+   * `"direct"`, top-K from `recallTopK`), or `null` when nothing matched. A
+   * pure query: no call id is minted — ids exist only on the adapted views,
+   * whose synthetic message pairs need them.
+   */
+  recall(query: string): SearchCapabilitiesResult | null;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
   adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A>;
-  /** Framework-free escape hatch: the shared tool catalog. */
-  readonly catalog: ToolCatalog;
-  /** Framework-free escape hatch: the shared skill catalog. */
-  readonly skills: SkillCatalog;
-  /** @throws — adapt first with `.adaptTo(<adapter>())`. */
-  tools(tools?: Record<string, unknown>): never;
-  /** @throws — adapt first with `.adaptTo(<adapter>())`. */
-  recall(query?: string): never;
 }
 
-// The gateway capability-tool ids: an app tool may not shadow them (registration throws).
+// The capability-tool ids: an app tool may not shadow them (registration throws).
 const RESERVED_TOOL_IDS: ReadonlySet<string> = new Set([
   SEARCH_CAPABILITIES_ID,
   INVOKE_TOOL_ID,
@@ -145,7 +207,7 @@ const RESERVED_TOOL_IDS: ReadonlySet<string> = new Set([
 const DEFAULT_OUTPUT_SCHEMA: JSONSchema7 = { type: "object" };
 
 // Frameworks probed (for error messages only — detection can't tell installed
-// from in use) to point an un-adapted host at the exact adapter to install.
+// from in use) to point a framework-shaped registration at the exact adapter.
 const KNOWN_FRAMEWORKS: readonly {
   readonly pkg: string;
   readonly adapter: string;
@@ -156,15 +218,18 @@ const KNOWN_FRAMEWORKS: readonly {
 ];
 
 /**
- * Create a framework-neutral Ratel core, then {@link RatelCore.adaptTo | adapt}
- * it to a framework with a {@link RatelAdapter}. The core owns all state (the
- * tool/skill catalogs, the recall-id counter) and every framework-independent
- * guard — reserved gateway ids, top-K clamping, first-registration-wins,
- * passthrough of non-executable tools — so adapters stay tiny. One core can back
- * several adapter views (they share the catalog, embeddings, and counter).
+ * Create a framework-neutral Ratel core. It works standalone — register native
+ * tools on `r.tools`, skills on `r.skills`, hand the model `r.expose()`, rank
+ * with `r.recall(query)` — and {@link Ratel.adaptTo | adapts} to a framework
+ * with a {@link RatelAdapter} for that framework's native shapes. The core owns
+ * all state (the catalogs, the recall-id counter) and every
+ * framework-independent guard — reserved capability-tool ids, top-K clamping,
+ * first-registration-wins on the adapted path, passthrough of non-executable
+ * tools — so adapters stay tiny. One core can back several adapter views (they
+ * share the catalog, embeddings, and counter).
  *
  * @param config - Retrieval method, recall budget, and trace sink.
- * @returns The core; call `.adaptTo(adapter())` to get the framework-shaped view.
+ * @returns The standalone core; call `.adaptTo(adapter())` for a framework-shaped view.
  *
  * @example
  * ```ts
@@ -172,11 +237,12 @@ const KNOWN_FRAMEWORKS: readonly {
  * import { aiSdk } from "@ratel-ai/ai-sdk-adapter";
  *
  * const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
- * const tools = r.tools(myTools); // stable gateway set for the model
+ * r.tools.register(myTools);
+ * const tools = r.expose(); // stable capability set for the model — take once, reuse
  * const messages = r.appendRecall(history); // per-turn recall (AI SDK idiom)
  * ```
  */
-export function ratel(config: RatelConfig = {}): RatelCore {
+export function ratel(config: RatelConfig = {}): Ratel {
   const catalog = new ToolCatalog({ method: config.method, trace: config.trace });
   const skills = new SkillCatalog({ method: config.method, trace: config.trace });
   // Recall call ids come from a private counter shared across every view of this
@@ -184,25 +250,63 @@ export function ratel(config: RatelConfig = {}): RatelCore {
   // them as tool-call ids), so they can't be the id source.
   let recallSeq = 0;
 
+  const tools: ToolCollection = {
+    catalog,
+    register(...items) {
+      for (const tool of items) {
+        assertNativeTool(tool);
+        assertUnreservedId(tool.id);
+        catalog.register(tool); // catalog semantics: replace-in-place, embed incrementally
+      }
+      return tools;
+    },
+    has: (id) => catalog.has(id),
+    get: (id) => catalog.get(id),
+    search: (query, topK, method) => catalog.search(query, topK, "direct", method),
+    invoke: (id, args) => catalog.invoke(id, args),
+  };
+
+  function expose(): Record<string, ExecutableTool> {
+    return {
+      // advertiseSkills pins the skills clause of the description: the exposed
+      // payload must be byte-identical whether skills register before or after.
+      [SEARCH_CAPABILITIES_ID]: searchCapabilitiesTool(catalog, skills, {
+        advertiseSkills: true,
+      }),
+      [INVOKE_TOOL_ID]: invokeToolTool(catalog),
+      [GET_SKILL_CONTENT_ID]: getSkillContentTool(skills),
+    };
+  }
+
+  function recall(query: string): SearchCapabilitiesResult | null {
+    const result = formatSearchCapabilities(catalog, query, {
+      topKTools: config.recallTopK, // capped/validated inside the formatter
+      skillCatalog: skills,
+      origin: "direct",
+    });
+    return result.tools.groups.length === 0 && result.skills.length === 0 ? null : result;
+  }
+
   function adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A> {
     assertAdapter(adapter);
-    const base: AdaptedBase<unknown, unknown> = {
+    // Provider- or client-executed tools: framework-shaped, so per view — a
+    // Mastra view must never expose an AI SDK passthrough.
+    const passthrough = new Map<string, unknown>();
+
+    const adaptedTools: AdaptedToolCollection<unknown> = {
       catalog,
-      skills,
-      tools(appTools) {
-        const passthrough: Record<string, unknown> = {};
+      has: (id) => catalog.has(id) || passthrough.has(id),
+      register(appTools) {
         for (const [id, tool] of Object.entries(appTools)) {
-          if (RESERVED_TOOL_IDS.has(id)) {
-            throw new Error(`ratel: tool id "${id}" is reserved for the gateway`);
-          }
+          assertUnreservedId(id);
+          // First registration of an id wins, across every view of the core
+          // and across this view's passthroughs — repeated calls are idempotent.
+          if (catalog.has(id) || passthrough.has(id)) continue;
           const registration = adapter.ingest(id, tool);
           if (registration === "passthrough") {
-            // Provider- or client-executed: not invocable through the catalog,
-            // so it stays eagerly exposed to keep working.
-            passthrough[id] = tool;
+            passthrough.set(id, tool);
             continue;
           }
-          if (catalog.has(id)) continue; // first registration of an id wins
           catalog.register({
             id,
             name: id,
@@ -212,27 +316,24 @@ export function ratel(config: RatelConfig = {}): RatelCore {
             execute: registration.execute,
           });
         }
-        catalog.buildEmbeddings(); // incremental; no-op on a BM25 catalog
-        const gateway: Record<string, unknown> = {
-          [SEARCH_CAPABILITIES_ID]: adapter.expose(searchCapabilitiesTool(catalog, skills)),
-          [INVOKE_TOOL_ID]: adapter.expose(invokeToolTool(catalog)),
-        };
-        // Only advertise get_skill_content when there is a skill to load, so the
-        // gateway set matches search_capabilities' own skills-bucket gating.
-        if (skills.size() > 0) {
-          gateway[GET_SKILL_CONTENT_ID] = adapter.expose(getSkillContentTool(skills));
+        return adaptedTools;
+      },
+    };
+
+    const base: AdaptedBase<unknown, unknown> = {
+      tools: adaptedTools,
+      skills,
+      expose() {
+        const out: Record<string, unknown> = Object.fromEntries(passthrough);
+        for (const [id, tool] of Object.entries(expose())) {
+          out[id] = adapter.expose(tool);
         }
-        return { ...passthrough, ...gateway };
+        return out;
       },
       recall(query) {
-        const recall = formatSearchCapabilities(catalog, query, {
-          topKTools: config.recallTopK, // clamped to [1, 50] inside the formatter
-          skillCatalog: skills,
-          origin: "direct",
-        });
-        // Nothing matched: don't spend a call id or inject an empty pair.
-        if (recall.tools.groups.length === 0 && recall.skills.length === 0) return [];
-        return adapter.recallMessages({ callId: `recall_${recallSeq++}`, query }, recall);
+        const result = recall(query);
+        if (result === null) return []; // nothing matched: don't spend a call id
+        return adapter.recallMessages({ callId: `recall_${recallSeq++}`, query }, result);
       },
     };
     // Generics are erased inside the implementation; the public signature keeps
@@ -241,17 +342,40 @@ export function ratel(config: RatelConfig = {}): RatelCore {
     return { ...base, ...ext } as AdaptedRatel<A>;
   }
 
-  return {
-    adaptTo,
-    catalog,
-    skills,
-    tools() {
-      throw unadaptedError(isPeerInstalled);
-    },
-    recall() {
-      throw unadaptedError(isPeerInstalled);
-    },
-  };
+  return { tools, skills, expose, recall, adaptTo };
+}
+
+/** Reject a reserved capability-tool id (the funnel's vocabulary can't be shadowed). */
+function assertUnreservedId(id: string): void {
+  if (RESERVED_TOOL_IDS.has(id)) {
+    throw new Error(`ratel: tool id "${id}" is reserved for the capability tools`);
+  }
+}
+
+/**
+ * Reject a framework-shaped tool on the native registration path with the
+ * actionable install-the-adapter error. Fingerprints, not full validation: a
+ * zod-style schema, a dynamic (function) description, or a missing id — the
+ * marks of a framework tool that belongs on an adapted view — trigger
+ * {@link unadaptedError}; everything else is the catalog's job to validate.
+ */
+function assertNativeTool(tool: ExecutableTool): void {
+  const candidate = tool as {
+    id?: unknown;
+    description?: unknown;
+    inputSchema?: unknown;
+  } | null;
+  if (candidate === null || typeof candidate !== "object") {
+    throw new TypeError(`ratel: tools.register() expects ExecutableTools; got ${typeof tool}`);
+  }
+  const schema = candidate.inputSchema as { _def?: unknown; safeParse?: unknown } | undefined;
+  const frameworkShaped =
+    typeof candidate.id !== "string" ||
+    typeof candidate.description === "function" ||
+    (typeof schema === "object" &&
+      schema !== null &&
+      (schema._def !== undefined || typeof schema.safeParse === "function"));
+  if (frameworkShaped) throw unadaptedError(isPeerInstalled);
 }
 
 /** Reject a non-adapter early (JS callers) with a message that names it via `adapter.name`. */
@@ -271,30 +395,24 @@ function assertAdapter(adapter: RatelAdapter): void {
 }
 
 /**
- * Build the error thrown when a `ratel()` core is used framework-shaped without
- * `.adaptTo(...)`. When a known framework is present in the tree, name its exact
- * adapter package and factory; otherwise a generic adapt-first message. Exported
- * (module-internal, not re-exported from the package) so the detected-framework
- * branch is testable with an injected probe.
+ * Build the error thrown when a framework-shaped tool hits the native
+ * `ratel().tools.register(...)` path. When a known framework is present in the
+ * tree, name its exact adapter package and factory; otherwise a generic
+ * adapt-first message. Exported (module-internal, not re-exported from the
+ * package) so the detected-framework branch is testable with an injected probe.
  *
  * @param isInstalled - Peer-resolution probe (the real {@link isPeerInstalled}).
  * @returns The error to throw.
  */
 export function unadaptedError(isInstalled: (specifier: string) => boolean): Error {
+  const intro =
+    "ratel: this looks like a framework tool, not a native ExecutableTool. " +
+    "Register framework tools on an adapted view: `ratel(config).adaptTo(adapter()).tools.register(...)`.";
   const detected = KNOWN_FRAMEWORKS.filter((f) => isInstalled(f.pkg));
-  if (detected.length === 0) {
-    return new Error(
-      "ratel(config) must be adapted before use: call `.adaptTo(adapter())` with a RatelAdapter, " +
-        "e.g. `import { aiSdk } from '@ratel-ai/ai-sdk-adapter'; ratel(config).adaptTo(aiSdk())`.",
-    );
-  }
+  if (detected.length === 0) return new Error(intro);
   const lines = detected.map(
     (f) =>
-      `  - ${f.pkg}: install \`${f.adapter}\` and call \`ratel(config).adaptTo(${f.factory}())\``,
+      `  - ${f.pkg}: install \`${f.adapter}\` and register via \`ratel(config).adaptTo(${f.factory}()).tools.register(...)\``,
   );
-  return new Error(
-    `ratel(config) must be adapted to your framework before use. Detected in your dependencies:\n${lines.join(
-      "\n",
-    )}`,
-  );
+  return new Error(`${intro} Detected in your dependencies:\n${lines.join("\n")}`);
 }
