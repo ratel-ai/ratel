@@ -151,6 +151,13 @@ class SkillRegistry:
         layers; `body` is the full instruction text, stored for on-demand load.
         """
 
+    def remove(self, skill_id: str) -> bool:
+        """Remove a skill by id, dropping its index entry and cached embedding.
+
+        Semantic search keeps working with no rebuild. Returns whether the id
+        was present; an unknown id is a silent no-op.
+        """
+
     def search(self, query: str, top_k: int) -> list[SkillHit]:
         """Lexical BM25 search over the skill corpus — see `ToolRegistry.search`."""
 

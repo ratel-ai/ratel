@@ -295,6 +295,13 @@ impl SkillRegistry {
         });
     }
 
+    /// Remove a skill by id, dropping its index entry and cached embedding
+    /// together (semantic search keeps working, no rebuild). Returns whether
+    /// the id was present; an unknown id is a silent no-op.
+    fn remove(&mut self, skill_id: String) -> bool {
+        self.inner.remove(&skill_id)
+    }
+
     /// Lexical BM25 search over the skill corpus — see [`ToolRegistry::search`].
     fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
         self.inner

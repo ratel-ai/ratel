@@ -8,6 +8,7 @@ relevance, and the matching body is fetched only on `invoke`.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -38,7 +39,12 @@ class Skill:
 
 
 class SkillCatalog:
-    """Registry of skills. Register once, then search and load bodies by id."""
+    """Registry of skills: search, load bodies by id, and mutate at runtime.
+
+    The mutation surface is the loader-facing seam: an external loader (any
+    package holding a catalog and mirroring a source into it) pushes with
+    `upsert`, drops with `remove`, and the host observes churn via `on_change`.
+    """
 
     def __init__(
         self,
@@ -57,6 +63,7 @@ class SkillCatalog:
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
         self._eager: bool = method in ("semantic", "hybrid")
+        self._listeners: set[Callable[[], None]] = set()
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -86,6 +93,70 @@ class SkillCatalog:
         self._skills[skill.id] = skill
         if self._eager:
             self._registry.build_embeddings()
+        self._notify_change()
+
+    def upsert(self, skill: Skill) -> bool:
+        """`register` that also reports whether the id was already present.
+
+        The added-vs-replaced signal an external loader needs to mirror a
+        source into the catalog. Same replace-in-place, eager-embedding, and
+        change-notification behavior as `register`.
+
+        Args:
+            skill: the skill to add or replace; `id` is its lookup key.
+
+        Returns:
+            `True` when an already-registered id was replaced, `False` when
+            the skill is new.
+        """
+        replaced = skill.id in self._skills
+        self.register(skill)
+        return replaced
+
+    def remove(self, skill_id: str) -> bool:
+        """Remove a skill by id.
+
+        The index entry and its cached embedding drop together, so a
+        semantic/hybrid catalog keeps searching with no rebuild. Notifies
+        `on_change` subscribers on a hit; an unknown id is a silent no-op
+        (no notification).
+
+        Args:
+            skill_id: id of the skill to remove.
+
+        Returns:
+            `True` when the id was present, `False` otherwise.
+        """
+        removed = self._registry.remove(skill_id)
+        self._skills.pop(skill_id, None)
+        if removed:
+            self._notify_change()
+        return removed
+
+    def on_change(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Subscribe to catalog churn.
+
+        The listener fires after every mutation — `register`, `upsert`, and a
+        `remove` that hit. It is a low-level signal (an initial registration
+        burst fires it per skill; debouncing is the subscriber's job) and the
+        single staleness hook for hosts: re-emit `tools/list_changed` from it,
+        and if the `search_capabilities` description was cached, re-read it on
+        an empty↔non-empty transition. A listener that raises is swallowed —
+        it breaks neither the mutation nor other listeners. Subscribing the
+        same function twice keeps one subscription.
+
+        Args:
+            listener: called (with no arguments) after each mutation.
+
+        Returns:
+            An unsubscribe function; call it to stop the notifications.
+        """
+        self._listeners.add(listener)
+
+        def unsubscribe() -> None:
+            self._listeners.discard(listener)
+
+        return unsubscribe
 
     def build_embeddings(self) -> None:
         """Pre-compute embeddings for not-yet-embedded skills.
@@ -174,3 +245,12 @@ class SkillCatalog:
             return body
 
         return trace_skill_load(skill_id, _run)
+
+    def _notify_change(self) -> None:
+        """Fire every subscriber over a snapshot; a raising one is isolated."""
+        for listener in tuple(self._listeners):
+            try:
+                listener()
+            except Exception:
+                # A bad subscriber must not break the mutation or its siblings.
+                pass
