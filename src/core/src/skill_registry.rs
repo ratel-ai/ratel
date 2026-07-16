@@ -106,6 +106,20 @@ impl SkillRegistry {
         });
     }
 
+    /// Remove a skill by id — see [`crate::ToolRegistry::remove`]. Returns
+    /// whether the id was present; an unknown id is a silent no-op.
+    pub fn remove(&mut self, skill_id: &str) -> bool {
+        if self.skills.shift_remove(skill_id).is_none() {
+            return false;
+        }
+        self.dense.invalidate(skill_id);
+        self.sink.record(TraceEvent::SkillChurn {
+            kind: ChurnKind::Remove,
+            skill_id: skill_id.to_string(),
+        });
+        true
+    }
+
     /// Number of registered skills (distinct ids).
     pub fn len(&self) -> usize {
         self.skills.len()
@@ -567,6 +581,99 @@ mod tests {
                 && stages.iter().any(|s| s.name == "dense")
                 && stages.iter().any(|s| s.name == "rrf")
         )));
+    }
+
+    #[test]
+    fn remove_drops_the_skill_and_returns_true() {
+        let mut reg = catalog();
+        assert!(reg.remove("api-design"));
+        assert_eq!(reg.len(), 1);
+        let hits = reg.search("design a REST endpoint with pagination", 5);
+        assert!(
+            !hits.iter().any(|h| h.skill_id == "api-design"),
+            "a removed skill never ranks"
+        );
+    }
+
+    #[test]
+    fn remove_unknown_id_is_a_silent_no_op() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = SkillRegistry::with_trace_sink(sink.clone());
+        reg.register(skill("s", "s", "REST API design", &["api"]));
+        sink.drain();
+        assert!(!reg.remove("missing"));
+        assert_eq!(reg.len(), 1);
+        assert!(sink.drain().is_empty(), "no churn event for an unknown id");
+    }
+
+    #[test]
+    fn remove_emits_remove_churn_once() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = SkillRegistry::with_trace_sink(sink.clone());
+        reg.register(skill("s", "s", "REST API design", &["api"]));
+        sink.drain();
+        reg.remove("s");
+        let events = sink.drain();
+        let removes: Vec<_> = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    &e.event,
+                    TraceEvent::SkillChurn {
+                        kind: ChurnKind::Remove,
+                        skill_id,
+                    } if skill_id == "s"
+                )
+            })
+            .collect();
+        assert_eq!(removes.len(), 1, "exactly one Remove churn event");
+    }
+
+    #[test]
+    fn semantic_search_succeeds_after_remove_without_rebuild() {
+        // Removing a skill drops its corpus entry and its cached vector together,
+        // so the cache still covers the corpus — no manual rebuild needed.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(skill(
+            "api-design",
+            "api-design",
+            "REST API design",
+            &["api"],
+        ));
+        reg.register(skill(
+            "slides",
+            "slides",
+            "HTML slides frontend",
+            &["frontend"],
+        ));
+        reg.build_embeddings().unwrap();
+        assert!(reg.remove("api-design"));
+        let hits = reg
+            .search_with_method("frontend slides", 5, Origin::Direct, SearchMethod::Semantic)
+            .expect("no EmbeddingsNotBuilt after remove");
+        assert_eq!(hits.first().map(|h| h.skill_id.as_str()), Some("slides"));
+        assert!(!hits.iter().any(|h| h.skill_id == "api-design"));
+    }
+
+    #[test]
+    fn removed_then_re_registered_id_re_embeds_fresh() {
+        // Remove must invalidate the cached vector: a later register of the same
+        // id (a fresh insert, so register's replace path never fires) would
+        // otherwise reuse the stale embedding.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(skill("s", "s", "REST API design", &["api"])); // dense: api bucket
+        reg.build_embeddings().unwrap();
+        reg.remove("s");
+        reg.register(skill("s", "s", "HTML slides frontend", &["frontend"])); // → frontend bucket
+        reg.build_embeddings().unwrap();
+        let hits = reg
+            .search_with_method("frontend slides", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(hits.first().map(|h| h.skill_id.as_str()), Some("s"));
+        assert!(
+            hits[0].score > 0.9,
+            "ranks with the freshly-embedded vector"
+        );
     }
 
     #[test]
