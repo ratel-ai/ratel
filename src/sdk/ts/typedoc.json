@@ -3,14 +3,12 @@
   "entryPoints": ["src/index.ts"],
   "readme": "none",
   "emit": "none",
+  "excludeInternal": true,
   "validation": {
     "notDocumented": true
   },
   "treatValidationWarningsAsErrors": true,
-  "intentionallyNotExported": [
-    "native/index.d.cts:TraceSinkConfig",
-    "native/index.d.cts:EmbeddingConfig"
-  ],
+  "intentionallyNotExported": ["src/catalog.ts:ExclusiveEmbeddingFields"],
   "externalSymbolLinkMappings": {
     "@ratel-ai/telemetry": {
       "DEFAULT_SERVICE_NAME": "https://github.com/ratel-ai/ratel/blob/main/src/telemetry/ts/src/config.ts",

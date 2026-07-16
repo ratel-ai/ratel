@@ -144,7 +144,7 @@ export function searchToolsTool(
       const { query, topK } = input as { query: string; topK?: number };
       const k = typeof topK === "number" && Number.isInteger(topK) && topK >= 1 ? topK : 5;
       const startedAt = Date.now();
-      const hits = catalog.search(query, k, "agent");
+      const hits = await catalog.searchAsync(query, k, "agent");
       catalog.recordEvent({
         type: "gateway_search",
         query,

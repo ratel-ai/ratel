@@ -142,6 +142,28 @@ def trace_search(
         return hits
 
 
+async def trace_search_async(
+    target: str,
+    query: str,
+    top_k: int,
+    origin: str,
+    run: Callable[[], Awaitable[T]],
+) -> T:
+    """Wrap asynchronous BM25, semantic, or hybrid retrieval in a `ratel.search` span."""
+    if not _ENABLED:
+        return await run()
+    with _tracer().start_as_current_span(RATEL_SEARCH, kind=SpanKind.INTERNAL) as span:
+        span.set_attribute(RATEL_SEARCH_TARGET, target)
+        span.set_attribute(RATEL_SEARCH_TOP_K, top_k)
+        span.set_attribute(RATEL_ORIGIN, origin)
+        if _capture_content_on_span():
+            span.set_attribute(RATEL_SEARCH_QUERY, query)
+        hits = await run()
+        span.set_attribute(RATEL_SEARCH_HIT_COUNT, len(hits))  # type: ignore[arg-type]
+        span.set_status(Status(StatusCode.OK))
+        return hits
+
+
 def trace_skill_load(skill_id: str, run: Callable[[], T]) -> T:
     """Wrap a skill-content load in a `ratel.skill.load` span."""
     if not _ENABLED:

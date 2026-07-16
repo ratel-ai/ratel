@@ -34,15 +34,16 @@ it:
   layer build on it. Changing the flattening algorithm is a breaking change and warrants
   supersession.
 
-The scorer over that projection is **lexical today and expected to evolve**:
+The scorers over that projection are selectable while the projection stays stable:
 
 - Current retrieval uses the [`bm25`](https://crates.io/crates/bm25) crate with its default
   English tokenizer, tuned `k1 = 0.9`, `b = 0.4` (below the crate defaults, because tool
   descriptions are short: term frequency saturates faster and length normalization matters
   less).
-- BM25 is **not a fixed decision.** Semantic / embedding retrieval is planned and is expected
-  to **merge with** the lexical signal (hybrid ranking), not replace the projection. The
-  `searchable_text` contract above is what stays stable across that change; the ranker and its
+- Semantic retrieval embeds the same projection with a configurable in-process model or
+  OpenAI-compatible endpoint; hybrid retrieval merges its ranking with BM25 through reciprocal
+  rank fusion. See ADR-0011 and ADR-0012 for retrieval, cache, and async SDK semantics. The
+  `searchable_text` contract above stays stable across scorer changes; rankers and their
   parameters are current tuning, not a frozen surface.
 
 ### Selection
@@ -59,7 +60,7 @@ The scorer over that projection is **lexical today and expected to evolve**:
 - The tool author's vocabulary (description, parameter names, enum values) flows directly
   into recall: documentation quality is the retrieval lever, and the integrator's knob.
 - The current `k1`/`b` are fixed tuning, reproducible for today's benchmarks; they are not a
-  public knob. Revisiting them, or adding a semantic ranker alongside, does not disturb the
+  public knob. Revisiting them or any dense-ranking detail does not disturb the
   `searchable_text` contract.
 - Rejected: rolling our own lexical scorer (maintenance, no gain at this scope); indexing raw
   JSON (flattens term distribution, hurts IDF); a typed schema struct instead of `Value`

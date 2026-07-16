@@ -6,7 +6,7 @@ const prompt =
   process.argv.slice(2).join(" ") || "read the files and find every TODO comment under src/";
 const modelId = process.env.AI_MODEL ?? "gpt-5-mini";
 
-const catalog = buildCatalog();
+const catalog = await buildCatalog();
 
 console.log(`prompt: "${prompt}"`);
 console.log(`catalog size: ${tools.length}`);

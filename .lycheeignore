@@ -1,3 +1,5 @@
 ^https://github\.com/ratel-ai/ratel/stargazers$
 ^https://www\.npmjs\.com/package/@ratel-ai/sdk$
 ^https://tsx\.is/?$
+# ADR-0012 ships in this branch; its blob/main URL 404s until merge. Remove once on main.
+^https://github\.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models\.md$

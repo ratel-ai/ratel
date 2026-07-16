@@ -164,6 +164,33 @@ export function traceSearch<T extends { length: number }>(
   });
 }
 
+/** Wrap an asynchronous capability search in a `ratel.search` span. */
+export function traceSearchAsync<T extends { length: number }>(
+  target: SearchTarget,
+  query: string,
+  topK: number,
+  origin: SearchOrigin,
+  run: () => Promise<T>,
+): Promise<T> {
+  return getTracer().startActiveSpan(RATEL_SEARCH, { kind: SpanKind.INTERNAL }, async (span) => {
+    span.setAttribute(RATEL_SEARCH_TARGET, target);
+    span.setAttribute(RATEL_SEARCH_TOP_K, topK);
+    span.setAttribute(RATEL_ORIGIN, origin);
+    if (captureContentOnSpan()) span.setAttribute(RATEL_SEARCH_QUERY, query);
+    try {
+      const hits = await run();
+      span.setAttribute(RATEL_SEARCH_HIT_COUNT, hits.length);
+      span.setStatus({ code: SpanStatusCode.OK });
+      return hits;
+    } catch (err) {
+      fail(span, err);
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+
 /** Wrap a skill-content load in a `ratel.skill.load` span. */
 export function traceSkillLoad<T>(skillId: string, run: () => T): T {
   return getTracer().startActiveSpan(RATEL_SKILL_LOAD, { kind: SpanKind.INTERNAL }, (span) => {

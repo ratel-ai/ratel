@@ -21,7 +21,7 @@
 //! only the built-in default**; an explicit HuggingFace model is **cache-only**
 //! (it must already be present, or opt in with `download=true`) — a missing one
 //! errors as [`EmbedderError::NotCached`], symmetric with Ollama's "not pulled",
-//! so a `register` never silently pulls a multi-GB model. Once cached, load is
+//! so an explicit embedding build never silently pulls a multi-GB model. Once cached, load is
 //! offline and deterministic when the revision is pinned. Two catalogs on the
 //! same model share one resident embedder (keyed by model fingerprint); a cold
 //! download emits a [`TraceEvent::EmbedderDownload`].
@@ -50,13 +50,20 @@ use serde::Deserialize;
 use tokenizers::{Tokenizer, TruncationDirection, TruncationParams, TruncationStrategy};
 
 use crate::embedding_config::{
-    DEFAULT_REPO, DEFAULT_REVISION, EmbeddingModel, OLLAMA_DEFAULT_URL, Pooling, fingerprint_suffix,
+    DEFAULT_REPO, DEFAULT_REVISION, EmbeddingModel, OLLAMA_DEFAULT_URL, Pooling,
+    endpoint_fingerprint, fingerprint_suffix, huggingface_fingerprint, local_fingerprint,
 };
 use crate::trace::{EmbedderLoadStatus, TraceEvent, TraceSink};
 
 /// HTTP timeout for a single endpoint embedding request, so a stalled endpoint
-/// can't hang registration/search forever.
+/// can't hang an embedding build/query forever.
 const ENDPOINT_TIMEOUT_SECS: u64 = 30;
+
+/// Maximum number of inputs sent in one OpenAI-compatible embeddings request.
+const ENDPOINT_BATCH_SIZE: usize = 64;
+
+/// Maximum response body accepted for one endpoint chunk.
+const ENDPOINT_RESPONSE_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Default cold-load latency (ms) above which the load is flagged `slow`, a hint
 /// that the machine may be underpowered. Override with `RATEL_EMBED_SLOW_MS`.
@@ -64,17 +71,17 @@ const DEFAULT_SLOW_LOAD_MS: u64 = 5_000;
 
 /// Human-readable reason attached to a `slow` load event.
 const SLOW_LOAD_REASON: &str = "embedding model load was slow — this machine may be underpowered \
-     for in-process CPU inference; expect slow registration and search";
+     for in-process CPU inference; expect slow embedding builds and queries";
 
 /// A recoverable embedder failure. Returned instead of panicking so a load or
 /// inference problem surfaces to the SDK as a **catchable** error (with a
 /// remediation hint in `Display`) rather than aborting the host process.
 #[derive(Debug, Clone)]
 pub enum EmbedderError {
-    /// Model files could not be fetched: offline, DNS/TLS, timeout, or the
-    /// pinned revision returned a 4xx.
+    /// A configured embedding source could not be reached: offline, DNS/TLS,
+    /// timeout, or an endpoint/model request returned a 4xx.
     Download {
-        /// The embedding model's HuggingFace repo id.
+        /// The configured model/source display name.
         model: String,
         /// The underlying fetch error.
         source: String,
@@ -85,10 +92,10 @@ pub enum EmbedderError {
         /// The underlying filesystem error.
         source: String,
     },
-    /// The fetched model is unusable: corrupt weights, or a config/tokenizer that
-    /// failed to parse.
+    /// Model files are unusable: missing or corrupt weights, or a
+    /// config/tokenizer that failed to parse.
     Load {
-        /// The embedding model's HuggingFace repo id.
+        /// The configured model/source display name.
         model: String,
         /// The underlying load error.
         source: String,
@@ -114,6 +121,15 @@ pub enum EmbedderError {
         /// The active model, named for diagnosis.
         model: String,
     },
+    /// A vector was produced by a different resolved model than the vectors
+    /// already in the cache. Mixing vector spaces is never safe; callers must
+    /// explicitly rebuild the full corpus to adopt the active model.
+    ModelMismatch {
+        /// Resolved model identity that built the cache.
+        built: String,
+        /// Resolved model identity returned by the active embedder.
+        active: String,
+    },
     /// The embedding configuration is invalid — a bad source combination, a
     /// missing required field, or a named `api_key_env` that is not set. Surfaced
     /// at catalog construction or on first use.
@@ -137,20 +153,25 @@ impl EmbedderError {
     fn hint(&self) -> &'static str {
         match self {
             EmbedderError::Download { .. } => {
-                "check network connectivity and that the model id + revision exist"
+                "check source availability, connectivity, and the configured model identifier"
             }
             EmbedderError::CacheUnwritable { .. } => {
                 "check ~/.cache/huggingface permissions and free disk space (or set HF_HOME)"
             }
-            EmbedderError::Load { .. } => "clear the cached model so it re-downloads",
+            EmbedderError::Load { .. } => {
+                "check that model files and configuration are present, readable, and compatible"
+            }
             EmbedderError::Inference { .. } => {
-                "the machine may be underpowered for this embedding model"
+                "check model input/configuration or the endpoint response and retry"
             }
             EmbedderError::EmbeddingsNotBuilt => {
-                "construct the catalog with method=\"semantic\"/\"hybrid\", or build its embeddings first"
+                "embed the corpus before running a semantic/hybrid search"
             }
             EmbedderError::DimensionMismatch { .. } => {
-                "the model changed under an existing embedding set; rebuild with build_embeddings()"
+                "the configured model changed; re-embed the corpus with the new model"
+            }
+            EmbedderError::ModelMismatch { .. } => {
+                "the configured model changed; re-embed the corpus with the new model"
             }
             EmbedderError::Config { .. } => {
                 "give exactly one embedding source (a model id / path / url) with its required fields"
@@ -189,6 +210,10 @@ impl std::fmt::Display for EmbedderError {
                 f,
                 "embedding dimension mismatch for {model}: expected {expected}, got {got} (hint: {hint})"
             ),
+            EmbedderError::ModelMismatch { built, active } => write!(
+                f,
+                "embedding model mismatch: cache was built with {built}, active model is {active} (hint: {hint})"
+            ),
             EmbedderError::Config { message } => write!(f, "{message} (hint: {hint})"),
             EmbedderError::NotCached { model, revision } => {
                 let rev = revision
@@ -213,6 +238,14 @@ impl std::fmt::Display for EmbedderError {
 
 impl std::error::Error for EmbedderError {}
 
+/// An embedding value paired with the resolved identity of the model that
+/// produced it. Carrying identity in the result avoids races when one process-
+/// cached endpoint embedder is shared by concurrent catalogs.
+pub(crate) struct Embedded<T> {
+    pub(crate) value: T,
+    pub(crate) fingerprint: String,
+}
+
 /// Maps a tool's searchable text (and a query) to an L2-normalized vector.
 /// A trait so the model is swappable — a HuggingFace/local BERT model or a
 /// remote endpoint can back the same registries without touching them.
@@ -221,17 +254,38 @@ pub(crate) trait Embedder: Send + Sync {
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError>;
 
     /// Embed a batch of documents. The default loops `embed_doc` (fine for an
-    /// in-process model); an endpoint embedder overrides it with a single HTTP
-    /// request, since registration embeds the whole corpus and per-doc
-    /// round-trips over the wire would be pathological.
+    /// in-process model); an endpoint embedder overrides it with ordered HTTP
+    /// chunks, since per-document round-trips would be pathological.
     fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
         texts.iter().map(|t| self.embed_doc(t)).collect()
     }
 
-    /// Resolved model identity (concrete HF revision/SHA, `local:<path>`, or
-    /// `endpoint:<url>#<model>`) — stamped on the dense cache so a later model
-    /// swap over an existing embedding set is detectable. Test stubs use the
-    /// default.
+    /// Embed a query and return the vector with its resolved model identity.
+    /// Fixed-identity embedders use [`Self::fingerprint`]; endpoint embedders
+    /// override this to carry the response's optional resolved `model`.
+    fn embed_query_with_identity(&self, text: &str) -> Result<Embedded<Vec<f32>>, EmbedderError> {
+        Ok(Embedded {
+            value: self.embed_query(text)?,
+            fingerprint: self.fingerprint(),
+        })
+    }
+
+    /// Embed documents and return the complete batch with its resolved model
+    /// identity. The cache validates and commits this result atomically.
+    fn embed_batch_with_identity(
+        &self,
+        texts: &[String],
+    ) -> Result<Embedded<Vec<Vec<f32>>>, EmbedderError> {
+        Ok(Embedded {
+            value: self.embed_batch(texts)?,
+            fingerprint: self.fingerprint(),
+        })
+    }
+
+    /// Resolved model identity (concrete HF revision/SHA, local path, or endpoint
+    /// URL + model), encoded as collision-proof length-delimited fields. It is
+    /// stamped on the dense cache so a later model swap over an existing
+    /// embedding set is detectable. Test stubs use the default.
     fn fingerprint(&self) -> String {
         "unknown".to_string()
     }
@@ -271,7 +325,7 @@ fn embedder_for(model: &EmbeddingModel) -> Result<ResolvedEmbedder, EmbedderErro
     static CELL: OnceLock<Mutex<HashMap<String, Arc<dyn Embedder>>>> = OnceLock::new();
     let cache = CELL.get_or_init(|| Mutex::new(HashMap::new()));
     let mut notices = LoadNotices::default();
-    let (emb, load_ms) = get_or_load_keyed(cache, &model.configured_fingerprint(), || {
+    let (emb, load_ms) = get_or_load_keyed(cache, &model.embedder_cache_key(), || {
         let (emb, n) = build_embedder(model)?;
         notices = n;
         Ok(emb)
@@ -564,7 +618,7 @@ impl CandleEmbedder {
             &loaded,
             query_prefix,
             doc_prefix,
-            format!("hf:{repo_id}@{sha}"),
+            huggingface_fingerprint(repo_id, &sha),
             repo_id,
         )?;
         Ok((embedder, notices))
@@ -624,7 +678,7 @@ impl CandleEmbedder {
             &loaded,
             query_prefix,
             doc_prefix,
-            format!("local:{name}"),
+            local_fingerprint(&name),
             &name,
         )?;
         Ok((embedder, notices))
@@ -840,13 +894,19 @@ pub(crate) struct EndpointEmbedder {
 #[derive(Deserialize)]
 struct EmbeddingsResponse {
     data: Vec<EmbeddingData>,
+    #[serde(default)]
+    model: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct EmbeddingData {
     embedding: Vec<f32>,
-    #[serde(default)]
     index: usize,
+}
+
+struct ParsedEmbeddings {
+    vectors: Vec<Vec<f32>>,
+    model: Option<String>,
 }
 
 impl EndpointEmbedder {
@@ -863,7 +923,8 @@ impl EndpointEmbedder {
             .into();
         // Prefixes are part of the identity (they change the vectors).
         let fingerprint = format!(
-            "endpoint:{url}#{model}{}",
+            "{}{}",
+            endpoint_fingerprint(&url, &model),
             fingerprint_suffix(None, &query_prefix, &doc_prefix)
         );
         Ok(Self {
@@ -893,7 +954,7 @@ impl EndpointEmbedder {
         }
     }
 
-    fn request(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+    fn request_chunk(&self, inputs: &[String]) -> Result<Embedded<Vec<Vec<f32>>>, EmbedderError> {
         let key = self.api_key()?;
         let body = serde_json::json!({ "model": self.model, "input": inputs });
         let mut req = self
@@ -904,13 +965,75 @@ impl EndpointEmbedder {
             req = req.header("authorization", &format!("Bearer {k}"));
         }
         let mut resp = req.send_json(&body).map_err(|e| self.classify(e))?;
-        let parsed: EmbeddingsResponse =
-            resp.body_mut()
-                .read_json()
-                .map_err(|e| EmbedderError::Inference {
-                    source: format!("malformed endpoint response: {e}"),
-                })?;
-        parse_embeddings(parsed, inputs.len())
+        let parsed: EmbeddingsResponse = resp
+            .body_mut()
+            .with_config()
+            .limit(ENDPOINT_RESPONSE_LIMIT_BYTES)
+            .read_json()
+            .map_err(|e| EmbedderError::Inference {
+                source: format!("malformed or oversized endpoint response: {e}"),
+            })?;
+        let parsed = parse_embeddings(parsed, inputs.len())?;
+        let resolved_model = parsed.model.as_deref().unwrap_or(&self.model);
+        Ok(Embedded {
+            value: parsed.vectors,
+            fingerprint: self.fingerprint_for_model(resolved_model),
+        })
+    }
+
+    fn request(&self, inputs: &[String]) -> Result<Embedded<Vec<Vec<f32>>>, EmbedderError> {
+        if inputs.is_empty() {
+            return Ok(Embedded {
+                value: Vec::new(),
+                fingerprint: self.fingerprint.clone(),
+            });
+        }
+
+        let mut vectors = Vec::with_capacity(inputs.len());
+        let mut fingerprint: Option<String> = None;
+        let mut dimension = None;
+        for chunk in inputs.chunks(ENDPOINT_BATCH_SIZE) {
+            let embedded = self.request_chunk(chunk)?;
+            if let Some(first) = &fingerprint {
+                if first != &embedded.fingerprint {
+                    return Err(EmbedderError::ModelMismatch {
+                        built: first.clone(),
+                        active: embedded.fingerprint,
+                    });
+                }
+            } else {
+                fingerprint = Some(embedded.fingerprint.clone());
+            }
+            let chunk_dimension = embedded
+                .value
+                .first()
+                .expect("non-empty request chunk has a non-empty response")
+                .len();
+            if let Some(expected) = dimension {
+                if expected != chunk_dimension {
+                    return Err(EmbedderError::Inference {
+                        source: format!(
+                            "endpoint returned mixed embedding dimensions across chunks: expected {expected}, got {chunk_dimension}"
+                        ),
+                    });
+                }
+            } else {
+                dimension = Some(chunk_dimension);
+            }
+            vectors.extend(embedded.value);
+        }
+        Ok(Embedded {
+            value: vectors,
+            fingerprint: fingerprint.expect("non-empty input produced at least one chunk"),
+        })
+    }
+
+    fn fingerprint_for_model(&self, model: &str) -> String {
+        format!(
+            "{}{}",
+            endpoint_fingerprint(&self.url, model),
+            fingerprint_suffix(None, &self.query_prefix, &self.doc_prefix)
+        )
     }
 
     /// Map an endpoint transport/HTTP error to a typed `EmbedderError`, with an
@@ -962,9 +1085,9 @@ impl EndpointEmbedder {
 /// Turn a parsed endpoint response into ordered, L2-normalized vectors. Pure, so
 /// the ordering + normalization guard is unit-tested without the network.
 fn parse_embeddings(
-    mut resp: EmbeddingsResponse,
+    resp: EmbeddingsResponse,
     expected_len: usize,
-) -> Result<Vec<Vec<f32>>, EmbedderError> {
+) -> Result<ParsedEmbeddings, EmbedderError> {
     if resp.data.len() != expected_len {
         return Err(EmbedderError::Inference {
             source: format!(
@@ -973,17 +1096,98 @@ fn parse_embeddings(
             ),
         });
     }
-    resp.data.sort_by_key(|d| d.index);
-    Ok(resp
-        .data
+    if resp
+        .model
+        .as_deref()
+        .is_some_and(|model| model.trim().is_empty())
+    {
+        return Err(EmbedderError::Inference {
+            source: "endpoint returned a blank model identity".into(),
+        });
+    }
+
+    let mut ordered: Vec<Option<Vec<f32>>> = (0..expected_len).map(|_| None).collect();
+    let mut dimension = None;
+    for data in resp.data {
+        if data.index >= expected_len {
+            return Err(EmbedderError::Inference {
+                source: format!(
+                    "endpoint returned out-of-range embedding index {} for {expected_len} inputs",
+                    data.index
+                ),
+            });
+        }
+        if ordered[data.index].is_some() {
+            return Err(EmbedderError::Inference {
+                source: format!("endpoint returned duplicate embedding index {}", data.index),
+            });
+        }
+        let vector = normalize_endpoint_vector(data.embedding, &mut dimension)?;
+        ordered[data.index] = Some(vector);
+    }
+
+    let vectors = ordered
         .into_iter()
-        .map(|d| l2_normalize(d.embedding))
-        .collect())
+        .enumerate()
+        .map(|(index, vector)| {
+            vector.ok_or_else(|| EmbedderError::Inference {
+                source: format!("endpoint response is missing embedding index {index}"),
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    Ok(ParsedEmbeddings {
+        vectors,
+        model: resp.model,
+    })
+}
+
+fn normalize_endpoint_vector(
+    mut vector: Vec<f32>,
+    dimension: &mut Option<usize>,
+) -> Result<Vec<f32>, EmbedderError> {
+    if vector.is_empty() {
+        return Err(EmbedderError::Inference {
+            source: "endpoint returned an empty embedding vector".into(),
+        });
+    }
+    if vector.iter().any(|value| !value.is_finite()) {
+        return Err(EmbedderError::Inference {
+            source: "endpoint returned a non-finite embedding value".into(),
+        });
+    }
+    match *dimension {
+        Some(expected) if vector.len() != expected => {
+            return Err(EmbedderError::Inference {
+                source: format!(
+                    "endpoint returned mixed embedding dimensions: expected {expected}, got {}",
+                    vector.len()
+                ),
+            });
+        }
+        None => *dimension = Some(vector.len()),
+        Some(_) => {}
+    }
+
+    let norm = vector
+        .iter()
+        .map(|value| f64::from(*value).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    if !norm.is_finite() || norm == 0.0 {
+        return Err(EmbedderError::Inference {
+            source: "endpoint returned a zero or non-normalizable embedding vector".into(),
+        });
+    }
+    for value in &mut vector {
+        *value = (f64::from(*value) / norm) as f32;
+    }
+    Ok(vector)
 }
 
 impl Embedder for EndpointEmbedder {
     fn embed_doc(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
-        self.embed_batch(std::slice::from_ref(&text.to_string()))?
+        self.embed_batch_with_identity(std::slice::from_ref(&text.to_string()))?
+            .value
             .into_iter()
             .next()
             .ok_or_else(|| EmbedderError::Inference {
@@ -992,20 +1196,35 @@ impl Embedder for EndpointEmbedder {
     }
 
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+        Ok(self.embed_query_with_identity(text)?.value)
+    }
+
+    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+        Ok(self.embed_batch_with_identity(texts)?.value)
+    }
+
+    fn embed_query_with_identity(&self, text: &str) -> Result<Embedded<Vec<f32>>, EmbedderError> {
         let q = if self.query_prefix.is_empty() {
             text.to_string()
         } else {
             format!("{}{}", self.query_prefix, text)
         };
-        self.request(&[q])?
+        let embedded = self.request(&[q])?;
+        let fingerprint = embedded.fingerprint;
+        let value = embedded
+            .value
             .into_iter()
             .next()
             .ok_or_else(|| EmbedderError::Inference {
                 source: "endpoint returned no embedding".into(),
-            })
+            })?;
+        Ok(Embedded { value, fingerprint })
     }
 
-    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+    fn embed_batch_with_identity(
+        &self,
+        texts: &[String],
+    ) -> Result<Embedded<Vec<Vec<f32>>>, EmbedderError> {
         if self.doc_prefix.is_empty() {
             self.request(texts)
         } else {
@@ -1099,7 +1318,12 @@ fn l2_normalize(mut v: Vec<f32>) -> Vec<f32> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+
     use super::*;
+    use crate::{Origin, SearchMethod, Tool, ToolRegistry};
 
     #[test]
     fn only_lock_contention_is_retried() {
@@ -1146,12 +1370,26 @@ mod tests {
     #[test]
     fn error_display_carries_source_and_hint() {
         let s = EmbedderError::Download {
-            model: "BAAI/x".into(),
+            model: "embed-v1 @ https://embeddings.example.test".into(),
             source: "connection refused".into(),
         }
         .to_string();
         assert!(s.contains("connection refused"), "got: {s}");
         assert!(s.contains("hint:"), "got: {s}");
+        assert!(!s.contains("revision"), "got: {s}");
+
+        let load = EmbedderError::Load {
+            model: "/models/embed".into(),
+            source: "missing config.json".into(),
+        }
+        .to_string();
+        assert!(!load.contains("re-download"), "got: {load}");
+
+        let inference = EmbedderError::Inference {
+            source: "endpoint returned duplicate index 0".into(),
+        }
+        .to_string();
+        assert!(!inference.contains("underpowered"), "got: {inference}");
     }
 
     #[test]
@@ -1213,6 +1451,7 @@ mod tests {
         // An endpoint may return un-normalized vectors in any order; ingestion
         // must L2-normalize (so cosine==dot holds) and restore index order.
         let resp = EmbeddingsResponse {
+            model: Some("resolved-model".into()),
             data: vec![
                 EmbeddingData {
                     embedding: vec![0.0, 3.0], // index 1, un-normalized
@@ -1225,13 +1464,15 @@ mod tests {
             ],
         };
         let out = parse_embeddings(resp, 2).expect("parse");
-        assert_eq!(out[0], vec![1.0, 0.0], "index 0 first, normalized");
-        assert_eq!(out[1], vec![0.0, 1.0], "index 1 second, normalized");
+        assert_eq!(out.vectors[0], vec![1.0, 0.0], "index 0 first, normalized");
+        assert_eq!(out.vectors[1], vec![0.0, 1.0], "index 1 second, normalized");
+        assert_eq!(out.model.as_deref(), Some("resolved-model"));
     }
 
     #[test]
     fn endpoint_response_count_mismatch_errors() {
         let resp = EmbeddingsResponse {
+            model: None,
             data: vec![EmbeddingData {
                 embedding: vec![1.0],
                 index: 0,
@@ -1241,6 +1482,394 @@ mod tests {
             parse_embeddings(resp, 2),
             Err(EmbedderError::Inference { .. })
         ));
+    }
+
+    fn response(vectors: &[(usize, Vec<f32>)]) -> EmbeddingsResponse {
+        EmbeddingsResponse {
+            model: None,
+            data: vectors
+                .iter()
+                .cloned()
+                .map(|(index, embedding)| EmbeddingData { embedding, index })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn endpoint_response_requires_an_exact_index_permutation() {
+        assert!(
+            serde_json::from_value::<EmbeddingsResponse>(serde_json::json!({
+                "data": [{ "embedding": [1.0] }]
+            }))
+            .is_err(),
+            "index is required"
+        );
+        for malformed in [
+            response(&[(0, vec![1.0]), (0, vec![1.0])]),
+            response(&[(0, vec![1.0]), (2, vec![1.0])]),
+        ] {
+            assert!(matches!(
+                parse_embeddings(malformed, 2),
+                Err(EmbedderError::Inference { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn endpoint_response_rejects_invalid_vectors() {
+        for malformed in [
+            response(&[(0, vec![])]),
+            response(&[(0, vec![0.0, 0.0])]),
+            response(&[(0, vec![f32::NAN, 1.0])]),
+            response(&[(0, vec![f32::INFINITY, 1.0])]),
+            response(&[(0, vec![1.0, 0.0]), (1, vec![1.0])]),
+        ] {
+            let expected_len = malformed.data.len();
+            assert!(matches!(
+                parse_embeddings(malformed, expected_len),
+                Err(EmbedderError::Inference { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn endpoint_rejects_a_response_over_64_mib() {
+        let (url, requests_rx, server) = mock_endpoint(vec![MockReply::Oversized]);
+        let embedder = EndpointEmbedder::new(
+            url,
+            "requested-model".into(),
+            None,
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+
+        let err = embedder
+            .embed_batch(&["one".to_string()])
+            .expect_err("oversized response must fail");
+        let requests = requests_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        server.join().unwrap();
+
+        assert!(err.to_string().contains("oversized"), "got: {err}");
+        assert_eq!(requests.len(), 1);
+    }
+
+    #[test]
+    fn endpoint_batches_65_inputs_as_64_plus_1_and_preserves_global_order() {
+        let (url, requests_rx, server) = mock_endpoint(vec![
+            MockReply::Embeddings("resolved-model"),
+            MockReply::Embeddings("resolved-model"),
+        ]);
+
+        let embedder = EndpointEmbedder::new(
+            url,
+            "requested-model".into(),
+            None,
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+        let inputs = (0..65).map(|index| index.to_string()).collect::<Vec<_>>();
+        let embedded = embedder.embed_batch_with_identity(&inputs).unwrap();
+        let requests = requests_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        server.join().unwrap();
+
+        assert_eq!(
+            requests
+                .iter()
+                .map(|request| request.inputs.len())
+                .collect::<Vec<_>>(),
+            vec![64, 1]
+        );
+        assert_eq!(
+            requests
+                .into_iter()
+                .flat_map(|request| request.inputs)
+                .collect::<Vec<_>>(),
+            inputs
+        );
+        assert_eq!(embedded.value.len(), 65);
+        assert!(embedded.fingerprint.contains("resolved-model"));
+    }
+
+    #[test]
+    fn second_chunk_failure_commits_neither_chunk_and_retry_sends_all_inputs() {
+        let (url, requests_rx, server) = mock_endpoint(vec![
+            MockReply::Embeddings("resolved-model"),
+            MockReply::Status(500),
+            MockReply::Embeddings("resolved-model"),
+            MockReply::Embeddings("resolved-model"),
+        ]);
+        let mut registry = ToolRegistry::with_embedding(EmbeddingModel::Endpoint {
+            url,
+            model: "requested-model".into(),
+            api_key_env: None,
+            query_prefix: None,
+            doc_prefix: None,
+        });
+        for index in 0..65 {
+            registry.register(tool_for_endpoint(index));
+        }
+
+        assert!(registry.build_embeddings().is_err());
+        registry.build_embeddings().unwrap();
+        let requests = requests_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        server.join().unwrap();
+
+        assert_eq!(
+            requests
+                .iter()
+                .map(|request| request.inputs.len())
+                .collect::<Vec<_>>(),
+            vec![64, 1, 64, 1]
+        );
+    }
+
+    #[test]
+    fn endpoint_cache_separates_api_key_env_names_and_sends_each_bearer_token() {
+        const KEY_A: &str = "RATEL_CORE_ENDPOINT_TEST_KEY_A";
+        const KEY_B: &str = "RATEL_CORE_ENDPOINT_TEST_KEY_B";
+        // Unique test-only names are not read by any other thread in the process.
+        unsafe {
+            std::env::set_var(KEY_A, "alpha-token");
+            std::env::set_var(KEY_B, "beta-token");
+        }
+        let (url, requests_rx, server) = mock_endpoint(vec![
+            MockReply::Embeddings("resolved-model"),
+            MockReply::Embeddings("resolved-model"),
+        ]);
+        for (id, env_name) in [("a", KEY_A), ("b", KEY_B)] {
+            let mut registry = ToolRegistry::with_embedding(EmbeddingModel::Endpoint {
+                url: url.clone(),
+                model: "requested-model".into(),
+                api_key_env: Some(env_name.into()),
+                query_prefix: None,
+                doc_prefix: None,
+            });
+            registry.register(Tool {
+                id: id.into(),
+                name: id.into(),
+                description: "endpoint auth test".into(),
+                input_schema: serde_json::json!({}),
+                output_schema: serde_json::json!({}),
+            });
+            registry.build_embeddings().unwrap();
+        }
+        let requests = requests_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        server.join().unwrap();
+        unsafe {
+            std::env::remove_var(KEY_A);
+            std::env::remove_var(KEY_B);
+        }
+
+        assert_eq!(
+            requests
+                .into_iter()
+                .map(|request| request.authorization)
+                .collect::<Vec<_>>(),
+            vec![
+                Some("Bearer alpha-token".into()),
+                Some("Bearer beta-token".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn response_model_drift_is_hard_and_rebuild_adopts_the_new_identity() {
+        let (url, requests_rx, server) = mock_endpoint(vec![
+            MockReply::Embeddings("model-a"),
+            MockReply::Embeddings("model-b"),
+            MockReply::Embeddings("model-b"),
+            MockReply::Embeddings("model-b"),
+        ]);
+        let mut registry = ToolRegistry::with_embedding(EmbeddingModel::Endpoint {
+            url,
+            model: "requested-model".into(),
+            api_key_env: None,
+            query_prefix: None,
+            doc_prefix: None,
+        });
+        registry.register(tool_for_endpoint(0));
+        registry.build_embeddings().unwrap();
+
+        assert!(matches!(
+            registry.search_with_method("tool", 1, Origin::Direct, SearchMethod::Semantic),
+            Err(EmbedderError::ModelMismatch { .. })
+        ));
+        registry.rebuild_embeddings().unwrap();
+        assert_eq!(
+            registry
+                .search_with_method("tool", 1, Origin::Direct, SearchMethod::Semantic)
+                .unwrap()
+                .len(),
+            1
+        );
+        let requests = requests_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        server.join().unwrap();
+        assert_eq!(requests.len(), 4);
+    }
+
+    fn tool_for_endpoint(index: usize) -> Tool {
+        Tool {
+            id: format!("tool-{index}"),
+            name: format!("tool-{index}"),
+            description: format!("endpoint tool {index}"),
+            input_schema: serde_json::json!({}),
+            output_schema: serde_json::json!({}),
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum MockReply {
+        Embeddings(&'static str),
+        Status(u16),
+        Oversized,
+    }
+
+    struct MockRequest {
+        inputs: Vec<String>,
+        authorization: Option<String>,
+    }
+
+    type MockServer = (
+        String,
+        mpsc::Receiver<Vec<MockRequest>>,
+        std::thread::JoinHandle<()>,
+    );
+
+    fn mock_endpoint(replies: Vec<MockReply>) -> MockServer {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = format!("http://{}/v1/embeddings", listener.local_addr().unwrap());
+        let (requests_tx, requests_rx) = mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut replies = std::collections::VecDeque::from(replies);
+            let mut requests = Vec::new();
+            while let Some(reply) = replies.front().copied() {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream.set_nonblocking(false).unwrap();
+                        let (body, authorization) = read_http_request(&mut stream);
+                        let inputs = body["input"]
+                            .as_array()
+                            .expect("input array")
+                            .iter()
+                            .map(|value| value.as_str().expect("string input").to_string())
+                            .collect::<Vec<_>>();
+                        write_mock_response(&mut stream, reply, inputs.len());
+                        requests.push(MockRequest {
+                            inputs,
+                            authorization,
+                        });
+                        replies.pop_front();
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("accept failed: {error}"),
+                }
+            }
+            requests_tx.send(requests).unwrap();
+        });
+        (url, requests_rx, server)
+    }
+
+    fn write_mock_response(stream: &mut std::net::TcpStream, reply: MockReply, input_len: usize) {
+        let (status, response) = match reply {
+            MockReply::Embeddings(model) => {
+                let data = (0..input_len)
+                    .map(|index| {
+                        serde_json::json!({
+                            "index": index,
+                            "embedding": [1.0, 0.0]
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                (
+                    "200 OK",
+                    serde_json::json!({ "data": data, "model": model }).to_string(),
+                )
+            }
+            MockReply::Status(code) => {
+                ("500 Internal Server Error", format!("{{\"code\":{code}}}"))
+            }
+            MockReply::Oversized => {
+                write_oversized_response(stream);
+                return;
+            }
+        };
+        write!(
+            stream,
+            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            response.len(),
+            response
+        )
+        .unwrap();
+    }
+
+    fn write_oversized_response(stream: &mut std::net::TcpStream) {
+        const PREFIX: &[u8] = b"{\"data\":[],\"padding\":\"";
+        const SUFFIX: &[u8] = b"\"}";
+        const CHUNK: &[u8] = &[b'x'; 64 * 1024];
+        let padding_len = ENDPOINT_RESPONSE_LIMIT_BYTES;
+        let content_len = PREFIX.len() as u64 + padding_len + SUFFIX.len() as u64;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {content_len}\r\nconnection: close\r\n\r\n"
+        )
+        .unwrap();
+        if stream.write_all(PREFIX).is_err() {
+            return;
+        }
+        let mut remaining = padding_len;
+        while remaining > 0 {
+            let len = remaining.min(CHUNK.len() as u64) as usize;
+            if stream.write_all(&CHUNK[..len]).is_err() {
+                return;
+            }
+            remaining -= len as u64;
+        }
+        let _ = stream.write_all(SUFFIX);
+    }
+
+    fn read_http_request(stream: &mut std::net::TcpStream) -> (serde_json::Value, Option<String>) {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 4096];
+        loop {
+            let read = stream.read(&mut buffer).unwrap();
+            assert!(read > 0, "connection closed before request body");
+            request.extend_from_slice(&buffer[..read]);
+            if let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+                let body_start = header_end + 4;
+                let headers = std::str::from_utf8(&request[..header_end]).unwrap();
+                let content_len = headers
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse::<usize>().unwrap())
+                    })
+                    .expect("content-length");
+                if request.len() >= body_start + content_len {
+                    let authorization = headers.lines().find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("authorization")
+                            .then(|| value.trim().to_string())
+                    });
+                    let body =
+                        serde_json::from_slice(&request[body_start..body_start + content_len])
+                            .unwrap();
+                    return (body, authorization);
+                }
+            }
+        }
     }
 
     #[test]

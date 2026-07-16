@@ -22,7 +22,7 @@ def _tool(tool_id: str, description: str) -> ExecutableTool:
 
 async def test_search_tools_keeps_old_id_and_groups_shape() -> None:
     catalog = ToolCatalog()
-    catalog.register(_tool("ci__deploy", "Deploy the project to production."))
+    await catalog.register(_tool("ci__deploy", "Deploy the project to production."))
     tool = search_tools_tool(catalog)
 
     assert tool.id == SEARCH_TOOLS_ID == "search_tools"
@@ -37,7 +37,7 @@ async def test_search_tools_keeps_old_id_and_groups_shape() -> None:
 async def test_search_tools_respects_top_k() -> None:
     catalog = ToolCatalog()
     for i in range(5):
-        catalog.register(_tool(f"ci__t{i}", "deploy the project to production"))
+        await catalog.register(_tool(f"ci__t{i}", "deploy the project to production"))
     tool = search_tools_tool(catalog)
     result = await tool.execute({"query": "deploy", "topK": 2})
     n = sum(len(g["hits"]) for g in result["groups"])
