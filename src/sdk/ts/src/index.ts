@@ -38,6 +38,8 @@ export type {
   TraceSinkConfig,
 } from "./catalog.js";
 export { ToolCatalog } from "./catalog.js";
+export type { CatalogLoader, CatalogLoaderHandle } from "./catalog-loader.js";
+export { attachLoader } from "./catalog-loader.js";
 // Deprecated pre-0.2.0 surface (see compat.ts) — kept so `@ratel-ai/sdk@0.1.x`
 // callers keep compiling and running after upgrading to 0.2.0. Slated for removal (RAT-250).
 export type {
