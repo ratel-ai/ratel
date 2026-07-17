@@ -1,8 +1,26 @@
-import { SEARCH_CAPABILITIES_ID, type SearchCapabilitiesResult } from "@ratel-ai/sdk";
-import { type Tool, tool } from "ai";
+import { ratel, SEARCH_CAPABILITIES_ID, type SearchCapabilitiesResult } from "@ratel-ai/sdk";
+import { type ModelMessage, type Tool, tool } from "ai";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { aiSdk } from "./aisdk.js";
+
+// A view over a fresh core with one BM25-discoverable executable tool.
+function viewWithDeployTool() {
+  const view = ratel().adaptTo(aiSdk());
+  view.tools.register({
+    deploy_app: tool({
+      description: "Deploy the app to production servers.",
+      inputSchema: z.object({}),
+      execute: async () => ({ deployed: true }),
+    }),
+  });
+  return view;
+}
+
+// The tool-call part of a synthetic recall's assistant message.
+function callPartOf(message: ModelMessage): Record<string, unknown> {
+  return (message.content as Array<Record<string, unknown>>)[0];
+}
 
 // A JSON Schema whose `properties` we read positionally in assertions.
 type JsonObjectSchema = { type?: string; properties?: Record<string, { type?: string }> };
@@ -140,5 +158,95 @@ describe("recallMessages codec", () => {
     expect(resultPart.toolName).toBe(SEARCH_CAPABILITIES_ID);
     // The result is carried as a JSON text part the model reads back.
     expect(resultPart.output).toEqual({ type: "text", value: JSON.stringify(recall) });
+  });
+});
+
+describe("appendRecall (extend)", () => {
+  it("appends the recall pair at the suffix and returns the same array reference", async () => {
+    const view = viewWithDeployTool();
+    const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+    const returned = await view.appendRecall(messages);
+    // Mutate-and-return: a suffix append extends the cached prefix.
+    expect(returned).toBe(messages);
+    expect(messages).toHaveLength(3);
+    expect(messages[1].role).toBe("assistant");
+    expect(messages[2].role).toBe("tool");
+    // The first recall spends recall_0 (ids come from the core's counter).
+    expect(callPartOf(messages[1]).toolCallId).toBe("recall_0");
+  });
+
+  it("no-ops (array untouched, no id spent) when the last message is not a user turn", async () => {
+    const view = viewWithDeployTool();
+    const messages: ModelMessage[] = [
+      { role: "user", content: "deploy to production" },
+      { role: "assistant", content: "on it" },
+    ];
+    expect(await view.appendRecall(messages)).toHaveLength(2);
+    // No id spent, so the next real recall is still recall_0.
+    const fresh: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+    await view.appendRecall(fresh);
+    expect(callPartOf(fresh[1]).toolCallId).toBe("recall_0");
+  });
+
+  it("no-ops on empty user text and on a zero-hit query, preserving id economy", async () => {
+    const view = viewWithDeployTool();
+    expect(await view.appendRecall([{ role: "user", content: "" }])).toHaveLength(1);
+    expect(
+      await view.appendRecall([{ role: "user", content: "zzzqqq utterly unrelated" }]),
+    ).toHaveLength(1);
+    const real: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+    await view.appendRecall(real);
+    expect(callPartOf(real[1]).toolCallId).toBe("recall_0");
+  });
+
+  it("joins multi-part user text with newlines for the recall query", async () => {
+    const view = viewWithDeployTool();
+    const messages: ModelMessage[] = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "deploy" },
+          { type: "text", text: "to production" },
+        ],
+      },
+    ];
+    await view.appendRecall(messages);
+    expect(messages).toHaveLength(3);
+    expect(callPartOf(messages[1]).input).toEqual({ query: "deploy\nto production" });
+  });
+});
+
+describe("prepareStep (extend)", () => {
+  it("injects a fresh messages array on step 0, leaving the caller's array untouched", async () => {
+    const view = viewWithDeployTool();
+    const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+    const result = await view.prepareStep({ stepNumber: 0, messages });
+    expect(result?.messages).toHaveLength(3);
+    // Never mutates: ai's messages override carries forward across steps.
+    expect(result?.messages).not.toBe(messages);
+    expect(messages).toHaveLength(1);
+    expect(callPartOf((result as { messages: ModelMessage[] }).messages[1]).toolCallId).toBe(
+      "recall_0",
+    );
+  });
+
+  it("returns undefined on later steps, a non-user last message, and zero hits (id economy)", async () => {
+    const view = viewWithDeployTool();
+    const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+    expect(await view.prepareStep({ stepNumber: 1, messages })).toBeUndefined();
+    expect(
+      await view.prepareStep({ stepNumber: 0, messages: [{ role: "assistant", content: "hi" }] }),
+    ).toBeUndefined();
+    expect(
+      await view.prepareStep({
+        stepNumber: 0,
+        messages: [{ role: "user", content: "zzzqqq utterly unrelated" }],
+      }),
+    ).toBeUndefined();
+    // None of those spent a call id: a real step-0 injection is still recall_0.
+    const injected = await view.prepareStep({ stepNumber: 0, messages });
+    expect(callPartOf((injected as { messages: ModelMessage[] }).messages[1]).toolCallId).toBe(
+      "recall_0",
+    );
   });
 });
