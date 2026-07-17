@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- In-process (Candle) embedding runs one padded forward pass per batch chunk instead of one per document, speeding up embedding a corpus on a `"semantic"`/`"hybrid"` catalog. Produced vectors are bit-for-bit identical, so rankings and reproducibility are unchanged.
+
+### Fixed
+
+- Distinct embedding models now load concurrently. The process-wide embedder cache held its lock across a full model load, so a cold load of one model blocked loading — or a warm-cache hit for — another; loads now run under a per-key slot lock while same-model loads stay single-flight (one load, reported once).
+
 ## [0.5.0-rc.1] - 2026-07-16
 
 ### Added

@@ -31,6 +31,22 @@ const hits = await catalog.searchAsync("deploy the service", 5);
 
 `register()` returns a promise for every method (BM25 too); `search()` stays synchronous for BM25 only, and `searchAsync()` covers all three. To change the endpoint's model or vector dimension, construct a new catalog and re-register.
 
+Embedding failures from `register()`/`searchAsync()` are typed `EmbedderError`s (with a stable `.code` such as `"Load"`, `"NotCached"`, or `"DimensionMismatch"`); a dimension mismatch is a `DimensionMismatchError` subclass — the parity of Python's `EmbedderError`/`DimensionMismatchError`. Invalid embedding config still throws at construction.
+
+```ts
+import { EmbedderError, DimensionMismatchError } from "@ratel-ai/sdk";
+
+try {
+  await catalog.register(tools);
+} catch (err) {
+  if (err instanceof DimensionMismatchError) {
+    // the model changed under the corpus — rebuild with a fresh catalog
+  } else if (err instanceof EmbedderError) {
+    console.error(`embedding failed (${err.code}): ${err.message}`);
+  }
+}
+```
+
 ## Install
 
 ```bash

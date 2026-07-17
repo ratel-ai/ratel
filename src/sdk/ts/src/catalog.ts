@@ -237,6 +237,10 @@ export class ToolCatalog {
    * @param tools - A single tool or a readonly array of tools; each
    *   `execute` must be set. Pass the whole batch at once for a single
    *   embedding request — separate `register` calls embed separately.
+   * @throws {@link EmbedderError} on a `"semantic"`/`"hybrid"` catalog when
+   *   embedding fails (model load / endpoint / auth / dimension) — a
+   *   {@link DimensionMismatchError} for a vector-width change. A missing
+   *   `execute` handler throws a plain `Error`.
    */
   async register(tools: ExecutableTool | readonly ExecutableTool[]): Promise<void> {
     const batch = Array.isArray(tools) ? tools : [tools];
