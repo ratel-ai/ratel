@@ -48,6 +48,7 @@ export type {
   SearchToolsToolOptions,
 } from "./compat.js";
 export { SEARCH_TOOLS_ID, searchToolsTool } from "./compat.js";
+export { DimensionMismatchError, EmbedderError } from "./errors.js";
 export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
 export { registerMcpServer } from "./mcp.js";
 export { SkillRegistry, ToolRegistry } from "./registry.js";

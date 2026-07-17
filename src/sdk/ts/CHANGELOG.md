@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Typed embedding errors: `EmbedderError` (with a stable `code`) and its `DimensionMismatchError` subclass are thrown from `register()`/`searchAsync()` on a semantic/hybrid catalog, so callers can branch on `instanceof`/`code` instead of matching message text — parity with the Python SDK. Invalid embedding config still throws at construction.
+
 ## [0.5.0-rc.1] - 2026-07-16
 
 ### Changed

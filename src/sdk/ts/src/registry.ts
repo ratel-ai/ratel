@@ -8,6 +8,7 @@ import {
   type Tool,
 } from "../native/index.cjs";
 import type { EmbeddingSpec, SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import { mapEmbedderError } from "./errors.js";
 
 /** Normalize the public string|object form into the native config the binding
  * expects (a string is the local-path `spec`, validated in core). */
@@ -16,27 +17,6 @@ function toNativeEmbedding(
 ): NativeEmbeddingConfig | undefined {
   if (embedding === undefined) return undefined;
   return typeof embedding === "string" ? { spec: embedding } : embedding;
-}
-
-/**
- * Append an await-oriented hint when a dense search fails because the corpus
- * was never embedded — the signature of a forgotten `await register(...)`.
- *
- * On a `"semantic"`/`"hybrid"` catalog the embedding pass runs inside `register`;
- * an un-awaited `register(...)` skips it, and the next dense search hits the
- * core's "not computed for semantic" error. We enrich only that already-failing
- * error (the original message is preserved, so existing matchers still match)
- * and pass every other error through untouched — this never turns a passing
- * call into a failure.
- */
-function augmentNotBuilt(error: unknown): unknown {
-  const message = error instanceof Error ? error.message : String(error);
-  if (!message.includes("not computed for semantic")) return error;
-  return new Error(
-    `${message} — if you called register(...) without awaiting it, the embedding ` +
-      "pass was skipped; `await catalog.register(...)` (or `registry.register(...)`) " +
-      "before a semantic/hybrid search",
-  );
 }
 
 /**
@@ -99,8 +79,11 @@ export class ToolRegistry {
    * @internal
    */
   async buildDense(): Promise<void> {
-    if (this.eager) {
+    if (!this.eager) return;
+    try {
       await this.native.buildEmbeddings();
+    } catch (error) {
+      throw mapEmbedderError(error);
     }
   }
 
@@ -141,7 +124,7 @@ export class ToolRegistry {
     try {
       return await this.native.searchWithMethodAsync(query, topK, origin, method);
     } catch (error) {
-      throw augmentNotBuilt(error);
+      throw mapEmbedderError(error);
     }
   }
 
@@ -214,8 +197,11 @@ export class SkillRegistry {
    * @internal
    */
   async buildDense(): Promise<void> {
-    if (this.eager) {
+    if (!this.eager) return;
+    try {
       await this.native.buildEmbeddings();
+    } catch (error) {
+      throw mapEmbedderError(error);
     }
   }
 
@@ -249,7 +235,7 @@ export class SkillRegistry {
     try {
       return await this.native.searchWithMethodAsync(query, topK, origin, method);
     } catch (error) {
-      throw augmentNotBuilt(error);
+      throw mapEmbedderError(error);
     }
   }
 
