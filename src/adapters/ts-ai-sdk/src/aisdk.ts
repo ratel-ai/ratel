@@ -56,9 +56,15 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
 
     ingest(id, t) {
       const execute = t.execute;
-      // Provider- or client-executed tools can't run through the catalog, so the
-      // core keeps them eagerly exposed (passthrough) rather than ingesting them.
-      if (!execute) return "passthrough";
+      // Two kinds of tool must stay eagerly exposed in native shape rather than
+      // being funneled through the catalog:
+      //   - any `type: "provider"` tool — the catalog can't carry its load-bearing
+      //     type / `<provider>.<tool>` id / args and it has no rankable description
+      //     (`description?: never`), so it passes through even when a
+      //     provider-DEFINED tool supplies its own client-side `execute`;
+      //   - any tool with no `execute` (provider- or client-run) — not invocable
+      //     through the catalog at all.
+      if (t.type === "provider" || !execute) return "passthrough";
       const registration: CatalogRegistration = {
         description: resolveDescription(t.description),
         inputSchema: toJsonSchema(t.inputSchema),

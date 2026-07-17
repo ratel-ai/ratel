@@ -32,12 +32,28 @@ describe("aiSdk() identity", () => {
 });
 
 describe("ingest codec", () => {
-  it("passes through a provider-executed tool (no execute)", () => {
+  it("passes through a function tool with no execute (provider/client-executed)", () => {
     const providerTool = tool({
       description: "provider-run search",
       inputSchema: z.object({ q: z.string() }),
     });
     expect(aiSdk().ingest("provider_search", providerTool)).toBe("passthrough");
+  });
+
+  it("passes through an ai@7 provider tool even when it carries a client execute", () => {
+    // Provider-DEFINED tools (anthropic.tools.bash_*/computer_*/textEditor_*) are
+    // type:'provider', isProviderExecuted:false, yet run a client-side execute. The
+    // catalog can't carry their type / <provider>.<tool> id / args (and they have no
+    // rankable description), so they must stay eagerly exposed in native shape.
+    const providerTool = {
+      type: "provider",
+      id: "acme.shell",
+      args: {},
+      isProviderExecuted: false,
+      inputSchema: { type: "object" },
+      execute: async () => ({ ran: true }),
+    } as unknown as Tool;
+    expect(aiSdk().ingest("shell", providerTool)).toBe("passthrough");
   });
 
   it("ingests an executable: resolves description, converts input schema, omits output schema", () => {
@@ -133,6 +149,25 @@ describe("expose codec", () => {
   });
 });
 
+describe("passthrough end-to-end", () => {
+  it("exposes a provider tool by identity and never catalogs it", () => {
+    const view = ratel().adaptTo(aiSdk());
+    const providerTool = {
+      type: "provider",
+      id: "acme.shell",
+      args: {},
+      isProviderExecuted: false,
+      inputSchema: { type: "object" },
+      execute: async () => ({ ran: true }),
+    } as unknown as Tool;
+    view.tools.register({ shell: providerTool });
+    // Exposed untouched, in native provider shape...
+    expect(view.expose().shell).toBe(providerTool);
+    // ...and never funneled into the catalog.
+    expect(view.tools.catalog.has("shell")).toBe(false);
+  });
+});
+
 describe("recallMessages codec", () => {
   it("renders the synthetic search_capabilities call/result pair in ModelMessage shape", () => {
     const recall = {
@@ -221,13 +256,17 @@ describe("prepareStep (extend)", () => {
     const view = viewWithDeployTool();
     const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
     const result = await view.prepareStep({ stepNumber: 0, messages });
-    expect(result?.messages).toHaveLength(3);
+    const injected = (result as { messages: ModelMessage[] }).messages;
+    expect(injected).toHaveLength(3);
     // Never mutates: ai's messages override carries forward across steps.
-    expect(result?.messages).not.toBe(messages);
+    expect(injected).not.toBe(messages);
     expect(messages).toHaveLength(1);
-    expect(callPartOf((result as { messages: ModelMessage[] }).messages[1]).toolCallId).toBe(
-      "recall_0",
-    );
+    // The recall pair is appended as a suffix — the user turn stays first (by
+    // identity), the assistant call and tool result follow, in order.
+    expect(injected[0]).toBe(messages[0]);
+    expect(injected[1].role).toBe("assistant");
+    expect(injected[2].role).toBe("tool");
+    expect(callPartOf(injected[1]).toolCallId).toBe("recall_0");
   });
 
   it("returns undefined on later steps, a non-user last message, and zero hits (id economy)", async () => {
