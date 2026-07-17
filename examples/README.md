@@ -6,6 +6,7 @@ Runnable demos of Ratel wired into real agent frameworks and protocol surfaces. 
 
 ```
 ai-sdk/           Ratel + Vercel AI SDK — top-K filtering + capability tools in ToolLoopAgent.generate
+mastra/           Ratel + Mastra — capability tools + per-turn recall processor via @ratel-ai/mastra-adapter
 mcp-chat/         Interactive REPL against an MCP-backed agent (Vercel AI SDK + OpenAI)
 pydantic-ai/      Ratel + Pydantic AI (Python) — top-K filtering + capability tools in the agent loop
 telemetry-ts/     Ratel telemetry — emit ratel.* spans via the OpenTelemetry JS SDK
