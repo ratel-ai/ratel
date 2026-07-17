@@ -14,18 +14,20 @@ export const SEARCH_CAPABILITIES_ID = "search_capabilities" as const;
  */
 export const INVOKE_TOOL_ID = "invoke_tool" as const;
 
-const DEFAULT_TOP_K_TOOLS = 5;
+/** Default `tools` bucket size, and the fallback for an invalid host `search` top-K. */
+export const DEFAULT_TOP_K_TOOLS = 5;
 const DEFAULT_TOP_K_SKILLS = 3;
 const MAX_TOP_K = 50;
 
 /**
  * Clamp a model-supplied top-K to a positive integer in [1, MAX_TOP_K], falling
  * back to `fallback` for anything else (undefined, 0, negative, non-integer,
- * NaN). Tools and skills — and the TS and Python SDKs — run the same input
+ * NaN). Tools and skills — the capability funnel, the host-driven
+ * {@link ToolCollection.search}, and the TS and Python SDKs — run the same input
  * through this, so a stray `topK` can't silently return zero results (or, via a
  * negative wrapping to u32 in the native layer, an unbounded set).
  */
-function clampTopK(value: unknown, fallback: number): number {
+export function clampTopK(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
   return Math.min(value, MAX_TOP_K);
 }

@@ -207,6 +207,39 @@ describe("ratel() standalone core", () => {
     );
   });
 
+  it("throws its own error, not the adapter hint, on a native-shaped tool missing an id", () => {
+    const r = ratel();
+    // Plain native shape (string description, JSON-schema input) — just no id.
+    // That's a malformed native tool, not a framework tool: the adapter hint
+    // would send the caller off installing a package that can't help.
+    const noId = {
+      name: "orphan",
+      description: "A plain native tool with a JSON schema but no id.",
+      inputSchema: { type: "object" },
+      outputSchema: { type: "object" },
+      execute: () => ({ ok: true }),
+    };
+    expect(() => r.tools.register(noId as unknown as ExecutableTool)).toThrow(
+      /expects each ExecutableTool to have a string `id`/,
+    );
+    expect(() => r.tools.register(noId as unknown as ExecutableTool)).not.toThrow(/adaptTo/);
+  });
+
+  it("clamps tools.search topK the same as the funnel: caps at 50, falls back on invalid", () => {
+    const r = ratel();
+    const many = Array.from({ length: 60 }, (_, i) =>
+      native(`grep_${i}`, `Search files variant ${i}: grep ripgrep.`),
+    );
+    r.tools.register(...many);
+    // A stray-large topK is capped, not passed straight to the catalog.
+    expect(r.tools.search("search files grep", 999).length).toBeLessThanOrEqual(50);
+    // A negative topK falls back to the default 5 rather than wrapping to an
+    // unbounded u32 set in the native layer.
+    const negative = r.tools.search("search files grep", -1);
+    expect(negative.length).toBeLessThanOrEqual(5);
+    expect(negative.length).toBeGreaterThan(0);
+  });
+
   it("recall() is a pure query: canonical result or null, no call ids", async () => {
     const r = ratel();
     expect(await r.recall("anything")).toBeNull(); // empty catalog
@@ -335,6 +368,22 @@ describe("ratel().adaptTo(adapter)", () => {
     expect(a.tools.catalog.has("provider_search")).toBe(false); // never in the catalog
     expect(a.tools.has("provider_search")).toBe(true); // …but the view knows it
     expect(b.expose()).not.toHaveProperty("provider_search"); // framework-shaped → per view
+  });
+
+  it("exposes get/search/invoke on the adapted handle, at parity with the native ToolCollection", async () => {
+    const a = ratel().adaptTo(fakeAdapter());
+    a.tools.register({ read_file: exec("Read a file from local disk.") });
+    expect(a.tools.get("read_file")?.description).toBe("Read a file from local disk.");
+    expect(a.tools.search("read a file", 5)[0]?.toolId).toBe("read_file");
+    expect(await a.tools.invoke("read_file", {})).toEqual({ ok: true });
+  });
+
+  it("adapted get/search/invoke are catalog-only: a passthrough is known to has() but not to them", () => {
+    const a = ratel().adaptTo(fakeAdapter());
+    const provider: FakeTool = { description: "provider-run search", inputSchema: {} };
+    a.tools.register({ provider_search: provider });
+    expect(a.tools.has("provider_search")).toBe(true); // the view knows it
+    expect(a.tools.get("provider_search")).toBeUndefined(); // …but it's not in the catalog
   });
 
   it("throws when an app tool shadows a reserved capability-tool id", () => {
