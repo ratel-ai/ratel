@@ -322,7 +322,7 @@ struct LoadNotices {
 type ResolvedEmbedder = (Arc<dyn Embedder>, Option<u64>, LoadNotices);
 
 fn embedder_for(model: &EmbeddingModel) -> Result<ResolvedEmbedder, EmbedderError> {
-    static CELL: OnceLock<Mutex<HashMap<String, Arc<dyn Embedder>>>> = OnceLock::new();
+    static CELL: OnceLock<Mutex<HashMap<String, LoadSlot<dyn Embedder>>>> = OnceLock::new();
     let cache = CELL.get_or_init(|| Mutex::new(HashMap::new()));
     let mut notices = LoadNotices::default();
     let (emb, load_ms) = get_or_load_keyed(cache, &model.embedder_cache_key(), || {
@@ -392,23 +392,40 @@ fn build_embedder(
     }
 }
 
-/// Get-or-load into a keyed cache with **no failure caching**: on `Err` the key
-/// stays empty so a later call retries. Returns the value plus `Some(load_ms)`
+/// A per-key load slot in a keyed cache: `None` until the value is loaded, then
+/// `Some`. Guarded by its own mutex so a `load` serializes callers of *that* key
+/// without holding the whole-map lock.
+type LoadSlot<T> = Arc<Mutex<Option<Arc<T>>>>;
+
+/// Get-or-load into a keyed cache with **no failure caching**: on `Err` the key's
+/// slot stays empty so a later call retries. Returns the value plus `Some(load_ms)`
 /// on the call that performed the load, `None` on warm reuse. Generic so the
 /// non-poisoning + once contract is unit-tested without touching the network.
+///
+/// The map lock is held only long enough to get/create the key's slot; `load`
+/// runs against that per-key slot mutex, never the map. So **different keys load
+/// concurrently** (a cold load of one model no longer blocks another), while
+/// **same-key loads stay single-flight** (concurrent cold misses share the slot,
+/// so `load` runs once and exactly one caller reports `Some(load_ms)`).
 fn get_or_load_keyed<T: ?Sized>(
-    cache: &Mutex<HashMap<String, Arc<T>>>,
+    cache: &Mutex<HashMap<String, LoadSlot<T>>>,
     key: &str,
     load: impl FnOnce() -> Result<Arc<T>, EmbedderError>,
 ) -> Result<(Arc<T>, Option<u64>), EmbedderError> {
-    let mut guard = cache.lock().expect("embedder cache mutex poisoned");
-    if let Some(existing) = guard.get(key) {
+    // Hold the map lock only to get/create this key's slot, then release it.
+    let slot = {
+        let mut guard = cache.lock().expect("embedder cache mutex poisoned");
+        Arc::clone(guard.entry(key.to_string()).or_default())
+    };
+    // Serialize per key on the slot — the map lock is NOT held across `load`.
+    let mut slot = slot.lock().expect("embedder cache slot mutex poisoned");
+    if let Some(existing) = slot.as_ref() {
         return Ok((existing.clone(), None));
     }
     let started = Instant::now();
-    let loaded = load()?;
+    let loaded = load()?; // Err leaves the slot `None`, so a later call retries.
     let took_ms = started.elapsed().as_millis() as u64;
-    guard.insert(key.to_string(), loaded.clone());
+    *slot = Some(loaded.clone());
     Ok((loaded, Some(took_ms)))
 }
 
@@ -1394,7 +1411,7 @@ mod tests {
 
     #[test]
     fn get_or_load_keyed_does_not_cache_failure_and_reports_latency_once() {
-        let cache: Mutex<HashMap<String, Arc<i32>>> = Mutex::new(HashMap::new());
+        let cache: Mutex<HashMap<String, LoadSlot<i32>>> = Mutex::new(HashMap::new());
         let boom = || {
             Err::<Arc<i32>, _>(EmbedderError::Inference {
                 source: "boom".into(),
@@ -1412,6 +1429,98 @@ mod tests {
             get_or_load_keyed(&cache, "k", || Ok::<_, EmbedderError>(Arc::new(999))).unwrap();
         assert_eq!(*v2, 7);
         assert!(ms2.is_none(), "warm reuse reports no load latency");
+    }
+
+    #[test]
+    fn distinct_key_loads_run_concurrently() {
+        use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::thread;
+
+        // Two loads for *different* keys must be able to run at the same time.
+        // The barrier only releases once BOTH loads have entered — so if the
+        // cache serializes distinct-key loads (map lock held across `load`), the
+        // second thread can never start and the receive below times out.
+        let cache: Arc<Mutex<HashMap<String, LoadSlot<i32>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let barrier = Arc::new(Barrier::new(2));
+        let inflight = Arc::new(AtomicUsize::new(0));
+        let (done_tx, done_rx) = mpsc::channel();
+
+        for (i, key) in ["a", "b"].into_iter().enumerate() {
+            let cache = Arc::clone(&cache);
+            let barrier = Arc::clone(&barrier);
+            let inflight = Arc::clone(&inflight);
+            let done_tx = done_tx.clone();
+            thread::spawn(move || {
+                let result = get_or_load_keyed(&cache, key, || {
+                    inflight.fetch_add(1, Ordering::SeqCst);
+                    barrier.wait(); // both distinct-key loads must be in-flight here
+                    Ok::<_, EmbedderError>(Arc::new(i as i32))
+                });
+                let _ = done_tx.send(result.map(|(v, _)| *v));
+            });
+        }
+        drop(done_tx);
+
+        let mut got = Vec::new();
+        for _ in 0..2 {
+            let value = done_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("distinct-key loads did not run concurrently (map lock held across load)");
+            got.push(value.unwrap());
+        }
+        got.sort_unstable();
+        assert_eq!(got, vec![0, 1]);
+        assert_eq!(inflight.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn same_key_load_is_single_flight() {
+        use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::thread;
+
+        // Many threads race the SAME key: `load` must run exactly once, and
+        // exactly one caller reports a load latency; the rest see warm reuse.
+        const THREADS: usize = 8;
+        let cache: Arc<Mutex<HashMap<String, LoadSlot<i32>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let loads = Arc::new(AtomicUsize::new(0));
+        let start = Arc::new(Barrier::new(THREADS));
+        let (tx, rx) = mpsc::channel();
+
+        for _ in 0..THREADS {
+            let cache = Arc::clone(&cache);
+            let loads = Arc::clone(&loads);
+            let start = Arc::clone(&start);
+            let tx = tx.clone();
+            thread::spawn(move || {
+                start.wait(); // maximize the race on the cold miss
+                let result = get_or_load_keyed(&cache, "shared", || {
+                    loads.fetch_add(1, Ordering::SeqCst);
+                    Ok::<_, EmbedderError>(Arc::new(42))
+                });
+                let (value, ms) = result.unwrap();
+                let _ = tx.send((*value, ms.is_some()));
+            });
+        }
+        drop(tx);
+
+        let mut reported = 0;
+        for _ in 0..THREADS {
+            let (value, loaded) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert_eq!(value, 42);
+            if loaded {
+                reported += 1;
+            }
+        }
+        assert_eq!(
+            loads.load(Ordering::SeqCst),
+            1,
+            "load must run exactly once per key"
+        );
+        assert_eq!(reported, 1, "exactly one caller reports the load latency");
     }
 
     #[test]
