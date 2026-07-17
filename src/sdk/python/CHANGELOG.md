@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.0-rc.2] - 2026-07-17
+
 ### Fixed
 
 - A forgotten `await` on `register()` no longer silently drops the corpus. `register()` now commits metadata **synchronously** and returns an awaitable that drives only the embedding pass, so an un-awaited call still registers the tools/skills (BM25 keeps working); and a `"semantic"`/`"hybrid"` `search_async` after an un-awaited `register()` raises an actionable "not awaited" error instead of ranking an empty corpus. Awaited usage — return value, timing, batch atomicity, off-thread embedding, error surfacing — is unchanged. (Note: `register` is now a regular method returning `Awaitable[None]`, not an `async def` coroutine function.)

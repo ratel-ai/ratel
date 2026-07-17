@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.0-rc.2] - 2026-07-17
+
 ### Changed
 
 - In-process (Candle) embedding runs one padded forward pass per batch chunk instead of one per document, speeding up embedding a corpus on a `"semantic"`/`"hybrid"` catalog. Produced vectors are bit-for-bit identical, so rankings and reproducibility are unchanged.
