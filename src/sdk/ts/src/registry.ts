@@ -8,6 +8,7 @@ import {
   type Tool,
 } from "../native/index.cjs";
 import type { EmbeddingSpec, SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import { mapEmbedderError } from "./errors.js";
 
 /** Normalize the public string|object form into the native config the binding
  * expects (a string is the local-path `spec`, validated in core). */
@@ -78,8 +79,11 @@ export class ToolRegistry {
    * @internal
    */
   async buildDense(): Promise<void> {
-    if (this.eager) {
+    if (!this.eager) return;
+    try {
       await this.native.buildEmbeddings();
+    } catch (error) {
+      throw mapEmbedderError(error);
     }
   }
 
@@ -111,13 +115,17 @@ export class ToolRegistry {
   }
 
   /** Search on a libuv worker; supports `"bm25"`, `"semantic"`, and `"hybrid"`. */
-  searchWithMethodAsync(
+  async searchWithMethodAsync(
     query: string,
     topK: number,
     origin: SearchOrigin,
     method: SearchMethod,
   ): Promise<SearchHit[]> {
-    return this.native.searchWithMethodAsync(query, topK, origin, method);
+    try {
+      return await this.native.searchWithMethodAsync(query, topK, origin, method);
+    } catch (error) {
+      throw mapEmbedderError(error);
+    }
   }
 
   /**
@@ -189,8 +197,11 @@ export class SkillRegistry {
    * @internal
    */
   async buildDense(): Promise<void> {
-    if (this.eager) {
+    if (!this.eager) return;
+    try {
       await this.native.buildEmbeddings();
+    } catch (error) {
+      throw mapEmbedderError(error);
     }
   }
 
@@ -215,13 +226,17 @@ export class SkillRegistry {
   }
 
   /** Search on a libuv worker — see `ToolRegistry.searchWithMethodAsync`. */
-  searchWithMethodAsync(
+  async searchWithMethodAsync(
     query: string,
     topK: number,
     origin: SearchOrigin,
     method: SearchMethod,
   ): Promise<SkillHit[]> {
-    return this.native.searchWithMethodAsync(query, topK, origin, method);
+    try {
+      return await this.native.searchWithMethodAsync(query, topK, origin, method);
+    } catch (error) {
+      throw mapEmbedderError(error);
+    }
   }
 
   /** Record a custom event on the local trace stream (ADR-0007). */

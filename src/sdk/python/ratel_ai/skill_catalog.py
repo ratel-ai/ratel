@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeVar, overload
 
@@ -18,6 +18,7 @@ from ._native import SkillHit
 from ._native import SkillRegistry as _NativeSkillRegistry
 from .catalog import (
     _REGISTRY_BUSY,
+    _UNAWAITED_REGISTER,
     EmbeddingSpec,
     SearchMethod,
     SearchOrigin,
@@ -153,16 +154,19 @@ class SkillRegistry:
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
+        # See `ToolRegistry.__init__`: scheduled-but-undriven embedding builds, so
+        # a forgotten `await register(...)` is caught at the next dense search.
+        self._undriven_builds = 0
         self._dense_tasks: set[asyncio.Task[Any]] = set()
 
     @overload
-    async def register(self, item: Skill) -> None: ...
+    def register(self, item: Skill) -> Awaitable[None]: ...
 
     @overload
-    async def register(self, item: Iterable[Skill]) -> None: ...
+    def register(self, item: Iterable[Skill]) -> Awaitable[None]: ...
 
     @overload
-    async def register(
+    def register(
         self,
         item: str,
         name: str,
@@ -171,9 +175,9 @@ class SkillRegistry:
         tools: list[str],
         metadata: dict[str, list[str]],
         body: str,
-    ) -> None: ...
+    ) -> Awaitable[None]: ...
 
-    async def register(
+    def register(
         self,
         item: Skill | Iterable[Skill] | str,
         name: str | None = None,
@@ -182,12 +186,14 @@ class SkillRegistry:
         tools: list[str] | None = None,
         metadata: dict[str, list[str]] | None = None,
         body: str | None = None,
-    ) -> None:
+    ) -> Awaitable[None]:
         """Register one `Skill`, many `Skill`s, or a flat (id, name, …) tuple.
 
-        Stores metadata and — on a "semantic"/"hybrid" registry — embeds in one
-        batched, off-thread pass (embedding errors surface here). "bm25" registers
-        metadata only.
+        Metadata is indexed **synchronously** when `register(...)` is called (a
+        forgotten `await` never drops the corpus); the returned awaitable drives
+        only the embedding pass. On a "semantic"/"hybrid" registry it embeds in
+        one batched, off-thread pass (errors surface when awaited); "bm25" has
+        nothing to embed. Always `await` the result.
         """
         flat_args = (name, description, tags, tools, metadata, body)
         if isinstance(item, Skill):
@@ -205,8 +211,7 @@ class SkillRegistry:
             if not all(isinstance(skill, Skill) for skill in skills):
                 raise TypeError("register requires Skill items")
         self._register_items(skills)
-        if self._eager:
-            await self._build()
+        return self._build_tracked(bool(skills))
 
     def search(self, query: str, top_k: int) -> list[SkillHit]:
         """Run synchronous, model-free BM25 retrieval."""
@@ -237,6 +242,22 @@ class SkillRegistry:
         """Recompute and atomically replace the full embedding cache (internal)."""
         await self._run_dense(self._native._rebuild_embeddings)
 
+    def _build_tracked(self, has_items: bool) -> Awaitable[None]:
+        """The awaitable `register` returns — see `ToolRegistry._build_tracked`."""
+        schedule = self._eager and has_items
+        if schedule:
+            self._undriven_builds += 1
+
+        async def _drive() -> None:
+            if not schedule:
+                return
+            try:
+                await self._build()
+            finally:
+                self._undriven_builds -= 1
+
+        return _drive()
+
     async def search_async(
         self,
         query: str,
@@ -249,6 +270,8 @@ class SkillRegistry:
             raise ValueError(f"unknown search method: {method}")
         if method == "bm25":
             return self.search_with_origin(query, top_k, origin)
+        if self._undriven_builds > 0:
+            raise RuntimeError(_UNAWAITED_REGISTER)
         return await self._run_dense(
             lambda: self._native._search_with_method(query, top_k, origin, method)
         )
@@ -359,14 +382,16 @@ class SkillCatalog:
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
-    async def register(self, skills: Skill | Iterable[Skill]) -> None:
+    def register(self, skills: Skill | Iterable[Skill]) -> Awaitable[None]:
         """Register one skill or many — the single entry point for both.
 
-        Stores metadata (name/description/tags are indexed; `tools`, `metadata`,
-        `body` are stored but not indexed), then — on a "semantic"/"hybrid"
-        catalog — embeds the skills in one batched, off-thread pass. Embedding
-        errors surface **here**, at registration; a BM25 catalog never loads a
-        model. Re-registering an id replaces it in place.
+        Metadata is stored **synchronously** when `register(...)` is called
+        (name/description/tags are indexed; `tools`, `metadata`, `body` are
+        stored but not indexed), so a forgotten `await` never drops the corpus.
+        The returned awaitable drives only the embedding pass: on a
+        "semantic"/"hybrid" catalog it embeds the batch off-thread and surfaces
+        errors when awaited; a BM25 catalog never loads a model. **Always
+        `await` the result.** Re-registering an id replaces it in place.
 
         A model or dimension change is not recovered in place — construct a new
         catalog and re-register.
@@ -376,15 +401,14 @@ class SkillCatalog:
                 at once for a single embedding request.
 
         Raises:
-            EmbedderError: on a semantic/hybrid catalog, if embedding fails.
+            EmbedderError: on a semantic/hybrid catalog, if embedding fails (when awaited).
             RuntimeError: if a dense operation already owns the registry.
         """
         batch = [skills] if isinstance(skills, Skill) else list(skills)
         self._registry._register_items(batch)
         for skill in batch:
             self._skills[skill.id] = skill
-        if self._method in ("semantic", "hybrid"):
-            await self._registry._build()
+        return self._registry._build_tracked(bool(batch))
 
     def search(
         self,

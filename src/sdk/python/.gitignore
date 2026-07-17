@@ -1,5 +1,6 @@
 # Virtualenv + build/test tool caches
 .venv/
+.venv*/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
