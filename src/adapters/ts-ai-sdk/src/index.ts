@@ -7,4 +7,4 @@
  * @packageDocumentation
  */
 
-export { aiSdk } from "./aisdk.js";
+export { type AiSdkExt, aiSdk } from "./aisdk.js";

@@ -9,15 +9,48 @@ import { SEARCH_CAPABILITIES_ID } from "@ratel-ai/sdk";
 import { asSchema, jsonSchema, type ModelMessage, type Tool, tool } from "ai";
 
 /**
+ * The AI SDK-idiomatic per-turn recall helpers {@link aiSdk} merges onto the
+ * adapted view via the SPI's `extend` hook. Two ways to inject the same
+ * synthetic `search_capabilities` pair; pick one per host (see the package
+ * README's cache trade-off).
+ */
+export interface AiSdkExt {
+  /**
+   * Rank the catalog against the last user message and append the synthetic
+   * `search_capabilities` pair at the transcript suffix (recall mode), then
+   * return `messages`. Mutates and returns the same array so prior turns' recalls
+   * stay in the history — a suffix append extends the cached prefix instead of
+   * busting it. Async (core recall is async). A no-op that returns `messages`
+   * untouched and spends no call id unless the last message is a user turn with
+   * text and there are hits. Hosts that rebuild the array per request must
+   * persist the appended pair themselves.
+   */
+  appendRecall(messages: ModelMessage[]): Promise<ModelMessage[]>;
+  /**
+   * A `prepareStep` for `generateText` / `streamText` / `ToolLoopAgent`: on step
+   * 0 with a user turn and hits, return a fresh messages array with the recall
+   * pair appended (never mutating the caller's — an ai `messages` override
+   * carries forward across steps); `undefined` on every other path (later steps,
+   * no user text, no hits), spending no call id. Structurally assignable to
+   * `PrepareStepFunction<TOOLS>` for any `TOOLS`.
+   */
+  prepareStep(options: {
+    stepNumber: number;
+    messages: ModelMessage[];
+  }): Promise<{ messages: ModelMessage[] } | undefined>;
+}
+
+/**
  * The Vercel AI SDK adapter: `ratel(config).adaptTo(aiSdk())` gives the
  * framework-neutral core `ai@7`'s native {@link Tool} and {@link ModelMessage}
  * shapes. The core owns every guard (reserved ids, top-K clamp,
  * first-registration-wins, recall-id counter), so the adapter is just the three
- * codecs — `ingest` / `expose` / `recallMessages`.
+ * codecs — `ingest` / `expose` / `recallMessages` — plus the {@link AiSdkExt}
+ * recall helpers.
  *
  * @returns A {@link RatelAdapter} over the AI SDK's tool and message types.
  */
-export function aiSdk(): RatelAdapter<Tool, ModelMessage> {
+export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
   return {
     name: "ai-sdk",
 
@@ -80,6 +113,30 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage> {
         },
       ];
     },
+
+    extend(base) {
+      return {
+        async appendRecall(messages) {
+          const query = lastUserText(messages);
+          if (!query) return messages;
+          // base.recall mints the id and returns [] on no hits (spending none).
+          messages.push(...(await base.recall(query)));
+          return messages;
+        },
+
+        async prepareStep({ stepNumber, messages }) {
+          // Recall belongs only on the first step's freshly-built prompt.
+          if (stepNumber !== 0) return undefined;
+          const query = lastUserText(messages);
+          if (!query) return undefined;
+          const pair = await base.recall(query);
+          if (pair.length === 0) return undefined;
+          // Fresh array: an ai `messages` override carries forward across steps,
+          // so never mutate the caller's array.
+          return { messages: [...messages, ...pair] };
+        },
+      };
+    },
   };
 }
 
@@ -98,4 +155,19 @@ function resolveDescription(
 // JSONSchema7 cast points.
 function toJsonSchema(schema: unknown): JSONSchema7 {
   return asSchema(schema as never).jsonSchema as unknown as JSONSchema7;
+}
+
+// The recall query is the last message's text iff it is a user turn: recall only
+// fires right after the user's turn was pushed, which also makes a second call in
+// the same turn a no-op (the last message is then a tool result). Multi-part text
+// joins with newlines.
+function lastUserText(messages: ModelMessage[]): string | undefined {
+  const last = messages.at(-1);
+  if (last?.role !== "user") return undefined;
+  if (typeof last.content === "string") return last.content || undefined;
+  const text = last.content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
+  return text || undefined;
 }
