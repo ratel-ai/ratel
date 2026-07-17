@@ -11,6 +11,7 @@ Core is a Rust lib (`ratel-ai-core`); language SDKs bundle it. In-process, no in
 ```
 src/core/           Rust core (ratel-ai-core engine)
 src/sdk/            language SDKs
+src/adapters/       framework adapter packages (ai-sdk, ...)
 src/telemetry/      OTel telemetry conventions + helper packages
 protocol/           catalog source wire contract (pull-sync + auth)
 docs/               ADRs and other docs
