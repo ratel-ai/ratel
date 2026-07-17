@@ -518,6 +518,12 @@ fn slow_load_ms() -> u64 {
 /// A BERT-family embedding model run in-process via Candle — the backend for the
 /// built-in default, any HuggingFace repo, and any on-disk model directory.
 /// Carries its pooling mode, asymmetric prefixes, and a resolved fingerprint.
+/// Documents per padded forward pass in [`CandleEmbedder::embed_batch_inner`]. A
+/// whole-corpus `rebuild` hands the full slice in at once, so this bounds peak
+/// activation memory; it does not affect the produced vectors (each row's output is
+/// independent of its chunk-mates).
+const EMBED_BATCH_CHUNK: usize = 32;
+
 pub(crate) struct CandleEmbedder {
     model: BertModel,
     tokenizer: Tokenizer,
@@ -802,6 +808,66 @@ impl CandleEmbedder {
         let vec = pooled.to_vec1::<f32>()?;
         Ok(l2_normalize(vec))
     }
+
+    /// Batched twin of [`Self::embed_inner`]: one padded forward pass per chunk of
+    /// documents instead of one per document. A padded (masked) key contributes
+    /// exactly zero to every real token's attention (candle adds `f32::MIN` before
+    /// softmax), and right-padding never leaks into real tokens, so each vector is
+    /// **bit-for-bit identical** to the per-document path — chunking only bounds the
+    /// activation memory a whole-corpus `rebuild` would otherwise allocate at once.
+    fn embed_batch_inner(&self, texts: &[String]) -> candle_core::Result<Vec<Vec<f32>>> {
+        let mut out = Vec::with_capacity(texts.len());
+        for chunk in texts.chunks(EMBED_BATCH_CHUNK) {
+            // Documents get the doc-side prefix, mirroring `embed_doc`.
+            let inputs: Vec<String> = if self.doc_prefix.is_empty() {
+                chunk.to_vec()
+            } else {
+                chunk
+                    .iter()
+                    .map(|t| format!("{}{}", self.doc_prefix, t))
+                    .collect()
+            };
+            let encodings = self
+                .tokenizer
+                .encode_batch(inputs, true)
+                .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+            let n = encodings.len();
+            let max_len = encodings
+                .iter()
+                .map(|e| e.get_ids().len())
+                .max()
+                .unwrap_or(0);
+            // Right-pad ids (pad id 0 — masked out, so the value is irrelevant) and
+            // the attention mask into rectangular `(n, max_len)` buffers.
+            let mut ids = vec![0u32; n * max_len];
+            let mut mask = vec![0u32; n * max_len];
+            for (row, enc) in encodings.iter().enumerate() {
+                let e_ids = enc.get_ids();
+                let e_mask = enc.get_attention_mask();
+                let base = row * max_len;
+                ids[base..base + e_ids.len()].copy_from_slice(e_ids);
+                mask[base..base + e_mask.len()].copy_from_slice(e_mask);
+            }
+            let input_ids = Tensor::from_vec(ids, (n, max_len), &self.device)?;
+            let attention_mask = Tensor::from_vec(mask, (n, max_len), &self.device)?;
+            let token_type_ids = input_ids.zeros_like()?;
+
+            // (n, max_len, hidden)
+            let sequence_output =
+                self.model
+                    .forward(&input_ids, &token_type_ids, Some(&attention_mask))?;
+            let pooled = match self.pooling {
+                // CLS pooling = each row's first token.
+                Pooling::Cls => sequence_output.narrow(1, 0, 1)?.squeeze(1)?, // (n, hidden)
+                // Mean pooling = masked average over the real tokens, per row.
+                Pooling::Mean => mean_pool_batch(&sequence_output, &attention_mask)?,
+            };
+            for row in pooled.to_vec2::<f32>()? {
+                out.push(l2_normalize(row));
+            }
+        }
+        Ok(out)
+    }
 }
 
 /// Masked mean over tokens: `Σ hidden[t]·mask[t] / Σ mask[t]`. `sequence_output`
@@ -811,6 +877,19 @@ fn mean_pool(sequence_output: &Tensor, attention_mask: &Tensor) -> candle_core::
     let summed = sequence_output.broadcast_mul(&mask)?.sum(1)?; // (1, hidden)
     let counts = mask.sum(1)?; // (1, 1)
     summed.broadcast_div(&counts)?.i(0) // (hidden,)
+}
+
+/// Masked mean over tokens for a whole batch — the row-wise twin of [`mean_pool`].
+/// `sequence_output` is `(n, seq, hidden)`, `attention_mask` is `(n, seq)`; returns
+/// `(n, hidden)`. Padded tokens (mask 0) contribute nothing and don't count.
+fn mean_pool_batch(
+    sequence_output: &Tensor,
+    attention_mask: &Tensor,
+) -> candle_core::Result<Tensor> {
+    let mask = attention_mask.to_dtype(DType::F32)?.unsqueeze(2)?; // (n, seq, 1)
+    let summed = sequence_output.broadcast_mul(&mask)?.sum(1)?; // (n, hidden)
+    let counts = mask.sum(1)?; // (n, 1)
+    summed.broadcast_div(&counts) // (n, hidden)
 }
 
 impl Embedder for CandleEmbedder {
@@ -828,6 +907,13 @@ impl Embedder for CandleEmbedder {
         } else {
             self.embed(&format!("{}{}", self.query_prefix, text))
         }
+    }
+
+    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+        self.embed_batch_inner(texts)
+            .map_err(|e| EmbedderError::Inference {
+                source: e.to_string(),
+            })
     }
 
     fn fingerprint(&self) -> String {
@@ -2001,6 +2087,26 @@ mod tests {
     }
 
     #[test]
+    fn mean_pool_batch_averages_each_row_over_its_own_unmasked_tokens() {
+        let dev = Device::Cpu;
+        // (2, 2, 2): two rows, two tokens, hidden = 2.
+        let seq = Tensor::new(
+            &[[[1.0f32, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]],
+            &dev,
+        )
+        .unwrap();
+        // Row 0: both tokens count → [2, 3]. Row 1: second token padded → [5, 6].
+        let mask = Tensor::new(&[[1u32, 1], [1, 0]], &dev).unwrap();
+        assert_eq!(
+            mean_pool_batch(&seq, &mask)
+                .unwrap()
+                .to_vec2::<f32>()
+                .unwrap(),
+            vec![vec![2.0, 3.0], vec![5.0, 6.0]]
+        );
+    }
+
+    #[test]
     fn parse_pooling_config_maps_cls_mean_and_none() {
         assert_eq!(
             parse_pooling_config(br#"{"pooling_mode_cls_token": true}"#),
@@ -2059,6 +2165,56 @@ mod tests {
         assert_eq!(a, b, "same text must embed identically (determinism)");
         let norm = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "expected unit norm, got {norm}");
+    }
+
+    #[test]
+    #[ignore = "downloads the ~130 MB bge model; run with `cargo test -- --ignored`"]
+    fn embed_batch_matches_looping_embed_doc_cls() {
+        // The batched forward must be bit-for-bit identical to embedding each doc
+        // alone (CLS pooling, built-in bge-small). Differing lengths exercise padding;
+        // > EMBED_BATCH_CHUNK items span a chunk boundary.
+        let e = embedder_for(&EmbeddingModel::Default)
+            .expect("load embedder")
+            .0;
+        let docs: Vec<String> = (0..EMBED_BATCH_CHUNK + 5)
+            .map(|i| format!("{}read a file from disk", "word ".repeat(i % 7)))
+            .collect();
+        let batched = e.embed_batch(&docs).expect("embed_batch");
+        let looped: Vec<Vec<f32>> = docs
+            .iter()
+            .map(|d| e.embed_doc(d).expect("embed_doc"))
+            .collect();
+        assert_eq!(
+            batched, looped,
+            "batched embedding must be bit-for-bit identical to the per-doc path"
+        );
+    }
+
+    #[test]
+    #[ignore = "downloads a mean-pooled model (gte-small); run with `cargo test -- --ignored`"]
+    fn embed_batch_matches_looping_embed_doc_mean() {
+        // Same exact-equality contract on the mean-pooled path (gte-small).
+        let model = EmbeddingModel::HuggingFace {
+            repo: "thenlper/gte-small".into(),
+            revision: None,
+            query_prefix: None,
+            doc_prefix: None,
+            pooling: None,  // auto-detected → Mean
+            download: true, // ignored test: allow the fetch
+        };
+        let e = embedder_for(&model).expect("load gte-small").0;
+        let docs: Vec<String> = (0..EMBED_BATCH_CHUNK + 3)
+            .map(|i| format!("{}deploy the service", "x ".repeat(i % 5)))
+            .collect();
+        let batched = e.embed_batch(&docs).expect("embed_batch");
+        let looped: Vec<Vec<f32>> = docs
+            .iter()
+            .map(|d| e.embed_doc(d).expect("embed_doc"))
+            .collect();
+        assert_eq!(
+            batched, looped,
+            "mean-pooled batched embedding must be bit-for-bit identical to the per-doc path"
+        );
     }
 
     #[test]
