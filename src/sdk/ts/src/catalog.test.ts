@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { type ExecutableTool, ToolCatalog } from "./index.js";
+import { EmbedderError, type ExecutableTool, ToolCatalog } from "./index.js";
 import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
 
 async function expectTimerBefore<T>(operation: Promise<T>): Promise<T> {
@@ -177,6 +177,21 @@ describe("ToolCatalog search methods", () => {
     expect(catalog.has("read_file")).toBe(true);
   });
 
+  it("surfaces a load failure as a typed EmbedderError with a stable code", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    const error = await catalog.register(readFile).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(EmbedderError);
+    expect((error as EmbedderError).code).toBe("Load");
+    // Original message preserved so message-based matchers keep working.
+    expect((error as EmbedderError).message).toMatch(/failed to load embedding model/);
+  });
+
   it("keeps dense search behind the asynchronous API", () => {
     // search() rejects a resolved semantic/hybrid method before ever touching
     // the registry, so this needs no registration (and no working model).
@@ -194,6 +209,18 @@ describe("ToolCatalog search methods", () => {
     await catalog.register(readFile);
     await expect(catalog.searchAsync("read", 5, "direct", "semantic")).rejects.toThrow(
       /not computed for semantic/,
+    );
+  });
+
+  it("enriches the not-built dense error with an await-register hint", async () => {
+    // The same failure a forgotten `await catalog.register(...)` produces on a
+    // semantic catalog: the corpus is unembedded, so a dense search enriches the
+    // core "not computed" error with an actionable await hint (original message
+    // preserved). Non-breaking: it only augments an already-failing path.
+    const catalog = new ToolCatalog();
+    await catalog.register(readFile);
+    await expect(catalog.searchAsync("read", 5, "direct", "semantic")).rejects.toThrow(
+      /without awaiting it/,
     );
   });
 

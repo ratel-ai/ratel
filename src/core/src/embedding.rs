@@ -322,7 +322,7 @@ struct LoadNotices {
 type ResolvedEmbedder = (Arc<dyn Embedder>, Option<u64>, LoadNotices);
 
 fn embedder_for(model: &EmbeddingModel) -> Result<ResolvedEmbedder, EmbedderError> {
-    static CELL: OnceLock<Mutex<HashMap<String, Arc<dyn Embedder>>>> = OnceLock::new();
+    static CELL: OnceLock<Mutex<HashMap<String, LoadSlot<dyn Embedder>>>> = OnceLock::new();
     let cache = CELL.get_or_init(|| Mutex::new(HashMap::new()));
     let mut notices = LoadNotices::default();
     let (emb, load_ms) = get_or_load_keyed(cache, &model.embedder_cache_key(), || {
@@ -392,23 +392,40 @@ fn build_embedder(
     }
 }
 
-/// Get-or-load into a keyed cache with **no failure caching**: on `Err` the key
-/// stays empty so a later call retries. Returns the value plus `Some(load_ms)`
+/// A per-key load slot in a keyed cache: `None` until the value is loaded, then
+/// `Some`. Guarded by its own mutex so a `load` serializes callers of *that* key
+/// without holding the whole-map lock.
+type LoadSlot<T> = Arc<Mutex<Option<Arc<T>>>>;
+
+/// Get-or-load into a keyed cache with **no failure caching**: on `Err` the key's
+/// slot stays empty so a later call retries. Returns the value plus `Some(load_ms)`
 /// on the call that performed the load, `None` on warm reuse. Generic so the
 /// non-poisoning + once contract is unit-tested without touching the network.
+///
+/// The map lock is held only long enough to get/create the key's slot; `load`
+/// runs against that per-key slot mutex, never the map. So **different keys load
+/// concurrently** (a cold load of one model no longer blocks another), while
+/// **same-key loads stay single-flight** (concurrent cold misses share the slot,
+/// so `load` runs once and exactly one caller reports `Some(load_ms)`).
 fn get_or_load_keyed<T: ?Sized>(
-    cache: &Mutex<HashMap<String, Arc<T>>>,
+    cache: &Mutex<HashMap<String, LoadSlot<T>>>,
     key: &str,
     load: impl FnOnce() -> Result<Arc<T>, EmbedderError>,
 ) -> Result<(Arc<T>, Option<u64>), EmbedderError> {
-    let mut guard = cache.lock().expect("embedder cache mutex poisoned");
-    if let Some(existing) = guard.get(key) {
+    // Hold the map lock only to get/create this key's slot, then release it.
+    let slot = {
+        let mut guard = cache.lock().expect("embedder cache mutex poisoned");
+        Arc::clone(guard.entry(key.to_string()).or_default())
+    };
+    // Serialize per key on the slot — the map lock is NOT held across `load`.
+    let mut slot = slot.lock().expect("embedder cache slot mutex poisoned");
+    if let Some(existing) = slot.as_ref() {
         return Ok((existing.clone(), None));
     }
     let started = Instant::now();
-    let loaded = load()?;
+    let loaded = load()?; // Err leaves the slot `None`, so a later call retries.
     let took_ms = started.elapsed().as_millis() as u64;
-    guard.insert(key.to_string(), loaded.clone());
+    *slot = Some(loaded.clone());
     Ok((loaded, Some(took_ms)))
 }
 
@@ -501,6 +518,12 @@ fn slow_load_ms() -> u64 {
 /// A BERT-family embedding model run in-process via Candle — the backend for the
 /// built-in default, any HuggingFace repo, and any on-disk model directory.
 /// Carries its pooling mode, asymmetric prefixes, and a resolved fingerprint.
+/// Documents per padded forward pass in [`CandleEmbedder::embed_batch_inner`]. A
+/// whole-corpus `rebuild` hands the full slice in at once, so this bounds peak
+/// activation memory; it does not affect the produced vectors (each row's output is
+/// independent of its chunk-mates).
+const EMBED_BATCH_CHUNK: usize = 32;
+
 pub(crate) struct CandleEmbedder {
     model: BertModel,
     tokenizer: Tokenizer,
@@ -785,6 +808,66 @@ impl CandleEmbedder {
         let vec = pooled.to_vec1::<f32>()?;
         Ok(l2_normalize(vec))
     }
+
+    /// Batched twin of [`Self::embed_inner`]: one padded forward pass per chunk of
+    /// documents instead of one per document. A padded (masked) key contributes
+    /// exactly zero to every real token's attention (candle adds `f32::MIN` before
+    /// softmax), and right-padding never leaks into real tokens, so each vector is
+    /// **bit-for-bit identical** to the per-document path — chunking only bounds the
+    /// activation memory a whole-corpus `rebuild` would otherwise allocate at once.
+    fn embed_batch_inner(&self, texts: &[String]) -> candle_core::Result<Vec<Vec<f32>>> {
+        let mut out = Vec::with_capacity(texts.len());
+        for chunk in texts.chunks(EMBED_BATCH_CHUNK) {
+            // Documents get the doc-side prefix, mirroring `embed_doc`.
+            let inputs: Vec<String> = if self.doc_prefix.is_empty() {
+                chunk.to_vec()
+            } else {
+                chunk
+                    .iter()
+                    .map(|t| format!("{}{}", self.doc_prefix, t))
+                    .collect()
+            };
+            let encodings = self
+                .tokenizer
+                .encode_batch(inputs, true)
+                .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+            let n = encodings.len();
+            let max_len = encodings
+                .iter()
+                .map(|e| e.get_ids().len())
+                .max()
+                .unwrap_or(0);
+            // Right-pad ids (pad id 0 — masked out, so the value is irrelevant) and
+            // the attention mask into rectangular `(n, max_len)` buffers.
+            let mut ids = vec![0u32; n * max_len];
+            let mut mask = vec![0u32; n * max_len];
+            for (row, enc) in encodings.iter().enumerate() {
+                let e_ids = enc.get_ids();
+                let e_mask = enc.get_attention_mask();
+                let base = row * max_len;
+                ids[base..base + e_ids.len()].copy_from_slice(e_ids);
+                mask[base..base + e_mask.len()].copy_from_slice(e_mask);
+            }
+            let input_ids = Tensor::from_vec(ids, (n, max_len), &self.device)?;
+            let attention_mask = Tensor::from_vec(mask, (n, max_len), &self.device)?;
+            let token_type_ids = input_ids.zeros_like()?;
+
+            // (n, max_len, hidden)
+            let sequence_output =
+                self.model
+                    .forward(&input_ids, &token_type_ids, Some(&attention_mask))?;
+            let pooled = match self.pooling {
+                // CLS pooling = each row's first token.
+                Pooling::Cls => sequence_output.narrow(1, 0, 1)?.squeeze(1)?, // (n, hidden)
+                // Mean pooling = masked average over the real tokens, per row.
+                Pooling::Mean => mean_pool_batch(&sequence_output, &attention_mask)?,
+            };
+            for row in pooled.to_vec2::<f32>()? {
+                out.push(l2_normalize(row));
+            }
+        }
+        Ok(out)
+    }
 }
 
 /// Masked mean over tokens: `Σ hidden[t]·mask[t] / Σ mask[t]`. `sequence_output`
@@ -794,6 +877,19 @@ fn mean_pool(sequence_output: &Tensor, attention_mask: &Tensor) -> candle_core::
     let summed = sequence_output.broadcast_mul(&mask)?.sum(1)?; // (1, hidden)
     let counts = mask.sum(1)?; // (1, 1)
     summed.broadcast_div(&counts)?.i(0) // (hidden,)
+}
+
+/// Masked mean over tokens for a whole batch — the row-wise twin of [`mean_pool`].
+/// `sequence_output` is `(n, seq, hidden)`, `attention_mask` is `(n, seq)`; returns
+/// `(n, hidden)`. Padded tokens (mask 0) contribute nothing and don't count.
+fn mean_pool_batch(
+    sequence_output: &Tensor,
+    attention_mask: &Tensor,
+) -> candle_core::Result<Tensor> {
+    let mask = attention_mask.to_dtype(DType::F32)?.unsqueeze(2)?; // (n, seq, 1)
+    let summed = sequence_output.broadcast_mul(&mask)?.sum(1)?; // (n, hidden)
+    let counts = mask.sum(1)?; // (n, 1)
+    summed.broadcast_div(&counts) // (n, hidden)
 }
 
 impl Embedder for CandleEmbedder {
@@ -811,6 +907,13 @@ impl Embedder for CandleEmbedder {
         } else {
             self.embed(&format!("{}{}", self.query_prefix, text))
         }
+    }
+
+    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedderError> {
+        self.embed_batch_inner(texts)
+            .map_err(|e| EmbedderError::Inference {
+                source: e.to_string(),
+            })
     }
 
     fn fingerprint(&self) -> String {
@@ -1394,7 +1497,7 @@ mod tests {
 
     #[test]
     fn get_or_load_keyed_does_not_cache_failure_and_reports_latency_once() {
-        let cache: Mutex<HashMap<String, Arc<i32>>> = Mutex::new(HashMap::new());
+        let cache: Mutex<HashMap<String, LoadSlot<i32>>> = Mutex::new(HashMap::new());
         let boom = || {
             Err::<Arc<i32>, _>(EmbedderError::Inference {
                 source: "boom".into(),
@@ -1412,6 +1515,98 @@ mod tests {
             get_or_load_keyed(&cache, "k", || Ok::<_, EmbedderError>(Arc::new(999))).unwrap();
         assert_eq!(*v2, 7);
         assert!(ms2.is_none(), "warm reuse reports no load latency");
+    }
+
+    #[test]
+    fn distinct_key_loads_run_concurrently() {
+        use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::thread;
+
+        // Two loads for *different* keys must be able to run at the same time.
+        // The barrier only releases once BOTH loads have entered — so if the
+        // cache serializes distinct-key loads (map lock held across `load`), the
+        // second thread can never start and the receive below times out.
+        let cache: Arc<Mutex<HashMap<String, LoadSlot<i32>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let barrier = Arc::new(Barrier::new(2));
+        let inflight = Arc::new(AtomicUsize::new(0));
+        let (done_tx, done_rx) = mpsc::channel();
+
+        for (i, key) in ["a", "b"].into_iter().enumerate() {
+            let cache = Arc::clone(&cache);
+            let barrier = Arc::clone(&barrier);
+            let inflight = Arc::clone(&inflight);
+            let done_tx = done_tx.clone();
+            thread::spawn(move || {
+                let result = get_or_load_keyed(&cache, key, || {
+                    inflight.fetch_add(1, Ordering::SeqCst);
+                    barrier.wait(); // both distinct-key loads must be in-flight here
+                    Ok::<_, EmbedderError>(Arc::new(i as i32))
+                });
+                let _ = done_tx.send(result.map(|(v, _)| *v));
+            });
+        }
+        drop(done_tx);
+
+        let mut got = Vec::new();
+        for _ in 0..2 {
+            let value = done_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("distinct-key loads did not run concurrently (map lock held across load)");
+            got.push(value.unwrap());
+        }
+        got.sort_unstable();
+        assert_eq!(got, vec![0, 1]);
+        assert_eq!(inflight.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn same_key_load_is_single_flight() {
+        use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::thread;
+
+        // Many threads race the SAME key: `load` must run exactly once, and
+        // exactly one caller reports a load latency; the rest see warm reuse.
+        const THREADS: usize = 8;
+        let cache: Arc<Mutex<HashMap<String, LoadSlot<i32>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let loads = Arc::new(AtomicUsize::new(0));
+        let start = Arc::new(Barrier::new(THREADS));
+        let (tx, rx) = mpsc::channel();
+
+        for _ in 0..THREADS {
+            let cache = Arc::clone(&cache);
+            let loads = Arc::clone(&loads);
+            let start = Arc::clone(&start);
+            let tx = tx.clone();
+            thread::spawn(move || {
+                start.wait(); // maximize the race on the cold miss
+                let result = get_or_load_keyed(&cache, "shared", || {
+                    loads.fetch_add(1, Ordering::SeqCst);
+                    Ok::<_, EmbedderError>(Arc::new(42))
+                });
+                let (value, ms) = result.unwrap();
+                let _ = tx.send((*value, ms.is_some()));
+            });
+        }
+        drop(tx);
+
+        let mut reported = 0;
+        for _ in 0..THREADS {
+            let (value, loaded) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert_eq!(value, 42);
+            if loaded {
+                reported += 1;
+            }
+        }
+        assert_eq!(
+            loads.load(Ordering::SeqCst),
+            1,
+            "load must run exactly once per key"
+        );
+        assert_eq!(reported, 1, "exactly one caller reports the load latency");
     }
 
     #[test]
@@ -1892,6 +2087,26 @@ mod tests {
     }
 
     #[test]
+    fn mean_pool_batch_averages_each_row_over_its_own_unmasked_tokens() {
+        let dev = Device::Cpu;
+        // (2, 2, 2): two rows, two tokens, hidden = 2.
+        let seq = Tensor::new(
+            &[[[1.0f32, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]],
+            &dev,
+        )
+        .unwrap();
+        // Row 0: both tokens count → [2, 3]. Row 1: second token padded → [5, 6].
+        let mask = Tensor::new(&[[1u32, 1], [1, 0]], &dev).unwrap();
+        assert_eq!(
+            mean_pool_batch(&seq, &mask)
+                .unwrap()
+                .to_vec2::<f32>()
+                .unwrap(),
+            vec![vec![2.0, 3.0], vec![5.0, 6.0]]
+        );
+    }
+
+    #[test]
     fn parse_pooling_config_maps_cls_mean_and_none() {
         assert_eq!(
             parse_pooling_config(br#"{"pooling_mode_cls_token": true}"#),
@@ -1950,6 +2165,56 @@ mod tests {
         assert_eq!(a, b, "same text must embed identically (determinism)");
         let norm = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "expected unit norm, got {norm}");
+    }
+
+    #[test]
+    #[ignore = "downloads the ~130 MB bge model; run with `cargo test -- --ignored`"]
+    fn embed_batch_matches_looping_embed_doc_cls() {
+        // The batched forward must be bit-for-bit identical to embedding each doc
+        // alone (CLS pooling, built-in bge-small). Differing lengths exercise padding;
+        // > EMBED_BATCH_CHUNK items span a chunk boundary.
+        let e = embedder_for(&EmbeddingModel::Default)
+            .expect("load embedder")
+            .0;
+        let docs: Vec<String> = (0..EMBED_BATCH_CHUNK + 5)
+            .map(|i| format!("{}read a file from disk", "word ".repeat(i % 7)))
+            .collect();
+        let batched = e.embed_batch(&docs).expect("embed_batch");
+        let looped: Vec<Vec<f32>> = docs
+            .iter()
+            .map(|d| e.embed_doc(d).expect("embed_doc"))
+            .collect();
+        assert_eq!(
+            batched, looped,
+            "batched embedding must be bit-for-bit identical to the per-doc path"
+        );
+    }
+
+    #[test]
+    #[ignore = "downloads a mean-pooled model (gte-small); run with `cargo test -- --ignored`"]
+    fn embed_batch_matches_looping_embed_doc_mean() {
+        // Same exact-equality contract on the mean-pooled path (gte-small).
+        let model = EmbeddingModel::HuggingFace {
+            repo: "thenlper/gte-small".into(),
+            revision: None,
+            query_prefix: None,
+            doc_prefix: None,
+            pooling: None,  // auto-detected → Mean
+            download: true, // ignored test: allow the fetch
+        };
+        let e = embedder_for(&model).expect("load gte-small").0;
+        let docs: Vec<String> = (0..EMBED_BATCH_CHUNK + 3)
+            .map(|i| format!("{}deploy the service", "x ".repeat(i % 5)))
+            .collect();
+        let batched = e.embed_batch(&docs).expect("embed_batch");
+        let looped: Vec<Vec<f32>> = docs
+            .iter()
+            .map(|d| e.embed_doc(d).expect("embed_doc"))
+            .collect();
+        assert_eq!(
+            batched, looped,
+            "mean-pooled batched embedding must be bit-for-bit identical to the per-doc path"
+        );
     }
 
     #[test]

@@ -6,13 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-## [0.5.0-rc.1] - 2026-07-16
-
-### Changed
-
-- **BREAKING (next minor):** `register()` is now an async coroutine that accepts a single tool/skill **or an iterable of them**, and folds embedding in: on a `"semantic"`/`"hybrid"` catalog it embeds the batch off the asyncio loop (GIL released), so embedding errors (model load / endpoint / auth / dimension) surface from `await register(...)`. A `"bm25"` catalog registers metadata only and never loads a model. `search()` stays synchronous BM25-only; `search_async()` covers BM25/semantic/hybrid. There is **no** `register_many()`, `build_embeddings()`, or `rebuild_embeddings()` — `register()` embeds, and recovery from a model/dimension change is to construct a new catalog and re-register.
-- Capability tools await async retrieval; MCP ingestion embeds ingested tools during `register`.
-- Embedding configuration is validated and retained on BM25-default catalogs for later async semantic/hybrid overrides; typed config variants are mutually exclusive.
+## [0.5.0] - 2026-07-20
 
 ### Added
 
@@ -20,6 +14,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Configurable default, HuggingFace, local Candle, Ollama, and OpenAI-compatible
   endpoint embedding sources, with public `EmbeddingSpec`,
   `EmbeddingModelConfig`, and source-specific `TypedDict` variants.
+
+### Changed
+
+- **BREAKING:** `register()` now accepts a single tool/skill **or an iterable of them** and folds embedding in, returning an awaitable (`Awaitable[None]`): on a `"semantic"`/`"hybrid"` catalog it embeds the batch off the asyncio loop (GIL released), so embedding errors (model load / endpoint / auth / dimension) surface from `await register(...)`. A `"bm25"` catalog registers metadata only and never loads a model. `search()` stays synchronous BM25-only; `search_async()` covers BM25/semantic/hybrid. There is **no** `register_many()`, `build_embeddings()`, or `rebuild_embeddings()` — `register()` embeds, and recovery from a model/dimension change is to construct a new catalog and re-register.
+- Capability tools await async retrieval; MCP ingestion embeds ingested tools during `register`.
+- Embedding configuration is validated and retained on BM25-default catalogs for later async semantic/hybrid overrides; typed config variants are mutually exclusive.
+
+### Fixed
+
+- A forgotten `await` on `register()` no longer silently drops the corpus: an un-awaited call still registers the tools/skills (BM25 keeps working), and a `"semantic"`/`"hybrid"` `search_async` after an un-awaited `register()` raises an actionable "not awaited" error instead of ranking an empty corpus.
 
 ## [0.4.2] - 2026-07-11
 

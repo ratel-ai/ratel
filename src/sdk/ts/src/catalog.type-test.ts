@@ -1,4 +1,6 @@
 import {
+  DimensionMismatchError,
+  EmbedderError,
   type EmbeddingSpec,
   type Skill,
   SkillCatalog,
@@ -111,3 +113,11 @@ new SkillCatalog().registerMany;
 new SkillCatalog().buildEmbeddings;
 // @ts-expect-error rebuildEmbeddings removed from SkillCatalog
 new SkillCatalog().rebuildEmbeddings;
+
+// Typed embedding errors: DimensionMismatchError is an EmbedderError, both are Errors,
+// and every EmbedderError carries a string `code` (parity with Python's hierarchy).
+const embedderError: EmbedderError = new DimensionMismatchError("x");
+const asError: Error = embedderError;
+const code: string = new EmbedderError("x", "Load").code;
+void asError;
+void code;

@@ -11,13 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Framework-adapter SPI + `ratel()` factory (ADR-0013).** `ratel(config)` is a standalone, framework-free core: `r.tools` is a handle over its one shared `ToolCatalog` (register native `ExecutableTool`s any time — also after exposure, since the capability tools search the live catalog), `r.skills` the shared `SkillCatalog`, `expose()` returns the three capability tools (always all three, so the set never depends on registration order), and `recall(query)` is an async pure query resolving to the canonical `search_capabilities` result or `null`. `adaptTo(adapter)` layers a framework-shaped view over the same state: `tools.register(...)` ingests framework tools (first registration of an id wins across views; provider-run tools pass through per view), `expose()` returns the model-facing set in framework shape, `recall(query)` resolves to the synthetic message pair with a call id from the core's private counter (never a transcript position). Types are inferred from the adapter (`AdaptedRatel<A>`), so app code needs no casts. A `RatelAdapter` is three codecs — `ingest` (framework tool → catalog registration, or `"passthrough"`), `expose` (capability tool → framework tool), `recallMessages` (synthetic `search_capabilities` pair) — plus an optional `extend` for framework idioms; the framework packages (`@ratel-ai/ai-sdk-adapter`, `@ratel-ai/mastra-adapter`) ship separately. Guards are core-owned: reserved capability-tool ids throw on registration, recall top-K is capped at 50 (invalid values fall back to the default 5), and a framework-shaped tool on the native path throws an actionable install-the-adapter error, probing known frameworks via `isPeerInstalled` (message only). The existing piecemeal API (`ToolCatalog`, capability-tool builders) is unchanged, except one additive option: `SearchCapabilitiesOptions.advertiseSkills` pins the skills clause of the `search_capabilities` description on or off (the size-gated default is untouched); `expose()` uses it so the exposed payload is byte-identical whether skills register before or after exposure.
 - `formatSearchCapabilities(toolCatalog, query, opts)` — the exported single source of truth for the `search_capabilities` result shape, shared by `searchCapabilitiesTool` (origin `agent`) and the host-driven recall path (origin `direct`). Async, matching the catalog's `searchAsync` retrieval. `JSONSchema7` is re-exported as the SDK's public JSON-Schema spelling so adapters type their registrations without casts.
 
-## [0.5.0-rc.1] - 2026-07-16
-
-### Changed
-
-- **BREAKING (next minor):** `register()` now returns a promise and accepts a single tool/skill **or an array of them**, and folds embedding in: on a `"semantic"`/`"hybrid"` catalog it embeds the batch on a libuv worker (never blocking the event loop), so embedding errors (model load / endpoint / auth / dimension) surface from `await register(...)`. A `"bm25"` catalog registers metadata only and never loads a model. `search()` stays synchronous BM25-only; `searchAsync()` covers BM25/semantic/hybrid. There is **no** `registerMany()`, `buildEmbeddings()`, or `rebuildEmbeddings()` — `register()` embeds, and recovery from a model/dimension change is to construct a new catalog and re-register.
-- Capability tools await async retrieval; MCP ingestion embeds ingested tools during `register`.
-- Embedding configuration is validated and retained on BM25-default catalogs for later async semantic/hybrid overrides; source unions are mutually exclusive.
+## [0.5.0] - 2026-07-20
 
 ### Added
 
@@ -25,6 +19,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Configurable default, HuggingFace, local Candle, Ollama, and OpenAI-compatible
   endpoint embedding sources, with public `EmbeddingSpec` and
   `EmbeddingModelConfig` types.
+- Typed embedding errors: `EmbedderError` (with a stable `code`) and its `DimensionMismatchError` subclass are thrown from `register()`/`searchAsync()` on a semantic/hybrid catalog, so callers can branch on `instanceof`/`code` instead of matching message text — parity with the Python SDK. Invalid embedding config still throws at construction.
+
+### Changed
+
+- **BREAKING:** `register()` now returns a promise and accepts a single tool/skill **or an array of them**, and folds embedding in: on a `"semantic"`/`"hybrid"` catalog it embeds the batch on a libuv worker (never blocking the event loop), so embedding errors (model load / endpoint / auth / dimension) surface from `await register(...)`. A `"bm25"` catalog registers metadata only and never loads a model. `search()` stays synchronous BM25-only; `searchAsync()` covers BM25/semantic/hybrid. There is **no** `registerMany()`, `buildEmbeddings()`, or `rebuildEmbeddings()` — `register()` embeds, and recovery from a model/dimension change is to construct a new catalog and re-register.
+- Capability tools await async retrieval; MCP ingestion embeds ingested tools during `register`.
+- Embedding configuration is validated and retained on BM25-default catalogs for later async semantic/hybrid overrides; source unions are mutually exclusive.
+
+### Fixed
+
+- A `"semantic"`/`"hybrid"` `searchAsync()` whose corpus was never embedded (the signature of a forgotten `await register(...)`) now reports an actionable "did you await register()?" hint, not just the bare "embeddings not computed" message.
 
 ## [0.4.1] - 2026-07-10
 
