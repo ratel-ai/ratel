@@ -197,6 +197,18 @@ describe("ToolCatalog search methods", () => {
     );
   });
 
+  it("enriches the not-built dense error with an await-register hint", async () => {
+    // The same failure a forgotten `await catalog.register(...)` produces on a
+    // semantic catalog: the corpus is unembedded, so a dense search enriches the
+    // core "not computed" error with an actionable await hint (original message
+    // preserved). Non-breaking: it only augments an already-failing path.
+    const catalog = new ToolCatalog();
+    await catalog.register(readFile);
+    await expect(catalog.searchAsync("read", 5, "direct", "semantic")).rejects.toThrow(
+      /without awaiting it/,
+    );
+  });
+
   it("keeps Node timers responsive during registration and query on a semantic catalog", async () => {
     const server = await startDelayedEmbeddingServer();
     try {

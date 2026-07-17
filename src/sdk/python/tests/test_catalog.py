@@ -263,6 +263,52 @@ async def test_semantic_on_bm25_without_embeddings_raises() -> None:
         await catalog.search_async("read", 5, method="semantic")
 
 
+async def test_unawaited_register_commits_bm25_metadata_synchronously() -> None:
+    # register() indexes metadata the instant it is called — a forgotten `await`
+    # never silently drops the corpus. BM25 search finds the tool without awaiting.
+    catalog = ToolCatalog()
+    pending = catalog.register(_read_file_tool(lambda args: {}))  # deliberately not awaited
+    assert catalog.has("read_file")
+    assert catalog.search("read a file", 5)[0].tool_id == "read_file"
+    await pending  # drain the (no-op) awaitable so no coroutine is left dangling
+
+
+async def test_unawaited_semantic_register_raises_on_dense_search(
+    delayed_embedding_endpoint: str,
+) -> None:
+    # A forgotten `await` on a semantic catalog leaves the embedding pass undriven;
+    # a dense search then fails loudly with an await-specific message instead of
+    # ranking an empty corpus. Awaiting the pending build afterwards recovers.
+    catalog = ToolCatalog(
+        method="semantic",
+        embedding={"url": delayed_embedding_endpoint, "model": "test-model"},
+    )
+    pending = catalog.register(_read_file_tool(lambda args: {}))  # forgot to await
+
+    assert catalog.has("read_file")  # metadata still committed synchronously
+    with pytest.raises(RuntimeError, match="was not awaited"):
+        await catalog.search_async("read a file", 5)
+
+    await pending  # driving the build clears the guard; search then works
+    hits = await catalog.search_async("read a file", 5)
+    assert hits[0].tool_id == "read_file"
+
+
+async def test_awaited_semantic_register_leaves_no_pending_build(
+    delayed_embedding_endpoint: str,
+) -> None:
+    # The happy path is unchanged: an awaited register drives the build to
+    # completion, so the guard never fires on the next dense search.
+    catalog = ToolCatalog(
+        method="semantic",
+        embedding={"url": delayed_embedding_endpoint, "model": "test-model"},
+    )
+    await catalog.register(_read_file_tool(lambda args: {}))
+    assert catalog._registry._undriven_builds == 0
+    hits = await catalog.search_async("read a file", 5)
+    assert hits[0].tool_id == "read_file"
+
+
 async def test_delayed_endpoint_register_keeps_asyncio_responsive(
     delayed_embedding_endpoint: str,
 ) -> None:

@@ -103,6 +103,36 @@ async def test_semantic_skill_registration_embeds_and_search_finds_hit(
     assert hits[0].skill_id == "s"
 
 
+async def test_unawaited_skill_register_commits_bm25_metadata_synchronously() -> None:
+    # Metadata is indexed the instant register() is called; a forgotten `await`
+    # never drops the corpus. BM25 search finds the skill without awaiting.
+    catalog = SkillCatalog()
+    pending = catalog.register(Skill(id="deploy", name="deploy", description="Deploy an app"))
+    assert catalog.has("deploy")
+    assert catalog.search("deploy an app", 5)[0].skill_id == "deploy"
+    await pending  # drain the no-op awaitable
+
+
+async def test_unawaited_semantic_skill_register_raises_on_dense_search(
+    delayed_embedding_endpoint: str,
+) -> None:
+    # A forgotten `await` on a semantic skill catalog is caught at the next dense
+    # search with an await-specific message; awaiting the build recovers.
+    catalog = SkillCatalog(
+        method="semantic",
+        embedding={"url": delayed_embedding_endpoint, "model": "test-model"},
+    )
+    pending = catalog.register(Skill(id="s", name="s", description="Skill"))
+
+    assert catalog.has("s")
+    with pytest.raises(RuntimeError, match="was not awaited"):
+        await catalog.search_async("skill", 5)
+
+    await pending
+    hits = await catalog.search_async("skill", 5)
+    assert hits[0].skill_id == "s"
+
+
 async def test_skill_catalog_register_accepts_an_iterable() -> None:
     catalog = SkillCatalog()
     await catalog.register(

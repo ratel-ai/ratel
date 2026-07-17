@@ -19,6 +19,27 @@ function toNativeEmbedding(
 }
 
 /**
+ * Append an await-oriented hint when a dense search fails because the corpus
+ * was never embedded — the signature of a forgotten `await register(...)`.
+ *
+ * On a `"semantic"`/`"hybrid"` catalog the embedding pass runs inside `register`;
+ * an un-awaited `register(...)` skips it, and the next dense search hits the
+ * core's "not computed for semantic" error. We enrich only that already-failing
+ * error (the original message is preserved, so existing matchers still match)
+ * and pass every other error through untouched — this never turns a passing
+ * call into a failure.
+ */
+function augmentNotBuilt(error: unknown): unknown {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!message.includes("not computed for semantic")) return error;
+  return new Error(
+    `${message} — if you called register(...) without awaiting it, the embedding ` +
+      "pass was skipped; `await catalog.register(...)` (or `registry.register(...)`) " +
+      "before a semantic/hybrid search",
+  );
+}
+
+/**
  * Typed facade over the native tool registry: metadata-only indexing and
  * retrieval, with the SDK's public embedding config and an async, batch-aware
  * `register`. {@link ToolCatalog} layers executors, OTel spans, and defaults
@@ -111,13 +132,17 @@ export class ToolRegistry {
   }
 
   /** Search on a libuv worker; supports `"bm25"`, `"semantic"`, and `"hybrid"`. */
-  searchWithMethodAsync(
+  async searchWithMethodAsync(
     query: string,
     topK: number,
     origin: SearchOrigin,
     method: SearchMethod,
   ): Promise<SearchHit[]> {
-    return this.native.searchWithMethodAsync(query, topK, origin, method);
+    try {
+      return await this.native.searchWithMethodAsync(query, topK, origin, method);
+    } catch (error) {
+      throw augmentNotBuilt(error);
+    }
   }
 
   /**
@@ -215,13 +240,17 @@ export class SkillRegistry {
   }
 
   /** Search on a libuv worker — see `ToolRegistry.searchWithMethodAsync`. */
-  searchWithMethodAsync(
+  async searchWithMethodAsync(
     query: string,
     topK: number,
     origin: SearchOrigin,
     method: SearchMethod,
   ): Promise<SkillHit[]> {
-    return this.native.searchWithMethodAsync(query, topK, origin, method);
+    try {
+      return await this.native.searchWithMethodAsync(query, topK, origin, method);
+    } catch (error) {
+      throw augmentNotBuilt(error);
+    }
   }
 
   /** Record a custom event on the local trace stream (ADR-0007). */
