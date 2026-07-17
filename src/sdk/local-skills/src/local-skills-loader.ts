@@ -98,7 +98,7 @@ export class LocalSkillsLoader implements CatalogLoader {
     for (const [id, { skill, raw }] of skills) {
       next.set(id, raw);
       if (this.loaded.get(id) !== raw) {
-        catalog.upsert(skill);
+        await catalog.upsert(skill);
       }
     }
     for (const id of this.loaded.keys()) {

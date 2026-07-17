@@ -25,7 +25,7 @@ DEFAULT_MODEL = "openai:gpt-5-mini"
 def main() -> None:
     prompt = " ".join(sys.argv[1:]) or "read the files and find every TODO comment under src/"
     model = os.environ.get("RATEL_EXAMPLE_MODEL", DEFAULT_MODEL)
-    catalog = build_catalog()
+    catalog = asyncio.run(build_catalog())
 
     print(f'prompt: "{prompt}"')
     print(f"catalog size: {len(TOOLS)}")

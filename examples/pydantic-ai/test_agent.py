@@ -20,7 +20,7 @@ from tools import build_catalog
 
 
 async def test_bm25_selected_tool_is_actually_invocable() -> None:
-    catalog = build_catalog()
+    catalog = await build_catalog()
     tools = build_tools(catalog, "read a file from disk", initial_top_k=3)
 
     # The prompt must surface a real (non-capability) sync-executor tool in the

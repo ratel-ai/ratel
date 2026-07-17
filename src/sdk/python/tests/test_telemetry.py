@@ -70,7 +70,7 @@ def _spans_named(exp: Any, name: str) -> list[Any]:
 @pytest.mark.asyncio
 async def test_execute_tool_span_attributes(exporter: Any) -> None:
     catalog = ToolCatalog()
-    catalog.register(_read_file())
+    await catalog.register(_read_file())
     await catalog.invoke("read_file", {"path": "/tmp/x"})
 
     spans = _spans_named(exporter, "execute_tool read_file")
@@ -85,7 +85,7 @@ async def test_execute_tool_span_attributes(exporter: Any) -> None:
 @pytest.mark.asyncio
 async def test_content_not_captured_by_default(exporter: Any) -> None:
     catalog = ToolCatalog()
-    catalog.register(_read_file())
+    await catalog.register(_read_file())
     await catalog.invoke("read_file", {"path": "/secret"})
 
     attrs = _spans_named(exporter, "execute_tool read_file")[0].attributes
@@ -99,7 +99,7 @@ async def test_content_captured_when_gate_set(
 ) -> None:
     monkeypatch.setenv(CAPTURE_ENV, "SPAN_AND_EVENT")
     catalog = ToolCatalog()
-    catalog.register(_read_file())
+    await catalog.register(_read_file())
     await catalog.invoke("read_file", {"path": "/p"})
 
     attrs = _spans_named(exporter, "execute_tool read_file")[0].attributes
@@ -113,7 +113,7 @@ async def test_execute_tool_span_error(exporter: Any) -> None:
         raise RuntimeError("kaboom")
 
     catalog = ToolCatalog()
-    catalog.register(
+    await catalog.register(
         ExecutableTool(id="boom", name="boom", description="throws", execute=boom)
     )
     with pytest.raises(RuntimeError, match="kaboom"):
@@ -127,7 +127,7 @@ async def test_execute_tool_span_error(exporter: Any) -> None:
 @pytest.mark.asyncio
 async def test_local_stream_intact_alongside_span(exporter: Any) -> None:
     catalog = ToolCatalog(trace=TraceSinkConfig("memory", session_id="s"))
-    catalog.register(_read_file())
+    await catalog.register(_read_file())
     await catalog.invoke("read_file", {"path": "/tmp/x"})
 
     local = catalog.drain_trace_events()
@@ -136,9 +136,9 @@ async def test_local_stream_intact_alongside_span(exporter: Any) -> None:
     assert len(_spans_named(exporter, "execute_tool read_file")) == 1
 
 
-def test_ratel_search_span_tool(exporter: Any) -> None:
+async def test_ratel_search_span_tool(exporter: Any) -> None:
     catalog = ToolCatalog()
-    catalog.register(_read_file())
+    await catalog.register(_read_file())
     catalog.search("read file", 5, "agent")
 
     attrs = _spans_named(exporter, "ratel.search")[0].attributes
@@ -149,12 +149,12 @@ def test_ratel_search_span_tool(exporter: Any) -> None:
     assert "ratel.search.query" not in attrs  # content off by default
 
 
-def test_ratel_search_span_skill_with_query(
+async def test_ratel_search_span_skill_with_query(
     exporter: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(CAPTURE_ENV, "SPAN_ONLY")
     skills = SkillCatalog()
-    skills.register(Skill(id="pdf", name="pdf", description="fill pdf forms", body="b"))
+    await skills.register(Skill(id="pdf", name="pdf", description="fill pdf forms", body="b"))
     skills.search("pdf", 3)
 
     attrs = _spans_named(exporter, "ratel.search")[0].attributes
@@ -162,9 +162,9 @@ def test_ratel_search_span_skill_with_query(
     assert attrs["ratel.search.query"] == "pdf"
 
 
-def test_ratel_skill_load_span(exporter: Any) -> None:
+async def test_ratel_skill_load_span(exporter: Any) -> None:
     skills = SkillCatalog()
-    skills.register(Skill(id="pdf", name="pdf", description="d", body="BODY"))
+    await skills.register(Skill(id="pdf", name="pdf", description="d", body="BODY"))
     assert skills.invoke("pdf") == "BODY"
 
     span = _spans_named(exporter, "ratel.skill.load")[0]
@@ -215,7 +215,7 @@ def _reset_override() -> Any:
 
 async def _invoke_and_read_args(exporter: Any) -> Any:
     catalog = ToolCatalog()
-    catalog.register(_read_file())
+    await catalog.register(_read_file())
     await catalog.invoke("read_file", {"path": "/p"})
     spans = _spans_named(exporter, "execute_tool read_file")
     return spans[-1].attributes.get("gen_ai.tool.call.arguments")  # most recent invoke

@@ -28,7 +28,7 @@ class AsyncFakeLoader:
         self.catalog = catalog
         self._maybe_throw("start")
         for skill in self._skills:
-            catalog.upsert(skill)
+            await catalog.upsert(skill)
 
     async def stop(self) -> None:
         self.calls.append("stop")
@@ -39,7 +39,7 @@ class AsyncFakeLoader:
         self._maybe_throw("refresh")
         if self.catalog is not None:
             for skill in self._skills:
-                self.catalog.upsert(skill)
+                await self.catalog.upsert(skill)
 
     def _maybe_throw(self, phase: str) -> None:
         if phase in self.throw_on:
@@ -98,6 +98,10 @@ async def test_attach_calls_start_with_catalog_and_hydrates_before_resolving() -
     assert callable(handle.detach) and callable(handle.refresh)
 
 
+# A sync loader can't await `upsert`; on a BM25 catalog metadata still commits
+# synchronously, but the embedding awaitable is dropped — an expected, benign
+# "never awaited" for this deliberately-synchronous loader.
+@pytest.mark.filterwarnings("ignore:coroutine .* was never awaited:RuntimeWarning")
 async def test_absorbs_a_fully_synchronous_loader() -> None:
     catalog = SkillCatalog()
     # A plain-`def` loader also conforms structurally.
@@ -174,7 +178,7 @@ async def test_start_failure_keeps_partial_hydration_and_re_allows_attach() -> N
 
         async def start(self, cat: SkillCatalog) -> None:
             self.calls.append("start")
-            cat.upsert(SLIDES)
+            await cat.upsert(SLIDES)
             raise RuntimeError("start blew up after one upsert")
 
         async def stop(self) -> None:

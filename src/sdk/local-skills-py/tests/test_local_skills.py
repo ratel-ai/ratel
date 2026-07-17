@@ -23,7 +23,7 @@ def test_defaults_dir_to_home_ratel_skills() -> None:
     assert LocalSkillsLoader().dir == Path.home() / ".ratel" / "skills"
 
 
-def test_hydrates_catalog_from_skill_md_on_start(tmp_path: Path) -> None:
+async def test_hydrates_catalog_from_skill_md_on_start(tmp_path: Path) -> None:
     _write_skill(
         tmp_path,
         "api-design",
@@ -37,7 +37,7 @@ def test_hydrates_catalog_from_skill_md_on_start(tmp_path: Path) -> None:
     )
     catalog = SkillCatalog()
 
-    LocalSkillsLoader(tmp_path).start(catalog)
+    await LocalSkillsLoader(tmp_path).start(catalog)
 
     assert catalog.size() == 2
     hits = catalog.search("design a REST endpoint with pagination", 5)
@@ -45,31 +45,31 @@ def test_hydrates_catalog_from_skill_md_on_start(tmp_path: Path) -> None:
     assert "Use nouns for resources." in catalog.invoke("api-design")
 
 
-def test_frontmatter_id_beats_dirname_and_name_defaults_to_id(tmp_path: Path) -> None:
+async def test_frontmatter_id_beats_dirname_and_name_defaults_to_id(tmp_path: Path) -> None:
     _write_skill(tmp_path, "dir-name", "---\nid: real-id\ndescription: An explicit id.\n---\nbody")
     catalog = SkillCatalog()
 
-    LocalSkillsLoader(tmp_path).start(catalog)
+    await LocalSkillsLoader(tmp_path).start(catalog)
 
     assert catalog.has("real-id")
     assert not catalog.has("dir-name")
     assert catalog.get("real-id").name == "real-id"
 
 
-def test_id_defaults_to_dirname_when_omitted(tmp_path: Path) -> None:
+async def test_id_defaults_to_dirname_when_omitted(tmp_path: Path) -> None:
     _write_skill(tmp_path, "my-skill", "---\ndescription: no explicit id.\n---\nbody")
     catalog = SkillCatalog()
 
-    LocalSkillsLoader(tmp_path).start(catalog)
+    await LocalSkillsLoader(tmp_path).start(catalog)
 
     assert catalog.has("my-skill")
 
 
-def test_optional_fields_default_to_empty(tmp_path: Path) -> None:
+async def test_optional_fields_default_to_empty(tmp_path: Path) -> None:
     _write_skill(tmp_path, "min", "---\ndescription: minimal skill.\n---\nbody")
     catalog = SkillCatalog()
 
-    LocalSkillsLoader(tmp_path).start(catalog)
+    await LocalSkillsLoader(tmp_path).start(catalog)
 
     skill = catalog.get("min")
     assert skill.tags == []
@@ -77,7 +77,7 @@ def test_optional_fields_default_to_empty(tmp_path: Path) -> None:
     assert skill.metadata == {}
 
 
-def test_round_trips_full_frontmatter(tmp_path: Path) -> None:
+async def test_round_trips_full_frontmatter(tmp_path: Path) -> None:
     _write_skill(
         tmp_path,
         "full",
@@ -102,7 +102,7 @@ def test_round_trips_full_frontmatter(tmp_path: Path) -> None:
     )
     catalog = SkillCatalog()
 
-    LocalSkillsLoader(tmp_path).start(catalog)
+    await LocalSkillsLoader(tmp_path).start(catalog)
 
     skill = catalog.get("full-skill")
     assert skill.name == "Full Skill"
@@ -112,23 +112,23 @@ def test_round_trips_full_frontmatter(tmp_path: Path) -> None:
     assert skill.metadata == {"stacks": ["react", "next"], "langs": ["ts"]}
 
 
-def test_extracts_body_verbatim_trimming_leading_blank_lines(tmp_path: Path) -> None:
+async def test_extracts_body_verbatim_trimming_leading_blank_lines(tmp_path: Path) -> None:
     _write_skill(tmp_path, "b", "---\ndescription: d\n---\n\n\n# Title\n\nLine 1\n  indented\n")
     catalog = SkillCatalog()
 
-    LocalSkillsLoader(tmp_path).start(catalog)
+    await LocalSkillsLoader(tmp_path).start(catalog)
 
     assert catalog.invoke("b") == "# Title\n\nLine 1\n  indented\n"
 
 
-def test_skips_malformed_files_loads_siblings_and_records_diagnostics(tmp_path: Path) -> None:
+async def test_skips_malformed_files_loads_siblings_and_records_diagnostics(tmp_path: Path) -> None:
     _write_skill(tmp_path, "good", "---\ndescription: a good skill.\n---\nbody")
     _write_skill(tmp_path, "no-fence", "no frontmatter here")
     _write_skill(tmp_path, "no-desc", "---\nname: x\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
 
-    loader.start(catalog)
+    await loader.start(catalog)
 
     assert catalog.has("good")
     assert catalog.size() == 1
@@ -137,18 +137,18 @@ def test_skips_malformed_files_loads_siblings_and_records_diagnostics(tmp_path: 
     assert any("no-desc" in d.path for d in loader.diagnostics)
 
 
-def test_diagnoses_wrong_typed_field(tmp_path: Path) -> None:
+async def test_diagnoses_wrong_typed_field(tmp_path: Path) -> None:
     _write_skill(tmp_path, "bad-tags", "---\ndescription: d\ntags: not-a-list\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
 
-    loader.start(catalog)
+    await loader.start(catalog)
 
     assert not catalog.has("bad-tags")
     assert "tags" in loader.diagnostics[0].reason
 
 
-def test_yaml_1_1_unquoted_boolean_keywords_are_booleans(tmp_path: Path) -> None:
+async def test_yaml_1_1_unquoted_boolean_keywords_are_booleans(tmp_path: Path) -> None:
     # `on` resolves to a boolean under pyyaml (YAML 1.1), so an unquoted one in a tag
     # list is not a string — rejected here exactly as the TS mirror rejects it. Quoting
     # keeps it a string and loads in both SDKs.
@@ -157,169 +157,171 @@ def test_yaml_1_1_unquoted_boolean_keywords_are_booleans(tmp_path: Path) -> None
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
 
-    loader.start(catalog)
+    await loader.start(catalog)
 
     assert not catalog.has("bool-tag")
     assert any("bool-tag" in d.path and "tags" in d.reason for d in loader.diagnostics)
     assert catalog.get("quoted-tag").tags == ["ci", "on"]
 
 
-def test_duplicate_frontmatter_key_takes_last_value(tmp_path: Path) -> None:
+async def test_duplicate_frontmatter_key_takes_last_value(tmp_path: Path) -> None:
     _write_skill(tmp_path, "dup", "---\ndescription: first\ndescription: second\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
 
-    loader.start(catalog)
+    await loader.start(catalog)
 
     assert catalog.has("dup")
     assert catalog.get("dup").description == "second"
     assert loader.diagnostics == []
 
 
-def test_starts_empty_when_directory_missing(tmp_path: Path) -> None:
+async def test_starts_empty_when_directory_missing(tmp_path: Path) -> None:
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path / "does-not-exist")
 
-    loader.start(catalog)
+    await loader.start(catalog)
 
     assert catalog.size() == 0
     assert loader.diagnostics == []
 
 
-def test_ignores_directories_without_skill_md(tmp_path: Path) -> None:
+async def test_ignores_directories_without_skill_md(tmp_path: Path) -> None:
     (tmp_path / "empty-dir").mkdir()
     _write_skill(tmp_path, "real", "---\ndescription: d\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
 
-    loader.start(catalog)
+    await loader.start(catalog)
 
     assert catalog.size() == 1
     assert loader.diagnostics == []
 
 
-def test_duplicate_id_first_wins_and_diagnoses_rest(tmp_path: Path) -> None:
+async def test_duplicate_id_first_wins_and_diagnoses_rest(tmp_path: Path) -> None:
     _write_skill(tmp_path, "a-dir", "---\nid: dup\ndescription: first wins.\n---\nfirst")
     _write_skill(tmp_path, "b-dir", "---\nid: dup\ndescription: second loses.\n---\nsecond")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
 
-    loader.start(catalog)
+    await loader.start(catalog)
 
     assert catalog.size() == 1
     assert catalog.invoke("dup") == "first"
     assert any("duplicate" in d.reason and "b-dir" in d.path for d in loader.diagnostics)
 
 
-def test_second_start_without_stop_raises(tmp_path: Path) -> None:
+async def test_second_start_without_stop_raises(tmp_path: Path) -> None:
     _write_skill(tmp_path, "s", "---\ndescription: d\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
-    loader.start(catalog)
+    await loader.start(catalog)
 
     with pytest.raises(RuntimeError, match="already started"):
-        loader.start(catalog)
+        await loader.start(catalog)
 
 
 # --- refresh & lifecycle -----------------------------------------------------
 
 
-def test_refresh_before_start_raises(tmp_path: Path) -> None:
+async def test_refresh_before_start_raises(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="not started"):
-        LocalSkillsLoader(tmp_path).refresh()
+        await LocalSkillsLoader(tmp_path).refresh()
 
 
-def test_refresh_adds_new_skills(tmp_path: Path) -> None:
+async def test_refresh_adds_new_skills(tmp_path: Path) -> None:
     _write_skill(tmp_path, "first", "---\ndescription: the first skill.\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
-    loader.start(catalog)
+    await loader.start(catalog)
     assert catalog.size() == 1
 
     _write_skill(tmp_path, "second", "---\ndescription: the second skill.\n---\nbody")
-    loader.refresh()
+    await loader.refresh()
 
     assert catalog.size() == 2
     assert catalog.has("second")
 
 
-def test_refresh_serves_updated_body(tmp_path: Path) -> None:
+async def test_refresh_serves_updated_body(tmp_path: Path) -> None:
     _write_skill(tmp_path, "s", "---\ndescription: d\n---\noriginal body")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
-    loader.start(catalog)
+    await loader.start(catalog)
     assert catalog.invoke("s") == "original body"
 
     _write_skill(tmp_path, "s", "---\ndescription: d\n---\nrewritten body")
-    loader.refresh()
+    await loader.refresh()
 
     assert catalog.size() == 1
     assert catalog.invoke("s") == "rewritten body"
 
 
-def test_refresh_removes_vanished_skill(tmp_path: Path) -> None:
+async def test_refresh_removes_vanished_skill(tmp_path: Path) -> None:
     import shutil
 
     _write_skill(tmp_path, "keep", "---\ndescription: keeper.\n---\nbody")
     _write_skill(tmp_path, "drop", "---\ndescription: goner.\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
-    loader.start(catalog)
+    await loader.start(catalog)
     assert catalog.size() == 2
 
     shutil.rmtree(tmp_path / "drop")
-    loader.refresh()
+    await loader.refresh()
 
     assert catalog.has("keep")
     assert not catalog.has("drop")
     assert catalog.size() == 1
 
 
-def test_refresh_never_removes_foreign_skill(tmp_path: Path) -> None:
+async def test_refresh_never_removes_foreign_skill(tmp_path: Path) -> None:
     from ratel_ai import Skill
 
     _write_skill(tmp_path, "owned", "---\ndescription: loader-owned.\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
-    loader.start(catalog)
-    catalog.upsert(Skill(id="foreign", name="foreign", description="put here by someone else"))
+    await loader.start(catalog)
+    await catalog.upsert(
+        Skill(id="foreign", name="foreign", description="put here by someone else")
+    )
     assert catalog.size() == 2
 
-    loader.refresh()
+    await loader.refresh()
 
     assert catalog.has("foreign")
     assert catalog.has("owned")
 
 
-def test_refresh_skips_unchanged_files(tmp_path: Path) -> None:
+async def test_refresh_skips_unchanged_files(tmp_path: Path) -> None:
     _write_skill(tmp_path, "a", "---\ndescription: skill a.\n---\nbody a")
     _write_skill(tmp_path, "b", "---\ndescription: skill b.\n---\nbody b")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
-    loader.start(catalog)
+    await loader.start(catalog)
 
     changes = []
     catalog.on_change(lambda: changes.append(1))
     _write_skill(tmp_path, "b", "---\ndescription: skill b.\n---\nbody b rewritten")
-    loader.refresh()
+    await loader.refresh()
 
     assert len(changes) == 1
     assert catalog.invoke("a") == "body a"
     assert catalog.invoke("b") == "body b rewritten"
 
 
-def test_stop_keeps_skills_and_start_after_stop_rescans(tmp_path: Path) -> None:
+async def test_stop_keeps_skills_and_start_after_stop_rescans(tmp_path: Path) -> None:
     _write_skill(tmp_path, "s", "---\ndescription: d\n---\nbody")
     catalog = SkillCatalog()
     loader = LocalSkillsLoader(tmp_path)
-    loader.start(catalog)
+    await loader.start(catalog)
 
     loader.stop()
     assert catalog.has("s")
     assert loader.diagnostics == []
 
     _write_skill(tmp_path, "t", "---\ndescription: added while stopped.\n---\nbody")
-    loader.start(catalog)
+    await loader.start(catalog)
     assert catalog.size() == 2
     assert catalog.has("t")
 

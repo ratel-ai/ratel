@@ -171,7 +171,7 @@ def search_capabilities_tool(
         k_tools = _clamp_top_k(input.get("topKTools"), _DEFAULT_TOP_K_TOOLS)
         k_skills = _clamp_top_k(input.get("topKSkills"), _DEFAULT_TOP_K_SKILLS)
         started_at = time.monotonic()
-        tool_hits = catalog.search(query, k_tools, "agent")
+        tool_hits = await catalog.search_async(query, k_tools, "agent")
         catalog.record_event(
             {
                 "type": "gateway_search",
@@ -225,7 +225,7 @@ def search_capabilities_tool(
         # budget → never starved by tools).
         skills: list[dict[str, Any]] = []
         if skill_catalog is not None:
-            for sh in skill_catalog.search(query, k_skills, "agent"):
+            for sh in await skill_catalog.search_async(query, k_skills, "agent"):
                 sk = skill_catalog.get(sh.skill_id)
                 skills.append(
                     {

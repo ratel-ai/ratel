@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type Skill, SkillCatalog } from "./index.js";
+import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
 
 const slides: Skill = {
   id: "frontend-slides",
@@ -23,10 +24,14 @@ describe("SkillCatalog", () => {
     expect(catalog.search("anything", 5)).toEqual([]);
   });
 
-  it("registers skills and ranks the relevant one first", () => {
+  it("rejects an explicitly empty embedding string", () => {
+    expect(() => new SkillCatalog({ embedding: "" })).toThrow(/must not be blank/);
+  });
+
+  it("registers skills and ranks the relevant one first", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(slides);
-    catalog.register(apiDesign);
+    await catalog.register(slides);
+    await catalog.register(apiDesign);
 
     const hits = catalog.search("design a REST endpoint with pagination", 5);
     expect(hits.length).toBeGreaterThan(0);
@@ -34,9 +39,96 @@ describe("SkillCatalog", () => {
     expect(hits[0].score).toBeGreaterThan(0);
   });
 
-  it("invoke(id) returns the body; has/get report membership and metadata", () => {
+  it("registers an iterable of skills as one batch", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(slides);
+    await catalog.register([
+      { id: "auth", name: "auth", description: "Set up login" },
+      { id: "deploy", name: "deploy", description: "Deploy an app" },
+    ]);
+
+    expect(catalog.has("auth")).toBe(true);
+    expect(catalog.has("deploy")).toBe(true);
+    expect(catalog.size()).toBe(2);
+  });
+
+  it("registers on a semantic catalog: embeds inline and search_async finds the hit", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const catalog = new SkillCatalog({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      });
+      await catalog.register(slides);
+
+      expect(catalog.has("frontend-slides")).toBe(true);
+      const hits = await catalog.searchAsync("slides", 5);
+      expect(hits[0]?.skillId).toBe("frontend-slides");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("surfaces embedding load failures through register, but metadata persists", async () => {
+    const catalog = new SkillCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+
+    await expect(catalog.register(slides)).rejects.toThrow(/failed to load embedding model/);
+    // Metadata registration happens before the embedding pass inside `register`,
+    // so it persists even though the embed itself failed.
+    expect(catalog.has("frontend-slides")).toBe(true);
+  });
+
+  it("keeps dense search behind the asynchronous API", () => {
+    // search() rejects a resolved semantic/hybrid method before ever touching
+    // the registry, so this needs no registration (and no working model).
+    const catalog = new SkillCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    expect(() => catalog.search("slides", 5)).toThrow(/searchAsync/);
+  });
+
+  it("rejects a semantic override on a bm25 catalog with no embeddings built", async () => {
+    const catalog = new SkillCatalog();
+    await catalog.register(slides);
+    await expect(catalog.searchAsync("slides", 5, "direct", "semantic")).rejects.toThrow(
+      /not computed for semantic/,
+    );
+  });
+
+  it("register([]) on a semantic catalog is an asynchronous no-op", async () => {
+    const catalog = new SkillCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    await expect(catalog.register([])).resolves.toBeUndefined();
+    expect(catalog.size()).toBe(0);
+  });
+
+  it("serializes queued dense searches and rejects registration until they settle", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const catalog = new SkillCatalog({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      });
+      await catalog.register(slides);
+
+      const first = catalog.searchAsync("slides", 5);
+      const second = catalog.searchAsync("frontend", 5);
+      await expect(catalog.register(apiDesign)).rejects.toThrow(/registry busy; await/);
+      await Promise.all([first, second]);
+      await expect(catalog.register(apiDesign)).resolves.toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("invoke(id) returns the body; has/get report membership and metadata", async () => {
+    const catalog = new SkillCatalog();
+    await catalog.register(slides);
 
     expect(catalog.has("frontend-slides")).toBe(true);
     expect(catalog.has("missing")).toBe(false);
@@ -50,7 +142,7 @@ describe("SkillCatalog", () => {
     expect(() => catalog.invoke("nope")).toThrow(/unknown skillId: nope/);
   });
 
-  it("accepts a minimal skill with no tags or body (parity with the Python SDK)", () => {
+  it("accepts a minimal skill with no tags or body (parity with the Python SDK)", async () => {
     const catalog = new SkillCatalog();
     // `tags` and `body` are optional — this object must type-check and register.
     const minimal: Skill = {
@@ -58,7 +150,7 @@ describe("SkillCatalog", () => {
       name: "min",
       description: "a minimal skill, no tags or body",
     };
-    catalog.register(minimal);
+    await catalog.register(minimal);
 
     expect(catalog.has("min")).toBe(true);
     expect(catalog.invoke("min")).toBe(""); // missing body resolves to "", never undefined
@@ -67,18 +159,18 @@ describe("SkillCatalog", () => {
 });
 
 describe("SkillCatalog mutation seam (loader-facing)", () => {
-  it("upsert returns false for a new id and true when replacing", () => {
+  it("upsert returns false for a new id and true when replacing", async () => {
     const catalog = new SkillCatalog();
-    expect(catalog.upsert(slides)).toBe(false);
-    expect(catalog.upsert({ ...slides, body: "# Updated" })).toBe(true);
+    expect(await catalog.upsert(slides)).toBe(false);
+    expect(await catalog.upsert({ ...slides, body: "# Updated" })).toBe(true);
     expect(catalog.size()).toBe(1);
     expect(catalog.get("frontend-slides")?.body).toBe("# Updated");
   });
 
-  it("remove drops the skill and returns whether it was present", () => {
+  it("remove drops the skill and returns whether it was present", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(slides);
-    catalog.register(apiDesign);
+    await catalog.register(slides);
+    await catalog.register(apiDesign);
 
     expect(catalog.remove("frontend-slides")).toBe(true);
     expect(catalog.has("frontend-slides")).toBe(false);
@@ -89,9 +181,9 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
     expect(catalog.remove("frontend-slides")).toBe(false);
   });
 
-  it("remove emits a skill_churn remove trace event", () => {
+  it("remove emits a skill_churn remove trace event", async () => {
     const catalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(slides);
+    await catalog.register(slides);
     catalog.drainTraceEvents();
 
     catalog.remove("frontend-slides");
@@ -103,22 +195,22 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
     expect(churn[0].skill_id).toBe("frontend-slides");
   });
 
-  it("onChange fires on register, upsert, and remove; unsubscribe stops it", () => {
+  it("onChange fires on register, upsert, and remove; unsubscribe stops it", async () => {
     const catalog = new SkillCatalog();
     let calls = 0;
     const unsubscribe = catalog.onChange(() => {
       calls += 1;
     });
 
-    catalog.register(slides);
+    await catalog.register(slides);
     expect(calls).toBe(1);
-    catalog.upsert({ ...slides, body: "# Updated" });
+    await catalog.upsert({ ...slides, body: "# Updated" });
     expect(calls).toBe(2);
     catalog.remove("frontend-slides");
     expect(calls).toBe(3);
 
     unsubscribe();
-    catalog.register(apiDesign);
+    await catalog.register(apiDesign);
     expect(calls).toBe(3);
   });
 
@@ -132,7 +224,7 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
     expect(calls).toBe(0);
   });
 
-  it("a subscribed listener registered twice fires once per change", () => {
+  it("a subscribed listener registered twice fires once per change", async () => {
     const catalog = new SkillCatalog();
     let calls = 0;
     const listener = () => {
@@ -140,30 +232,28 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
     };
     catalog.onChange(listener);
     catalog.onChange(listener);
-    catalog.register(slides);
+    await catalog.register(slides);
     expect(calls).toBe(1);
   });
 
-  it("notifies subscribers even when eager embedding fails mid-register", () => {
-    // On a semantic catalog the mutation commits before the eager embed; if the
-    // embedder then fails, the error propagates but the staleness hook must
+  it("notifies subscribers even when embedding fails mid-register", async () => {
+    // On a semantic catalog metadata is indexed before the embedding pass; if
+    // the embedder then fails, the error propagates but the staleness hook must
     // still fire — the host has a committed mutation to react to.
     const catalog = new SkillCatalog({ method: "semantic" });
-    const internals = catalog as unknown as { registry: { buildEmbeddings: () => void } };
-    internals.registry.buildEmbeddings = () => {
-      throw new Error("stub embed failure");
-    };
+    const internals = catalog as unknown as { registry: { buildDense: () => Promise<void> } };
+    internals.registry.buildDense = () => Promise.reject(new Error("stub embed failure"));
     let calls = 0;
     catalog.onChange(() => {
       calls += 1;
     });
 
-    expect(() => catalog.register(slides)).toThrow(/stub embed failure/);
+    await expect(catalog.register(slides)).rejects.toThrow(/stub embed failure/);
     expect(catalog.has("frontend-slides")).toBe(true);
     expect(calls).toBe(1);
   });
 
-  it("a listener unsubscribing itself mid-notify breaks neither the mutation nor siblings", () => {
+  it("a listener unsubscribing itself mid-notify breaks neither the mutation nor siblings", async () => {
     const catalog = new SkillCatalog();
     let siblingCalls = 0;
     const unsubscribes: Array<() => void> = [];
@@ -176,13 +266,13 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
       siblingCalls += 1;
     });
 
-    expect(() => catalog.register(slides)).not.toThrow();
+    await expect(catalog.register(slides)).resolves.toBeUndefined();
     expect(siblingCalls).toBe(1);
-    catalog.register(apiDesign);
+    await catalog.register(apiDesign);
     expect(siblingCalls).toBe(2);
   });
 
-  it("a listener subscribed mid-notify fires on the next mutation, not the current one", () => {
+  it("a listener subscribed mid-notify fires on the next mutation, not the current one", async () => {
     const catalog = new SkillCatalog();
     let lateCalls = 0;
     let subscribed = false;
@@ -195,20 +285,20 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
       }
     });
 
-    catalog.register(slides);
+    await catalog.register(slides);
     expect(lateCalls).toBe(0);
-    catalog.register(apiDesign);
+    await catalog.register(apiDesign);
     expect(lateCalls).toBe(1);
   });
 
-  it("listeners observe the settled post-mutation catalog", () => {
+  it("listeners observe the settled post-mutation catalog", async () => {
     const catalog = new SkillCatalog();
     const seen: Array<[number, boolean]> = [];
     catalog.onChange(() => {
       seen.push([catalog.size(), catalog.has("frontend-slides")]);
     });
 
-    catalog.register(slides);
+    await catalog.register(slides);
     catalog.remove("frontend-slides");
     expect(seen).toEqual([
       [1, true],
@@ -216,7 +306,7 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
     ]);
   });
 
-  it("a throwing listener breaks neither the mutation nor its siblings", () => {
+  it("a throwing listener breaks neither the mutation nor its siblings", async () => {
     const catalog = new SkillCatalog();
     let calls = 0;
     catalog.onChange(() => {
@@ -226,23 +316,33 @@ describe("SkillCatalog mutation seam (loader-facing)", () => {
       calls += 1;
     });
 
-    expect(() => catalog.register(slides)).not.toThrow();
+    await expect(catalog.register(slides)).resolves.toBeUndefined();
     expect(calls).toBe(1);
     expect(catalog.has("frontend-slides")).toBe(true);
   });
 });
 
+describe("SkillCatalog removed methods", () => {
+  it("registerMany / buildEmbeddings / rebuildEmbeddings are gone at runtime", () => {
+    // Folded into the variadic, self-embedding `register` (RAT-379/async-register).
+    const catalog = new SkillCatalog() as unknown as Record<string, unknown>;
+    expect(catalog.registerMany).toBeUndefined();
+    expect(catalog.buildEmbeddings).toBeUndefined();
+    expect(catalog.rebuildEmbeddings).toBeUndefined();
+  });
+});
+
 describe("SkillCatalog tracing", () => {
-  it("does not capture events under the default noop sink", () => {
+  it("does not capture events under the default noop sink", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(slides);
+    await catalog.register(slides);
     catalog.search("slides", 5);
     expect(catalog.drainTraceEvents()).toEqual([]);
   });
 
-  it("captures skill_churn on register and skill_search on search", () => {
+  it("captures skill_churn on register and skill_search on search", async () => {
     const catalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(apiDesign);
+    await catalog.register(apiDesign);
     catalog.search("api", 5, "agent");
 
     const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
@@ -255,9 +355,9 @@ describe("SkillCatalog tracing", () => {
     expect((search?.hits as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("emits skill_invoke on invoke", () => {
+  it("emits skill_invoke on invoke", async () => {
     const catalog = new SkillCatalog({ trace: { kind: "memory", sessionId: "t" } });
-    catalog.register(apiDesign);
+    await catalog.register(apiDesign);
     catalog.drainTraceEvents();
 
     catalog.invoke("api-design");
@@ -268,10 +368,10 @@ describe("SkillCatalog tracing", () => {
     expect(typeof invoke?.took_ms).toBe("number");
   });
 
-  it("re-registering an id replaces it in place — one hit, latest body wins", () => {
+  it("re-registering an id replaces it in place — one hit, latest body wins", async () => {
     const catalog = new SkillCatalog();
-    catalog.register(apiDesign);
-    catalog.register({
+    await catalog.register(apiDesign);
+    await catalog.register({
       ...apiDesign,
       description: "Build animation-rich HTML presentations from scratch.",
       body: "# Slides\n\nUpdated body.",

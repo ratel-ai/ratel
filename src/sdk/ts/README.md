@@ -19,6 +19,34 @@
 
 Use `ToolCatalog` for ranked tools with executable handlers and `SkillCatalog` for ranked playbooks loaded on demand. Expose `searchCapabilitiesTool`, `invokeToolTool`, and `getSkillContentTool` so an agent can discover tools and skills, invoke tools, and load full skill instructions. Tools from existing MCP servers can be ingested into the tool catalog.
 
+Semantic and hybrid retrieval use a configurable embedding model ([ADR 0012](../../../docs/adr/0012-configurable-embedding-models.md)), set per catalog via the `embedding` option: the built-in default, a HuggingFace repo or local directory (in-process), or an OpenAI-compatible endpoint (OpenAI, Ollama, TEI, vLLM).
+
+For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole array and embeds on a libuv worker, so model loading, HTTP, and inference never block Node's event loop — and embedding errors surface right at `register()`:
+
+```ts
+const catalog = new ToolCatalog({ method: "semantic", embedding: { ollama: "nomic-embed-text" } });
+await catalog.register(tools);                              // embeds the batch here
+const hits = await catalog.searchAsync("deploy the service", 5);
+```
+
+`register()` returns a promise for every method (BM25 too); `search()` stays synchronous for BM25 only, and `searchAsync()` covers all three. To change the endpoint's model or vector dimension, construct a new catalog and re-register.
+
+Embedding failures from `register()`/`searchAsync()` are typed `EmbedderError`s (with a stable `.code` such as `"Load"`, `"NotCached"`, or `"DimensionMismatch"`); a dimension mismatch is a `DimensionMismatchError` subclass — the parity of Python's `EmbedderError`/`DimensionMismatchError`. Invalid embedding config still throws at construction.
+
+```ts
+import { EmbedderError, DimensionMismatchError } from "@ratel-ai/sdk";
+
+try {
+  await catalog.register(tools);
+} catch (err) {
+  if (err instanceof DimensionMismatchError) {
+    // the model changed under the corpus — rebuild with a fresh catalog
+  } else if (err instanceof EmbedderError) {
+    console.error(`embedding failed (${err.code}): ${err.message}`);
+  }
+}
+```
+
 ## Install
 
 ```bash
@@ -33,7 +61,7 @@ Save as `quickstart.mjs`, then run `node quickstart.mjs`:
 import { ToolCatalog } from "@ratel-ai/sdk";
 
 const catalog = new ToolCatalog();
-catalog.register({
+await catalog.register({
   id: "get_weather",
   name: "get_weather",
   description: "Get the current weather for a city.",

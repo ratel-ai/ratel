@@ -283,7 +283,7 @@ export function searchCapabilitiesTool(
       const kSkills = clampTopK(topKSkills, DEFAULT_TOP_K_SKILLS);
       const startedAt = Date.now();
 
-      const toolHits = toolCatalog.search(query, kTools, "agent");
+      const toolHits = await toolCatalog.searchAsync(query, kTools, "agent");
       toolCatalog.recordEvent({
         type: "gateway_search",
         query,
@@ -333,7 +333,7 @@ export function searchCapabilitiesTool(
       // budget → never starved by tools). SkillCatalog.search emits its own
       // skill_search trace for the funnel.
       const skills: CapabilitySkillHit[] = skillCatalog
-        ? skillCatalog.search(query, kSkills, "agent").map((h) => ({
+        ? (await skillCatalog.searchAsync(query, kSkills, "agent")).map((h) => ({
             skillId: h.skillId,
             score: h.score,
             description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),

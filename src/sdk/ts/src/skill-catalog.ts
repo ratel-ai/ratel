@@ -1,7 +1,8 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
-import { type Skill, type SkillHit, SkillRegistry } from "../native/index.cjs";
-import type { SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
-import { traceSearch, traceSkillLoad } from "./telemetry.js";
+import type { Skill, SkillHit } from "../native/index.cjs";
+import type { EmbeddingSpec, SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
+import { SkillRegistry } from "./registry.js";
+import { traceSearch, traceSearchAsync, traceSkillLoad } from "./telemetry.js";
 
 export type { Skill, SkillHit };
 
@@ -11,12 +12,16 @@ export interface SkillCatalogOptions {
   trace?: TraceSinkConfig;
   /** Default retrieval method for `search` (default `"bm25"`). */
   method?: SearchMethod;
+  /** Embedding model for semantic/hybrid retrieval — see
+   * {@link ToolCatalogOptions.embedding}. Retained for asynchronous overrides. */
+  embedding?: EmbeddingSpec;
 }
 
 /**
- * In-memory catalog of skills, ranked by the native BM25 `SkillRegistry`. The
- * on-demand analog of {@link ToolCatalog}: registered skills are searched by
- * relevance; the matching body is fetched only on {@link SkillCatalog.invoke}.
+ * In-memory catalog of skills, ranked by the native `SkillRegistry` retrieval
+ * engine. The on-demand analog of {@link ToolCatalog}: registered skills are
+ * searched by relevance; the matching body is fetched only on
+ * {@link SkillCatalog.invoke}.
  *
  * The catalog is mutable at runtime — the loader-facing seam: an external
  * loader (any package holding a catalog and mirroring a source into it) pushes
@@ -27,64 +32,68 @@ export class SkillCatalog {
   private readonly registry: SkillRegistry;
   private readonly skills = new Map<string, Skill>();
   private readonly method: SearchMethod;
-  private readonly eager: boolean;
   private readonly listeners = new Set<() => void>();
 
   /**
    * Create an empty catalog.
    *
-   * @param options - Trace sink and default retrieval method. A `"semantic"`/
-   *   `"hybrid"` default makes every subsequent `register` embed the new skill
-   *   immediately (loading the embedding model on first use); the `"bm25"`
-   *   default stays model-free.
+   * @param options - Trace sink, default retrieval method, and embedding model.
+   *   Construction validates configuration but never loads a model.
    */
   constructor(options: SkillCatalogOptions = {}) {
-    this.registry = new SkillRegistry();
     this.method = options.method ?? "bm25";
-    this.eager = this.method === "semantic" || this.method === "hybrid";
+    this.registry = new SkillRegistry(options.embedding, this.method);
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
     }
   }
 
   /**
-   * Add a skill to the catalog, or replace it in place when the id is already
-   * registered. Name, description, and tags are indexed for ranking; the
-   * `body` is not (it is the dispatch payload, fetched by
-   * {@link SkillCatalog.invoke}). On a semantic/hybrid catalog this also
-   * embeds the new skill immediately, and throws if the embedding model fails
-   * to load — the skill is registered by then, so subscribers are still
-   * notified before the error propagates.
+   * Add one skill or a batch to the catalog, or replace an id in place when
+   * already registered — the single entry point for both. Name, description,
+   * and tags are indexed for ranking; `tools`, `metadata`, and `body` are
+   * stored but not indexed (`body` is the dispatch payload, fetched by
+   * {@link SkillCatalog.invoke}). On a `"semantic"`/`"hybrid"` catalog, embeds
+   * the batch in one pass on a libuv worker after metadata is indexed —
+   * embedding errors surface **here**, at registration. The skills are
+   * indexed by then, so {@link SkillCatalog.onChange} subscribers are still
+   * notified before the error propagates. A `"bm25"` catalog never loads a
+   * model.
    *
-   * @param skill - The skill to register; `id` is its lookup key.
+   * A model or dimension change is not recovered in place — construct a new
+   * catalog and re-register.
+   *
+   * @param skills - A single skill or a readonly array of them. Pass the
+   *   whole batch at once for a single embedding request.
    */
-  register(skill: Skill): void {
-    this.registry.register(skill);
-    this.skills.set(skill.id, skill);
+  async register(skills: Skill | readonly Skill[]): Promise<void> {
+    const batch = Array.isArray(skills) ? skills : [skills];
+    this.registry.registerItems(batch);
+    for (const skill of batch) {
+      this.skills.set(skill.id, skill);
+    }
     try {
-      if (this.eager) {
-        this.registry.buildEmbeddings();
-      }
+      await this.registry.buildDense();
     } finally {
-      // The mutation is committed above; a failed eager embed must not
-      // swallow the staleness signal.
+      // Metadata is committed above; a failed embedding pass must not swallow
+      // the staleness signal.
       this.notifyChange();
     }
   }
 
   /**
-   * {@link SkillCatalog.register} that also reports whether the id was already
-   * present — the added-vs-replaced signal an external loader needs to mirror
-   * a source into the catalog. Same replace-in-place, eager-embedding, and
-   * change-notification behavior as `register`.
+   * {@link SkillCatalog.register} for a single skill that also reports whether
+   * the id was already present — the added-vs-replaced signal an external
+   * loader needs to mirror a source into the catalog. Same replace-in-place,
+   * embedding, and change-notification behavior as `register`.
    *
    * @param skill - The skill to add or replace; `id` is its lookup key.
    * @returns `true` when an already-registered id was replaced, `false` when
    *   the skill is new.
    */
-  upsert(skill: Skill): boolean {
+  async upsert(skill: Skill): Promise<boolean> {
     const replaced = this.skills.has(skill.id);
-    this.register(skill);
+    await this.register(skill);
     return replaced;
   }
 
@@ -109,8 +118,9 @@ export class SkillCatalog {
   /**
    * Subscribe to catalog churn: the listener fires after every mutation —
    * `register`, `upsert`, and a `remove` that hit. It is a low-level signal
-   * (an initial registration burst fires it per skill; debouncing is the
-   * subscriber's job) and the single staleness hook for hosts: re-emit
+   * (an initial registration burst fires it once per `register`/`upsert` call;
+   * debouncing is the subscriber's job) and the single staleness hook for
+   * hosts: re-emit
    * `tools/list_changed` from it, and if the `search_capabilities` description
    * was cached, re-read it on an empty↔non-empty transition. A listener that
    * throws is swallowed — it breaks neither the mutation nor other listeners.
@@ -126,23 +136,19 @@ export class SkillCatalog {
     };
   }
 
-  /** Pre-compute embeddings for not-yet-embedded skills. See `ToolCatalog.buildEmbeddings`. */
-  buildEmbeddings(): void {
-    this.registry.buildEmbeddings();
-  }
-
   /**
-   * Search the catalog — the skill counterpart of `ToolCatalog.search`, with
-   * the same method semantics (a `"semantic"`/`"hybrid"` call throws
-   * `EmbeddingsNotBuilt` if the embedding cache isn't built).
+   * Search the catalog synchronously with BM25. A `"semantic"`/`"hybrid"`
+   * call throws synchronously with guidance to use
+   * {@link SkillCatalog.searchAsync}.
    *
    * @param query - Natural-language description of the task at hand.
    * @param topK - Maximum number of hits to return.
    * @param origin - Who initiated the call (default `"direct"`); recorded on
    *   the trace event and span, never affects ranking.
    * @param method - Per-call override of the catalog's default retrieval method.
-   * @returns Up to `topK` hits, best-first with ties broken by skill id; the
-   *   `score` scale depends on the method (BM25 / cosine / RRF).
+   * @returns Up to `topK` BM25 hits, best-first with ties broken by skill id.
+   *   Semantic/dense/hybrid methods throw migration guidance; use
+   *   {@link SkillCatalog.searchAsync} for those methods.
    */
   search(
     query: string,
@@ -152,6 +158,18 @@ export class SkillCatalog {
   ): SkillHit[] {
     return traceSearch(SearchTarget.Skill, query, topK, origin, () =>
       this.registry.searchWithMethod(query, topK, origin, method ?? this.method),
+    );
+  }
+
+  /** Search with any retrieval method without blocking the Node.js event loop. */
+  searchAsync(
+    query: string,
+    topK: number,
+    origin: SearchOrigin = "direct",
+    method?: SearchMethod,
+  ): Promise<SkillHit[]> {
+    return traceSearchAsync(SearchTarget.Skill, query, topK, origin, () =>
+      this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method),
     );
   }
 

@@ -6,12 +6,105 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use ratel_ai_core as core;
 use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
 use serde_json::Value;
+
+type ToolBatchItem = (String, String, String, Py<PyAny>, Py<PyAny>);
+type SkillBatchItem = (
+    String,
+    String,
+    String,
+    Vec<String>,
+    Vec<String>,
+    HashMap<String, Vec<String>>,
+    String,
+);
+
+create_exception!(
+    _native,
+    EmbedderError,
+    PyRuntimeError,
+    "Embedding model load / inference failure (subclass of RuntimeError)."
+);
+create_exception!(
+    _native,
+    DimensionMismatchError,
+    EmbedderError,
+    "A query/corpus embedding dimension mismatch — the model changed under an existing set."
+);
+
+/// Map a core embedding error to a typed Python exception (base `EmbedderError`,
+/// with `DimensionMismatchError` for the dimension case), keeping `RuntimeError`
+/// as the common ancestor so existing `except RuntimeError` still catches them.
+fn map_embedder_err(e: core::EmbedderError) -> PyErr {
+    let msg = e.to_string();
+    match e {
+        core::EmbedderError::DimensionMismatch { .. } => DimensionMismatchError::new_err(msg),
+        _ => EmbedderError::new_err(msg),
+    }
+}
+
+/// Resolve the flat embedding-config kwargs to a core model, or `None` when none
+/// are given (→ built-in default). A config error is a construction-time
+/// `ValueError`. Mirrors the TS binding's `resolve_embedding`.
+#[allow(clippy::too_many_arguments)]
+fn resolve_embedding(
+    spec: Option<String>,
+    huggingface: Option<String>,
+    local: Option<String>,
+    ollama: Option<String>,
+    url: Option<String>,
+    model: Option<String>,
+    revision: Option<String>,
+    api_key_env: Option<String>,
+    query_prefix: Option<String>,
+    doc_prefix: Option<String>,
+    pooling: Option<String>,
+    download: Option<bool>,
+) -> PyResult<Option<core::EmbeddingModel>> {
+    // No fields given → no override (the default model).
+    let all_none = download.is_none()
+        && [
+            &spec,
+            &huggingface,
+            &local,
+            &ollama,
+            &url,
+            &model,
+            &revision,
+            &api_key_env,
+            &query_prefix,
+            &doc_prefix,
+            &pooling,
+        ]
+        .iter()
+        .all(|f| f.is_none());
+    if all_none {
+        return Ok(None);
+    }
+    let s = core::EmbeddingSpec {
+        spec,
+        huggingface,
+        local,
+        ollama,
+        url,
+        model,
+        revision,
+        api_key_env,
+        query_prefix,
+        doc_prefix,
+        pooling,
+        download,
+    };
+    core::EmbeddingModel::resolve(s)
+        .map(Some)
+        .map_err(|e| PyValueError::new_err(e.to_string()))
+}
 
 /// A single search result: the matched tool id and its relevance score. Mirrors
 /// the TS SDK's `SearchHit` (camelCase `toolId` there → snake_case `tool_id` here).
@@ -61,9 +154,9 @@ impl SkillHit {
     }
 }
 
-/// Metadata-only BM25 index over `ratel-ai-core`. Executors and the
-/// capability-tool / MCP layers live in the pure-Python `ratel_ai` package
-/// above this binding.
+/// Metadata registry over `ratel-ai-core`. BM25 is exposed synchronously;
+/// GIL-releasing dense primitives are private to the pure-Python async facade.
+/// Executors and capability-tool / MCP layers also live above this binding.
 #[pyclass]
 pub struct ToolRegistry {
     inner: core::ToolRegistry,
@@ -72,12 +165,47 @@ pub struct ToolRegistry {
 
 #[pymethods]
 impl ToolRegistry {
+    /// Construct a registry. The optional embedding kwargs select the
+    /// semantic/hybrid model (default bge-small when none given); an invalid
+    /// config raises `ValueError` here, at construction.
     #[new]
-    fn new() -> Self {
-        Self {
-            inner: core::ToolRegistry::new(),
+    #[pyo3(signature = (spec=None, huggingface=None, local=None, ollama=None, url=None, model=None, revision=None, api_key_env=None, query_prefix=None, doc_prefix=None, pooling=None, download=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        spec: Option<String>,
+        huggingface: Option<String>,
+        local: Option<String>,
+        ollama: Option<String>,
+        url: Option<String>,
+        model: Option<String>,
+        revision: Option<String>,
+        api_key_env: Option<String>,
+        query_prefix: Option<String>,
+        doc_prefix: Option<String>,
+        pooling: Option<String>,
+        download: Option<bool>,
+    ) -> PyResult<Self> {
+        let inner = match resolve_embedding(
+            spec,
+            huggingface,
+            local,
+            ollama,
+            url,
+            model,
+            revision,
+            api_key_env,
+            query_prefix,
+            doc_prefix,
+            pooling,
+            download,
+        )? {
+            Some(model) => core::ToolRegistry::with_embedding(model),
+            None => core::ToolRegistry::new(),
+        };
+        Ok(Self {
+            inner,
             memory_sink: None,
-        }
+        })
     }
 
     /// Register a tool's metadata into the index (or replace it in place when
@@ -102,6 +230,31 @@ impl ToolRegistry {
             input_schema,
             output_schema,
         });
+        Ok(())
+    }
+
+    /// Convert the complete batch before mutating the core registry, so a bad
+    /// schema in a later item cannot leave earlier items partially registered.
+    fn _register_many(&mut self, py: Python<'_>, tools: Vec<ToolBatchItem>) -> PyResult<()> {
+        let tools = tools
+            .into_iter()
+            .map(|(id, name, description, input_schema, output_schema)| {
+                let input_schema: Value = pythonize::depythonize(input_schema.bind(py))
+                    .map_err(|e| PyValueError::new_err(format!("invalid input_schema: {e}")))?;
+                let output_schema: Value = pythonize::depythonize(output_schema.bind(py))
+                    .map_err(|e| PyValueError::new_err(format!("invalid output_schema: {e}")))?;
+                Ok(core::Tool {
+                    id,
+                    name,
+                    description,
+                    input_schema,
+                    output_schema,
+                })
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        for tool in tools {
+            self.inner.register(tool);
+        }
         Ok(())
     }
 
@@ -139,10 +292,11 @@ impl ToolRegistry {
     /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
     /// `bm25` is infallible; `semantic`/`hybrid` rank against the prebuilt embedding
     /// cache and raise `RuntimeError` (`EmbeddingsNotBuilt`) if it isn't built — the
-    /// model loads at `build_embeddings`, never inside a search. An unknown method
-    /// string raises `ValueError`.
-    fn search_with_method(
+    /// model loads at `_build_embeddings`, never inside a search. Private worker
+    /// primitive; releases the GIL. An unknown method raises `ValueError`.
+    fn _search_with_method(
         &self,
+        py: Python<'_>,
         query: String,
         top_k: u32,
         origin: String,
@@ -155,10 +309,12 @@ impl ToolRegistry {
         let parsed_method = method
             .parse::<core::SearchMethod>()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let hits = self
-            .inner
-            .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        let hits = py
+            .allow_threads(|| {
+                self.inner
+                    .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+            })
+            .map_err(map_embedder_err)?;
         Ok(hits
             .into_iter()
             .map(|hit| SearchHit {
@@ -169,13 +325,17 @@ impl ToolRegistry {
     }
 
     /// Pre-compute embeddings for not-yet-embedded tools (incremental) so a later
-    /// semantic/hybrid search only embeds the query. Raises `RuntimeError` if the
-    /// model fails to load. The catalog calls this after `register` in semantic
-    /// mode; BM25-only callers never do.
-    fn build_embeddings(&self) -> PyResult<()> {
-        self.inner
-            .build_embeddings()
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    /// semantic/hybrid search only embeds the query. Private worker primitive;
+    /// releases the GIL while loading models, calling HTTP, and running inference.
+    fn _build_embeddings(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.build_embeddings())
+            .map_err(map_embedder_err)
+    }
+
+    /// Recompute the complete tool embedding cache without holding the GIL.
+    fn _rebuild_embeddings(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.rebuild_embeddings())
+            .map_err(map_embedder_err)
     }
 
     /// Record an SDK-layer trace event into the active sink. `event` must be a
@@ -248,9 +408,8 @@ impl ToolRegistry {
     }
 }
 
-/// Metadata-only BM25 index over the skill corpus — the on-demand analogue of
-/// [`ToolRegistry`]. A separate index, so skills are ranked independently of
-/// tools (own corpus statistics, own top-K).
+/// Metadata registry over the skill corpus — the on-demand analogue of
+/// [`ToolRegistry`]. A separate index keeps skill ranking independent of tools.
 #[pyclass]
 pub struct SkillRegistry {
     inner: core::SkillRegistry,
@@ -260,11 +419,43 @@ pub struct SkillRegistry {
 #[pymethods]
 impl SkillRegistry {
     #[new]
-    fn new() -> Self {
-        Self {
-            inner: core::SkillRegistry::new(),
+    #[pyo3(signature = (spec=None, huggingface=None, local=None, ollama=None, url=None, model=None, revision=None, api_key_env=None, query_prefix=None, doc_prefix=None, pooling=None, download=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        spec: Option<String>,
+        huggingface: Option<String>,
+        local: Option<String>,
+        ollama: Option<String>,
+        url: Option<String>,
+        model: Option<String>,
+        revision: Option<String>,
+        api_key_env: Option<String>,
+        query_prefix: Option<String>,
+        doc_prefix: Option<String>,
+        pooling: Option<String>,
+        download: Option<bool>,
+    ) -> PyResult<Self> {
+        let inner = match resolve_embedding(
+            spec,
+            huggingface,
+            local,
+            ollama,
+            url,
+            model,
+            revision,
+            api_key_env,
+            query_prefix,
+            doc_prefix,
+            pooling,
+            download,
+        )? {
+            Some(model) => core::SkillRegistry::with_embedding(model),
+            None => core::SkillRegistry::new(),
+        };
+        Ok(Self {
+            inner,
             memory_sink: None,
-        }
+        })
     }
 
     /// Register a skill's metadata into the index (or replace it in place when
@@ -302,6 +493,22 @@ impl SkillRegistry {
         self.inner.remove(&skill_id)
     }
 
+    /// Register a batch only after PyO3 has converted every item's full shape.
+    /// A bad later item therefore fails before this method mutates the registry.
+    fn _register_many(&mut self, skills: Vec<SkillBatchItem>) {
+        for (id, name, description, tags, tools, metadata, body) in skills {
+            self.inner.register(core::Skill {
+                id,
+                name,
+                description,
+                tags,
+                tools,
+                metadata,
+                body,
+            });
+        }
+    }
+
     /// Lexical BM25 search over the skill corpus — see [`ToolRegistry::search`].
     fn search(&self, query: String, top_k: u32) -> Vec<SkillHit> {
         self.inner
@@ -331,9 +538,10 @@ impl SkillRegistry {
             .collect()
     }
 
-    /// Search with an explicit method — see [`ToolRegistry::search_with_method`].
-    fn search_with_method(
+    /// Private GIL-releasing method search — see [`ToolRegistry::_search_with_method`].
+    fn _search_with_method(
         &self,
+        py: Python<'_>,
         query: String,
         top_k: u32,
         origin: String,
@@ -346,10 +554,12 @@ impl SkillRegistry {
         let parsed_method = method
             .parse::<core::SearchMethod>()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let hits = self
-            .inner
-            .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        let hits = py
+            .allow_threads(|| {
+                self.inner
+                    .search_with_method(&query, top_k as usize, parsed_origin, parsed_method)
+            })
+            .map_err(map_embedder_err)?;
         Ok(hits
             .into_iter()
             .map(|hit| SkillHit {
@@ -359,11 +569,16 @@ impl SkillRegistry {
             .collect())
     }
 
-    /// See [`ToolRegistry::build_embeddings`].
-    fn build_embeddings(&self) -> PyResult<()> {
-        self.inner
-            .build_embeddings()
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    /// See [`ToolRegistry::_build_embeddings`].
+    fn _build_embeddings(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.build_embeddings())
+            .map_err(map_embedder_err)
+    }
+
+    /// Recompute the complete skill embedding cache without holding the GIL.
+    fn _rebuild_embeddings(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.rebuild_embeddings())
+            .map_err(map_embedder_err)
     }
 
     /// Record an SDK-layer trace event into the active sink — see
@@ -438,5 +653,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SearchHit>()?;
     m.add_class::<SkillRegistry>()?;
     m.add_class::<SkillHit>()?;
+    m.add("EmbedderError", m.py().get_type::<EmbedderError>())?;
+    m.add(
+        "DimensionMismatchError",
+        m.py().get_type::<DimensionMismatchError>(),
+    )?;
     Ok(())
 }

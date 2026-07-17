@@ -12,7 +12,6 @@
  */
 
 export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
-export { SkillRegistry, ToolRegistry } from "../native/index.cjs";
 export type {
   CapabilitySkillHit,
   CapabilityToolGroup,
@@ -30,6 +29,8 @@ export {
   searchCapabilitiesTool,
 } from "./capabilities.js";
 export type {
+  EmbeddingModelConfig,
+  EmbeddingSpec,
   ExecutableTool,
   Executor,
   SearchMethod,
@@ -49,8 +50,10 @@ export type {
   SearchToolsToolOptions,
 } from "./compat.js";
 export { SEARCH_TOOLS_ID, searchToolsTool } from "./compat.js";
+export { DimensionMismatchError, EmbedderError } from "./errors.js";
 export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
 export { registerMcpServer } from "./mcp.js";
+export { SkillRegistry, ToolRegistry } from "./registry.js";
 export type { SkillCatalogOptions } from "./skill-catalog.js";
 export { SkillCatalog } from "./skill-catalog.js";
 export { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";

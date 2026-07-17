@@ -17,11 +17,7 @@ class FakeLoader implements CatalogLoader {
   start(catalog: SkillCatalog): void | Promise<void> {
     this.calls.push("start");
     this.catalog = catalog;
-    return this.run("start", () => {
-      for (const skill of this.skills) {
-        catalog.upsert(skill);
-      }
-    });
+    return this.run("start", () => this.mirror(catalog));
   }
 
   stop(): void | Promise<void> {
@@ -31,14 +27,7 @@ class FakeLoader implements CatalogLoader {
 
   refresh(): void | Promise<void> {
     this.calls.push("refresh");
-    return this.run("refresh", () => {
-      const catalog = this.catalog;
-      if (catalog) {
-        for (const skill of this.skills) {
-          catalog.upsert(skill);
-        }
-      }
-    });
+    return this.run("refresh", () => this.mirror(this.catalog));
   }
 
   /** Swap the skill set a later refresh will mirror. */
@@ -46,12 +35,31 @@ class FakeLoader implements CatalogLoader {
     this.skills = skills;
   }
 
-  private run(phase: "start" | "stop" | "refresh", work: () => void): void | Promise<void> {
+  /** An async loader awaits each `upsert`; a sync one fires and forgets (metadata
+   * still commits synchronously, so a BM25 catalog hydrates either way). */
+  private mirror(catalog: SkillCatalog | undefined): void | Promise<void> {
+    if (!catalog) return;
+    if (this.async) {
+      return (async () => {
+        for (const skill of this.skills) {
+          await catalog.upsert(skill);
+        }
+      })();
+    }
+    for (const skill of this.skills) {
+      void catalog.upsert(skill);
+    }
+  }
+
+  private run(
+    phase: "start" | "stop" | "refresh",
+    work: () => void | Promise<void>,
+  ): void | Promise<void> {
     const act = () => {
       if (this.throwOn.has(phase)) {
         throw new Error(`fake loader ${phase} failure`);
       }
-      work();
+      return work();
     };
     if (this.async) {
       return Promise.resolve().then(act);
@@ -167,8 +175,8 @@ describe("attachLoader", () => {
       override start(cat: SkillCatalog): Promise<void> {
         this.catalog = cat;
         this.calls.push("start");
-        return Promise.resolve().then(() => {
-          cat.upsert(slides);
+        return Promise.resolve().then(async () => {
+          await cat.upsert(slides);
           throw new Error("start blew up after one upsert");
         });
       }

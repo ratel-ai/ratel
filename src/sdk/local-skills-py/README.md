@@ -28,9 +28,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Pass `LocalSkillsLoader(dir)` to load a different folder. The loader's lifecycle methods are
-plain synchronous (`start(catalog)` / `refresh()` / `stop()`), so it can also be driven directly
-without `attach_loader`.
+Pass `LocalSkillsLoader(dir)` to load a different folder. The loader can also be driven directly
+without `attach_loader`: `await start(catalog)` and `await refresh()` mirror the directory (async
+because they await the catalog's embedding pass), and `stop()` is synchronous.
 
 ## Layout contract
 

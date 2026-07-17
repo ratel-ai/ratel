@@ -50,25 +50,25 @@ function deepEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function buildCatalog() {
+async function buildCatalog() {
   const catalog = new ToolCatalog();
-  for (const tool of CATALOG.tools) {
-    catalog.register({
+  await catalog.register(
+    CATALOG.tools.map((tool) => ({
       id: tool.id,
       name: tool.name,
       description: tool.description,
       inputSchema: tool.inputSchema ?? {},
       outputSchema: tool.outputSchema ?? {},
       execute: async (args) => ({ tool: tool.id, echo: args }),
-    });
-  }
+    })),
+  );
   return catalog;
 }
 
-function buildSkillCatalog() {
+async function buildSkillCatalog() {
   const catalog = new SkillCatalog();
-  for (const skill of SKILLS.skills) {
-    catalog.register({
+  await catalog.register(
+    SKILLS.skills.map((skill) => ({
       id: skill.id,
       name: skill.name,
       description: skill.description,
@@ -76,13 +76,13 @@ function buildSkillCatalog() {
       tools: skill.tools ?? [],
       metadata: skill.metadata ?? {},
       body: skill.body ?? "",
-    });
-  }
+    })),
+  );
   return catalog;
 }
 
 async function main() {
-  const catalog = buildCatalog();
+  const catalog = await buildCatalog();
   const nTools = CATALOG.tools.length;
 
   // 1. Search ranking parity.
@@ -124,7 +124,7 @@ async function main() {
   console.log(`  capability invoke OK: ${gi.toolId} -> ${JSON.stringify(giOut)}`);
 
   // --- Skills surface (0.2.0) ---------------------------------------------
-  const skillCatalog = buildSkillCatalog();
+  const skillCatalog = await buildSkillCatalog();
   const nSkills = SKILLS.skills.length;
   const skillsById = new Map(SKILLS.skills.map((s) => [s.id, s]));
 

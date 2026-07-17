@@ -58,7 +58,7 @@ class LocalSkillsLoader(CatalogLoader):
         """Files skipped by the most recent scan, and why. Empty after a clean scan."""
         return self._diagnostics
 
-    def start(self, catalog: SkillCatalog) -> None:
+    async def start(self, catalog: SkillCatalog) -> None:
         """Store the catalog, scan once, and `upsert` every valid skill.
 
         Args:
@@ -70,9 +70,9 @@ class LocalSkillsLoader(CatalogLoader):
         if self._catalog is not None:
             raise RuntimeError("loader already started; stop it before starting again")
         self._catalog = catalog
-        self._sync()
+        await self._sync()
 
-    def refresh(self) -> None:
+    async def refresh(self) -> None:
         """Re-scan now: upsert new/changed files, remove vanished loaded ids.
 
         Raw-text equality is the change fingerprint, so an untouched file is not
@@ -84,7 +84,7 @@ class LocalSkillsLoader(CatalogLoader):
         """
         if self._catalog is None:
             raise RuntimeError("loader not started; call start(catalog) first")
-        self._sync()
+        await self._sync()
 
     def stop(self) -> None:
         """Forget the catalog and the loaded-set; the skills stay in the catalog.
@@ -96,7 +96,7 @@ class LocalSkillsLoader(CatalogLoader):
         self._loaded = {}
         self._diagnostics = []
 
-    def _sync(self) -> None:
+    async def _sync(self) -> None:
         """One scan-and-reconcile pass against the current catalog."""
         catalog = self._catalog
         if catalog is None:
@@ -106,7 +106,7 @@ class LocalSkillsLoader(CatalogLoader):
         for skill_id, (skill, raw) in skills.items():
             nxt[skill_id] = raw
             if self._loaded.get(skill_id) != raw:
-                catalog.upsert(skill)
+                await catalog.upsert(skill)
         for skill_id in self._loaded:
             if skill_id not in nxt:
                 catalog.remove(skill_id)

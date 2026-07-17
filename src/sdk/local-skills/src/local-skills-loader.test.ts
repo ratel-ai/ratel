@@ -279,7 +279,11 @@ describe("LocalSkillsLoader — refresh & lifecycle", () => {
     const loader = new LocalSkillsLoader({ dir: root });
     await loader.start(catalog);
     // A different writer pushes a skill the loader never loaded.
-    catalog.upsert({ id: "foreign", name: "foreign", description: "put here by someone else" });
+    await catalog.upsert({
+      id: "foreign",
+      name: "foreign",
+      description: "put here by someone else",
+    });
     expect(catalog.size()).toBe(2);
 
     await loader.refresh();

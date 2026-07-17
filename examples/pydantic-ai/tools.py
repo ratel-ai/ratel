@@ -104,10 +104,9 @@ TOOLS: list[ExecutableTool] = [
 ]
 
 
-def build_catalog() -> ToolCatalog:
+async def build_catalog() -> ToolCatalog:
     catalog = ToolCatalog()
-    for tool in TOOLS:
-        catalog.register(tool)
+    await catalog.register(TOOLS)
     return catalog
 
 

@@ -1,6 +1,6 @@
 [package]
 name = "ratel-ai-core"
-version = "0.4.0" # core-v* release unit (ADR-0008)
+version = "0.5.0-rc.2" # core-v* release unit (ADR-0008)
 edition.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
@@ -32,6 +32,11 @@ candle-transformers = "0.9"
 # wheels/addons. BERT WordPiece tokenization is unaffected by the backend.
 tokenizers = { version = "0.21", default-features = false, features = ["fancy-regex"] }
 hf-hub = { version = "0.5", default-features = false, features = ["ureq"] }
+
+# Sync HTTP client for OpenAI-compatible embedding endpoints (OpenAI, Ollama,
+# TEI, vLLM…). Already in-tree via hf-hub's `ureq` feature; rustls to match it —
+# no OpenSSL/native-tls. See ADR-0012.
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -1642,7 +1642,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-ai-core"
-version = "0.4.0"
+version = "0.5.0-rc.2"
 dependencies = [
  "bm25",
  "candle-core",
@@ -1654,6 +1654,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokenizers",
+ "ureq",
 ]
 
 [[package]]
@@ -1662,7 +1663,7 @@ version = "0.1.0"
 
 [[package]]
 name = "ratel-sdk-python-native"
-version = "0.4.2"
+version = "0.5.0-rc.2"
 dependencies = [
  "pyo3",
  "pythonize",
@@ -1672,7 +1673,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-sdk-ts-native"
-version = "0.4.1"
+version = "0.5.0-rc.2"
 dependencies = [
  "napi",
  "napi-build",

@@ -25,13 +25,28 @@ class SearchHit:
         """
 
 class ToolRegistry:
-    """Metadata-only BM25 index over `ratel-ai-core`.
+    """Private native metadata registry over `ratel-ai-core`.
 
-    Executors and the capability-tool / MCP layers live in the pure-Python
-    `ratel_ai` package above this binding.
+    BM25 is synchronous; GIL-releasing dense primitives support the public
+    pure-Python async facade. Executors and capability-tool / MCP layers also
+    live above this binding.
     """
 
-    def __init__(self) -> None: ...
+    def __init__(
+        self,
+        spec: str | None = ...,
+        huggingface: str | None = ...,
+        local: str | None = ...,
+        ollama: str | None = ...,
+        url: str | None = ...,
+        model: str | None = ...,
+        revision: str | None = ...,
+        api_key_env: str | None = ...,
+        query_prefix: str | None = ...,
+        doc_prefix: str | None = ...,
+        pooling: str | None = ...,
+        download: bool | None = ...,
+    ) -> None: ...
     def register(
         self,
         id: str,
@@ -45,6 +60,12 @@ class ToolRegistry:
         Replaces in place when `id` is already registered. The schemas must be
         JSON-serializable dicts; anything else raises `ValueError`.
         """
+
+    def _register_many(
+        self,
+        tools: list[tuple[str, str, str, dict[str, Any], dict[str, Any]]],
+    ) -> None:
+        """Atomically convert, then register a tool metadata batch."""
 
     def search(self, query: str, top_k: int) -> list[SearchHit]:
         """Lexical BM25 search: the top `top_k` tools for `query`, best first.
@@ -60,24 +81,26 @@ class ToolRegistry:
         event — ranking is identical to `search`.
         """
 
-    def search_with_method(
+    def _search_with_method(
         self, query: str, top_k: int, origin: str, method: str
     ) -> list[SearchHit]:
         """Search with an explicit method ("bm25" | "semantic" | "hybrid").
 
         "bm25" is infallible; "semantic"/"hybrid" rank against the prebuilt
         embedding cache and raise `RuntimeError` (`EmbeddingsNotBuilt`) if it
-        isn't built — the model loads at `build_embeddings`, never inside a
-        search. An unknown method string raises `ValueError`.
+        isn't built. Private worker-thread primitive; the public Python wrapper
+        exposes `search_async`. An unknown method raises `ValueError`.
         """
 
-    def build_embeddings(self) -> None:
+    def _build_embeddings(self) -> None:
         """Pre-compute embeddings for not-yet-embedded tools (incremental).
 
-        A later semantic/hybrid search then only embeds the query. Raises
-        `RuntimeError` if the model fails to load. The catalog calls this
-        after `register` in semantic mode; BM25-only callers never do.
+        A later semantic/hybrid search then only embeds the query. Private
+        worker-thread primitive used by the public async wrapper.
         """
+
+    def _rebuild_embeddings(self) -> None:
+        """Recompute and atomically replace every tool embedding."""
 
     def record_event(self, event: dict[str, Any]) -> None:
         """Record an SDK-layer trace event into the active sink.
@@ -108,6 +131,12 @@ class ToolRegistry:
         Returns `[]` unless the active sink is "memory".
         """
 
+class EmbedderError(RuntimeError):
+    """Embedding model load / inference failure (subclass of RuntimeError)."""
+
+class DimensionMismatchError(EmbedderError):
+    """A query/corpus embedding dimension mismatch."""
+
 class SkillHit:
     """A single skill search result: the matched skill id and its relevance score.
 
@@ -127,13 +156,27 @@ class SkillHit:
         """
 
 class SkillRegistry:
-    """Metadata-only BM25 index over the skill corpus (separate from tools).
+    """Private native metadata registry over the skill corpus.
 
     The on-demand analogue of `ToolRegistry`: a separate index, so skills are
     ranked independently of tools (own corpus statistics, own top-K).
     """
 
-    def __init__(self) -> None: ...
+    def __init__(
+        self,
+        spec: str | None = ...,
+        huggingface: str | None = ...,
+        local: str | None = ...,
+        ollama: str | None = ...,
+        url: str | None = ...,
+        model: str | None = ...,
+        revision: str | None = ...,
+        api_key_env: str | None = ...,
+        query_prefix: str | None = ...,
+        doc_prefix: str | None = ...,
+        pooling: str | None = ...,
+        download: bool | None = ...,
+    ) -> None: ...
     def register(
         self,
         id: str,
@@ -158,19 +201,38 @@ class SkillRegistry:
         was present; an unknown id is a silent no-op.
         """
 
+    def _register_many(
+        self,
+        skills: list[
+            tuple[
+                str,
+                str,
+                str,
+                list[str],
+                list[str],
+                dict[str, list[str]],
+                str,
+            ]
+        ],
+    ) -> None:
+        """Atomically convert, then register a skill metadata batch."""
+
     def search(self, query: str, top_k: int) -> list[SkillHit]:
         """Lexical BM25 search over the skill corpus — see `ToolRegistry.search`."""
 
     def search_with_origin(self, query: str, top_k: int, origin: str) -> list[SkillHit]:
         """BM25 search tagged with who initiated it — see `ToolRegistry.search_with_origin`."""
 
-    def search_with_method(
+    def _search_with_method(
         self, query: str, top_k: int, origin: str, method: str
     ) -> list[SkillHit]:
-        """Search with an explicit method — see `ToolRegistry.search_with_method`."""
+        """Private worker-thread search primitive."""
 
-    def build_embeddings(self) -> None:
-        """See `ToolRegistry.build_embeddings`."""
+    def _build_embeddings(self) -> None:
+        """Private incremental-build primitive."""
+
+    def _rebuild_embeddings(self) -> None:
+        """Recompute and atomically replace every skill embedding."""
 
     def record_event(self, event: dict[str, Any]) -> None:
         """Record an SDK-layer trace event — see `ToolRegistry.record_event`."""
