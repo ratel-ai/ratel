@@ -1,6 +1,8 @@
 import type { JSONSchema7 } from "json-schema";
 import type { SearchHit, Tool } from "../native/index.cjs";
 import {
+  clampTopK,
+  DEFAULT_TOP_K_TOOLS,
   formatSearchCapabilities,
   INVOKE_TOOL_ID,
   invokeToolTool,
@@ -102,7 +104,11 @@ export interface ToolCollection {
   has(id: string): boolean;
   /** The tool's searchable metadata, or `undefined` when unregistered. */
   get(id: string): Tool | undefined;
-  /** Rank the catalog for `query` (host-driven, origin `"direct"`). */
+  /**
+   * Rank the catalog for `query` (host-driven, origin `"direct"`). `topK` is
+   * clamped to `[1, 50]` (invalid values fall back to 5), like the capability
+   * funnel — drop to {@link catalog} for an unclamped search.
+   */
   search(query: string, topK: number, method?: SearchMethod): SearchHit[];
   /** Execute a registered tool by id with the args object. */
   invoke(id: string, args: Record<string, unknown>): Promise<unknown>;
@@ -115,12 +121,29 @@ export interface ToolCollection {
  * framework's tool shape. Registration runs the adapter's `ingest` codec;
  * first registration of an id wins across every view of the core (and across
  * this view's passthroughs), so repeated calls are idempotent.
+ *
+ * `register`/`has` are framework-aware (`register` takes the framework's tool
+ * shape; `has` also covers this view's passthroughs); `get`/`search`/`invoke`
+ * are at parity with {@link ToolCollection} — they read and run the shared
+ * catalog in its neutral shapes, so they're catalog-only: a passthrough is
+ * provider-executed and un-indexed, so `has` reports it but `get` returns
+ * `undefined`, `search` never ranks it, and `invoke` can't run it.
  */
 export interface AdaptedToolCollection<TTool> {
   /** Ingest framework tools (keyed by tool id) into the shared catalog. Chainable. */
   register(tools: Record<string, TTool>): this;
   /** Whether this id is registered — in the catalog or as this view's passthrough. */
   has(id: string): boolean;
+  /** A catalog tool's searchable metadata, or `undefined` (incl. for a passthrough). */
+  get(id: string): Tool | undefined;
+  /**
+   * Rank the shared catalog for `query` (host-driven, origin `"direct"`). `topK`
+   * is clamped to `[1, 50]` (invalid values fall back to 5); passthroughs are
+   * never ranked. Drop to {@link catalog} for an unclamped search.
+   */
+  search(query: string, topK: number, method?: SearchMethod): SearchHit[];
+  /** Execute a catalog tool by id with the args object (not a passthrough). */
+  invoke(id: string, args: Record<string, unknown>): Promise<unknown>;
   /** The shared catalog itself — the unguarded driver-level escape hatch. */
   readonly catalog: ToolCatalog;
 }
@@ -262,7 +285,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
     },
     has: (id) => catalog.has(id),
     get: (id) => catalog.get(id),
-    search: (query, topK, method) => catalog.search(query, topK, "direct", method),
+    search: (query, topK, method) =>
+      catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", method),
     invoke: (id, args) => catalog.invoke(id, args),
   };
 
@@ -296,6 +320,10 @@ export function ratel(config: RatelConfig = {}): Ratel {
     const adaptedTools: AdaptedToolCollection<unknown> = {
       catalog,
       has: (id) => catalog.has(id) || passthrough.has(id),
+      get: (id) => catalog.get(id),
+      search: (query, topK, method) =>
+        catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", method),
+      invoke: (id, args) => catalog.invoke(id, args),
       register(appTools) {
         for (const [id, tool] of Object.entries(appTools)) {
           assertUnreservedId(id);
@@ -353,11 +381,14 @@ function assertUnreservedId(id: string): void {
 }
 
 /**
- * Reject a framework-shaped tool on the native registration path with the
- * actionable install-the-adapter error. Fingerprints, not full validation: a
- * zod-style schema, a dynamic (function) description, or a missing id — the
- * marks of a framework tool that belongs on an adapted view — trigger
- * {@link unadaptedError}; everything else is the catalog's job to validate.
+ * Reject a native-registration input that isn't a well-formed native tool.
+ * Fingerprints, not full validation: a zod-style schema or a dynamic (function)
+ * description — the marks of a framework tool that belongs on an adapted view —
+ * trigger the actionable {@link unadaptedError}. A missing id is a *malformed
+ * native* tool, not a framework one (framework tools are keyed externally in a
+ * `Record`, so their id-lessness is expected), so it gets its own plain error
+ * rather than misdirecting the caller to install an adapter. Everything else is
+ * the catalog's job to validate.
  */
 function assertNativeTool(tool: ExecutableTool): void {
   const candidate = tool as {
@@ -370,12 +401,16 @@ function assertNativeTool(tool: ExecutableTool): void {
   }
   const schema = candidate.inputSchema as { _def?: unknown; safeParse?: unknown } | undefined;
   const frameworkShaped =
-    typeof candidate.id !== "string" ||
     typeof candidate.description === "function" ||
     (typeof schema === "object" &&
       schema !== null &&
       (schema._def !== undefined || typeof schema.safeParse === "function"));
   if (frameworkShaped) throw unadaptedError(isPeerInstalled);
+  if (typeof candidate.id !== "string") {
+    throw new TypeError(
+      `ratel: tools.register() expects each ExecutableTool to have a string \`id\`; got ${typeof candidate.id}`,
+    );
+  }
 }
 
 /** Reject a non-adapter early (JS callers) with a message that names it via `adapter.name`. */
