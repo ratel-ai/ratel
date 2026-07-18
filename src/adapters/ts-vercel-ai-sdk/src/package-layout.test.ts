@@ -14,7 +14,7 @@ const manifest = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as PackageManifest;
 
-describe("published ai-sdk-adapter dependency layout", () => {
+describe("published vercel-ai-sdk dependency layout", () => {
   it("carries no runtime dependencies — the adapter is pure glue", () => {
     // Everything the adapter touches (`ai`, `@ratel-ai/sdk`) is the host's to
     // provide, so it ships as peers with zero runtime `dependencies`.
