@@ -43,6 +43,10 @@ For features that aren't frontend-only, implement on the Rust core first (with t
 
 Backend / business-logic / library code: TDD is the default — write the failing test first, make it pass, refactor. Frontend changes don't require TDD unless they encode business logic.
 
+## Additive, non-breaking evolution
+
+Avoid breaking changes wherever avoidable. Ship new capabilities as additive, clearly-named experimental surfaces — an `experimentalSomething` function/method or a feature flag (e.g. `experimentalAsyncBuildEmbeddings`) — alongside the stable path, so existing callers keep working while the new behavior is proven out. Once it's proven, promote it to stable (drop the `experimental` prefix) or remove it; don't leave `experimental*` surfaces to rot.
+
 ## Architecture decisions
 
 For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Status` / `Context` / `Decision` / `Consequences`), next available number, kebab-cased title. The set is kept minimal and current: amend in place for small drift (paths, names, counts), supersede for real decision reversals, compact periodically (git history is the archive). See [ADR 0001](docs/adr/0001-record-architecture-decisions.md) for the full convention.
