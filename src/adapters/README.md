@@ -6,15 +6,15 @@ Directories are language-prefixed (`ts-*`, `py-*`) since a framework gets one ad
 
 ## Layout
 
-- `ts-ai-sdk/` — [`@ratel-ai/ai-sdk-adapter`](ts-ai-sdk/README.md): the [Vercel AI SDK](https://sdk.vercel.ai) (`ai@7`) adapter.
+- `ts-vercel-ai-sdk/` — [`@ratel-ai/vercel-ai-sdk`](ts-vercel-ai-sdk/README.md): the [Vercel AI SDK](https://sdk.vercel.ai) (`ai@7`) adapter.
 
 ## Build & test
 
 Each package is a member of the pnpm workspace; build and test it from the repo root:
 
 ```bash
-pnpm --filter @ratel-ai/ai-sdk-adapter build
-pnpm --filter @ratel-ai/ai-sdk-adapter typecheck
-pnpm --filter @ratel-ai/ai-sdk-adapter lint
-pnpm --filter @ratel-ai/ai-sdk-adapter test
+pnpm --filter @ratel-ai/vercel-ai-sdk build
+pnpm --filter @ratel-ai/vercel-ai-sdk typecheck
+pnpm --filter @ratel-ai/vercel-ai-sdk lint
+pnpm --filter @ratel-ai/vercel-ai-sdk test
 ```

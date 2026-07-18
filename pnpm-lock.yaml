@@ -93,7 +93,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
-  src/adapters/ts-ai-sdk:
+  src/adapters/ts-vercel-ai-sdk:
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.13

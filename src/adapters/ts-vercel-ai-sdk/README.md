@@ -1,4 +1,4 @@
-# `@ratel-ai/ai-sdk-adapter`
+# `@ratel-ai/vercel-ai-sdk`
 
 The [Vercel AI SDK](https://sdk.vercel.ai) (`ai@7`) adapter for [Ratel](https://github.com/ratel-ai/ratel). `ratel(config).adaptTo(aiSdk())` layers a framework-shaped view over the framework-neutral core (ADR-0013), so an AI SDK agent registers its own `tool()`s, hands the model Ratel's capability funnel, and gets per-turn recall — all in the SDK's native `Tool` and `ModelMessage` shapes, with no glue in app code.
 
@@ -8,7 +8,7 @@ Ratel keeps the model's tool list small and stable: instead of advertising every
 
 ```ts
 import { anthropic } from "@ai-sdk/anthropic";
-import { aiSdk } from "@ratel-ai/ai-sdk-adapter";
+import { aiSdk } from "@ratel-ai/vercel-ai-sdk";
 import { ratel } from "@ratel-ai/sdk";
 import { type ModelMessage, streamText, tool } from "ai";
 import { z } from "zod";
@@ -76,7 +76,7 @@ Rule of thumb: for a long-lived multi-turn agent that already persists `response
 
 ## Package shape
 
-- Package name: `@ratel-ai/ai-sdk-adapter`
+- Package name: `@ratel-ai/vercel-ai-sdk`
 - Pure TypeScript, **zero runtime dependencies** — the adapter is glue. `ai@^7.0.0` and `@ratel-ai/sdk` are peers the host already installs.
 - MIT ([ADR-0009](../../../docs/adr/0009-licensing.md)); member of the pnpm workspace; `publishConfig` provenance on.
 
@@ -85,10 +85,10 @@ Rule of thumb: for a long-lived multi-turn agent that already persists `response
 From the repo root (the SDK is built first by `pnpm -r build`, which the tests import):
 
 ```bash
-pnpm --filter @ratel-ai/ai-sdk-adapter build
-pnpm --filter @ratel-ai/ai-sdk-adapter typecheck
-pnpm --filter @ratel-ai/ai-sdk-adapter lint
-pnpm --filter @ratel-ai/ai-sdk-adapter test
+pnpm --filter @ratel-ai/vercel-ai-sdk build
+pnpm --filter @ratel-ai/vercel-ai-sdk typecheck
+pnpm --filter @ratel-ai/vercel-ai-sdk lint
+pnpm --filter @ratel-ai/vercel-ai-sdk test
 ```
 
 The suite covers the three codecs, both recall helpers (including id economy on the no-op paths), a `MockLanguageModelV3` integration test that drives the real `ai@7` `generateText` loop, a compile-only type-test locking the `ai` surface, and the `@ratel-ai/sdk/testkit` conformance battery (21 cases, 0 skipped).

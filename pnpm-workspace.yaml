@@ -1,6 +1,6 @@
 packages:
   - 'src/sdk/ts'
-  - 'src/adapters/ts-ai-sdk'
+  - 'src/adapters/ts-vercel-ai-sdk'
   - 'src/telemetry/ts'
   - 'src/telemetry/ts-otlp'
   - 'examples/*'
