@@ -117,11 +117,12 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   hand-duplicating the shape. The SDK also re-exports `JSONSchema7` as its public JSON-Schema
   spelling, so adapters type their registrations without casting through private SDK internals.
 
-- **Detection powers error messages only.** A framework-shaped tool (zod-style schema, dynamic
-  `description`, no `id`) hitting the native `r.tools.register(...)` throws an actionable error
+- **Detection powers error messages only.** A framework-shaped tool — a zod-style schema or a
+  dynamic `description` — hitting the native `r.tools.register(...)` throws an actionable error
   that names the exact adapter package to install, probing known frameworks with the existing
-  `isPeerInstalled`. Detection can't tell *installed* from *in use* (Mastra depends on `ai`
-  internally), so it never drives behavior — only the hint.
+  `isPeerInstalled`. (A merely missing `id` is a malformed *native* tool, not a framework one, so
+  it takes its own plain error path rather than the adapter hint.) Detection can't tell *installed*
+  from *in use* (Mastra depends on `ai` internally), so it never drives behavior — only the hint.
 
 The existing piecemeal API (`ToolCatalog`, the capability-tool builders) is unchanged; the factory
 is additive.
@@ -130,7 +131,8 @@ is additive.
 
 - A framework adapter is ~three pure functions plus its idioms; correctness of the shared guards
   and result shape is the core's job and is tested once. This is what makes community adapters
-  safe (a conformance testkit, next phase, pins the contract).
+  safe: a runner-agnostic conformance testkit (`@ratel-ai/sdk/testkit`) pins the contract, driven
+  by framework-supplied hooks and shipped with a reference adapter as the worked example.
 - Telemetry stamping of the adapter's `name` as a `ratel.adapter` attribute is deferred to the
   adapter packages: the attribute is a vocabulary addition across the Rust/TS/Python telemetry
   triple (ADR-0007) and lands with the first adapter that emits it, not with the core SPI. The

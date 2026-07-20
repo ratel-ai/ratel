@@ -88,12 +88,12 @@ To work in a host framework's native tool and message shapes, adapt the core wit
 
 ```js
 import { ratel } from "@ratel-ai/sdk";
-import { aiSdk } from "@ratel-ai/ai-sdk-adapter"; // ships separately
+import { aiSdk } from "@ratel-ai/vercel-ai-sdk"; // ships separately
 
 const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
-await r.tools.register(myTools);             // async; callable any time, also after expose()
-const tools = r.expose();                    // stable capability set — take once, reuse
-const messages = r.appendRecall(history);    // per-turn recall (AI SDK idiom)
+await r.tools.register(myTools);              // async; callable any time, also after expose()
+const tools = r.expose();                     // stable capability set — take once, reuse
+const messages = await r.appendRecall(history); // per-turn recall (AI SDK idiom)
 ```
 
 `r.tools` is a handle over the core's one shared catalog — registration and exposure are separate

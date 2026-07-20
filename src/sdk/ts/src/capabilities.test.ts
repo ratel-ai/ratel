@@ -163,6 +163,7 @@ describe("searchCapabilitiesTool", () => {
     const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
     const gw = events.find((e) => e.type === "gateway_search");
     expect(gw?.top_k).toBe(3);
+    expect(gw?.origin).toBe("agent"); // searchCapabilitiesTool drives runCapabilitiesSearch as origin "agent"
   });
 
   it("clamps a non-positive / non-integer topK back to the default", async () => {

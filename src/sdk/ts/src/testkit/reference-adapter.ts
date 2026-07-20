@@ -46,39 +46,6 @@ export interface FakeExt {
 }
 
 /**
- * Build a reference {@link FakeTool} that {@link RatelAdapter.ingest | ingests}
- * as an executable — its `execute` returns `spec.result` (default
- * `{ ok: true }`), so a conformance case can prove the catalog ran the
- * framework executor by observing that value come back.
- *
- * @param spec - The description to rank on and the result to observe.
- * @returns A framework tool with an executor.
- */
-export function makeExecutableTool(spec: ConformanceToolSpec): FakeTool {
-  const result = spec.result ?? { ok: true };
-  return {
-    description: spec.description,
-    inputSchema: { type: "object" },
-    execute: () => result,
-  };
-}
-
-/**
- * Build a reference {@link FakeTool} that {@link RatelAdapter.ingest | ingests}
- * as a passthrough — no `execute`, so the adapter must keep it eagerly exposed
- * and out of the catalog.
- *
- * @param spec - The description to rank on (the result is unused for a passthrough).
- * @returns A framework tool without an executor.
- */
-export function makePassthroughTool(spec: ConformanceToolSpec): FakeTool {
-  return {
-    description: spec.description,
-    inputSchema: { type: "object" },
-  };
-}
-
-/**
  * A tiny in-repo {@link RatelAdapter} standing in for a real framework package.
  * Its tool type ({@link FakeTool}) carries its own shape and its message type
  * ({@link FakeMessage}) is fully observable, so tests — and the conformance
@@ -135,6 +102,39 @@ export function referenceConformanceOptions(): AdapterConformanceOptions<FakeToo
     callExposedTool: (tool, args) => tool.execute?.(args),
     validateRecallPair,
     validateExposedTool,
+  };
+}
+
+/**
+ * Build a reference {@link FakeTool} that {@link RatelAdapter.ingest | ingests}
+ * as an executable — its `execute` returns `spec.result` (default
+ * `{ ok: true }`), so a conformance case can prove the catalog ran the
+ * framework executor by observing that value come back.
+ *
+ * @param spec - The description to rank on and the result to observe.
+ * @returns A framework tool with an executor.
+ */
+export function makeExecutableTool(spec: ConformanceToolSpec): FakeTool {
+  const result = spec.result ?? { ok: true };
+  return {
+    description: spec.description,
+    inputSchema: { type: "object" },
+    execute: () => result,
+  };
+}
+
+/**
+ * Build a reference {@link FakeTool} that {@link RatelAdapter.ingest | ingests}
+ * as a passthrough — no `execute`, so the adapter must keep it eagerly exposed
+ * and out of the catalog.
+ *
+ * @param spec - The description to rank on (the result is unused for a passthrough).
+ * @returns A framework tool without an executor.
+ */
+export function makePassthroughTool(spec: ConformanceToolSpec): FakeTool {
+  return {
+    description: spec.description,
+    inputSchema: { type: "object" },
   };
 }
 

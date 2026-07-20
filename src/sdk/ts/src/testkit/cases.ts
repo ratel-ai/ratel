@@ -118,7 +118,7 @@ export function adapterConformanceCases<TTool, TMessage>(
       run: async () => {
         const core = ratel();
         const view = core.adaptTo(options.adapter());
-        view.tools.register({
+        await view.tools.register({
           read_file: options.makeExecutableTool({ description: "Read a file from local disk." }),
         });
         assert.ok(core.tools.has("read_file"), "the core sees the ingested tool");
@@ -133,7 +133,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const marker = { invoked: "read_file" };
         const core = ratel();
         const view = core.adaptTo(options.adapter());
-        view.tools.register({
+        await view.tools.register({
           read_file: options.makeExecutableTool({ description: "Read a file.", result: marker }),
         });
         const result = await core.tools.invoke("read_file", {});
@@ -146,7 +146,7 @@ export function adapterConformanceCases<TTool, TMessage>(
       run: async () => {
         const core = ratel();
         const view = core.adaptTo(options.adapter());
-        view.tools.register({
+        await view.tools.register({
           read_file: options.makeExecutableTool({ description: "Read a file." }),
         });
         const exposed = view.expose();
@@ -175,7 +175,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const view = core.adaptTo(options.adapter());
         // A neutral id, so discovery ranks on the ingested description (the
         // codec's output) rather than on query terms leaking through the id.
-        view.tools.register({
+        await view.tools.register({
           provisioner: options.makeExecutableTool({
             description: "Deploy the app to production servers.",
             result: marker,
@@ -232,7 +232,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const core = ratel();
         const view = core.adaptTo(options.adapter());
         const exposed = view.expose(); // take the set first…
-        view.tools.register({
+        await view.tools.register({
           late_tool: options.makeExecutableTool({ description: "Deploy the app to production." }),
         }); // …register later
         const search = (await options.callExposedTool(exposed[SEARCH_CAPABILITIES_ID], {
@@ -252,6 +252,8 @@ export function adapterConformanceCases<TTool, TMessage>(
         const core = ratel();
         const view = core.adaptTo(options.adapter());
         for (const id of CAPABILITY_IDS) {
+          // Validation throws synchronously, at the call site, before the
+          // promise — assert.throws catches it without an await.
           assert.throws(
             () =>
               view.tools.register({
@@ -262,10 +264,38 @@ export function adapterConformanceCases<TTool, TMessage>(
           );
           assert.ok(!view.tools.catalog.has(id), `${id} never entered the catalog`);
         }
-        view.tools.register({
+        await view.tools.register({
           read_file: options.makeExecutableTool({ description: "Read a file." }),
         });
         assert.ok(view.tools.catalog.has("read_file"), "a normal registration still works");
+      },
+    },
+    {
+      name: "commits nothing when a reserved id throws mid-batch",
+      area: "reserved-ids",
+      skipped: passthroughSkip,
+      run: async () => {
+        const makePassthrough = options.makePassthroughTool;
+        if (!makePassthrough) return;
+        const core = ratel();
+        const view = core.adaptTo(options.adapter());
+        const provider = makePassthrough({ description: "provider-run search" });
+        // A batch whose reserved id throws mid-loop: the passthrough and the
+        // executable ahead of it must not survive — register stages and commits
+        // only after the whole batch validates, like the native path.
+        assert.throws(
+          () =>
+            view.tools.register({
+              provider_search: provider,
+              read_file: options.makeExecutableTool({ description: "Read a file." }),
+              [SEARCH_CAPABILITIES_ID]: options.makeExecutableTool({ description: "impostor" }),
+            }),
+          /reserved/,
+          "a reserved id anywhere in the batch throws",
+        );
+        assert.ok(!view.tools.has("provider_search"), "the passthrough was not committed");
+        assert.ok(!view.tools.catalog.has("read_file"), "the executable was not committed");
+        assert.ok(!("provider_search" in view.expose()), "the passthrough is not model-exposed");
       },
     },
     {
@@ -274,12 +304,11 @@ export function adapterConformanceCases<TTool, TMessage>(
       run: async () => {
         const core = ratel({ recallTopK: 999 });
         const view = core.adaptTo(options.adapter());
-        view.tools.register(manyGrepTools(options));
+        await view.tools.register(manyGrepTools(options));
         const expected = await core.recall("search files grep");
         assert.ok(expected, "the core recall matched");
-        const count = countHits(expected);
-        assert.ok(count <= 50, `topK is capped at 50 (got ${count})`);
-        assert.ok(count > 5, "999 is honoured past the default before the cap");
+        // 60 tools match; 999 is honoured past the default 5, then capped at 50.
+        assert.strictEqual(countHits(expected), 50, "topK caps at exactly 50");
         const messages = await view.recall("search files grep");
         options.validateRecallPair(messages, {
           callId: "recall_0",
@@ -294,10 +323,11 @@ export function adapterConformanceCases<TTool, TMessage>(
       run: async () => {
         const core = ratel({ recallTopK: -1 });
         const view = core.adaptTo(options.adapter());
-        view.tools.register(manyGrepTools(options));
+        await view.tools.register(manyGrepTools(options));
         const expected = await core.recall("search files grep");
         assert.ok(expected, "the core recall matched");
-        assert.ok(countHits(expected) <= 5, "an invalid topK falls back to the default 5");
+        // 60 tools match; an invalid topK falls back to exactly the default 5.
+        assert.strictEqual(countHits(expected), 5, "an invalid topK falls back to the default 5");
         const messages = await view.recall("search files grep");
         options.validateRecallPair(messages, {
           callId: "recall_0",
@@ -316,7 +346,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const core = ratel();
         const view = core.adaptTo(options.adapter());
         const provider = makePassthrough({ description: "provider-run search" });
-        view.tools.register({ provider_search: provider });
+        await view.tools.register({ provider_search: provider });
         assert.strictEqual(
           view.expose().provider_search,
           provider,
@@ -337,7 +367,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const a = core.adaptTo(options.adapter());
         const b = core.adaptTo(options.adapter());
         const provider = makePassthrough({ description: "provider-run search" });
-        a.tools.register({ provider_search: provider });
+        await a.tools.register({ provider_search: provider });
         assert.strictEqual(a.expose().provider_search, provider, "view a exposes it");
         assert.ok(
           !("provider_search" in b.expose()),
@@ -356,8 +386,8 @@ export function adapterConformanceCases<TTool, TMessage>(
         const view = core.adaptTo(options.adapter());
         // A passthrough claims its id: a later executable must not shadow it.
         const provider = makePassthrough({ description: "provider-run" });
-        view.tools.register({ claimed: provider });
-        view.tools.register({
+        await view.tools.register({ claimed: provider });
+        await view.tools.register({
           claimed: options.makeExecutableTool({ description: "late executable" }),
         });
         assert.ok(
@@ -370,10 +400,10 @@ export function adapterConformanceCases<TTool, TMessage>(
           "the first passthrough still owns the id",
         );
         // The reverse: an executable claims its id, a later passthrough must not shadow it.
-        view.tools.register({
+        await view.tools.register({
           dup: options.makeExecutableTool({ description: "first description" }),
         });
-        view.tools.register({ dup: makePassthrough({ description: "late passthrough" }) });
+        await view.tools.register({ dup: makePassthrough({ description: "late passthrough" }) });
         assert.ok(view.tools.catalog.has("dup"), "the executable kept its id");
         assert.ok(!("dup" in view.expose()), "the late passthrough is not exposed");
       },
@@ -389,7 +419,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const view = core.adaptTo(options.adapter());
         const early = view.expose(); // taken before the passthrough exists
         const provider = makePassthrough({ description: "provider-run late" });
-        view.tools.register({ late_provider: provider });
+        await view.tools.register({ late_provider: provider });
         assert.ok(!("late_provider" in early), "the already-taken set does not include it");
         assert.strictEqual(view.expose().late_provider, provider, "a re-expose surfaces it");
       },
@@ -400,7 +430,7 @@ export function adapterConformanceCases<TTool, TMessage>(
       run: async () => {
         const core = ratel();
         const view = core.adaptTo(options.adapter());
-        view.tools.register({
+        await view.tools.register({
           deploy_app: options.makeExecutableTool({
             description: "Deploy the app to production servers.",
           }),
@@ -422,7 +452,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const core = ratel();
         const view = core.adaptTo(options.adapter());
         assert.deepStrictEqual(await view.recall("anything at all"), [], "empty catalog → []");
-        view.tools.register({
+        await view.tools.register({
           deploy_app: options.makeExecutableTool({ description: "Deploy the app to production." }),
         });
         assert.deepStrictEqual(
@@ -448,7 +478,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const core = ratel();
         const a = core.adaptTo(options.adapter());
         const b = core.adaptTo(options.adapter());
-        a.tools.register({
+        await a.tools.register({
           shared_tool: options.makeExecutableTool({ description: "Shared search grep tool." }),
         });
         const expected = await core.recall("shared grep");
@@ -500,17 +530,14 @@ export function adapterConformanceCases<TTool, TMessage>(
       area: "guards",
       run: async () => {
         let ingestCalls = 0;
-        const adapter = options.adapter();
-        const counting: RatelAdapter<TTool, TMessage> = {
-          ...adapter,
-          ingest(id, tool) {
-            ingestCalls++;
-            return adapter.ingest(id, tool);
-          },
-        };
+        const counting = countingAdapter(options.adapter(), () => {
+          ingestCalls++;
+        });
         const view = ratel().adaptTo(counting);
-        view.tools.register({ fresh: options.makeExecutableTool({ description: "Fresh tool." }) });
-        view.tools.register({
+        await view.tools.register({
+          fresh: options.makeExecutableTool({ description: "Fresh tool." }),
+        });
+        await view.tools.register({
           fresh: options.makeExecutableTool({ description: "Duplicate call." }),
         });
         assert.strictEqual(ingestCalls, 1, "ingest ran once despite the repeated register");
@@ -521,18 +548,13 @@ export function adapterConformanceCases<TTool, TMessage>(
       area: "guards",
       run: async () => {
         let ingestCalls = 0;
-        const adapter = options.adapter();
-        const counting: RatelAdapter<TTool, TMessage> = {
-          ...adapter,
-          ingest(id, tool) {
-            ingestCalls++;
-            return adapter.ingest(id, tool);
-          },
-        };
+        const counting = countingAdapter(options.adapter(), () => {
+          ingestCalls++;
+        });
         const core = ratel();
-        core.tools.register(nativeTool("shared_tool", "Shared grep tool."));
+        await core.tools.register(nativeTool("shared_tool", "Shared grep tool."));
         const view = core.adaptTo(counting);
-        view.tools.register({
+        await view.tools.register({
           shared_tool: options.makeExecutableTool({ description: "would shadow" }),
         });
         assert.strictEqual(ingestCalls, 0, "a natively-registered id skips ingest entirely");
@@ -543,7 +565,7 @@ export function adapterConformanceCases<TTool, TMessage>(
       area: "guards",
       run: async () => {
         const view = ratel().adaptTo(options.adapter());
-        view.tools.register({
+        await view.tools.register({
           read_file: options.makeExecutableTool({ description: "Read a file from local disk." }),
         });
         assert.strictEqual(typeof view.tools.register, "function", "the tools handle survives");
@@ -571,6 +593,30 @@ export function adapterConformanceCases<TTool, TMessage>(
 /** Sum the tool hits across every server group in a recall result. */
 function countHits(result: SearchCapabilitiesResult): number {
   return result.tools.groups.reduce((n, g) => n + g.hits.length, 0);
+}
+
+/**
+ * Wrap an adapter so every `ingest` fires `onIngest`, delegating each codec
+ * explicitly. Never spreads the adapter: a spread drops a class-based adapter's
+ * prototype methods, so `expose`/`recallMessages`/`extend` would vanish and a
+ * conformant class adapter would flunk the guard cases.
+ */
+function countingAdapter<TTool, TMessage>(
+  adapter: RatelAdapter<TTool, TMessage>,
+  onIngest: () => void,
+): RatelAdapter<TTool, TMessage> {
+  const wrapped: RatelAdapter<TTool, TMessage> = {
+    name: adapter.name,
+    ingest(id, tool) {
+      onIngest();
+      return adapter.ingest(id, tool);
+    },
+    expose: (tool) => adapter.expose(tool),
+    recallMessages: (ref, recall) => adapter.recallMessages(ref, recall),
+  };
+  const { extend } = adapter;
+  if (extend) wrapped.extend = (base) => extend(base);
+  return wrapped;
 }
 
 /** 60 executable tools sharing query terms, so a recall over-fills its top-K budget. */

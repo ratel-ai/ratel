@@ -2,7 +2,9 @@
  * `@ratel-ai/sdk/testkit` — the adapter conformance battery. A runner-agnostic
  * set of cases every `RatelAdapter` package must pass, covering the whole
  * SPI contract (ADR-0013): ingest/expose round-trip, the reserved-id guard,
- * recall top-K clamping, passthrough semantics, and recall-pair shape. Drive it
+ * recall top-K clamping, passthrough semantics, recall-pair shape, and the
+ * adapter-shape guards (ingest dedup, base surface under `extend`, a non-empty
+ * name). Drive it
  * with {@link describeAdapterConformance} (a `{ describe, it }` from
  * Vitest/Jest/`node:test`) or build the cases yourself with
  * {@link adapterConformanceCases}; assertions use `node:assert`, so no test

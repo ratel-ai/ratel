@@ -63,17 +63,21 @@ describe("describeAdapterConformance registration", () => {
     expect(calls.some((c) => c.kind === "it.skip")).toBe(false);
   });
 
-  it("skips the passthrough cases with a reason when makePassthroughTool is absent", () => {
+  it("skips the passthrough-dependent cases with a reason when makePassthroughTool is absent", () => {
     const noPassthrough = { ...referenceConformanceOptions(), makePassthroughTool: undefined };
     const { calls, runner } = recordingRunner();
     describeAdapterConformance(noPassthrough, runner);
 
-    const passthroughCases = adapterConformanceCases(noPassthrough).filter(
-      (c) => c.area === "passthrough",
-    );
-    expect(passthroughCases.length).toBeGreaterThan(0);
-    expect(passthroughCases.every((c) => typeof c.skipped === "string")).toBe(true);
-    expect(calls.filter((c) => c.kind === "it.skip")).toHaveLength(passthroughCases.length);
+    const cases = adapterConformanceCases(noPassthrough);
+    // Every passthrough-area case needs the hook, so all are skipped…
+    expect(cases.filter((c) => c.area === "passthrough").length).toBeGreaterThan(0);
+    expect(
+      cases.filter((c) => c.area === "passthrough").every((c) => typeof c.skipped === "string"),
+    ).toBe(true);
+    // …and the harness emits exactly one it.skip per skipped case (passthrough
+    // cases plus any other hook-dependent case, e.g. the mixed-batch atomicity check).
+    const skippedCases = cases.filter((c) => typeof c.skipped === "string");
+    expect(calls.filter((c) => c.kind === "it.skip")).toHaveLength(skippedCases.length);
   });
 
   it("falls back to a name suffix when the runner's it has no skip()", () => {

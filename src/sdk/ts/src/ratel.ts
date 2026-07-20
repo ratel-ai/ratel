@@ -80,7 +80,8 @@ export interface RatelAdapter<
   TMessage = unknown,
   TExt extends object = Record<never, never>,
 > {
-  /** Stamped on telemetry (`ratel.adapter`) and error messages. */
+  /** Names the adapter in error messages (and, once adapter packages emit it, in
+   * the `ratel.adapter` telemetry attribute — stamping is deferred to them per ADR-0013). */
   readonly name: string;
   /**
    * Framework tool → catalog registration, or `"passthrough"` for tools the
@@ -280,8 +281,8 @@ const KNOWN_FRAMEWORKS: readonly {
   readonly adapter: string;
   readonly factory: string;
 }[] = [
-  { pkg: "ai", adapter: "@ratel-ai/ai-sdk-adapter", factory: "aiSdk" },
-  { pkg: "@mastra/core", adapter: "@ratel-ai/mastra-adapter", factory: "mastra" },
+  { pkg: "ai", adapter: "@ratel-ai/vercel-ai-sdk", factory: "aiSdk" },
+  { pkg: "@mastra/core", adapter: "@ratel-ai/mastra", factory: "mastra" },
 ];
 
 /**
@@ -302,12 +303,12 @@ const KNOWN_FRAMEWORKS: readonly {
  * @example
  * ```ts
  * import { ratel } from "@ratel-ai/sdk";
- * import { aiSdk } from "@ratel-ai/ai-sdk-adapter";
+ * import { aiSdk } from "@ratel-ai/vercel-ai-sdk";
  *
  * const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
  * await r.tools.register(myTools);
  * const tools = r.expose(); // stable capability set for the model — take once, reuse
- * const messages = r.appendRecall(history); // per-turn recall (AI SDK idiom)
+ * const messages = await r.appendRecall(history); // per-turn recall (AI SDK idiom)
  * ```
  */
 export function ratel(config: RatelConfig = {}): Ratel {
@@ -398,8 +399,13 @@ export function ratel(config: RatelConfig = {}): Ratel {
       invoke: (id, args) => catalog.invoke(id, args),
       // Ingest synchronously (validation + adapter codec + passthrough routing),
       // then embed the ingested batch in one pass; the promise rejects on failure.
+      // Both the passthroughs and the executables stage into locals and commit
+      // only after the whole batch validates, so a mid-batch throw (a reserved
+      // id, or an `ingest` that throws) leaves nothing committed — parity with
+      // the native path, which validates the batch before touching the catalog.
       register(appTools) {
         const batch: ExecutableTool[] = [];
+        const stagedPassthrough: [string, unknown][] = [];
         for (const [id, tool] of Object.entries(appTools)) {
           assertUnreservedId(id);
           // First registration of an id wins, across every view of the core
@@ -407,7 +413,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
           if (catalog.has(id) || passthrough.has(id)) continue;
           const registration = adapter.ingest(id, tool);
           if (registration === "passthrough") {
-            passthrough.set(id, tool);
+            stagedPassthrough.push([id, tool]);
             continue;
           }
           batch.push({
@@ -419,6 +425,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
             execute: registration.execute,
           });
         }
+        // The batch validated: commit the passthroughs, then index the executables.
+        for (const [id, tool] of stagedPassthrough) passthrough.set(id, tool);
         return catalog.register(batch);
       },
     };

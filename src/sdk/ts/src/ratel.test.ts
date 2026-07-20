@@ -60,6 +60,14 @@ describe("ratel() standalone core", () => {
     expect(r.tools.get("dup")?.description).toBe("second description"); // unlike the adapted path
   });
 
+  it("native replace-in-place resolves a duplicate id within one batch to the last", async () => {
+    const r = ratel();
+    // Both entries share an id in a single register() call; the native path is
+    // replace-in-place (not first-wins like the adapted path), so the last wins.
+    await r.tools.register(native("dup", "first description"), native("dup", "second description"));
+    expect(r.tools.get("dup")?.description).toBe("second description");
+  });
+
   it("expose() returns the three capability tools in native shape", async () => {
     const r = ratel();
     await r.tools.register(native("read_file", "Read a file from local disk."));
@@ -70,6 +78,18 @@ describe("ratel() standalone core", () => {
       query: "read a file",
     })) as SearchCapabilitiesResult;
     expect(result.tools.groups[0]?.hits[0]?.toolId).toBe("read_file");
+  });
+
+  it("expose() builds fresh capability-tool objects each call", async () => {
+    const r = ratel();
+    await r.tools.register(native("read_file", "Read a file from local disk."));
+    const first = r.expose();
+    const second = r.expose();
+    // Fresh objects per call (parity with the adapted view), so a host taking
+    // the set once and reusing it keeps the prompt cache stable.
+    expect(second[SEARCH_CAPABILITIES_ID]).not.toBe(first[SEARCH_CAPABILITIES_ID]);
+    expect(second[INVOKE_TOOL_ID]).not.toBe(first[INVOKE_TOOL_ID]);
+    expect(second[GET_SKILL_CONTENT_ID]).not.toBe(first[GET_SKILL_CONTENT_ID]);
   });
 
   it("expose() always advertises get_skill_content, even with zero skills", async () => {
@@ -203,13 +223,11 @@ describe("ratel() standalone core", () => {
       native(`grep_${i}`, `Search files variant ${i}: grep ripgrep.`),
     );
     await r.tools.register(...many);
-    // A stray-large topK is capped, not passed straight to the catalog.
-    expect(r.tools.search("search files grep", 999).length).toBeLessThanOrEqual(50);
-    // A negative topK falls back to the default 5 rather than wrapping to an
-    // unbounded u32 set in the native layer.
-    const negative = r.tools.search("search files grep", -1);
-    expect(negative.length).toBeLessThanOrEqual(5);
-    expect(negative.length).toBeGreaterThan(0);
+    // 60 tools match, so exact counts pin the contract: a stray-large topK caps
+    // at 50 (not passed straight to the catalog), a negative one falls back to
+    // the default 5 (not wrapping to an unbounded u32 set in the native layer).
+    expect(r.tools.search("search files grep", 999).length).toBe(50);
+    expect(r.tools.search("search files grep", -1).length).toBe(5);
   });
 
   it("recall() is a pure query: canonical result or null, no call ids", async () => {
@@ -249,8 +267,7 @@ describe("ratel() standalone core", () => {
       (n, g) => n + g.hits.length,
       0,
     );
-    expect(hi).toBeLessThanOrEqual(50);
-    expect(hi).toBeGreaterThan(5); // 999 honored past the default, capped at 50
+    expect(hi).toBe(50); // 999 honored past the default 5, then capped at exactly 50
 
     const low = ratel({ recallTopK: -1 });
     await low.tools.register(...many);
@@ -258,7 +275,7 @@ describe("ratel() standalone core", () => {
       (n, g) => n + g.hits.length,
       0,
     );
-    expect(lo).toBeLessThanOrEqual(5); // invalid → default 5
+    expect(lo).toBe(5); // invalid → exactly the default 5
   });
 
   it("derives server groups by the '__' prefix, treating a leading '__' as no prefix", async () => {
@@ -463,6 +480,24 @@ describe("ratel().adaptTo(adapter)", () => {
     }
   });
 
+  it("register is atomic: a reserved id mid-batch commits neither passthrough nor executable", () => {
+    const a = ratel().adaptTo(referenceAdapter());
+    const provider: FakeTool = { description: "provider-run search", inputSchema: {} };
+    // A mixed batch whose reserved id throws after a passthrough and an
+    // executable: staging means the earlier entries never land — no
+    // half-committed, model-exposed passthrough while the executable is dropped.
+    expect(() =>
+      a.tools.register({
+        provider_search: provider,
+        read_file: exec("Read a file from local disk."),
+        [SEARCH_CAPABILITIES_ID]: exec("impostor"),
+      }),
+    ).toThrow(/reserved/);
+    expect(a.tools.has("provider_search")).toBe(false); // passthrough not committed
+    expect(a.tools.catalog.has("read_file")).toBe(false); // executable not committed
+    expect(a.expose()).not.toHaveProperty("provider_search"); // and not model-exposed
+  });
+
   it("skips ingest entirely for an id that is already registered", async () => {
     const core = ratel();
     await core.tools.register(native("shared_tool", "Shared grep tool."));
@@ -594,11 +629,11 @@ describe("ratel().adaptTo(adapter)", () => {
 describe("unadaptedError", () => {
   it("names the exact adapter package when a known framework is detected", () => {
     const aiErr = unadaptedError((pkg) => pkg === "ai");
-    expect(aiErr.message).toContain("@ratel-ai/ai-sdk-adapter");
+    expect(aiErr.message).toContain("@ratel-ai/vercel-ai-sdk");
     expect(aiErr.message).toContain("aiSdk");
 
     const mastraErr = unadaptedError((pkg) => pkg === "@mastra/core");
-    expect(mastraErr.message).toContain("@ratel-ai/mastra-adapter");
+    expect(mastraErr.message).toContain("@ratel-ai/mastra");
     expect(mastraErr.message).toContain("mastra");
   });
 
