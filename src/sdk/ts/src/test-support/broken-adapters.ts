@@ -97,11 +97,11 @@ export function droppedResult(): RatelAdapter<FakeTool, FakeMessage> {
   };
 }
 
-/** `extend` shadows the base `expose`, clobbering the model-facing surface. */
+/** `extend` shadows the base `modelTools`, clobbering the model-facing surface. */
 export function shadowingExtend(): RatelAdapter<FakeTool, FakeMessage> {
   return {
     ...referenceAdapter(),
-    extend: () => ({ expose: () => ({}) }),
+    extend: () => ({ modelTools: () => ({}) }),
   };
 }
 

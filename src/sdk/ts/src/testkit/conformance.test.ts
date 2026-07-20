@@ -133,7 +133,7 @@ describe("the battery discriminates against broken adapters", () => {
   it("lossyIngest fails discovery of ingested tools", async () => {
     const outcomes = await runOutcomes(withAdapter(lossyIngest));
     expectOutcome(outcomes, "runs discovery and invocation through the framework shape", false);
-    expectOutcome(outcomes, "discovers tools registered after expose()", false);
+    expectOutcome(outcomes, "discovers tools registered after modelTools()", false);
     expectOutcome(outcomes, "requires a non-empty adapter name", true);
   });
 
@@ -156,7 +156,7 @@ describe("the battery discriminates against broken adapters", () => {
     expectOutcome(outcomes, "exposes a passthrough by identity and never catalogs it", false);
     expectOutcome(outcomes, "keeps passthroughs per view", false);
     expectOutcome(outcomes, "first registration wins across executables and passthroughs", false);
-    expectOutcome(outcomes, "needs a re-expose to surface a late passthrough", false);
+    expectOutcome(outcomes, "needs a fresh modelTools() to surface a late passthrough", false);
     expectOutcome(outcomes, "registers an ingested tool into the shared catalog", true);
   });
 

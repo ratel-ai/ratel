@@ -99,7 +99,7 @@ export interface RatelAdapter<
 /**
  * The core's handle over its shared {@link ToolCatalog} — registration and
  * lookup in the SDK's native shapes, callable at any time (also after
- * {@link Ratel.expose}: the capability tools search the live catalog at
+ * {@link Ratel.modelTools}: the capability tools search the live catalog at
  * invocation time). Guards live here: the reserved capability-tool ids throw,
  * and a framework-shaped tool throws an actionable install-the-adapter error.
  * Registration keeps the catalog's own replace-in-place semantics — the native
@@ -205,9 +205,9 @@ export interface AdaptedBase<TTool, TMessage> {
    * Fresh objects per call — take it once per agent instance and reuse it, so
    * the prompt cache survives. Tools registered later are still discoverable
    * (the capability tools search the live catalog); only a *passthrough*
-   * registered later needs a re-expose to reach the model.
+   * registered later needs a fresh `modelTools()` to reach the model.
    */
-  expose(): Record<string, TTool>;
+  modelTools(): Record<string, TTool>;
   /**
    * Rank `query` and return the synthetic `search_capabilities` message pair in
    * the framework's shape (origin `"direct"`), or `[]` when nothing matched
@@ -231,8 +231,8 @@ export type AdaptedRatel<A extends RatelAdapter> =
 /**
  * One `ratel(config)` core: a single {@link ToolCatalog} + {@link SkillCatalog}
  * + recall-id counter shared by every {@link Ratel.adaptTo} view. Genuinely
- * usable standalone — register native tools on {@link Ratel.tools}, expose the
- * capability tools with {@link Ratel.expose}, rank with {@link Ratel.recall} —
+ * usable standalone — register native tools on {@link Ratel.tools}, hand the
+ * model {@link Ratel.modelTools}, rank with {@link Ratel.recall} —
  * and adaptable on top for a framework's native shapes.
  */
 export interface Ratel {
@@ -251,7 +251,7 @@ export interface Ratel {
    * structured error, not a missing tool. Fresh objects per call: take it once
    * and reuse it. Tools and skills registered later are still discoverable.
    */
-  expose(): Record<string, ExecutableTool>;
+  modelTools(): Record<string, ExecutableTool>;
   /**
    * Rank `query` into the canonical `search_capabilities` result (origin
    * `"direct"`, top-K from `recallTopK`), or `null` when nothing matched. A
@@ -287,7 +287,7 @@ const KNOWN_FRAMEWORKS: readonly {
 
 /**
  * Create a framework-neutral Ratel core. It works standalone — register native
- * tools on `r.tools`, skills on `r.skills`, hand the model `r.expose()`, rank
+ * tools on `r.tools`, skills on `r.skills`, hand the model `r.modelTools()`, rank
  * with `r.recall(query)` — and {@link Ratel.adaptTo | adapts} to a framework
  * with a {@link RatelAdapter} for that framework's native shapes. The core owns
  * all state (the catalogs, the recall-id counter) and every
@@ -307,7 +307,7 @@ const KNOWN_FRAMEWORKS: readonly {
  *
  * const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
  * await r.tools.register(myTools);
- * const tools = r.expose(); // stable capability set for the model — take once, reuse
+ * const tools = r.modelTools(); // stable capability set for the model — take once, reuse
  * const messages = await r.appendRecall(history); // per-turn recall (AI SDK idiom)
  * ```
  */
@@ -363,7 +363,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     invoke: (id, args) => catalog.invoke(id, args),
   };
 
-  function expose(): Record<string, ExecutableTool> {
+  function modelTools(): Record<string, ExecutableTool> {
     return {
       // advertiseSkills pins the skills clause of the description: the exposed
       // payload must be byte-identical whether skills register before or after.
@@ -434,9 +434,9 @@ export function ratel(config: RatelConfig = {}): Ratel {
     const base: AdaptedBase<unknown, unknown> = {
       tools: adaptedTools,
       skills,
-      expose() {
+      modelTools() {
         const out: Record<string, unknown> = Object.fromEntries(passthrough);
-        for (const [id, tool] of Object.entries(expose())) {
+        for (const [id, tool] of Object.entries(modelTools())) {
           out[id] = adapter.expose(tool);
         }
         return out;
@@ -453,7 +453,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     return { ...base, ...ext } as AdaptedRatel<A>;
   }
 
-  return { tools, skills, expose, recall, adaptTo };
+  return { tools, skills, modelTools, recall, adaptTo };
 }
 
 /** Reject a reserved capability-tool id (the funnel's vocabulary can't be shadowed). */

@@ -32,15 +32,15 @@ into.
 ## Decision
 
 **A `RatelAdapter` SPI plus a `ratel(config)` factory. The core is a standalone,
-framework-free object — a collection handle per catalog, an explicit `expose()`, a pure
+framework-free object — a collection handle per catalog, an explicit `modelTools()`, a pure
 `recall()` — and `adaptTo(aiSdk())` layers a framework-shaped view over the same state. An
 adapter is three pure codecs; the core owns all state and every framework-independent guard.**
 
 - **Registration and exposure are separate acts.** `r.tools` is a handle over the core's one
   `ToolCatalog` (mongo `db.collection` style): registration is callable at any time, including
   after exposure — the capability tools close over the live catalog and search at invocation
-  time, and a semantic/hybrid catalog embeds incrementally per-register. `expose()` returns the
-  model-facing set: the three capability tools (plus, on an adapted view, that view's
+  time, and a semantic/hybrid catalog embeds incrementally per-register. `modelTools()` returns
+  the model-facing set: the three capability tools (plus, on an adapted view, that view's
   passthroughs). It builds fresh objects per call — hosts take it once per agent instance and
   reuse it. Rejected: the one-shot `tools(appTools)` that ingested, built embeddings, and exposed
   in a single call — it hid that late registration is safe and made incremental use impossible.
@@ -92,13 +92,13 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   is the authoritative hot-swap path. The raw catalog stays reachable (`r.tools.catalog`) as the
   unguarded driver-level escape hatch.
 
-- **All three capability tools are always advertised.** `expose()` never gates
+- **All three capability tools are always advertised.** `modelTools()` never gates
   `get_skill_content` on `skills.size()`: the exposed set must not depend on registration order,
   or a skill registered after exposure makes `search_capabilities` return skill hits pointing at
   a tool the model was never given (a hard `NoSuchToolError` in AI SDK hosts). The
   `search_capabilities` description is pinned skills-inclusive the same way (an additive
   `advertiseSkills` option on the piecemeal builder, whose size-gated default is unchanged), so
-  the exposed payload is byte-identical whether skills register before or after `expose()`.
+  the exposed payload is byte-identical whether skills register before or after `modelTools()`.
   Loading from an empty skill catalog returns a structured error, not a missing tool — one
   dormant tool slot buys an order-independent, prompt-cache-stable set. Rejected: conditional
   advertisement with a caller pin — more surface for the same guarantee.
@@ -138,7 +138,7 @@ is additive.
   triple (ADR-0007) and lands with the first adapter that emits it, not with the core SPI. The
   `name` field is carried on the SPI now so adapters supply it from day one.
 - Late-registered *passthroughs* are the one thing an already-exposed set can't pick up (they are
-  plain framework tools, not catalog entries); surfacing them requires re-taking `expose()` — a
+  plain framework tools, not catalog entries); surfacing them requires re-taking `modelTools()` — a
   visible, deliberate prompt-cache bust rather than an implicit mutation.
 - Rejected: string-keyed adapters and auto-require sugar (breaks bundlers and static typing).
   Rejected: auto-detecting the framework from inside the core (structurally unreliable under

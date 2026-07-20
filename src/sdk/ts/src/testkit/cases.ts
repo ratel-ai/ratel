@@ -149,17 +149,17 @@ export function adapterConformanceCases<TTool, TMessage>(
         await view.tools.register({
           read_file: options.makeExecutableTool({ description: "Read a file." }),
         });
-        const exposed = view.expose();
+        const exposed = view.modelTools();
         assert.deepStrictEqual(
           Object.keys(exposed).sort(),
           [...CAPABILITY_IDS].sort(),
           "exposes exactly the three capability tools",
         );
-        const again = view.expose();
+        const again = view.modelTools();
         assert.notStrictEqual(
           again[SEARCH_CAPABILITIES_ID],
           exposed[SEARCH_CAPABILITIES_ID],
-          "expose() builds fresh objects each call",
+          "modelTools() builds fresh objects each call",
         );
         for (const id of CAPABILITY_IDS) {
           options.validateExposedTool?.(exposed[id]);
@@ -181,7 +181,7 @@ export function adapterConformanceCases<TTool, TMessage>(
             result: marker,
           }),
         });
-        const exposed = view.expose();
+        const exposed = view.modelTools();
         const search = (await options.callExposedTool(exposed[SEARCH_CAPABILITIES_ID], {
           query: "deploy to production",
         })) as SearchCapabilitiesResult;
@@ -214,7 +214,7 @@ export function adapterConformanceCases<TTool, TMessage>(
           tags: [],
           body: "# Deploy",
         });
-        const exposed = view.expose();
+        const exposed = view.modelTools();
         const loaded = (await options.callExposedTool(exposed[GET_SKILL_CONTENT_ID], {
           skillId: "deploy",
         })) as { body?: string };
@@ -226,12 +226,12 @@ export function adapterConformanceCases<TTool, TMessage>(
       },
     },
     {
-      name: "discovers tools registered after expose()",
+      name: "discovers tools registered after modelTools()",
       area: "ingest-expose",
       run: async () => {
         const core = ratel();
         const view = core.adaptTo(options.adapter());
-        const exposed = view.expose(); // take the set first…
+        const exposed = view.modelTools(); // take the set first…
         await view.tools.register({
           late_tool: options.makeExecutableTool({ description: "Deploy the app to production." }),
         }); // …register later
@@ -241,7 +241,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         assert.strictEqual(
           search.tools.groups[0]?.hits[0]?.toolId,
           "late_tool",
-          "a tool registered after expose() is still discoverable",
+          "a tool registered after modelTools() is still discoverable",
         );
       },
     },
@@ -295,7 +295,10 @@ export function adapterConformanceCases<TTool, TMessage>(
         );
         assert.ok(!view.tools.has("provider_search"), "the passthrough was not committed");
         assert.ok(!view.tools.catalog.has("read_file"), "the executable was not committed");
-        assert.ok(!("provider_search" in view.expose()), "the passthrough is not model-exposed");
+        assert.ok(
+          !("provider_search" in view.modelTools()),
+          "the passthrough is not model-exposed",
+        );
       },
     },
     {
@@ -348,7 +351,7 @@ export function adapterConformanceCases<TTool, TMessage>(
         const provider = makePassthrough({ description: "provider-run search" });
         await view.tools.register({ provider_search: provider });
         assert.strictEqual(
-          view.expose().provider_search,
+          view.modelTools().provider_search,
           provider,
           "the passthrough is exposed by identity, untouched",
         );
@@ -368,9 +371,9 @@ export function adapterConformanceCases<TTool, TMessage>(
         const b = core.adaptTo(options.adapter());
         const provider = makePassthrough({ description: "provider-run search" });
         await a.tools.register({ provider_search: provider });
-        assert.strictEqual(a.expose().provider_search, provider, "view a exposes it");
+        assert.strictEqual(a.modelTools().provider_search, provider, "view a exposes it");
         assert.ok(
-          !("provider_search" in b.expose()),
+          !("provider_search" in b.modelTools()),
           "view b does not — passthroughs are per view",
         );
       },
@@ -395,7 +398,7 @@ export function adapterConformanceCases<TTool, TMessage>(
           "the executable did not shadow the passthrough",
         );
         assert.strictEqual(
-          view.expose().claimed,
+          view.modelTools().claimed,
           provider,
           "the first passthrough still owns the id",
         );
@@ -405,11 +408,11 @@ export function adapterConformanceCases<TTool, TMessage>(
         });
         await view.tools.register({ dup: makePassthrough({ description: "late passthrough" }) });
         assert.ok(view.tools.catalog.has("dup"), "the executable kept its id");
-        assert.ok(!("dup" in view.expose()), "the late passthrough is not exposed");
+        assert.ok(!("dup" in view.modelTools()), "the late passthrough is not exposed");
       },
     },
     {
-      name: "needs a re-expose to surface a late passthrough",
+      name: "needs a fresh modelTools() to surface a late passthrough",
       area: "passthrough",
       skipped: passthroughSkip,
       run: async () => {
@@ -417,11 +420,15 @@ export function adapterConformanceCases<TTool, TMessage>(
         if (!makePassthrough) return;
         const core = ratel();
         const view = core.adaptTo(options.adapter());
-        const early = view.expose(); // taken before the passthrough exists
+        const early = view.modelTools(); // taken before the passthrough exists
         const provider = makePassthrough({ description: "provider-run late" });
         await view.tools.register({ late_provider: provider });
         assert.ok(!("late_provider" in early), "the already-taken set does not include it");
-        assert.strictEqual(view.expose().late_provider, provider, "a re-expose surfaces it");
+        assert.strictEqual(
+          view.modelTools().late_provider,
+          provider,
+          "a fresh modelTools() surfaces it",
+        );
       },
     },
     {
@@ -572,9 +579,9 @@ export function adapterConformanceCases<TTool, TMessage>(
         assert.strictEqual(typeof view.recall, "function", "recall survives");
         assert.ok(view.skills instanceof SkillCatalog, "the skills catalog survives");
         assert.deepStrictEqual(
-          Object.keys(view.expose()).sort(),
+          Object.keys(view.modelTools()).sort(),
           [...CAPABILITY_IDS].sort(),
-          "expose() still returns exactly the capability set",
+          "modelTools() still returns exactly the capability set",
         );
       },
     },

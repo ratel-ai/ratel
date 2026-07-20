@@ -68,10 +68,10 @@ describe("ratel() standalone core", () => {
     expect(r.tools.get("dup")?.description).toBe("second description");
   });
 
-  it("expose() returns the three capability tools in native shape", async () => {
+  it("modelTools() returns the three capability tools in native shape", async () => {
     const r = ratel();
     await r.tools.register(native("read_file", "Read a file from local disk."));
-    const out = r.expose();
+    const out = r.modelTools();
     expect(Object.keys(out).sort()).toEqual([...CAPABILITY_IDS].sort());
     expect(out[SEARCH_CAPABILITIES_ID]?.id).toBe(SEARCH_CAPABILITIES_ID); // native, not adapted
     const result = (await out[SEARCH_CAPABILITIES_ID]?.execute({
@@ -80,11 +80,11 @@ describe("ratel() standalone core", () => {
     expect(result.tools.groups[0]?.hits[0]?.toolId).toBe("read_file");
   });
 
-  it("expose() builds fresh capability-tool objects each call", async () => {
+  it("modelTools() builds fresh capability-tool objects each call", async () => {
     const r = ratel();
     await r.tools.register(native("read_file", "Read a file from local disk."));
-    const first = r.expose();
-    const second = r.expose();
+    const first = r.modelTools();
+    const second = r.modelTools();
     // Fresh objects per call (parity with the adapted view), so a host taking
     // the set once and reusing it keeps the prompt cache stable.
     expect(second[SEARCH_CAPABILITIES_ID]).not.toBe(first[SEARCH_CAPABILITIES_ID]);
@@ -92,9 +92,9 @@ describe("ratel() standalone core", () => {
     expect(second[GET_SKILL_CONTENT_ID]).not.toBe(first[GET_SKILL_CONTENT_ID]);
   });
 
-  it("expose() always advertises get_skill_content, even with zero skills", async () => {
+  it("modelTools() always advertises get_skill_content, even with zero skills", async () => {
     const r = ratel();
-    const out = r.expose();
+    const out = r.modelTools();
     expect(Object.keys(out)).toContain(GET_SKILL_CONTENT_ID);
     // Empty skill catalog degrades to a structured error, never a missing tool.
     const res = (await out[GET_SKILL_CONTENT_ID]?.execute({ skillId: "nope" })) as {
@@ -103,9 +103,9 @@ describe("ratel() standalone core", () => {
     expect(res.isError).toBe(true);
   });
 
-  it("tools registered after expose() are discoverable through the exposed set", async () => {
+  it("tools registered after modelTools() are discoverable through the exposed set", async () => {
     const r = ratel();
-    const out = r.expose(); // expose first…
+    const out = r.modelTools(); // take the set first…
     await r.tools.register(native("late_tool", "Deploy the app to production.")); // …register later
     const result = (await out[SEARCH_CAPABILITIES_ID]?.execute({
       query: "deploy production",
@@ -113,9 +113,9 @@ describe("ratel() standalone core", () => {
     expect(result.tools.groups[0]?.hits[0]?.toolId).toBe("late_tool");
   });
 
-  it("loads a skill registered after expose() through the exposed get_skill_content", async () => {
+  it("loads a skill registered after modelTools() through the exposed get_skill_content", async () => {
     const r = ratel();
-    const out = r.expose(); // taken once, before any skill exists
+    const out = r.modelTools(); // taken once, before any skill exists
     await r.skills.register({
       id: "deploy",
       name: "deploy",
@@ -131,7 +131,7 @@ describe("ratel() standalone core", () => {
 
   it("keeps the exposed search_capabilities description byte-stable across skill registration", async () => {
     const r = ratel();
-    const before = r.expose()[SEARCH_CAPABILITIES_ID]?.description;
+    const before = r.modelTools()[SEARCH_CAPABILITIES_ID]?.description;
     // The skills clause is always advertised — get_skill_content is always in
     // the set, so the description must never deny the bucket…
     expect(before).toContain("get_skill_content");
@@ -143,7 +143,7 @@ describe("ratel() standalone core", () => {
       body: "# Deploy",
     });
     // …and re-exposing after the first skill must not bust the prompt cache.
-    expect(r.expose()[SEARCH_CAPABILITIES_ID]?.description).toBe(before);
+    expect(r.modelTools()[SEARCH_CAPABILITIES_ID]?.description).toBe(before);
   });
 
   it("throws when a tool shadows a reserved capability-tool id", () => {
@@ -389,25 +389,25 @@ describe("ratel().adaptTo(adapter)", () => {
     const a = ratel().adaptTo(referenceAdapter());
     expect(a.label).toBe("adapted:true"); // TExt inferred and merged
     expect(typeof a.tools.register).toBe("function");
-    expect(typeof a.expose).toBe("function");
+    expect(typeof a.modelTools).toBe("function");
     expect(typeof a.recall).toBe("function");
     expect(a.skills).toBeInstanceOf(SkillCatalog);
   });
 
-  it("registers tools into the shared catalog; expose() returns only the capability set", async () => {
+  it("registers tools into the shared catalog; modelTools() returns only the capability set", async () => {
     const a = ratel().adaptTo(referenceAdapter());
     await a.tools.register({ read_file: exec("Read a file from local disk.") });
     expect(a.tools.has("read_file")).toBe(true);
     expect(a.tools.catalog.has("read_file")).toBe(true); // same shared catalog
-    expect(Object.keys(a.expose()).sort()).toEqual([...CAPABILITY_IDS].sort());
+    expect(Object.keys(a.modelTools()).sort()).toEqual([...CAPABILITY_IDS].sort());
   });
 
   it("routes the capability tools through the adapter's expose codec", async () => {
     const a = ratel().adaptTo(referenceAdapter());
     await a.tools.register({ read_file: exec("Read a file from local disk.") });
-    const search = a.expose()[SEARCH_CAPABILITIES_ID];
+    const search = a.modelTools()[SEARCH_CAPABILITIES_ID];
     // A FakeTool has no id/outputSchema — a raw ExecutableTool would. Their
-    // absence proves expose() ran the value through the codec, not shipped it raw.
+    // absence proves modelTools() ran the value through the codec, not shipped it raw.
     expect(search).not.toHaveProperty("id");
     expect(search).not.toHaveProperty("outputSchema");
     const result = (await search?.execute?.({ query: "read a file" })) as SearchCapabilitiesResult;
@@ -416,12 +416,12 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("always advertises get_skill_content, even before any skill is registered", () => {
     const a = ratel().adaptTo(referenceAdapter());
-    expect(Object.keys(a.expose())).toContain(GET_SKILL_CONTENT_ID);
+    expect(Object.keys(a.modelTools())).toContain(GET_SKILL_CONTENT_ID);
   });
 
-  it("tools registered after expose() are discoverable through the exposed set", async () => {
+  it("tools registered after modelTools() are discoverable through the exposed set", async () => {
     const a = ratel().adaptTo(referenceAdapter());
-    const out = a.expose();
+    const out = a.modelTools();
     await a.tools.register({ late_tool: exec("Deploy the app to production.") });
     const result = (await out[SEARCH_CAPABILITIES_ID]?.execute?.({
       query: "deploy production",
@@ -435,10 +435,10 @@ describe("ratel().adaptTo(adapter)", () => {
     const b = core.adaptTo(referenceAdapter());
     const provider: FakeTool = { description: "provider-run search", inputSchema: {} };
     await a.tools.register({ provider_search: provider });
-    expect(a.expose().provider_search).toBe(provider); // eagerly exposed, untouched
+    expect(a.modelTools().provider_search).toBe(provider); // eagerly exposed, untouched
     expect(a.tools.catalog.has("provider_search")).toBe(false); // never in the catalog
     expect(a.tools.has("provider_search")).toBe(true); // …but the view knows it
-    expect(b.expose()).not.toHaveProperty("provider_search"); // framework-shaped → per view
+    expect(b.modelTools()).not.toHaveProperty("provider_search"); // framework-shaped → per view
   });
 
   it("exposes get/search/invoke on the adapted handle, at parity with the native ToolCollection", async () => {
@@ -495,7 +495,7 @@ describe("ratel().adaptTo(adapter)", () => {
     ).toThrow(/reserved/);
     expect(a.tools.has("provider_search")).toBe(false); // passthrough not committed
     expect(a.tools.catalog.has("read_file")).toBe(false); // executable not committed
-    expect(a.expose()).not.toHaveProperty("provider_search"); // and not model-exposed
+    expect(a.modelTools()).not.toHaveProperty("provider_search"); // and not model-exposed
   });
 
   it("skips ingest entirely for an id that is already registered", async () => {
@@ -552,7 +552,7 @@ describe("ratel().adaptTo(adapter)", () => {
     await a.tools.register({ claimed: provider });
     await a.tools.register({ claimed: exec("late executable") });
     expect(a.tools.catalog.has("claimed")).toBe(false);
-    expect(a.expose().claimed).toBe(provider);
+    expect(a.modelTools().claimed).toBe(provider);
   });
 
   it("recall returns the adapter's message pair with a private-counter call id", async () => {
@@ -617,7 +617,7 @@ describe("ratel().adaptTo(adapter)", () => {
     } as unknown as RatelAdapter<FakeTool, FakeMessage>;
     const a = ratel().adaptTo(bad);
     await a.tools.register({ read_file: exec("Read a file from local disk.") });
-    expect(Object.keys(a.expose()).sort()).toEqual([...CAPABILITY_IDS].sort());
+    expect(Object.keys(a.modelTools()).sort()).toEqual([...CAPABILITY_IDS].sort());
   });
 
   it("validates the adapter shape, naming it via adapter.name", () => {
