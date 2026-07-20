@@ -8,8 +8,8 @@ import { mastra } from "./mastra.js";
 
 const view = ratel().adaptTo(mastra());
 
-// `expose()` returns tools assignable straight to an Agent's `ToolsInput` — no cast.
-const tools: ToolsInput = view.expose();
+// `modelTools()` returns tools assignable straight to an Agent's `ToolsInput` — no cast.
+const tools: ToolsInput = view.modelTools();
 
 // `recallProcessor()` is a Mastra `Processor` and, more specifically, an
 // `InputProcessor` (id + processInput), so it drops into `inputProcessors`.
@@ -22,7 +22,7 @@ const agent = new Agent({
   name: "type-test",
   instructions: "test",
   model: "openai/gpt-4o-mini",
-  tools: view.expose(),
+  tools: view.modelTools(),
   inputProcessors: [view.recallProcessor()],
 });
 

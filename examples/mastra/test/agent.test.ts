@@ -2,7 +2,7 @@
 // examples/ai-sdk/test/agent.test.ts). Drives the real Mastra `Agent` loop with
 // Mastra's built-in mock model — no API key, no network — so it exercises the
 // parts that break on SDK/Mastra drift but the SDK-level e2e can't see:
-//   - the adapter's expose() feeding the Agent exactly the three capability tools
+//   - the adapter's modelTools() feeding the Agent exactly the three capability tools
 //   - recallProcessor() injecting the synthetic search_capabilities pair into the
 //     prompt the model actually receives
 //
