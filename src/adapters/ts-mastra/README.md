@@ -1,4 +1,4 @@
-# `@ratel-ai/mastra-adapter`
+# `@ratel-ai/mastra`
 
 The [Mastra](https://mastra.ai) (`@mastra/core`) adapter for [Ratel](https://github.com/ratel-ai/ratel). `ratel(config).adaptTo(mastra())` layers a framework-shaped view over the framework-neutral core (ADR-0013), so a Mastra agent registers its own `createTool()`s, hands the model Ratel's capability funnel, and gets per-turn recall — all in Mastra's native `Tool` and `MastraDBMessage` shapes, with no glue in app code.
 
@@ -9,7 +9,7 @@ Ratel keeps the model's tool list small and stable: instead of advertising every
 ```ts
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
-import { mastra } from "@ratel-ai/mastra-adapter";
+import { mastra } from "@ratel-ai/mastra";
 import { ratel } from "@ratel-ai/sdk";
 import { z } from "zod";
 
@@ -63,7 +63,7 @@ It is a no-op — spending no recall-id — when the last message is not a user 
 
 ## Package shape
 
-- Package name: `@ratel-ai/mastra-adapter`
+- Package name: `@ratel-ai/mastra`
 - Pure TypeScript, **zero runtime dependencies** — the adapter is glue. `@mastra/core@^1.51.0`, `zod@^3.25.0 || ^4.0.0` (matching Mastra's own zod peer), and `@ratel-ai/sdk` are peers the host already installs.
 - MIT ([ADR-0009](../../../docs/adr/0009-licensing.md)); member of the pnpm workspace; `publishConfig` provenance on.
 
@@ -72,10 +72,10 @@ It is a no-op — spending no recall-id — when the last message is not a user 
 From the repo root (the SDK is built first by `pnpm -r build`, which the tests import):
 
 ```bash
-pnpm --filter @ratel-ai/mastra-adapter build
-pnpm --filter @ratel-ai/mastra-adapter typecheck
-pnpm --filter @ratel-ai/mastra-adapter lint
-pnpm --filter @ratel-ai/mastra-adapter test
+pnpm --filter @ratel-ai/mastra build
+pnpm --filter @ratel-ai/mastra typecheck
+pnpm --filter @ratel-ai/mastra lint
+pnpm --filter @ratel-ai/mastra test
 ```
 
 The suite covers the three codecs, the recall processor (including id economy on the no-op paths), a mock-model integration test that drives the real Mastra `Agent` loop, a compile-only type-test locking the `@mastra/core` surface, and the `@ratel-ai/sdk/testkit` conformance battery (21 cases, 0 skipped).

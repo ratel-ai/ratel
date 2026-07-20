@@ -14,7 +14,7 @@ const manifest = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as PackageManifest;
 
-describe("published mastra-adapter dependency layout", () => {
+describe("published mastra dependency layout", () => {
   it("carries no runtime dependencies — the adapter is pure glue", () => {
     // Everything the adapter touches (`@mastra/core`, `zod`, `@ratel-ai/sdk`) is
     // the host's to provide, so it ships as peers with zero runtime `dependencies`.

@@ -1,5 +1,5 @@
 {
-  "name": "@ratel-ai/mastra-adapter",
+  "name": "@ratel-ai/mastra",
   "version": "0.1.0-rc.1",
   "description": "Mastra adapter for Ratel — adapts the context-engineering core to @mastra/core tool and message shapes, with a per-turn recall input processor.",
   "private": false,

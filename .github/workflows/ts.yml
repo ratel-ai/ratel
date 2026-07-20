@@ -47,7 +47,7 @@ jobs:
       # Example wiring (Mastra) — parity with the AI SDK row. Drives the real Mastra
       # Agent loop with Mastra's built-in mock model (no API key), asserting the
       # adapter's capability-tool funnel + recall processor reach the model prompt.
-      # @ratel-ai/mastra-adapter is already built by `pnpm -r build` above.
+      # @ratel-ai/mastra is already built by `pnpm -r build` above.
       # See examples/mastra/test/agent.test.ts.
       - name: Test the Mastra example wiring
         run: pnpm --filter @ratel-ai/example-mastra exec tsx test/agent.test.ts
