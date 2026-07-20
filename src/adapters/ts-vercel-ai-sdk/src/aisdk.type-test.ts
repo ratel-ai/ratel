@@ -7,9 +7,9 @@ import { aiSdk } from "./aisdk.js";
 
 const view = ratel().adaptTo(aiSdk());
 
-// `expose()` returns a valid AI SDK ToolSet — hand it straight to
+// `modelTools()` returns a valid AI SDK ToolSet — hand it straight to
 // generateText / streamText / ToolLoopAgent with no cast.
-const toolset: ToolSet = view.expose();
+const toolset: ToolSet = view.modelTools();
 
 // `prepareStep` drops into the prepareStep slot for any TOOLS: the structurally
 // narrow `{ stepNumber, messages }` parameter keeps it assignable to
