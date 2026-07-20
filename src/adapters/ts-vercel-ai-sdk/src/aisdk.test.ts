@@ -162,7 +162,7 @@ describe("passthrough end-to-end", () => {
     } as unknown as Tool;
     view.tools.register({ shell: providerTool });
     // Exposed untouched, in native provider shape...
-    expect(view.expose().shell).toBe(providerTool);
+    expect(view.modelTools().shell).toBe(providerTool);
     // ...and never funneled into the catalog.
     expect(view.tools.catalog.has("shell")).toBe(false);
   });

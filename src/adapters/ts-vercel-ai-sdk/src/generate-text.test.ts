@@ -35,7 +35,7 @@ describe("generateText integration (the real ai@7 loop)", () => {
 
     const result = await generateText({
       model: model as unknown as LanguageModel,
-      tools: view.expose(),
+      tools: view.modelTools(),
       messages: [{ role: "user", content: "deploy to production" }] as ModelMessage[],
       prepareStep: view.prepareStep,
     });

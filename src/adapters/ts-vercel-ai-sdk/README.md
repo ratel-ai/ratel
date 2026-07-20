@@ -16,7 +16,7 @@ import { z } from "zod";
 const r = ratel({ method: "hybrid", recallTopK: 5 }).adaptTo(aiSdk());
 
 // Register the app's AI SDK tools into the shared catalog (any time, also after
-// expose()). Tools without an `execute` (provider-executed) pass through eagerly.
+// modelTools()). Tools without an `execute` (provider-executed) pass through eagerly.
 r.tools.register({
   weather: tool({
     description: "Get the weather in a location",
@@ -27,7 +27,7 @@ r.tools.register({
 
 // Take the model-facing set ONCE per agent and reuse it: the three capability
 // tools never change across turns, so the prompt cache survives.
-const tools = r.expose();
+const tools = r.modelTools();
 
 const messages: ModelMessage[] = [{ role: "user", content: "what's the weather in Paris?" }];
 
@@ -49,7 +49,7 @@ messages.push(...(await result.responseMessages));
 ```ts
 const result = streamText({
   model: anthropic("claude-haiku-4-5"),
-  tools: r.expose(),
+  tools: r.modelTools(),
   messages, // your own history, untouched
   prepareStep: r.prepareStep, // injects the recall pair on step 0
 });
