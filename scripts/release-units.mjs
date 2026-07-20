@@ -122,6 +122,21 @@ export const UNITS = {
       includePaths: ["src/telemetry/ts-otlp/**"],
     },
   },
+  // The Vercel AI SDK framework adapter — an independent npm-only unit. Pure TS
+  // with a workspace:^ dep on @ratel-ai/sdk, so publish-rc.sh `pnpm pack`s it
+  // (rewriting that dep to a real range) and `npm publish`es the tarball.
+  "vercel-ai-sdk": {
+    tagPrefix: "vercel-ai-sdk-v",
+    label: "@ratel-ai/vercel-ai-sdk → npm",
+    versionManifest: { path: "src/adapters/ts-vercel-ai-sdk/package.json", kind: "json" },
+    manifests: [{ path: "src/adapters/ts-vercel-ai-sdk/package.json", kind: "json" }],
+    changelogs: ["src/adapters/ts-vercel-ai-sdk/CHANGELOG.md"],
+    srcPaths: ["src/adapters/ts-vercel-ai-sdk"],
+    changelog: {
+      name: "@ratel-ai/vercel-ai-sdk",
+      includePaths: ["src/adapters/ts-vercel-ai-sdk/**"],
+    },
+  },
 };
 
 export const UNIT_IDS = Object.keys(UNITS);

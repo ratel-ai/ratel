@@ -45,6 +45,9 @@ function makeRepo(version = "0.2.0", pyVersion = version) {
   // telemetry-ts-otlp: the npm exporter unit, split from the vocabulary package.
   write("src/telemetry/ts-otlp/package.json", json("@ratel-ai/telemetry-otlp"));
   write("src/telemetry/ts-otlp/CHANGELOG.md", changelog(version));
+  // vercel-ai-sdk: the Vercel AI SDK framework adapter — an independent npm unit.
+  write("src/adapters/ts-vercel-ai-sdk/package.json", json("@ratel-ai/vercel-ai-sdk"));
+  write("src/adapters/ts-vercel-ai-sdk/CHANGELOG.md", changelog(version));
 
   return { root, write, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -58,6 +61,7 @@ test("parseTag splits prefix and version for every unit", () => {
   assert.deepEqual(parseTag("telemetry-ts-v0.1.0"), { unit: "telemetry-ts", version: "0.1.0" });
   assert.deepEqual(parseTag("telemetry-py-v0.2.0-rc.2"), { unit: "telemetry-py", version: "0.2.0-rc.2" });
   assert.deepEqual(parseTag("telemetry-ts-otlp-v0.1.0-rc.3"), { unit: "telemetry-ts-otlp", version: "0.1.0-rc.3" });
+  assert.deepEqual(parseTag("vercel-ai-sdk-v0.1.0-rc.1"), { unit: "vercel-ai-sdk", version: "0.1.0-rc.1" });
 });
 
 test("parseTag rejects the old lockstep tag and unknown prefixes", () => {
@@ -66,6 +70,19 @@ test("parseTag rejects the old lockstep tag and unknown prefixes", () => {
   assert.equal(parseTag("telemetry-v0.1.0"), null); // the bundled tag was split into telemetry-core/js/py + telemetry-ts-otlp
   assert.equal(parseTag("sdk-ts-0.2.0"), null); // missing the -v
   assert.equal(parseTag("core-vX.Y.Z"), null); // non-semver
+});
+
+test("vercel-ai-sdk rc tag passes when the adapter package + its changelog match", () => {
+  const repo = makeRepo("0.1.0-rc.1");
+  try {
+    const r = checkReleaseTag("vercel-ai-sdk-v0.1.0-rc.1", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+    assert.equal(r.unit, "vercel-ai-sdk");
+    assert.equal(r.version, "0.1.0-rc.1");
+    assert.equal(r.distTag, "rc");
+  } finally {
+    repo.cleanup();
+  }
 });
 
 test("distTagFor maps rc vs GA", () => {
