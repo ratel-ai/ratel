@@ -91,17 +91,19 @@ import { ratel } from "@ratel-ai/sdk";
 import { aiSdk } from "@ratel-ai/ai-sdk-adapter"; // ships separately
 
 const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
-r.tools.register(myTools);                   // callable any time, also after expose()
+await r.tools.register(myTools);             // async; callable any time, also after expose()
 const tools = r.expose();                    // stable capability set — take once, reuse
 const messages = r.appendRecall(history);    // per-turn recall (AI SDK idiom)
 ```
 
 `r.tools` is a handle over the core's one shared catalog — registration and exposure are separate
 acts, and tools registered after `expose()` are still discoverable because the capability tools
-search the live catalog. The core also works standalone, without any adapter:
-`ratel().tools.register(...)` takes native `ExecutableTool`s, `expose()` returns the three
-capability tools in native shape, and `recall(query)` is a pure query returning the canonical
-`search_capabilities` result.
+search the live catalog. `register(...)` is async: it validates synchronously (a bad tool throws at
+the call site) and its promise resolves once the tools are indexed and, on a semantic/hybrid core,
+embedded — `await` it so embedding errors surface at registration. The core also works standalone,
+without any adapter: `ratel().tools.register(...)` takes native `ExecutableTool`s, `expose()`
+returns the three capability tools in native shape, and `recall(query)` is a pure query returning
+the canonical `search_capabilities` result.
 
 `ratel(config)` owns one `ToolCatalog` + `SkillCatalog` + recall-id counter and every
 framework-independent guard (reserved capability-tool ids, top-K clamp, first-registration-wins

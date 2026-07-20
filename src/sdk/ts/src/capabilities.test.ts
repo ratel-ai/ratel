@@ -200,14 +200,17 @@ describe("searchCapabilitiesTool", () => {
     expect(emptyCatalog.description).not.toContain("get_skill_content");
   });
 
-  it("advertiseSkills overrides the size-based description default in both directions", () => {
+  it("advertiseSkills overrides the size-based description default in both directions", async () => {
     const tools = new ToolCatalog();
-    tools.register(readFile);
+    await tools.register(readFile);
     // A host that always exposes get_skill_content pins the skills clause on…
     const pinnedOn = searchCapabilitiesTool(tools, new SkillCatalog(), { advertiseSkills: true });
     expect(pinnedOn.description).toContain("get_skill_content");
-    // …and one that never exposes it pins the clause off despite live skills.
-    const pinnedOff = searchCapabilitiesTool(tools, skillCatalogWith(vercelSkill), {
+    // …and one that never exposes it pins the clause off despite a genuinely
+    // non-empty catalog — awaited, so the "despite live skills" precondition is
+    // real and the override (not a short-circuit on an unresolved Promise) is
+    // what suppresses the clause.
+    const pinnedOff = searchCapabilitiesTool(tools, await skillCatalogWith(vercelSkill), {
       advertiseSkills: false,
     });
     expect(pinnedOff.description).not.toContain("get_skill_content");
