@@ -182,7 +182,7 @@ describe("expose codec", () => {
 
   it("preserves the capability tools' canonical parameter descriptions for the model", () => {
     const view = ratel().adaptTo(mastra());
-    const exposed = view.expose();
+    const exposed = view.modelTools();
     const jsonOf = (tool: Tool) =>
       (
         tool.inputSchema as {
@@ -212,7 +212,7 @@ describe("expose codec", () => {
         ]),
       ),
     );
-    const search = view.expose()[SEARCH_CAPABILITIES_ID];
+    const search = view.modelTools()[SEARCH_CAPABILITIES_ID];
     // A value far above the default is honoured, then clamped to 50 by the core —
     // it is NOT rejected by the exposed tool's schema.
     const high = (await callExposed(search, {
@@ -240,7 +240,7 @@ describe("expose codec", () => {
         execute: async (input) => ({ got: input }),
       }),
     });
-    const invoke = view.expose()[INVOKE_TOOL_ID];
+    const invoke = view.modelTools()[INVOKE_TOOL_ID];
     const result = await callExposed(invoke, {
       toolId: "echo_tool",
       args: { path: "/tmp/x", n: 3 },

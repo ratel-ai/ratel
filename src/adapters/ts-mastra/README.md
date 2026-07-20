@@ -16,7 +16,7 @@ import { z } from "zod";
 const r = ratel({ method: "hybrid", recallTopK: 5 }).adaptTo(mastra());
 
 // Register the app's Mastra tools into the shared catalog (any time, also after
-// expose()). Tools without an `execute` (client/provider-executed) pass through eagerly.
+// modelTools()). Tools without an `execute` (client/provider-executed) pass through eagerly.
 r.tools.register({
   weather: createTool({
     id: "weather",
@@ -32,7 +32,7 @@ const agent = new Agent({
   model: "openai/gpt-4o-mini",
   // The three capability tools in Mastra shape. Take the set ONCE per agent and
   // reuse it: it never changes across turns, so the prompt cache survives.
-  tools: r.expose(),
+  tools: r.modelTools(),
   // Rank the catalog for each user turn and inject the synthetic search_capabilities
   // call+result before the model runs (recall mode).
   inputProcessors: [r.recallProcessor()],
