@@ -1,4 +1,3 @@
-import type { JSONSchema7 } from "json-schema";
 import { describe, expect, it } from "vitest";
 import {
   type ExecutableTool,
@@ -13,59 +12,14 @@ import {
 } from "./index.js";
 import { unadaptedError } from "./ratel.js";
 import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
+import {
+  type FakeMessage,
+  type FakeTool,
+  makeExecutableTool,
+  referenceAdapter,
+} from "./testkit/reference-adapter.js";
 
-// A tiny in-repo adapter standing in for a real framework package: its tool type
-// carries its own shape and its message type is observable, so tests can assert
-// the core drove ingest/expose/recallMessages correctly without any framework.
-interface FakeTool {
-  description: string;
-  inputSchema: JSONSchema7;
-  execute?: (input: unknown) => unknown;
-}
-interface FakeMessage {
-  role: "call" | "result";
-  callId: string;
-  body: unknown;
-}
-interface FakeExt {
-  label: string;
-}
-
-function fakeAdapter(): RatelAdapter<FakeTool, FakeMessage, FakeExt> {
-  return {
-    name: "fake",
-    ingest(_id, tool) {
-      if (!tool.execute) return "passthrough";
-      return {
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        execute: tool.execute,
-      };
-    },
-    expose(tool) {
-      return {
-        description: tool.description,
-        inputSchema: tool.inputSchema as JSONSchema7,
-        execute: (input) => tool.execute?.(input),
-      };
-    },
-    recallMessages(ref, recall) {
-      return [
-        { role: "call", callId: ref.callId, body: { query: ref.query } },
-        { role: "result", callId: ref.callId, body: recall },
-      ];
-    },
-    extend(base) {
-      return { label: `adapted:${base.tools.catalog instanceof ToolCatalog}` };
-    },
-  };
-}
-
-const exec = (description: string): FakeTool => ({
-  description,
-  inputSchema: { type: "object" },
-  execute: () => ({ ok: true }),
-});
+const exec = (description: string): FakeTool => makeExecutableTool({ description });
 
 const native = (id: string, description: string): ExecutableTool => ({
   id,
@@ -415,7 +369,7 @@ describe("ratel() semantic/hybrid config", () => {
 
 describe("ratel().adaptTo(adapter)", () => {
   it("merges the adapter's extend helpers onto the base surface", () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     expect(a.label).toBe("adapted:true"); // TExt inferred and merged
     expect(typeof a.tools.register).toBe("function");
     expect(typeof a.expose).toBe("function");
@@ -424,7 +378,7 @@ describe("ratel().adaptTo(adapter)", () => {
   });
 
   it("registers tools into the shared catalog; expose() returns only the capability set", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     await a.tools.register({ read_file: exec("Read a file from local disk.") });
     expect(a.tools.has("read_file")).toBe(true);
     expect(a.tools.catalog.has("read_file")).toBe(true); // same shared catalog
@@ -432,7 +386,7 @@ describe("ratel().adaptTo(adapter)", () => {
   });
 
   it("routes the capability tools through the adapter's expose codec", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     await a.tools.register({ read_file: exec("Read a file from local disk.") });
     const search = a.expose()[SEARCH_CAPABILITIES_ID];
     // A FakeTool has no id/outputSchema — a raw ExecutableTool would. Their
@@ -444,12 +398,12 @@ describe("ratel().adaptTo(adapter)", () => {
   });
 
   it("always advertises get_skill_content, even before any skill is registered", () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     expect(Object.keys(a.expose())).toContain(GET_SKILL_CONTENT_ID);
   });
 
   it("tools registered after expose() are discoverable through the exposed set", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     const out = a.expose();
     await a.tools.register({ late_tool: exec("Deploy the app to production.") });
     const result = (await out[SEARCH_CAPABILITIES_ID]?.execute?.({
@@ -460,8 +414,8 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("keeps non-executable tools as per-view passthroughs, unregistered", async () => {
     const core = ratel();
-    const a = core.adaptTo(fakeAdapter());
-    const b = core.adaptTo(fakeAdapter());
+    const a = core.adaptTo(referenceAdapter());
+    const b = core.adaptTo(referenceAdapter());
     const provider: FakeTool = { description: "provider-run search", inputSchema: {} };
     await a.tools.register({ provider_search: provider });
     expect(a.expose().provider_search).toBe(provider); // eagerly exposed, untouched
@@ -471,7 +425,7 @@ describe("ratel().adaptTo(adapter)", () => {
   });
 
   it("exposes get/search/invoke on the adapted handle, at parity with the native ToolCollection", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     await a.tools.register({ read_file: exec("Read a file from local disk.") });
     expect(a.tools.get("read_file")?.description).toBe("Read a file from local disk.");
     expect(a.tools.search("read a file", 5)[0]?.toolId).toBe("read_file");
@@ -484,7 +438,7 @@ describe("ratel().adaptTo(adapter)", () => {
       const a = ratel({
         method: "semantic",
         embedding: { url: server.url, model: "test-model" },
-      }).adaptTo(fakeAdapter());
+      }).adaptTo(referenceAdapter());
       await a.tools.register({ read_file: exec("Read a file from local disk.") });
       expect(() => a.tools.search("read a file", 5)).toThrow(/searchAsync/);
       const hits = await a.tools.searchAsync("read a file", 5);
@@ -495,7 +449,7 @@ describe("ratel().adaptTo(adapter)", () => {
   });
 
   it("adapted get/search/invoke are catalog-only: a passthrough is known to has() but not to them", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     const provider: FakeTool = { description: "provider-run search", inputSchema: {} };
     await a.tools.register({ provider_search: provider });
     expect(a.tools.has("provider_search")).toBe(true); // the view knows it
@@ -504,7 +458,7 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("throws when an app tool shadows a reserved capability-tool id", () => {
     for (const id of CAPABILITY_IDS) {
-      const a = ratel().adaptTo(fakeAdapter());
+      const a = ratel().adaptTo(referenceAdapter());
       expect(() => a.tools.register({ [id]: exec("x") })).toThrow(/reserved/);
     }
   });
@@ -514,10 +468,10 @@ describe("ratel().adaptTo(adapter)", () => {
     await core.tools.register(native("shared_tool", "Shared grep tool."));
     let ingestCalls = 0;
     const counting: RatelAdapter<FakeTool, FakeMessage> = {
-      ...fakeAdapter(),
+      ...referenceAdapter(),
       ingest(id, tool) {
         ingestCalls++;
-        return fakeAdapter().ingest(id, tool);
+        return referenceAdapter().ingest(id, tool);
       },
     };
     const a = core.adaptTo(counting);
@@ -530,7 +484,7 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("preserves an ingest-provided outputSchema and defaults an omitted one", async () => {
     const withOutput: RatelAdapter<FakeTool, FakeMessage> = {
-      ...fakeAdapter(),
+      ...referenceAdapter(),
       ingest(_id, tool) {
         return {
           description: tool.description,
@@ -547,13 +501,13 @@ describe("ratel().adaptTo(adapter)", () => {
       properties: { ok: { type: "boolean" } },
     });
 
-    const b = ratel().adaptTo(fakeAdapter()); // fakeAdapter's ingest omits outputSchema
+    const b = ratel().adaptTo(referenceAdapter()); // referenceAdapter's ingest omits outputSchema
     await b.tools.register({ untyped: exec("Tool without an output shape.") });
     expect(b.tools.catalog.get("untyped")?.outputSchema).toEqual({ type: "object" });
   });
 
   it("first registration of an id wins, across executables and passthroughs", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     await a.tools.register({ dup: exec("first description") });
     await a.tools.register({ dup: exec("second description") });
     expect(a.tools.catalog.get("dup")?.description).toBe("first description");
@@ -567,7 +521,7 @@ describe("ratel().adaptTo(adapter)", () => {
   });
 
   it("recall returns the adapter's message pair with a private-counter call id", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     await a.tools.register({ deploy_app: exec("Deploy the app to production servers.") });
 
     const first = await a.recall("deploy to production");
@@ -583,7 +537,7 @@ describe("ratel().adaptTo(adapter)", () => {
   });
 
   it("recall returns [] and spends no call id when nothing matches", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     expect(await a.recall("anything at all")).toEqual([]); // empty catalog, no skills
 
     await a.tools.register({ deploy_app: exec("Deploy the app to production.") });
@@ -595,8 +549,8 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("shares one core's catalog and recall counter across adapter views", async () => {
     const core = ratel();
-    const a = core.adaptTo(fakeAdapter());
-    const b = core.adaptTo(fakeAdapter());
+    const a = core.adaptTo(referenceAdapter());
+    const b = core.adaptTo(referenceAdapter());
     await a.tools.register({ shared_tool: exec("Shared search grep tool.") });
     expect(b.tools.has("shared_tool")).toBe(true); // one catalog
     expect(core.tools.has("shared_tool")).toBe(true); // …the core's own
@@ -606,7 +560,7 @@ describe("ratel().adaptTo(adapter)", () => {
   });
 
   it("recall carries a skills-only match: the pair is built even with zero tool hits", async () => {
-    const a = ratel().adaptTo(fakeAdapter());
+    const a = ratel().adaptTo(referenceAdapter());
     await a.skills.register({
       id: "vercel-deploy",
       name: "vercel-deploy",
@@ -623,7 +577,7 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("tolerates an extend returning a non-object: the view is still the usable base", async () => {
     const bad = {
-      ...fakeAdapter(),
+      ...referenceAdapter(),
       extend: () => 42,
     } as unknown as RatelAdapter<FakeTool, FakeMessage>;
     const a = ratel().adaptTo(bad);
