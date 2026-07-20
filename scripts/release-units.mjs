@@ -137,15 +137,15 @@ export const UNITS = {
       includePaths: ["src/adapters/ts-vercel-ai-sdk/**"],
     },
   },
-  "mastra-adapter": {
-    tagPrefix: "mastra-adapter-v",
-    label: "@ratel-ai/mastra-adapter → npm",
+  "mastra": {
+    tagPrefix: "mastra-v",
+    label: "@ratel-ai/mastra → npm",
     versionManifest: { path: "src/adapters/ts-mastra/package.json", kind: "json" },
     manifests: [{ path: "src/adapters/ts-mastra/package.json", kind: "json" }],
     changelogs: ["src/adapters/ts-mastra/CHANGELOG.md"],
     srcPaths: ["src/adapters/ts-mastra"],
     changelog: {
-      name: "@ratel-ai/mastra-adapter",
+      name: "@ratel-ai/mastra",
       includePaths: ["src/adapters/ts-mastra/**"],
     },
   },

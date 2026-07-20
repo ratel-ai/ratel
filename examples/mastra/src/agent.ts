@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
-import { mastra } from "@ratel-ai/mastra-adapter";
+import { mastra } from "@ratel-ai/mastra";
 import { ratel, type RatelConfig } from "@ratel-ai/sdk";
 import { tools } from "./tools.js";
 
