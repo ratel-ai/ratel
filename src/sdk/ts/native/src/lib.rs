@@ -12,7 +12,7 @@ use napi::{Env, Task};
 use ratel_ai_core as core;
 use ratel_ai_core::{
     EmbeddingModel, EmbeddingSpec, JsonlSink, MemorySink, NoopSink, Origin, SearchMethod,
-    TraceEvent,
+    TraceEvent, UsageLearner,
 };
 use serde_json::Value;
 
@@ -363,6 +363,70 @@ fn resolve_embedding(config: Option<EmbeddingConfig>) -> napi::Result<Option<Emb
         .map_err(|e| napi::Error::from_reason(e.to_string()))
 }
 
+/// A shared usage-ranking intent graph (ADR-0013): clusters of past queries,
+/// each remembering the capabilities invoked after them.
+///
+/// **Hand the same instance to both registries.** One cluster carries a `tools`
+/// map and a `skills` map, so a tool catalog and a skill catalog sharing a graph
+/// learn from and rank against one set of clusters. Giving them separate graphs
+/// duplicates every cluster and halves the evidence behind each.
+#[napi]
+pub struct IntentGraph {
+    inner: Arc<RwLock<core::IntentGraph>>,
+}
+
+#[napi]
+impl IntentGraph {
+    /// An empty graph. `halfLifeDays` (default 30) sets how fast evidence
+    /// decays: a capability last used one half-life ago counts half as much as
+    /// one used now.
+    #[napi(constructor)]
+    pub fn new(half_life_days: Option<f64>) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(core::IntentGraph::empty(
+                half_life_days.unwrap_or(30.0),
+            ))),
+        }
+    }
+
+    /// Adopt a graph serialized in the `protocol/v1` wire form — produced by
+    /// `ratel-graph build`, by a previous `toJson`, or by Ratel Cloud.
+    ///
+    /// Throws if the JSON is malformed or declares a schema version this build
+    /// does not read (a consumer rejects rather than degrading).
+    #[napi(factory)]
+    pub fn from_json(json: String) -> napi::Result<Self> {
+        let graph = core::IntentGraph::from_json(&json)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(Self {
+            inner: Arc::new(RwLock::new(graph)),
+        })
+    }
+
+    /// Serialize to the `protocol/v1` wire form — for inspection, or to carry
+    /// what was learned across processes.
+    #[napi]
+    pub fn to_json(&self) -> napi::Result<String> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("intent graph lock poisoned"))?;
+        serde_json::to_string(&*guard)
+            .map_err(|e| napi::Error::from_reason(format!("serialize intent graph: {e}")))
+    }
+
+    /// How many clusters the graph holds. `0` is the cold-start state, in which
+    /// the graph contributes nothing to ranking.
+    #[napi(getter)]
+    pub fn cluster_count(&self) -> napi::Result<u32> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("intent graph lock poisoned"))?;
+        Ok(guard.len() as u32)
+    }
+}
+
 /// Node binding over the `ratel-ai-core` tool registry: an in-process index
 /// that ranks registered tools against a natural-language query (BM25 by
 /// default; semantic/hybrid once embeddings are built). Metadata-only — the
@@ -373,6 +437,9 @@ pub struct ToolRegistry {
     dense_gate: Arc<Mutex<()>>,
     pending_dense: Arc<AtomicUsize>,
     memory_sink: Option<Arc<MemorySink>>,
+    /// Retained so `setTraceSink` can re-wrap the new sink in a learner —
+    /// otherwise changing sinks would silently switch learning off.
+    graph: Option<Arc<RwLock<core::IntentGraph>>>,
 }
 
 #[napi]
@@ -391,6 +458,7 @@ impl ToolRegistry {
             dense_gate: Arc::new(Mutex::new(())),
             pending_dense: Arc::new(AtomicUsize::new(0)),
             memory_sink: None,
+            graph: None,
         })
     }
 
@@ -572,10 +640,62 @@ impl ToolRegistry {
     #[napi]
     pub fn set_trace_sink(&mut self, config: TraceSinkConfig) -> napi::Result<()> {
         let (sink, memory) = build_trace_sink(config)?;
+        // Re-wrap: adaptive ranking learns by decorating the sink, so replacing
+        // the sink outright would quietly stop learning.
+        let sink = match &self.graph {
+            Some(graph) => {
+                Arc::new(UsageLearner::new(graph.clone(), sink)) as Arc<dyn core::TraceSink>
+            }
+            None => sink,
+        };
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
         drop(registry);
         self.memory_sink = memory;
+        Ok(())
+    }
+
+    /// Turn on adaptive usage ranking against `graph` (ADR-0013).
+    ///
+    /// Wires both halves at once: the registry **ranks** against the graph, and
+    /// the trace sink is decorated with a learner that **grows** it from
+    /// search-then-invoke pairs. Pass the same `IntentGraph` to the tool and
+    /// skill registries so both learn into one set of clusters.
+    ///
+    /// Ranking changes only where the graph has evidence: a query matching no
+    /// cluster returns exactly what it would have without one. Note that with a
+    /// graph attached `SearchHit.score` becomes a fusion score rather than a raw
+    /// BM25 score — only ordering is comparable, as with hybrid search.
+    #[napi]
+    pub fn enable_adaptive_ranking(&mut self, graph: &IntentGraph) -> napi::Result<()> {
+        let handle = graph.inner.clone();
+        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
+            Some(memory) => memory.clone(),
+            None => Arc::new(NoopSink),
+        };
+        let learner = Arc::new(UsageLearner::new(handle.clone(), inner_sink));
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        registry.set_trace_sink(learner);
+        registry.set_intent_graph(Some(handle.clone()));
+        drop(registry);
+        self.graph = Some(handle);
+        Ok(())
+    }
+
+    /// Turn adaptive usage ranking off: ranking returns to the base engine and
+    /// the graph stops growing. The graph itself is untouched, so re-enabling
+    /// resumes from what it already learned.
+    #[napi]
+    pub fn disable_adaptive_ranking(&mut self) -> napi::Result<()> {
+        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
+            Some(memory) => memory.clone(),
+            None => Arc::new(NoopSink),
+        };
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        registry.set_trace_sink(inner_sink);
+        registry.set_intent_graph(None);
+        drop(registry);
+        self.graph = None;
         Ok(())
     }
 
@@ -644,6 +764,9 @@ pub struct SkillRegistry {
     dense_gate: Arc<Mutex<()>>,
     pending_dense: Arc<AtomicUsize>,
     memory_sink: Option<Arc<MemorySink>>,
+    /// Retained so `setTraceSink` can re-wrap the new sink in a learner —
+    /// otherwise changing sinks would silently switch learning off.
+    graph: Option<Arc<RwLock<core::IntentGraph>>>,
 }
 
 #[napi]
@@ -660,6 +783,7 @@ impl SkillRegistry {
             dense_gate: Arc::new(Mutex::new(())),
             pending_dense: Arc::new(AtomicUsize::new(0)),
             memory_sink: None,
+            graph: None,
         })
     }
 
@@ -834,10 +958,62 @@ impl SkillRegistry {
     #[napi]
     pub fn set_trace_sink(&mut self, config: TraceSinkConfig) -> napi::Result<()> {
         let (sink, memory) = build_trace_sink(config)?;
+        // Re-wrap: adaptive ranking learns by decorating the sink, so replacing
+        // the sink outright would quietly stop learning.
+        let sink = match &self.graph {
+            Some(graph) => {
+                Arc::new(UsageLearner::new(graph.clone(), sink)) as Arc<dyn core::TraceSink>
+            }
+            None => sink,
+        };
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
         drop(registry);
         self.memory_sink = memory;
+        Ok(())
+    }
+
+    /// Turn on adaptive usage ranking against `graph` (ADR-0013).
+    ///
+    /// Wires both halves at once: the registry **ranks** against the graph, and
+    /// the trace sink is decorated with a learner that **grows** it from
+    /// search-then-invoke pairs. Pass the same `IntentGraph` to the tool and
+    /// skill registries so both learn into one set of clusters.
+    ///
+    /// Ranking changes only where the graph has evidence: a query matching no
+    /// cluster returns exactly what it would have without one. Note that with a
+    /// graph attached `SearchHit.score` becomes a fusion score rather than a raw
+    /// BM25 score — only ordering is comparable, as with hybrid search.
+    #[napi]
+    pub fn enable_adaptive_ranking(&mut self, graph: &IntentGraph) -> napi::Result<()> {
+        let handle = graph.inner.clone();
+        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
+            Some(memory) => memory.clone(),
+            None => Arc::new(NoopSink),
+        };
+        let learner = Arc::new(UsageLearner::new(handle.clone(), inner_sink));
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        registry.set_trace_sink(learner);
+        registry.set_intent_graph(Some(handle.clone()));
+        drop(registry);
+        self.graph = Some(handle);
+        Ok(())
+    }
+
+    /// Turn adaptive usage ranking off: ranking returns to the base engine and
+    /// the graph stops growing. The graph itself is untouched, so re-enabling
+    /// resumes from what it already learned.
+    #[napi]
+    pub fn disable_adaptive_ranking(&mut self) -> napi::Result<()> {
+        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
+            Some(memory) => memory.clone(),
+            None => Arc::new(NoopSink),
+        };
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        registry.set_trace_sink(inner_sink);
+        registry.set_intent_graph(None);
+        drop(registry);
+        self.graph = None;
         Ok(())
     }
 

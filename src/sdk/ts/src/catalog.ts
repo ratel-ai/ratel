@@ -1,6 +1,6 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
 import type { SearchHit, Tool } from "../native/index.cjs";
-import { ToolRegistry } from "./registry.js";
+import { type IntentGraph, ToolRegistry } from "./registry.js";
 import {
   argsSizeBytes,
   errorMessage,
@@ -339,6 +339,23 @@ export class ToolCatalog {
    */
   recordEvent(event: object): void {
     this.registry.recordEvent(event);
+  }
+
+  /**
+   * Turn on adaptive usage ranking against `graph` (ADR-0013): the catalog
+   * ranks against what users have actually invoked after similar queries, and
+   * keeps learning as it is used.
+   *
+   * Pass the same {@link IntentGraph} to a {@link SkillCatalog} so both learn
+   * into one set of clusters.
+   */
+  enableAdaptiveRanking(graph: IntentGraph): void {
+    this.registry.enableAdaptiveRanking(graph);
+  }
+
+  /** Turn adaptive usage ranking off; the graph keeps what it learned. */
+  disableAdaptiveRanking(): void {
+    this.registry.disableAdaptiveRanking();
   }
 
   /**

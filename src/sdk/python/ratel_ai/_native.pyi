@@ -24,6 +24,47 @@ class SearchHit:
         "hybrid" — scores from different methods are not comparable.
         """
 
+class IntentGraph:
+    """A shared usage-ranking intent graph (ADR-0013).
+
+    Clusters of past queries, each remembering the capabilities invoked after
+    them. Hand the *same* instance to a tool catalog and a skill catalog: one
+    cluster carries both a tool and a skill edge map, so sharing gives one set
+    of clusters with all the evidence behind it, while separate graphs
+    duplicate every cluster and split the evidence.
+    """
+
+    def __init__(self, half_life_days: float | None = ...) -> None:
+        """An empty graph.
+
+        `half_life_days` (default 30) sets how fast evidence decays: a
+        capability last used one half-life ago counts half as much as one used
+        now.
+        """
+
+    @staticmethod
+    def from_json(json: str) -> IntentGraph:
+        """Adopt a graph in the `protocol/v1` wire form.
+
+        Accepts output from `ratel-graph build`, a previous `to_json()`, or
+        Ratel Cloud. Raises `ValueError` if it is malformed or declares a
+        schema version this build does not read.
+        """
+
+    def to_json(self) -> str:
+        """Serialize to the `protocol/v1` wire form.
+
+        For inspection, or to carry what was learned across processes.
+        """
+
+    @property
+    def cluster_count(self) -> int:
+        """How many clusters the graph holds.
+
+        `0` is the cold-start state, in which it contributes nothing to
+        ranking.
+        """
+
 class ToolRegistry:
     """Private native metadata registry over `ratel-ai-core`.
 
@@ -123,6 +164,27 @@ class ToolRegistry:
         (append to a file; requires `session_id` and `path`). Raises
         `ValueError` on an unknown kind, a missing required argument, or a
         jsonl path that cannot be opened.
+        """
+
+    def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
+        """Turn on adaptive usage ranking against `graph` (ADR-0013).
+
+        Wires both halves: this registry ranks against the graph, and its trace
+        sink is decorated with a learner that grows it from search-then-invoke
+        pairs. Pass the same graph to the other registry so both learn into one
+        set of clusters.
+
+        Only queries matching a cluster are affected. With a graph attached
+        `SearchHit.score` becomes a fusion score rather than a raw BM25 score,
+        so compare ordering rather than magnitudes.
+        """
+
+    def disable_adaptive_ranking(self) -> None:
+        """Turn adaptive usage ranking off.
+
+        Ranking returns to the base engine and the graph stops growing; the
+        graph keeps what it learned, so re-enabling resumes rather than
+        restarts.
         """
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
@@ -237,6 +299,27 @@ class SkillRegistry:
         path: str | None = ...,
     ) -> None:
         """Route trace events to a sink — see `ToolRegistry.set_trace_sink`."""
+
+    def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
+        """Turn on adaptive usage ranking against `graph` (ADR-0013).
+
+        Wires both halves: this registry ranks against the graph, and its trace
+        sink is decorated with a learner that grows it from search-then-invoke
+        pairs. Pass the same graph to the other registry so both learn into one
+        set of clusters.
+
+        Only queries matching a cluster are affected. With a graph attached
+        `SearchHit.score` becomes a fusion score rather than a raw BM25 score,
+        so compare ordering rather than magnitudes.
+        """
+
+    def disable_adaptive_ranking(self) -> None:
+        """Turn adaptive usage ranking off.
+
+        Ranking returns to the base engine and the graph stops growing; the
+        graph keeps what it learned, so re-enabling resumes rather than
+        restarts.
+        """
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
         """Drain captured envelopes — see `ToolRegistry.drain_trace_events`."""

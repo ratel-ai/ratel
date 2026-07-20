@@ -51,7 +51,8 @@ export { SEARCH_TOOLS_ID, searchToolsTool } from "./compat.js";
 export { DimensionMismatchError, EmbedderError } from "./errors.js";
 export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
 export { registerMcpServer } from "./mcp.js";
-export { SkillRegistry, ToolRegistry } from "./registry.js";
+/** Adaptive usage ranking: the shared read model of what users invoke (ADR-0013). */
+export { IntentGraph, SkillRegistry, ToolRegistry } from "./registry.js";
 export type { SkillCatalogOptions } from "./skill-catalog.js";
 export { SkillCatalog } from "./skill-catalog.js";
 export { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";

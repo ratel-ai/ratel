@@ -16,6 +16,7 @@ from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, TypedDict, TypeVar, Union, overload
 
+from ._native import IntentGraph as IntentGraph  # re-exported for `ratel_ai.IntentGraph`
 from ._native import SearchHit
 from ._native import ToolRegistry as _NativeToolRegistry
 from .telemetry import SEARCH_TARGET_TOOL, trace_execute_tool, trace_search, trace_search_async
@@ -391,7 +392,7 @@ class ToolRegistry:
             raise ValueError(f"unknown search method: {method}")
         if method != "bm25":
             raise RuntimeError(
-                f'{method} search is asynchronous; use `await registry.search_async(..., '
+                f"{method} search is asynchronous; use `await registry.search_async(..., "
                 f'method="{method}")`'
             )
         return self.search_with_origin(query, top_k, origin)
@@ -454,6 +455,24 @@ class ToolRegistry:
         with self._dense_state:
             self._raise_if_busy()
             self._native.set_trace_sink(kind, session_id, path)
+
+    def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
+        """Turn on adaptive usage ranking against ``graph`` (ADR-0013).
+
+        Wires both halves: this registry ranks against what users have actually
+        invoked after similar queries, and keeps learning as it is used. Pass
+        the same :class:`IntentGraph` to the other registry so both learn into one
+        set of clusters.
+
+        Only queries matching a cluster are affected. With a graph attached the
+        hit ``score`` becomes a fusion score rather than a raw BM25 score, so
+        compare ordering rather than magnitudes.
+        """
+        self._native.enable_adaptive_ranking(graph)
+
+    def disable_adaptive_ranking(self) -> None:
+        """Turn adaptive usage ranking off; the graph keeps what it learned."""
+        self._native.disable_adaptive_ranking()
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
         """Drain captured native trace events."""
@@ -631,7 +650,7 @@ class ToolCatalog:
             raise ValueError(f"unknown search method: {resolved_method}")
         if resolved_method != "bm25":
             raise RuntimeError(
-                f'{resolved_method} search is asynchronous; use `await catalog.search_async(..., '
+                f"{resolved_method} search is asynchronous; use `await catalog.search_async(..., "
                 f'method="{resolved_method}")`'
             )
         return trace_search(
@@ -697,6 +716,24 @@ class ToolCatalog:
             ValueError: if the dict doesn't match any known event shape.
         """
         self._registry.record_event(event)
+
+    def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
+        """Turn on adaptive usage ranking against ``graph`` (ADR-0013).
+
+        Wires both halves: this catalog ranks against what users have actually
+        invoked after similar queries, and keeps learning as it is used. Pass
+        the same :class:`IntentGraph` to the other catalog so both learn into one
+        set of clusters.
+
+        Only queries matching a cluster are affected. With a graph attached the
+        hit ``score`` becomes a fusion score rather than a raw BM25 score, so
+        compare ordering rather than magnitudes.
+        """
+        self._registry.enable_adaptive_ranking(graph)
+
+    def disable_adaptive_ranking(self) -> None:
+        """Turn adaptive usage ranking off; the graph keeps what it learned."""
+        self._registry.disable_adaptive_ranking()
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
         """Drain captured trace envelopes; `[]` unless the sink is "memory"."""

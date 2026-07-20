@@ -4,14 +4,14 @@
 //! ADR-0007 for the core-owned trace schema this emits into.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use ratel_ai_core as core;
-use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent};
+use ratel_ai_core::{JsonlSink, MemorySink, NoopSink, Origin, TraceEvent, UsageLearner};
 use serde_json::Value;
 
 type ToolBatchItem = (String, String, String, Py<PyAny>, Py<PyAny>);
@@ -154,6 +154,82 @@ impl SkillHit {
     }
 }
 
+/// Decorate `sink` with a [`UsageLearner`] when adaptive ranking is on, so the
+/// graph keeps growing across a sink change. Without this, `set_trace_sink`
+/// would quietly stop learning.
+fn wrap_learner(
+    sink: Arc<dyn core::TraceSink>,
+    graph: Option<&Arc<RwLock<core::IntentGraph>>>,
+) -> Arc<dyn core::TraceSink> {
+    match graph {
+        Some(graph) => Arc::new(UsageLearner::new(graph.clone(), sink)),
+        None => sink,
+    }
+}
+
+/// A shared usage-ranking intent graph (ADR-0013): clusters of past queries,
+/// each remembering the capabilities invoked after them.
+///
+/// Hand the **same** instance to a tool catalog and a skill catalog. One cluster
+/// carries both a tool and a skill edge map, so sharing gives one set of
+/// clusters with all the evidence behind it; separate graphs duplicate every
+/// cluster and split the evidence.
+#[pyclass]
+#[derive(Clone)]
+pub struct IntentGraph {
+    inner: Arc<RwLock<core::IntentGraph>>,
+}
+
+#[pymethods]
+impl IntentGraph {
+    /// An empty graph. `half_life_days` (default 30) sets how fast evidence
+    /// decays: a capability last used one half-life ago counts half as much as
+    /// one used now.
+    #[new]
+    #[pyo3(signature = (half_life_days=None))]
+    fn new(half_life_days: Option<f64>) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(core::IntentGraph::empty(
+                half_life_days.unwrap_or(30.0),
+            ))),
+        }
+    }
+
+    /// Adopt a graph in the `protocol/v1` wire form — from `ratel-graph build`,
+    /// a previous `to_json()`, or Ratel Cloud. Raises `ValueError` if it is
+    /// malformed or declares a schema version this build does not read.
+    #[staticmethod]
+    fn from_json(json: &str) -> PyResult<Self> {
+        let graph =
+            core::IntentGraph::from_json(json).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self {
+            inner: Arc::new(RwLock::new(graph)),
+        })
+    }
+
+    /// Serialize to the `protocol/v1` wire form — for inspection, or to carry
+    /// what was learned across processes.
+    fn to_json(&self) -> PyResult<String> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| PyValueError::new_err("intent graph lock poisoned"))?;
+        serde_json::to_string(&*guard)
+            .map_err(|e| PyValueError::new_err(format!("serialize intent graph: {e}")))
+    }
+
+    /// How many clusters the graph holds. `0` is the cold-start state, in which
+    /// it contributes nothing to ranking.
+    #[getter]
+    fn cluster_count(&self) -> PyResult<usize> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| PyValueError::new_err("intent graph lock poisoned"))?;
+        Ok(guard.len())
+    }
+}
+
 /// Metadata registry over `ratel-ai-core`. BM25 is exposed synchronously;
 /// GIL-releasing dense primitives are private to the pure-Python async facade.
 /// Executors and capability-tool / MCP layers also live above this binding.
@@ -161,6 +237,9 @@ impl SkillHit {
 pub struct ToolRegistry {
     inner: core::ToolRegistry,
     memory_sink: Option<Arc<MemorySink>>,
+    /// Retained so `set_trace_sink` can re-wrap the new sink in a learner —
+    /// otherwise changing sinks would silently switch learning off.
+    graph: Option<Arc<RwLock<core::IntentGraph>>>,
 }
 
 #[pymethods]
@@ -205,6 +284,7 @@ impl ToolRegistry {
         Ok(Self {
             inner,
             memory_sink: None,
+            graph: None,
         })
     }
 
@@ -365,13 +445,15 @@ impl ToolRegistry {
         match kind.as_str() {
             "noop" => {
                 self.memory_sink = None;
-                self.inner.set_trace_sink(Arc::new(NoopSink));
+                let sink = wrap_learner(Arc::new(NoopSink), self.graph.as_ref());
+                self.inner.set_trace_sink(sink);
             }
             "memory" => {
                 let session_id = session_id
                     .ok_or_else(|| PyValueError::new_err("memory sink requires session_id"))?;
                 let sink = Arc::new(MemorySink::new(session_id));
                 self.memory_sink = Some(sink.clone());
+                let sink = wrap_learner(sink, self.graph.as_ref());
                 self.inner.set_trace_sink(sink);
             }
             "jsonl" => {
@@ -381,7 +463,8 @@ impl ToolRegistry {
                 let sink = JsonlSink::new(session_id, &path)
                     .map_err(|e| PyValueError::new_err(format!("open jsonl sink: {e}")))?;
                 self.memory_sink = None;
-                self.inner.set_trace_sink(Arc::new(sink));
+                let sink = wrap_learner(Arc::new(sink), self.graph.as_ref());
+                self.inner.set_trace_sink(sink);
             }
             other => {
                 return Err(PyValueError::new_err(format!(
@@ -390,6 +473,40 @@ impl ToolRegistry {
             }
         }
         Ok(())
+    }
+
+    /// Turn on adaptive usage ranking against `graph` (ADR-0013).
+    ///
+    /// Wires both halves: this registry ranks against the graph, and its trace
+    /// sink is decorated with a learner that grows it from search-then-invoke
+    /// pairs. Pass the same graph to the other registry so both learn into one
+    /// set of clusters.
+    ///
+    /// Only queries matching a cluster are affected. With a graph attached
+    /// `SearchHit.score` becomes a fusion score rather than a raw BM25 score, so
+    /// compare ordering rather than magnitudes.
+    fn enable_adaptive_ranking(&mut self, graph: &IntentGraph) {
+        let handle = graph.inner.clone();
+        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
+            Some(memory) => memory.clone(),
+            None => Arc::new(NoopSink),
+        };
+        self.inner
+            .set_trace_sink(Arc::new(UsageLearner::new(handle.clone(), inner_sink)));
+        self.inner.set_intent_graph(Some(handle.clone()));
+        self.graph = Some(handle);
+    }
+
+    /// Turn adaptive usage ranking off: ranking returns to the base engine and
+    /// the graph stops growing. The graph keeps what it learned.
+    fn disable_adaptive_ranking(&mut self) {
+        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
+            Some(memory) => memory.clone(),
+            None => Arc::new(NoopSink),
+        };
+        self.inner.set_trace_sink(inner_sink);
+        self.inner.set_intent_graph(None);
+        self.graph = None;
     }
 
     /// Drain captured envelopes from the active sink. Returns `[]` unless the
@@ -414,6 +531,9 @@ impl ToolRegistry {
 pub struct SkillRegistry {
     inner: core::SkillRegistry,
     memory_sink: Option<Arc<MemorySink>>,
+    /// Retained so `set_trace_sink` can re-wrap the new sink in a learner —
+    /// otherwise changing sinks would silently switch learning off.
+    graph: Option<Arc<RwLock<core::IntentGraph>>>,
 }
 
 #[pymethods]
@@ -455,6 +575,7 @@ impl SkillRegistry {
         Ok(Self {
             inner,
             memory_sink: None,
+            graph: None,
         })
     }
 
@@ -597,13 +718,15 @@ impl SkillRegistry {
         match kind.as_str() {
             "noop" => {
                 self.memory_sink = None;
-                self.inner.set_trace_sink(Arc::new(NoopSink));
+                let sink = wrap_learner(Arc::new(NoopSink), self.graph.as_ref());
+                self.inner.set_trace_sink(sink);
             }
             "memory" => {
                 let session_id = session_id
                     .ok_or_else(|| PyValueError::new_err("memory sink requires session_id"))?;
                 let sink = Arc::new(MemorySink::new(session_id));
                 self.memory_sink = Some(sink.clone());
+                let sink = wrap_learner(sink, self.graph.as_ref());
                 self.inner.set_trace_sink(sink);
             }
             "jsonl" => {
@@ -613,7 +736,8 @@ impl SkillRegistry {
                 let sink = JsonlSink::new(session_id, &path)
                     .map_err(|e| PyValueError::new_err(format!("open jsonl sink: {e}")))?;
                 self.memory_sink = None;
-                self.inner.set_trace_sink(Arc::new(sink));
+                let sink = wrap_learner(Arc::new(sink), self.graph.as_ref());
+                self.inner.set_trace_sink(sink);
             }
             other => {
                 return Err(PyValueError::new_err(format!(
@@ -622,6 +746,40 @@ impl SkillRegistry {
             }
         }
         Ok(())
+    }
+
+    /// Turn on adaptive usage ranking against `graph` (ADR-0013).
+    ///
+    /// Wires both halves: this registry ranks against the graph, and its trace
+    /// sink is decorated with a learner that grows it from search-then-invoke
+    /// pairs. Pass the same graph to the other registry so both learn into one
+    /// set of clusters.
+    ///
+    /// Only queries matching a cluster are affected. With a graph attached
+    /// `SearchHit.score` becomes a fusion score rather than a raw BM25 score, so
+    /// compare ordering rather than magnitudes.
+    fn enable_adaptive_ranking(&mut self, graph: &IntentGraph) {
+        let handle = graph.inner.clone();
+        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
+            Some(memory) => memory.clone(),
+            None => Arc::new(NoopSink),
+        };
+        self.inner
+            .set_trace_sink(Arc::new(UsageLearner::new(handle.clone(), inner_sink)));
+        self.inner.set_intent_graph(Some(handle.clone()));
+        self.graph = Some(handle);
+    }
+
+    /// Turn adaptive usage ranking off: ranking returns to the base engine and
+    /// the graph stops growing. The graph keeps what it learned.
+    fn disable_adaptive_ranking(&mut self) {
+        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
+            Some(memory) => memory.clone(),
+            None => Arc::new(NoopSink),
+        };
+        self.inner.set_trace_sink(inner_sink);
+        self.inner.set_intent_graph(None);
+        self.graph = None;
     }
 
     /// Drain captured envelopes from the active sink — see
@@ -643,6 +801,7 @@ impl SkillRegistry {
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ToolRegistry>()?;
+    m.add_class::<IntentGraph>()?;
     m.add_class::<SearchHit>()?;
     m.add_class::<SkillRegistry>()?;
     m.add_class::<SkillHit>()?;

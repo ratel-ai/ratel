@@ -27,6 +27,7 @@ from .catalog import (
     ExecutableTool,
     Executor,
     HuggingFaceEmbeddingConfig,
+    IntentGraph,
     LocalEmbeddingConfig,
     OllamaEmbeddingConfig,
     SearchMethod,
@@ -52,6 +53,7 @@ from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 from .telemetry import configure_telemetry
 
 __all__ = [
+    "IntentGraph",
     "GET_SKILL_CONTENT_ID",
     "INVOKE_TOOL_ID",
     "SEARCH_CAPABILITIES_ID",

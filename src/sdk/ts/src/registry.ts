@@ -1,4 +1,5 @@
 import {
+  IntentGraph,
   type EmbeddingConfig as NativeEmbeddingConfig,
   SkillRegistry as NativeSkillRegistry,
   ToolRegistry as NativeToolRegistry,
@@ -9,6 +10,8 @@ import {
 } from "../native/index.cjs";
 import type { EmbeddingSpec, SearchMethod, SearchOrigin, TraceSinkConfig } from "./catalog.js";
 import { mapEmbedderError } from "./errors.js";
+
+export { IntentGraph };
 
 /** Normalize the public string|object form into the native config the binding
  * expects (a string is the local-path `spec`, validated in core). */
@@ -141,6 +144,36 @@ export class ToolRegistry {
     this.native.setTraceSink(config);
   }
 
+  /**
+   * Turn on adaptive usage ranking against `graph` (ADR-0013).
+   *
+   * Wires both halves: the registry ranks against the graph, and its trace sink
+   * is decorated with a learner that grows it from search-then-invoke pairs — a
+   * capability the user actually invoked after a query becomes evidence for
+   * similar queries later.
+   *
+   * Pass the **same** {@link IntentGraph} to the tool and skill registries. One
+   * cluster holds both a tool and a skill edge map, so sharing gives one set of
+   * clusters with all the evidence behind it; separate graphs duplicate every
+   * cluster and split the evidence.
+   *
+   * Only queries that match a cluster are affected — anything else ranks exactly
+   * as it would have. With a graph attached, `SearchHit.score` becomes a fusion
+   * score rather than a raw BM25 score, so compare ordering, not magnitudes.
+   */
+  enableAdaptiveRanking(graph: IntentGraph): void {
+    this.native.enableAdaptiveRanking(graph);
+  }
+
+  /**
+   * Turn adaptive usage ranking off: ranking returns to the base engine and the
+   * graph stops growing. The graph keeps what it learned, so re-enabling
+   * resumes rather than restarts.
+   */
+  disableAdaptiveRanking(): void {
+    this.native.disableAdaptiveRanking();
+  }
+
   /** Drain captured envelopes from a `"memory"` sink; `[]` otherwise. */
   drainTraceEvents(): unknown[] {
     return this.native.drainTraceEvents();
@@ -247,6 +280,36 @@ export class SkillRegistry {
   /** Replace the trace sink; subsequent events go to the new destination. */
   setTraceSink(config: TraceSinkConfig): void {
     this.native.setTraceSink(config);
+  }
+
+  /**
+   * Turn on adaptive usage ranking against `graph` (ADR-0013).
+   *
+   * Wires both halves: the registry ranks against the graph, and its trace sink
+   * is decorated with a learner that grows it from search-then-invoke pairs — a
+   * capability the user actually invoked after a query becomes evidence for
+   * similar queries later.
+   *
+   * Pass the **same** {@link IntentGraph} to the tool and skill registries. One
+   * cluster holds both a tool and a skill edge map, so sharing gives one set of
+   * clusters with all the evidence behind it; separate graphs duplicate every
+   * cluster and split the evidence.
+   *
+   * Only queries that match a cluster are affected — anything else ranks exactly
+   * as it would have. With a graph attached, `SearchHit.score` becomes a fusion
+   * score rather than a raw BM25 score, so compare ordering, not magnitudes.
+   */
+  enableAdaptiveRanking(graph: IntentGraph): void {
+    this.native.enableAdaptiveRanking(graph);
+  }
+
+  /**
+   * Turn adaptive usage ranking off: ranking returns to the base engine and the
+   * graph stops growing. The graph keeps what it learned, so re-enabling
+   * resumes rather than restarts.
+   */
+  disableAdaptiveRanking(): void {
+    this.native.disableAdaptiveRanking();
   }
 
   /** Drain captured envelopes from a `"memory"` sink; `[]` otherwise. */
