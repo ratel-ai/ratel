@@ -7,9 +7,9 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type ExecutableTool,
-  formatSearchCapabilities,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  runCapabilitiesSearch,
   SEARCH_CAPABILITIES_ID,
   type SearchCapabilitiesResult,
   type Skill,
@@ -214,13 +214,13 @@ describe("searchCapabilitiesTool", () => {
   });
 });
 
-describe("formatSearchCapabilities", () => {
+describe("runCapabilitiesSearch", () => {
   it("records one gateway_search event stamped with the given origin", async () => {
     const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
     tools.register(readFile);
     tools.drainTraceEvents();
 
-    await formatSearchCapabilities(tools, "read a file", { topKTools: 3, origin: "direct" });
+    await runCapabilitiesSearch(tools, "read a file", { topKTools: 3, origin: "direct" });
 
     const ev = (tools.drainTraceEvents() as Array<Record<string, unknown>>).find(
       (e) => e.type === "gateway_search",
@@ -239,7 +239,7 @@ describe("formatSearchCapabilities", () => {
     tools.register(sendEmail);
     const skills = await skillCatalogWith(vercelSkill);
 
-    const direct = await formatSearchCapabilities(tools, "read a file", { skillCatalog: skills });
+    const direct = await runCapabilitiesSearch(tools, "read a file", { skillCatalog: skills });
     const viaTool = (await searchCapabilitiesTool(tools, skills).execute({
       query: "read a file",
     })) as SearchCapabilitiesResult;

@@ -3,9 +3,9 @@ import type { SearchHit, Tool } from "../native/index.cjs";
 import {
   clampTopK,
   DEFAULT_TOP_K_TOOLS,
-  formatSearchCapabilities,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  runCapabilitiesSearch,
   SEARCH_CAPABILITIES_ID,
   type SearchCapabilitiesResult,
   searchCapabilitiesTool,
@@ -303,8 +303,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
   }
 
   async function recall(query: string): Promise<SearchCapabilitiesResult | null> {
-    const result = await formatSearchCapabilities(catalog, query, {
-      topKTools: config.recallTopK, // capped/validated inside the formatter
+    const result = await runCapabilitiesSearch(catalog, query, {
+      topKTools: config.recallTopK, // capped/validated inside runCapabilitiesSearch
       skillCatalog: skills,
       origin: "direct",
     });

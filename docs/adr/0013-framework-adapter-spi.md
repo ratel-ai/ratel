@@ -90,7 +90,7 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   tool-call ids. A caller-supplied id factory was considered for restored-transcript collisions
   and deferred (YAGNI until a restore-heavy host needs it).
 
-- **One exported `formatSearchCapabilities` is the single source of truth for the result shape.**
+- **One exported `runCapabilitiesSearch` is the single source of truth for the result shape.**
   The agent path (`searchCapabilitiesTool`, origin `agent`) and both recall paths (origin
   `direct`) call it, so they can never drift — the drift risk the prototype carried by
   hand-duplicating the shape. The SDK also re-exports `JSONSchema7` as its public JSON-Schema
@@ -124,5 +124,5 @@ is additive.
   framework-specific; the base stays pure). Rejected: throwing `tools()`/`recall()` stubs on the
   un-adapted core (the standalone core is genuinely usable; the install-the-adapter hint moved to
   the native registration shape guard). Rejected: duplicating the top-K clamp and result shape
-  into the recall path (the shared `formatSearchCapabilities` removes the drift the prototype
+  into the recall path (the shared `runCapabilitiesSearch` removes the drift the prototype
   had).
