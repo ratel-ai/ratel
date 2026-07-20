@@ -6,17 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-## [0.5.0-rc.2] - 2026-07-17
-
-### Changed
-
-- In-process (Candle) embedding runs one padded forward pass per batch chunk instead of one per document, speeding up embedding a corpus on a `"semantic"`/`"hybrid"` catalog. Produced vectors are bit-for-bit identical, so rankings and reproducibility are unchanged.
-
-### Fixed
-
-- Distinct embedding models now load concurrently. The process-wide embedder cache held its lock across a full model load, so a cold load of one model blocked loading — or a warm-cache hit for — another; loads now run under a per-key slot lock while same-model loads stay single-flight (one load, reported once).
-
-## [0.5.0-rc.1] - 2026-07-16
+## [0.5.0] - 2026-07-20
 
 ### Added
 
@@ -27,15 +17,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
-- **BREAKING (next minor):** `EmbedderError` and `TraceEvent` add public variants for configurable-model validation and lifecycle failures; exhaustive matches must handle them.
+- **BREAKING:** `EmbedderError` and `TraceEvent` add public variants for configurable-model validation and lifecycle failures; exhaustive matches must handle them.
 - Dense cache batches are validated and committed atomically. Endpoint embedding requests are chunked at 64 inputs, responses are capped at 64 MiB, optional response model identity is enforced, and malformed indices/vectors are rejected.
 - Endpoint client-cache identity includes the `api_key_env` name without including its secret value, preventing credential cross-talk while preserving vector-space identity.
 - Dense searches and rebuilds share an operation guard, preventing a rebuild from swapping vector spaces between query validation and ranking. Fingerprint fields are length-delimited to prevent configuration collisions.
 - Public `EmbeddingModel` values can be checked with `validate()` and are validated before a lazy model load; SDK `EmbeddingSpec` construction remains fail-fast.
+- In-process (Candle) embedding runs one padded forward pass per batch chunk instead of one per document, speeding up embedding a corpus on a `"semantic"`/`"hybrid"` catalog. Produced vectors are bit-for-bit identical, so rankings and reproducibility are unchanged.
 
 ### Fixed
 
 - Failed incremental embedding batches can no longer leave partial vectors, dimensions, or model fingerprints in the cache.
+- Distinct embedding models now load concurrently. The process-wide embedder cache held its lock across a full model load, so a cold load of one model blocked loading — or a warm-cache hit for — another; loads now run under a per-key slot lock while same-model loads stay single-flight (one load, reported once).
 
 ## [0.4.0] - 2026-07-09
 
