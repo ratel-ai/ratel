@@ -11,6 +11,7 @@ import {
   searchCapabilitiesTool,
 } from "./capabilities.js";
 import {
+  type EmbeddingSpec,
   type ExecutableTool,
   type SearchMethod,
   ToolCatalog,
@@ -24,6 +25,13 @@ import { isPeerInstalled } from "./telemetry.js";
 export interface RatelConfig {
   /** Default retrieval method for the tool and skill catalogs (default `"bm25"`, model-free). */
   method?: SearchMethod;
+  /** Embedding model backing `"semantic"`/`"hybrid"` retrieval, forwarded to both
+   * catalogs — see {@link ToolCatalogOptions.embedding}. A string is a local model
+   * directory path; every other source is a keyed object (`{ huggingface }`,
+   * `{ ollama }`, `{ url, model, apiKeyEnv }`). Omit to use the built-in default
+   * model. `await r.tools.register(...)` awaits the embedding pass and rejects if
+   * it fails, so errors surface at registration. */
+  embedding?: EmbeddingSpec;
   /** Max tools each host-driven `recall` returns: capped at 50; 0, negative, or
    * non-integer values fall back to the default 5. */
   recallTopK?: number;
@@ -94,22 +102,40 @@ export interface RatelAdapter<
  * invocation time). Guards live here: the reserved capability-tool ids throw,
  * and a framework-shaped tool throws an actionable install-the-adapter error.
  * Registration keeps the catalog's own replace-in-place semantics — the native
- * path is authoritative, unlike the first-wins adapted path — and embeds
- * incrementally on a semantic/hybrid catalog.
+ * path is authoritative, unlike the first-wins adapted path — and embeds the
+ * batch on a semantic/hybrid catalog.
  */
 export interface ToolCollection {
-  /** Register native tools (replace-in-place on a duplicate id). Chainable. */
-  register(...tools: ExecutableTool[]): this;
+  /**
+   * Register native tools (replace-in-place on a duplicate id). Async: input is
+   * validated synchronously (a missing `execute`, a reserved id, or a
+   * framework-shaped tool throws *at the call site*, before the promise), then
+   * the returned promise resolves when the batch is indexed and — on a
+   * `"semantic"`/`"hybrid"` core — embedded, rejecting if that embedding fails.
+   * `await` it before searching a dense core; embedding errors surface as the
+   * rejection. Pass the whole batch in one call for a single embedding pass.
+   */
+  register(...tools: ExecutableTool[]): Promise<void>;
   /** Whether a tool with this id is registered. */
   has(id: string): boolean;
   /** The tool's searchable metadata, or `undefined` when unregistered. */
   get(id: string): Tool | undefined;
   /**
-   * Rank the catalog for `query` (host-driven, origin `"direct"`). `topK` is
-   * clamped to `[1, 50]` (invalid values fall back to 5), like the capability
+   * Rank the catalog for `query` synchronously (host-driven, origin `"direct"`).
+   * BM25 only: a `"semantic"`/`"hybrid"` catalog (or a per-call `method`
+   * override to one) throws with a pointer to {@link searchAsync}, since dense
+   * ranking runs against the prebuilt embedding cache off the event loop. `topK`
+   * is clamped to `[1, 50]` (invalid values fall back to 5), like the capability
    * funnel — drop to {@link catalog} for an unclamped search.
    */
   search(query: string, topK: number, method?: SearchMethod): SearchHit[];
+  /**
+   * Rank the catalog for `query` with any retrieval method without blocking the
+   * event loop (origin `"direct"`, same `topK` clamp as {@link search}). Ranks
+   * whatever is embedded now — `await register(...)` first so a dense tool is in
+   * the cache.
+   */
+  searchAsync(query: string, topK: number, method?: SearchMethod): Promise<SearchHit[]>;
   /** Execute a registered tool by id with the args object. */
   invoke(id: string, args: Record<string, unknown>): Promise<unknown>;
   /** The shared catalog itself — the unguarded driver-level escape hatch. */
@@ -130,18 +156,32 @@ export interface ToolCollection {
  * `undefined`, `search` never ranks it, and `invoke` can't run it.
  */
 export interface AdaptedToolCollection<TTool> {
-  /** Ingest framework tools (keyed by tool id) into the shared catalog. Chainable. */
-  register(tools: Record<string, TTool>): this;
+  /**
+   * Ingest framework tools (keyed by tool id) into the shared catalog. Async,
+   * with the same semantics as {@link ToolCollection.register}: ids are validated
+   * and ingested synchronously (a reserved id throws at the call site), then the
+   * returned promise resolves when the batch is indexed and, on a semantic/hybrid
+   * core, embedded — rejecting if embedding fails. `await` it before a dense search.
+   */
+  register(tools: Record<string, TTool>): Promise<void>;
   /** Whether this id is registered — in the catalog or as this view's passthrough. */
   has(id: string): boolean;
   /** A catalog tool's searchable metadata, or `undefined` (incl. for a passthrough). */
   get(id: string): Tool | undefined;
   /**
-   * Rank the shared catalog for `query` (host-driven, origin `"direct"`). `topK`
-   * is clamped to `[1, 50]` (invalid values fall back to 5); passthroughs are
-   * never ranked. Drop to {@link catalog} for an unclamped search.
+   * Rank the shared catalog for `query` synchronously (host-driven, origin
+   * `"direct"`). BM25 only — semantic/hybrid throws with a pointer to
+   * {@link searchAsync}. `topK` is clamped to `[1, 50]` (invalid values fall
+   * back to 5); passthroughs are never ranked. Drop to {@link catalog} for an
+   * unclamped search.
    */
   search(query: string, topK: number, method?: SearchMethod): SearchHit[];
+  /**
+   * Rank the shared catalog for `query` with any retrieval method off the event
+   * loop (origin `"direct"`). Same `topK` clamp as {@link search}; passthroughs
+   * are never ranked. `await register(...)` first so a dense tool is embedded.
+   */
+  searchAsync(query: string, topK: number, method?: SearchMethod): Promise<SearchHit[]>;
   /** Execute a catalog tool by id with the args object (not a passthrough). */
   invoke(id: string, args: Record<string, unknown>): Promise<unknown>;
   /** The shared catalog itself — the unguarded driver-level escape hatch. */
@@ -197,7 +237,10 @@ export type AdaptedRatel<A extends RatelAdapter> =
 export interface Ratel {
   /** Handle over the shared tool catalog (native shapes, guarded). */
   readonly tools: ToolCollection;
-  /** The shared skill catalog. */
+  /** The shared skill catalog — exposed raw (skills are framework-neutral and
+   * need no ingest codec), so it is the unguarded escape hatch at parity with
+   * {@link ToolCollection.catalog}: its `search` top-K is not clamped. Use
+   * {@link recall} for a clamped, capability-shaped skills ranking. */
   readonly skills: SkillCatalog;
   /**
    * The three capability tools (`search_capabilities`, `invoke_tool`,
@@ -212,7 +255,8 @@ export interface Ratel {
    * Rank `query` into the canonical `search_capabilities` result (origin
    * `"direct"`, top-K from `recallTopK`), or `null` when nothing matched. A
    * pure query: no call id is minted — ids exist only on the adapted views,
-   * whose synthetic message pairs need them.
+   * whose synthetic message pairs need them. Ranks whatever is registered and
+   * (on a dense core) embedded now — `await r.tools.register(...)` first.
    */
   recall(query: string): Promise<SearchCapabilitiesResult | null>;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
@@ -251,7 +295,8 @@ const KNOWN_FRAMEWORKS: readonly {
  * tools — so adapters stay tiny. One core can back several adapter views (they
  * share the catalog, embeddings, and counter).
  *
- * @param config - Retrieval method, recall budget, and trace sink.
+ * @param config - Retrieval method, embedding model (for semantic/hybrid),
+ *   recall budget, and trace sink.
  * @returns The standalone core; call `.adaptTo(adapter())` for a framework-shaped view.
  *
  * @example
@@ -260,33 +305,60 @@ const KNOWN_FRAMEWORKS: readonly {
  * import { aiSdk } from "@ratel-ai/ai-sdk-adapter";
  *
  * const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
- * r.tools.register(myTools);
+ * await r.tools.register(myTools);
  * const tools = r.expose(); // stable capability set for the model — take once, reuse
  * const messages = r.appendRecall(history); // per-turn recall (AI SDK idiom)
  * ```
  */
 export function ratel(config: RatelConfig = {}): Ratel {
-  const catalog = new ToolCatalog({ method: config.method, trace: config.trace });
-  const skills = new SkillCatalog({ method: config.method, trace: config.trace });
+  const catalogMethod: SearchMethod = config.method ?? "bm25";
+  const catalog = new ToolCatalog({
+    method: config.method,
+    embedding: config.embedding,
+    trace: config.trace,
+  });
+  const skills = new SkillCatalog({
+    method: config.method,
+    embedding: config.embedding,
+    trace: config.trace,
+  });
   // Recall call ids come from a private counter shared across every view of this
   // core: transcript positions are caller-owned (trimming/compaction repeats
   // them as tool-call ids), so they can't be the id source.
   let recallSeq = 0;
 
+  // Shared by both handles. Sync `search` is BM25-only — dense methods rank
+  // against the prebuilt embedding cache off the event loop, so they route
+  // through `searchAsync`.
+  const searchSync = (query: string, topK: number, method?: SearchMethod): SearchHit[] => {
+    const effective = method ?? catalogMethod;
+    if (effective !== "bm25") {
+      throw new Error(
+        `ratel: tools.search() is synchronous and ranks BM25 only; "${effective}" ranks against ` +
+          "prebuilt embeddings — use tools.searchAsync().",
+      );
+    }
+    return catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", "bm25");
+  };
+  const searchAsync = (query: string, topK: number, method?: SearchMethod): Promise<SearchHit[]> =>
+    catalog.searchAsync(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", method);
+
   const tools: ToolCollection = {
     catalog,
+    // Validate synchronously (a missing execute / reserved id / framework-shaped
+    // tool throws at the call site, before the promise), then embed the whole
+    // batch in one pass; the returned promise rejects if that embedding fails.
     register(...items) {
       for (const tool of items) {
         assertNativeTool(tool);
         assertUnreservedId(tool.id);
-        catalog.register(tool); // catalog semantics: replace-in-place, embed incrementally
       }
-      return tools;
+      return catalog.register(items);
     },
     has: (id) => catalog.has(id),
     get: (id) => catalog.get(id),
-    search: (query, topK, method) =>
-      catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", method),
+    search: searchSync,
+    searchAsync,
     invoke: (id, args) => catalog.invoke(id, args),
   };
 
@@ -321,10 +393,13 @@ export function ratel(config: RatelConfig = {}): Ratel {
       catalog,
       has: (id) => catalog.has(id) || passthrough.has(id),
       get: (id) => catalog.get(id),
-      search: (query, topK, method) =>
-        catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", method),
+      search: searchSync,
+      searchAsync,
       invoke: (id, args) => catalog.invoke(id, args),
+      // Ingest synchronously (validation + adapter codec + passthrough routing),
+      // then embed the ingested batch in one pass; the promise rejects on failure.
       register(appTools) {
+        const batch: ExecutableTool[] = [];
         for (const [id, tool] of Object.entries(appTools)) {
           assertUnreservedId(id);
           // First registration of an id wins, across every view of the core
@@ -335,7 +410,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
             passthrough.set(id, tool);
             continue;
           }
-          catalog.register({
+          batch.push({
             id,
             name: id,
             description: registration.description,
@@ -344,7 +419,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
             execute: registration.execute,
           });
         }
-        return adaptedTools;
+        return catalog.register(batch);
       },
     };
 
@@ -387,14 +462,17 @@ function assertUnreservedId(id: string): void {
  * trigger the actionable {@link unadaptedError}. A missing id is a *malformed
  * native* tool, not a framework one (framework tools are keyed externally in a
  * `Record`, so their id-lessness is expected), so it gets its own plain error
- * rather than misdirecting the caller to install an adapter. Everything else is
- * the catalog's job to validate.
+ * rather than misdirecting the caller to install an adapter. A missing `execute`
+ * is caught here too, so a malformed tool fails fast at the call site rather than
+ * as a rejection of the `register` promise the caller may not be awaiting.
+ * Everything else is the catalog's job to validate.
  */
 function assertNativeTool(tool: ExecutableTool): void {
   const candidate = tool as {
     id?: unknown;
     description?: unknown;
     inputSchema?: unknown;
+    execute?: unknown;
   } | null;
   if (candidate === null || typeof candidate !== "object") {
     throw new TypeError(`ratel: tools.register() expects ExecutableTools; got ${typeof tool}`);
@@ -409,6 +487,11 @@ function assertNativeTool(tool: ExecutableTool): void {
   if (typeof candidate.id !== "string") {
     throw new TypeError(
       `ratel: tools.register() expects each ExecutableTool to have a string \`id\`; got ${typeof candidate.id}`,
+    );
+  }
+  if (typeof candidate.execute !== "function") {
+    throw new TypeError(
+      `ratel: tools.register() expects each ExecutableTool to have an \`execute\` function; got ${typeof candidate.execute}`,
     );
   }
 }

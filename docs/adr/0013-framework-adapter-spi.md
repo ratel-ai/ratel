@@ -6,7 +6,7 @@ Date: 2026-07-15
 
 Accepted
 
-Builds on the framework-neutral capability tools (ADR-0007's `search_capabilities` /
+Builds on the framework-neutral capability tools (ADR-0005's `search_capabilities` /
 `invoke_tool` / `get_skill_content` funnel) and the optional-peer detection pattern first shipped
 for `@ratel-ai/telemetry-otlp`. Design source: the reviewed proposal *TS framework adapter
 packages*; this ADR records the SPI that its first phase lands in `@ratel-ai/sdk`.
@@ -44,6 +44,27 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   passthroughs). It builds fresh objects per call — hosts take it once per agent instance and
   reuse it. Rejected: the one-shot `tools(appTools)` that ingested, built embeddings, and exposed
   in a single call — it hid that late registration is safe and made incremental use impossible.
+
+- **`register` is async, not sync-chainable.** `ToolCatalog.register` embeds on a
+  `"semantic"`/`"hybrid"` core, so registration is inherently asynchronous. The handle's
+  `register(...)` returns that promise (`Promise<void>`) rather than a chainable `this`: it validates
+  the input synchronously (a missing `execute`, reserved id, or framework-shaped tool throws *at the
+  call site*, before the promise), then the promise resolves when the batch is indexed and embedded
+  and rejects if embedding fails — so `await r.tools.register(...)` awaits the pass and surfaces its
+  error, matching this ADR's promise that embedding errors surface at registration. `recall` and a
+  dense `searchAsync` rank whatever is embedded now, so a caller awaits registration before them (the
+  same contract as the underlying `ToolCatalog`). Rejected: a synchronous chainable `register` that
+  returns `this` and discards the embedding promise — it *looked* synchronous while hiding an async
+  pass, turning a missing `execute` or an embedding failure into a process-crashing unhandled
+  rejection and forcing a bolt-on `settled()`/quiesce surface to observe completion; async
+  `register` deletes that accidental complexity (the mongo `db.collection` analogy is itself async).
+
+- **`semantic`/`hybrid` is a first-class factory config.** `RatelConfig` forwards both `method`
+  and `embedding` to the two catalogs (ADR-0012's configurable models), so a semantic/hybrid core
+  is fully usable through `ratel()`, not default-model-only. Retrieval keeps the SDK's
+  sync/async split: the handle's `search(...)` is synchronous and BM25-only (a dense method throws
+  with a pointer to `searchAsync`, rather than leaking the native migration error), and
+  `searchAsync(...)` ranks any method off the event loop.
 
 - **The seam is three codecs + one extension hook.** `ingest(id, tool)` maps a framework tool to
   a `CatalogRegistration` (or `"passthrough"` for provider-executed tools that must stay eagerly

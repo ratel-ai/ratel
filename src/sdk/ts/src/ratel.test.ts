@@ -12,6 +12,7 @@ import {
   ToolCatalog,
 } from "./index.js";
 import { unadaptedError } from "./ratel.js";
+import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
 
 // A tiny in-repo adapter standing in for a real framework package: its tool type
 // carries its own shape and its message type is observable, so tests can assert
@@ -78,13 +79,12 @@ const native = (id: string, description: string): ExecutableTool => ({
 const CAPABILITY_IDS = [SEARCH_CAPABILITIES_ID, INVOKE_TOOL_ID, GET_SKILL_CONTENT_ID];
 
 describe("ratel() standalone core", () => {
-  it("r.tools is a chainable handle over the one shared catalog", () => {
+  it("r.tools is a handle over the one shared catalog", async () => {
     const r = ratel();
-    const returned = r.tools.register(
+    await r.tools.register(
       native("read_file", "Read a file from local disk."),
       native("write_file", "Write a file to local disk."),
     );
-    expect(returned).toBe(r.tools); // chainable
     expect(r.tools.has("read_file")).toBe(true);
     expect(r.tools.get("write_file")?.description).toBe("Write a file to local disk.");
     expect(r.tools.search("read a file", 5)[0]?.toolId).toBe("read_file");
@@ -95,20 +95,20 @@ describe("ratel() standalone core", () => {
 
   it("invokes registered tools through the handle", async () => {
     const r = ratel();
-    r.tools.register(native("ping", "Ping a host."));
+    await r.tools.register(native("ping", "Ping a host."));
     expect(await r.tools.invoke("ping", {})).toEqual({ ok: true });
   });
 
-  it("native registration is authoritative: a duplicate id replaces in place", () => {
+  it("native registration is authoritative: a duplicate id replaces in place", async () => {
     const r = ratel();
-    r.tools.register(native("dup", "first description"));
-    r.tools.register(native("dup", "second description"));
+    await r.tools.register(native("dup", "first description"));
+    await r.tools.register(native("dup", "second description"));
     expect(r.tools.get("dup")?.description).toBe("second description"); // unlike the adapted path
   });
 
   it("expose() returns the three capability tools in native shape", async () => {
     const r = ratel();
-    r.tools.register(native("read_file", "Read a file from local disk."));
+    await r.tools.register(native("read_file", "Read a file from local disk."));
     const out = r.expose();
     expect(Object.keys(out).sort()).toEqual([...CAPABILITY_IDS].sort());
     expect(out[SEARCH_CAPABILITIES_ID]?.id).toBe(SEARCH_CAPABILITIES_ID); // native, not adapted
@@ -132,7 +132,7 @@ describe("ratel() standalone core", () => {
   it("tools registered after expose() are discoverable through the exposed set", async () => {
     const r = ratel();
     const out = r.expose(); // expose first…
-    r.tools.register(native("late_tool", "Deploy the app to production.")); // …register later
+    await r.tools.register(native("late_tool", "Deploy the app to production.")); // …register later
     const result = (await out[SEARCH_CAPABILITIES_ID]?.execute({
       query: "deploy production",
     })) as SearchCapabilitiesResult;
@@ -142,7 +142,7 @@ describe("ratel() standalone core", () => {
   it("loads a skill registered after expose() through the exposed get_skill_content", async () => {
     const r = ratel();
     const out = r.expose(); // taken once, before any skill exists
-    r.skills.register({
+    await r.skills.register({
       id: "deploy",
       name: "deploy",
       description: "Deploy playbook: preview vs production, rollbacks.",
@@ -155,13 +155,13 @@ describe("ratel() standalone core", () => {
     expect(res.body).toBe("# Deploy");
   });
 
-  it("keeps the exposed search_capabilities description byte-stable across skill registration", () => {
+  it("keeps the exposed search_capabilities description byte-stable across skill registration", async () => {
     const r = ratel();
     const before = r.expose()[SEARCH_CAPABILITIES_ID]?.description;
     // The skills clause is always advertised — get_skill_content is always in
     // the set, so the description must never deny the bucket…
     expect(before).toContain("get_skill_content");
-    r.skills.register({
+    await r.skills.register({
       id: "deploy",
       name: "deploy",
       description: "Deploy playbook: preview vs production, rollbacks.",
@@ -225,12 +225,30 @@ describe("ratel() standalone core", () => {
     expect(() => r.tools.register(noId as unknown as ExecutableTool)).not.toThrow(/adaptTo/);
   });
 
-  it("clamps tools.search topK the same as the funnel: caps at 50, falls back on invalid", () => {
+  it("rejects a native tool with no execute handler synchronously, committing nothing", () => {
+    const r = ratel();
+    // A JS caller (or a cast) can hand register() a native-shaped tool that is
+    // missing its execute handler. The handle validates synchronously, so it
+    // fails fast at the call site rather than as a rejection of a promise the
+    // caller may not be awaiting.
+    const noExecute = {
+      id: "broken",
+      name: "broken",
+      description: "A native-shaped tool missing its execute handler.",
+      inputSchema: { type: "object" },
+      outputSchema: { type: "object" },
+    };
+    expect(() => r.tools.register(noExecute as unknown as ExecutableTool)).toThrow(/execute/);
+    expect(r.tools.has("broken")).toBe(false); // nothing committed
+    expect(() => r.tools.register(noExecute as unknown as ExecutableTool)).not.toThrow(/adaptTo/);
+  });
+
+  it("clamps tools.search topK the same as the funnel: caps at 50, falls back on invalid", async () => {
     const r = ratel();
     const many = Array.from({ length: 60 }, (_, i) =>
       native(`grep_${i}`, `Search files variant ${i}: grep ripgrep.`),
     );
-    r.tools.register(...many);
+    await r.tools.register(...many);
     // A stray-large topK is capped, not passed straight to the catalog.
     expect(r.tools.search("search files grep", 999).length).toBeLessThanOrEqual(50);
     // A negative topK falls back to the default 5 rather than wrapping to an
@@ -244,7 +262,7 @@ describe("ratel() standalone core", () => {
     const r = ratel();
     expect(await r.recall("anything")).toBeNull(); // empty catalog
 
-    r.tools.register(native("deploy_app", "Deploy the app to production."));
+    await r.tools.register(native("deploy_app", "Deploy the app to production."));
     expect(await r.recall("zzzqqq totally unrelated")).toBeNull(); // no hits
 
     const result = await r.recall("deploy to production");
@@ -254,7 +272,7 @@ describe("ratel() standalone core", () => {
 
   it("recall() includes the skills bucket when a skill is registered", async () => {
     const r = ratel();
-    r.skills.register({
+    await r.skills.register({
       id: "vercel-deploy",
       name: "vercel-deploy",
       description: "Deploy to Vercel: env vars, preview vs production, rollbacks.",
@@ -272,7 +290,7 @@ describe("ratel() standalone core", () => {
     );
 
     const high = ratel({ recallTopK: 999 });
-    high.tools.register(...many);
+    await high.tools.register(...many);
     const hi = (await high.recall("search files grep"))?.tools.groups.reduce(
       (n, g) => n + g.hits.length,
       0,
@@ -281,7 +299,7 @@ describe("ratel() standalone core", () => {
     expect(hi).toBeGreaterThan(5); // 999 honored past the default, capped at 50
 
     const low = ratel({ recallTopK: -1 });
-    low.tools.register(...many);
+    await low.tools.register(...many);
     const lo = (await low.recall("search files grep"))?.tools.groups.reduce(
       (n, g) => n + g.hits.length,
       0,
@@ -291,7 +309,7 @@ describe("ratel() standalone core", () => {
 
   it("derives server groups by the '__' prefix, treating a leading '__' as no prefix", async () => {
     const r = ratel();
-    r.tools.register(
+    await r.tools.register(
       native("github__create_issue", "Open a GitHub issue tracker ticket."),
       native("__weird_internal", "An internal GitHub issue tracker tool with leading underscores."),
     );
@@ -302,13 +320,96 @@ describe("ratel() standalone core", () => {
 
   it("records a direct-origin gateway_search on recall", async () => {
     const r = ratel({ trace: { kind: "memory", sessionId: "t" } });
-    r.tools.register(native("deploy_grep", "Deploy grep search tool."));
+    await r.tools.register(native("deploy_grep", "Deploy grep search tool."));
     r.tools.catalog.drainTraceEvents();
     await r.recall("deploy grep");
     const ev = (r.tools.catalog.drainTraceEvents() as Array<Record<string, unknown>>).find(
       (e) => e.type === "gateway_search",
     );
     expect(ev?.origin).toBe("direct");
+  });
+});
+
+describe("ratel() semantic/hybrid config", () => {
+  // Semantic/hybrid is a first-class config through the factory. These prove
+  // method + embedding are forwarded to both catalogs and that register is
+  // async (awaits/surfaces the embedding pass) — offline except where a fake
+  // embedding endpoint is needed for the end-to-end embed-then-search.
+  it("forwards method: the handle's sync search is BM25-only and points to searchAsync", () => {
+    expect(() => ratel().tools.search("q", 5)).not.toThrow(); // bm25 default: sync search works
+
+    // A hybrid catalog can't be searched synchronously — the handle says so in
+    // its own words, not by leaking the native "use searchWithMethodAsync()".
+    expect(() => ratel({ method: "hybrid" }).tools.search("q", 5)).toThrow(/searchAsync/);
+    // A per-call semantic override on a bm25 core is caught the same way.
+    expect(() => ratel().tools.search("q", 5, "semantic")).toThrow(/searchAsync/);
+  });
+
+  it("forwards method + embedding so searchAsync ranks against real embeddings", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const r = ratel({ method: "semantic", embedding: { url: server.url, model: "test-model" } });
+      await r.tools.register(native("read_file", "Read a file from local disk."));
+      const hits = await r.tools.searchAsync("read a file", 5);
+      expect(hits[0]?.toolId).toBe("read_file");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("register awaits the embedding pass and rejects on failure, but commits metadata", async () => {
+    const r = ratel({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    // register() is async: the embedding failure is the rejection of the call
+    // itself (no discarded promise, no unhandled rejection).
+    await expect(
+      r.tools.register(native("read_file", "Read a file from local disk.")),
+    ).rejects.toThrow(/failed to load embedding model/);
+    expect(r.tools.has("read_file")).toBe(true); // metadata is committed before the embed pass
+  });
+
+  it("a BM25 searchAsync override doesn't depend on the (failing) embedding pass", async () => {
+    const r = ratel({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    // The embedding pass fails, but the lexical corpus is still indexed, so a
+    // per-call bm25 override ranks it.
+    await r.tools.register(native("read_file", "Read a file from local disk.")).catch(() => {});
+    const hits = await r.tools.searchAsync("read a file", 5, "bm25");
+    expect(hits[0]?.toolId).toBe("read_file");
+  });
+
+  it("recall ranks a registered semantic tool", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const r = ratel({ method: "semantic", embedding: { url: server.url, model: "test-model" } });
+      await r.tools.register(native("deploy_app", "Deploy the app to production."));
+      const result = await r.recall("deploy to production");
+      expect(result?.tools.groups[0]?.hits[0]?.toolId).toBe("deploy_app");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("forwards method + embedding to the skill catalog too", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const r = ratel({ method: "semantic", embedding: { url: server.url, model: "test-model" } });
+      await r.skills.register({
+        id: "vercel-deploy",
+        name: "vercel-deploy",
+        description: "Deploy to Vercel: env vars, preview vs production, rollbacks.",
+        tags: ["vercel"],
+        body: "# Vercel",
+      });
+      const hits = await r.skills.searchAsync("deploy to vercel", 3);
+      expect(hits[0]?.skillId).toBe("vercel-deploy");
+    } finally {
+      await server.close();
+    }
   });
 });
 
@@ -322,10 +423,9 @@ describe("ratel().adaptTo(adapter)", () => {
     expect(a.skills).toBeInstanceOf(SkillCatalog);
   });
 
-  it("registers tools into the shared catalog; expose() returns only the capability set", () => {
+  it("registers tools into the shared catalog; expose() returns only the capability set", async () => {
     const a = ratel().adaptTo(fakeAdapter());
-    const returned = a.tools.register({ read_file: exec("Read a file from local disk.") });
-    expect(returned).toBe(a.tools); // chainable
+    await a.tools.register({ read_file: exec("Read a file from local disk.") });
     expect(a.tools.has("read_file")).toBe(true);
     expect(a.tools.catalog.has("read_file")).toBe(true); // same shared catalog
     expect(Object.keys(a.expose()).sort()).toEqual([...CAPABILITY_IDS].sort());
@@ -333,7 +433,7 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("routes the capability tools through the adapter's expose codec", async () => {
     const a = ratel().adaptTo(fakeAdapter());
-    a.tools.register({ read_file: exec("Read a file from local disk.") });
+    await a.tools.register({ read_file: exec("Read a file from local disk.") });
     const search = a.expose()[SEARCH_CAPABILITIES_ID];
     // A FakeTool has no id/outputSchema — a raw ExecutableTool would. Their
     // absence proves expose() ran the value through the codec, not shipped it raw.
@@ -351,19 +451,19 @@ describe("ratel().adaptTo(adapter)", () => {
   it("tools registered after expose() are discoverable through the exposed set", async () => {
     const a = ratel().adaptTo(fakeAdapter());
     const out = a.expose();
-    a.tools.register({ late_tool: exec("Deploy the app to production.") });
+    await a.tools.register({ late_tool: exec("Deploy the app to production.") });
     const result = (await out[SEARCH_CAPABILITIES_ID]?.execute?.({
       query: "deploy production",
     })) as SearchCapabilitiesResult;
     expect(result.tools.groups[0]?.hits[0]?.toolId).toBe("late_tool");
   });
 
-  it("keeps non-executable tools as per-view passthroughs, unregistered", () => {
+  it("keeps non-executable tools as per-view passthroughs, unregistered", async () => {
     const core = ratel();
     const a = core.adaptTo(fakeAdapter());
     const b = core.adaptTo(fakeAdapter());
     const provider: FakeTool = { description: "provider-run search", inputSchema: {} };
-    a.tools.register({ provider_search: provider });
+    await a.tools.register({ provider_search: provider });
     expect(a.expose().provider_search).toBe(provider); // eagerly exposed, untouched
     expect(a.tools.catalog.has("provider_search")).toBe(false); // never in the catalog
     expect(a.tools.has("provider_search")).toBe(true); // …but the view knows it
@@ -372,16 +472,32 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("exposes get/search/invoke on the adapted handle, at parity with the native ToolCollection", async () => {
     const a = ratel().adaptTo(fakeAdapter());
-    a.tools.register({ read_file: exec("Read a file from local disk.") });
+    await a.tools.register({ read_file: exec("Read a file from local disk.") });
     expect(a.tools.get("read_file")?.description).toBe("Read a file from local disk.");
     expect(a.tools.search("read a file", 5)[0]?.toolId).toBe("read_file");
     expect(await a.tools.invoke("read_file", {})).toEqual({ ok: true });
   });
 
-  it("adapted get/search/invoke are catalog-only: a passthrough is known to has() but not to them", () => {
+  it("adapted searchAsync ranks a semantic catalog; sync search still points to searchAsync", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const a = ratel({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      }).adaptTo(fakeAdapter());
+      await a.tools.register({ read_file: exec("Read a file from local disk.") });
+      expect(() => a.tools.search("read a file", 5)).toThrow(/searchAsync/);
+      const hits = await a.tools.searchAsync("read a file", 5);
+      expect(hits[0]?.toolId).toBe("read_file");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("adapted get/search/invoke are catalog-only: a passthrough is known to has() but not to them", async () => {
     const a = ratel().adaptTo(fakeAdapter());
     const provider: FakeTool = { description: "provider-run search", inputSchema: {} };
-    a.tools.register({ provider_search: provider });
+    await a.tools.register({ provider_search: provider });
     expect(a.tools.has("provider_search")).toBe(true); // the view knows it
     expect(a.tools.get("provider_search")).toBeUndefined(); // …but it's not in the catalog
   });
@@ -393,9 +509,9 @@ describe("ratel().adaptTo(adapter)", () => {
     }
   });
 
-  it("skips ingest entirely for an id that is already registered", () => {
+  it("skips ingest entirely for an id that is already registered", async () => {
     const core = ratel();
-    core.tools.register(native("shared_tool", "Shared grep tool."));
+    await core.tools.register(native("shared_tool", "Shared grep tool."));
     let ingestCalls = 0;
     const counting: RatelAdapter<FakeTool, FakeMessage> = {
       ...fakeAdapter(),
@@ -405,14 +521,14 @@ describe("ratel().adaptTo(adapter)", () => {
       },
     };
     const a = core.adaptTo(counting);
-    a.tools.register({ shared_tool: exec("would shadow") }); // native id → first-wins pre-check
+    await a.tools.register({ shared_tool: exec("would shadow") }); // native id → first-wins pre-check
     expect(ingestCalls).toBe(0);
-    a.tools.register({ fresh: exec("Fresh tool.") });
-    a.tools.register({ fresh: exec("Duplicate call.") });
+    await a.tools.register({ fresh: exec("Fresh tool.") });
+    await a.tools.register({ fresh: exec("Duplicate call.") });
     expect(ingestCalls).toBe(1); // ingest's user code must not re-run per repeated register
   });
 
-  it("preserves an ingest-provided outputSchema and defaults an omitted one", () => {
+  it("preserves an ingest-provided outputSchema and defaults an omitted one", async () => {
     const withOutput: RatelAdapter<FakeTool, FakeMessage> = {
       ...fakeAdapter(),
       ingest(_id, tool) {
@@ -425,34 +541,34 @@ describe("ratel().adaptTo(adapter)", () => {
       },
     };
     const a = ratel().adaptTo(withOutput);
-    a.tools.register({ typed: exec("Tool with a declared output shape.") });
+    await a.tools.register({ typed: exec("Tool with a declared output shape.") });
     expect(a.tools.catalog.get("typed")?.outputSchema).toEqual({
       type: "object",
       properties: { ok: { type: "boolean" } },
     });
 
     const b = ratel().adaptTo(fakeAdapter()); // fakeAdapter's ingest omits outputSchema
-    b.tools.register({ untyped: exec("Tool without an output shape.") });
+    await b.tools.register({ untyped: exec("Tool without an output shape.") });
     expect(b.tools.catalog.get("untyped")?.outputSchema).toEqual({ type: "object" });
   });
 
-  it("first registration of an id wins, across executables and passthroughs", () => {
+  it("first registration of an id wins, across executables and passthroughs", async () => {
     const a = ratel().adaptTo(fakeAdapter());
-    a.tools.register({ dup: exec("first description") });
-    a.tools.register({ dup: exec("second description") });
+    await a.tools.register({ dup: exec("first description") });
+    await a.tools.register({ dup: exec("second description") });
     expect(a.tools.catalog.get("dup")?.description).toBe("first description");
 
     // A passthrough claims its id too: a later executable must not shadow it.
     const provider: FakeTool = { description: "provider-run", inputSchema: {} };
-    a.tools.register({ claimed: provider });
-    a.tools.register({ claimed: exec("late executable") });
+    await a.tools.register({ claimed: provider });
+    await a.tools.register({ claimed: exec("late executable") });
     expect(a.tools.catalog.has("claimed")).toBe(false);
     expect(a.expose().claimed).toBe(provider);
   });
 
   it("recall returns the adapter's message pair with a private-counter call id", async () => {
     const a = ratel().adaptTo(fakeAdapter());
-    a.tools.register({ deploy_app: exec("Deploy the app to production servers.") });
+    await a.tools.register({ deploy_app: exec("Deploy the app to production servers.") });
 
     const first = await a.recall("deploy to production");
     expect(first).toHaveLength(2);
@@ -470,7 +586,7 @@ describe("ratel().adaptTo(adapter)", () => {
     const a = ratel().adaptTo(fakeAdapter());
     expect(await a.recall("anything at all")).toEqual([]); // empty catalog, no skills
 
-    a.tools.register({ deploy_app: exec("Deploy the app to production.") });
+    await a.tools.register({ deploy_app: exec("Deploy the app to production.") });
     // A query that shares no terms with the only tool → no hits → still [].
     expect(await a.recall("zzzqqq totally unrelated")).toEqual([]);
     // The counter was never spent, so the next real hit is still recall_0.
@@ -481,7 +597,7 @@ describe("ratel().adaptTo(adapter)", () => {
     const core = ratel();
     const a = core.adaptTo(fakeAdapter());
     const b = core.adaptTo(fakeAdapter());
-    a.tools.register({ shared_tool: exec("Shared search grep tool.") });
+    await a.tools.register({ shared_tool: exec("Shared search grep tool.") });
     expect(b.tools.has("shared_tool")).toBe(true); // one catalog
     expect(core.tools.has("shared_tool")).toBe(true); // …the core's own
 
@@ -491,7 +607,7 @@ describe("ratel().adaptTo(adapter)", () => {
 
   it("recall carries a skills-only match: the pair is built even with zero tool hits", async () => {
     const a = ratel().adaptTo(fakeAdapter());
-    a.skills.register({
+    await a.skills.register({
       id: "vercel-deploy",
       name: "vercel-deploy",
       description: "Deploy to Vercel: env vars, preview vs production, rollbacks.",
@@ -505,13 +621,13 @@ describe("ratel().adaptTo(adapter)", () => {
     expect(recall.skills.map((s) => s.skillId)).toContain("vercel-deploy");
   });
 
-  it("tolerates an extend returning a non-object: the view is still the usable base", () => {
+  it("tolerates an extend returning a non-object: the view is still the usable base", async () => {
     const bad = {
       ...fakeAdapter(),
       extend: () => 42,
     } as unknown as RatelAdapter<FakeTool, FakeMessage>;
     const a = ratel().adaptTo(bad);
-    a.tools.register({ read_file: exec("Read a file from local disk.") });
+    await a.tools.register({ read_file: exec("Read a file from local disk.") });
     expect(Object.keys(a.expose()).sort()).toEqual([...CAPABILITY_IDS].sort());
   });
 
