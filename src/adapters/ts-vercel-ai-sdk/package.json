@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/vercel-ai-sdk",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Vercel AI SDK adapter for Ratel — adapts the context-engineering core to ai@7 tool and message shapes, with per-turn recall helpers.",
   "private": false,
   "type": "module",
