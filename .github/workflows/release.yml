@@ -14,7 +14,7 @@ name: Release
 #   telemetry-ts-otlp-v* -> @ratel-ai/telemetry-otlp on npm (the init() exporter)
 #     The telemetry helpers release independently (one registry each; otlp is the
 #     npm exporter split from the vocabulary); tag the same commit to ship together.
-#   mastra-adapter-v* -> @ratel-ai/mastra-adapter on npm (framework adapter, peers the SDK)
+#   mastra-v* -> @ratel-ai/mastra on npm (framework adapter, peers the SDK)
 
 on:
   push:
@@ -26,7 +26,7 @@ on:
       - 'telemetry-ts-v*'
       - 'telemetry-py-v*'
       - 'telemetry-ts-otlp-v*'
-      - 'mastra-adapter-v*'
+      - 'mastra-v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -586,10 +586,10 @@ jobs:
             (cd src/telemetry/ts-otlp && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
           fi
 
-  publish-mastra-adapter:
-    name: Publish @ratel-ai/mastra-adapter to npm
+  publish-mastra:
+    name: Publish @ratel-ai/mastra to npm
     needs: [tag-version-check]
-    if: needs.tag-version-check.outputs.unit == 'mastra-adapter'
+    if: needs.tag-version-check.outputs.unit == 'mastra'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -616,7 +616,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       # Build the adapter and its @ratel-ai/sdk workspace dependency (topo order).
       - name: Build TS
-        run: pnpm --filter "@ratel-ai/mastra-adapter..." run build
+        run: pnpm --filter "@ratel-ai/mastra..." run build
       # npm keeps `workspace:` specifiers verbatim, so pin the @ratel-ai/sdk peer to
       # the concrete co-released version before publishing (ephemeral CI edit; not
       # committed). Keeps the npm-OIDC dir publish + provenance identical to the
@@ -661,7 +661,7 @@ jobs:
       - publish-telemetry-py
       - publish-telemetry-core
       - publish-telemetry-ts-otlp
-      - publish-mastra-adapter
+      - publish-mastra
     # Exactly one unit's publish job runs; the rest are skipped. Run when the tag
     # was pushed and that one job succeeded. Every unit is single-registry now, so
     # any one publish job succeeding is enough.
@@ -675,7 +675,7 @@ jobs:
               || needs.publish-telemetry-py.result == 'success'
               || needs.publish-telemetry-core.result == 'success'
               || needs.publish-telemetry-ts-otlp.result == 'success'
-              || needs.publish-mastra-adapter.result == 'success') }}
+              || needs.publish-mastra.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

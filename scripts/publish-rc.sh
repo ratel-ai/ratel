@@ -15,7 +15,7 @@
 #   telemetry-py   -> ratel-ai-telemetry on PyPI           (twine upload, built locally)
 #   telemetry-ts-otlp -> @ratel-ai/telemetry-otlp on npm      (npm publish, pnpm-packed locally)
 #   vercel-ai-sdk  -> @ratel-ai/vercel-ai-sdk on npm       (npm publish, pnpm-packed locally)
-#   mastra-adapter -> @ratel-ai/mastra-adapter on npm      (npm publish, pnpm-packed locally)
+#   mastra -> @ratel-ai/mastra on npm      (npm publish, pnpm-packed locally)
 # Each unit's version is read from its own manifest via scripts/release-units.mjs
 # (the single source of truth) — units are NOT assumed to share a version.
 #
@@ -33,7 +33,7 @@
 # Options:
 #   --unit <id>        core | sdk-ts | sdk-py | telemetry-core | telemetry-ts |
 #                      telemetry-py | telemetry-ts-otlp | vercel-ai-sdk |
-#                      mastra-adapter.
+#                      mastra.
 #                      Repeatable. Default: all.
 #   --from-run <id>    Download all artifacts from the given GH Actions run
 #                      (requires `gh auth login`); tarballs/wheels are found within.
@@ -358,18 +358,18 @@ publish_telemetry_core() {
   echo "==> telemetry-core publish complete"; echo
 }
 
-# ---------- mastra-adapter: @ratel-ai/mastra-adapter on npm, packed locally ----------
+# ---------- mastra: @ratel-ai/mastra on npm, packed locally ----------
 # Pure-language framework adapter with a `workspace:^` peer on @ratel-ai/sdk.
 # `pnpm pack` rewrites that specifier to the concrete co-installed version in the
 # tarball, so a plain `npm publish <tarball>` (bootstrap: no OIDC, no provenance)
 # ships a valid manifest — same shape as telemetry-ts-otlp.
-publish_mastra_adapter() {
-  local version; version="$(resolve_version mastra-adapter)"
-  echo "===== mastra-adapter @ $version (npm) ====="
-  echo "----- @ratel-ai/mastra-adapter@$version (npm) -----"
+publish_mastra() {
+  local version; version="$(resolve_version mastra)"
+  echo "===== mastra @ $version (npm) ====="
+  echo "----- @ratel-ai/mastra@$version (npm) -----"
   local status
   status="$(curl -sS -o /dev/null -w '%{http_code}' \
-    "https://registry.npmjs.org/@ratel-ai%2Fmastra-adapter/${version}" || echo 000)"
+    "https://registry.npmjs.org/@ratel-ai%2Fmastra/${version}" || echo 000)"
   if [[ "$status" == "200" ]]; then
     echo "    already published, skipping npm"; echo; return 0
   fi
@@ -377,7 +377,7 @@ publish_mastra_adapter() {
     echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
   fi
   # Build the adapter and its @ratel-ai/sdk workspace dependency (topo order).
-  ( cd "$REPO_ROOT" && pnpm --filter "@ratel-ai/mastra-adapter..." run build )
+  ( cd "$REPO_ROOT" && pnpm --filter "@ratel-ai/mastra..." run build )
   local tgz
   tgz="$( cd "$REPO_ROOT/src/adapters/ts-mastra" && pnpm pack --pack-destination "$(mktemp -d)" | tail -1 )"
   if [[ $DRY_RUN -eq 1 ]]; then
@@ -385,7 +385,7 @@ publish_mastra_adapter() {
   else
     publish_one_npm "$tgz" || exit 1
   fi
-  echo "==> mastra-adapter publish complete"; echo
+  echo "==> mastra publish complete"; echo
 }
 
 # Publish in a stable order regardless of --unit argument order.
@@ -397,7 +397,7 @@ selected telemetry-ts   && publish_telemetry_ts
 selected telemetry-ts-otlp && publish_telemetry_ts_otlp
 selected telemetry-py   && publish_telemetry_py
 selected vercel-ai-sdk  && publish_vercel_ai_sdk
-selected mastra-adapter && publish_mastra_adapter
+selected mastra && publish_mastra
 
 echo "==> done"
 echo
