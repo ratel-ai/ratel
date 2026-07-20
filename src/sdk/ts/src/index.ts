@@ -16,20 +16,20 @@
 export type { JSONSchema7 } from "json-schema";
 export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
 export type {
+  CapabilitiesSearchOptions,
   CapabilitySkillHit,
   CapabilityToolGroup,
   CapabilityToolHit,
-  FormatSearchCapabilitiesOptions,
   InvokeToolToolOptions,
   SearchCapabilitiesOptions,
   SearchCapabilitiesResult,
   UpstreamServerInfo,
 } from "./capabilities.js";
 export {
-  formatSearchCapabilities,
   formatUpstreamLine,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  runCapabilitiesSearch,
   SEARCH_CAPABILITIES_ID,
   searchCapabilitiesTool,
 } from "./capabilities.js";

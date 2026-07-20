@@ -290,7 +290,7 @@ export function searchCapabilitiesTool(
         topKTools?: number;
         topKSkills?: number;
       };
-      return formatSearchCapabilities(toolCatalog, query, {
+      return runCapabilitiesSearch(toolCatalog, query, {
         topKTools,
         topKSkills,
         skillCatalog,
@@ -301,8 +301,8 @@ export function searchCapabilitiesTool(
   };
 }
 
-/** Options for {@link formatSearchCapabilities}. */
-export interface FormatSearchCapabilitiesOptions {
+/** Options for {@link runCapabilitiesSearch}. */
+export interface CapabilitiesSearchOptions {
   /** Max tools bucket size; capped at 50, default 5 (same as the tool); 0, negative, or non-integer values fall back to the default. */
   topKTools?: number;
   /** Max skills bucket size; capped at 50, default 3; invalid values fall back to the default. */
@@ -334,10 +334,10 @@ export interface FormatSearchCapabilitiesOptions {
  * @param opts - Bucket sizes, skill catalog, origin, and upstream metadata.
  * @returns A promise for the {@link SearchCapabilitiesResult}.
  */
-export async function formatSearchCapabilities(
+export async function runCapabilitiesSearch(
   toolCatalog: ToolCatalog,
   query: string,
-  opts: FormatSearchCapabilitiesOptions = {},
+  opts: CapabilitiesSearchOptions = {},
 ): Promise<SearchCapabilitiesResult> {
   const kTools = clampTopK(opts.topKTools, DEFAULT_TOP_K_TOOLS);
   const kSkills = clampTopK(opts.topKSkills, DEFAULT_TOP_K_SKILLS);
