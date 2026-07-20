@@ -131,6 +131,12 @@ impl SkillRegistry {
         // behavior rather than failing the search.
         let arm = {
             let guard = graph.read().ok()?;
+            // Hand the embedded query to the learner: it only sees trace events,
+            // which carry text and not vectors, so this is how a locally-grown
+            // cluster gets a real centroid instead of clustering on words alone.
+            if let Some(v) = query_vec {
+                guard.note_query_vector(query, v);
+            }
             let known = |id: &str| self.skills.contains_key(id);
             // The graph picks the match tier from what it carries; a lexically
             // grown graph has no centroids to compare a query vector against.

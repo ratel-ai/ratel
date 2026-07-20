@@ -30,13 +30,17 @@
 //! searches once and invokes three tools records three observations — that is
 //! genuinely what happened.
 //!
-//! # What it cannot do
+//! # How far a cluster reaches
 //!
 //! A [`TraceEvent::Search`] carries the query *text*, not its embedding, so the
-//! learner clusters **lexically** and the clusters it grows carry no centroid.
-//! They reach repeats and near-repeats, not phrasings that share no vocabulary.
-//! [`IntentGraph::arm`] falls back to lexical matching for such graphs, so they
-//! work on every [`crate::SearchMethod`] — at the lexical tier's reach.
+//! sink alone could only cluster on words. A semantic/hybrid registry closes
+//! that gap: it has already embedded the query for its own ranking and stashes
+//! that vector on the graph, so the learner grows a real centroid and clusters
+//! phrasings that share **no vocabulary** — "delete a path" with "remove
+//! something". A `Bm25` registry loads no model (ADR-0011), so its clusters
+//! carry no centroid and reach repeats and near-repeats only.
+//! [`IntentGraph::arm`] picks the tier from what the graph carries, so either
+//! kind works on every [`crate::SearchMethod`].
 
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};

@@ -173,6 +173,12 @@ impl ToolRegistry {
         // enhancement, and losing it degrades to today's behavior.
         let arm = {
             let guard = graph.read().ok()?;
+            // Hand the embedded query to the learner: it only sees trace events,
+            // which carry text and not vectors, so this is how a locally-grown
+            // cluster gets a real centroid instead of clustering on words alone.
+            if let Some(v) = query_vec {
+                guard.note_query_vector(query, v);
+            }
             let known = |id: &str| self.tools.contains_key(id);
             // The graph picks the match tier from what it carries; a lexically
             // grown graph has no centroids to compare a query vector against.
@@ -631,6 +637,7 @@ mod tests {
     use super::*;
     use crate::embedding::{Embedded, Embedder};
     use crate::trace::MemorySink;
+    use crate::usage::Capability;
 
     /// Deterministic, network-free embedder: a 3-d one-hot keyed on a keyword so
     /// dense ranking is predictable ("read" docs/queries collide, etc.).
@@ -1154,6 +1161,88 @@ mod tests {
             &e.event,
             TraceEvent::Search { origin: Origin::Agent, hits, .. } if !hits.is_empty()
         )));
+    }
+
+    #[test]
+    fn a_semantic_registry_learns_clusters_that_bridge_disjoint_vocabulary() {
+        // THE headline behaviour, and what the lexical tier cannot do:
+        // "delete a path" and "remove something" share NO content words, but the
+        // embedder places them together. Learning on a semantic registry must
+        // group them into one cluster, so evidence from one lifts the other.
+        let graph = Arc::new(RwLock::new(IntentGraph::empty(30.0)));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(Arc::new(crate::UsageLearner::new(
+            graph.clone(),
+            Arc::new(NoopSink),
+        )));
+        reg.set_intent_graph(Some(graph.clone()));
+        reg.register(tool("delete_file", "delete a path"));
+        reg.register(tool("read_file", "read a file"));
+        reg.build_embeddings().unwrap();
+
+        let observe = |q: &str, id: &str| {
+            reg.search_with_method(q, 5, Origin::Agent, SearchMethod::Semantic)
+                .unwrap();
+            reg.record_event(TraceEvent::InvokeStart {
+                tool_id: id.into(),
+                args_size_bytes: 0,
+            });
+        };
+        observe("delete a path", "delete_file");
+        observe("remove something", "delete_file");
+
+        let g = graph.read().unwrap();
+        assert_eq!(
+            g.len(),
+            1,
+            "disjoint wording, same meaning — one cluster, got {:?}",
+            g.intents.iter().map(|i| &i.members).collect::<Vec<_>>()
+        );
+        assert!(
+            g.intents[0].centroid.is_some(),
+            "a semantic registry must grow a real centroid"
+        );
+    }
+
+    #[test]
+    fn a_bm25_registry_still_learns_without_any_centroid() {
+        // No embedder is ever touched on this path (ADR-0011), so the cluster is
+        // lexical and carries no centroid — the documented lesser tier.
+        let graph = Arc::new(RwLock::new(IntentGraph::empty(30.0)));
+        let mut reg = ToolRegistry::new();
+        reg.set_trace_sink(Arc::new(crate::UsageLearner::new(
+            graph.clone(),
+            Arc::new(NoopSink),
+        )));
+        reg.set_intent_graph(Some(graph.clone()));
+        reg.register(tool("delete_file", "delete a path"));
+
+        reg.search_with_origin("delete a path", 5, Origin::Agent);
+        reg.record_event(TraceEvent::InvokeStart {
+            tool_id: "delete_file".into(),
+            args_size_bytes: 0,
+        });
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.len(), 1);
+        assert!(g.intents[0].centroid.is_none());
+    }
+
+    #[test]
+    fn a_stashed_vector_from_a_different_query_is_not_reused() {
+        // Sessions share a graph, so a concurrent search can clobber the slot.
+        // Keying it by query text means the mismatch degrades to lexical
+        // clustering rather than attaching the wrong embedding to a question.
+        let graph = IntentGraph::empty(30.0);
+        graph.note_query_vector("some other query", &[1.0, 0.0, 0.0]);
+        let mut graph = graph;
+        graph.observe("delete a path", Capability::Tool, "delete_file", 1);
+
+        assert_eq!(graph.len(), 1);
+        assert!(
+            graph.intents[0].centroid.is_none(),
+            "must not borrow another query's embedding"
+        );
     }
 
     // ---- usage ranking on the dense paths (ADR-0013) -----------------------

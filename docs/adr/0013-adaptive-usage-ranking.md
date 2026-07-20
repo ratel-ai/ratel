@@ -46,13 +46,15 @@ a `label`, `terms`, `support`, and `tools` / `skills` edge maps.
   hold enters the system.
 - **Online.** Clusters are created and grow as queries arrive; a cluster may boost from
   its first confirmed pair. There is no build step.
-- **The in-process learner clusters lexically.** A `TraceEvent::Search` carries the query
-  text, not its embedding — a trace event is no place for a 384-float vector — so a
-  sink-based learner has no embedder and the clusters it grows carry **no centroid**. It
-  therefore reaches repeats and near-repeats, not phrasings that share no vocabulary.
-  Dense clusters remain available from a producer that does have an embedder (Ratel
-  Cloud, or a future replay pass); giving the in-process learner one is deferred rather
-  than rejected.
+- **The learner clusters at whatever tier the registry runs.** A `TraceEvent::Search`
+  carries the query text, not its embedding, so the sink alone could only cluster on
+  words. But a semantic/hybrid registry has *already embedded the query* for its own
+  ranking, so it stashes that vector on the graph (a `Mutex` slot, written under the read
+  lock) and the learner grows a real centroid from it — free, since the embedding was
+  computed anyway. A `Bm25` registry loads no model and its clusters carry no centroid,
+  reaching repeats and near-repeats only. The slot is keyed by query text: sessions share
+  a graph, so a clobbered slot degrades to lexical clustering rather than attaching one
+  session's embedding to another's question.
 - **Support-scaled, not support-gated.** The arm's weight is `W · min(1, support/3)`, so
   one observation nudges and three or more get full weight. A batch design could filter
   weak clusters before use; an online one cannot, so the ramp does that job without making

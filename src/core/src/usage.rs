@@ -29,6 +29,7 @@
 //! folded in.
 
 use std::collections::BTreeMap;
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -126,6 +127,52 @@ impl std::error::Error for IntentGraphError {}
 /// The schema version this build reads.
 const GRAPH_VERSION: u32 = 1;
 
+/// The most recent query and its embedding, stashed by the search path so the
+/// learner can grow a real centroid.
+///
+/// Transient scratch, **not part of the graph's value**: skipped on the wire,
+/// empty after a clone, and ignored by equality — two graphs that differ only
+/// here are the same graph. It lives on [`IntentGraph`] because the search path
+/// and the learner share nothing else, and it is a `Mutex` so the search path
+/// can write it while holding only a read lock.
+#[derive(Debug, Default)]
+struct PendingQuery(Mutex<Option<(String, Vec<f32>)>>);
+
+impl Clone for PendingQuery {
+    /// A clone starts empty: a half-finished search is not worth copying.
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for PendingQuery {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl PendingQuery {
+    fn set(&self, query: &str, vector: &[f32]) {
+        if let Ok(mut slot) = self.0.lock() {
+            *slot = Some((query.to_string(), vector.to_vec()));
+        }
+    }
+
+    /// The stashed vector, but **only if it belongs to `query`**.
+    ///
+    /// Sessions share a graph, so a concurrent search can overwrite the slot
+    /// between one session's search and its invoke. Keying by the query text
+    /// means a clobbered slot degrades to lexical clustering rather than
+    /// attaching one session's embedding to another's question.
+    fn take_for(&self, query: &str) -> Option<Vec<f32>> {
+        let slot = self.0.lock().ok()?;
+        match slot.as_ref() {
+            Some((q, v)) if q == query => Some(v.clone()),
+            _ => None,
+        }
+    }
+}
+
 /// One cluster: the queries it covers and the capabilities invoked after them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Intent {
@@ -175,6 +222,27 @@ impl Intent {
         ranked.into_iter().map(|(id, _)| id).collect()
     }
 
+    /// Fold `vector` into this cluster's centroid as a running mean over its
+    /// members, renormalized so cosine stays a plain dot product.
+    ///
+    /// The mean of unit vectors falls inside the sphere, so skipping the
+    /// renormalize would depress every later similarity by the cluster's own
+    /// spread. A first vector — or one of a different width, meaning the
+    /// embedding model changed — replaces the centroid rather than being
+    /// averaged into a space it does not share.
+    fn absorb_vector(&mut self, vector: &[f32]) {
+        let n = self.members.len().max(1) as f32;
+        let merged: Vec<f32> = match self.centroid.as_deref() {
+            Some(c) if c.len() == vector.len() => c
+                .iter()
+                .zip(vector)
+                .map(|(c, v)| c * (n - 1.0) + v)
+                .collect(),
+            _ => vector.to_vec(),
+        };
+        self.centroid = Some(normalize(merged));
+    }
+
     /// Every distinct content token across this cluster's members.
     fn token_bag(&self) -> std::collections::HashSet<String> {
         self.members.iter().flat_map(|m| tokenize(m)).collect()
@@ -196,6 +264,9 @@ pub struct IntentGraph {
     pub built_from_ts: u64,
     /// The clusters. Order is not significant.
     pub intents: Vec<Intent>,
+    /// Scratch for the search path → learner handoff; never serialized.
+    #[serde(skip)]
+    pending: PendingQuery,
 }
 
 impl IntentGraph {
@@ -221,6 +292,7 @@ impl IntentGraph {
             half_life_days,
             built_from_ts: 0,
             intents: Vec::new(),
+            pending: PendingQuery::default(),
         }
     }
 
@@ -233,6 +305,17 @@ impl IntentGraph {
     /// contributes no arm to any query.
     pub fn is_empty(&self) -> bool {
         self.intents.is_empty()
+    }
+
+    /// Stash the embedded query so a later [`Self::observe`] can grow a real
+    /// centroid from it.
+    ///
+    /// Called on the search path of a semantic/hybrid registry, which has
+    /// already embedded the query for its own ranking — so this costs nothing
+    /// beyond a copy. Takes `&self`: the slot is a `Mutex`, so the search path
+    /// never needs the write lock.
+    pub(crate) fn note_query_vector(&self, query: &str, vector: &[f32]) {
+        self.pending.set(query, vector);
     }
 
     /// Fold one confirmed observation — a query, and the capability invoked
@@ -259,12 +342,15 @@ impl IntentGraph {
         capability_id: &str,
         ts_ms: u64,
     ) {
-        if tokenize(query).is_empty() {
-            return; // nothing to cluster on
+        // A query vector is available only when the search path was
+        // semantic/hybrid AND the slot still belongs to this query.
+        let vector = self.pending.take_for(query);
+        if vector.is_none() && tokenize(query).is_empty() {
+            return; // no words to cluster on and no embedding either
         }
         self.decay_to(ts_ms);
 
-        let idx = match self.best_lexical_match(query) {
+        let idx = match self.best_match(query, vector.as_deref()) {
             Some(i) => i,
             None => {
                 let id = format!("intent_{}", self.next_intent_seq());
@@ -290,6 +376,9 @@ impl IntentGraph {
                 it.members.push(query.to_string());
             }
             it.support = it.support.saturating_add(1);
+            if let Some(v) = vector.as_deref() {
+                it.absorb_vector(v);
+            }
             let edges = match kind {
                 Capability::Tool => &mut it.tools,
                 Capability::Skill => &mut it.skills,
@@ -319,6 +408,44 @@ impl IntentGraph {
             }
         }
         self.built_from_ts = ts_ms;
+    }
+
+    /// The cluster this query belongs to: by cosine when an embedding is
+    /// available and some cluster carries a centroid, otherwise by token
+    /// overlap.
+    ///
+    /// Dense first, lexical as a fallback — a graph can hold both kinds while
+    /// centroids are still being filled in, and a query that no centroid
+    /// recognizes may still share words with a cluster.
+    fn best_match(&self, query: &str, vector: Option<&[f32]>) -> Option<usize> {
+        if let Some(v) = vector
+            && let Some(i) = self.best_dense_match(v)
+        {
+            return Some(i);
+        }
+        self.best_lexical_match(query)
+    }
+
+    /// Index of the nearest cluster centroid clearing [`TAU_COSINE`]. Ties break
+    /// by cluster id so growth does not depend on `Vec` order.
+    fn best_dense_match(&self, vector: &[f32]) -> Option<usize> {
+        self.intents
+            .iter()
+            .enumerate()
+            .filter_map(|(i, it)| {
+                let c = it.centroid.as_deref()?;
+                if c.len() != vector.len() {
+                    return None; // a different embedding model — not comparable
+                }
+                Some((i, cosine(vector, c)))
+            })
+            .filter(|(_, sim)| *sim >= TAU_COSINE)
+            .max_by(|a, b| {
+                a.1.partial_cmp(&b.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| self.intents[b.0].id.cmp(&self.intents[a.0].id))
+            })
+            .map(|(i, _)| i)
     }
 
     /// Index of the cluster whose member-token bag best covers `query`, if any
@@ -543,6 +670,19 @@ fn arm_from(intent: &Intent, kind: Capability, known: &dyn Fn(&str) -> bool) -> 
     })
 }
 
+/// Scale to unit length. A zero vector is returned unchanged — there is no
+/// direction to preserve, and dividing would produce NaNs that would poison
+/// every later comparison.
+fn normalize(mut v: Vec<f32>) -> Vec<f32> {
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        for x in &mut v {
+            *x /= norm;
+        }
+    }
+    v
+}
+
 /// Cosine similarity. Computed in full rather than as a bare dot product: the
 /// contract says centroids are L2-normalized, but a producer that rounds or
 /// truncates would otherwise silently depress every score.
@@ -601,6 +741,7 @@ mod tests {
             half_life_days: 30.0,
             built_from_ts: 1_753_000_000_000,
             intents,
+            pending: PendingQuery::default(),
         }
     }
 
