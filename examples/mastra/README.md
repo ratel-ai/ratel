@@ -1,6 +1,6 @@
 # `examples/mastra` — Ratel + Mastra
 
-Demonstrates the Ratel SDK wired into [Mastra](https://mastra.ai) through [`@ratel-ai/mastra-adapter`](../../src/adapters/ts-mastra/README.md). App tools are registered as native Mastra `createTool`s on an adapted view (`ratel(config).adaptTo(mastra())`); the Agent is handed only the three capability tools (`view.expose()`), and `view.recallProcessor()` injects a ranked `search_capabilities` result for each user turn. See [Capability tools](https://docs.ratel.sh/docs/capability-tools) and [Framework integrations](https://docs.ratel.sh/docs/framework-integrations) for the protocol and reusable wiring pattern.
+Demonstrates the Ratel SDK wired into [Mastra](https://mastra.ai) through [`@ratel-ai/mastra`](../../src/adapters/ts-mastra/README.md). App tools are registered as native Mastra `createTool`s on an adapted view (`ratel(config).adaptTo(mastra())`); the Agent is handed only the three capability tools (`view.expose()`), and `view.recallProcessor()` injects a ranked `search_capabilities` result for each user turn. See [Capability tools](https://docs.ratel.sh/docs/capability-tools) and [Framework integrations](https://docs.ratel.sh/docs/framework-integrations) for the protocol and reusable wiring pattern.
 
 ## Setup
 
@@ -29,4 +29,4 @@ The Agent never sees the six app tools directly — only `search_capabilities` /
 
 ## Why it's a separate workspace package
 
-Examples don't ship in `@ratel-ai/mastra-adapter` — keeping them out of the published artifact keeps the public API surface narrow. The example pulls `@mastra/core` only here.
+Examples don't ship in `@ratel-ai/mastra` — keeping them out of the published artifact keeps the public API surface narrow. The example pulls `@mastra/core` only here.
