@@ -1,6 +1,6 @@
 # `examples/mastra` — Ratel + Mastra
 
-Demonstrates the Ratel SDK wired into [Mastra](https://mastra.ai) through [`@ratel-ai/mastra`](../../src/adapters/ts-mastra/README.md). App tools are registered as native Mastra `createTool`s on an adapted view (`ratel(config).adaptTo(mastra())`); the Agent is handed only the three capability tools (`view.expose()`), and `view.recallProcessor()` injects a ranked `search_capabilities` result for each user turn. See [Capability tools](https://docs.ratel.sh/docs/capability-tools) and [Framework integrations](https://docs.ratel.sh/docs/framework-integrations) for the protocol and reusable wiring pattern.
+Demonstrates the Ratel SDK wired into [Mastra](https://mastra.ai) through [`@ratel-ai/mastra`](../../src/adapters/ts-mastra/README.md). App tools are registered as native Mastra `createTool`s on an adapted view (`ratel(config).adaptTo(mastra())`); the Agent is handed only the three capability tools (`view.modelTools()`), and `view.recallProcessor()` injects a ranked `search_capabilities` result for each user turn. See [Capability tools](https://docs.ratel.sh/docs/capability-tools) and [Framework integrations](https://docs.ratel.sh/docs/framework-integrations) for the protocol and reusable wiring pattern.
 
 ## Setup
 
@@ -20,7 +20,7 @@ The model is a [Mastra model-router](https://mastra.ai/en/docs/getting-started/m
 
 ```
 src/tools.ts        the app's Mastra createTool tools (stubs)
-src/agent.ts        buildView (ratel().adaptTo(mastra()) + register) and runAgent (Agent + expose + recallProcessor)
+src/agent.ts        buildView (ratel().adaptTo(mastra()) + register) and runAgent (Agent + modelTools + recallProcessor)
 src/index.ts        entry — parse argv, run, print (diagnostic mode without a key)
 test/agent.test.ts  model-free test of the capability-tool + recall path (Mastra's mock model)
 ```

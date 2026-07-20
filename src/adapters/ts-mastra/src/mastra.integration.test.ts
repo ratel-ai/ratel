@@ -39,7 +39,7 @@ describe("Agent integration (the real Mastra loop)", () => {
       name: "integration",
       instructions: "help the user",
       model,
-      tools: view.expose(),
+      tools: view.modelTools(),
       inputProcessors: [view.recallProcessor()],
     });
 
@@ -67,7 +67,7 @@ describe("Agent integration (the real Mastra loop)", () => {
       name: "integration2",
       instructions: "help the user",
       model,
-      tools: view.expose(),
+      tools: view.modelTools(),
       inputProcessors: [view.recallProcessor()],
     });
 
