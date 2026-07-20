@@ -41,7 +41,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::trace::{TraceEvent, TraceSink};
+use crate::trace::{TraceEnvelope, TraceEvent, TraceSink};
 use crate::usage::{Capability, IntentGraph};
 
 /// A [`TraceSink`] decorator that grows an [`IntentGraph`] from the events
@@ -109,7 +109,7 @@ impl UsageLearner {
     /// Best-effort throughout: trace events are observations, so a poisoned lock
     /// or a missing pending query drops the evidence rather than disturbing the
     /// agent loop (ADR-0007's query-log semantics).
-    fn confirm(&self, kind: Capability, capability_id: &str) {
+    fn confirm(&self, kind: Capability, capability_id: &str, ts_ms: u64) {
         let Ok(pending) = self.pending.lock() else {
             return;
         };
@@ -118,23 +118,51 @@ impl UsageLearner {
         };
         drop(pending);
         if let Ok(mut graph) = self.graph.write() {
-            graph.observe(&query, kind, capability_id, now_ms());
+            graph.observe(&query, kind, capability_id, ts_ms);
+        }
+    }
+
+    /// Learn from a **historical** envelope instead of a live event.
+    ///
+    /// Identical to [`TraceSink::record`] except that the observation is stamped
+    /// with the envelope's own `ts` rather than the wall clock, so decay
+    /// reflects when the work actually happened. Replaying a trace log through
+    /// this therefore reproduces the graph the live path would have grown —
+    /// which is what makes a JSONL replay a faithful reconstruction rather than
+    /// an approximation.
+    ///
+    /// Does **not** forward to the inner sink: replaying an old log must not
+    /// re-emit its events into a live stream.
+    ///
+    /// One learner covers one session. Feed envelopes from different
+    /// `session_id`s through separate learners, or their searches and invokes
+    /// cross-pair into edges nobody produced.
+    pub fn replay(&self, envelope: &TraceEnvelope) {
+        self.learn_from(&envelope.event, envelope.ts);
+    }
+
+    /// The shared pairing step behind [`Self::replay`] and [`TraceSink::record`].
+    fn learn_from(&self, event: &TraceEvent, ts_ms: u64) {
+        match event {
+            // Both search kinds set the pending query: a capability search hits
+            // the tool and skill registries in turn with the same text.
+            TraceEvent::Search { query, .. } | TraceEvent::SkillSearch { query, .. } => {
+                self.remember_query(query)
+            }
+            TraceEvent::InvokeStart { tool_id, .. } => {
+                self.confirm(Capability::Tool, tool_id, ts_ms)
+            }
+            TraceEvent::SkillInvoke { skill_id, .. } => {
+                self.confirm(Capability::Skill, skill_id, ts_ms)
+            }
+            _ => {}
         }
     }
 }
 
 impl TraceSink for UsageLearner {
     fn record(&self, event: TraceEvent) {
-        match &event {
-            // Both search kinds set the pending query: a capability search hits
-            // the tool and skill registries in turn with the same text.
-            TraceEvent::Search { query, .. } | TraceEvent::SkillSearch { query, .. } => {
-                self.remember_query(query)
-            }
-            TraceEvent::InvokeStart { tool_id, .. } => self.confirm(Capability::Tool, tool_id),
-            TraceEvent::SkillInvoke { skill_id, .. } => self.confirm(Capability::Skill, skill_id),
-            _ => {}
-        }
+        self.learn_from(&event, now_ms());
         self.inner.record(event);
     }
 
