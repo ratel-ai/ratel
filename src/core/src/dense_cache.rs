@@ -31,6 +31,11 @@ pub(crate) trait Embeddable {
     fn embed_text(&self) -> String;
 }
 
+/// A dense ranking paired with the query vector that produced it — see
+/// [`DenseCache::search_returning_query_vec`], which lets the usage-ranking arm
+/// reuse the embedding instead of paying for a second inference.
+pub(crate) type RankedWithQuery = (Vec<(String, f32)>, Vec<f32>);
+
 /// Per-item dense vectors, keyed by item id.
 #[derive(Default)]
 struct DenseCacheState {
@@ -233,16 +238,23 @@ impl DenseCache {
             .remove(id);
     }
 
-    /// Validate, embed, and rank one query against one immutable cache version.
-    /// A concurrent build/rebuild cannot replace the vector space between the
-    /// query identity check and cosine ranking.
-    pub(crate) fn search<'a, T: Embeddable + 'a>(
+    /// Validate, embed, and rank one query against one immutable cache version,
+    /// returning the ranking **and** the embedded query. A concurrent
+    /// build/rebuild cannot replace the vector space between the query identity
+    /// check and cosine ranking.
+    ///
+    /// The query vector escapes because the usage-ranking arm (ADR-0013) matches
+    /// it against intent centroids: reusing it here is what makes adaptive
+    /// ranking free on the semantic and hybrid paths instead of costing a second
+    /// inference. The match happens after this returns but within the same
+    /// caller, so it observes the vector this ranking used.
+    pub(crate) fn search_returning_query_vec<'a, T: Embeddable + 'a>(
         &self,
         items: impl IntoIterator<Item = &'a T>,
         query: &str,
         depth: usize,
         sink: &dyn TraceSink,
-    ) -> Result<Vec<(String, f32)>, EmbedderError> {
+    ) -> Result<RankedWithQuery, EmbedderError> {
         let _search = self
             .operation_lock
             .read()
@@ -250,7 +262,8 @@ impl DenseCache {
         let items: Vec<&T> = items.into_iter().collect();
         self.require_built(items.len())?;
         let query_vec = self.embed_query(query, sink)?;
-        Ok(self.ranked(items, &query_vec, depth))
+        let ranked = self.ranked(items, &query_vec, depth);
+        Ok((ranked, query_vec))
     }
 
     /// Embed a query for cosine ranking (uses the same embedder as

@@ -295,6 +295,26 @@ pub enum TraceEvent {
         /// The model now configured.
         active: String,
     },
+    /// Emitted on every search of a registry that has an intent graph attached,
+    /// recording whether usage history contributed to the ranking (ADR-0013).
+    /// A registry with no graph emits nothing, so this event's presence is
+    /// itself the signal that adaptive ranking is switched on.
+    ///
+    /// `intent: None` is the **miss** case: the query matched no cluster and
+    /// ranked exactly as it would have with no graph at all. A rising share of
+    /// misses means the graph no longer covers what is being asked — the cue to
+    /// re-derive it.
+    UsageBoost {
+        /// Id of the matched cluster; `None` when nothing cleared the match
+        /// threshold.
+        intent: Option<String>,
+        /// The matched cluster's observation count, which scales the arm's
+        /// weight. `0` on a miss.
+        support: u32,
+        /// How many capability ids the arm contributed to the fusion. `0` on a
+        /// miss.
+        promoted: u32,
+    },
     /// Emitted once when an in-process model's pooling could not be detected
     /// (no `1_Pooling/config.json`) and no override was given, so a mode was
     /// assumed. A non-silent guess: set `pooling` to correct it. See ADR-0012.

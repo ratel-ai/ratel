@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use indexmap::IndexMap;
@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
 use crate::embedding_config::EmbeddingModel;
-use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
+use crate::fusion::{RETRIEVE_DEPTH, RRF_K, WeightedArm, rrf_fuse_weighted};
 use crate::method::SearchMethod;
 use crate::search::bm25_search;
 use crate::skill::Skill;
@@ -14,6 +14,7 @@ use crate::skill_indexing::searchable_text;
 use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchStage, SkillHitTrace, TraceEvent, TraceSink,
 };
+use crate::usage::{Capability, IntentGraph, UsageArm};
 
 /// One ranked match from a [`SkillRegistry`] search, best-first in the
 /// returned `Vec` — the skill-side twin of [`crate::SearchHit`].
@@ -50,6 +51,10 @@ pub struct SkillRegistry {
     /// Dense embeddings for `skills`, keyed by id and built on demand — the
     /// skill-side twin of [`crate::ToolRegistry`]'s field (see [`DenseCache`]).
     dense: DenseCache,
+    /// Optional usage-ranking read model (ADR-0013). `None` — the default — is
+    /// today's behavior exactly. Shared behind a lock because the learner writes
+    /// to the same graph the search path reads.
+    graph: Option<Arc<RwLock<IntentGraph>>>,
 }
 
 impl Default for SkillRegistry {
@@ -66,6 +71,7 @@ impl SkillRegistry {
             skills: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::new(),
+            graph: None,
         }
     }
 
@@ -76,6 +82,7 @@ impl SkillRegistry {
             skills: IndexMap::new(),
             sink,
             dense: DenseCache::new(),
+            graph: None,
         }
     }
 
@@ -89,6 +96,7 @@ impl SkillRegistry {
             skills: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::with_model(model),
+            graph: None,
         }
     }
 
@@ -103,6 +111,76 @@ impl SkillRegistry {
     /// their `skill_invoke` (content-load) events through this.
     pub fn record_event(&self, event: TraceEvent) {
         self.sink.record(event);
+    }
+
+    /// Attach (or with `None`, detach) the usage-ranking read model — the
+    /// skill-side twin of [`crate::ToolRegistry::set_intent_graph`], reading the
+    /// same graph's `skills` edges (ADR-0013).
+    ///
+    /// Opt-in for the same reason: with an arm in play [`SkillHit::score`]
+    /// becomes an RRF score rather than a BM25 one.
+    pub fn set_intent_graph(&mut self, graph: Option<Arc<RwLock<IntentGraph>>>) {
+        self.graph = graph;
+    }
+
+    /// Resolve the usage arm for one query and record the outcome. See
+    /// `ToolRegistry::usage_arm`; this reads the `skills` edge map instead.
+    fn usage_arm(&self, query: &str, query_vec: Option<&[f32]>) -> Option<UsageArm> {
+        let graph = self.graph.as_ref()?;
+        // Usage ranking is an enhancement; a poisoned lock degrades to today's
+        // behavior rather than failing the search.
+        let arm = {
+            let guard = graph.read().ok()?;
+            let known = |id: &str| self.skills.contains_key(id);
+            // The graph picks the match tier from what it carries; a lexically
+            // grown graph has no centroids to compare a query vector against.
+            guard.arm(query, query_vec, Capability::Skill, &known)
+        };
+        // The read guard is released BEFORE the sink runs. A `UsageLearner` sink
+        // takes the write lock on this same graph, and `RwLock` is not
+        // reentrant — recording while still holding the read guard would
+        // deadlock the search path.
+        self.sink.record(TraceEvent::UsageBoost {
+            intent: arm.as_ref().map(|a| a.intent_id.clone()),
+            support: arm.as_ref().map_or(0, |a| a.support),
+            promoted: arm.as_ref().map_or(0, |a| a.ids.len() as u32),
+        });
+        arm
+    }
+
+    /// The corpus as `(id, searchable_text)` pairs for BM25.
+    fn bm25_docs(&self) -> impl Iterator<Item = (String, String)> + '_ {
+        self.skills
+            .values()
+            .map(|s| (s.id.clone(), searchable_text(s)))
+    }
+
+    /// Fuse the ranked arms into the final top-`top_k`, returning the hits and
+    /// the `rrf` stage — one implementation for all three engines.
+    fn fuse_arms(arms: &[WeightedArm<'_>], top_k: usize) -> (Vec<SkillHit>, SearchStage) {
+        let t = Instant::now();
+        let mut fused = rrf_fuse_weighted(arms, RRF_K);
+        fused.truncate(top_k);
+        let stage = SearchStage {
+            name: "rrf".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: fused.first().map(|(_, s)| *s as f64),
+        };
+        let hits = fused
+            .into_iter()
+            .map(|(skill_id, score)| SkillHit { skill_id, score })
+            .collect();
+        (hits, stage)
+    }
+
+    /// The `usage` stage descriptor for a matched arm; `top_score` carries the
+    /// arm's fusion weight, the only scalar it has.
+    fn usage_stage(arm: &UsageArm, took_ms: u64) -> SearchStage {
+        SearchStage {
+            name: "usage".into(),
+            took_ms,
+            top_score: Some(arm.weight() as f64),
+        }
     }
 
     /// Register a skill, or replace one in place if its id is already present —
@@ -213,28 +291,53 @@ impl SkillRegistry {
 
     fn bm25_search_traced(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SkillHit> {
         let started = Instant::now();
-        let hits: Vec<SkillHit> = bm25_search(
-            self.skills
-                .values()
-                .map(|s| (s.id.clone(), searchable_text(s))),
-            query,
-            top_k,
-        )
-        .into_iter()
-        .map(|(skill_id, score)| SkillHit { skill_id, score })
-        .collect();
+        let t = Instant::now();
+        let arm = self.usage_arm(query, None);
+        let usage_ms = t.elapsed().as_millis() as u64;
+
+        let Some(arm) = arm else {
+            // No graph, or nothing matched: the original path with raw BM25
+            // scores, unchanged.
+            let hits: Vec<SkillHit> = bm25_search(self.bm25_docs(), query, top_k)
+                .into_iter()
+                .map(|(skill_id, score)| SkillHit { skill_id, score })
+                .collect();
+            let took_ms = started.elapsed().as_millis() as u64;
+            let top_score = hits.first().map(|h| h.score as f64);
+            self.record_search(
+                query,
+                origin,
+                top_k,
+                &hits,
+                vec![SearchStage {
+                    name: "bm25".into(),
+                    took_ms,
+                    top_score,
+                }],
+                took_ms,
+            );
+            return hits;
+        };
+
+        let depth = RETRIEVE_DEPTH.max(top_k);
+        let t = Instant::now();
+        let bm25_ranked = bm25_search(self.bm25_docs(), query, depth);
+        let bm25_stage = SearchStage {
+            name: "bm25".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
+        };
+        let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
+
+        let (hits, rrf_stage) =
+            Self::fuse_arms(&[(&bm25_ids, 1.0), (&arm.ids, arm.weight())], top_k);
         let took_ms = started.elapsed().as_millis() as u64;
-        let top_score = hits.first().map(|h| h.score as f64);
         self.record_search(
             query,
             origin,
             top_k,
             &hits,
-            vec![SearchStage {
-                name: "bm25".into(),
-                took_ms,
-                top_score,
-            }],
+            vec![bm25_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
         );
         hits
@@ -251,27 +354,64 @@ impl SkillRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
+        // Retrieve deeper only when a graph is attached; without one the depth,
+        // scores, and stages stay exactly as they were.
+        let depth = if self.graph.is_some() {
+            RETRIEVE_DEPTH.max(top_k)
+        } else {
+            top_k
+        };
         let t = Instant::now();
-        let ranked = self
-            .dense
-            .search(self.skills.values(), query, top_k, self.sink.as_ref())?;
+        let (ranked, query_vec) = self.dense.search_returning_query_vec(
+            self.skills.values(),
+            query,
+            depth,
+            self.sink.as_ref(),
+        )?;
         let stage_ms = t.elapsed().as_millis() as u64;
-        let hits: Vec<SkillHit> = ranked
-            .into_iter()
-            .map(|(skill_id, score)| SkillHit { skill_id, score })
-            .collect();
+
+        // Reuses the vector the dense arm just embedded — no second inference.
+        let t = Instant::now();
+        let arm = self.usage_arm(query, Some(&query_vec));
+        let usage_ms = t.elapsed().as_millis() as u64;
+
+        let Some(arm) = arm else {
+            let hits: Vec<SkillHit> = ranked
+                .into_iter()
+                .map(|(skill_id, score)| SkillHit { skill_id, score })
+                .collect();
+            let took_ms = started.elapsed().as_millis() as u64;
+            let top_score = hits.first().map(|h| h.score as f64);
+            self.record_search(
+                query,
+                origin,
+                top_k,
+                &hits,
+                vec![SearchStage {
+                    name: "dense".into(),
+                    took_ms: stage_ms,
+                    top_score,
+                }],
+                took_ms,
+            );
+            return Ok(hits);
+        };
+
+        let dense_stage = SearchStage {
+            name: "dense".into(),
+            took_ms: stage_ms,
+            top_score: ranked.first().map(|(_, s)| *s as f64),
+        };
+        let dense_ids: Vec<String> = ranked.into_iter().map(|(id, _)| id).collect();
+        let (hits, rrf_stage) =
+            Self::fuse_arms(&[(&dense_ids, 1.0), (&arm.ids, arm.weight())], top_k);
         let took_ms = started.elapsed().as_millis() as u64;
-        let top_score = hits.first().map(|h| h.score as f64);
         self.record_search(
             query,
             origin,
             top_k,
             &hits,
-            vec![SearchStage {
-                name: "dense".into(),
-                took_ms: stage_ms,
-                top_score,
-            }],
+            vec![dense_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
         );
         Ok(hits)
@@ -305,39 +445,39 @@ impl SkillRegistry {
         };
 
         let t = Instant::now();
-        let dense_ranked =
-            self.dense
-                .search(self.skills.values(), query, depth, self.sink.as_ref())?;
+        let (dense_ranked, query_vec) = self.dense.search_returning_query_vec(
+            self.skills.values(),
+            query,
+            depth,
+            self.sink.as_ref(),
+        )?;
         let dense_stage = SearchStage {
             name: "dense".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: dense_ranked.first().map(|(_, s)| *s as f64),
         };
 
+        // Usage arm, matched on the vector the dense arm already embedded.
         let t = Instant::now();
+        let arm = self.usage_arm(query, Some(&query_vec));
+        let usage_ms = t.elapsed().as_millis() as u64;
+
         let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
         let dense_ids: Vec<String> = dense_ranked.into_iter().map(|(id, _)| id).collect();
-        let mut fused = rrf_fuse(&[&bm25_ids, &dense_ids], RRF_K);
-        fused.truncate(top_k);
-        let rrf_stage = SearchStage {
-            name: "rrf".into(),
-            took_ms: t.elapsed().as_millis() as u64,
-            top_score: fused.first().map(|(_, s)| *s as f64),
-        };
+        let mut arms: Vec<WeightedArm<'_>> = vec![(&bm25_ids, 1.0), (&dense_ids, 1.0)];
+        if let Some(arm) = &arm {
+            arms.push((&arm.ids, arm.weight()));
+        }
+        let (hits, rrf_stage) = Self::fuse_arms(&arms, top_k);
 
-        let hits: Vec<SkillHit> = fused
-            .into_iter()
-            .map(|(skill_id, score)| SkillHit { skill_id, score })
-            .collect();
+        let mut stages = vec![bm25_stage, dense_stage];
+        if let Some(arm) = &arm {
+            stages.push(Self::usage_stage(arm, usage_ms));
+        }
+        stages.push(rrf_stage);
+
         let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(
-            query,
-            origin,
-            top_k,
-            &hits,
-            vec![bm25_stage, dense_stage, rrf_stage],
-            took_ms,
-        );
+        self.record_search(query, origin, top_k, &hits, stages, took_ms);
         Ok(hits)
     }
 
@@ -426,6 +566,7 @@ mod tests {
             skills: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::with_embedder(embedder),
+            graph: None,
         }
     }
 

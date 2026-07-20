@@ -1,0 +1,164 @@
+# 13. Adaptive usage ranking: an online usage arm over the existing fusion
+
+Date: 2026-07-20
+
+## Status
+
+Accepted
+
+Builds on [ADR-0004](0004-retrieval-and-tool-selection.md) (the `searchable_text`
+projection), [ADR-0011](0011-selectable-retrieval-methods.md) (the three methods and RRF),
+and [ADR-0007](0007-telemetry-two-streams.md) (the local trace stream, whose sink seam this
+subscribes to). Ratifies the 2026-07-06 adaptive-ranking brief with the amendments below.
+
+## Context
+
+Every ranker in the engine scores **text similarity only** — BM25 over the flattened
+projection, dense cosine, or their fusion. None of them has memory. A query like
+`"why is the build broken"` ranks a `docker_build` tool first on the token *build*, and it
+will do so on the thousandth repetition, in a project where every such query has ended in
+`gh_run_list`.
+
+The engine already emits the evidence that would fix this. `TraceEvent::Search` carries the
+query and its ranked hits; `TraceEvent::InvokeStart` carries the tool that was actually
+called. Adjacent, in one session, they are a user-confirmed relevance judgment — the search
+literature's impression/click pair — and today nothing consumes them.
+
+The 2026-07-06 brief proposed a "co-usage boost" over an intent graph, extracted by an LLM,
+synced down the catalog loader seam. Specifying it surfaced that the loader seam does not
+exist in code, that the LLM buys nothing load-bearing, and that the brief's multiplicative
+combination is arithmetically worse than the additive one the crate already implements.
+
+## Decision
+
+**A third RRF arm, ranked by what users actually invoked after semantically similar
+queries, learned online.**
+
+### The read model
+
+Queries are clustered; each cluster carries weighted edges to the capabilities invoked
+after its members. A cluster is a row: `members` (the match key), an optional `centroid`,
+a `label`, `terms`, `support`, and `tools` / `skills` edge maps.
+
+- **Edges come from invocations, never from retrievals.** Recording retrieved ids would
+  memorize the ranker's own output — including its errors — and reinforce them on every
+  update. Invocations are the only point at which information the ranker does not already
+  hold enters the system.
+- **Online.** Clusters are created and grow as queries arrive; a cluster may boost from
+  its first confirmed pair. There is no build step.
+- **The in-process learner clusters lexically.** A `TraceEvent::Search` carries the query
+  text, not its embedding — a trace event is no place for a 384-float vector — so a
+  sink-based learner has no embedder and the clusters it grows carry **no centroid**. It
+  therefore reaches repeats and near-repeats, not phrasings that share no vocabulary.
+  Dense clusters remain available from a producer that does have an embedder (Ratel
+  Cloud, or a future replay pass); giving the in-process learner one is deferred rather
+  than rejected.
+- **Support-scaled, not support-gated.** The arm's weight is `W · min(1, support/3)`, so
+  one observation nudges and three or more get full weight. A batch design could filter
+  weak clusters before use; an online one cannot, so the ramp does that job without making
+  the user wait.
+- **Recency decay.** Edge weights are `Σ exp(−Δt / half_life)`, measured against the
+  newest observed event rather than wall clock. Stale dominance expires on its own, which
+  is what keeps a strong arm from amplifying history that is no longer true.
+
+### The scorer
+
+`score(id) = Σ_arms w_arm · 1/(RRF_K + rank_arm(id))`, with `w_bm25 = w_dense = 1` and
+`w_usage = W · min(1, support/3)`, `W < 1`. The arm is **absent**, not zero-weighted, on a
+miss, so an unmatched query ranks bit-identically to a registry with no graph.
+
+`W < 1` is deliberate: at equal rank a capability the current query lexically matched
+outranks one only history supports. The arm still promotes a low-ranked capability past
+BM25's rank-0 (it contributes from both arms), but it cannot conjure one the base ranker
+did not retrieve at all.
+
+### Two similarity tiers
+
+Online clustering needs a query-to-cluster similarity at search time.
+
+| Method | similarity | reach |
+|---|---|---|
+| `Semantic` / `Hybrid` | cosine against `centroid` | groups phrasings that share no words |
+| `Bm25` | lexical, over the cluster's member-token bag | repeats and near-repeats only |
+
+On semantic/hybrid the marginal cost is zero — the dense arm already embedded the query for
+its own ranking. On `Bm25` no model is loaded at any point, so ADR-0011's model-free
+default is preserved. The Bm25 tier is genuinely weaker and is documented as such.
+
+Because `members` is the match key and `centroid` is optional, a graph grown under one tier
+is consumable by the other. **The tier is chosen from what the graph carries, not from the
+caller's search method**: a semantic catalog handed a centroid-less graph matches it
+lexically rather than seeing nothing. Without that fallback the in-process learner's own
+output would be invisible to the very methods it is meant to improve.
+
+### Opt-in, per registry
+
+A usage arm turns `SearchHit.score` from a BM25 score into an RRF score. ADR-0011 promises
+`search` / `search_with_origin` keep BM25 behavior byte-for-byte, so the graph attaches per
+registry and those entry points are untouched — the same containment ADR-0011 used for
+fallibility.
+
+### Where learning happens
+
+The learner is a `TraceSink` decorator. `Search` and `InvokeStart` arrive through separate
+API calls and the registries have no session concept, but sinks do. ADR-0007 already frames
+the sink as the subscription seam ("rerankers, suggestion analysis, and inspection
+subscribe to different cuts of the same producer"), so this needs no new plumbing.
+
+### What is open source
+
+The **format** is specified in [`protocol/v1`](../../protocol/v1/README.md) beside
+`CatalogSkillWire`, and the local learner ships in `ratel-ai-core` under Apache-2.0. Ratel
+Cloud is a second producer of the same format from hosted traces — the "usage-ranking read
+model" ADR-0003 named as the first candidate to open. Labels are medoid + c-TF-IDF, both
+counted from the member strings; no model, no key, no vendor in the OSS path. Cloud's
+LLM-extracted intents populate the same `members` field.
+
+## Consequences
+
+- Retrieval gains a signal no amount of description-writing can supply: what users chose
+  when the ranker was wrong. The tool author's vocabulary stops being the only lever
+  (ADR-0004).
+- **Ranking becomes order-dependent.** The same events in a different order produce a
+  different graph. This is a real reversal of the determinism posture `bm25_search` and
+  `sort_and_truncate` hold elsewhere, accepted as the cost of learning without a build
+  step; replaying the JSONL trace log is the escape hatch when a reproducible artifact is
+  needed (CI, benchmarks, bug reports).
+- **The graph accumulates from a stream ADR-0007 permits to drop events.** A dropped
+  invoke is lost permanently rather than recovered on the next rebuild. Replay is the
+  repair path.
+- Learning is process-scoped until durable storage lands; replaying `~/.ratel/telemetry` at
+  construction is the interim cross-session path, and needs no new storage because
+  `JsonlSink` already writes that log.
+- `members` holds raw query text. Whatever persists it must match the `0600` treatment
+  `JsonlSink` already applies.
+- A feedback loop is inherent — boosting used capabilities makes them more used. `W < 1`,
+  the support ramp, and decay bound it; they do not remove it.
+
+## Rejected
+
+- **Multiplicative fusion with intent similarity as a factor** (the brief's
+  `BM25/dense × intent-similarity × co-usage`): a `W·(cos−τ)/(1−τ)` ramp scores 0.53 at
+  cos 0.78 and ranks the correct capability *below* where no boost at all would leave it.
+  Real match similarities occupy 0.70–0.90, so a ramp normalized to 1.0 spends its range
+  where nothing lives. Similarity is a gate; the arms combine additively.
+- **Recording retrieved capabilities as edges**: self-reinforcing, adds no information.
+- **An LLM for intent extraction or labeling in the OSS path**: labels are cosmetic —
+  identical retrieval results if every label were `intent_17`. The crate is encoder-only
+  (`candle_transformers::models::bert`); adding a generation path, and a download or an
+  API key, to produce display strings is not a trade worth making. Medoid + c-TF-IDF are
+  counted from the members and cannot hallucinate. Cloud may label however it likes; the
+  format carries a plain string.
+- **An optional OpenAI-compatible labeling endpoint**: the precedent in
+  `embedding_config.rs` does not transfer, because embedding quality is load-bearing and
+  label text is not. An OSS artifact that reaches for a service to produce cosmetic strings
+  reads as a hole where a product should be.
+- **Tool↔tool co-usage** (the brief's "co-usage"): a different signal from the intent→tool
+  edges the impression/click pairing yields. Possible fourth arm later; not carried by
+  this decision.
+- **Batch rebuild**: reproducible and able to sweep thresholds corpus-wide, but a query's
+  evidence would not affect ranking until the next build. Immediacy was ratified over
+  determinism; replay preserves the batch path where it is needed.
+- **Shipping the graph down the catalog loader seam** (the brief's "no new machinery"): no
+  `RATEL_URL` or `CatalogSource` exists in `src/` — the seam is specified, not built.
+  Revisit when PSKS-5 lands.

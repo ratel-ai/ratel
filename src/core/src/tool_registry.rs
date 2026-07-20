@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use indexmap::IndexMap;
@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
 use crate::embedding_config::EmbeddingModel;
-use crate::fusion::{RETRIEVE_DEPTH, RRF_K, rrf_fuse};
+use crate::fusion::{RETRIEVE_DEPTH, RRF_K, WeightedArm, rrf_fuse_weighted};
 use crate::indexing::searchable_text;
 use crate::method::SearchMethod;
 use crate::search::bm25_search;
@@ -14,6 +14,7 @@ use crate::tool::Tool;
 use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchHitTrace, SearchStage, TraceEvent, TraceSink,
 };
+use crate::usage::{Capability, IntentGraph, UsageArm};
 
 /// One ranked match from a [`ToolRegistry`] search, best-first in the
 /// returned `Vec`.
@@ -74,6 +75,11 @@ pub struct ToolRegistry {
     /// the cache built first). A pure BM25 user never populates it and never loads
     /// the model (see ADR-0011 and [`DenseCache`]).
     dense: DenseCache,
+    /// Optional usage-ranking read model (ADR-0013). `None` — the default — is
+    /// today's behavior exactly: no extra arm, no `UsageBoost` event, BM25
+    /// scores unchanged. Shared behind a lock because the learner writes to the
+    /// same graph the search path reads.
+    graph: Option<Arc<RwLock<IntentGraph>>>,
 }
 
 impl Default for ToolRegistry {
@@ -90,6 +96,7 @@ impl ToolRegistry {
             tools: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::new(),
+            graph: None,
         }
     }
 
@@ -99,6 +106,7 @@ impl ToolRegistry {
             tools: IndexMap::new(),
             sink,
             dense: DenseCache::new(),
+            graph: None,
         }
     }
 
@@ -112,6 +120,7 @@ impl ToolRegistry {
             tools: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::with_model(model),
+            graph: None,
         }
     }
 
@@ -127,6 +136,58 @@ impl ToolRegistry {
     /// registry's own search and churn events (ADR-0007).
     pub fn record_event(&self, event: TraceEvent) {
         self.sink.record(event);
+    }
+
+    /// Attach (or with `None`, detach) the usage-ranking read model — adaptive
+    /// ranking is **opt-in** (ADR-0013).
+    ///
+    /// With a graph attached, a query that matches one of its clusters gains a
+    /// third fusion arm ranked by what users invoked after similar queries. That
+    /// changes [`SearchHit::score`] from a BM25 score to an RRF score on the
+    /// `Bm25` path, which is exactly why it is opt-in: ADR-0011 promises
+    /// [`Self::search`] keeps BM25 behavior byte-for-byte, and it does for every
+    /// caller that never calls this.
+    ///
+    /// A query that matches nothing is unaffected — same order, same scores —
+    /// so attaching a graph is only ever felt where it has evidence.
+    ///
+    /// The graph is shared behind a lock so a learner may keep updating it while
+    /// searches read it.
+    pub fn set_intent_graph(&mut self, graph: Option<Arc<RwLock<IntentGraph>>>) {
+        self.graph = graph;
+    }
+
+    /// Resolve the usage arm for one query, and record the outcome.
+    ///
+    /// `query_vec` carries the already-computed query embedding on the
+    /// semantic/hybrid paths, so dense matching costs no extra inference; `None`
+    /// selects the lexical tier, which loads no model (ADR-0011's model-free
+    /// `Bm25` guarantee).
+    ///
+    /// Emits [`TraceEvent::UsageBoost`] on hit *and* miss — but only when a
+    /// graph is attached, so a registry without one is silent and behaves
+    /// exactly as before.
+    fn usage_arm(&self, query: &str, query_vec: Option<&[f32]>) -> Option<UsageArm> {
+        let graph = self.graph.as_ref()?;
+        // A poisoned lock must not take down a search: usage ranking is an
+        // enhancement, and losing it degrades to today's behavior.
+        let arm = {
+            let guard = graph.read().ok()?;
+            let known = |id: &str| self.tools.contains_key(id);
+            // The graph picks the match tier from what it carries; a lexically
+            // grown graph has no centroids to compare a query vector against.
+            guard.arm(query, query_vec, Capability::Tool, &known)
+        };
+        // The read guard is released BEFORE the sink runs. A `UsageLearner` sink
+        // takes the write lock on this same graph, and `RwLock` is not
+        // reentrant — recording while still holding the read guard would
+        // deadlock the search path.
+        self.sink.record(TraceEvent::UsageBoost {
+            intent: arm.as_ref().map(|a| a.intent_id.clone()),
+            support: arm.as_ref().map_or(0, |a| a.support),
+            promoted: arm.as_ref().map_or(0, |a| a.ids.len() as u32),
+        });
+        arm
     }
 
     /// Register a tool, or replace one in place if its id is already present.
@@ -293,30 +354,95 @@ impl ToolRegistry {
 
     // ---- engines -----------------------------------------------------------
 
+    /// The corpus as `(id, searchable_text)` pairs for BM25.
+    fn bm25_docs(&self) -> impl Iterator<Item = (String, String)> + '_ {
+        self.tools
+            .values()
+            .map(|t| (t.id.clone(), searchable_text(t)))
+    }
+
+    /// Fuse the ranked arms into the final top-`top_k`, returning the hits and
+    /// the `rrf` stage. Shared by all three engines so the fusion, truncation,
+    /// and `(score desc, id asc)` ordering have exactly one implementation.
+    fn fuse_arms(arms: &[WeightedArm<'_>], top_k: usize) -> (Vec<SearchHit>, SearchStage) {
+        let t = Instant::now();
+        let mut fused = rrf_fuse_weighted(arms, RRF_K);
+        fused.truncate(top_k);
+        let stage = SearchStage {
+            name: "rrf".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: fused.first().map(|(_, s)| *s as f64),
+        };
+        let hits = fused
+            .into_iter()
+            .map(|(tool_id, score)| SearchHit { tool_id, score })
+            .collect();
+        (hits, stage)
+    }
+
+    /// The `usage` stage descriptor for a matched arm. `top_score` carries the
+    /// arm's fusion weight — the only scalar the stage has, since the arm
+    /// contributes rank positions rather than scores.
+    fn usage_stage(arm: &UsageArm, took_ms: u64) -> SearchStage {
+        SearchStage {
+            name: "usage".into(),
+            took_ms,
+            top_score: Some(arm.weight() as f64),
+        }
+    }
+
     fn bm25_search_traced(&self, query: &str, top_k: usize, origin: Origin) -> Vec<SearchHit> {
         let started = Instant::now();
-        let hits: Vec<SearchHit> = bm25_search(
-            self.tools
-                .values()
-                .map(|t| (t.id.clone(), searchable_text(t))),
-            query,
-            top_k,
-        )
-        .into_iter()
-        .map(|(tool_id, score)| SearchHit { tool_id, score })
-        .collect();
+        let t = Instant::now();
+        let arm = self.usage_arm(query, None);
+        let usage_ms = t.elapsed().as_millis() as u64;
+
+        let Some(arm) = arm else {
+            // No graph, or nothing matched: the original path, unchanged, with
+            // raw BM25 scores. ADR-0011's byte-for-byte promise lives here.
+            let hits: Vec<SearchHit> = bm25_search(self.bm25_docs(), query, top_k)
+                .into_iter()
+                .map(|(tool_id, score)| SearchHit { tool_id, score })
+                .collect();
+            let took_ms = started.elapsed().as_millis() as u64;
+            let top_score = hits.first().map(|h| h.score as f64);
+            self.record_search(
+                query,
+                origin,
+                top_k,
+                &hits,
+                vec![SearchStage {
+                    name: "bm25".into(),
+                    took_ms,
+                    top_score,
+                }],
+                took_ms,
+            );
+            return hits;
+        };
+
+        // Matched: retrieve deeper than `top_k` so a tool the usage arm favors
+        // still has BM25 rank signal to fuse, then fuse. Scores become RRF
+        // scores — the opt-in cost documented on `set_intent_graph`.
+        let depth = RETRIEVE_DEPTH.max(top_k);
+        let t = Instant::now();
+        let bm25_ranked = bm25_search(self.bm25_docs(), query, depth);
+        let bm25_stage = SearchStage {
+            name: "bm25".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
+        };
+        let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
+
+        let (hits, rrf_stage) =
+            Self::fuse_arms(&[(&bm25_ids, 1.0), (&arm.ids, arm.weight())], top_k);
         let took_ms = started.elapsed().as_millis() as u64;
-        let top_score = hits.first().map(|h| h.score as f64);
         self.record_search(
             query,
             origin,
             top_k,
             &hits,
-            vec![SearchStage {
-                name: "bm25".into(),
-                took_ms,
-                top_score,
-            }],
+            vec![bm25_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
         );
         hits
@@ -333,27 +459,64 @@ impl ToolRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0);
             return Ok(Vec::new());
         }
+        // Retrieve deeper than `top_k` only when a graph is attached; without
+        // one the depth, scores, and stages stay exactly as they were.
+        let depth = if self.graph.is_some() {
+            RETRIEVE_DEPTH.max(top_k)
+        } else {
+            top_k
+        };
         let t = Instant::now();
-        let ranked = self
-            .dense
-            .search(self.tools.values(), query, top_k, self.sink.as_ref())?;
+        let (ranked, query_vec) = self.dense.search_returning_query_vec(
+            self.tools.values(),
+            query,
+            depth,
+            self.sink.as_ref(),
+        )?;
         let stage_ms = t.elapsed().as_millis() as u64;
-        let hits: Vec<SearchHit> = ranked
-            .into_iter()
-            .map(|(tool_id, score)| SearchHit { tool_id, score })
-            .collect();
+
+        // Reuses the vector the dense arm just embedded — no second inference.
+        let t = Instant::now();
+        let arm = self.usage_arm(query, Some(&query_vec));
+        let usage_ms = t.elapsed().as_millis() as u64;
+
+        let Some(arm) = arm else {
+            let hits: Vec<SearchHit> = ranked
+                .into_iter()
+                .map(|(tool_id, score)| SearchHit { tool_id, score })
+                .collect();
+            let took_ms = started.elapsed().as_millis() as u64;
+            let top_score = hits.first().map(|h| h.score as f64);
+            self.record_search(
+                query,
+                origin,
+                top_k,
+                &hits,
+                vec![SearchStage {
+                    name: "dense".into(),
+                    took_ms: stage_ms,
+                    top_score,
+                }],
+                took_ms,
+            );
+            return Ok(hits);
+        };
+
+        let dense_stage = SearchStage {
+            name: "dense".into(),
+            took_ms: stage_ms,
+            top_score: ranked.first().map(|(_, s)| *s as f64),
+        };
+        let dense_ids: Vec<String> = ranked.into_iter().map(|(id, _)| id).collect();
+        let (hits, rrf_stage) =
+            Self::fuse_arms(&[(&dense_ids, 1.0), (&arm.ids, arm.weight())], top_k);
         let took_ms = started.elapsed().as_millis() as u64;
-        let top_score = hits.first().map(|h| h.score as f64);
         self.record_search(
             query,
             origin,
             top_k,
             &hits,
-            vec![SearchStage {
-                name: "dense".into(),
-                took_ms: stage_ms,
-                top_score,
-            }],
+            vec![dense_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
         );
         Ok(hits)
@@ -394,40 +557,41 @@ impl ToolRegistry {
 
         // 2. Dense (semantic) — requires embeddings to be built; never embeds in-search.
         let t = Instant::now();
-        let dense_ranked =
-            self.dense
-                .search(self.tools.values(), query, depth, self.sink.as_ref())?;
+        let (dense_ranked, query_vec) = self.dense.search_returning_query_vec(
+            self.tools.values(),
+            query,
+            depth,
+            self.sink.as_ref(),
+        )?;
         let dense_stage = SearchStage {
             name: "dense".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: dense_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        // 3. RRF fusion of the two rankings → final top_k.
+        // 3. Usage (ADR-0013), matched on the vector the dense arm already
+        //    embedded. Absent unless a graph is attached and the query matches.
         let t = Instant::now();
+        let arm = self.usage_arm(query, Some(&query_vec));
+        let usage_ms = t.elapsed().as_millis() as u64;
+
+        // 4. RRF fusion → final top_k.
         let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
         let dense_ids: Vec<String> = dense_ranked.into_iter().map(|(id, _)| id).collect();
-        let mut fused = rrf_fuse(&[&bm25_ids, &dense_ids], RRF_K);
-        fused.truncate(top_k);
-        let rrf_stage = SearchStage {
-            name: "rrf".into(),
-            took_ms: t.elapsed().as_millis() as u64,
-            top_score: fused.first().map(|(_, s)| *s as f64),
-        };
+        let mut arms: Vec<WeightedArm<'_>> = vec![(&bm25_ids, 1.0), (&dense_ids, 1.0)];
+        if let Some(arm) = &arm {
+            arms.push((&arm.ids, arm.weight()));
+        }
+        let (hits, rrf_stage) = Self::fuse_arms(&arms, top_k);
 
-        let hits: Vec<SearchHit> = fused
-            .into_iter()
-            .map(|(tool_id, score)| SearchHit { tool_id, score })
-            .collect();
+        let mut stages = vec![bm25_stage, dense_stage];
+        if let Some(arm) = &arm {
+            stages.push(Self::usage_stage(arm, usage_ms));
+        }
+        stages.push(rrf_stage);
+
         let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(
-            query,
-            origin,
-            top_k,
-            &hits,
-            vec![bm25_stage, dense_stage, rrf_stage],
-            took_ms,
-        );
+        self.record_search(query, origin, top_k, &hits, stages, took_ms);
         Ok(hits)
     }
 
@@ -511,15 +675,20 @@ mod tests {
     /// (registering a tool re-embeds only that tool, not the whole corpus).
     struct CountingEmbedder {
         doc_calls: std::sync::atomic::AtomicUsize,
+        query_calls: std::sync::atomic::AtomicUsize,
     }
     impl CountingEmbedder {
         fn new() -> Self {
             Self {
                 doc_calls: std::sync::atomic::AtomicUsize::new(0),
+                query_calls: std::sync::atomic::AtomicUsize::new(0),
             }
         }
         fn doc_calls(&self) -> usize {
             self.doc_calls.load(std::sync::atomic::Ordering::SeqCst)
+        }
+        fn query_calls(&self) -> usize {
+            self.query_calls.load(std::sync::atomic::Ordering::SeqCst)
         }
     }
     impl Embedder for CountingEmbedder {
@@ -529,6 +698,8 @@ mod tests {
             Ok(StubEmbedder::vec_for(text))
         }
         fn embed_query(&self, text: &str) -> Result<Vec<f32>, EmbedderError> {
+            self.query_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(StubEmbedder::vec_for(text))
         }
     }
@@ -538,6 +709,7 @@ mod tests {
             tools: IndexMap::new(),
             sink: Arc::new(NoopSink),
             dense: DenseCache::with_embedder(embedder),
+            graph: None,
         }
     }
 
@@ -982,5 +1154,151 @@ mod tests {
             &e.event,
             TraceEvent::Search { origin: Origin::Agent, hits, .. } if !hits.is_empty()
         )));
+    }
+
+    // ---- usage ranking on the dense paths (ADR-0013) -----------------------
+
+    /// A graph whose single cluster carries the stub embedder's "read" vector,
+    /// so a query containing "read" matches it at cosine 1.0.
+    fn read_graph(tool_id: &str, support: u32) -> Arc<RwLock<IntentGraph>> {
+        let json = format!(
+            r#"{{"v":1,"half_life_days":30.0,"built_from_ts":1,
+                 "intents":[{{"id":"i0","label":"l","terms":[],
+                 "members":["read a file"],"centroid":[1.0,0.0,0.0],
+                 "support":{support},"tools":{{"{tool_id}":1.0}},"skills":{{}}}}]}}"#
+        );
+        Arc::new(RwLock::new(IntentGraph::from_json(&json).expect("valid")))
+    }
+
+    #[test]
+    fn semantic_search_is_unchanged_when_no_graph_is_attached() {
+        // ADR-0011's byte-for-byte promise, on the dense path.
+        let build = || {
+            let mut reg = with_embedder(Arc::new(StubEmbedder));
+            reg.register(tool("read_file", "read a file"));
+            reg.register(tool("delete_file", "delete a path"));
+            reg.build_embeddings().unwrap();
+            reg
+        };
+        let baseline = build()
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        let mut with_graph = build();
+        // A cluster the query cannot match (orthogonal centroid).
+        let json = r#"{"v":1,"half_life_days":30.0,"built_from_ts":1,
+            "intents":[{"id":"i0","label":"l","terms":[],"members":["x"],
+            "centroid":[0.0,1.0,0.0],"support":9,
+            "tools":{"delete_file":1.0},"skills":{}}]}"#;
+        with_graph.set_intent_graph(Some(Arc::new(RwLock::new(
+            IntentGraph::from_json(json).unwrap(),
+        ))));
+        let missed = with_graph
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        assert_eq!(baseline.len(), missed.len());
+        for (a, b) in baseline.iter().zip(missed.iter()) {
+            assert_eq!(a.tool_id, b.tool_id);
+            assert_eq!(a.score, b.score, "cosine score changed for {}", a.tool_id);
+        }
+    }
+
+    #[test]
+    fn semantic_search_promotes_the_usage_arms_tool() {
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(tool("read_file", "read a file"));
+        // Embeds orthogonally to the query, so dense ranks it last...
+        reg.register(tool("delete_file", "delete a path"));
+        reg.build_embeddings().unwrap();
+
+        let before = reg
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(before[0].tool_id, "read_file");
+
+        // ...but usage history says people invoke it for this intent.
+        reg.set_intent_graph(Some(read_graph("delete_file", 9)));
+        let after = reg
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        let pos = |hits: &[SearchHit], id: &str| hits.iter().position(|h| h.tool_id == id).unwrap();
+        assert!(
+            pos(&after, "delete_file") < pos(&before, "delete_file"),
+            "the usage arm should lift it, got {:?}",
+            after.iter().map(|h| &h.tool_id).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn the_usage_match_reuses_the_dense_query_vector() {
+        // The claim that adaptive ranking is free on semantic/hybrid rests on
+        // this: matching against centroids must not trigger a second inference.
+        let counting = Arc::new(CountingEmbedder::new());
+        let mut reg = with_embedder(counting.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(Some(read_graph("read_file", 9)));
+
+        reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(
+            counting.query_calls(),
+            1,
+            "one search must embed the query exactly once"
+        );
+    }
+
+    #[test]
+    fn hybrid_search_reports_all_four_stages_when_the_arm_fires() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(Some(read_graph("read_file", 9)));
+
+        reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Hybrid)
+            .unwrap();
+
+        let stages: Vec<String> = sink
+            .drain()
+            .into_iter()
+            .find_map(|e| match e.event {
+                TraceEvent::Search { stages, .. } => Some(stages),
+                _ => None,
+            })
+            .expect("a search event")
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(stages, vec!["bm25", "dense", "usage", "rrf"]);
+    }
+
+    #[test]
+    fn hybrid_search_keeps_three_stages_when_the_query_misses() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(Some(read_graph("read_file", 9)));
+
+        // "delete" embeds orthogonally to the cluster centroid.
+        reg.search_with_method("delete", 5, Origin::Direct, SearchMethod::Hybrid)
+            .unwrap();
+
+        let stages: Vec<String> = sink
+            .drain()
+            .into_iter()
+            .find_map(|e| match e.event {
+                TraceEvent::Search { stages, .. } => Some(stages),
+                _ => None,
+            })
+            .expect("a search event")
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(stages, vec!["bm25", "dense", "rrf"]);
     }
 }
