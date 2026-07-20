@@ -2,9 +2,10 @@
 
 How a new version of a Ratel package is published. Read end-to-end before cutting a release.
 
-Ratel releases **per unit** (ADR-0008): seven independently-versioned release units, each on
-its own tag prefix, all routed through one `release.yml`. There is no workspace-shared
-version — each unit carries its own version in its own manifest and ships on its own cadence.
+Ratel releases **per unit** (ADR-0008): eight independently-versioned release units, each on
+its own tag prefix, routed through one `release.yml` (except `vercel-ai-sdk`, which is
+manual-publish-only for now — see its note below). There is no workspace-shared version —
+each unit carries its own version in its own manifest and ships on its own cadence.
 
 ## Release units
 
@@ -17,10 +18,18 @@ version — each unit carries its own version in its own manifest and ships on i
 | `telemetry-ts` | `telemetry-ts-v*` | `@ratel-ai/telemetry` on npm | `src/telemetry/ts/package.json` |
 | `telemetry-py` | `telemetry-py-v*` | `ratel-ai-telemetry` on PyPI | `src/telemetry/python/pyproject.toml` |
 | `telemetry-ts-otlp` | `telemetry-ts-otlp-v*` | `@ratel-ai/telemetry-otlp` on npm | `src/telemetry/ts-otlp/package.json` |
+| `vercel-ai-sdk` | `vercel-ai-sdk-v*` | `@ratel-ai/vercel-ai-sdk` on npm | `src/adapters/ts-vercel-ai-sdk/package.json` |
 
 The units are registered once, in [`scripts/release-units.mjs`](scripts/release-units.mjs)
 — the single source of truth that the tag gate, the `releasable` helper, the changelog
 drafter, and the manual publish helper all read. Adding a future unit is a one-place change.
+
+The `vercel-ai-sdk` framework adapter is registered here so the tag gate, `releasable`, and
+`publish-rc.sh` recognise it, but it is **not yet wired into `release.yml`'s triggers or a
+Trusted Publisher**. First-publish it manually with `scripts/publish-rc.sh --unit
+vercel-ai-sdk` (pure-TS, built + `pnpm pack`ed locally, like the telemetry npm units); then add
+its `vercel-ai-sdk-v*` trigger to `release.yml`, the `release` environment's tag policy, and a
+Trusted Publisher to move it onto the OIDC path (mirrors the telemetry bootstrap).
 
 The `sdk-ts` unit is internally lockstep: the loader `@ratel-ai/sdk`, its five per-OS native
 packages (`@ratel-ai/sdk-darwin-arm64`, `-darwin-x64`, `-linux-x64-gnu`, `-linux-arm64-gnu`,

@@ -13,6 +13,7 @@
 #   telemetry-ts   -> @ratel-ai/telemetry on npm           (npm publish, built locally)
 #   telemetry-py   -> ratel-ai-telemetry on PyPI           (twine upload, built locally)
 #   telemetry-ts-otlp -> @ratel-ai/telemetry-otlp on npm      (npm publish, pnpm-packed locally)
+#   vercel-ai-sdk  -> @ratel-ai/vercel-ai-sdk on npm       (npm publish, pnpm-packed locally)
 # Each unit's version is read from its own manifest via scripts/release-units.mjs
 # (the single source of truth) — units are NOT assumed to share a version.
 #
@@ -28,7 +29,8 @@
 #
 # Options:
 #   --unit <id>        core | sdk-ts | sdk-py | telemetry-core | telemetry-ts |
-#                      telemetry-py | telemetry-ts-otlp. Repeatable. Default: all.
+#                      telemetry-py | telemetry-ts-otlp | vercel-ai-sdk.
+#                      Repeatable. Default: all.
 #   --from-run <id>    Download all artifacts from the given GH Actions run
 #                      (requires `gh auth login`); tarballs/wheels are found within.
 #   --from-dir <path>  Use a directory already holding the tarballs/wheels.
@@ -296,6 +298,36 @@ publish_telemetry_ts_otlp() {
   echo "==> telemetry-ts-otlp publish complete"; echo
 }
 
+# ---------- vercel-ai-sdk: @ratel-ai/vercel-ai-sdk on npm, packed locally ----------
+# The Vercel AI SDK framework adapter. Pure-TS like telemetry-ts-otlp, with a
+# workspace:^ dep on @ratel-ai/sdk. `pnpm pack` rewrites that dep to a real version
+# range in the tarball, so a plain `npm publish <tarball>` (bootstrap: no OIDC, no
+# provenance) ships a valid manifest.
+publish_vercel_ai_sdk() {
+  local version; version="$(resolve_version vercel-ai-sdk)"
+  echo "===== vercel-ai-sdk @ $version (npm) ====="
+  echo "----- @ratel-ai/vercel-ai-sdk@$version (npm) -----"
+  local status
+  status="$(curl -sS -o /dev/null -w '%{http_code}' \
+    "https://registry.npmjs.org/@ratel-ai%2Fvercel-ai-sdk/${version}" || echo 000)"
+  if [[ "$status" == "200" ]]; then
+    echo "    already published, skipping npm"; echo; return 0
+  fi
+  if [[ $DRY_RUN -eq 0 ]] && ! npm whoami >/dev/null 2>&1; then
+    echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
+  fi
+  # Build the adapter + its @ratel-ai/sdk workspace dependency (topo order).
+  ( cd "$REPO_ROOT" && pnpm --filter "@ratel-ai/vercel-ai-sdk..." run build )
+  local tgz
+  tgz="$( cd "$REPO_ROOT/src/adapters/ts-vercel-ai-sdk" && pnpm pack --pack-destination "$(mktemp -d)" | tail -1 )"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] npm publish $tgz --access public --tag $TAG --provenance=false"
+  else
+    publish_one_npm "$tgz" || exit 1
+  fi
+  echo "==> vercel-ai-sdk publish complete"; echo
+}
+
 # ---------- telemetry-core: ratel-ai-telemetry on crates.io ----------
 publish_telemetry_core() {
   local version; version="$(resolve_version telemetry-core)"
@@ -330,6 +362,7 @@ selected telemetry-core && publish_telemetry_core
 selected telemetry-ts   && publish_telemetry_ts
 selected telemetry-ts-otlp && publish_telemetry_ts_otlp
 selected telemetry-py   && publish_telemetry_py
+selected vercel-ai-sdk  && publish_vercel_ai_sdk
 
 echo "==> done"
 echo
