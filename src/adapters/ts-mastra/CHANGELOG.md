@@ -4,6 +4,12 @@ All notable changes to `@ratel-ai/mastra` are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this package adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.0-rc.2] - 2026-07-21
+
+### Changed
+
+- Follow the SDK's model-facing `expose()` → `modelTools()` rename at the call sites (the adapter's `expose` SPI codec is unchanged). Rebased onto the current adapter SPI and built against `@ratel-ai/sdk@0.5.1-rc.0`.
+
 ## [0.1.0-rc.1] - 2026-07-18
 
 ### Added
