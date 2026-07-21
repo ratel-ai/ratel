@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.3] - 2026-07-21
+
 ### Changed
 
 - Lower the supported `@mastra/core` floor from 1.51.0 to 1.11.0. The adapter now owns the no-op observer and validation-error guard locally instead of importing helpers added in later Mastra releases; CI runs its build, full suite, and type tests against 1.11.0, 1.31.0, and 1.51.0. Align the declared Node.js floor with Mastra at 22.13.0.
