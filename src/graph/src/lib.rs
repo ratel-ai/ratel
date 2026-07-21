@@ -157,7 +157,11 @@ pub fn render(graph: &IntentGraph) -> String {
         return "no clusters yet — nothing has been searched and then invoked\n".into();
     }
 
-    let mut intents: Vec<_> = graph.intents.iter().collect();
+    // `labeled()` materializes the display fields against the graph as it is now
+    // — they are derived, not stored, so reading `graph.intents` directly would
+    // print blanks.
+    let materialized = graph.labeled();
+    let mut intents: Vec<_> = materialized.iter().collect();
     intents.sort_by(|a, b| b.support.cmp(&a.support).then_with(|| a.id.cmp(&b.id)));
 
     for it in intents {

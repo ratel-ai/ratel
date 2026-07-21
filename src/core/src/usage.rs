@@ -175,7 +175,12 @@ impl PendingQuery {
 }
 
 /// One cluster: the queries it covers and the capabilities invoked after them.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// `label` and `terms` are **derived**, not stored: they are computed from the
+/// members at read time and deliberately excluded from equality. c-TF-IDF scores
+/// a term against *the other clusters*, so a value frozen when this cluster was
+/// last written is wrong the moment another cluster appears.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Intent {
     /// Cluster id, unique within the graph. Opaque — it names a row.
     pub id: String,
@@ -200,6 +205,20 @@ pub struct Intent {
     /// magnitude is discarded by the fusion.
     #[serde(default)]
     pub skills: BTreeMap<String, f32>,
+}
+
+/// Identity is the evidence — members, centroid, support, edges. The derived
+/// display fields are ignored, so a graph compares equal to its own round-trip
+/// whether or not labels have been materialized.
+impl PartialEq for Intent {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.members == other.members
+            && self.centroid == other.centroid
+            && self.support == other.support
+            && self.tools == other.tools
+            && self.skills == other.skills
+    }
 }
 
 impl Intent {
@@ -257,7 +276,7 @@ impl Intent {
 /// Built either in-process by the local learner or offline by Ratel Cloud; both
 /// emit the shape in `protocol/v1`. Attach one to a registry to add the usage
 /// arm to its ranking.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct IntentGraph {
     /// Schema version. Always [`GRAPH_VERSION`] for a graph this build accepts.
     pub v: u32,
@@ -269,6 +288,26 @@ pub struct IntentGraph {
     /// Scratch for the search path → learner handoff; never serialized.
     #[serde(skip)]
     pending: PendingQuery,
+}
+
+/// Serializing materializes the derived display fields, so the wire form always
+/// carries labels computed against the graph being written — never a stale
+/// snapshot from whenever a cluster last happened to change.
+impl Serialize for IntentGraph {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut out = serializer.serialize_struct("IntentGraph", 3)?;
+        out.serialize_field("v", &self.v)?;
+        out.serialize_field("built_from_ts", &self.built_from_ts)?;
+        out.serialize_field("intents", &self.labeled())?;
+        out.end()
+    }
+}
+
+impl Default for IntentGraph {
+    fn default() -> Self {
+        Self::empty()
+    }
 }
 
 impl IntentGraph {
@@ -355,7 +394,8 @@ impl IntentGraph {
                 let id = format!("intent_{}", self.next_intent_seq());
                 self.intents.push(Intent {
                     id,
-                    label: query.to_string(),
+                    // Derived on read — see `labeled`. Never written while learning.
+                    label: String::new(),
                     terms: Vec::new(),
                     members: Vec::new(),
                     centroid: None,
@@ -384,8 +424,6 @@ impl IntentGraph {
             };
             *edges.entry(capability_id.to_string()).or_insert(0.0) += 1.0;
         }
-
-        self.relabel(idx);
     }
 
     /// The cluster this query belongs to: by cosine when an embedding is
@@ -461,17 +499,6 @@ impl IntentGraph {
             .map_or(0, |m| m + 1)
     }
 
-    /// Recompute one cluster's display fields: the medoid member as `label`,
-    /// and its distinguishing terms by c-TF-IDF against the other clusters.
-    /// Display only — ranking never reads either.
-    fn relabel(&mut self, idx: usize) {
-        let label = self.medoid(idx);
-        let terms = self.c_tf_idf(idx);
-        let it = &mut self.intents[idx];
-        it.label = label;
-        it.terms = terms;
-    }
-
     /// The member that best covers the cluster's own token bag — a real past
     /// query rather than a generated summary, so it can never misdescribe the
     /// cluster. Ties break by the member text.
@@ -539,6 +566,26 @@ impl IntentGraph {
             .collect();
         sort_and_truncate(&mut scored, MAX_TERMS);
         scored.into_iter().map(|(t, _)| t).collect()
+    }
+
+    /// The clusters with their display fields materialized against the graph as
+    /// it is **now**.
+    ///
+    /// Labels are derived rather than stored for two reasons. c-TF-IDF ranks a
+    /// term by how rare it is across the *other* clusters, so a value computed
+    /// when a cluster was last written goes stale as soon as the graph grows.
+    /// And computing them on write meant re-tokenizing every member of every
+    /// cluster on every invocation — for strings ranking never reads.
+    pub fn labeled(&self) -> Vec<Intent> {
+        self.intents
+            .iter()
+            .enumerate()
+            .map(|(i, it)| Intent {
+                label: self.medoid(i),
+                terms: self.c_tf_idf(i),
+                ..it.clone()
+            })
+            .collect()
     }
 
     /// Resolve the usage arm, choosing the match tier from **what this graph
@@ -1138,7 +1185,7 @@ mod tests {
         g.observe("why is the build broken", Capability::Tool, "t", T0);
         g.observe("is the build broken now", Capability::Tool, "t", T0);
 
-        let it = &g.intents[0];
+        let it = &g.labeled()[0];
         assert!(
             it.members.contains(&it.label),
             "label {:?} not a member",
@@ -1153,13 +1200,50 @@ mod tests {
         g.observe("the build is broken again", Capability::Tool, "t", T0);
         g.observe("rotate the signing key", Capability::Tool, "v", T0);
 
-        let build = &g.intents[0];
+        let build = &g.labeled()[0];
         assert!(
             build.terms.contains(&"build".to_string()),
             "got {:?}",
             build.terms
         );
         assert!(!build.terms.contains(&"rotate".to_string()));
+    }
+
+    #[test]
+    fn terms_are_scored_against_the_graph_as_it_is_now() {
+        // c-TF-IDF ranks a term by how rare it is across the OTHER clusters, so a
+        // value frozen when a cluster was last written goes stale the moment the
+        // graph grows. This used to be computed inside `observe`, which made every
+        // label describe a graph that no longer existed.
+        let mut g = IntentGraph::empty();
+        g.observe("why is the build broken", Capability::Tool, "t", T0);
+        g.observe("the build broken again", Capability::Tool, "t", T0);
+        let alone = g.labeled()[0].terms.clone();
+
+        // A second cluster that also uses "again" makes that term less
+        // distinguishing for the first — which must be reflected even though the
+        // first cluster was never touched again.
+        g.observe("tail the service log again", Capability::Tool, "u", T0);
+        let with_neighbour = g.labeled()[0].terms.clone();
+
+        let rank = |terms: &[String], t: &str| terms.iter().position(|x| x == t);
+        assert!(
+            rank(&with_neighbour, "again") >= rank(&alone, "again"),
+            "\"again\" should not gain rank once a neighbour shares it: {alone:?} -> {with_neighbour:?}"
+        );
+    }
+
+    #[test]
+    fn the_label_is_derived_not_stored() {
+        // Nothing writes `label` during learning; it is materialized on read, so
+        // two graphs holding the same evidence are equal regardless.
+        let mut g = IntentGraph::empty();
+        g.observe("why is the build broken", Capability::Tool, "t", T0);
+        assert!(
+            g.intents[0].label.is_empty(),
+            "not stored on the write path"
+        );
+        assert!(!g.labeled()[0].label.is_empty(), "materialized on read");
     }
 
     #[test]
