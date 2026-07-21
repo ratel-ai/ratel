@@ -86,11 +86,22 @@ Online clustering needs a query-to-cluster similarity at search time.
 | Method | similarity | reach |
 |---|---|---|
 | `Semantic` / `Hybrid` | cosine against `centroid` | groups phrasings that share no words |
-| `Bm25` | lexical, over the cluster's member-token bag | repeats and near-repeats only |
+| `Bm25` | best Jaccard overlap with any single member | repeats and near-repeats only |
 
 On semantic/hybrid the marginal cost is zero — the dense arm already embedded the query for
 its own ranking. On `Bm25` no model is loaded at any point, so ADR-0011's model-free
 default is preserved. The Bm25 tier is genuinely weaker and is documented as such.
+
+**Lexical scoring is per member, never against their union.** A union only grows, so scoring
+against it let a mature cluster recognize most of the vocabulary, absorb unrelated asks, and
+grow further — 100 distinct topics measured as 18 clusters, once as 1. Per-member Jaccard
+keeps a cluster exactly as discriminating on its 200th member as on its first.
+
+The cost is recall, and it is the right trade. Two queries sharing one word out of two are
+structurally identical whether they are the same question phrased differently or two
+unrelated asks; no word-overlap rule can accept one and reject the other. This tier rejects
+both, because **a false merge degrades ranking while a false split only misses a boost**.
+Bridging distant wording is what the dense tier is for.
 
 Because `members` is the match key and `centroid` is optional, a graph grown under one tier
 is consumable by the other. **The tier is chosen from what the graph carries, not from the

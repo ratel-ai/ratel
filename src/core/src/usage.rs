@@ -51,8 +51,14 @@ pub(crate) const USAGE_WEIGHT: f32 = 0.5;
 /// Minimum cosine between a query and a cluster centroid to count as a match.
 pub(crate) const TAU_COSINE: f32 = 0.70;
 
-/// Minimum share of a query's content tokens a cluster must already know to
-/// count as a lexical match.
+/// Minimum Jaccard overlap between a query and a cluster's closest single
+/// member for a lexical match — `|q ∩ m| / |q ∪ m|`.
+///
+/// Scored per member rather than against the members' union: a union only
+/// grows, so union scoring let a mature cluster absorb unrelated asks and grow
+/// further still. Per-member scoring reaches repeats and near-repeats, which is
+/// this tier's documented ceiling (ADR-0013) — distant wording is the dense
+/// tier's job.
 pub(crate) const TAU_LEXICAL: f32 = 0.5;
 
 /// How many c-TF-IDF terms a cluster's display label carries.
@@ -206,7 +212,17 @@ pub struct Intent {
     /// magnitude is discarded by the fusion.
     #[serde(default)]
     pub skills: BTreeMap<String, f32>,
-    /// Every distinct content token across `members`, cached.
+    /// Tokens of each member, positionally parallel to `members`.
+    ///
+    /// Matching scores a query against **individual members**, not their union:
+    /// the union only grows, so scoring against it made a mature cluster
+    /// recognize most of the vocabulary and absorb unrelated asks, which grew it
+    /// further (ADR-0013). Derived from `members`, so never serialized and never
+    /// part of identity.
+    #[serde(skip)]
+    member_bags: Vec<std::collections::HashSet<String>>,
+    /// Every distinct content token across `members`, cached — retained as a
+    /// cheap prefilter for [`Self::lexical_score`], not as the score itself.
     ///
     /// Derived from `members` and kept in step with them, so it is never
     /// serialized and never part of identity. It exists because lexical
@@ -284,13 +300,61 @@ impl Intent {
     /// Fold a newly added member's tokens into the cache. O(tokens in that one
     /// member) — the other members are already accounted for.
     fn absorb_tokens(&mut self, member: &str) {
-        self.bag.extend(tokenize(member));
+        let tokens: std::collections::HashSet<String> = tokenize(member).into_iter().collect();
+        self.bag.extend(tokens.iter().cloned());
+        self.member_bags.push(tokens);
     }
 
     /// Rebuild the cache from `members` — after deserialization, where the
     /// cache is skipped on the wire.
     fn rebuild_bag(&mut self) {
+        self.member_bags = self
+            .members
+            .iter()
+            .map(|m| tokenize(m).into_iter().collect())
+            .collect();
         self.bag = self.members.iter().flat_map(|m| tokenize(m)).collect();
+    }
+
+    /// How well `q` matches this cluster: the **best Jaccard overlap with any
+    /// single member**, `|q ∩ m| / |q ∪ m|`.
+    ///
+    /// Per-member rather than against the union, because the union only grows —
+    /// so a union score rises with cluster size regardless of whether any actual
+    /// past question resembles the query. Per-member, a cluster is exactly as
+    /// discriminating on its 200th member as on its first.
+    ///
+    /// The union is still useful as a cheap **necessary condition**: from
+    /// `J = i/(|q|+|m|-i) ≥ τ` and `|m| ≥ 1`, any matching member needs
+    /// `i ≥ τ(|q|+1)/(1+τ)` shared tokens, and `|q ∩ union| ≥ |q ∩ m|` for every
+    /// member. Clusters that cannot clear that are skipped without touching
+    /// their members.
+    fn lexical_score(&self, q: &std::collections::HashSet<String>) -> f32 {
+        let needed = (TAU_LEXICAL * (q.len() as f32 + 1.0) / (1.0 + TAU_LEXICAL)).ceil() as usize;
+        if q.iter().filter(|t| self.bag.contains(*t)).count() < needed {
+            return 0.0;
+        }
+        self.member_bags
+            .iter()
+            .map(|m| {
+                // Length alone can rule a member out: the intersection is at most
+                // `min(|q|,|m|)` and the union at least `max(|q|,|m|)`, so a
+                // 2-token query can never reach 0.5 against a 5-token member
+                // (best case 2/5). Checking that first skips the hashing entirely,
+                // and it is exact rather than heuristic.
+                let (lo, hi) = if q.len() < m.len() {
+                    (q.len(), m.len())
+                } else {
+                    (m.len(), q.len())
+                };
+                if hi == 0 || (lo as f32 / hi as f32) < TAU_LEXICAL {
+                    return 0.0;
+                }
+                let inter = q.intersection(m).count() as f32;
+                let union = (q.len() + m.len()) as f32 - inter;
+                if union == 0.0 { 0.0 } else { inter / union }
+            })
+            .fold(0.0f32, f32::max)
     }
 }
 
@@ -443,6 +507,7 @@ impl IntentGraph {
                     tools: BTreeMap::new(),
                     skills: BTreeMap::new(),
                     bag: std::collections::HashSet::new(),
+                    member_bags: Vec::new(),
                 });
                 self.intents.len() - 1
             }
@@ -520,18 +585,14 @@ impl IntentGraph {
     /// clears [`TAU_LEXICAL`]. Ties break by cluster id so growth does not
     /// depend on `Vec` order.
     fn best_lexical_match(&self, query: &str) -> Option<usize> {
-        let q = tokenize(query);
+        let q: std::collections::HashSet<String> = tokenize(query).into_iter().collect();
         if q.is_empty() {
             return None;
         }
         self.intents
             .iter()
             .enumerate()
-            .map(|(i, it)| {
-                let bag = it.token_bag();
-                let hits = q.iter().filter(|t| bag.contains(*t)).count();
-                (i, hits as f32 / q.len() as f32)
-            })
+            .map(|(i, it)| (i, it.lexical_score(&q)))
             .filter(|(_, score)| *score >= TAU_LEXICAL)
             .max_by(|a, b| {
                 a.1.partial_cmp(&b.1)
@@ -708,18 +769,14 @@ impl IntentGraph {
         kind: Capability,
         known: &dyn Fn(&str) -> bool,
     ) -> Option<UsageArm> {
-        let q = tokenize(query);
+        let q: std::collections::HashSet<String> = tokenize(query).into_iter().collect();
         if q.is_empty() {
             return None;
         }
         let best = self
             .intents
             .iter()
-            .map(|it| {
-                let bag = it.token_bag();
-                let hits = q.iter().filter(|t| bag.contains(*t)).count();
-                (it, hits as f32 / q.len() as f32)
-            })
+            .map(|it| (it, it.lexical_score(&q)))
             .filter(|(_, score)| *score >= TAU_LEXICAL)
             .max_by(pick_best)?;
         arm_from(best.0, best.1, kind, known)
@@ -816,6 +873,7 @@ mod tests {
             tools: tools.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
             skills: BTreeMap::new(),
             bag: std::collections::HashSet::new(),
+            member_bags: Vec::new(),
         };
         it.rebuild_bag(); // the cache is derived from members — keep them in step
         it
@@ -1169,7 +1227,7 @@ mod tests {
             true,
         );
         g.observe(
-            "did the build pass",
+            "is the build broken again",
             Capability::Tool,
             "gh_run_list",
             T0,
@@ -1177,10 +1235,39 @@ mod tests {
         );
 
         let arm = g
-            .arm("is the build ok", None, Capability::Tool, &all_known)
-            .expect("shares 'build' with the cluster");
+            .arm(
+                "the build broken on main",
+                None,
+                Capability::Tool,
+                &all_known,
+            )
+            .expect("a near-repeat of a member");
         assert_eq!(arm.ids, vec!["gh_run_list"]);
         assert_eq!(arm.support, 2);
+    }
+
+    #[test]
+    fn the_lexical_tier_does_not_reach_distant_wording() {
+        // "is the build ok" and "why is the build broken" are the same question,
+        // and this tier will not connect them — they share one word out of two,
+        // which is indistinguishable from two unrelated asks that happen to
+        // share a word (`one_shared_word_does_not_merge_distinct_intents`).
+        //
+        // No word-overlap rule can accept one and reject the other, so this tier
+        // rejects both: a false merge degrades ranking, a false split only misses
+        // a boost. Bridging distant wording is the dense tier's job.
+        let mut g = IntentGraph::empty();
+        g.observe(
+            "why is the build broken",
+            Capability::Tool,
+            "gh_run_list",
+            T0,
+            true,
+        );
+        assert_eq!(
+            g.arm("is the build ok", None, Capability::Tool, &all_known),
+            None
+        );
     }
 
     #[test]
@@ -1259,7 +1346,16 @@ mod tests {
         let it = &g.intents[0];
         let fresh: std::collections::HashSet<String> =
             it.members.iter().flat_map(|m| tokenize(m)).collect();
-        assert_eq!(it.token_bag(), &fresh, "cache drifted from members");
+        assert_eq!(it.token_bag(), &fresh, "union cache drifted from members");
+
+        // The per-member sets are what scoring actually reads, and they are
+        // positional — a drift here silently stops a cluster matching queries it
+        // plainly covers.
+        assert_eq!(it.member_bags.len(), it.members.len(), "one set per member");
+        for (m, bag) in it.members.iter().zip(&it.member_bags) {
+            let fresh: std::collections::HashSet<String> = tokenize(m).into_iter().collect();
+            assert_eq!(bag, &fresh, "member set drifted for {m:?}");
+        }
     }
 
     #[test]
@@ -1335,6 +1431,97 @@ mod tests {
         let mut g = IntentGraph::empty();
         g.observe("why is the build broken", Capability::Tool, "a", T0, false);
         assert_eq!(g.intents[0].support, 1);
+    }
+
+    // ---- lexical clustering must not over-merge -----------------------------
+
+    #[test]
+    fn one_shared_word_does_not_merge_distinct_intents() {
+        // The bug, minimally. Two unrelated asks sharing a single word were
+        // exactly 50% "covered" by each other and merged.
+        let mut g = IntentGraph::empty();
+        g.observe("deploy0 rollback3", Capability::Tool, "a", T0, true);
+        g.observe("deploy0 migrate5", Capability::Tool, "b", T0, true);
+        assert_eq!(g.len(), 2, "one shared word is not the same question");
+    }
+
+    #[test]
+    fn a_large_cluster_does_not_absorb_an_unrelated_query() {
+        // The runaway: the old score was measured against the UNION of every
+        // member, which only grows — so a mature cluster recognized most of the
+        // vocabulary and swallowed anything, which grew it further.
+        let mut g = IntentGraph::empty();
+        for i in 0..30 {
+            g.observe(
+                &format!("build broken variant{i}"),
+                Capability::Tool,
+                "gh_run_list",
+                T0,
+                true,
+            );
+        }
+        assert_eq!(g.len(), 1, "those really are one ask");
+
+        // Every word of this query appears somewhere in that cluster's 32-word
+        // union — but no single member shares more than one of them. Scoring
+        // against the union called it a perfect match; scoring against members
+        // calls it 0.25.
+        g.observe("variant7 variant12", Capability::Tool, "vault", T0, true);
+        assert_eq!(
+            g.len(),
+            2,
+            "a big cluster must not absorb by sheer vocabulary"
+        );
+    }
+
+    #[test]
+    fn distinct_topics_do_not_collapse_at_scale() {
+        // Collapse only shows once unions have grown, which is why small
+        // fixtures never caught it: 40 separable topics used to end up as 11
+        // clusters. These phrasings are deliberately adversarial — two words
+        // each, low overlap — so a HIGH cluster count is the right outcome here.
+        // This asserts the absence of collapse; `near_repeats_still_merge`
+        // covers the other direction.
+        const WORDS: [&str; 20] = [
+            "deploy", "rollback", "migrate", "schema", "invoice", "refund", "tenant", "webhook",
+            "cursor", "throttle", "quota", "shard", "replica", "index", "vault", "rotate", "lease",
+            "beacon", "harvest", "prune",
+        ];
+        let mut g = IntentGraph::empty();
+        for topic in 0..40 {
+            for phrasing in 0..10 {
+                let q = format!(
+                    "{}{topic} {}{phrasing}",
+                    WORDS[topic % 20],
+                    WORDS[(topic + phrasing) % 20]
+                );
+                g.observe(&q, Capability::Tool, &format!("t{topic}"), T0, true);
+            }
+        }
+        assert!(
+            g.len() >= 35,
+            "40 distinct topics collapsed into {} clusters",
+            g.len()
+        );
+    }
+
+    #[test]
+    fn near_repeats_still_merge() {
+        // The fix must not over-split: rephrasings of one ask stay together.
+        let mut g = IntentGraph::empty();
+        for q in [
+            "why is the build broken",
+            "is the build broken again",
+            "the build broken on main",
+        ] {
+            g.observe(q, Capability::Tool, "gh_run_list", T0, true);
+        }
+        for q in ["rotate the signing key", "rotate the signing key now"] {
+            g.observe(q, Capability::Tool, "vault_rotate", T0, true);
+        }
+        assert_eq!(g.len(), 2, "two asks, however phrased");
+        assert_eq!(g.intents[0].members.len(), 3);
+        assert_eq!(g.intents[1].members.len(), 2);
     }
 
     // ---- labels ------------------------------------------------------------
