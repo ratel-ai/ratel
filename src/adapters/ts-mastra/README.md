@@ -64,8 +64,15 @@ It is a no-op — spending no recall-id — when the last message is not a user 
 ## Package shape
 
 - Package name: `@ratel-ai/mastra`
-- Pure TypeScript, **zero runtime dependencies** — the adapter is glue. `@mastra/core@^1.51.0`, `zod@^3.25.0 || ^4.0.0` (matching Mastra's own zod peer), and `@ratel-ai/sdk` are peers the host already installs.
+- Pure TypeScript, **zero runtime dependencies** — the adapter is glue. `@mastra/core@>=1.11.0 <2`, `zod@^3.25.0 || ^4.0.0` (matching Mastra's own zod peer), and `@ratel-ai/sdk` are peers the host already installs.
+- Requires Node.js 22.13 or newer, matching Mastra's own requirement.
 - MIT ([ADR-0009](../../../docs/adr/0009-licensing.md)); member of the pnpm workspace; `publishConfig` provenance on.
+
+## Mastra compatibility
+
+The supported range is `@mastra/core@>=1.11.0 <2`. Version 1.11 is the floor because it is the first 1.x release where `createTool()` normalizes zod and raw JSON schemas to the Standard Schema surface that `ingest` reads.
+
+There is no runtime version detection. The adapter stays on the common public tool, message, and processor shapes and owns two tiny compatibility details locally: the no-op observer context and the structural validation-error check. This avoids imports that Mastra only exported later (`isValidationError` in 1.18 and `noopObserve` in 1.37) while preserving their behavior. CI runs the adapter build, suite, and type tests against exact 1.11.0, 1.31.0, and 1.51.0; the worked Mastra example also drives a real 1.51 Agent loop.
 
 ## Build & test
 
@@ -78,4 +85,4 @@ pnpm --filter @ratel-ai/mastra lint
 pnpm --filter @ratel-ai/mastra test
 ```
 
-The suite covers the three codecs, the recall processor (including id economy on the no-op paths), a mock-model integration test that drives the real Mastra `Agent` loop, a compile-only type-test locking the `@mastra/core` surface, and the `@ratel-ai/sdk/testkit` conformance battery (21 cases, 0 skipped).
+The suite covers the three codecs, the recall processor (including id economy on the no-op paths), a mock-model integration test that drives the real Mastra `Agent` loop, a compile-only type-test locking the supported `@mastra/core` surface, and the `@ratel-ai/sdk/testkit` conformance battery (22 cases, 0 skipped). CI repeats it against the minimum Mastra release.
