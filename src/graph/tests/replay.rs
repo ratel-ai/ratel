@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use ratel_ai_core::{IntentGraph, NoopSink, Origin, TraceEnvelope, TraceEvent, UsageLearner};
-use ratel_ai_graph::{DEFAULT_HALF_LIFE_DAYS, render, replay_dir, replay_envelopes};
+use ratel_ai_graph::{render, replay_dir, replay_envelopes};
 
 const T0: u64 = 1_753_000_000_000;
 
@@ -58,14 +58,14 @@ fn replay_reproduces_what_the_live_learner_grew() {
 
     // Live path: the same events through UsageLearner::replay, which is what the
     // sink does with a wall-clock stamp instead of the envelope's.
-    let live_graph = Arc::new(RwLock::new(IntentGraph::empty(DEFAULT_HALF_LIFE_DAYS)));
+    let live_graph = Arc::new(RwLock::new(IntentGraph::empty()));
     let learner = UsageLearner::new(live_graph.clone(), Arc::new(NoopSink));
     for e in &envelopes {
         learner.replay(e);
     }
     let live = live_graph.read().unwrap().clone();
 
-    let replayed = replay_envelopes(&envelopes, DEFAULT_HALF_LIFE_DAYS);
+    let replayed = replay_envelopes(&envelopes);
     assert_eq!(live, replayed);
 }
 
@@ -77,10 +77,7 @@ fn replay_is_independent_of_input_order() {
     let mut reversed = forward.clone();
     reversed.reverse();
 
-    assert_eq!(
-        replay_envelopes(&forward, DEFAULT_HALF_LIFE_DAYS),
-        replay_envelopes(&reversed, DEFAULT_HALF_LIFE_DAYS)
-    );
+    assert_eq!(replay_envelopes(&forward), replay_envelopes(&reversed));
 }
 
 #[test]
@@ -93,7 +90,7 @@ fn sessions_are_paired_separately() {
         envelope("s2", T0 + 1, invoke("vault_rotate")),
         envelope("s1", T0 + 2, invoke("gh_run_list")),
     ];
-    let graph = replay_envelopes(&envelopes, DEFAULT_HALF_LIFE_DAYS);
+    let graph = replay_envelopes(&envelopes);
 
     assert_eq!(graph.len(), 1);
     assert_eq!(
@@ -179,7 +176,7 @@ fn non_jsonl_files_are_ignored() {
 
 #[test]
 fn render_shows_the_label_evidence_and_edges() {
-    let graph = replay_envelopes(&one_session(), DEFAULT_HALF_LIFE_DAYS);
+    let graph = replay_envelopes(&one_session());
     let out = render(&graph);
     assert!(out.contains("3 observations"), "got: {out}");
     assert!(out.contains("gh_run_list"), "got: {out}");
@@ -188,7 +185,7 @@ fn render_shows_the_label_evidence_and_edges() {
 
 #[test]
 fn render_distinguishes_an_empty_graph_from_a_broken_one() {
-    let out = render(&IntentGraph::empty(DEFAULT_HALF_LIFE_DAYS));
+    let out = render(&IntentGraph::empty());
     assert!(
         out.contains("nothing has been searched and then invoked"),
         "got: {out}"
@@ -199,12 +196,11 @@ fn render_distinguishes_an_empty_graph_from_a_broken_one() {
 fn a_replayed_graph_is_valid_protocol_v1_json() {
     // `build` prints this; the schema in protocol/v1 is what consumers validate
     // against, so a replay must not emit something only this crate can read.
-    let graph = replay_envelopes(&one_session(), DEFAULT_HALF_LIFE_DAYS);
+    let graph = replay_envelopes(&one_session());
     let json = serde_json::to_string(&graph).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
     assert_eq!(parsed["v"], 1);
-    assert!(parsed["half_life_days"].is_number());
     assert!(parsed["built_from_ts"].is_number());
     let intent = &parsed["intents"][0];
     for field in [

@@ -103,7 +103,7 @@ describe("adaptive usage ranking", () => {
   it("rejects a graph from a schema version it does not read", () => {
     const future = JSON.stringify({
       v: 2,
-      half_life_days: 30,
+
       built_from_ts: 1,
       intents: [],
     });

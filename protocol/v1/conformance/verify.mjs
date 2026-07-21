@@ -16,7 +16,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -121,9 +121,6 @@ export function validateGraph(doc) {
 
   if (!isObj(doc)) return ['graph must be an object'];
   if (doc.v !== 1) errs.push(`v must be 1, got ${JSON.stringify(doc.v)}`);
-  if (!(typeof doc.half_life_days === 'number' && doc.half_life_days > 0)) {
-    errs.push(`half_life_days must be a positive number, got ${JSON.stringify(doc.half_life_days)}`);
-  }
   if (!(isInt(doc.built_from_ts) && doc.built_from_ts >= 0)) {
     errs.push(`built_from_ts must be a non-negative integer, got ${JSON.stringify(doc.built_from_ts)}`);
   }
@@ -261,4 +258,9 @@ function main() {
   console.log(`OK — ${n} conformance checks passed (${doc.etag.length} etag, ${doc.inm.length} if-none-match, ${(doc.equalEtags ?? []).length} equal-groups, ${(doc.distinctEtags ?? []).length} distinct-groups, ${g} intent-graph).`);
 }
 
-main();
+// Only run the suite when invoked as a script. The helpers above (`etagOf`,
+// `resolve`, `ifNoneMatchMatches`, `validateGraph`) are exported for reuse, and
+// importing them must not print a report or exit the host process.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

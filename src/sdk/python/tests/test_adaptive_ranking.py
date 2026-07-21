@@ -110,7 +110,7 @@ async def test_learning_survives_a_restart_via_the_wire_form() -> None:
 
 
 def test_a_future_schema_version_is_rejected() -> None:
-    future = json.dumps({"v": 2, "half_life_days": 30, "built_from_ts": 1, "intents": []})
+    future = json.dumps({"v": 2, "built_from_ts": 1, "intents": []})
     with pytest.raises(ValueError, match="version"):
         IntentGraph.from_json(future)
 

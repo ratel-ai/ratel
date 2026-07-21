@@ -308,6 +308,11 @@ pub enum TraceEvent {
         /// Id of the matched cluster; `None` when nothing cleared the match
         /// threshold.
         intent: Option<String>,
+        /// How well the query matched the cluster — cosine on the dense tier,
+        /// token-overlap share on the lexical one. `0.0` on a miss. Scales
+        /// differ between tiers, so compare within one. Reported so near-misses
+        /// are visible and the threshold can be judged against real traffic.
+        similarity: f64,
         /// The matched cluster's observation count, which scales the arm's
         /// weight. `0` on a miss.
         support: u32,

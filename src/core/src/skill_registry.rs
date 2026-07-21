@@ -148,6 +148,7 @@ impl SkillRegistry {
         // deadlock the search path.
         self.sink.record(TraceEvent::UsageBoost {
             intent: arm.as_ref().map(|a| a.intent_id.clone()),
+            similarity: arm.as_ref().map_or(0.0, |a| a.similarity as f64),
             support: arm.as_ref().map_or(0, |a| a.support),
             promoted: arm.as_ref().map_or(0, |a| a.ids.len() as u32),
         });

@@ -27,9 +27,6 @@ use std::sync::{Arc, RwLock};
 
 use ratel_ai_core::{IntentGraph, NoopSink, TraceEnvelope, UsageLearner};
 
-/// Default recency half-life, in days, for a graph built by replay.
-pub const DEFAULT_HALF_LIFE_DAYS: f64 = 30.0;
-
 /// What a replay consumed — enough to tell "no telemetry found" from "telemetry
 /// found, but nobody ever invoked anything".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -57,7 +54,7 @@ pub fn replay_dir(dir: impl AsRef<Path>) -> std::io::Result<(IntentGraph, Replay
     let mut envelopes = Vec::new();
     let mut stats = ReplayStats::default();
     collect(dir.as_ref(), &mut envelopes, &mut stats)?;
-    let graph = replay_envelopes(&envelopes, DEFAULT_HALF_LIFE_DAYS);
+    let graph = replay_envelopes(&envelopes);
     stats.sessions = distinct_sessions(&envelopes);
     Ok((graph, stats))
 }
@@ -124,8 +121,8 @@ fn distinct_sessions(envelopes: &[TraceEnvelope]) -> usize {
 /// interleave sessions, and pairing depends on a search preceding its invoke.
 /// Sessions are processed in id order so the result does not depend on input
 /// order.
-pub fn replay_envelopes(envelopes: &[TraceEnvelope], half_life_days: f64) -> IntentGraph {
-    let graph = Arc::new(RwLock::new(IntentGraph::empty(half_life_days)));
+pub fn replay_envelopes(envelopes: &[TraceEnvelope]) -> IntentGraph {
+    let graph = Arc::new(RwLock::new(IntentGraph::empty()));
 
     let mut by_session: BTreeMap<&str, Vec<&TraceEnvelope>> = BTreeMap::new();
     for e in envelopes {

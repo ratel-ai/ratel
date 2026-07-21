@@ -34,13 +34,8 @@ class IntentGraph:
     duplicate every cluster and split the evidence.
     """
 
-    def __init__(self, half_life_days: float | None = ...) -> None:
-        """An empty graph.
-
-        `half_life_days` (default 30) sets how fast evidence decays: a
-        capability last used one half-life ago counts half as much as one used
-        now.
-        """
+    def __init__(self) -> None:
+        """An empty graph — knows nothing until a search is followed by an invoke."""
 
     @staticmethod
     def from_json(json: str) -> IntentGraph:

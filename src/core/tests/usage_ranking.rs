@@ -43,7 +43,7 @@ fn registry() -> ToolRegistry {
 fn graph_json(support: u32) -> String {
     json!({
         "v": 1,
-        "half_life_days": 30.0,
+
         "built_from_ts": 1_753_000_000_000u64,
         "intents": [{
             "id": "intent_0",
@@ -89,7 +89,7 @@ fn an_empty_graph_ranks_identically_to_no_graph() {
     let baseline = registry().search("why is the build broken", 5);
 
     let mut r = registry();
-    r.set_intent_graph(Some(Arc::new(IntentGraph::empty(30.0).into())));
+    r.set_intent_graph(Some(Arc::new(IntentGraph::empty().into())));
     let with_graph = r.search("why is the build broken", 5);
 
     assert_eq!(ids(&baseline), ids(&with_graph));
@@ -180,7 +180,7 @@ fn edges_naming_an_unregistered_tool_are_not_ranked() {
     // The graph outlives a catalog change; a ghost id must never be returned,
     // since the agent could not invoke it.
     let json = json!({
-        "v": 1, "half_life_days": 30.0, "built_from_ts": 1u64,
+        "v": 1,  "built_from_ts": 1u64,
         "intents": [{
             "id": "intent_0", "label": "l", "terms": [],
             "members": ["why is the build broken"], "support": 9,
@@ -206,10 +206,42 @@ fn usage_events(sink: &MemorySink) -> Vec<(Option<String>, u32, u32)> {
                 intent,
                 support,
                 promoted,
+                ..
             } => Some((intent, support, promoted)),
             _ => None,
         })
         .collect()
+}
+
+/// The match score carried by each `UsageBoost` — cosine on the dense tier,
+/// token-overlap share on the lexical one.
+fn usage_similarities(sink: &MemorySink) -> Vec<f64> {
+    sink.snapshot()
+        .into_iter()
+        .filter_map(|e| match e.event {
+            TraceEvent::UsageBoost { similarity, .. } => Some(similarity),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_hit_reports_how_well_it_matched_and_a_miss_reports_zero() {
+    // The score makes near-misses visible: without it, a query that scored 0.69
+    // against a 0.70 threshold is indistinguishable from one that scored 0.05.
+    let sink = Arc::new(MemorySink::new("s"));
+    let mut r = registry();
+    r.set_trace_sink(sink.clone());
+    r.set_intent_graph(Some(Arc::new(graph(9).into())));
+
+    r.search("why is the build broken", 5);
+    let hit = usage_similarities(&sink)[0];
+    assert!(hit > 0.0 && hit <= 1.0, "expected a match score, got {hit}");
+
+    let sink2 = Arc::new(MemorySink::new("s"));
+    r.set_trace_sink(sink2.clone());
+    r.search("rotate the signing key", 5);
+    assert_eq!(usage_similarities(&sink2), vec![0.0]);
 }
 
 #[test]
@@ -310,7 +342,7 @@ fn a_tool_the_base_ranker_never_retrieved_is_not_promoted() {
     ));
 
     let json = json!({
-        "v": 1, "half_life_days": 30.0, "built_from_ts": 1u64,
+        "v": 1,  "built_from_ts": 1u64,
         "intents": [{
             "id": "intent_0", "label": "l", "terms": [],
             "members": ["why is the build broken"], "support": 9,
@@ -367,7 +399,7 @@ fn skills_are_boosted_from_the_same_graphs_skill_edges() {
         .expect("present");
 
     let json = json!({
-        "v": 1, "half_life_days": 30.0, "built_from_ts": 1u64,
+        "v": 1,  "built_from_ts": 1u64,
         "intents": [{
             "id": "intent_0", "label": "l", "terms": [],
             "members": ["why is the build broken"], "support": 9,
@@ -424,7 +456,7 @@ use std::sync::RwLock;
 /// Wire a registry so that what it learns is what it reads: the learner writes
 /// the graph, the registry ranks against it.
 fn self_teaching_registry() -> (ToolRegistry, std::sync::Arc<RwLock<IntentGraph>>) {
-    let graph = std::sync::Arc::new(RwLock::new(IntentGraph::empty(30.0)));
+    let graph = std::sync::Arc::new(RwLock::new(IntentGraph::empty()));
     let learner = Arc::new(UsageLearner::new(graph.clone(), Arc::new(NoopSink)));
     let mut r = registry();
     r.set_trace_sink(learner);

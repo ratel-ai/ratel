@@ -58,7 +58,7 @@ use crate::usage::{Capability, IntentGraph};
 /// use std::sync::{Arc, RwLock};
 /// use ratel_ai_core::{IntentGraph, NoopSink, Tool, ToolRegistry, UsageLearner};
 ///
-/// let graph = Arc::new(RwLock::new(IntentGraph::empty(30.0)));
+/// let graph = Arc::new(RwLock::new(IntentGraph::empty()));
 /// let learner = Arc::new(UsageLearner::new(graph.clone(), Arc::new(NoopSink)));
 ///
 /// let mut registry = ToolRegistry::new();
@@ -188,7 +188,7 @@ mod tests {
     use crate::trace::{MemorySink, NoopSink, Origin};
 
     fn learner() -> (Arc<UsageLearner>, Arc<RwLock<IntentGraph>>) {
-        let graph = Arc::new(RwLock::new(IntentGraph::empty(30.0)));
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
         let l = Arc::new(UsageLearner::new(graph.clone(), Arc::new(NoopSink)));
         (l, graph)
     }
@@ -320,7 +320,7 @@ mod tests {
         // Decorating must be transparent: installing a learner cannot cost the
         // caller their JSONL/inspector stream.
         let inner = Arc::new(MemorySink::new("s"));
-        let graph = Arc::new(RwLock::new(IntentGraph::empty(30.0)));
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
         let l = UsageLearner::new(graph, inner.clone());
 
         l.record(search("why is the build broken"));

@@ -190,6 +190,7 @@ impl ToolRegistry {
         // deadlock the search path.
         self.sink.record(TraceEvent::UsageBoost {
             intent: arm.as_ref().map(|a| a.intent_id.clone()),
+            similarity: arm.as_ref().map_or(0.0, |a| a.similarity as f64),
             support: arm.as_ref().map_or(0, |a| a.support),
             promoted: arm.as_ref().map_or(0, |a| a.ids.len() as u32),
         });
@@ -1169,7 +1170,7 @@ mod tests {
         // "delete a path" and "remove something" share NO content words, but the
         // embedder places them together. Learning on a semantic registry must
         // group them into one cluster, so evidence from one lifts the other.
-        let graph = Arc::new(RwLock::new(IntentGraph::empty(30.0)));
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
         let mut reg = with_embedder(Arc::new(StubEmbedder));
         reg.set_trace_sink(Arc::new(crate::UsageLearner::new(
             graph.clone(),
@@ -1208,7 +1209,7 @@ mod tests {
     fn a_bm25_registry_still_learns_without_any_centroid() {
         // No embedder is ever touched on this path (ADR-0011), so the cluster is
         // lexical and carries no centroid — the documented lesser tier.
-        let graph = Arc::new(RwLock::new(IntentGraph::empty(30.0)));
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
         let mut reg = ToolRegistry::new();
         reg.set_trace_sink(Arc::new(crate::UsageLearner::new(
             graph.clone(),
@@ -1233,7 +1234,7 @@ mod tests {
         // Sessions share a graph, so a concurrent search can clobber the slot.
         // Keying it by query text means the mismatch degrades to lexical
         // clustering rather than attaching the wrong embedding to a question.
-        let graph = IntentGraph::empty(30.0);
+        let graph = IntentGraph::empty();
         graph.note_query_vector("some other query", &[1.0, 0.0, 0.0]);
         let mut graph = graph;
         graph.observe("delete a path", Capability::Tool, "delete_file", 1);
@@ -1251,7 +1252,7 @@ mod tests {
     /// so a query containing "read" matches it at cosine 1.0.
     fn read_graph(tool_id: &str, support: u32) -> Arc<RwLock<IntentGraph>> {
         let json = format!(
-            r#"{{"v":1,"half_life_days":30.0,"built_from_ts":1,
+            r#"{{"v":1,"built_from_ts":1,
                  "intents":[{{"id":"i0","label":"l","terms":[],
                  "members":["read a file"],"centroid":[1.0,0.0,0.0],
                  "support":{support},"tools":{{"{tool_id}":1.0}},"skills":{{}}}}]}}"#
@@ -1275,7 +1276,7 @@ mod tests {
 
         let mut with_graph = build();
         // A cluster the query cannot match (orthogonal centroid).
-        let json = r#"{"v":1,"half_life_days":30.0,"built_from_ts":1,
+        let json = r#"{"v":1,"built_from_ts":1,
             "intents":[{"id":"i0","label":"l","terms":[],"members":["x"],
             "centroid":[0.0,1.0,0.0],"support":9,
             "tools":{"delete_file":1.0},"skills":{}}]}"#;

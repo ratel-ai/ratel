@@ -182,16 +182,11 @@ pub struct IntentGraph {
 
 #[pymethods]
 impl IntentGraph {
-    /// An empty graph. `half_life_days` (default 30) sets how fast evidence
-    /// decays: a capability last used one half-life ago counts half as much as
-    /// one used now.
+    /// An empty graph — knows nothing until a search is followed by an invoke.
     #[new]
-    #[pyo3(signature = (half_life_days=None))]
-    fn new(half_life_days: Option<f64>) -> Self {
+    fn new() -> Self {
         Self {
-            inner: Arc::new(RwLock::new(core::IntentGraph::empty(
-                half_life_days.unwrap_or(30.0),
-            ))),
+            inner: Arc::new(RwLock::new(core::IntentGraph::empty())),
         }
     }
 

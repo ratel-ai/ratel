@@ -496,7 +496,6 @@
         "why": "Full graph from a semantic/hybrid learner: centroid present, several members, two weighted tool edges.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -533,7 +532,6 @@
         "why": "A lexically-clustered producer (the Bm25 tier, or Ratel Cloud's Jaccard clusterer) emits no centroid. `members` is the match key, so the graph is still fully usable — a consumer with an embedder may derive a centroid from the members.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -565,7 +563,6 @@
         "why": "A cluster seeded by a single confirmed observation. Valid, and the consumer scales its ranking arm down accordingly rather than refusing the row.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -593,7 +590,6 @@
         "why": "Edge maps may be empty — a cluster can exist with no surviving capability edges after decay. It contributes no ranking arm.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -622,7 +618,6 @@
         "why": "Skills are ranked by the same mechanism as tools, via the skill registry's own arm.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -653,7 +648,6 @@
         "why": "A graph may name a capability the consumer does not have — the catalog changed after the graph was grown. This is VALID on the wire; the consumer drops the id at rank time (see consumerRules), it is not a format error.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -685,7 +679,6 @@
         "why": "Producers may carry additional fields; a conforming consumer ignores them.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -726,7 +719,6 @@
         "because": "`v` must be 1; a consumer rejects an unknown version rather than degrading.",
         "doc": {
           "v": 2,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -758,7 +750,6 @@
         "because": "`members` is the match key — without it the row can never be matched.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -785,7 +776,6 @@
         "because": "`members` requires at least one entry.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -813,7 +803,6 @@
         "because": "`support` counts confirmed observations and is at least 1; a row with none should not have been emitted.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -845,7 +834,6 @@
         "because": "Edge weights are decayed positive counts; zero or negative is meaningless and would invert the arm's order.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -876,7 +864,6 @@
         "because": "When present, a centroid must have at least one dimension.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -909,7 +896,6 @@
         "because": "Ids name a row and must be unique within the graph.",
         "doc": {
           "v": 1,
-          "half_life_days": 30,
           "built_from_ts": 1753000000000,
           "intents": [
             {
@@ -933,38 +919,6 @@
               },
               "skills": {}
             },
-            {
-              "id": "intent_0",
-              "label": "is the build green",
-              "terms": [
-                "build",
-                "ci",
-                "pipeline",
-                "fail"
-              ],
-              "members": [
-                "why is the build broken",
-                "did CI pass",
-                "is the build green"
-              ],
-              "support": 5,
-              "tools": {
-                "gh_run_list": 0.8,
-                "gh_run_view": 0.2
-              },
-              "skills": {}
-            }
-          ]
-        }
-      },
-      {
-        "name": "half-life-zero",
-        "because": "`half_life_days` must be positive; zero would annihilate every weight.",
-        "doc": {
-          "v": 1,
-          "half_life_days": 0,
-          "built_from_ts": 1753000000000,
-          "intents": [
             {
               "id": "intent_0",
               "label": "is the build green",

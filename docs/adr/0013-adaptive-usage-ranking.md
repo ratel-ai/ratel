@@ -59,9 +59,9 @@ a `label`, `terms`, `support`, and `tools` / `skills` edge maps.
   one observation nudges and three or more get full weight. A batch design could filter
   weak clusters before use; an online one cannot, so the ramp does that job without making
   the user wait.
-- **Recency decay.** Edge weights are `Σ exp(−Δt / half_life)`, measured against the
-  newest observed event rather than wall clock. Stale dominance expires on its own, which
-  is what keeps a strong arm from amplifying history that is no longer true.
+- **Edge weights are plain invocation counts.** No recency term: only their *order* within
+  a cluster reaches the fusion, so a decay factor applied uniformly to a cluster changed
+  nothing that ranking could observe (see Rejected).
 
 ### The scorer
 
@@ -134,10 +134,23 @@ LLM-extracted intents populate the same `members` field.
   `JsonlSink` already writes that log.
 - `members` holds raw query text. Whatever persists it must match the `0600` treatment
   `JsonlSink` already applies.
-- A feedback loop is inherent — boosting used capabilities makes them more used. `W < 1`,
-  the support ramp, and decay bound it; they do not remove it.
+- A feedback loop is inherent — boosting used capabilities makes them more used. `W < 1`
+  and the support ramp bound it; they do not remove it.
+- **Nothing expires.** A cluster nobody has queried in a year still boosts at full weight,
+  because `support` does not age and no cluster is evicted. Handling staleness is deferred
+  rather than solved; it needs to act on the arm's weight or on cluster lifetime, not on
+  edge magnitudes.
 
 ## Rejected
+
+- **Recency decay on edge weights** (`Σ 2^(−Δt/half_life)`, built and then removed). It
+  discounted old invocations correctly, but the fusion consumes *rank position*: decaying
+  every edge in a cluster by the same factor left their order unchanged, so ranking could
+  not observe it. It only reordered when two capabilities in one cluster differed sharply
+  in recency — a narrow case bought with a wire field, a tuning constant, and a time
+  parameter threaded through the learning path. The staleness it appeared to address (a
+  whole cluster going cold) it never addressed, since `support` and cluster lifetime are
+  untouched by it.
 
 - **Multiplicative fusion with intent similarity as a factor** (the brief's
   `BM25/dense × intent-similarity × co-usage`): a `W·(cos−τ)/(1−τ)` ramp scores 0.53 at

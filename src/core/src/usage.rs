@@ -23,10 +23,8 @@
 //!   cannot connect "why is the build broken" to "did CI pass".
 //!
 //! The wire shape is `protocol/v1/schema/intent-graph.schema.json`; this is its
-//! consumer. Weights arrive already decayed to `built_from_ts`, so no read-time
-//! decay is applied here — scaling every weight in a cluster by the same factor
-//! cannot change their order. Decay is re-anchored when new observations are
-//! folded in.
+//! consumer. An edge weight is a plain count of confirmed invocations: it orders
+//! the arm and nothing more, since RRF then fuses on rank position.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -60,8 +58,6 @@ pub(crate) const TAU_LEXICAL: f32 = 0.5;
 /// How many c-TF-IDF terms a cluster's display label carries.
 const MAX_TERMS: usize = 5;
 
-const MS_PER_DAY: f64 = 86_400_000.0;
-
 /// The effective weight of the usage arm for a cluster with `support`
 /// observations: `USAGE_WEIGHT · min(1, support / SUPPORT_FULL)`.
 pub(crate) fn usage_weight(support: u32) -> f32 {
@@ -84,6 +80,11 @@ pub(crate) enum Capability {
 pub(crate) struct UsageArm {
     /// Id of the cluster that matched — carried into `TraceEvent::UsageBoost`.
     pub intent_id: String,
+    /// How well the query matched: cosine against the centroid on the dense
+    /// tier, share of query tokens known on the lexical one. Both are in
+    /// `[0, 1]`, but they are **different scales** — compare within a tier, not
+    /// across. Reported so near-misses are visible, not just hits.
+    pub similarity: f32,
     /// The cluster's observation count, which sets the arm's weight.
     pub support: u32,
     /// Capability ids, best-first. Already filtered to ids the registry knows.
@@ -191,10 +192,12 @@ pub struct Intent {
     pub centroid: Option<Vec<f32>>,
     /// Confirmed search-then-invoke observations behind this cluster.
     pub support: u32,
-    /// Tool id → decayed weight, from invocations only.
+    /// Tool id → count of confirmed invocations. Orders the arm; the
+    /// magnitude is discarded by the fusion.
     #[serde(default)]
     pub tools: BTreeMap<String, f32>,
-    /// Skill id → decayed weight, from invocations only.
+    /// Skill id → count of confirmed invocations. Orders the arm; the
+    /// magnitude is discarded by the fusion.
     #[serde(default)]
     pub skills: BTreeMap<String, f32>,
 }
@@ -258,9 +261,8 @@ impl Intent {
 pub struct IntentGraph {
     /// Schema version. Always [`GRAPH_VERSION`] for a graph this build accepts.
     pub v: u32,
-    /// The recency half-life already applied to the edge weights, in days.
-    pub half_life_days: f64,
-    /// Epoch-millis of the newest event folded in — the decay anchor.
+    /// Epoch-millis of the newest event folded in. Provenance only — it says how
+    /// current the graph is, and nothing reads it during ranking.
     pub built_from_ts: u64,
     /// The clusters. Order is not significant.
     pub intents: Vec<Intent>,
@@ -286,10 +288,9 @@ impl IntentGraph {
     }
 
     /// An empty graph at the current version — the starting state of a learner.
-    pub fn empty(half_life_days: f64) -> Self {
+    pub fn empty() -> Self {
         Self {
             v: GRAPH_VERSION,
-            half_life_days,
             built_from_ts: 0,
             intents: Vec::new(),
             pending: PendingQuery::default(),
@@ -323,18 +324,16 @@ impl IntentGraph {
     ///
     /// This is the whole learning step (ADR-0013). It:
     ///
-    /// 1. **re-anchors decay** to `ts_ms`, scaling every existing edge by
-    ///    `exp(-Δt / half_life)` so all weights stay in one time frame and old
-    ///    evidence fades without a sweep;
-    /// 2. finds the cluster this query belongs to — lexically, since a trace
-    ///    event carries text and not an embedding — or **seeds a new one**;
-    /// 3. adds the query as a member, bumps `support`, and adds `1.0` to the
+    /// 1. finds the cluster this query belongs to — by centroid when the search
+    ///    path stashed an embedding, else by token overlap — or **seeds a new
+    ///    one**;
+    /// 2. adds the query as a member, bumps `support`, and adds `1.0` to the
     ///    invoked capability's edge;
-    /// 4. recomputes the cluster's display label and terms.
+    /// 3. recomputes the cluster's display label and terms.
     ///
-    /// Clusters grown this way carry **no centroid**; [`Self::arm`] matches them
-    /// lexically. `ts_ms` going backwards is tolerated (traces are loosely
-    /// ordered, ADR-0007) and simply does not re-anchor.
+    /// `ts_ms` records how current the graph is; it never affects ranking.
+    /// Traces are loosely ordered (ADR-0007), so a late-arriving older event
+    /// leaves the recorded high-water mark alone.
     pub(crate) fn observe(
         &mut self,
         query: &str,
@@ -348,7 +347,7 @@ impl IntentGraph {
         if vector.is_none() && tokenize(query).is_empty() {
             return; // no words to cluster on and no embedding either
         }
-        self.decay_to(ts_ms);
+        self.built_from_ts = self.built_from_ts.max(ts_ms);
 
         let idx = match self.best_match(query, vector.as_deref()) {
             Some(i) => i,
@@ -387,27 +386,6 @@ impl IntentGraph {
         }
 
         self.relabel(idx);
-    }
-
-    /// Scale every edge toward `ts_ms` and move the decay anchor there, so an
-    /// observation recorded now is worth `1.0` against history already faded to
-    /// this instant. A no-op when `ts_ms` is not newer than the anchor.
-    fn decay_to(&mut self, ts_ms: u64) {
-        if self.built_from_ts == 0 {
-            self.built_from_ts = ts_ms;
-            return;
-        }
-        if ts_ms <= self.built_from_ts {
-            return;
-        }
-        let elapsed_days = (ts_ms - self.built_from_ts) as f64 / MS_PER_DAY;
-        let factor = (-elapsed_days / self.half_life_days * std::f64::consts::LN_2).exp() as f32;
-        for it in &mut self.intents {
-            for w in it.tools.values_mut().chain(it.skills.values_mut()) {
-                *w *= factor;
-            }
-        }
-        self.built_from_ts = ts_ms;
     }
 
     /// The cluster this query belongs to: by cosine when an embedding is
@@ -615,7 +593,7 @@ impl IntentGraph {
             })
             .filter(|(_, sim)| *sim >= TAU_COSINE)
             .max_by(pick_best)?;
-        arm_from(best.0, kind, known)
+        arm_from(best.0, best.1, kind, known)
     }
 
     /// Match `query` lexically against each cluster's member-token bag and
@@ -645,7 +623,7 @@ impl IntentGraph {
             })
             .filter(|(_, score)| *score >= TAU_LEXICAL)
             .max_by(pick_best)?;
-        arm_from(best.0, kind, known)
+        arm_from(best.0, best.1, kind, known)
     }
 }
 
@@ -658,13 +636,19 @@ fn pick_best(a: &(&Intent, f32), b: &(&Intent, f32)) -> std::cmp::Ordering {
         .then_with(|| b.0.id.cmp(&a.0.id))
 }
 
-fn arm_from(intent: &Intent, kind: Capability, known: &dyn Fn(&str) -> bool) -> Option<UsageArm> {
+fn arm_from(
+    intent: &Intent,
+    similarity: f32,
+    kind: Capability,
+    known: &dyn Fn(&str) -> bool,
+) -> Option<UsageArm> {
     let ids = intent.ranked(kind, known);
     if ids.is_empty() {
         return None; // matched, but nothing it remembers still exists
     }
     Some(UsageArm {
         intent_id: intent.id.clone(),
+        similarity,
         support: intent.support,
         ids,
     })
@@ -738,7 +722,6 @@ mod tests {
     fn graph(intents: Vec<Intent>) -> IntentGraph {
         IntentGraph {
             v: 1,
-            half_life_days: 30.0,
             built_from_ts: 1_753_000_000_000,
             intents,
             pending: PendingQuery::default(),
@@ -770,7 +753,7 @@ mod tests {
     #[test]
     fn parses_a_graph_without_a_centroid() {
         // The Bm25 / Jaccard-producer case: `centroid` is optional by contract.
-        let json = r#"{"v":1,"half_life_days":30,"built_from_ts":1,
+        let json = r#"{"v":1,"built_from_ts":1,
             "intents":[{"id":"i0","label":"l","members":["q"],"support":2,
             "tools":{"t":1.0},"skills":{}}]}"#;
         let g = IntentGraph::from_json(json).expect("valid graph");
@@ -780,7 +763,7 @@ mod tests {
 
     #[test]
     fn rejects_an_unknown_version_instead_of_degrading() {
-        let json = r#"{"v":2,"half_life_days":30,"built_from_ts":1,"intents":[]}"#;
+        let json = r#"{"v":2,"built_from_ts":1,"intents":[]}"#;
         assert_eq!(
             IntentGraph::from_json(json),
             Err(IntentGraphError::UnsupportedVersion(2))
@@ -797,7 +780,7 @@ mod tests {
 
     #[test]
     fn an_empty_graph_contributes_no_arm() {
-        let g = IntentGraph::empty(30.0);
+        let g = IntentGraph::empty();
         assert!(g.is_empty());
         assert_eq!(
             g.arm_lexical("anything", Capability::Tool, &all_known),
@@ -984,11 +967,10 @@ mod tests {
     // ---- observe: the online learning step ---------------------------------
 
     const T0: u64 = 1_753_000_000_000;
-    const DAY: u64 = 86_400_000;
 
     #[test]
     fn the_first_observation_seeds_a_cluster() {
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe(
             "why is the build broken",
             Capability::Tool,
@@ -1006,7 +988,7 @@ mod tests {
 
     #[test]
     fn a_similar_query_joins_the_existing_cluster() {
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe(
             "why is the build broken",
             Capability::Tool,
@@ -1027,7 +1009,7 @@ mod tests {
 
     #[test]
     fn a_dissimilar_query_seeds_its_own_cluster() {
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe(
             "why is the build broken",
             Capability::Tool,
@@ -1050,7 +1032,7 @@ mod tests {
     fn a_repeated_phrasing_is_not_duplicated_in_members() {
         // Members are the match key; repeating one must not inflate the token
         // bag and make the cluster match ever more loosely.
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         for _ in 0..3 {
             g.observe(
                 "why is the build broken",
@@ -1070,7 +1052,7 @@ mod tests {
     fn learning_then_searching_closes_the_loop() {
         // The whole feature in one assertion: observe, then match a query that
         // was never observed verbatim.
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe(
             "why is the build broken",
             Capability::Tool,
@@ -1091,7 +1073,7 @@ mod tests {
         // A semantic catalog hands `arm` a query vector, but a locally-learned
         // graph has no centroids to compare it against. It must fall back to
         // lexical matching rather than silently returning nothing.
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe(
             "why is the build broken",
             Capability::Tool,
@@ -1108,48 +1090,22 @@ mod tests {
         assert!(arm.is_some(), "must not be invisible to a semantic catalog");
     }
 
-    // ---- decay -------------------------------------------------------------
-
     #[test]
-    fn older_evidence_decays_relative_to_newer() {
-        let mut g = IntentGraph::empty(30.0);
-        g.observe("why is the build broken", Capability::Tool, "old_tool", T0);
-        // 30 days later — exactly one half-life — a different tool for the same
-        // intent.
-        g.observe(
-            "why is the build broken",
-            Capability::Tool,
-            "new_tool",
-            T0 + 30 * DAY,
-        );
-
-        let tools = &g.intents[0].tools;
-        let old = tools["old_tool"];
-        let new = tools["new_tool"];
-        assert!(
-            (old - 0.5).abs() < 1e-4,
-            "one half-life should halve it, got {old}"
-        );
-        assert!(
-            (new - 1.0).abs() < 1e-6,
-            "the fresh observation is worth 1.0, got {new}"
-        );
-        assert!(new > old, "recent evidence must outrank stale evidence");
-    }
-
-    #[test]
-    fn decay_reorders_the_arm_once_history_goes_stale() {
-        // The point of decay: a tool that dominated long ago stops leading.
-        let mut g = IntentGraph::empty(30.0);
-        for _ in 0..4 {
-            g.observe("why is the build broken", Capability::Tool, "old_tool", T0);
+    fn edges_rank_by_how_often_a_capability_was_chosen() {
+        let mut g = IntentGraph::empty();
+        for _ in 0..3 {
+            g.observe(
+                "why is the build broken",
+                Capability::Tool,
+                "chosen_often",
+                T0,
+            );
         }
-        // A year later, one use of something else.
         g.observe(
             "why is the build broken",
             Capability::Tool,
-            "new_tool",
-            T0 + 365 * DAY,
+            "chosen_once",
+            T0,
         );
 
         let arm = g
@@ -1160,18 +1116,17 @@ mod tests {
                 &all_known,
             )
             .unwrap();
-        assert_eq!(arm.ids.first().map(String::as_str), Some("new_tool"));
+        assert_eq!(arm.ids, vec!["chosen_often", "chosen_once"]);
     }
 
     #[test]
-    fn out_of_order_timestamps_do_not_rewind_the_anchor() {
-        // Trace events are loosely ordered (ADR-0007); a late-arriving older
-        // event must not un-decay the graph.
-        let mut g = IntentGraph::empty(30.0);
-        g.observe("build broken", Capability::Tool, "a", T0 + 10 * DAY);
-        let anchor = g.built_from_ts;
+    fn built_from_ts_tracks_the_newest_event_and_never_rewinds() {
+        // Provenance only — it says how current the graph is. Traces are loosely
+        // ordered (ADR-0007), so a late-arriving older event must not drag it back.
+        let mut g = IntentGraph::empty();
+        g.observe("build broken", Capability::Tool, "a", T0 + 10);
         g.observe("build broken", Capability::Tool, "b", T0);
-        assert_eq!(g.built_from_ts, anchor);
+        assert_eq!(g.built_from_ts, T0 + 10);
     }
 
     // ---- labels ------------------------------------------------------------
@@ -1179,7 +1134,7 @@ mod tests {
     #[test]
     fn the_label_is_always_one_of_the_members() {
         // Counted from the data, so it cannot describe the cluster wrongly.
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe("why is the build broken", Capability::Tool, "t", T0);
         g.observe("is the build broken now", Capability::Tool, "t", T0);
 
@@ -1193,7 +1148,7 @@ mod tests {
 
     #[test]
     fn terms_distinguish_a_cluster_from_its_neighbours() {
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe("why is the build broken", Capability::Tool, "t", T0);
         g.observe("the build is broken again", Capability::Tool, "t", T0);
         g.observe("rotate the signing key", Capability::Tool, "v", T0);
@@ -1209,14 +1164,14 @@ mod tests {
 
     #[test]
     fn a_stopword_only_query_teaches_nothing() {
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe("is the", Capability::Tool, "t", T0);
         assert!(g.is_empty());
     }
 
     #[test]
     fn tool_and_skill_observations_land_on_separate_edge_maps() {
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe(
             "why is the build broken",
             Capability::Tool,
@@ -1237,7 +1192,7 @@ mod tests {
 
     #[test]
     fn a_learned_graph_round_trips_through_the_wire_form() {
-        let mut g = IntentGraph::empty(30.0);
+        let mut g = IntentGraph::empty();
         g.observe(
             "why is the build broken",
             Capability::Tool,
