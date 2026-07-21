@@ -29,6 +29,7 @@ __all__ = [
     "GroundOptions",
     "GroundingItem",
     "GroundingResult",
+    "GroundingSnapshotItem",
     "InjectionDecision",
     "InjectionDecisionReason",
     "InjectionPolicy",
@@ -176,8 +177,30 @@ class GroundingItem:
     body: str
     # The marker to embed alongside the body so later turns dedupe it (`grounding_marker`).
     marker: str
+    # The body and marker pre-joined — render this as the message content and the
+    # dedupe contract is met without remembering to keep the marker. The uniform
+    # render field across both grounding modes (a snapshot item's `text` is just
+    # its body).
+    text: str
     # Why it was injected.
     reason: InjectionReason
+    # Which tier it came from.
+    pin: PinTier
+
+
+@dataclass(frozen=True)
+class GroundingSnapshotItem:
+    """One fact riding along in a per-call grounding snapshot.
+
+    Produced by `FactCatalog.ground_snapshot` — no marker, nothing persisted.
+    """
+
+    # The fact id.
+    id: str
+    # The fact body.
+    body: str
+    # Render this as the message content — for a snapshot it is just `body`.
+    text: str
     # Which tier it came from.
     pin: PinTier
 

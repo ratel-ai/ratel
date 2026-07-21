@@ -121,6 +121,16 @@ describe("FactCatalog.ground (the freshness gate, on the catalog)", () => {
     expect(again.inject.find((i) => i.id === "shop-address")?.reason).toBe("evicted");
   });
 
+  it("items carry a pre-joined text field (body + marker) so rendering can't drop the marker", async () => {
+    const catalog = await setup();
+    const { inject } = await catalog.ground("hi", []);
+    const shop = inject.find((i) => i.id === "shop-address");
+    expect(shop?.text).toBe(`${shop?.body}\n${shop?.marker}`);
+    // Rendering `text` verbatim satisfies the dedupe contract:
+    const second = await catalog.ground("hi", [shop?.text ?? ""]);
+    expect(second.skipped).toContain("shop-address");
+  });
+
   it("r.ground delegates to the same catalog state as r.facts.ground", async () => {
     const r = ratel();
     await r.facts.register(address);
@@ -130,6 +140,58 @@ describe("FactCatalog.ground (the freshness gate, on the catalog)", () => {
     const transcript = viaCore.inject.map((i) => `${i.body} ${i.marker}`);
     const viaCatalog = await r.facts.ground("hi", transcript);
     expect(viaCatalog.skipped).toContain("shop-address");
+  });
+});
+
+describe("FactCatalog.groundSnapshot (the stateless per-call mode)", () => {
+  const setup = async () => {
+    const catalog = new FactCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    await catalog.register([address, cancellation]);
+    return catalog;
+  };
+
+  it("returns pinned plus query-matched facts, with text = body and no marker", async () => {
+    const catalog = await setup();
+    const items = await catalog.groundSnapshot("I need to cancel my appointment");
+    const ids = items.map((i) => i.id);
+    expect(ids).toContain("shop-address"); // pinned rides along regardless of match
+    expect(ids).toContain("cancellation"); // matched by the query
+    expect(ids.indexOf("shop-address")).toBeLessThan(ids.indexOf("cancellation")); // pinned first
+    for (const item of items) {
+      expect(item.text).toBe(item.body);
+      expect(item.text).not.toContain("⟦ratel:fact");
+    }
+  });
+
+  it("is stateless: identical calls return the full set every time (no dedup, no memory)", async () => {
+    const catalog = await setup();
+    const first = await catalog.groundSnapshot("hi");
+    const second = await catalog.groundSnapshot("hi");
+    expect(second).toEqual(first);
+    expect(second.map((i) => i.id)).toContain("shop-address");
+  });
+
+  it("does not disturb ground()'s freshness state", async () => {
+    const catalog = await setup();
+    await catalog.groundSnapshot("hi"); // snapshots never mark anything as injected
+    const { inject } = await catalog.ground("hi", []);
+    expect(inject.find((i) => i.id === "shop-address")?.reason).toBe("never");
+  });
+
+  it("emits a fact_snapshot trace event per fact", async () => {
+    const catalog = await setup();
+    await catalog.groundSnapshot("cancel my booking");
+    const events = catalog.drainTraceEvents() as Array<{ type: string; fact_id: string }>;
+    const snaps = events.filter((e) => e.type === "fact_snapshot").map((e) => e.fact_id);
+    expect(snaps).toContain("shop-address");
+    expect(snaps).toContain("cancellation");
+  });
+
+  it("r.groundSnapshot delegates to the catalog", async () => {
+    const r = ratel();
+    await r.facts.register(address);
+    const items = await r.groundSnapshot("anything");
+    expect(items.map((i) => i.id)).toContain("shop-address");
   });
 });
 

@@ -224,6 +224,15 @@ pub enum TraceEvent {
         /// Id of the fact that was already present and left alone.
         fact_id: String,
     },
+    /// A fact rode along in a per-call grounding snapshot — the stateless
+    /// `groundSnapshot` path: recomputed each call, nothing persisted, no
+    /// freshness gate. The per-call twin of [`TraceEvent::FactInject`], emitted
+    /// by the SDK via [`crate::FactRegistry::record_event`] once per fact per
+    /// snapshot.
+    FactSnapshot {
+        /// Id of the fact included in the snapshot.
+        fact_id: String,
+    },
     /// A tool invocation began. Emitted by the SDK catalogs just before the
     /// tool's executor runs; paired with [`TraceEvent::InvokeEnd`] or
     /// [`TraceEvent::InvokeError`].

@@ -18,7 +18,12 @@ import {
   type TraceSinkConfig,
 } from "./catalog.js";
 import { FactCatalog } from "./fact-catalog.js";
-import type { GroundingResult, GroundOptions } from "./grounding.js";
+import type {
+  GroundingResult,
+  GroundingSnapshotItem,
+  GroundOptions,
+  GroundSnapshotOptions,
+} from "./grounding.js";
 import { SkillCatalog } from "./skill-catalog.js";
 import { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";
 import { isPeerInstalled } from "./telemetry.js";
@@ -237,6 +242,12 @@ export interface AdaptedBase<TTool, TMessage> {
     transcript: readonly string[],
     opts?: GroundOptions,
   ): Promise<GroundingResult>;
+  /**
+   * ⚠️ Experimental (facts, ADR-0014). Stateless per-call twin of
+   * {@link AdaptedBase.ground}: the full grounding set for one model call, no
+   * markers, nothing persisted. See `experimental.FactCatalog.groundSnapshot`.
+   */
+  groundSnapshot(query: string, opts?: GroundSnapshotOptions): Promise<GroundingSnapshotItem[]>;
 }
 
 /**
@@ -310,6 +321,13 @@ export interface Ratel {
     transcript: readonly string[],
     opts?: GroundOptions,
   ): Promise<GroundingResult>;
+  /**
+   * ⚠️ Experimental (facts, ADR-0014). Stateless per-call twin of
+   * {@link Ratel.ground}: the full grounding set (always-on plus query-matched
+   * facts) for one model call — no markers, no transcript, nothing persisted.
+   * Render into a per-call message override (e.g. a `prepareStep`) and discard.
+   */
+  groundSnapshot(query: string, opts?: GroundSnapshotOptions): Promise<GroundingSnapshotItem[]>;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
   adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A>;
 }
@@ -449,13 +467,18 @@ export function ratel(config: RatelConfig = {}): Ratel {
       : result;
   }
 
-  // The freshness gate lives on the fact catalog (it owns the fact state); the
-  // core just forwards to it, so `r.ground` and `r.facts.ground` are one path.
+  // Grounding lives on the fact catalog (it owns the fact state); the core just
+  // forwards to it, so `r.ground`/`r.groundSnapshot` and the catalog methods
+  // are one path.
   const ground = (
     query: string,
     transcript: readonly string[],
     opts?: GroundOptions,
   ): Promise<GroundingResult> => facts.ground(query, transcript, opts);
+  const groundSnapshot = (
+    query: string,
+    opts?: GroundSnapshotOptions,
+  ): Promise<GroundingSnapshotItem[]> => facts.groundSnapshot(query, opts);
 
   function adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A> {
     assertAdapter(adapter);
@@ -509,6 +532,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
       skills,
       facts,
       ground,
+      groundSnapshot,
       modelTools() {
         const out: Record<string, unknown> = Object.fromEntries(passthrough);
         for (const [id, tool] of Object.entries(modelTools())) {
@@ -528,7 +552,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     return { ...base, ...ext } as AdaptedRatel<A>;
   }
 
-  return { tools, skills, facts, modelTools, recall, ground, adaptTo };
+  return { tools, skills, facts, modelTools, recall, ground, groundSnapshot, adaptTo };
 }
 
 /** Reject a reserved capability-tool id (the funnel's vocabulary can't be shadowed). */

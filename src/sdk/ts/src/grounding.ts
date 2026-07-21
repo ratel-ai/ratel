@@ -155,10 +155,38 @@ export interface GroundingItem {
   body: string;
   /** The marker to embed alongside the body so later turns dedupe it ({@link groundingMarker}). */
   marker: string;
+  /**
+   * The body and marker pre-joined — render this as the message content and the
+   * dedupe contract is met without remembering to keep the marker. The uniform
+   * render field across both grounding modes (a snapshot item's `text` is just
+   * its body).
+   */
+  text: string;
   /** Why it was injected. */
   reason: InjectionReason;
   /** Which tier it came from. */
   pin: Pin;
+}
+
+/**
+ * One fact riding along in a per-call grounding snapshot
+ * ({@link FactCatalog.groundSnapshot}) — no marker, nothing persisted.
+ */
+export interface GroundingSnapshotItem {
+  /** The fact id. */
+  id: string;
+  /** The fact body. */
+  body: string;
+  /** Render this as the message content — for a snapshot it is just `body`. */
+  text: string;
+  /** Which tier it came from. */
+  pin: Pin;
+}
+
+/** Per-call options for a grounding snapshot. */
+export interface GroundSnapshotOptions {
+  /** Max retrieval-gated facts to consider (capped at 50, default 3). */
+  topK?: number;
 }
 
 /** The outcome of a grounding pass — what to inject and what was left fresh. */

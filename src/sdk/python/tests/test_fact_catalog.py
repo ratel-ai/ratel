@@ -240,3 +240,57 @@ async def test_ground_emits_inject_and_skip_trace_events() -> None:
     types = [e["type"] for e in catalog.drain_trace_events()]
     assert "fact_inject" in types
     assert "fact_inject_skip" in types
+
+
+# --- FactCatalog.ground_snapshot (the stateless per-call mode) ------------
+
+
+async def test_ground_snapshot_returns_pinned_plus_matched_with_no_marker() -> None:
+    catalog = FactCatalog()
+    await catalog.register([address, cancellation])
+    items = await catalog.ground_snapshot("I need to cancel my appointment")
+    ids = [i.id for i in items]
+    assert "shop-address" in ids  # pinned rides along regardless of match
+    assert "cancellation" in ids  # matched by the query
+    assert ids.index("shop-address") < ids.index("cancellation")  # pinned first
+    for item in items:
+        assert item.text == item.body
+        assert "⟦ratel:fact" not in item.text
+
+
+async def test_ground_snapshot_is_stateless_across_calls() -> None:
+    catalog = FactCatalog()
+    await catalog.register([address, cancellation])
+    first = await catalog.ground_snapshot("hi")
+    second = await catalog.ground_snapshot("hi")
+    assert second == first
+    assert "shop-address" in [i.id for i in second]
+
+
+async def test_ground_snapshot_does_not_disturb_ground_freshness_state() -> None:
+    catalog = FactCatalog()
+    await catalog.register(address)
+    await catalog.ground_snapshot("hi")  # snapshots never mark anything injected
+    result = await catalog.ground("hi", [])
+    shop = next(i for i in result.inject if i.id == "shop-address")
+    assert shop.reason == "never"
+
+
+async def test_ground_snapshot_emits_fact_snapshot_trace_events() -> None:
+    catalog = FactCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    await catalog.register([address, cancellation])
+    await catalog.ground_snapshot("cancel my booking")
+    snaps = [e["fact_id"] for e in catalog.drain_trace_events() if e["type"] == "fact_snapshot"]
+    assert "shop-address" in snaps
+    assert "cancellation" in snaps
+
+
+async def test_ground_items_carry_prejoined_text() -> None:
+    catalog = FactCatalog()
+    await catalog.register(address)
+    result = await catalog.ground("hi", [])
+    shop = next(i for i in result.inject if i.id == "shop-address")
+    assert shop.text == f"{shop.body}\n{shop.marker}"
+    # Rendering `text` verbatim satisfies the dedupe contract:
+    second = await catalog.ground("hi", [shop.text])
+    assert "shop-address" in second.skipped

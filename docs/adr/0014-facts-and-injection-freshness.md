@@ -89,6 +89,27 @@ the window, not elapsed minutes. The `stale` (distance-based) re-inject defaults
 an append-only transcript cannot remove the old buried copy, so a stale re-inject would duplicate
 rather than move it; presence-based re-injection (`never`/`evicted`/`mutated`) is always safe.
 
+### Two injection modes: `ground` vs `groundSnapshot`
+
+Grounding ships in two modes, deliberately mirroring the recall idiom's persist-vs-per-call split
+(`appendRecall` vs `prepareStep` in the AI SDK adapter) so the SDK has one injection philosophy,
+not two:
+
+- **`ground(query, transcript)`** — the *persist* mode above: facts enter the durable history, the
+  marker + freshness gate dedupe across turns, and the stable prefix accrues prompt-cache credit.
+  For long-lived multi-turn agents that store their messages.
+- **`groundSnapshot(query)`** — the *per-call* mode: the full grounding set (always-on plus
+  query-ranked facts) recomputed fresh each call, **no markers, no state, no transcript argument** —
+  rendered into a per-call message override and discarded with it. For one-shot or stateless calls,
+  or hosts that keep synthetic content out of their stored history. Traced per fact as
+  `fact_snapshot`. The marker machinery exists *only because* the persist mode saves into the
+  transcript; the snapshot mode needs none of it.
+
+Both modes assemble candidates identically (one shared code path), so they can never disagree on
+*which* facts apply — only on how the injection lives. Every item carries a pre-joined `text` field
+(persist: body + marker; snapshot: body) so rendering is uniform and the marker can't be dropped by
+accident.
+
 ## Consequences
 
 - **The always-on tier becomes cache-friendly, not cache-hostile.** Skipping re-injection keeps

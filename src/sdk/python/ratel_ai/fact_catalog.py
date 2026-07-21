@@ -41,6 +41,7 @@ from .grounding import (
     FactCandidate,
     GroundingItem,
     GroundingResult,
+    GroundingSnapshotItem,
     InjectionPolicy,
     InjectionReason,
     PinTier,
@@ -601,16 +602,7 @@ class FactCatalog:
         Returns:
             The facts to inject (always-on first) and the ids left fresh.
         """
-        k = _clamp_facts_top_k(top_k if top_k is not None else self._facts_top_k)
-        pinned = self.pinned()
-        pinned_ids = {fact.id for fact in pinned}
-        hits = await self.search_async(query, k, "direct")
-        retrieved = [
-            fact
-            for hit in hits
-            if (fact := self._facts.get(hit.fact_id)) is not None and fact.id not in pinned_ids
-        ]
-        candidates = pinned + retrieved
+        candidates = await self._candidate_facts(query, top_k)
 
         window = freshness_window if freshness_window is not None else self._freshness_window
         policy = None if window is None else InjectionPolicy(window)
@@ -630,11 +622,13 @@ class FactCatalog:
                 continue
             if decision.inject:
                 tier: PinTier = "always" if fact.pin == Pin.ALWAYS else "retrieved"
+                marker = grounding_marker(fact.id, fact_hash(fact.body))
                 inject.append(
                     GroundingItem(
                         id=fact.id,
                         body=fact.body,
-                        marker=grounding_marker(fact.id, fact_hash(fact.body)),
+                        marker=marker,
+                        text=f"{fact.body}\n{marker}",
                         reason=cast(InjectionReason, decision.reason),
                         pin=tier,
                     )
@@ -648,6 +642,37 @@ class FactCatalog:
                 self.record_event({"type": "fact_inject_skip", "fact_id": fact.id})
         return GroundingResult(inject=inject, skipped=skipped)
 
+    async def ground_snapshot(
+        self, query: str, top_k: int | None = None
+    ) -> list[GroundingSnapshotItem]:
+        """Return the full grounding set for one model call — the stateless mode.
+
+        The per-call twin of `ground`: always-on facts plus the retrieval-gated
+        facts `query` ranks in, recomputed fresh every call. No markers, no
+        freshness gate, no transcript, nothing persisted — render the items into
+        the call's message override and discard them with it. The persist/per-call
+        split mirrors the recall idiom's ``appendRecall``-vs-``prepareStep``: use
+        this for one-shot or stateless calls (or to keep grounding out of your
+        stored history), and `ground` for a long-lived transcript where the
+        freshness gate earns its keep. Records a ``fact_snapshot`` event per fact.
+
+        Args:
+            query: the current turn's text, for the retrieval-gated tier.
+            top_k: max retrieval-gated facts to consider (defaults to the
+                catalog's `facts_top_k`, then 3).
+
+        Returns:
+            The snapshot items (always-on first); each ``text`` is just the body.
+        """
+        items: list[GroundingSnapshotItem] = []
+        for fact in await self._candidate_facts(query, top_k):
+            tier: PinTier = "always" if fact.pin == Pin.ALWAYS else "retrieved"
+            items.append(
+                GroundingSnapshotItem(id=fact.id, body=fact.body, text=fact.body, pin=tier)
+            )
+            self.record_event({"type": "fact_snapshot", "fact_id": fact.id})
+        return items
+
     def pinned(self) -> list[Fact]:
         """Return the always-on facts (`pin == "always"`), in registration order.
 
@@ -655,6 +680,24 @@ class FactCatalog:
         freshness gate still decides whether each actually needs (re-)injecting.
         """
         return [fact for fact in self._facts.values() if fact.pin == Pin.ALWAYS]
+
+    async def _candidate_facts(self, query: str, top_k: int | None) -> list[Fact]:
+        """Assemble a grounding pass's candidates: pinned plus query-ranked facts.
+
+        Deduped by id (a pinned fact that also ranks appears once, as pinned).
+        Shared by `ground` and `ground_snapshot` so the two modes can never
+        disagree on the set.
+        """
+        k = _clamp_facts_top_k(top_k if top_k is not None else self._facts_top_k)
+        pinned = self.pinned()
+        pinned_ids = {fact.id for fact in pinned}
+        hits = await self.search_async(query, k, "direct")
+        retrieved = [
+            fact
+            for hit in hits
+            if (fact := self._facts.get(hit.fact_id)) is not None and fact.id not in pinned_ids
+        ]
+        return pinned + retrieved
 
     def has(self, fact_id: str) -> bool:
         """Return whether a fact with this id is registered."""

@@ -187,10 +187,12 @@ def test_e2e_reinjects_after_compaction_drops_marker() -> None:
 def test_grounding_item_and_result_carry_marker_and_reason() -> None:
     # The structured items a grounding pass would return: body + marker + reason.
     body = "12 Baker Street, London."
+    marker = grounding_marker("shop-address", fact_hash(body))
     item = GroundingItem(
         id="shop-address",
         body=body,
-        marker=grounding_marker("shop-address", fact_hash(body)),
+        marker=marker,
+        text=f"{body}\n{marker}",
         reason="never",
         pin="always",
     )

@@ -8,7 +8,9 @@ import {
   factHash,
   type GroundingItem,
   type GroundingResult,
+  type GroundingSnapshotItem,
   type GroundOptions,
+  type GroundSnapshotOptions,
   groundingMarker,
   type InjectionReason,
   Pin,
@@ -167,17 +169,7 @@ export class FactCatalog {
     transcript: readonly string[],
     opts?: GroundOptions,
   ): Promise<GroundingResult> {
-    // Candidates: always-on facts (pinned) plus the retrieval-gated facts the
-    // query ranks in, deduped by id — a pinned fact that also ranks is injected
-    // once, as pinned.
-    const k = clampTopK(opts?.topK ?? this.factsTopK, DEFAULT_FACTS_TOP_K);
-    const pinned = this.pinned();
-    const pinnedIds = new Set(pinned.map((f) => f.id));
-    const retrievedHits = await this.searchAsync(query, k, "direct");
-    const retrieved = retrievedHits
-      .map((h) => this.facts.get(h.factId))
-      .filter((f): f is Fact => f !== undefined && !pinnedIds.has(f.id));
-    const candidateFacts = [...pinned, ...retrieved];
+    const candidateFacts = await this.candidateFacts(query, opts?.topK);
 
     const window = opts?.freshnessWindow ?? this.freshnessWindow;
     const decisions = planInjection({
@@ -195,10 +187,12 @@ export class FactCatalog {
       if (!fact) continue; // unreachable: decisions mirror candidateFacts
       if (decision.inject) {
         const body = fact.body ?? "";
+        const marker = groundingMarker(fact.id, factHash(body));
         inject.push({
           id: fact.id,
           body,
-          marker: groundingMarker(fact.id, factHash(body)),
+          marker,
+          text: `${body}\n${marker}`,
           reason: decision.reason as InjectionReason,
           pin: fact.pin === Pin.Always ? Pin.Always : Pin.Retrieved,
         });
@@ -217,6 +211,43 @@ export class FactCatalog {
   }
 
   /**
+   * The stateless twin of {@link FactCatalog.ground}: the full grounding set
+   * for **one model call** — always-on facts plus the retrieval-gated facts
+   * `query` ranks in — recomputed fresh every call. No markers, no freshness
+   * gate, no transcript, nothing persisted: render the items into the call's
+   * message override (e.g. the AI SDK's `prepareStep`) and discard them with
+   * it. The per-call/persist split mirrors the recall idiom's
+   * `prepareStep`-vs-`appendRecall`: use this for one-shot or stateless calls
+   * (or when you'd rather not store grounding in your history), and `ground`
+   * for a long-lived transcript where the freshness gate earns its keep.
+   * Records a `fact_snapshot` event per fact.
+   *
+   * @param query - The current turn's text, for the retrieval-gated tier.
+   * @param opts - Per-call top-K override.
+   * @returns The snapshot items (always-on first); each `text` is just the body.
+   */
+  async groundSnapshot(
+    query: string,
+    opts?: GroundSnapshotOptions,
+  ): Promise<GroundingSnapshotItem[]> {
+    const items = (await this.candidateFacts(query, opts?.topK)).map(
+      (fact): GroundingSnapshotItem => {
+        const body = fact.body ?? "";
+        return {
+          id: fact.id,
+          body,
+          text: body,
+          pin: fact.pin === Pin.Always ? Pin.Always : Pin.Retrieved,
+        };
+      },
+    );
+    for (const item of items) {
+      this.registry.recordEvent({ type: "fact_snapshot", fact_id: item.id });
+    }
+    return items;
+  }
+
+  /**
    * The always-on facts (`pin: "always"`), in registration order — the push
    * tier {@link FactCatalog.ground} considers every turn, bypassing ranking. The
    * freshness gate still decides whether each actually needs (re-)injecting.
@@ -225,6 +256,21 @@ export class FactCatalog {
    */
   pinned(): Fact[] {
     return [...this.facts.values()].filter((f) => f.pin === Pin.Always);
+  }
+
+  // Candidates for a grounding pass: always-on facts (pinned) plus the
+  // retrieval-gated facts the query ranks in, deduped by id — a pinned fact
+  // that also ranks appears once, as pinned. Shared by `ground` and
+  // `groundSnapshot` so the two modes can never disagree on the set.
+  private async candidateFacts(query: string, topK: number | undefined): Promise<Fact[]> {
+    const k = clampTopK(topK ?? this.factsTopK, DEFAULT_FACTS_TOP_K);
+    const pinned = this.pinned();
+    const pinnedIds = new Set(pinned.map((f) => f.id));
+    const retrievedHits = await this.searchAsync(query, k, "direct");
+    const retrieved = retrievedHits
+      .map((h) => this.facts.get(h.factId))
+      .filter((f): f is Fact => f !== undefined && !pinnedIds.has(f.id));
+    return [...pinned, ...retrieved];
   }
 
   /**
