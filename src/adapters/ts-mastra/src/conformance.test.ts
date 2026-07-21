@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { MastraDBMessage } from "@mastra/core/agent";
-import { createTool, noopObserve, Tool } from "@mastra/core/tools";
+import { createTool, Tool } from "@mastra/core/tools";
 import { SEARCH_CAPABILITIES_ID } from "@ratel-ai/sdk";
 import {
   type AdapterConformanceOptions,
@@ -10,6 +10,15 @@ import {
 } from "@ratel-ai/sdk/testkit";
 import { describe, it } from "vitest";
 import { type MastraTool, mastra } from "./mastra.js";
+
+const TEST_CONTEXT = {
+  observe: {
+    async span<T>(_name: string, fn: () => T | Promise<T>): Promise<T> {
+      return fn();
+    },
+    log(): void {},
+  },
+};
 
 // The framework hooks that teach the shared conformance battery how to build
 // Mastra tools, invoke exposed ones, and read back the recall message. Kept
@@ -33,7 +42,7 @@ function mastraConformanceOptions(): AdapterConformanceOptions<MastraTool, Mastr
       const execute = tool.execute as (input: unknown, context: unknown) => unknown;
       // Exposed tools ignore the context; fabricate the minimal one so the call
       // is shaped like a real Mastra invocation.
-      return execute(args, { observe: noopObserve });
+      return execute(args, TEST_CONTEXT);
     },
     validateRecallPair,
     validateExposedTool,

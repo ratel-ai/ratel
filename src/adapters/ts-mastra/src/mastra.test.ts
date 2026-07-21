@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from "@mastra/core/agent";
-import { createTool, isValidationError, noopObserve, Tool } from "@mastra/core/tools";
+import { createTool, Tool } from "@mastra/core/tools";
 import {
   GET_SKILL_CONTENT_ID,
   INVOKE_TOOL_ID,
@@ -27,7 +27,14 @@ function userMsg(...texts: string[]): MastraDBMessage {
 // Invoke an exposed Mastra tool with the fabricated minimal context.
 function callExposed(tool: Tool, args: Record<string, unknown>): Promise<unknown> {
   const execute = tool.execute as (input: unknown, context: unknown) => Promise<unknown>;
-  return execute(args, { observe: noopObserve });
+  return execute(args, {
+    observe: {
+      async span<T>(_name: string, fn: () => T | Promise<T>): Promise<T> {
+        return fn();
+      },
+      log(): void {},
+    },
+  });
 }
 
 function countHits(result: SearchCapabilitiesResult): number {
@@ -137,6 +144,19 @@ describe("ingest codec", () => {
     await expect(reg.execute({})).rejects.toThrow();
   });
 
+  it("does not mistake an ordinary error-shaped tool result for a ValidationError", async () => {
+    const domainFailure = { error: true, message: "card declined" };
+    const charge = createTool({
+      id: "charge",
+      description: "Charge a card",
+      execute: async () => domainFailure,
+    });
+    const reg = mastra().ingest("charge", charge);
+    if (reg === "passthrough") throw new Error("expected an executable registration");
+
+    await expect(reg.execute({})).resolves.toEqual(domainFailure);
+  });
+
   it("fabricates a minimal Mastra context when the catalog runs the tool", async () => {
     let seenContext: Record<string, unknown> | undefined;
     const view = ratel().adaptTo(mastra());
@@ -219,7 +239,6 @@ describe("expose codec", () => {
       query: "grep files",
       topKTools: 999,
     })) as SearchCapabilitiesResult;
-    expect(isValidationError(high)).toBe(false);
     expect(countHits(high)).toBeGreaterThan(5);
     expect(countHits(high)).toBeLessThanOrEqual(50);
     // A negative value is accepted too and falls back to the default inside the core.
@@ -227,7 +246,6 @@ describe("expose codec", () => {
       query: "grep files",
       topKTools: -1,
     })) as SearchCapabilitiesResult;
-    expect(isValidationError(low)).toBe(false);
     expect(countHits(low)).toBeLessThanOrEqual(5);
   });
 
