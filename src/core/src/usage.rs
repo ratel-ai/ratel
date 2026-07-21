@@ -159,13 +159,14 @@ impl PendingQuery {
         }
     }
 
-    /// The stashed vector, but **only if it belongs to `query`**.
+    /// The stashed vector, but **only if it belongs to `query`**. Reads without
+    /// clearing: several invokes may follow one search, and each needs to see it.
     ///
     /// Sessions share a graph, so a concurrent search can overwrite the slot
     /// between one session's search and its invoke. Keying by the query text
     /// means a clobbered slot degrades to lexical clustering rather than
     /// attaching one session's embedding to another's question.
-    fn take_for(&self, query: &str) -> Option<Vec<f32>> {
+    fn vector_for(&self, query: &str) -> Option<Vec<f32>> {
         let slot = self.0.lock().ok()?;
         match slot.as_ref() {
             Some((q, v)) if q == query => Some(v.clone()),
@@ -398,23 +399,30 @@ impl IntentGraph {
     /// 1. finds the cluster this query belongs to — by centroid when the search
     ///    path stashed an embedding, else by token overlap — or **seeds a new
     ///    one**;
-    /// 2. adds the query as a member, bumps `support`, and adds `1.0` to the
-    ///    invoked capability's edge;
+    /// 2. adds the query as a member and adds `1.0` to the invoked capability's
+    ///    edge, bumping `support` only when this is the search's **first**
+    ///    confirming invoke;
     /// 3. recomputes the cluster's display label and terms.
     ///
     /// `ts_ms` records how current the graph is; it never affects ranking.
     /// Traces are loosely ordered (ADR-0007), so a late-arriving older event
     /// leaves the recorded high-water mark alone.
+    /// `first_confirmation` distinguishes *this search was acted on* from
+    /// *another capability was used for the same search*. Both add an edge; only
+    /// the former is an observation, so only the former raises `support`. The
+    /// caller owns that distinction because it is the one holding the pending
+    /// search — see [`crate::UsageLearner`].
     pub(crate) fn observe(
         &mut self,
         query: &str,
         kind: Capability,
         capability_id: &str,
         ts_ms: u64,
+        first_confirmation: bool,
     ) {
         // A query vector is available only when the search path was
         // semantic/hybrid AND the slot still belongs to this query.
-        let vector = self.pending.take_for(query);
+        let vector = self.pending.vector_for(query);
         if vector.is_none() && tokenize(query).is_empty() {
             return; // no words to cluster on and no embedding either
         }
@@ -443,14 +451,24 @@ impl IntentGraph {
         {
             let it = &mut self.intents[idx];
             // Members are the match key, so a repeated phrasing must not inflate
-            // the token bag — dedupe. `support` still counts every observation.
+            // the token bag — dedupe. The centroid is the mean of the DISTINCT
+            // member texts, so it moves exactly when a new member arrives: the
+            // same condition, and what stops a second invoke from folding the
+            // same query vector in twice.
             if !it.members.iter().any(|m| m == query) {
                 it.members.push(query.to_string());
                 it.absorb_tokens(query);
+                if let Some(v) = vector.as_deref() {
+                    it.absorb_vector(v);
+                }
             }
-            it.support = it.support.saturating_add(1);
-            if let Some(v) = vector.as_deref() {
-                it.absorb_vector(v);
+            // `|| support == 0` is load-bearing: a cluster moves as it learns, so
+            // a later invoke from the same search can match a cluster the first
+            // one did not — and a freshly seeded cluster must still start at 1.
+            // `protocol/v1` requires support >= 1, and a zero-support cluster
+            // would contribute a weightless arm.
+            if first_confirmation || it.support == 0 {
+                it.support = it.support.saturating_add(1);
             }
             let edges = match kind {
                 Capability::Tool => &mut it.tools,
@@ -1060,6 +1078,7 @@ mod tests {
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
 
         assert_eq!(g.len(), 1);
@@ -1078,12 +1097,14 @@ mod tests {
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
         g.observe(
             "is the build broken now",
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
 
         assert_eq!(g.len(), 1, "should not have seeded a second cluster");
@@ -1099,12 +1120,14 @@ mod tests {
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
         g.observe(
             "rotate the signing key",
             Capability::Tool,
             "vault_rotate",
             T0,
+            true,
         );
 
         assert_eq!(g.len(), 2);
@@ -1123,6 +1146,7 @@ mod tests {
                 Capability::Tool,
                 "gh_run_list",
                 T0,
+                true,
             );
         }
         assert_eq!(g.intents[0].members.len(), 1);
@@ -1142,8 +1166,15 @@ mod tests {
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
-        g.observe("did the build pass", Capability::Tool, "gh_run_list", T0);
+        g.observe(
+            "did the build pass",
+            Capability::Tool,
+            "gh_run_list",
+            T0,
+            true,
+        );
 
         let arm = g
             .arm("is the build ok", None, Capability::Tool, &all_known)
@@ -1163,6 +1194,7 @@ mod tests {
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
 
         let arm = g.arm(
@@ -1183,6 +1215,7 @@ mod tests {
                 Capability::Tool,
                 "chosen_often",
                 T0,
+                true,
             );
         }
         g.observe(
@@ -1190,6 +1223,7 @@ mod tests {
             Capability::Tool,
             "chosen_once",
             T0,
+            true,
         );
 
         let arm = g
@@ -1208,8 +1242,8 @@ mod tests {
         // Provenance only — it says how current the graph is. Traces are loosely
         // ordered (ADR-0007), so a late-arriving older event must not drag it back.
         let mut g = IntentGraph::empty();
-        g.observe("build broken", Capability::Tool, "a", T0 + 10);
-        g.observe("build broken", Capability::Tool, "b", T0);
+        g.observe("build broken", Capability::Tool, "a", T0 + 10, true);
+        g.observe("build broken", Capability::Tool, "b", T0, true);
         assert_eq!(g.built_from_ts, T0 + 10);
     }
 
@@ -1219,8 +1253,8 @@ mod tests {
         // matching a cluster that plainly covers it. Silent, and invisible to
         // every other test — so pin it directly.
         let mut g = IntentGraph::empty();
-        g.observe("why is the build broken", Capability::Tool, "t", T0);
-        g.observe("the pipeline is broken", Capability::Tool, "t", T0);
+        g.observe("why is the build broken", Capability::Tool, "t", T0, true);
+        g.observe("the pipeline is broken", Capability::Tool, "t", T0, true);
 
         let it = &g.intents[0];
         let fresh: std::collections::HashSet<String> =
@@ -1238,6 +1272,7 @@ mod tests {
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
         let back = IntentGraph::from_json(&serde_json::to_string(&g).unwrap()).unwrap();
 
@@ -1253,14 +1288,63 @@ mod tests {
         );
     }
 
+    #[test]
+    fn the_centroid_is_folded_once_per_distinct_member() {
+        // The centroid is the mean of the cluster's DISTINCT member texts, so
+        // extra invokes from one search must not fold that query's vector again.
+        //
+        // Two members are essential here: with a single member the running mean
+        // is `c*(n-1) + v = v`, so re-folding is idempotent and a one-member
+        // fixture passes even when the guard is removed.
+        let v1 = [1.0f32, 0.0, 0.0];
+        let v2 = [0.0f32, 1.0, 0.0];
+        let build = |extra: usize| {
+            let mut g = IntentGraph::empty();
+            g.note_query_vector("build broken", &v1);
+            g.observe("build broken", Capability::Tool, "a", T0, true);
+            g.note_query_vector("build broken again", &v2);
+            g.observe("build broken again", Capability::Tool, "b", T0, true);
+            for i in 0..extra {
+                g.observe(
+                    "build broken again",
+                    Capability::Tool,
+                    &format!("x{i}"),
+                    T0,
+                    false,
+                );
+            }
+            g.intents[0].centroid.clone().unwrap()
+        };
+
+        let once = build(0);
+        let with_extra_invokes = build(3);
+        for (a, b) in once.iter().zip(&with_extra_invokes) {
+            assert!(
+                (a - b).abs() < 1e-6,
+                "extra invokes moved the centroid: {once:?} vs {with_extra_invokes:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_later_invoke_landing_elsewhere_still_has_support() {
+        // A cluster moves as it learns, so a second invoke from the same search
+        // can match a DIFFERENT cluster than the first did. That cluster is new,
+        // so it must still start at 1 — `protocol/v1` requires support >= 1, and
+        // a zero-support cluster would contribute a weightless arm.
+        let mut g = IntentGraph::empty();
+        g.observe("why is the build broken", Capability::Tool, "a", T0, false);
+        assert_eq!(g.intents[0].support, 1);
+    }
+
     // ---- labels ------------------------------------------------------------
 
     #[test]
     fn the_label_is_always_one_of_the_members() {
         // Counted from the data, so it cannot describe the cluster wrongly.
         let mut g = IntentGraph::empty();
-        g.observe("why is the build broken", Capability::Tool, "t", T0);
-        g.observe("is the build broken now", Capability::Tool, "t", T0);
+        g.observe("why is the build broken", Capability::Tool, "t", T0, true);
+        g.observe("is the build broken now", Capability::Tool, "t", T0, true);
 
         let it = &g.labeled()[0];
         assert!(
@@ -1273,9 +1357,9 @@ mod tests {
     #[test]
     fn terms_distinguish_a_cluster_from_its_neighbours() {
         let mut g = IntentGraph::empty();
-        g.observe("why is the build broken", Capability::Tool, "t", T0);
-        g.observe("the build is broken again", Capability::Tool, "t", T0);
-        g.observe("rotate the signing key", Capability::Tool, "v", T0);
+        g.observe("why is the build broken", Capability::Tool, "t", T0, true);
+        g.observe("the build is broken again", Capability::Tool, "t", T0, true);
+        g.observe("rotate the signing key", Capability::Tool, "v", T0, true);
 
         let build = &g.labeled()[0];
         assert!(
@@ -1293,14 +1377,20 @@ mod tests {
         // graph grows. This used to be computed inside `observe`, which made every
         // label describe a graph that no longer existed.
         let mut g = IntentGraph::empty();
-        g.observe("why is the build broken", Capability::Tool, "t", T0);
-        g.observe("the build broken again", Capability::Tool, "t", T0);
+        g.observe("why is the build broken", Capability::Tool, "t", T0, true);
+        g.observe("the build broken again", Capability::Tool, "t", T0, true);
         let alone = g.labeled()[0].terms.clone();
 
         // A second cluster that also uses "again" makes that term less
         // distinguishing for the first — which must be reflected even though the
         // first cluster was never touched again.
-        g.observe("tail the service log again", Capability::Tool, "u", T0);
+        g.observe(
+            "tail the service log again",
+            Capability::Tool,
+            "u",
+            T0,
+            true,
+        );
         let with_neighbour = g.labeled()[0].terms.clone();
 
         let rank = |terms: &[String], t: &str| terms.iter().position(|x| x == t);
@@ -1315,7 +1405,7 @@ mod tests {
         // Nothing writes `label` during learning; it is materialized on read, so
         // two graphs holding the same evidence are equal regardless.
         let mut g = IntentGraph::empty();
-        g.observe("why is the build broken", Capability::Tool, "t", T0);
+        g.observe("why is the build broken", Capability::Tool, "t", T0, true);
         assert!(
             g.intents[0].label.is_empty(),
             "not stored on the write path"
@@ -1326,7 +1416,7 @@ mod tests {
     #[test]
     fn a_stopword_only_query_teaches_nothing() {
         let mut g = IntentGraph::empty();
-        g.observe("is the", Capability::Tool, "t", T0);
+        g.observe("is the", Capability::Tool, "t", T0, true);
         assert!(g.is_empty());
     }
 
@@ -1338,12 +1428,14 @@ mod tests {
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
         g.observe(
             "why is the build broken",
             Capability::Skill,
             "ci-triage",
             T0,
+            true,
         );
 
         assert_eq!(g.len(), 1);
@@ -1359,6 +1451,7 @@ mod tests {
             Capability::Tool,
             "gh_run_list",
             T0,
+            true,
         );
         let back = IntentGraph::from_json(&serde_json::to_string(&g).unwrap()).unwrap();
         assert_eq!(g, back);

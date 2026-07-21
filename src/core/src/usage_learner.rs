@@ -48,6 +48,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::trace::{TraceEnvelope, TraceEvent, TraceSink};
 use crate::usage::{Capability, IntentGraph};
 
+/// The session's most recent search, and whether an invoke has already credited
+/// it. An agent that searches once and uses three tools confirmed three
+/// *capabilities* but asked one *question*, so only the first invoke counts as
+/// an observation.
+struct Pending {
+    query: String,
+    credited: bool,
+}
+
 /// A [`TraceSink`] decorator that grows an [`IntentGraph`] from the events
 /// passing through it, then forwards them unchanged.
 ///
@@ -82,8 +91,8 @@ use crate::usage::{Capability, IntentGraph};
 pub struct UsageLearner {
     inner: Arc<dyn TraceSink>,
     graph: Arc<RwLock<IntentGraph>>,
-    /// The session's most recent search text, awaiting an invoke to confirm it.
-    pending: Mutex<Option<String>>,
+    /// The session's most recent search, awaiting an invoke to confirm it.
+    pending: Mutex<Option<Pending>>,
 }
 
 impl UsageLearner {
@@ -102,9 +111,19 @@ impl UsageLearner {
         self.graph.clone()
     }
 
+    /// Record the search awaiting confirmation, re-arming the credit.
+    ///
+    /// Re-arming unconditionally is safe even though `search_capabilities`
+    /// emits both a `Search` and a `SkillSearch` for one question: both arrive
+    /// *before* any invoke, so only one credit follows either way. Over-counting
+    /// would need a credit, then another search of the same text, then another
+    /// credit — which is two real searches and should count twice.
     fn remember_query(&self, query: &str) {
         if let Ok(mut pending) = self.pending.lock() {
-            *pending = Some(query.to_string());
+            *pending = Some(Pending {
+                query: query.to_string(),
+                credited: false,
+            });
         }
     }
 
@@ -114,15 +133,20 @@ impl UsageLearner {
     /// or a missing pending query drops the evidence rather than disturbing the
     /// agent loop (ADR-0007's query-log semantics).
     fn confirm(&self, kind: Capability, capability_id: &str, ts_ms: u64) {
-        let Ok(pending) = self.pending.lock() else {
+        let Ok(mut pending) = self.pending.lock() else {
             return;
         };
-        let Some(query) = pending.clone() else {
+        let Some(p) = pending.as_mut() else {
             return; // an invoke with no search before it proves nothing
         };
+        let query = p.query.clone();
+        // The first invoke after a search is what makes it an observation; the
+        // rest are further capabilities used for the same question.
+        let first_confirmation = !p.credited;
+        p.credited = true;
         drop(pending);
         if let Ok(mut graph) = self.graph.write() {
-            graph.observe(&query, kind, capability_id, ts_ms);
+            graph.observe(&query, kind, capability_id, ts_ms, first_confirmation);
         }
     }
 
@@ -265,17 +289,85 @@ mod tests {
     }
 
     #[test]
-    fn several_invokes_after_one_search_all_count() {
+    fn several_invokes_after_one_search_all_count_as_capabilities() {
         // An agent that searches once and uses three tools genuinely confirmed
-        // three capabilities for that intent.
+        // three capabilities — so three EDGES. But it asked one question, so it
+        // is one observation. This assertion on `support` is what was missing:
+        // the edge count alone passed while support inflated to 3.
         let (l, graph) = learner();
         l.record(search("why is the build broken"));
         l.record(invoke("gh_run_list"));
         l.record(invoke("gh_run_view"));
+        l.record(invoke("read_file"));
 
         let g = graph.read().unwrap();
         assert_eq!(g.len(), 1);
-        assert_eq!(g.intents[0].tools.len(), 2);
+        assert_eq!(g.intents[0].tools.len(), 3, "three capabilities were used");
+        assert_eq!(g.intents[0].support, 1, "but only one question was asked");
+        for (id, w) in &g.intents[0].tools {
+            assert_eq!(*w, 1.0, "{id} was used once");
+        }
+    }
+
+    #[test]
+    fn the_same_question_asked_twice_counts_twice() {
+        // Two real searches, even with identical text, are two observations.
+        // An earlier attempt to dedupe the capability-search double-emit by
+        // comparing query text broke exactly this — and protected nothing,
+        // since both of those searches arrive before any invoke.
+        let (l, graph) = learner();
+        l.record(search("why is the build broken"));
+        l.record(invoke("gh_run_list"));
+        l.record(search("why is the build broken"));
+        l.record(invoke("gh_run_list"));
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.intents[0].support, 2);
+        assert_eq!(g.intents[0].tools["gh_run_list"], 2.0);
+    }
+
+    #[test]
+    fn separate_searches_each_count() {
+        let (l, graph) = learner();
+        l.record(search("why is the build broken"));
+        l.record(invoke("gh_run_list"));
+        l.record(search("is the build broken again"));
+        l.record(invoke("gh_run_list"));
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.intents[0].support, 2, "two questions, two observations");
+    }
+
+    #[test]
+    fn a_capability_search_across_both_registries_counts_once() {
+        // `search_capabilities` searches the tool and skill catalogs with the
+        // same text, so ONE logical search emits both a Search and a SkillSearch
+        // (src/sdk/ts/src/capabilities.ts). Crediting each would reintroduce the
+        // very inflation this guards against.
+        let (l, graph) = learner();
+        l.record(search("why is the build broken"));
+        l.record(TraceEvent::SkillSearch {
+            query: "why is the build broken".into(),
+            origin: Origin::Agent,
+            top_k: 5,
+            hits: Vec::new(),
+            stages: Vec::new(),
+            took_ms: 0,
+        });
+        l.record(invoke("gh_run_list"));
+        l.record(TraceEvent::SkillInvoke {
+            skill_id: "ci-triage".into(),
+            took_ms: 1,
+        });
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.len(), 1);
+        assert_eq!(
+            g.intents[0].support, 1,
+            "one question, however many catalogs it hit"
+        );
+        assert_eq!(g.intents[0].tools.len(), 1);
+        assert_eq!(g.intents[0].skills.len(), 1);
     }
 
     #[test]

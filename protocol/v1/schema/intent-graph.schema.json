@@ -77,7 +77,7 @@
         "support": {
           "type": "integer",
           "minimum": 1,
-          "description": "Count of confirmed search-then-invoke observations behind this cluster. Consumers scale the ranking arm by this (ADR-0013): one observation nudges, several carry full weight, so a single misclick cannot dictate ranking."
+          "description": "Count of distinct confirmed searches behind this cluster \u2014 searches that were followed by an invoke. One search that invokes several capabilities counts ONCE (it adds several edges but is one observation). Consumers scale the ranking arm by this (ADR-0013): one observation nudges, several carry full weight, so a single misclick cannot dictate ranking. Always >= 1."
         },
         "tools": {
           "$ref": "#/$defs/edges"

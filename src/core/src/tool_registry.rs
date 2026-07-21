@@ -1237,7 +1237,7 @@ mod tests {
         let graph = IntentGraph::empty();
         graph.note_query_vector("some other query", &[1.0, 0.0, 0.0]);
         let mut graph = graph;
-        graph.observe("delete a path", Capability::Tool, "delete_file", 1);
+        graph.observe("delete a path", Capability::Tool, "delete_file", 1, true);
 
         assert_eq!(graph.len(), 1);
         assert!(

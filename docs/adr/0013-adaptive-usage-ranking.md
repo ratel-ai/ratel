@@ -59,6 +59,11 @@ a `label`, `terms`, `support`, and `tools` / `skills` edge maps.
   one observation nudges and three or more get full weight. A batch design could filter
   weak clusters before use; an online one cannot, so the ramp does that job without making
   the user wait.
+- **An observation is a *search* that was acted on, not an invoke.** One search that leads
+  to three tool calls adds three edges but counts once: the agent used three capabilities
+  to answer one question. Counting invokes let a single query reach full weight
+  immediately, defeating the ramp — which is the normal shape of `search_capabilities`,
+  not an edge case.
 - **Edge weights are plain invocation counts.** No recency term: only their *order* within
   a cluster reaches the fusion, so a decay factor applied uniformly to a cluster changed
   nothing that ranking could observe (see Rejected).
