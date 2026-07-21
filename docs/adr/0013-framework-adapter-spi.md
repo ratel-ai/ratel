@@ -74,6 +74,18 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   framework idioms (the AI SDK's mutate-and-append `appendRecall`, Mastra's `recallProcessor`)
   that surface on the adapted object with full framework typing via a `TExt` generic.
 
+- **Live execution context is opaque, call-local, and adapter-tagged.** `Executor` and
+  `CatalogRegistration.execute` accept an optional second `unknown` argument, `ToolCatalog.invoke`
+  an optional third, and `invoke_tool` forwards that value unchanged. A context-aware adapter's
+  `expose` codec wraps the framework's complete live context under a private package-stable tag;
+  its ingested executor unwraps only that tag. A missing or foreign tag takes the framework's
+  context-free fallback, which matters because several framework views may share one catalog.
+  The core never reads, stores, or traces the value: it may contain credentials, cyclic objects,
+  streams, or abort signals. Optional arguments preserve source compatibility and the exact
+  one-argument runtime call for existing executors. Rejected: shared mutable state or async-local
+  bridging (ambient coupling and tenant-leak risk), an untagged raw framework context (cross-view
+  confusion), and a core-owned context union (couples the SDK to every framework).
+
 - **Explicit `adaptTo(adapter())`, not string keys or auto-require.** Types flow through generics
   (`AdaptedRatel<A>` infers the framework's tool/message types and the adapter's helpers), so app
   code needs zero casts. A string key would need a module-augmentation registry plus a dynamic
@@ -124,8 +136,8 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   it takes its own plain error path rather than the adapter hint.) Detection can't tell *installed*
   from *in use* (Mastra depends on `ai` internally), so it never drives behavior — only the hint.
 
-The existing piecemeal API (`ToolCatalog`, the capability-tool builders) is unchanged; the factory
-is additive.
+The existing piecemeal API remains source-compatible. The factory is additive; the only extension
+to the executor path is the optional opaque context argument described above.
 
 ## Consequences
 

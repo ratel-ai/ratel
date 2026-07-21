@@ -40,8 +40,8 @@ function mastraConformanceOptions(): AdapterConformanceOptions<MastraTool, Mastr
       createTool({ id: "conformance_passthrough", description: spec.description }),
     callExposedTool: (tool, args) => {
       const execute = tool.execute as (input: unknown, context: unknown) => unknown;
-      // Exposed tools ignore the context; fabricate the minimal one so the call
-      // is shaped like a real Mastra invocation.
+      // Supply the minimal live context shape; the exposed capability preserves
+      // it for any catalog tool reached through invoke_tool.
       return execute(args, TEST_CONTEXT);
     },
     validateRecallPair,
