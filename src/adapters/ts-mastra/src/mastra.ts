@@ -1,6 +1,6 @@
 import type { MastraDBMessage, ToolsInput } from "@mastra/core/agent";
 import type { InputProcessor, ProcessInputArgs } from "@mastra/core/processors";
-import { createTool, isValidationError, noopObserve } from "@mastra/core/tools";
+import { createTool } from "@mastra/core/tools";
 import type {
   CatalogRegistration,
   JSONSchema7,
@@ -10,6 +10,11 @@ import type {
 } from "@ratel-ai/sdk";
 import { GET_SKILL_CONTENT_ID, INVOKE_TOOL_ID, SEARCH_CAPABILITIES_ID } from "@ratel-ai/sdk";
 import { z } from "zod";
+
+interface MastraValidationError {
+  error: true;
+  validationErrors: unknown;
+}
 
 /**
  * A Mastra tool — the per-entry type of Mastra's `ToolsInput` (a `createTool`
@@ -42,7 +47,14 @@ const RECALL_PROCESSOR_ID = "ratel-recall";
 // Mastra tool with just its args: `observe` is the only required field of
 // `ToolExecutionContext` (the createTool wrapper fills `requestContext` itself).
 // A tool reading `mastra` / `agent` / `workflow` / `abortSignal` sees `undefined`.
-const CATALOG_CONTEXT = { observe: noopObserve };
+const CATALOG_CONTEXT = {
+  observe: {
+    async span<T>(_name: string, fn: () => T | Promise<T>): Promise<T> {
+      return fn();
+    },
+    log(): void {},
+  },
+};
 
 /**
  * The Mastra adapter: `ratel(config).adaptTo(mastra())` gives the
@@ -85,10 +97,12 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
           // required requestContext the fabricated context can't satisfy) — it
           // RETURNS a ValidationError. Surface it as a real error so the capability
           // funnel reports a failed call, not a successful one carrying an error blob.
-          if (isValidationError(result)) {
-            throw new Error(
-              (result as { message?: string }).message ?? "Mastra tool input validation failed",
-            );
+          if (isMastraValidationError(result)) {
+            const message =
+              "message" in result && typeof result.message === "string"
+                ? result.message
+                : "Mastra tool input validation failed";
+            throw new Error(message);
           }
           return result;
         },
@@ -155,6 +169,18 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
       };
     },
   };
+}
+
+// Mastra exports this structural guard from 1.18 onward. Keep the equivalent
+// check local so the adapter also works with 1.11–1.17 without version probing.
+function isMastraValidationError(value: unknown): value is MastraValidationError {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "error" in value &&
+    value.error === true &&
+    "validationErrors" in value
+  );
 }
 
 // Hand-written, deliberately permissive zod schemas for the three capability
