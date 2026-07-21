@@ -23,20 +23,10 @@ export type {
   GroundingResult,
   GroundingSnapshotItem,
   GroundOptions,
-  GroundSnapshotOptions,
   InjectionDecision,
   InjectionDecisionReason,
-  InjectionPolicy,
   InjectionReason,
-  LedgerEntry,
   PlanInjectionInput,
 } from "./grounding.js";
-export {
-  FACT_ID_PATTERN,
-  factHash,
-  groundingMarker,
-  Pin,
-  planInjection,
-  readGroundingLedger,
-} from "./grounding.js";
+export { FACT_ID_PATTERN, Pin, planInjection } from "./grounding.js";
 export { FactRegistry } from "./registry.js";

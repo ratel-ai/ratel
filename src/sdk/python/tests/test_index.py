@@ -49,20 +49,15 @@ _EXPERIMENTAL_SURFACE = {
     "Fact",
     "Pin",
     "FactCandidate",
-    "LedgerEntry",
     "InjectionDecision",
     "InjectionDecisionReason",
-    "InjectionPolicy",
     "InjectionReason",
     "GroundingItem",
     "GroundingResult",
-    "GroundOptions",
+    "GroundingSnapshotItem",
     "PinTier",
     "FACT_ID_PATTERN",
-    "fact_hash",
-    "grounding_marker",
     "plan_injection",
-    "read_grounding_ledger",
 }
 
 

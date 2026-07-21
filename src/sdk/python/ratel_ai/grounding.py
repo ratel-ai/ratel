@@ -1,60 +1,57 @@
 """The re-injection freshness gate for facts — the Python port of `grounding.ts`.
 
 This is the pure decision layer behind "inject a fact only if it isn't already
-fresh in the context." Once a fact's body is injected as a transcript message it
+in the context." Once a fact's body is injected as a transcript message it
 *stays* in the history on every later turn, so re-appending it each turn would
-duplicate tokens and confuse the model. This module derives what is already
-present from the transcript itself — no conversation store, no persistence — and
-decides, per fact, whether to (re-)inject. The transcript *is* the ledger:
-compaction removing a marker naturally re-arms injection, and a changed body is
-caught by a content hash embedded in the marker.
+duplicate tokens and confuse the model. This module decides, per fact, whether
+to (re-)inject — and the signal is **the fact's own body text**: a fact is
+"present" when its body appears verbatim anywhere in the transcript. No markers,
+no tags, no extra tokens — the injected content is its own record. Compaction
+dropping the text naturally re-arms injection, and an edited body (no longer
+found verbatim) naturally re-injects the new version.
 
-Everything here is a pure function of its inputs (framework-agnostic): a caller
-extracts per-message text and renders the chosen injections; this module never
-touches a message shape. It has no skill twin — grounding is fact-specific — but
-it is the push-path counterpart to the on-demand skill load path.
+The one contract this puts on hosts: render ``body`` **verbatim** in the message
+you append (decorate around it, don't rewrite it) — otherwise the gate can't see
+it next turn and will re-inject.
+
+Everything here is a pure function of its inputs (framework-agnostic): the
+caller extracts per-message text and renders the chosen injections; this module
+never touches a message shape.
 """
 
 from __future__ import annotations
 
-import math
 import re
-from collections.abc import Sequence, Set
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
 __all__ = [
     "FACT_ID_PATTERN",
     "FactCandidate",
-    "GroundOptions",
     "GroundingItem",
     "GroundingResult",
     "GroundingSnapshotItem",
     "InjectionDecision",
     "InjectionDecisionReason",
-    "InjectionPolicy",
     "InjectionReason",
-    "LedgerEntry",
     "PinTier",
-    "fact_hash",
-    "grounding_marker",
     "plan_injection",
-    "read_grounding_ledger",
 ]
 
-InjectionReason = Literal["never", "evicted", "mutated", "stale"]
+InjectionReason = Literal["never", "evicted", "mutated"]
 """Why a fact was chosen for (re-)injection. Mirrors the core `FactInjectReason`.
 
 - ``never`` — not present in the transcript and never injected this session.
-- ``evicted`` — injected earlier but its marker is gone now (trimmed / compacted
+- ``evicted`` — injected earlier but its body is gone now (trimmed / compacted
   out of the window).
-- ``mutated`` — present, but the registered body changed since it was injected.
-- ``stale`` — present and unchanged, but buried past the freshness window.
+- ``mutated`` — the registered body changed since it was injected (the current
+  body is absent and differs from the one last injected).
 """
 
-InjectionDecisionReason = Literal["never", "evicted", "mutated", "stale", "fresh"]
-"""An `InjectionReason`, plus ``fresh`` — a fact left alone because it is still
-in context."""
+InjectionDecisionReason = Literal["never", "evicted", "mutated", "fresh"]
+"""An `InjectionReason`, plus ``fresh`` — a fact left alone because its body is
+still in context."""
 
 PinTier = Literal["always", "retrieved"]
 """The two tiers a fact's `pin` splits into — always-on vs retrieval-gated."""
@@ -64,36 +61,10 @@ PinTier = Literal["always", "retrieved"]
 class FactCandidate:
     """A fact under consideration for injection this turn."""
 
-    # The fact id — matched against the transcript ledger and stamped in the marker.
+    # The fact id — keys the session's injected-body memory and the trace events.
     id: str
-    # Content hash of the fact's current body (`fact_hash`); detects mutation.
-    hash: str
-
-
-@dataclass(frozen=True)
-class LedgerEntry:
-    """One already-injected fact recovered from the transcript by `read_grounding_ledger`."""
-
-    # The injected fact's id.
-    id: str
-    # The content hash carried in its marker at injection time.
-    hash: str
-    # How far back the marker sits, in messages from the end of the transcript
-    # (`0` = the most recent message). A positional proxy for how fresh the fact
-    # still is in the model's attention.
-    distance: int
-
-
-@dataclass(frozen=True)
-class InjectionPolicy:
-    """Tuning for `plan_injection`."""
-
-    # Re-inject a still-present, unchanged fact once its `LedgerEntry.distance`
-    # exceeds this many messages — the lost-in-the-middle re-anchor. Default
-    # `inf` (presence-only: never re-inject on distance alone). Leave it at the
-    # default for append-only transcripts, where a stale re-inject would
-    # duplicate the buried copy rather than move it.
-    freshness_window: float = math.inf
+    # The fact's current body — the text whose presence in the transcript is checked.
+    body: str
 
 
 @dataclass(frozen=True)
@@ -110,60 +81,52 @@ class InjectionDecision:
 
 def plan_injection(
     candidates: Sequence[FactCandidate],
-    ledger: Sequence[LedgerEntry],
-    ever_injected: Set[str] | None = None,
-    policy: InjectionPolicy | None = None,
+    transcript: Sequence[str],
+    previously_injected: Mapping[str, str] | None = None,
 ) -> list[InjectionDecision]:
     """Decide, per candidate, whether to inject its body this turn.
 
     The heart of the freshness gate. Pure and deterministic: the verdicts come
     back in candidate order and depend only on the inputs, so repeated calls in
-    one turn never disagree and the result is cache-key stable.
+    one turn never disagree.
 
-    A candidate is injected when it is absent from the ledger
-    (``never``/``evicted``), present with a different hash (``mutated``), or
-    present and unchanged but past the freshness window (``stale``); otherwise it
-    is skipped as ``fresh``. When the ledger holds more than one marker for an id
-    (an append-only re-injection), the freshest occurrence — the smallest
-    distance — is the one compared.
+    Presence is a literal substring check of the candidate's body against the
+    transcript text — no regex, no parsing, no markers; the fastest and most
+    robust form of the test, and semantically honest: it answers "is this
+    information in the window?" regardless of who put it there. A candidate with
+    an empty body is trivially present (there is nothing to inject) and is
+    skipped as ``fresh``.
 
     Args:
         candidates: the facts to consider this turn (pinned always-on facts plus
             retrieved hits).
-        ledger: the transcript-derived ledger from `read_grounding_ledger`.
-        ever_injected: ids injected earlier this session, if the caller tracks
-            them. Refines the absent case: absent + previously-injected ⇒
-            ``evicted``, absent + unseen ⇒ ``never``. Omit it and every absent
+        transcript: per-message text of the current history, oldest first.
+        previously_injected: the bodies this session already injected, keyed by
+            fact id — the caller's bookkeeping (e.g. `FactCatalog`'s). Refines
+            the absent case: absent + previously-injected-same-body ⇒
+            ``evicted``; absent + previously-injected-different-body ⇒
+            ``mutated``; absent + unseen ⇒ ``never``. Omit it and every absent
             fact reads as ``never``.
-        policy: freshness tuning; see `InjectionPolicy`.
 
     Returns:
         One `InjectionDecision` per candidate, in the same order.
     """
-    window = policy.freshness_window if policy is not None else math.inf
-
-    # Collapse the ledger to the freshest (smallest-distance) marker per id, so a
-    # re-injected fact is judged by its most recent copy, not a buried older one.
-    freshest: dict[str, LedgerEntry] = {}
-    for marker in ledger:
-        prev = freshest.get(marker.id)
-        if prev is None or marker.distance < prev.distance:
-            freshest[marker.id] = marker
+    # One haystack, one substring scan per candidate. Bodies are injected as
+    # (part of) a single message, so a per-message join can't split them.
+    haystack = "\n".join(transcript)
 
     decisions: list[InjectionDecision] = []
     for candidate in candidates:
-        entry = freshest.get(candidate.id)
-        if entry is None:
-            if ever_injected is not None and candidate.id in ever_injected:
-                decisions.append(InjectionDecision(candidate.id, True, "evicted"))
-            else:
-                decisions.append(InjectionDecision(candidate.id, True, "never"))
-        elif entry.hash != candidate.hash:
-            decisions.append(InjectionDecision(candidate.id, True, "mutated"))
-        elif entry.distance > window:
-            decisions.append(InjectionDecision(candidate.id, True, "stale"))
-        else:
+        if candidate.body == "" or candidate.body in haystack:
             decisions.append(InjectionDecision(candidate.id, False, "fresh"))
+            continue
+        last = previously_injected.get(candidate.id) if previously_injected is not None else None
+        if last is None:
+            decisions.append(InjectionDecision(candidate.id, True, "never"))
+        elif last == candidate.body:
+            decisions.append(InjectionDecision(candidate.id, True, "evicted"))
+        else:
+            decisions.append(InjectionDecision(candidate.id, True, "mutated"))
     return decisions
 
 
@@ -173,34 +136,11 @@ class GroundingItem:
 
     # The fact id.
     id: str
-    # The fact body to render into the transcript.
+    # The fact body — render it **verbatim** as (part of) the message content;
+    # its presence in the transcript is what dedupes the next turn.
     body: str
-    # The marker to embed alongside the body so later turns dedupe it (`grounding_marker`).
-    marker: str
-    # The body and marker pre-joined — render this as the message content and the
-    # dedupe contract is met without remembering to keep the marker. The uniform
-    # render field across both grounding modes (a snapshot item's `text` is just
-    # its body).
-    text: str
     # Why it was injected.
     reason: InjectionReason
-    # Which tier it came from.
-    pin: PinTier
-
-
-@dataclass(frozen=True)
-class GroundingSnapshotItem:
-    """One fact riding along in a per-call grounding snapshot.
-
-    Produced by `FactCatalog.ground_snapshot` — no marker, nothing persisted.
-    """
-
-    # The fact id.
-    id: str
-    # The fact body.
-    body: str
-    # Render this as the message content — for a snapshot it is just `body`.
-    text: str
     # Which tier it came from.
     pin: PinTier
 
@@ -211,102 +151,29 @@ class GroundingResult:
 
     # Facts to render into the transcript, always-on tier first.
     inject: list[GroundingItem] = field(default_factory=list)
-    # Ids left alone because they are still fresh in the context (observability).
+    # Ids left alone because their body is still in the context (observability).
     skipped: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
-class GroundOptions:
-    """Per-call options for a grounding pass."""
+class GroundingSnapshotItem:
+    """One fact riding along in a per-call grounding snapshot.
 
-    # Max retrieval-gated facts to consider (capped at 50, default 3).
-    top_k: int | None = None
-    # Override the freshness window for this pass — see `InjectionPolicy.freshness_window`.
-    freshness_window: float | None = None
-
-
-# FNV-1a 64-bit constants, masked to 64 bits each multiply.
-_FNV_OFFSET = 0xCBF29CE484222325
-_FNV_PRIME = 0x100000001B3
-_U64_MASK = 0xFFFFFFFFFFFFFFFF
-
-
-def fact_hash(body: str) -> str:
-    """Return a short, stable content hash of a fact's body.
-
-    The change-detection token embedded in the marker. FNV-1a (64-bit),
-    dependency-free: this is *not* a security boundary, so a fast non-crypto hash
-    is deliberate. A collision merely means a changed fact is not re-injected
-    (stale content, never a safety issue). Only the ``body`` is hashed: the body
-    is what sits in the context, so a change to ranking-only metadata never
-    forces a re-inject. Self-consistent within a runtime — the SDK reads back
-    only markers it wrote — so the algorithm need not match other SDKs
-    byte-for-byte (a code point per Python character here, versus a UTF-16 code
-    unit in the TS SDK).
-
-    Args:
-        body: the fact body that gets injected.
-
-    Returns:
-        A fixed-width 16-char lowercase-hex digest.
+    Produced by `FactCatalog.ground_snapshot` — nothing persisted.
     """
-    digest = _FNV_OFFSET
-    for char in body:
-        digest = ((digest ^ ord(char)) * _FNV_PRIME) & _U64_MASK
-    return format(digest, "016x")
+
+    # The fact id.
+    id: str
+    # The fact body.
+    body: str
+    # Which tier it came from.
+    pin: PinTier
 
 
 FACT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]+$")
-"""The set of fact ids a grounding marker's id may use.
+"""The set of fact ids a catalog accepts.
 
-Enforced at the catalog boundary so a marker is always unambiguously parseable
-(no whitespace or the marker delimiters can appear inside an id).
+Ids ride in trace events and in structured injection payloads (the adapter
+tool-pair shape), so they stay conservative: letters, digits, and ``. _ : -``
+only.
 """
-
-# A single-line, unobtrusive marker the injected message carries so the fact can
-# be recovered from the transcript. `id` is delimiter-free (validated by
-# FACT_ID_PATTERN); `v` is the hex content hash.
-_MARKER_OPEN = "⟦ratel:fact"
-_MARKER_CLOSE = "⟧"
-_MARKER_RE = re.compile(r"⟦ratel:fact id=([A-Za-z0-9._:-]+) v=([0-9a-f]+)⟧")
-
-
-def grounding_marker(id: str, hash: str) -> str:
-    """Render the grounding marker that tags an injected fact so later turns dedupe it.
-
-    Pair it with the fact body in the message the caller appends.
-
-    Args:
-        id: the fact id; must match `FACT_ID_PATTERN`.
-        hash: the body hash from `fact_hash`.
-
-    Returns:
-        The marker string, e.g. ``⟦ratel:fact id=shop-address v=1a2b3c4d5e6f⟧``.
-    """
-    return f"{_MARKER_OPEN} id={id} v={hash}{_MARKER_CLOSE}"
-
-
-def read_grounding_ledger(texts: Sequence[str]) -> list[LedgerEntry]:
-    """Rebuild the injection ledger from a transcript.
-
-    The stateless counterpart to `grounding_marker`. Scans each message's
-    already-extracted text for grounding markers and returns one `LedgerEntry`
-    per id, keeping the freshest (nearest-to-end) occurrence when a fact was
-    injected more than once.
-
-    Args:
-        texts: per-message text in transcript order (oldest first, newest last).
-
-    Returns:
-        The recovered ledger, freshest-per-id; ``[]`` when no markers are present.
-    """
-    freshest: dict[str, LedgerEntry] = {}
-    n = len(texts)
-    for i, text in enumerate(texts):
-        distance = n - 1 - i
-        for match in _MARKER_RE.finditer(text):
-            fact_id, content_hash = match.group(1), match.group(2)
-            prev = freshest.get(fact_id)
-            if prev is None or distance < prev.distance:
-                freshest[fact_id] = LedgerEntry(fact_id, content_hash, distance)
-    return list(freshest.values())

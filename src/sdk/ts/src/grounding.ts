@@ -1,17 +1,22 @@
 /**
  * The re-injection freshness gate for facts — the pure decision layer behind
- * "inject a fact only if it isn't already fresh in the context."
+ * "inject a fact only if it isn't already in the context."
  *
  * Once a fact's body is injected as a transcript message it *stays* in the
  * history on every later turn, so re-appending it each turn would duplicate
- * tokens and confuse the model. This module derives what is already present
- * from the transcript itself — no conversation store, no persistence — and
- * decides, per fact, whether to (re-)inject. The transcript *is* the ledger:
- * compaction removing a marker naturally re-arms injection, and a changed body
- * is caught by a content hash embedded in the marker.
+ * tokens and confuse the model. This module decides, per fact, whether to
+ * (re-)inject — and the signal is **the fact's own body text**: a fact is
+ * "present" when its body appears verbatim anywhere in the transcript. No
+ * markers, no tags, no extra tokens — the injected content is its own record.
+ * Compaction dropping the text naturally re-arms injection, and an edited body
+ * (no longer found verbatim) naturally re-injects the new version.
+ *
+ * The one contract this puts on hosts: render `body` **verbatim** in the
+ * message you append (decorate around it, don't rewrite it) — otherwise the
+ * gate can't see it next turn and will re-inject.
  *
  * Everything here is a pure function of its inputs (framework-agnostic): the
- * adapter extracts per-message text and renders the chosen injections; this
+ * caller extracts per-message text and renders the chosen injections; this
  * module never touches a message shape.
  */
 
@@ -20,14 +25,14 @@
  * `FactInjectReason` trace enum.
  *
  * - `never` — not present in the transcript and never injected this session.
- * - `evicted` — injected earlier but its marker is gone now (trimmed /
- *   compacted out of the window).
- * - `mutated` — present, but the registered body changed since it was injected.
- * - `stale` — present and unchanged, but buried past the freshness window.
+ * - `evicted` — injected earlier but its body is gone now (trimmed / compacted
+ *   out of the window).
+ * - `mutated` — the registered body changed since it was injected (the current
+ *   body is absent and differs from the one last injected).
  */
-export type InjectionReason = "never" | "evicted" | "mutated" | "stale";
+export type InjectionReason = "never" | "evicted" | "mutated";
 
-/** The verdict `fresh` marks a fact left alone because it is still in context. */
+/** The verdict `fresh` marks a fact left alone because its body is still in context. */
 export type InjectionDecisionReason = InjectionReason | "fresh";
 
 /**
@@ -46,52 +51,26 @@ export type Pin = (typeof Pin)[keyof typeof Pin];
 
 /** A fact under consideration for injection this turn. */
 export interface FactCandidate {
-  /** The fact id — matched against the transcript ledger and stamped in the marker. */
+  /** The fact id — keys the session's injected-body memory and the trace events. */
   id: string;
-  /** Content hash of the fact's current body ({@link factHash}); detects mutation. */
-  hash: string;
-}
-
-/** One already-injected fact recovered from the transcript by {@link readGroundingLedger}. */
-export interface LedgerEntry {
-  /** The injected fact's id. */
-  id: string;
-  /** The content hash carried in its marker at injection time. */
-  hash: string;
-  /**
-   * How far back the marker sits, in messages from the end of the transcript
-   * (`0` = the most recent message). A positional proxy for how fresh the fact
-   * still is in the model's attention.
-   */
-  distance: number;
-}
-
-/** Tuning for {@link planInjection}. */
-export interface InjectionPolicy {
-  /**
-   * Re-inject a still-present, unchanged fact once its {@link LedgerEntry.distance}
-   * exceeds this many messages — the lost-in-the-middle re-anchor. Default
-   * `Infinity` (presence-only: never re-inject on distance alone). Leave it at
-   * the default for append-only transcripts, where a stale re-inject would
-   * duplicate the buried copy rather than move it.
-   */
-  freshnessWindow?: number;
+  /** The fact's current body — the text whose presence in the transcript is checked. */
+  body: string;
 }
 
 /** Input to {@link planInjection}. */
 export interface PlanInjectionInput {
   /** The facts to consider this turn (pinned always-on facts plus retrieved hits). */
   candidates: readonly FactCandidate[];
-  /** The transcript-derived ledger from {@link readGroundingLedger}. */
-  ledger: readonly LedgerEntry[];
+  /** Per-message text of the current history, oldest first. */
+  transcript: readonly string[];
   /**
-   * Ids injected earlier this session, if the caller tracks them. Refines the
-   * absent case: absent + previously-injected ⇒ `evicted`, absent + unseen ⇒
-   * `never`. Omit it and every absent fact reads as `never`.
+   * The bodies this session already injected, keyed by fact id — the caller's
+   * bookkeeping (e.g. {@link FactCatalog}'s). Refines the absent case: absent +
+   * previously-injected-same-body ⇒ `evicted`; absent + previously-injected-
+   * different-body ⇒ `mutated`; absent + unseen ⇒ `never`. Omit it and every
+   * absent fact reads as `never`.
    */
-  everInjected?: ReadonlySet<string>;
-  /** Freshness tuning; see {@link InjectionPolicy}. */
-  policy?: InjectionPolicy;
+  previouslyInjected?: ReadonlyMap<string, string>;
 }
 
 /** One fact's verdict from {@link planInjection}. */
@@ -108,42 +87,37 @@ export interface InjectionDecision {
  * Decide, per candidate, whether to inject its body this turn — the heart of
  * the freshness gate. Pure and deterministic: the verdicts come back in
  * candidate order and depend only on the inputs, so repeated calls in one turn
- * never disagree and the result is cache-key stable.
+ * never disagree.
  *
- * A candidate is injected when it is absent from the ledger (`never`/`evicted`),
- * present with a different hash (`mutated`), or present and unchanged but past
- * the freshness window (`stale`); otherwise it is skipped as `fresh`. When the
- * ledger holds more than one marker for an id (an append-only re-injection), the
- * freshest occurrence — the smallest distance — is the one compared.
+ * Presence is a literal substring check of the candidate's body against the
+ * transcript text — no regex, no parsing, no markers; the fastest and most
+ * robust form of the test, and semantically honest: it answers "is this
+ * information in the window?" regardless of who put it there. A candidate with
+ * an empty body is trivially present (there is nothing to inject) and is
+ * skipped as `fresh`.
  *
- * @param input - Candidates, the transcript ledger, optional session bookkeeping, and policy.
+ * @param input - Candidates, the transcript, and the session's injected-body memory.
  * @returns One {@link InjectionDecision} per candidate, in the same order.
  */
 export function planInjection(input: PlanInjectionInput): InjectionDecision[] {
-  const window = input.policy?.freshnessWindow ?? Number.POSITIVE_INFINITY;
-  const ever = input.everInjected;
-
-  // Collapse the ledger to the freshest (smallest-distance) marker per id, so a
-  // re-injected fact is judged by its most recent copy, not a buried older one.
-  const freshest = new Map<string, LedgerEntry>();
-  for (const entry of input.ledger) {
-    const prev = freshest.get(entry.id);
-    if (!prev || entry.distance < prev.distance) freshest.set(entry.id, entry);
-  }
+  // One haystack, one substring scan per candidate. Bodies are injected as
+  // (part of) a single message, so a per-message join can't split them.
+  const haystack = input.transcript.join("\n");
+  const previous = input.previouslyInjected;
 
   return input.candidates.map((candidate): InjectionDecision => {
-    const entry = freshest.get(candidate.id);
-    if (!entry) {
-      const reason: InjectionReason = ever?.has(candidate.id) ? "evicted" : "never";
-      return { id: candidate.id, inject: true, reason };
+    if (candidate.body === "" || haystack.includes(candidate.body)) {
+      return { id: candidate.id, inject: false, reason: "fresh" };
     }
-    if (entry.hash !== candidate.hash) {
-      return { id: candidate.id, inject: true, reason: "mutated" };
+    const lastInjected = previous?.get(candidate.id);
+    if (lastInjected === undefined) {
+      return { id: candidate.id, inject: true, reason: "never" };
     }
-    if (entry.distance > window) {
-      return { id: candidate.id, inject: true, reason: "stale" };
-    }
-    return { id: candidate.id, inject: false, reason: "fresh" };
+    return {
+      id: candidate.id,
+      inject: true,
+      reason: lastInjected === candidate.body ? "evicted" : "mutated",
+    };
   });
 }
 
@@ -151,133 +125,47 @@ export function planInjection(input: PlanInjectionInput): InjectionDecision[] {
 export interface GroundingItem {
   /** The fact id. */
   id: string;
-  /** The fact body to render into the transcript. */
-  body: string;
-  /** The marker to embed alongside the body so later turns dedupe it ({@link groundingMarker}). */
-  marker: string;
   /**
-   * The body and marker pre-joined — render this as the message content and the
-   * dedupe contract is met without remembering to keep the marker. The uniform
-   * render field across both grounding modes (a snapshot item's `text` is just
-   * its body).
+   * The fact body — render it **verbatim** as (part of) the message content;
+   * its presence in the transcript is what dedupes the next turn.
    */
-  text: string;
+  body: string;
   /** Why it was injected. */
   reason: InjectionReason;
   /** Which tier it came from. */
   pin: Pin;
 }
 
+/** The outcome of a grounding pass — what to inject and what was left fresh. */
+export interface GroundingResult {
+  /** Facts to render into the transcript, always-on tier first. */
+  inject: GroundingItem[];
+  /** Ids left alone because their body is still in the context (observability). */
+  skipped: string[];
+}
+
 /**
  * One fact riding along in a per-call grounding snapshot
- * ({@link FactCatalog.groundSnapshot}) — no marker, nothing persisted.
+ * ({@link FactCatalog.groundSnapshot}) — nothing persisted.
  */
 export interface GroundingSnapshotItem {
   /** The fact id. */
   id: string;
   /** The fact body. */
   body: string;
-  /** Render this as the message content — for a snapshot it is just `body`. */
-  text: string;
   /** Which tier it came from. */
   pin: Pin;
 }
 
-/** Per-call options for a grounding snapshot. */
-export interface GroundSnapshotOptions {
-  /** Max retrieval-gated facts to consider (capped at 50, default 3). */
-  topK?: number;
-}
-
-/** The outcome of a grounding pass — what to inject and what was left fresh. */
-export interface GroundingResult {
-  /** Facts to render into the transcript, always-on tier first. */
-  inject: GroundingItem[];
-  /** Ids left alone because they are still fresh in the context (observability). */
-  skipped: string[];
-}
-
-/** Per-call options for a grounding pass. */
+/** Per-call options for {@link FactCatalog.ground} and {@link FactCatalog.groundSnapshot}. */
 export interface GroundOptions {
   /** Max retrieval-gated facts to consider (capped at 50, default 3). */
   topK?: number;
-  /** Override the freshness window for this pass — see {@link InjectionPolicy.freshnessWindow}. */
-  freshnessWindow?: number;
-}
-
-// FNV-1a 64-bit constants (BigInt), masked to 64 bits each multiply.
-const FNV_OFFSET = 0xcbf29ce484222325n;
-const FNV_PRIME = 0x100000001b3n;
-const U64_MASK = 0xffffffffffffffffn;
-
-/**
- * A short, stable content hash of a fact's body — the change-detection token
- * embedded in the marker. FNV-1a (64-bit), dependency-free: this is *not* a
- * security boundary, so a fast non-crypto hash is deliberate. A collision
- * merely means a changed fact is not re-injected (stale content, never a
- * safety issue). Only the `body` is hashed: the body is what sits in the
- * context, so a change to ranking-only metadata never forces a re-inject.
- * Self-consistent within a runtime — the SDK reads back only markers it wrote —
- * so the algorithm need not match other SDKs byte-for-byte.
- *
- * @param body - The fact body that gets injected.
- * @returns A fixed-width 16-char lowercase-hex digest.
- */
-export function factHash(body: string): string {
-  let hash = FNV_OFFSET;
-  for (let i = 0; i < body.length; i++) {
-    hash = ((hash ^ BigInt(body.charCodeAt(i))) * FNV_PRIME) & U64_MASK;
-  }
-  return hash.toString(16).padStart(16, "0");
 }
 
 /**
- * The set of fact ids a grounding marker's id may use. Enforced at the catalog
- * boundary so a marker is always unambiguously parseable (no whitespace or the
- * marker delimiters can appear inside an id).
+ * The set of fact ids a catalog accepts. Ids ride in trace events and in
+ * structured injection payloads (the adapter tool-pair shape), so they stay
+ * conservative: letters, digits, and `. _ : -` only.
  */
 export const FACT_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
-
-// A single-line, unobtrusive marker the injected message carries so the fact can
-// be recovered from the transcript. `id` is delimiter-free (validated by
-// FACT_ID_PATTERN); `v` is the hex content hash.
-const MARKER_OPEN = "⟦ratel:fact";
-const MARKER_CLOSE = "⟧";
-const MARKER_RE = /⟦ratel:fact id=([A-Za-z0-9._:-]+) v=([0-9a-f]+)⟧/g;
-
-/**
- * Render the grounding marker that tags an injected fact so later turns can
- * dedupe it. Pair it with the fact body in the message the adapter appends.
- *
- * @param id - The fact id; must match {@link FACT_ID_PATTERN}.
- * @param hash - The body hash from {@link factHash}.
- * @returns The marker string, e.g. `⟦ratel:fact id=shop-address v=1a2b3c4d5e6f⟧`.
- */
-export function groundingMarker(id: string, hash: string): string {
-  return `${MARKER_OPEN} id=${id} v=${hash}${MARKER_CLOSE}`;
-}
-
-/**
- * Rebuild the injection ledger from a transcript — the stateless counterpart to
- * {@link groundingMarker}. Scans each message's already-extracted text for
- * grounding markers and returns one {@link LedgerEntry} per id, keeping the
- * freshest (nearest-to-end) occurrence when a fact was injected more than once.
- *
- * @param texts - Per-message text in transcript order (oldest first, newest last).
- * @returns The recovered ledger, freshest-per-id; `[]` when no markers are present.
- */
-export function readGroundingLedger(texts: readonly string[]): LedgerEntry[] {
-  const freshest = new Map<string, LedgerEntry>();
-  const n = texts.length;
-  for (let i = 0; i < n; i++) {
-    const distance = n - 1 - i;
-    // Fresh lastIndex per message: MARKER_RE is a shared global regex.
-    MARKER_RE.lastIndex = 0;
-    for (let m = MARKER_RE.exec(texts[i]); m !== null; m = MARKER_RE.exec(texts[i])) {
-      const [, id, hash] = m;
-      const prev = freshest.get(id);
-      if (!prev || distance < prev.distance) freshest.set(id, { id, hash, distance });
-    }
-  }
-  return [...freshest.values()];
-}

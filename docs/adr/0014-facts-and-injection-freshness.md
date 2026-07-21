@@ -64,30 +64,36 @@ telemetry stand on its own," facts emit their own `fact_search` / `fact_churn` /
   `formatSearchCapabilities`, alongside `tools` and `skills`, with the `body` inline (facts are
   small — no second `get_*_content` round-trip).
 
-### The re-injection freshness gate
+### The re-injection freshness gate: content presence
 
-Injection is a pure decision over four cases, computed by `planInjection`:
+Injection is a pure decision over three cases, computed by `planInjection`:
 
 | Trigger | Meaning | Detection |
 |---|---|---|
-| `never` | not yet injected this session | no marker in the transcript |
-| `evicted` | injected earlier, marker now gone | absent + present in the session's injected-id set |
-| `mutated` | body changed since injection | marker's content hash ≠ current hash |
-| `stale` | present but buried past the window | marker distance > `freshnessWindow` (opt-in; default off) |
+| `never` | not in the window, never injected this session | body absent + id unseen |
+| `evicted` | injected earlier, now gone (trimmed/compacted) | body absent + same body previously injected |
+| `mutated` | body edited since injection | current body absent + differs from the one last injected |
 
-The state lives in **the transcript itself**, not an external store: each injected fact carries an
-unobtrusive marker `⟦ratel:fact id=<id> v=<hash>⟧`; reading markers back out of the current
-history reconstructs the ledger. This keeps the whole feature in-process with no conversation id
-and no persistence — compaction removing a marker naturally re-arms injection, and a content hash
-in the marker catches edits. The only session state is a small set of injected ids, used solely to
-tell `evicted` from `never`. `ratel().ground(query, transcript)` returns structured items (body +
-marker + reason) plus the ids it skipped; the adapter renders them, embedding each marker beside
-its body so the next turn can dedupe.
+The presence signal is **the fact's own body text**: a fact is "fresh" (skipped) when its body
+appears verbatim — a literal substring check, no regex, no parsing — anywhere in the current
+transcript. There is no marker, no tag, no extra token: the injected content is its own record.
+This was a deliberate revision — an earlier design carried a `⟦ratel:fact id=… v=hash⟧` marker
+beside each body, but for short facts the ~20-token marker rivaled the fact itself, it exposed odd
+glyphs to the model, and it answered the wrong question ("did *I* tag this?") instead of the right
+one ("is this information in the window?"). Content presence is also who-put-it-there agnostic: if
+the assistant echoed the fact verbatim, or a summarizing compaction preserved it, the information
+*is* in context and skipping is correct — cases the marker mis-handled.
 
-Freshness is positional (messages/tokens back), not wall-clock — what matters is a fact's place in
-the window, not elapsed minutes. The `stale` (distance-based) re-inject defaults **off**, because
-an append-only transcript cannot remove the old buried copy, so a stale re-inject would duplicate
-rather than move it; presence-based re-injection (`never`/`evicted`/`mutated`) is always safe.
+The gate stays in-process with no conversation store: compaction dropping the text naturally
+re-arms injection, and an edited body (no longer found verbatim) naturally re-injects the new
+version. The only session state is a small map of last-injected body per id, used solely to
+classify an absent body as `evicted`/`mutated` rather than `never`. The one contract on hosts:
+render `body` **verbatim** in the appended message — decorate around it, never rewrite it.
+
+A fourth case, `stale` ("present but buried too far back," with a tunable `freshnessWindow`), was
+built and then **removed**: the window had no principled value, and re-injecting on an append-only
+transcript duplicates the buried copy rather than moving it. Recency is `groundSnapshot`'s job —
+it places facts near the end of every call by construction.
 
 ### Two injection modes: `ground` vs `groundSnapshot`
 
@@ -96,19 +102,16 @@ Grounding ships in two modes, deliberately mirroring the recall idiom's persist-
 not two:
 
 - **`ground(query, transcript)`** — the *persist* mode above: facts enter the durable history, the
-  marker + freshness gate dedupe across turns, and the stable prefix accrues prompt-cache credit.
-  For long-lived multi-turn agents that store their messages.
+  presence gate dedupes across turns, and the stable prefix accrues prompt-cache credit. For
+  long-lived multi-turn agents that store their messages.
 - **`groundSnapshot(query)`** — the *per-call* mode: the full grounding set (always-on plus
-  query-ranked facts) recomputed fresh each call, **no markers, no state, no transcript argument** —
+  query-ranked facts) recomputed fresh each call, **no gate, no state, no transcript argument** —
   rendered into a per-call message override and discarded with it. For one-shot or stateless calls,
   or hosts that keep synthetic content out of their stored history. Traced per fact as
-  `fact_snapshot`. The marker machinery exists *only because* the persist mode saves into the
-  transcript; the snapshot mode needs none of it.
+  `fact_snapshot`.
 
 Both modes assemble candidates identically (one shared code path), so they can never disagree on
-*which* facts apply — only on how the injection lives. Every item carries a pre-joined `text` field
-(persist: body + marker; snapshot: body) so rendering is uniform and the marker can't be dropped by
-accident.
+*which* facts apply — only on how the injection lives.
 
 ## Consequences
 
@@ -118,16 +121,18 @@ accident.
 - **Facts reuse ~everything from skills.** The registry, native bindings, catalog facade, and
   telemetry plumbing are mechanical parallels — low new surface, and the retrieval behavior is
   identical and already proven.
-- **The planner is a reusable primitive.** `planInjection` / `readGroundingLedger` /
-  `factHash` are pure and framework-agnostic; adapters render, the core decides. Nothing about the
-  gate is fact-specific in principle — it is injection-deduplication that could later apply to any
-  pushed content.
-- **Known limits, accepted.** (1) Compaction that *summarizes* rather than drops may preserve a
-  fact's content while removing its marker, causing a redundant re-inject; undetectable in general.
-  (2) The `stale` re-inject can duplicate on append-only adapters, hence default-off. (3) The
-  content hash is FNV-1a (change-detection, not security): a collision only skips a re-inject of
-  changed content. (4) Fact ids are constrained to `[A-Za-z0-9._:-]+` so the marker is
-  unambiguous — validated at the catalog boundary.
+- **The planner is a reusable primitive.** `planInjection` is pure and framework-agnostic;
+  adapters render, the core decides. Nothing about the gate is fact-specific in principle — it is
+  injection-deduplication that could later apply to any pushed content.
+- **Known limits, accepted.** (1) The gate depends on hosts rendering `body` verbatim — a host
+  that rewrites the injected text (translation, aggressive reformatting) defeats detection and the
+  fact re-injects each turn (safe, just wasteful). (2) Across process restarts the injected-body
+  map is empty, so an absent body reads as `never` rather than `evicted`/`mutated` — the action
+  (inject) is identical either way; only the telemetry reason coarsens. (3) A summarizing
+  compaction that *rewords* (rather than preserves) a fact's text causes a redundant re-inject;
+  one that preserves it verbatim is now handled correctly — an improvement over the marker design.
+  (4) Fact ids are constrained to `[A-Za-z0-9._:-]+`; they ride in trace events and structured
+  injection payloads — validated at the catalog boundary.
 - **Deciding the tier is the author's job.** The `pin` flag — an enum (`Pin.Always` /
   `Pin.ALWAYS`, wire strings still accepted) — is the whole UX; new facts default to `retrieved`
   and are promoted to `always` deliberately. A size cap on the always-on tier is left to a

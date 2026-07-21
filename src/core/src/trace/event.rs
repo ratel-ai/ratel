@@ -92,26 +92,22 @@ pub struct FactHitTrace {
 }
 
 /// Why a fact's body was (re-)injected into the context, carried by
-/// [`TraceEvent::FactInject`]. The grounding layer decides this from the
-/// transcript-derived injection ledger; it is the observable half of the
-/// re-injection freshness gate.
+/// [`TraceEvent::FactInject`]. The grounding layer decides this by scanning
+/// the transcript for the fact's own body text (content presence); it is the
+/// observable half of the re-injection freshness gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FactInjectReason {
-    /// Not present in the transcript at all — a first injection this
-    /// conversation. Wire value `never`.
+    /// Not present in the transcript and never injected this session — a
+    /// first injection. Wire value `never`.
     Never,
-    /// Its marker was in an earlier turn but is gone now (trimmed / compacted
-    /// out of the window), so it is re-injected. Wire value `evicted`.
+    /// Injected earlier but its body is gone from the window now (trimmed /
+    /// compacted out), so it is re-injected. Wire value `evicted`.
     Evicted,
-    /// Present, but the registered body changed since it was injected (the
-    /// marker's content hash differs), so the new version is injected. Wire
-    /// value `mutated`.
+    /// The registered body changed since it was injected (the current body is
+    /// absent and differs from the one last injected), so the new version is
+    /// injected. Wire value `mutated`.
     Mutated,
-    /// Present and unchanged, but buried far enough back that the freshness
-    /// window elapsed, so it is re-anchored near the current turn. Wire value
-    /// `stale`.
-    Stale,
 }
 
 /// Every event produced by any layer of Ratel. New variants are additive;

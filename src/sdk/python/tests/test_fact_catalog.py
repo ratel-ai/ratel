@@ -77,7 +77,7 @@ async def test_re_registers_an_id_in_place() -> None:
     assert catalog.pinned() == []  # adopted the new pin
 
 
-async def test_rejects_an_id_that_would_break_its_grounding_marker() -> None:
+async def test_rejects_an_id_with_characters_outside_the_allowed_set() -> None:
     catalog = FactCatalog()
     with pytest.raises(ValueError, match="must match"):
         await catalog.register(Fact(id="bad id", name="n", description="d"))
@@ -196,7 +196,7 @@ async def test_ground_injects_pinned_then_skips_when_fresh() -> None:
     assert shop.pin == "always"
     assert "Baker Street" in shop.body
 
-    transcript = [f"{i.body} {i.marker}" for i in first.inject]
+    transcript = [i.body for i in first.inject]
     second = await catalog.ground("hi again", transcript)
     assert second.inject == []
     assert "shop-address" in second.skipped
@@ -206,7 +206,7 @@ async def test_ground_reinjects_mutated_body() -> None:
     catalog = FactCatalog()
     await catalog.register(address)
     first = await catalog.ground("hi", [])
-    transcript = [f"{i.body} {i.marker}" for i in first.inject]
+    transcript = [i.body for i in first.inject]
 
     await catalog.register(replace(address, body="New location: 40 Oxford Street."))
     second = await catalog.ground("hi", transcript)
@@ -219,7 +219,7 @@ async def test_ground_reinjects_evicted_via_session_state() -> None:
     catalog = FactCatalog()
     await catalog.register(address)
     await catalog.ground("hi", [])
-    second = await catalog.ground("hi", ["a summary that dropped the markers"])
+    second = await catalog.ground("hi", ["a summary that dropped the fact"])
     shop = next(i for i in second.inject if i.id == "shop-address")
     assert shop.reason == "evicted"
 
@@ -235,17 +235,28 @@ async def test_ground_emits_inject_and_skip_trace_events() -> None:
     catalog = FactCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
     await catalog.register(address)
     first = await catalog.ground("hi", [])
-    transcript = [f"{i.body} {i.marker}" for i in first.inject]
+    transcript = [i.body for i in first.inject]
     await catalog.ground("hi", transcript)
     types = [e["type"] for e in catalog.drain_trace_events()]
     assert "fact_inject" in types
     assert "fact_inject_skip" in types
 
 
+async def test_ground_decorated_body_is_still_detected() -> None:
+    # Rendering the body verbatim is the whole dedupe contract: a host may
+    # decorate around the body — presence still detects it.
+    catalog = FactCatalog()
+    await catalog.register(address)
+    first = await catalog.ground("hi", [])
+    shop = next(i for i in first.inject if i.id == "shop-address")
+    second = await catalog.ground("hi", [f"Note for the agent: {shop.body}"])
+    assert "shop-address" in second.skipped
+
+
 # --- FactCatalog.ground_snapshot (the stateless per-call mode) ------------
 
 
-async def test_ground_snapshot_returns_pinned_plus_matched_with_no_marker() -> None:
+async def test_ground_snapshot_returns_pinned_plus_matched() -> None:
     catalog = FactCatalog()
     await catalog.register([address, cancellation])
     items = await catalog.ground_snapshot("I need to cancel my appointment")
@@ -254,8 +265,7 @@ async def test_ground_snapshot_returns_pinned_plus_matched_with_no_marker() -> N
     assert "cancellation" in ids  # matched by the query
     assert ids.index("shop-address") < ids.index("cancellation")  # pinned first
     for item in items:
-        assert item.text == item.body
-        assert "⟦ratel:fact" not in item.text
+        assert len(item.body) > 0
 
 
 async def test_ground_snapshot_is_stateless_across_calls() -> None:
@@ -283,14 +293,3 @@ async def test_ground_snapshot_emits_fact_snapshot_trace_events() -> None:
     snaps = [e["fact_id"] for e in catalog.drain_trace_events() if e["type"] == "fact_snapshot"]
     assert "shop-address" in snaps
     assert "cancellation" in snaps
-
-
-async def test_ground_items_carry_prejoined_text() -> None:
-    catalog = FactCatalog()
-    await catalog.register(address)
-    result = await catalog.ground("hi", [])
-    shop = next(i for i in result.inject if i.id == "shop-address")
-    assert shop.text == f"{shop.body}\n{shop.marker}"
-    # Rendering `text` verbatim satisfies the dedupe contract:
-    second = await catalog.ground("hi", [shop.text])
-    assert "shop-address" in second.skipped

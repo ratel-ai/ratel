@@ -71,7 +71,7 @@ describe("FactCatalog", () => {
     expect(catalog.pinned()).toEqual([]); // adopted the new pin
   });
 
-  it("rejects an id that would break its grounding marker", async () => {
+  it("rejects an id with characters outside the allowed set", async () => {
     const catalog = new FactCatalog();
     await expect(catalog.register({ id: "bad id", name: "n", description: "d" })).rejects.toThrow(
       /must match/,
@@ -108,7 +108,7 @@ describe("FactCatalog.ground (the freshness gate, on the catalog)", () => {
     expect(first.inject.map((i) => i.id)).toContain("shop-address");
     expect(first.inject.find((i) => i.id === "shop-address")?.pin).toBe(Pin.Always);
 
-    const transcript = first.inject.map((i) => `${i.body} ${i.marker}`);
+    const transcript = first.inject.map((i) => i.body);
     const second = await catalog.ground("hi again", transcript);
     expect(second.inject).toEqual([]);
     expect(second.skipped).toContain("shop-address");
@@ -117,17 +117,16 @@ describe("FactCatalog.ground (the freshness gate, on the catalog)", () => {
   it("tracks evicted vs never via its own session state", async () => {
     const catalog = await setup();
     await catalog.ground("hi", []);
-    const again = await catalog.ground("hi", ["a summary with no markers"]);
+    const again = await catalog.ground("hi", ["a summary that dropped the fact"]);
     expect(again.inject.find((i) => i.id === "shop-address")?.reason).toBe("evicted");
   });
 
-  it("items carry a pre-joined text field (body + marker) so rendering can't drop the marker", async () => {
+  it("rendering the body verbatim is the whole dedupe contract", async () => {
     const catalog = await setup();
     const { inject } = await catalog.ground("hi", []);
     const shop = inject.find((i) => i.id === "shop-address");
-    expect(shop?.text).toBe(`${shop?.body}\n${shop?.marker}`);
-    // Rendering `text` verbatim satisfies the dedupe contract:
-    const second = await catalog.ground("hi", [shop?.text ?? ""]);
+    // A host may decorate around the body — presence still detects it.
+    const second = await catalog.ground("hi", [`Note for the agent: ${shop?.body}`]);
     expect(second.skipped).toContain("shop-address");
   });
 
@@ -136,8 +135,8 @@ describe("FactCatalog.ground (the freshness gate, on the catalog)", () => {
     await r.facts.register(address);
     const viaCore = await r.ground("hi", []);
     expect(viaCore.inject.map((i) => i.id)).toContain("shop-address");
-    // Same injected-id state: grounding again (marker present) skips it.
-    const transcript = viaCore.inject.map((i) => `${i.body} ${i.marker}`);
+    // Same session state: grounding again (body present) skips it.
+    const transcript = viaCore.inject.map((i) => i.body);
     const viaCatalog = await r.facts.ground("hi", transcript);
     expect(viaCatalog.skipped).toContain("shop-address");
   });
@@ -150,7 +149,7 @@ describe("FactCatalog.groundSnapshot (the stateless per-call mode)", () => {
     return catalog;
   };
 
-  it("returns pinned plus query-matched facts, with text = body and no marker", async () => {
+  it("returns pinned plus query-matched facts", async () => {
     const catalog = await setup();
     const items = await catalog.groundSnapshot("I need to cancel my appointment");
     const ids = items.map((i) => i.id);
@@ -158,8 +157,7 @@ describe("FactCatalog.groundSnapshot (the stateless per-call mode)", () => {
     expect(ids).toContain("cancellation"); // matched by the query
     expect(ids.indexOf("shop-address")).toBeLessThan(ids.indexOf("cancellation")); // pinned first
     for (const item of items) {
-      expect(item.text).toBe(item.body);
-      expect(item.text).not.toContain("⟦ratel:fact");
+      expect(item.body.length).toBeGreaterThan(0);
     }
   });
 
@@ -217,7 +215,7 @@ describe("ratel().ground — the freshness gate", () => {
     const r = await setup();
     const first = await r.ground("hi", []);
     // Simulate the adapter having rendered the injected fact into the history.
-    const transcript = ["earlier user turn", ...first.inject.map((i) => `${i.body} ${i.marker}`)];
+    const transcript = ["earlier user turn", ...first.inject.map((i) => i.body)];
     const second = await r.ground("hi again", transcript);
     expect(second.inject).toEqual([]);
     expect(second.skipped).toContain("shop-address");
@@ -226,7 +224,7 @@ describe("ratel().ground — the freshness gate", () => {
   it("re-injects as `mutated` after the fact body is edited", async () => {
     const r = await setup();
     const first = await r.ground("hi", []);
-    const transcript = first.inject.map((i) => `${i.body} ${i.marker}`);
+    const transcript = first.inject.map((i) => i.body);
     await r.facts.register({ ...address, body: "New location: 40 Oxford Street." });
     const second = await r.ground("hi", transcript);
     const shop = second.inject.find((i) => i.id === "shop-address");
@@ -234,10 +232,10 @@ describe("ratel().ground — the freshness gate", () => {
     expect(shop?.body).toContain("Oxford Street");
   });
 
-  it("re-injects as `evicted` when the marker is compacted away", async () => {
+  it("re-injects as `evicted` when compaction drops the fact", async () => {
     const r = await setup();
     await r.ground("hi", []);
-    const second = await r.ground("hi", ["a summary that dropped the markers"]);
+    const second = await r.ground("hi", ["a summary that dropped the fact"]);
     const shop = second.inject.find((i) => i.id === "shop-address");
     expect(shop?.reason).toBe("evicted");
   });
@@ -251,7 +249,7 @@ describe("ratel().ground — the freshness gate", () => {
   it("emits fact_inject then fact_inject_skip trace events", async () => {
     const r = await setup();
     const first = await r.ground("hi", []);
-    const transcript = first.inject.map((i) => `${i.body} ${i.marker}`);
+    const transcript = first.inject.map((i) => i.body);
     await r.ground("hi", transcript);
     const events = r.facts.drainTraceEvents() as Array<{ type: string; fact_id: string }>;
     const types = events.map((e) => e.type);

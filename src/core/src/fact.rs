@@ -95,9 +95,9 @@ impl FromStr for PinMode {
 /// [`PinMode`]); `metadata` is free-form, non-indexed context for higher-layer
 /// biasing, never matched as query terms.
 pub struct Fact {
-    /// Stable identifier, returned in [`crate::FactHit::fact_id`] and carried in
-    /// the injection marker so a fact is deduped across turns. Registering the
-    /// same id again replaces the entry in place. Not indexed for ranking.
+    /// Stable identifier, returned in [`crate::FactHit::fact_id`] and stamped
+    /// on the grounding trace events. Registering the same id again replaces
+    /// the entry in place. Not indexed for ranking.
     pub id: String,
     /// Short name. Indexed both verbatim and identifier-split, so
     /// snake_case/camelCase/kebab constituent words match.

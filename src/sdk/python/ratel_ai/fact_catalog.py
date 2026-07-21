@@ -42,13 +42,9 @@ from .grounding import (
     GroundingItem,
     GroundingResult,
     GroundingSnapshotItem,
-    InjectionPolicy,
     InjectionReason,
     PinTier,
-    fact_hash,
-    grounding_marker,
     plan_injection,
-    read_grounding_ledger,
 )
 from .telemetry import SEARCH_TARGET_FACT, trace_search, trace_search_async
 
@@ -454,7 +450,6 @@ class FactCatalog:
         method: SearchMethod = "bm25",
         embedding: EmbeddingSpec | None = None,
         facts_top_k: int | None = None,
-        freshness_window: float | None = None,
     ) -> None:
         """Create an empty fact catalog.
 
@@ -466,18 +461,17 @@ class FactCatalog:
             embedding: model for semantic/hybrid retrieval — see
                 `SkillCatalog.__init__`; retained and validated under "bm25" too.
             facts_top_k: max retrieval-gated facts `ground` considers (default 3).
-            freshness_window: re-inject a still-present, unchanged fact once it
-                sits this many messages back; `None` = presence-only (never
-                re-inject on distance alone). See `plan_injection`.
         """
         _warn_experimental_once()
         self._facts: dict[str, Fact] = {}
         self._method: SearchMethod = method
         self._facts_top_k = facts_top_k
-        self._freshness_window = freshness_window
-        # Session bookkeeping for the freshness gate: the ids this catalog has
-        # injected via `ground`. Lets it tell `evicted` from `never`.
-        self._ever_injected: set[str] = set()
+        # Session bookkeeping for the freshness gate: the body this catalog last
+        # injected per fact id via `ground`. Lets an absent body be classified
+        # as `evicted` (same body, gone from the window) or `mutated` (body has
+        # since changed) instead of `never`. The transcript itself carries the
+        # rest.
+        self._injected_bodies: dict[str, str] = {}
         self._registry = FactRegistry(embedding, method=method)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
@@ -494,9 +488,9 @@ class FactCatalog:
         `await` the result.** Re-registering an id replaces it in place.
 
         Each fact is validated at this boundary: the `id` must match
-        `FACT_ID_PATTERN` (so its grounding marker is unambiguous) and `pin`, if
-        set, must be `"always"` or `"retrieved"`. A bad value raises `ValueError`
-        before anything is indexed.
+        `FACT_ID_PATTERN` (ids ride in trace events and structured payloads) and
+        `pin`, if set, must be `"always"` or `"retrieved"`. A bad value raises
+        `ValueError` before anything is indexed.
 
         A model or dimension change is not recovered in place — construct a new
         catalog and re-register.
@@ -575,42 +569,38 @@ class FactCatalog:
         query: str,
         transcript: Sequence[str],
         top_k: int | None = None,
-        freshness_window: float | None = None,
     ) -> GroundingResult:
         """Decide which facts to (re-)inject given the current transcript.
 
         The grounding freshness gate. Considers the always-on tier (`pinned`)
         plus the retrieval-gated facts `query` ranks in, then injects only those
-        not already fresh in `transcript`: absent (``never``/``evicted``),
-        changed (``mutated``), or past the freshness window (``stale``). Records
-        a ``fact_inject`` / ``fact_inject_skip`` event per fact.
+        whose body is not already in `transcript`: never injected (``never``),
+        gone from the window (``evicted``), or changed since injection
+        (``mutated``). Records a ``fact_inject`` / ``fact_inject_skip`` event
+        per fact.
 
-        Stateless across conversations — the transcript *is* the ledger — but
-        session-aware within one catalog: it remembers which ids it injected so
-        it can tell ``evicted`` from ``never``. Returns structured
-        `GroundingItem`s (body + marker + reason); the caller renders them into
-        its message shape, embedding each ``marker`` beside its ``body`` so the
-        next turn can dedupe.
+        Presence is the fact's own body text — no markers, no tags: render each
+        `GroundingItem.body` **verbatim** as (part of) the message you append
+        (decorate around it, don't rewrite it), and its presence dedupes the
+        next turn. Stateless across conversations — the transcript *is* the
+        record — with one piece of session memory: the last body injected per
+        id, so an absent body reads as ``evicted``/``mutated`` instead of
+        ``never``.
 
         Args:
             query: the current turn's text, for the retrieval-gated tier.
             transcript: per-message text of the current history, oldest first.
             top_k: max retrieval-gated facts to consider (defaults to the
                 catalog's `facts_top_k`, then 3).
-            freshness_window: override the freshness window for this pass.
 
         Returns:
             The facts to inject (always-on first) and the ids left fresh.
         """
         candidates = await self._candidate_facts(query, top_k)
-
-        window = freshness_window if freshness_window is not None else self._freshness_window
-        policy = None if window is None else InjectionPolicy(window)
         decisions = plan_injection(
-            [FactCandidate(fact.id, fact_hash(fact.body)) for fact in candidates],
-            read_grounding_ledger(transcript),
-            ever_injected=self._ever_injected,
-            policy=policy,
+            [FactCandidate(fact.id, fact.body) for fact in candidates],
+            transcript,
+            previously_injected=self._injected_bodies,
         )
 
         by_id = {fact.id: fact for fact in candidates}
@@ -622,18 +612,15 @@ class FactCatalog:
                 continue
             if decision.inject:
                 tier: PinTier = "always" if fact.pin == Pin.ALWAYS else "retrieved"
-                marker = grounding_marker(fact.id, fact_hash(fact.body))
                 inject.append(
                     GroundingItem(
                         id=fact.id,
                         body=fact.body,
-                        marker=marker,
-                        text=f"{fact.body}\n{marker}",
                         reason=cast(InjectionReason, decision.reason),
                         pin=tier,
                     )
                 )
-                self._ever_injected.add(fact.id)
+                self._injected_bodies[fact.id] = fact.body
                 self.record_event(
                     {"type": "fact_inject", "fact_id": fact.id, "reason": decision.reason}
                 )
@@ -648,13 +635,13 @@ class FactCatalog:
         """Return the full grounding set for one model call — the stateless mode.
 
         The per-call twin of `ground`: always-on facts plus the retrieval-gated
-        facts `query` ranks in, recomputed fresh every call. No markers, no
-        freshness gate, no transcript, nothing persisted — render the items into
-        the call's message override and discard them with it. The persist/per-call
-        split mirrors the recall idiom's ``appendRecall``-vs-``prepareStep``: use
-        this for one-shot or stateless calls (or to keep grounding out of your
-        stored history), and `ground` for a long-lived transcript where the
-        freshness gate earns its keep. Records a ``fact_snapshot`` event per fact.
+        facts `query` ranks in, recomputed fresh every call. No freshness gate,
+        no transcript, nothing persisted — render the items into the call's
+        message override and discard them with it. The persist/per-call split
+        mirrors the recall idiom's ``appendRecall``-vs-``prepareStep``: use this
+        for one-shot or stateless calls (or to keep grounding out of your stored
+        history), and `ground` for a long-lived transcript where the freshness
+        gate earns its keep. Records a ``fact_snapshot`` event per fact.
 
         Args:
             query: the current turn's text, for the retrieval-gated tier.
@@ -662,14 +649,12 @@ class FactCatalog:
                 catalog's `facts_top_k`, then 3).
 
         Returns:
-            The snapshot items (always-on first); each ``text`` is just the body.
+            The snapshot items (always-on first).
         """
         items: list[GroundingSnapshotItem] = []
         for fact in await self._candidate_facts(query, top_k):
             tier: PinTier = "always" if fact.pin == Pin.ALWAYS else "retrieved"
-            items.append(
-                GroundingSnapshotItem(id=fact.id, body=fact.body, text=fact.body, pin=tier)
-            )
+            items.append(GroundingSnapshotItem(id=fact.id, body=fact.body, pin=tier))
             self.record_event({"type": "fact_snapshot", "fact_id": fact.id})
         return items
 
@@ -737,7 +722,8 @@ def _assert_valid_fact(fact: Fact) -> None:
     if not isinstance(fact.id, str) or not FACT_ID_PATTERN.match(fact.id):
         raise ValueError(
             f"ratel: fact id {fact.id!r} must match {FACT_ID_PATTERN.pattern} "
-            "(letters, digits, and . _ : - only) so its grounding marker is unambiguous"
+            "(letters, digits, and . _ : - only; ids ride in trace events and "
+            "structured payloads)"
         )
     if fact.pin not in ("always", "retrieved"):
         raise ValueError(

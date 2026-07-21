@@ -18,12 +18,7 @@ import {
   type TraceSinkConfig,
 } from "./catalog.js";
 import { FactCatalog } from "./fact-catalog.js";
-import type {
-  GroundingResult,
-  GroundingSnapshotItem,
-  GroundOptions,
-  GroundSnapshotOptions,
-} from "./grounding.js";
+import type { GroundingResult, GroundingSnapshotItem, GroundOptions } from "./grounding.js";
 import { SkillCatalog } from "./skill-catalog.js";
 import { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";
 import { isPeerInstalled } from "./telemetry.js";
@@ -45,10 +40,6 @@ export interface RatelConfig {
   /** ⚠️ Experimental (facts, ADR-0014). Max retrieval-gated facts each
    * `recall`/`ground` considers: capped at 50; invalid values fall back to 3. */
   factsTopK?: number;
-  /** ⚠️ Experimental (facts, ADR-0014). Re-inject a still-present, unchanged
-   * fact once it sits this many messages back (the lost-in-the-middle
-   * re-anchor). Default: presence-only — never re-inject on distance alone. */
-  freshnessWindow?: number;
   /** Local trace-stream destination for all catalogs (default: discard). */
   trace?: TraceSinkConfig;
 }
@@ -234,7 +225,7 @@ export interface AdaptedBase<TTool, TMessage> {
   /**
    * ⚠️ Experimental (facts, ADR-0014). Decide which facts to (re-)inject given
    * the current transcript — the grounding freshness gate. See
-   * {@link Ratel.ground}. Returns structured items (body + marker + reason); the
+   * {@link Ratel.ground}. Returns structured items (body + reason); the
    * caller renders them into messages.
    */
   ground(
@@ -244,10 +235,10 @@ export interface AdaptedBase<TTool, TMessage> {
   ): Promise<GroundingResult>;
   /**
    * ⚠️ Experimental (facts, ADR-0014). Stateless per-call twin of
-   * {@link AdaptedBase.ground}: the full grounding set for one model call, no
-   * markers, nothing persisted. See `experimental.FactCatalog.groundSnapshot`.
+   * {@link AdaptedBase.ground}: the full grounding set for one model call,
+   * nothing persisted. See `experimental.FactCatalog.groundSnapshot`.
    */
-  groundSnapshot(query: string, opts?: GroundSnapshotOptions): Promise<GroundingSnapshotItem[]>;
+  groundSnapshot(query: string, opts?: GroundOptions): Promise<GroundingSnapshotItem[]>;
 }
 
 /**
@@ -307,9 +298,9 @@ export interface Ratel {
    * Stateless across conversations — the transcript *is* the ledger — but
    * session-aware within one core instance: it remembers which ids it injected
    * so it can tell `evicted` from `never`. Returns structured
-   * `experimental.GroundingItem`s (body + marker + reason); the caller renders
-   * them into the framework's message shape, embedding each `marker` beside its
-   * `body` so the next turn can dedupe.
+   * `experimental.GroundingItem`s (body + reason); the caller renders each `body`
+   * verbatim into the framework's message shape — its presence in the transcript
+   * is what dedupes the next turn.
    *
    * @param query - The current turn's text, for the retrieval-gated tier.
    * @param transcript - Per-message text of the current history, oldest first.
@@ -324,10 +315,10 @@ export interface Ratel {
   /**
    * ⚠️ Experimental (facts, ADR-0014). Stateless per-call twin of
    * {@link Ratel.ground}: the full grounding set (always-on plus query-matched
-   * facts) for one model call — no markers, no transcript, nothing persisted.
+   * facts) for one model call — no freshness gate, no transcript, nothing persisted.
    * Render into a per-call message override (e.g. a `prepareStep`) and discard.
    */
-  groundSnapshot(query: string, opts?: GroundSnapshotOptions): Promise<GroundingSnapshotItem[]>;
+  groundSnapshot(query: string, opts?: GroundOptions): Promise<GroundingSnapshotItem[]>;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
   adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A>;
 }
@@ -398,7 +389,6 @@ export function ratel(config: RatelConfig = {}): Ratel {
     embedding: config.embedding,
     trace: config.trace,
     factsTopK: config.factsTopK,
-    freshnessWindow: config.freshnessWindow,
   });
   // Recall call ids come from a private counter shared across every view of this
   // core: transcript positions are caller-owned (trimming/compaction repeats
@@ -475,10 +465,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
     transcript: readonly string[],
     opts?: GroundOptions,
   ): Promise<GroundingResult> => facts.ground(query, transcript, opts);
-  const groundSnapshot = (
-    query: string,
-    opts?: GroundSnapshotOptions,
-  ): Promise<GroundingSnapshotItem[]> => facts.groundSnapshot(query, opts);
+  const groundSnapshot = (query: string, opts?: GroundOptions): Promise<GroundingSnapshotItem[]> =>
+    facts.groundSnapshot(query, opts);
 
   function adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A> {
     assertAdapter(adapter);

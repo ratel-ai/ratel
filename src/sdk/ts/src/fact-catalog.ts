@@ -5,17 +5,13 @@ import type { EmbeddingSpec, SearchMethod, SearchOrigin, TraceSinkConfig } from 
 import { warnExperimentalFactsOnce } from "./experimental-warning.js";
 import {
   FACT_ID_PATTERN,
-  factHash,
   type GroundingItem,
   type GroundingResult,
   type GroundingSnapshotItem,
   type GroundOptions,
-  type GroundSnapshotOptions,
-  groundingMarker,
   type InjectionReason,
   Pin,
   planInjection,
-  readGroundingLedger,
 } from "./grounding.js";
 import { FactRegistry } from "./registry.js";
 import { traceSearch, traceSearchAsync } from "./telemetry.js";
@@ -37,9 +33,6 @@ export interface FactCatalogOptions {
   embedding?: EmbeddingSpec;
   /** Max retrieval-gated facts {@link FactCatalog.ground} considers (default 3, capped at 50). */
   factsTopK?: number;
-  /** Re-inject a still-present, unchanged fact once it sits this many messages
-   * back. Default: presence-only (never re-inject on distance alone). See {@link planInjection}. */
-  freshnessWindow?: number;
 }
 
 /**
@@ -61,11 +54,11 @@ export class FactCatalog {
   private readonly facts = new Map<string, Fact>();
   private readonly method: SearchMethod;
   private readonly factsTopK?: number;
-  private readonly freshnessWindow?: number;
-  // Session bookkeeping for the freshness gate: the ids this catalog has
-  // injected via `ground`. Lets it tell `evicted` (was injected, marker gone)
-  // from `never` (never injected). The transcript itself carries the rest.
-  private readonly everInjected = new Set<string>();
+  // Session bookkeeping for the freshness gate: the body this catalog last
+  // injected per fact id via `ground`. Lets an absent body be classified as
+  // `evicted` (same body, gone from the window) or `mutated` (body has since
+  // changed) instead of `never`. The transcript itself carries the rest.
+  private readonly injectedBodies = new Map<string, string>();
 
   /**
    * Create an empty catalog.
@@ -77,7 +70,6 @@ export class FactCatalog {
     warnExperimentalFactsOnce();
     this.method = options.method ?? "bm25";
     this.factsTopK = options.factsTopK;
-    this.freshnessWindow = options.freshnessWindow;
     this.registry = new FactRegistry(options.embedding, this.method);
     if (options.trace) {
       this.registry.setTraceSink(options.trace);
@@ -92,7 +84,7 @@ export class FactCatalog {
    * pass on a libuv worker; embedding errors surface **here**, at registration.
    *
    * Each fact is validated at this boundary: the `id` must match
-   * {@link FACT_ID_PATTERN} (so its grounding marker is unambiguous) and `pin`,
+   * {@link FACT_ID_PATTERN} (ids ride in trace events and structured payloads) and `pin`,
    * if set, must be `"always"` or `"retrieved"`. A bad value throws before
    * anything is indexed.
    *
@@ -147,21 +139,21 @@ export class FactCatalog {
   /**
    * Decide which facts to (re-)inject given the current transcript — the
    * grounding freshness gate. Considers the always-on tier ({@link FactCatalog.pinned})
-   * plus the retrieval-gated facts `query` ranks in, then injects only those not
-   * already fresh in `transcript`: absent (`never`/`evicted`), changed
-   * (`mutated`), or past the freshness window (`stale`). Records a `fact_inject`
-   * / `fact_inject_skip` event per fact.
+   * plus the retrieval-gated facts `query` ranks in, then injects only those
+   * whose body is not already in `transcript`: never injected (`never`), gone
+   * from the window (`evicted`), or changed since injection (`mutated`).
+   * Records a `fact_inject` / `fact_inject_skip` event per fact.
    *
-   * Stateless across conversations — the transcript *is* the ledger — but
-   * session-aware within one catalog: it remembers which ids it injected so it
-   * can tell `evicted` from `never`. Returns structured {@link GroundingItem}s
-   * (body + marker + reason); the caller renders them into the framework's
-   * message shape, embedding each `marker` beside its `body` so the next turn
-   * can dedupe.
+   * Presence is the fact's own body text — no markers, no tags: render each
+   * {@link GroundingItem.body} **verbatim** as (part of) the message you append
+   * (decorate around it, don't rewrite it), and its presence dedupes the next
+   * turn. Stateless across conversations — the transcript *is* the record —
+   * with one piece of session memory: the last body injected per id, so an
+   * absent body reads as `evicted`/`mutated` instead of `never`.
    *
    * @param query - The current turn's text, for the retrieval-gated tier.
    * @param transcript - Per-message text of the current history, oldest first.
-   * @param opts - Per-call top-K and freshness-window overrides.
+   * @param opts - Per-call top-K override.
    * @returns The facts to inject (always-on first) and the ids left fresh.
    */
   async ground(
@@ -170,13 +162,10 @@ export class FactCatalog {
     opts?: GroundOptions,
   ): Promise<GroundingResult> {
     const candidateFacts = await this.candidateFacts(query, opts?.topK);
-
-    const window = opts?.freshnessWindow ?? this.freshnessWindow;
     const decisions = planInjection({
-      candidates: candidateFacts.map((f) => ({ id: f.id, hash: factHash(f.body ?? "") })),
-      ledger: readGroundingLedger(transcript),
-      everInjected: this.everInjected,
-      policy: window === undefined ? undefined : { freshnessWindow: window },
+      candidates: candidateFacts.map((f) => ({ id: f.id, body: f.body ?? "" })),
+      transcript,
+      previouslyInjected: this.injectedBodies,
     });
 
     const byId = new Map(candidateFacts.map((f) => [f.id, f]));
@@ -187,16 +176,13 @@ export class FactCatalog {
       if (!fact) continue; // unreachable: decisions mirror candidateFacts
       if (decision.inject) {
         const body = fact.body ?? "";
-        const marker = groundingMarker(fact.id, factHash(body));
         inject.push({
           id: fact.id,
           body,
-          marker,
-          text: `${body}\n${marker}`,
           reason: decision.reason as InjectionReason,
           pin: fact.pin === Pin.Always ? Pin.Always : Pin.Retrieved,
         });
-        this.everInjected.add(fact.id);
+        this.injectedBodies.set(fact.id, body);
         this.registry.recordEvent({
           type: "fact_inject",
           fact_id: fact.id,
@@ -213,10 +199,10 @@ export class FactCatalog {
   /**
    * The stateless twin of {@link FactCatalog.ground}: the full grounding set
    * for **one model call** — always-on facts plus the retrieval-gated facts
-   * `query` ranks in — recomputed fresh every call. No markers, no freshness
-   * gate, no transcript, nothing persisted: render the items into the call's
-   * message override (e.g. the AI SDK's `prepareStep`) and discard them with
-   * it. The per-call/persist split mirrors the recall idiom's
+   * `query` ranks in — recomputed fresh every call. No freshness gate, no
+   * transcript, nothing persisted: render the items into the call's message
+   * override (e.g. the AI SDK's `prepareStep`) and discard them with it. The
+   * per-call/persist split mirrors the recall idiom's
    * `prepareStep`-vs-`appendRecall`: use this for one-shot or stateless calls
    * (or when you'd rather not store grounding in your history), and `ground`
    * for a long-lived transcript where the freshness gate earns its keep.
@@ -224,22 +210,15 @@ export class FactCatalog {
    *
    * @param query - The current turn's text, for the retrieval-gated tier.
    * @param opts - Per-call top-K override.
-   * @returns The snapshot items (always-on first); each `text` is just the body.
+   * @returns The snapshot items (always-on first).
    */
-  async groundSnapshot(
-    query: string,
-    opts?: GroundSnapshotOptions,
-  ): Promise<GroundingSnapshotItem[]> {
+  async groundSnapshot(query: string, opts?: GroundOptions): Promise<GroundingSnapshotItem[]> {
     const items = (await this.candidateFacts(query, opts?.topK)).map(
-      (fact): GroundingSnapshotItem => {
-        const body = fact.body ?? "";
-        return {
-          id: fact.id,
-          body,
-          text: body,
-          pin: fact.pin === Pin.Always ? Pin.Always : Pin.Retrieved,
-        };
-      },
+      (fact): GroundingSnapshotItem => ({
+        id: fact.id,
+        body: fact.body ?? "",
+        pin: fact.pin === Pin.Always ? Pin.Always : Pin.Retrieved,
+      }),
     );
     for (const item of items) {
       this.registry.recordEvent({ type: "fact_snapshot", fact_id: item.id });
@@ -331,7 +310,7 @@ function assertValidFact(fact: Fact): void {
   if (typeof fact.id !== "string" || !FACT_ID_PATTERN.test(fact.id)) {
     throw new Error(
       `ratel: fact id ${JSON.stringify(fact.id)} must match ${FACT_ID_PATTERN} ` +
-        "(letters, digits, and . _ : - only) so its grounding marker is unambiguous",
+        "(letters, digits, and . _ : - only; ids ride in trace events and structured payloads)",
     );
   }
   if (fact.pin !== undefined && fact.pin !== Pin.Always && fact.pin !== Pin.Retrieved) {
