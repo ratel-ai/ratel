@@ -107,6 +107,27 @@ describe("ToolCatalog", () => {
     expect(result).toEqual({ contents: "contents of /tmp/x" });
   });
 
+  it("keeps legacy executors at one argument when no invocation context is supplied", async () => {
+    const catalog = new ToolCatalog();
+    await catalog.register({
+      ...readFile,
+      execute: (...received) => ({ argumentCount: received.length }),
+    });
+
+    expect(await catalog.invoke("read_file", {})).toEqual({ argumentCount: 1 });
+  });
+
+  it("forwards an invocation context to the registered executor by identity", async () => {
+    const context = { adapter: "test", value: { tenantId: "tenant-42" } };
+    const catalog = new ToolCatalog();
+    await catalog.register({
+      ...readFile,
+      execute: (_input, receivedContext) => ({ sameContext: receivedContext === context }),
+    });
+
+    expect(await catalog.invoke("read_file", {}, context)).toEqual({ sameContext: true });
+  });
+
   it("throws on invoke of an unknown tool id", async () => {
     const catalog = new ToolCatalog();
     await expect(catalog.invoke("nope", {})).rejects.toThrow(/unknown toolId: nope/);
@@ -520,6 +541,18 @@ describe("ToolCatalog tracing", () => {
     const start = events.find((e) => e.type === "invoke_start");
     expect(start?.tool_id).toBe("read_file");
     expect(typeof start?.args_size_bytes).toBe("number");
+  });
+
+  it("does not record opaque invocation context in the local trace", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    await catalog.register(readFile);
+    catalog.drainTraceEvents();
+    const context: { secret: string; self?: unknown } = { secret: "tenant-secret" };
+    context.self = context;
+
+    await catalog.invoke("read_file", { path: "/x" }, context);
+
+    expect(JSON.stringify(catalog.drainTraceEvents())).not.toContain("tenant-secret");
   });
 
   it("emits invoke_error when the executor throws and re-throws to the caller", async () => {

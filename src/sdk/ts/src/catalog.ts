@@ -10,12 +10,14 @@ import {
 } from "./telemetry.js";
 
 /**
- * The function that runs a tool. Receives the arguments object and may return
+ * The function that runs a tool. Receives the arguments object and an optional
+ * opaque invocation context supplied by a framework adapter. It may return
  * either a plain value or a `Promise` — {@link ToolCatalog.invoke} awaits both,
- * so synchronous executors need no wrapping.
+ * so synchronous executors need no wrapping. One-argument executors remain
+ * valid; framework-neutral callers normally omit `context`.
  */
 // biome-ignore lint/suspicious/noExplicitAny: tool inputs are heterogeneous across the catalog
-export type Executor = (input: any) => Promise<unknown> | unknown;
+export type Executor = (input: any, context?: unknown) => Promise<unknown> | unknown;
 
 /**
  * A tool the catalog can both retrieve *and* run: the searchable metadata of a
@@ -24,7 +26,7 @@ export type Executor = (input: any) => Promise<unknown> | unknown;
  * returns.
  */
 export interface ExecutableTool extends Tool {
-  /** Runs the tool. Called by {@link ToolCatalog.invoke} with the args object. */
+  /** Runs the tool. Called by {@link ToolCatalog.invoke} with args and optional context. */
   execute: Executor;
 }
 
@@ -366,9 +368,10 @@ export class ToolCatalog {
    *
    * @param toolId - Id of a registered tool.
    * @param args - Arguments object passed through to the executor unchanged.
+   * @param context - Optional opaque invocation context forwarded unchanged.
    * @returns Whatever the executor returns (resolved if it returned a promise).
    */
-  async invoke(toolId: string, args: Record<string, unknown>): Promise<unknown> {
+  async invoke(toolId: string, args: Record<string, unknown>, context?: unknown): Promise<unknown> {
     const fn = this.executors.get(toolId);
     if (!fn) {
       throw new Error(`unknown toolId: ${toolId}`);
@@ -383,7 +386,7 @@ export class ToolCatalog {
       });
       const started = Date.now();
       try {
-        const result = await fn(args);
+        const result = await (context === undefined ? fn(args) : fn(args, context));
         this.registry.recordEvent({
           type: "invoke_end",
           tool_id: toolId,

@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from "@mastra/core/agent";
+import { RequestContext } from "@mastra/core/request-context";
 import { createTool, Tool } from "@mastra/core/tools";
 import {
   GET_SKILL_CONTENT_ID,
@@ -24,8 +25,13 @@ function userMsg(...texts: string[]): MastraDBMessage {
   };
 }
 
-// Invoke an exposed Mastra tool with the fabricated minimal context.
-function callExposed(tool: Tool, args: Record<string, unknown>): Promise<unknown> {
+// Invoke an exposed Mastra tool with a valid minimal context plus any live
+// fields the test supplies.
+function callExposed(
+  tool: Tool,
+  args: Record<string, unknown>,
+  context: Record<string, unknown> = {},
+): Promise<unknown> {
   const execute = tool.execute as (input: unknown, context: unknown) => Promise<unknown>;
   return execute(args, {
     observe: {
@@ -34,6 +40,7 @@ function callExposed(tool: Tool, args: Record<string, unknown>): Promise<unknown
       },
       log(): void {},
     },
+    ...context,
   });
 }
 
@@ -160,7 +167,7 @@ describe("ingest codec", () => {
   it("fabricates a minimal Mastra context when the catalog runs the tool", async () => {
     let seenContext: Record<string, unknown> | undefined;
     const view = ratel().adaptTo(mastra());
-    view.tools.register({
+    await view.tools.register({
       spy: createTool({
         id: "spy",
         description: "spy",
@@ -172,12 +179,155 @@ describe("ingest codec", () => {
     });
     const out = await view.tools.catalog.invoke("spy", {});
     expect(out).toEqual({ ran: true });
-    // The fabricated context carries the no-op `observe` and a fresh requestContext;
+    // The direct-call fallback carries the no-op `observe` and a fresh requestContext;
     // a tool reading `agent` / `mastra` / `workflow` sees undefined, not a crash.
     expect(seenContext?.observe).toBeDefined();
     expect(seenContext?.requestContext).toBeDefined();
     expect(seenContext?.agent).toBeUndefined();
     expect(seenContext?.mastra).toBeUndefined();
+  });
+
+  it("preserves the caller's Mastra execution context through invoke_tool", async () => {
+    const requestContext = new RequestContext([["tenantId", "tenant-42"]]);
+    const workspace = { marker: "workspace" };
+    const agent = {
+      toolCallId: "call-1",
+      messages: [],
+      suspend: async () => {},
+      threadId: "thread-9",
+      resourceId: "resource-3",
+    };
+    const mastraInstance = { marker: "mastra" };
+    const abortSignal = new AbortController().signal;
+    const core = ratel();
+    const registrationView = core.adaptTo(mastra());
+    const invocationView = core.adaptTo(mastra());
+    await registrationView.tools.register({
+      tenant_probe: createTool({
+        id: "tenant_probe",
+        description: "Read the current tenant",
+        execute: async (_input, context) => ({
+          sameContext: context.requestContext === requestContext,
+          tenantId: context.requestContext?.get("tenantId"),
+          sameWorkspace: context.workspace === workspace,
+          threadId: context.agent?.threadId,
+          resourceId: context.agent?.resourceId,
+          sameMastra: context.mastra === mastraInstance,
+          sameAbortSignal: context.abortSignal === abortSignal,
+        }),
+      }),
+    });
+
+    const out = await callExposed(
+      invocationView.modelTools()[INVOKE_TOOL_ID] as Tool,
+      {
+        toolId: "tenant_probe",
+        args: {},
+      },
+      {
+        requestContext,
+        workspace,
+        agent,
+        mastra: mastraInstance,
+        abortSignal,
+      },
+    );
+
+    expect(out).toEqual({
+      sameContext: true,
+      tenantId: "tenant-42",
+      sameWorkspace: true,
+      threadId: "thread-9",
+      resourceId: "resource-3",
+      sameMastra: true,
+      sameAbortSignal: true,
+    });
+  });
+
+  it("satisfies a registered tool's request context schema through invoke_tool", async () => {
+    const requestContext = new RequestContext([["actorId", "actor-7"]]);
+    const view = ratel().adaptTo(mastra());
+    await view.tools.register({
+      actor_probe: createTool({
+        id: "actor_probe",
+        description: "Read the authorized actor",
+        requestContextSchema: z.object({ actorId: z.string() }),
+        execute: async (_input, context) => ({
+          actorId: context.requestContext?.get("actorId"),
+        }),
+      }),
+    });
+
+    const out = await callExposed(
+      view.modelTools()[INVOKE_TOOL_ID] as Tool,
+      {
+        toolId: "actor_probe",
+        args: {},
+      },
+      { requestContext },
+    );
+
+    expect(out).toEqual({ actorId: "actor-7" });
+  });
+
+  it("isolates request contexts across concurrent invoke_tool calls", async () => {
+    let arrivals = 0;
+    let releaseBoth!: () => void;
+    const bothArrived = new Promise<void>((resolve) => {
+      releaseBoth = resolve;
+    });
+    const view = ratel().adaptTo(mastra());
+    await view.tools.register({
+      tenant_probe: createTool({
+        id: "tenant_probe",
+        description: "Read the current tenant after calls overlap",
+        execute: async (_input, context) => {
+          arrivals += 1;
+          if (arrivals === 2) releaseBoth();
+          await bothArrived;
+          return { tenantId: context.requestContext?.get("tenantId") };
+        },
+      }),
+    });
+    const invokeTool = view.modelTools()[INVOKE_TOOL_ID] as Tool;
+
+    const invokeFor = (tenantId: string) =>
+      callExposed(
+        invokeTool,
+        { toolId: "tenant_probe", args: {} },
+        {
+          requestContext: new RequestContext([["tenantId", tenantId]]),
+        },
+      );
+
+    expect(await Promise.all([invokeFor("tenant-a"), invokeFor("tenant-b")])).toEqual([
+      { tenantId: "tenant-a" },
+      { tenantId: "tenant-b" },
+    ]);
+  });
+
+  it("does not mistake a lookalike foreign context for Mastra context", async () => {
+    const core = ratel();
+    const view = core.adaptTo(mastra());
+    await view.tools.register({
+      tenant_probe: createTool({
+        id: "tenant_probe",
+        description: "Read the current tenant",
+        execute: async (_input, context) => ({
+          tenantId: context.requestContext?.get("tenantId"),
+        }),
+      }),
+    });
+
+    const result = await core.modelTools()[INVOKE_TOOL_ID].execute(
+      { toolId: "tenant_probe", args: {} },
+      {
+        adapter: "mastra",
+        value: { requestContext: new RequestContext([["tenantId", "foreign-tenant"]]) },
+      },
+    );
+
+    expect(result).toEqual({ tenantId: undefined });
   });
 });
 

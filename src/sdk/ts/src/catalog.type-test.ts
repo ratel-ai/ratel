@@ -2,12 +2,19 @@ import {
   DimensionMismatchError,
   EmbedderError,
   type EmbeddingSpec,
+  type Executor,
   type Skill,
   SkillCatalog,
   SkillRegistry,
   ToolCatalog,
   ToolRegistry,
 } from "./index.js";
+
+const legacyExecutor: Executor = (_input) => ({});
+const contextualExecutor: Executor = (_input, context) => context;
+// @ts-expect-error executor context is optional and opaque; implementations must narrow it
+const requiredNarrowContext: Executor = (_input, _context: { tenantId: string }) => ({});
+void [legacyExecutor, contextualExecutor, requiredNarrowContext];
 
 const valid: EmbeddingSpec[] = [
   { huggingface: "org/model", revision: "main", download: false },

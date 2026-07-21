@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- Add an optional opaque invocation context to `Executor`, `CatalogRegistration.execute`, and `ToolCatalog.invoke`, and forward it unchanged through `invokeToolTool`. Framework adapters can now preserve request-scoped execution state without the core inspecting, storing, or tracing it; existing one-argument executors retain their source compatibility and runtime call arity.
+
 ## [0.5.1-rc.0] - 2026-07-21
 
 ### Added

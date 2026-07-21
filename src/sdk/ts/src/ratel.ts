@@ -52,8 +52,11 @@ export interface CatalogRegistration {
   inputSchema: JSONSchema7;
   /** Output JSON Schema; defaults to `{ type: "object" }` when omitted. */
   outputSchema?: JSONSchema7;
-  /** Runs the tool through the capability funnel with just the args object. */
-  execute(input: unknown): Promise<unknown> | unknown;
+  /** Runs the tool through the capability funnel with args and optional opaque
+   * adapter context. An adapter that supports live framework context tags it in
+   * `expose` and validates that private tag here before unwrapping it; a missing
+   * or foreign tag must take the framework's context-free fallback. */
+  execute(input: unknown, context?: unknown): Promise<unknown> | unknown;
 }
 
 /** The identity of one synthetic recall call, handed to {@link RatelAdapter.recallMessages}. */
@@ -88,7 +91,9 @@ export interface RatelAdapter<
    * catalog can't execute (provider-executed) that must stay eagerly exposed.
    */
   ingest(id: string, tool: TTool): CatalogRegistration | "passthrough";
-  /** Ratel capability tool → framework tool. */
+  /** Ratel capability tool → framework tool. Context-aware adapters wrap the
+   * framework's complete live execution context in a private, stable tag before
+   * passing it as the capability executor's optional second argument. */
   expose(tool: ExecutableTool): TTool;
   /** Synthetic recall pair in the framework's message shape. */
   recallMessages(ref: RecallRef, recall: SearchCapabilitiesResult): TMessage[];

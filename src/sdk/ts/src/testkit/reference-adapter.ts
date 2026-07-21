@@ -53,6 +53,11 @@ export interface FakeExt {
  * correctly without pulling in any framework. Ships as the living example the
  * conformance meta-tests keep honest.
  *
+ * `FakeTool` has no framework execution context, so this smallest reference
+ * keeps one-argument executors. A context-aware adapter additionally wraps its
+ * live context under a private stable tag in `expose` and unwraps only that tag
+ * in the `CatalogRegistration.execute` returned by `ingest`.
+ *
  * @returns A reference adapter over the {@link FakeTool}/{@link FakeMessage} shapes.
  */
 export function referenceAdapter(): RatelAdapter<FakeTool, FakeMessage, FakeExt> {
