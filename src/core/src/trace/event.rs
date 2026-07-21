@@ -16,7 +16,8 @@ pub enum Origin {
 }
 
 /// How a registry corpus changed — carried by [`TraceEvent::IndexChurn`]
-/// (tools) and [`TraceEvent::SkillChurn`] (skills).
+/// (tools), [`TraceEvent::SkillChurn`] (skills), and [`TraceEvent::FactChurn`]
+/// (facts).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChurnKind {
@@ -77,6 +78,40 @@ pub struct SkillHitTrace {
     /// The engine score, widened to `f64` — same per-method semantics as
     /// [`crate::SkillHit::score`].
     pub score: f64,
+}
+
+/// One ranked fact hit inside a [`TraceEvent::FactSearch`] event — the
+/// fact-side twin of [`SkillHitTrace`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FactHitTrace {
+    /// Id of the matching fact.
+    pub fact_id: String,
+    /// The engine score, widened to `f64` — same per-method semantics as
+    /// [`crate::FactHit::score`].
+    pub score: f64,
+}
+
+/// Why a fact's body was (re-)injected into the context, carried by
+/// [`TraceEvent::FactInject`]. The grounding layer decides this from the
+/// transcript-derived injection ledger; it is the observable half of the
+/// re-injection freshness gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FactInjectReason {
+    /// Not present in the transcript at all — a first injection this
+    /// conversation. Wire value `never`.
+    Never,
+    /// Its marker was in an earlier turn but is gone now (trimmed / compacted
+    /// out of the window), so it is re-injected. Wire value `evicted`.
+    Evicted,
+    /// Present, but the registered body changed since it was injected (the
+    /// marker's content hash differs), so the new version is injected. Wire
+    /// value `mutated`.
+    Mutated,
+    /// Present and unchanged, but buried far enough back that the freshness
+    /// window elapsed, so it is re-anchored near the current turn. Wire value
+    /// `stale`.
+    Stale,
 }
 
 /// Every event produced by any layer of Ratel. New variants are additive;
@@ -147,6 +182,47 @@ pub enum TraceEvent {
         skill_id: String,
         /// Load wall time, in milliseconds.
         took_ms: u64,
+    },
+    /// A [`crate::FactRegistry`] search completed — the fact-side twin of
+    /// [`TraceEvent::SkillSearch`], with the same shape.
+    FactSearch {
+        /// The search text.
+        query: String,
+        /// Direct library call vs agent-synthesized.
+        origin: Origin,
+        /// Requested result count.
+        top_k: u32,
+        /// The ranked results, best-first.
+        hits: Vec<FactHitTrace>,
+        /// Per-engine stage timings (`bm25` / `dense` / `rrf`).
+        stages: Vec<SearchStage>,
+        /// Total search wall time, in milliseconds.
+        took_ms: u64,
+    },
+    /// The fact corpus changed — the fact-side twin of
+    /// [`TraceEvent::SkillChurn`], emitted by [`crate::FactRegistry::register`].
+    FactChurn {
+        /// Whether the id was added or removed.
+        kind: ChurnKind,
+        /// Id of the affected fact.
+        fact_id: String,
+    },
+    /// A fact's body was injected into the context by the grounding layer.
+    /// Emitted by the SDK via [`crate::FactRegistry::record_event`]; `reason`
+    /// records why the re-injection freshness gate let it through.
+    FactInject {
+        /// Id of the injected fact.
+        fact_id: String,
+        /// Why it was (re-)injected this turn.
+        reason: FactInjectReason,
+    },
+    /// A fact was *not* re-injected because it is still fresh in the context —
+    /// the token-saving half of the freshness gate, surfaced so the saving is
+    /// observable. Emitted by the SDK via
+    /// [`crate::FactRegistry::record_event`].
+    FactInjectSkip {
+        /// Id of the fact that was already present and left alone.
+        fact_id: String,
     },
     /// A tool invocation began. Emitted by the SDK catalogs just before the
     /// tool's executor runs; paired with [`TraceEvent::InvokeEnd`] or

@@ -17,13 +17,15 @@ import {
   ToolCatalog,
   type TraceSinkConfig,
 } from "./catalog.js";
+import { FactCatalog } from "./fact-catalog.js";
+import type { GroundingResult, GroundOptions } from "./grounding.js";
 import { SkillCatalog } from "./skill-catalog.js";
 import { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";
 import { isPeerInstalled } from "./telemetry.js";
 
 /** Construction options for {@link ratel}. Shared by every adapter view of the core. */
 export interface RatelConfig {
-  /** Default retrieval method for the tool and skill catalogs (default `"bm25"`, model-free). */
+  /** Default retrieval method for the tool, skill, and fact catalogs (default `"bm25"`, model-free). */
   method?: SearchMethod;
   /** Embedding model backing `"semantic"`/`"hybrid"` retrieval, forwarded to both
    * catalogs — see {@link ToolCatalogOptions.embedding}. A string is a local model
@@ -35,7 +37,14 @@ export interface RatelConfig {
   /** Max tools each host-driven `recall` returns: capped at 50; 0, negative, or
    * non-integer values fall back to the default 5. */
   recallTopK?: number;
-  /** Local trace-stream destination for both catalogs (default: discard). */
+  /** ⚠️ Experimental (facts, ADR-0014). Max retrieval-gated facts each
+   * `recall`/`ground` considers: capped at 50; invalid values fall back to 3. */
+  factsTopK?: number;
+  /** ⚠️ Experimental (facts, ADR-0014). Re-inject a still-present, unchanged
+   * fact once it sits this many messages back (the lost-in-the-middle
+   * re-anchor). Default: presence-only — never re-inject on distance alone. */
+  freshnessWindow?: number;
+  /** Local trace-stream destination for all catalogs (default: discard). */
   trace?: TraceSinkConfig;
 }
 
@@ -199,6 +208,8 @@ export interface AdaptedBase<TTool, TMessage> {
   readonly tools: AdaptedToolCollection<TTool>;
   /** The shared skill catalog (skills are framework-neutral). */
   readonly skills: SkillCatalog;
+  /** ⚠️ Experimental (facts, ADR-0014). The shared fact catalog — framework-neutral grounding content. */
+  readonly facts: FactCatalog;
   /**
    * The model-facing toolset in the framework's shape: this view's passthroughs
    * plus the three capability tools run through the adapter's `expose` codec.
@@ -212,9 +223,20 @@ export interface AdaptedBase<TTool, TMessage> {
    * Rank `query` and return the synthetic `search_capabilities` message pair in
    * the framework's shape (origin `"direct"`), or `[]` when nothing matched
    * (spending no call id). Pure: it builds fresh messages and never mutates a
-   * host array.
+   * host array. The result carries a `facts` bucket too when facts are registered.
    */
   recall(query: string): Promise<TMessage[]>;
+  /**
+   * ⚠️ Experimental (facts, ADR-0014). Decide which facts to (re-)inject given
+   * the current transcript — the grounding freshness gate. See
+   * {@link Ratel.ground}. Returns structured items (body + marker + reason); the
+   * caller renders them into messages.
+   */
+  ground(
+    query: string,
+    transcript: readonly string[],
+    opts?: GroundOptions,
+  ): Promise<GroundingResult>;
 }
 
 /**
@@ -243,6 +265,8 @@ export interface Ratel {
    * {@link ToolCollection.catalog}: its `search` top-K is not clamped. Use
    * {@link recall} for a clamped, capability-shaped skills ranking. */
   readonly skills: SkillCatalog;
+  /** ⚠️ Experimental (facts, ADR-0014). The shared fact catalog — constant grounding content, injected via {@link Ratel.ground}. */
+  readonly facts: FactCatalog;
   /**
    * The three capability tools (`search_capabilities`, `invoke_tool`,
    * `get_skill_content`) in native shape, for framework-free hosts. All three
@@ -260,6 +284,32 @@ export interface Ratel {
    * (on a dense core) embedded now — `await r.tools.register(...)` first.
    */
   recall(query: string): Promise<SearchCapabilitiesResult | null>;
+  /**
+   * ⚠️ Experimental (facts, ADR-0014). Decide which facts to (re-)inject given
+   * the current transcript — the grounding freshness gate. Considers the
+   * always-on tier (`experimental.FactCatalog.pinned`) plus the retrieval-gated
+   * facts `query` ranks in, then injects only those not already fresh in
+   * `transcript`: absent (`never`/`evicted`), changed (`mutated`), or past the
+   * freshness window (`stale`). Records a `fact_inject` / `fact_inject_skip`
+   * event per fact.
+   *
+   * Stateless across conversations — the transcript *is* the ledger — but
+   * session-aware within one core instance: it remembers which ids it injected
+   * so it can tell `evicted` from `never`. Returns structured
+   * `experimental.GroundingItem`s (body + marker + reason); the caller renders
+   * them into the framework's message shape, embedding each `marker` beside its
+   * `body` so the next turn can dedupe.
+   *
+   * @param query - The current turn's text, for the retrieval-gated tier.
+   * @param transcript - Per-message text of the current history, oldest first.
+   * @param opts - Per-call top-K and freshness-window overrides.
+   * @returns The facts to inject (always-on first) and the ids left fresh.
+   */
+  ground(
+    query: string,
+    transcript: readonly string[],
+    opts?: GroundOptions,
+  ): Promise<GroundingResult>;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
   adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A>;
 }
@@ -323,6 +373,15 @@ export function ratel(config: RatelConfig = {}): Ratel {
     embedding: config.embedding,
     trace: config.trace,
   });
+  // The fact catalog owns the grounding freshness state (its injected-id set),
+  // so `r.ground` is a thin delegate to `facts.ground`.
+  const facts = new FactCatalog({
+    method: config.method,
+    embedding: config.embedding,
+    trace: config.trace,
+    factsTopK: config.factsTopK,
+    freshnessWindow: config.freshnessWindow,
+  });
   // Recall call ids come from a private counter shared across every view of this
   // core: transcript positions are caller-owned (trimming/compaction repeats
   // them as tool-call ids), so they can't be the id source.
@@ -378,11 +437,25 @@ export function ratel(config: RatelConfig = {}): Ratel {
   async function recall(query: string): Promise<SearchCapabilitiesResult | null> {
     const result = await runCapabilitiesSearch(catalog, query, {
       topKTools: config.recallTopK, // capped/validated inside runCapabilitiesSearch
+      topKFacts: config.factsTopK,
       skillCatalog: skills,
+      factCatalog: facts,
       origin: "direct",
     });
-    return result.tools.groups.length === 0 && result.skills.length === 0 ? null : result;
+    return result.tools.groups.length === 0 &&
+      result.skills.length === 0 &&
+      result.facts.length === 0
+      ? null
+      : result;
   }
+
+  // The freshness gate lives on the fact catalog (it owns the fact state); the
+  // core just forwards to it, so `r.ground` and `r.facts.ground` are one path.
+  const ground = (
+    query: string,
+    transcript: readonly string[],
+    opts?: GroundOptions,
+  ): Promise<GroundingResult> => facts.ground(query, transcript, opts);
 
   function adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A> {
     assertAdapter(adapter);
@@ -434,6 +507,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
     const base: AdaptedBase<unknown, unknown> = {
       tools: adaptedTools,
       skills,
+      facts,
+      ground,
       modelTools() {
         const out: Record<string, unknown> = Object.fromEntries(passthrough);
         for (const [id, tool] of Object.entries(modelTools())) {
@@ -453,7 +528,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     return { ...base, ...ext } as AdaptedRatel<A>;
   }
 
-  return { tools, skills, modelTools, recall, adaptTo };
+  return { tools, skills, facts, modelTools, recall, ground, adaptTo };
 }
 
 /** Reject a reserved capability-tool id (the funnel's vocabulary can't be shadowed). */

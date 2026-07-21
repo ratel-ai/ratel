@@ -60,6 +60,7 @@ _TRACER_NAME = "ratel-ai"
 #: call sites, so the catalog modules stay dependency-free when telemetry is absent).
 SEARCH_TARGET_TOOL = "tool"
 SEARCH_TARGET_SKILL = "skill"
+SEARCH_TARGET_FACT = "fact"
 
 T = TypeVar("T")
 
