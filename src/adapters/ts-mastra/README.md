@@ -57,7 +57,7 @@ It is a no-op — spending no recall-id — when the last message is not a user 
 ## Limitations
 
 - **Single-message recall encoding.** A `MastraDBMessage` has no `tool` role: a completed call+result is one assistant message with `content.format: 2` and a single resolved `tool-invocation` part. The recall pair is therefore encoded as **one** assistant message (Mastra renders it to the model as an assistant tool-call followed by a tool result).
-- **Fabricated execution context for catalog-invoked tools.** When the model runs one of your tools through `invoke_tool`, the catalog calls its `execute(args, context)` with a *minimal fabricated* context (`{ observe }` no-op; `mastra` / `agent` / `workflow` / `abortSignal` absent, `requestContext` a fresh empty one). A tool that reads those sees the fakes; tools that read only their input args are unaffected. Mastra re-validates the args against the tool's schema on this call; invalid args (or a required `requestContextSchema` the fabricated context can't satisfy) surface as a thrown error, which the capability funnel reports as a failed call.
+- **Direct catalog invocation has no Mastra context.** The normal model path through `invoke_tool` forwards Mastra's complete live `ToolExecutionContext` unchanged, including `requestContext`, workspace, agent thread/resource metadata, `mastra`, and `abortSignal`; `requestContextSchema` therefore validates against the caller's real values. The driver-level escape hatch `r.tools.catalog.invoke(id, args)` bypasses a Mastra invocation, so it retains a minimal fallback context (`{ observe }` no-op, a fresh empty `requestContext`, other live fields absent). Pass tools through `modelTools()` when they depend on request-scoped context.
 - **Any Mastra tool schema works.** `ingest` reads Mastra's *already-normalized* input schema, so tools built with zod 3, zod 4, or a raw JSON Schema all catalog correctly — the adapter never re-converts schemas itself. (`zod` is a peer only because the exposed capability tools carry hand-written zod schemas.)
 - **Persist the conversation across turns.** Recall fires only when the last message is the user's turn. Standard Mastra memory hygiene applies; if you rebuild the message history per call, keep the user turn last so recall can find it.
 
@@ -65,6 +65,7 @@ It is a no-op — spending no recall-id — when the last message is not a user 
 
 - Package name: `@ratel-ai/mastra`
 - Pure TypeScript, **zero runtime dependencies** — the adapter is glue. `@mastra/core@>=1.11.0 <2`, `zod@^3.25.0 || ^4.0.0` (matching Mastra's own zod peer), and `@ratel-ai/sdk` are peers the host already installs.
+- Live context forwarding spans this adapter and `@ratel-ai/sdk`; upgrade their RCs together. An older SDK silently drops the adapter's opaque context before catalog execution.
 - Requires Node.js 22.13 or newer, matching Mastra's own requirement.
 - MIT ([ADR-0009](../../../docs/adr/0009-licensing.md)); member of the pnpm workspace; `publishConfig` provenance on.
 
@@ -72,7 +73,7 @@ It is a no-op — spending no recall-id — when the last message is not a user 
 
 The supported range is `@mastra/core@>=1.11.0 <2`. Version 1.11 is the floor because it is the first 1.x release where `createTool()` normalizes zod and raw JSON schemas to the Standard Schema surface that `ingest` reads.
 
-There is no runtime version detection. The adapter stays on the common public tool, message, and processor shapes and owns two tiny compatibility details locally: the no-op observer context and the structural validation-error check. This avoids imports that Mastra only exported later (`isValidationError` in 1.18 and `noopObserve` in 1.37) while preserving their behavior. CI runs the adapter build, suite, and type tests against exact 1.11.0, 1.31.0, and 1.51.0; the worked Mastra example also drives a real 1.51 Agent loop.
+There is no runtime version detection. The adapter stays on the common public tool, message, processor, and `ToolExecutionContext` shapes and owns two tiny compatibility details locally: the direct-call no-op observer fallback and the structural validation-error check. This avoids imports that Mastra only exported later (`isValidationError` in 1.18 and `noopObserve` in 1.37) while preserving their behavior. CI runs the adapter build, suite, and type tests against exact 1.11.0, 1.31.0, and 1.51.0; the worked Mastra example also drives a real 1.51 Agent loop.
 
 ## Build & test
 

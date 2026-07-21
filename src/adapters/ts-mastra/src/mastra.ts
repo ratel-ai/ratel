@@ -1,6 +1,6 @@
 import type { MastraDBMessage, ToolsInput } from "@mastra/core/agent";
 import type { InputProcessor, ProcessInputArgs } from "@mastra/core/processors";
-import { createTool } from "@mastra/core/tools";
+import { createTool, type ToolExecutionContext } from "@mastra/core/tools";
 import type {
   CatalogRegistration,
   JSONSchema7,
@@ -43,10 +43,14 @@ export interface MastraExt {
 /** Id of the recall input processor (stamped on the Mastra `Processor`). */
 const RECALL_PROCESSOR_ID = "ratel-recall";
 
-// The minimal execution context the catalog fabricates when it runs an ingested
-// Mastra tool with just its args: `observe` is the only required field of
-// `ToolExecutionContext` (the createTool wrapper fills `requestContext` itself).
-// A tool reading `mastra` / `agent` / `workflow` / `abortSignal` sees `undefined`.
+// Package-stable and collision-resistant across multiple Mastra views or package
+// copies sharing one catalog. Other framework adapters use their own key.
+const MASTRA_CONTEXT_KEY = Symbol.for("@ratel-ai/mastra.execution-context");
+
+// Direct catalog calls have no Mastra invocation to supply context. Preserve a
+// minimal fallback for that driver-level path (and for a foreign adapter tag):
+// `observe` is the only required field of `ToolExecutionContext`; createTool
+// fills a fresh empty `requestContext`. Other live fields remain undefined.
 const CATALOG_CONTEXT = {
   observe: {
     async span<T>(_name: string, fn: () => T | Promise<T>): Promise<T> {
@@ -89,12 +93,14 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
         // Schema straight off the normalized standard schema (works for tools
         // built from zod 3, zod 4, or a raw JSON Schema).
         inputSchema: toJsonSchema(t.inputSchema),
-        // Catalog executors get only the args object: fabricate the minimal
-        // Mastra context so a tool reading it sees a no-op rather than crashing.
-        execute: async (input) => {
-          const result = await execute(input, CATALOG_CONTEXT);
+        // A model-facing capability call carries Mastra's live context through
+        // the catalog as an opaque, adapter-tagged value. Direct catalog calls
+        // have none, so preserve their minimal no-op fallback.
+        execute: async (input, invocationContext) => {
+          const context = mastraContext(invocationContext) ?? CATALOG_CONTEXT;
+          const result = await execute(input, context);
           // Mastra's createTool wrapper does not throw on a schema mismatch (or a
-          // required requestContext the fabricated context can't satisfy) — it
+          // required requestContext the direct-call fallback can't satisfy) — it
           // RETURNS a ValidationError. Surface it as a real error so the capability
           // funnel reports a failed call, not a successful one carrying an error blob.
           if (isMastraValidationError(result)) {
@@ -118,7 +124,13 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
         id: tool.id,
         description: tool.description,
         inputSchema: capabilitySchema(tool.id, tool.inputSchema as JSONSchema7),
-        execute: async (input) => tool.execute(input as Record<string, unknown>),
+        // Keep the whole live context opaque to the core. The stable private
+        // symbol lets any Mastra view over this catalog recover it, while a
+        // different adapter's carrier can never be mistaken for Mastra's.
+        execute: async (input, context) =>
+          tool.execute(input as Record<string, unknown>, {
+            [MASTRA_CONTEXT_KEY]: context,
+          }),
       }) as MastraTool;
     },
 
@@ -169,6 +181,13 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
       };
     },
   };
+}
+
+function mastraContext(value: unknown): ToolExecutionContext | undefined {
+  if (value === null || typeof value !== "object" || !(MASTRA_CONTEXT_KEY in value)) {
+    return undefined;
+  }
+  return (value as { [MASTRA_CONTEXT_KEY]: ToolExecutionContext })[MASTRA_CONTEXT_KEY];
 }
 
 // Mastra exports this structural guard from 1.18 onward. Keep the equivalent
