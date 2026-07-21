@@ -205,6 +205,16 @@ pub struct Intent {
     /// magnitude is discarded by the fusion.
     #[serde(default)]
     pub skills: BTreeMap<String, f32>,
+    /// Every distinct content token across `members`, cached.
+    ///
+    /// Derived from `members` and kept in step with them, so it is never
+    /// serialized and never part of identity. It exists because lexical
+    /// matching needs this set on **every search**, and rebuilding it from the
+    /// member strings each time cost ~99% of that search — the set does not
+    /// change between searches, so it is built once and extended in place.
+    /// Rebuilt after deserialization by [`IntentGraph::rebuild_caches`].
+    #[serde(skip)]
+    bag: std::collections::HashSet<String>,
 }
 
 /// Identity is the evidence — members, centroid, support, edges. The derived
@@ -266,8 +276,20 @@ impl Intent {
     }
 
     /// Every distinct content token across this cluster's members.
-    fn token_bag(&self) -> std::collections::HashSet<String> {
-        self.members.iter().flat_map(|m| tokenize(m)).collect()
+    fn token_bag(&self) -> &std::collections::HashSet<String> {
+        &self.bag
+    }
+
+    /// Fold a newly added member's tokens into the cache. O(tokens in that one
+    /// member) — the other members are already accounted for.
+    fn absorb_tokens(&mut self, member: &str) {
+        self.bag.extend(tokenize(member));
+    }
+
+    /// Rebuild the cache from `members` — after deserialization, where the
+    /// cache is skipped on the wire.
+    fn rebuild_bag(&mut self) {
+        self.bag = self.members.iter().flat_map(|m| tokenize(m)).collect();
     }
 }
 
@@ -318,12 +340,22 @@ impl IntentGraph {
     /// [`IntentGraphError::Malformed`] if the bytes are not the expected shape,
     /// or [`IntentGraphError::UnsupportedVersion`] if `v` is not 1.
     pub fn from_json(json: &str) -> Result<Self, IntentGraphError> {
-        let graph: IntentGraph =
+        let mut graph: IntentGraph =
             serde_json::from_str(json).map_err(|e| IntentGraphError::Malformed(e.to_string()))?;
         if graph.v != GRAPH_VERSION {
             return Err(IntentGraphError::UnsupportedVersion(graph.v));
         }
+        graph.rebuild_caches();
         Ok(graph)
+    }
+
+    /// Rebuild every cluster's derived token cache. The cache is skipped on the
+    /// wire, so a deserialized graph must restore it before it can match
+    /// lexically.
+    fn rebuild_caches(&mut self) {
+        for it in &mut self.intents {
+            it.rebuild_bag();
+        }
     }
 
     /// An empty graph at the current version — the starting state of a learner.
@@ -402,6 +434,7 @@ impl IntentGraph {
                     support: 0,
                     tools: BTreeMap::new(),
                     skills: BTreeMap::new(),
+                    bag: std::collections::HashSet::new(),
                 });
                 self.intents.len() - 1
             }
@@ -413,6 +446,7 @@ impl IntentGraph {
             // the token bag — dedupe. `support` still counts every observation.
             if !it.members.iter().any(|m| m == query) {
                 it.members.push(query.to_string());
+                it.absorb_tokens(query);
             }
             it.support = it.support.saturating_add(1);
             if let Some(v) = vector.as_deref() {
@@ -754,7 +788,7 @@ mod tests {
     use super::*;
 
     fn intent(id: &str, members: &[&str], tools: &[(&str, f32)]) -> Intent {
-        Intent {
+        let mut it = Intent {
             id: id.into(),
             label: members.first().copied().unwrap_or_default().into(),
             terms: Vec::new(),
@@ -763,7 +797,10 @@ mod tests {
             support: 5,
             tools: tools.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
             skills: BTreeMap::new(),
-        }
+            bag: std::collections::HashSet::new(),
+        };
+        it.rebuild_bag(); // the cache is derived from members — keep them in step
+        it
     }
 
     fn graph(intents: Vec<Intent>) -> IntentGraph {
@@ -1174,6 +1211,46 @@ mod tests {
         g.observe("build broken", Capability::Tool, "a", T0 + 10);
         g.observe("build broken", Capability::Tool, "b", T0);
         assert_eq!(g.built_from_ts, T0 + 10);
+    }
+
+    #[test]
+    fn the_token_cache_stays_in_step_with_members() {
+        // The cache is derived from `members`; if the two drift, a query stops
+        // matching a cluster that plainly covers it. Silent, and invisible to
+        // every other test — so pin it directly.
+        let mut g = IntentGraph::empty();
+        g.observe("why is the build broken", Capability::Tool, "t", T0);
+        g.observe("the pipeline is broken", Capability::Tool, "t", T0);
+
+        let it = &g.intents[0];
+        let fresh: std::collections::HashSet<String> =
+            it.members.iter().flat_map(|m| tokenize(m)).collect();
+        assert_eq!(it.token_bag(), &fresh, "cache drifted from members");
+    }
+
+    #[test]
+    fn a_deserialized_graph_can_still_match_lexically() {
+        // The cache is skipped on the wire, so `from_json` must rebuild it —
+        // otherwise a reloaded graph silently matches nothing.
+        let mut g = IntentGraph::empty();
+        g.observe(
+            "why is the build broken",
+            Capability::Tool,
+            "gh_run_list",
+            T0,
+        );
+        let back = IntentGraph::from_json(&serde_json::to_string(&g).unwrap()).unwrap();
+
+        assert!(
+            back.arm(
+                "why is the build broken",
+                None,
+                Capability::Tool,
+                &all_known
+            )
+            .is_some(),
+            "a reloaded graph must still match"
+        );
     }
 
     // ---- labels ------------------------------------------------------------
