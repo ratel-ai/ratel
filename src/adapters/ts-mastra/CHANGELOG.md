@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.4] - 2026-07-21
+
 ### Fixed
 
 - Preserve Mastra's complete live `ToolExecutionContext` through `invoke_tool`, including `requestContext`, workspace, agent thread/resource metadata, `mastra`, and `abortSignal`. Required `requestContextSchema` values now validate against the caller's real context, and concurrent invocations remain isolated. Direct `ToolCatalog.invoke` calls still use the documented context-free fallback. This requires the paired `@ratel-ai/sdk` release containing opaque invocation-context forwarding.
