@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.4] - 2026-07-22
+
+### Changed
+
+- Rebuilt against `@ratel-ai/sdk@0.5.1-rc.1`: the packed `@ratel-ai/sdk` peer range moves up from `^0.5.0` — which the prerelease `0.5.1-rc.1` does not satisfy — to `^0.5.1-rc.1`, so the adapter installs cleanly alongside the current SDK. No adapter source changes since rc.3; the model-facing SDK API the adapter builds on is unchanged. (rc.3 was tagged but never published to npm, so this is the first published adapter release since rc.2.)
+
 ## [0.1.0-rc.3] - 2026-07-22
 
 ### Added
