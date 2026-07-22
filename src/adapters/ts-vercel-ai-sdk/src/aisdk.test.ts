@@ -1,5 +1,5 @@
 import { ratel, SEARCH_CAPABILITIES_ID, type SearchCapabilitiesResult } from "@ratel-ai/sdk";
-import { type ModelMessage, type Tool, tool } from "ai";
+import { jsonSchema, type ModelMessage, type Tool, tool } from "ai";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { aiSdk } from "./aisdk.js";
@@ -50,6 +50,17 @@ describe("ingest codec", () => {
       id: "acme.shell",
       args: {},
       isProviderExecuted: false,
+      inputSchema: { type: "object" },
+      execute: async () => ({ ran: true }),
+    } as unknown as Tool;
+    expect(aiSdk().ingest("shell", providerTool)).toBe("passthrough");
+  });
+
+  it("passes through an ai@5 provider-defined tool even when it carries a client execute", () => {
+    const providerTool = {
+      type: "provider-defined",
+      id: "acme.shell",
+      args: {},
       inputSchema: { type: "object" },
       execute: async () => ({ ran: true }),
     } as unknown as Tool;
@@ -107,7 +118,7 @@ describe("ingest codec", () => {
     expect(seenContext).toBeUndefined();
   });
 
-  it("fabricates AI SDK execution options (incl. a context field) when the catalog runs the tool", async () => {
+  it("fabricates AI SDK 5–7 execution options when the catalog runs the tool", async () => {
     let seenOptions: Record<string, unknown> | undefined;
     const t = tool({
       description: "spy",
@@ -121,11 +132,49 @@ describe("ingest codec", () => {
     if (reg === "passthrough") throw new Error("expected an executable registration");
     const out = await reg.execute({});
     expect(out).toEqual({ ran: true });
-    // ai@7 tool executors may read options.context — fabricate it so a reader
-    // sees a fake rather than a crash on a missing field.
+    // ai@5/6 read experimental_context; ai@7 reads context. Both exist so a
+    // tool sees an explicit fake rather than crashing on a missing field.
     expect(seenOptions && "context" in seenOptions).toBe(true);
+    expect(seenOptions && "experimental_context" in seenOptions).toBe(true);
+    expect(seenOptions?.context).toBeUndefined();
+    expect(seenOptions?.experimental_context).toBeUndefined();
     expect(seenOptions?.toolCallId).toBe("ratel_spy");
     expect(seenOptions?.messages).toEqual([]);
+  });
+
+  it("rejects an asynchronous input schema synchronously without partially registering a batch", () => {
+    const view = ratel().adaptTo(aiSdk());
+    const valid = tool({
+      description: "valid",
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
+    });
+    const asynchronous = tool({
+      description: "async schema",
+      inputSchema: jsonSchema(Promise.resolve({ type: "object" })),
+      execute: async () => ({ ok: true }),
+    });
+
+    expect(() => view.tools.register({ valid, asynchronous })).toThrow(
+      'ratel: AI SDK tool "asynchronous" has an asynchronous inputSchema; @ratel-ai/vercel-ai-sdk requires schemas to resolve synchronously',
+    );
+    expect(view.tools.has("valid")).toBe(false);
+    expect(view.tools.has("asynchronous")).toBe(false);
+  });
+
+  it("identifies an asynchronous output schema by tool and field", () => {
+    const view = ratel().adaptTo(aiSdk());
+    const asynchronous = tool({
+      description: "async output schema",
+      inputSchema: z.object({}),
+      outputSchema: jsonSchema(Promise.resolve({ type: "object" })),
+      execute: async () => ({ ok: true }),
+    });
+
+    expect(() => view.tools.register({ asynchronous })).toThrow(
+      'ratel: AI SDK tool "asynchronous" has an asynchronous outputSchema; @ratel-ai/vercel-ai-sdk requires schemas to resolve synchronously',
+    );
+    expect(view.tools.has("asynchronous")).toBe(false);
   });
 });
 
