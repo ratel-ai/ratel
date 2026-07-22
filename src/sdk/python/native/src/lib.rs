@@ -113,20 +113,30 @@ pub struct SearchHit {
     /// Id of the matched tool, as passed to `register`.
     #[pyo3(get)]
     pub tool_id: String,
-    /// Relevance score; higher ranks first. The scale depends on the search
-    /// method: raw BM25 (unbounded) for `"bm25"`, cosine similarity for
-    /// `"semantic"`, reciprocal-rank-fusion for `"hybrid"` — scores from
-    /// different methods are not comparable.
+    /// Relevance score; higher ranks first. Its scale depends on the method
+    /// (raw BM25 / cosine / RRF) AND on `fused` — with adaptive ranking a matched
+    /// query returns small RRF scores while an unmatched one on the same catalog
+    /// returns the raw score. Order by `rank`, branch on `fused`; treat `score`
+    /// as a within-list hint only.
     #[pyo3(get)]
     pub score: f64,
+    /// 0-based position in this result list (best is `0`). Stable across methods
+    /// and across the `fused` switch — the field to order or threshold on.
+    #[pyo3(get)]
+    pub rank: u32,
+    /// `true` when `score` is an RRF score (ordering-only) rather than the raw
+    /// method score. Uniform across one result list; lets a caller detect the
+    /// scale their `score` is on.
+    #[pyo3(get)]
+    pub fused: bool,
 }
 
 #[pymethods]
 impl SearchHit {
     fn __repr__(&self) -> String {
         format!(
-            "SearchHit(tool_id={:?}, score={})",
-            self.tool_id, self.score
+            "SearchHit(tool_id={:?}, score={}, rank={}, fused={})",
+            self.tool_id, self.score, self.rank, self.fused
         )
     }
 }
@@ -138,18 +148,24 @@ pub struct SkillHit {
     /// Id of the matched skill, as passed to `register`.
     #[pyo3(get)]
     pub skill_id: String,
-    /// Relevance score; higher ranks first. Same method-dependent scale as
-    /// [`SearchHit::score`], computed against the skill corpus.
+    /// Relevance score; scale depends on the method and on `fused`, as on
+    /// [`SearchHit::score`]. Order by `rank`, branch on `fused`.
     #[pyo3(get)]
     pub score: f64,
+    /// 0-based position — as on [`SearchHit::rank`].
+    #[pyo3(get)]
+    pub rank: u32,
+    /// `true` when `score` is an RRF score — as on [`SearchHit::fused`].
+    #[pyo3(get)]
+    pub fused: bool,
 }
 
 #[pymethods]
 impl SkillHit {
     fn __repr__(&self) -> String {
         format!(
-            "SkillHit(skill_id={:?}, score={})",
-            self.skill_id, self.score
+            "SkillHit(skill_id={:?}, score={}, rank={}, fused={})",
+            self.skill_id, self.score, self.rank, self.fused
         )
     }
 }
@@ -342,6 +358,8 @@ impl ToolRegistry {
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect()
     }
@@ -360,6 +378,8 @@ impl ToolRegistry {
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect()
     }
@@ -395,6 +415,8 @@ impl ToolRegistry {
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect())
     }
@@ -626,6 +648,8 @@ impl SkillRegistry {
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect()
     }
@@ -643,6 +667,8 @@ impl SkillRegistry {
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect()
     }
@@ -674,6 +700,8 @@ impl SkillRegistry {
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect())
     }

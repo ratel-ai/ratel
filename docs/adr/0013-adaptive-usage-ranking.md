@@ -116,6 +116,13 @@ A usage arm turns `SearchHit.score` from a BM25 score into an RRF score. ADR-001
 registry and those entry points are untouched — the same containment ADR-0011 used for
 fallibility.
 
+Because that makes `score` switch scale *between calls* on one catalog (raw when a query
+matches no cluster, RRF when it matches one), each hit carries `rank` (0-based position,
+scale-invariant) and `fused` (whether `score` is an RRF score). Callers order/threshold on
+`rank` and branch on `fused`; `score` is a within-list hint only. Deliberately no normalized
+confidence — BM25, cosine, and RRF have no honest common scale, so any single number would
+be fabricated.
+
 ### Where learning happens
 
 The learner is a `TraceSink` decorator. `Search` and `InvokeStart` arrive through separate

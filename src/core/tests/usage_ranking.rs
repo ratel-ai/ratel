@@ -559,3 +559,48 @@ fn a_single_stray_invocation_does_not_reshape_ranking() {
         "a lone observation must not flip the top result"
     );
 }
+
+// ---- rank and fused expose the score-scale switch (problem #2) --------------
+
+#[test]
+fn rank_is_the_zero_based_position() {
+    let hits = registry().search("why is the build broken", 5);
+    for (i, h) in hits.iter().enumerate() {
+        assert_eq!(h.rank, i as u32, "rank must be the list position");
+    }
+}
+
+#[test]
+fn without_a_graph_scores_are_raw_and_unfused() {
+    // The byte-identical promise, now also asserting the flag: no graph means no
+    // fusion, so scores stay on the raw BM25 scale.
+    let hits = registry().search("why is the build broken", 5);
+    assert!(hits.iter().all(|h| !h.fused), "no graph → not fused");
+    assert!(hits[0].score > 0.1, "raw BM25 score, not a ~0.03 RRF score");
+}
+
+#[test]
+fn a_matched_query_is_flagged_fused() {
+    let mut r = registry();
+    r.set_intent_graph(Some(Arc::new(graph(9).into())));
+    let hits = r.search("why is the build broken", 5);
+    assert!(hits.iter().all(|h| h.fused), "the usage arm fused → fused");
+    assert!(hits[0].score < 0.1, "RRF score, small magnitude");
+    // rank still contiguous from 0 through the fused list
+    for (i, h) in hits.iter().enumerate() {
+        assert_eq!(h.rank, i as u32);
+    }
+}
+
+#[test]
+fn a_missed_query_stays_unfused_even_with_a_graph() {
+    // Same catalog, different query: this one matches no cluster, so it must
+    // report the raw scale — the exact between-calls switch `fused` exists for.
+    let mut r = registry();
+    r.set_intent_graph(Some(Arc::new(graph(9).into())));
+    let hits = r.search("rotate the signing key", 5);
+    assert!(
+        hits.iter().all(|h| !h.fused),
+        "no cluster matched → not fused"
+    );
+}

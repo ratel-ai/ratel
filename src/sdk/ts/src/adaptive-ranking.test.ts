@@ -156,4 +156,28 @@ describe("adaptive usage ranking", () => {
     expect(Object.keys(wire.intents[0].tools)).toContain("gh_run_list");
     expect(Object.keys(wire.intents[0].skills)).toContain("ci-triage");
   });
+
+  it("exposes rank and fused so callers avoid the scale-shifting score", async () => {
+    const catalog = await buildCatalog();
+    const graph = new IntentGraph();
+    catalog.enableAdaptiveRanking(graph);
+
+    // No evidence yet: raw scores, unfused.
+    const cold = catalog.search("why is the build broken", 5);
+    expect(cold.map((h) => h.rank)).toEqual(cold.map((_, i) => i));
+    expect(cold.every((h) => h.fused === false)).toBe(true);
+
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+    await useIt(catalog, "is the build broken again", "gh_run_list");
+    await useIt(catalog, "the build broken on main", "gh_run_list");
+
+    // Matched now: fused RRF scores, rank still contiguous from 0.
+    const warm = catalog.search("why is the build broken", 5);
+    expect(warm[0]?.rank).toBe(0);
+    expect(warm.every((h) => h.fused === true)).toBe(true);
+
+    // An unrelated query on the same catalog stays unfused — the between-calls
+    // switch `fused` exists to expose.
+    expect(catalog.search("read a file from disk", 5).every((h) => !h.fused)).toBe(true);
+  });
 });

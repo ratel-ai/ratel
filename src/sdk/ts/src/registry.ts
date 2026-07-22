@@ -159,7 +159,8 @@ export class ToolRegistry {
    *
    * Only queries that match a cluster are affected — anything else ranks exactly
    * as it would have. With a graph attached, `SearchHit.score` becomes a fusion
-   * score rather than a raw BM25 score, so compare ordering, not magnitudes.
+   * score rather than a raw BM25 score, so use `rank` for ordering and
+   * `fused` to detect the scale, not the raw `score`.
    */
   enableAdaptiveRanking(graph: IntentGraph): void {
     this.native.enableAdaptiveRanking(graph);
@@ -297,7 +298,8 @@ export class SkillRegistry {
    *
    * Only queries that match a cluster are affected — anything else ranks exactly
    * as it would have. With a graph attached, `SearchHit.score` becomes a fusion
-   * score rather than a raw BM25 score, so compare ordering, not magnitudes.
+   * score rather than a raw BM25 score, so use `rank` for ordering and
+   * `fused` to detect the scale, not the raw `score`.
    */
   enableAdaptiveRanking(graph: IntentGraph): void {
     this.native.enableAdaptiveRanking(graph);

@@ -25,8 +25,31 @@ pub struct SkillHit {
     /// [`SearchMethod`] exactly as documented on [`crate::SearchHit::score`]:
     /// raw BM25 relevance for `Bm25`, cosine similarity (at most `1.0`) for
     /// `Semantic`, a Reciprocal Rank Fusion sum for `Hybrid`. Ties break by
-    /// `skill_id` ascending.
+    /// `skill_id` ascending. **Scale also depends on [`fused`](Self::fused)** —
+    /// order by [`rank`](Self::rank), branch on [`fused`](Self::fused).
     pub score: f32,
+    /// 0-based position in this result list (best is `0`) — the scale-invariant
+    /// signal to order or threshold on, in place of [`score`](Self::score). The
+    /// skill-side twin of [`crate::SearchHit::rank`].
+    pub rank: u32,
+    /// Whether [`score`](Self::score) is an RRF score (ordering-only) rather than
+    /// the raw method score — the skill-side twin of [`crate::SearchHit::fused`].
+    pub fused: bool,
+}
+
+/// Build hits from an already-ranked, best-first `(id, score)` list — the
+/// skill-side twin of [`crate::tool_registry`]'s `to_search_hits`.
+fn to_skill_hits(ranked: Vec<(String, f32)>, fused: bool) -> Vec<SkillHit> {
+    ranked
+        .into_iter()
+        .enumerate()
+        .map(|(i, (skill_id, score))| SkillHit {
+            skill_id,
+            score,
+            rank: i as u32,
+            fused,
+        })
+        .collect()
 }
 
 impl Embeddable for Skill {
@@ -173,10 +196,8 @@ impl SkillRegistry {
             took_ms: t.elapsed().as_millis() as u64,
             top_score: fused.first().map(|(_, s)| *s as f64),
         };
-        let hits = fused
-            .into_iter()
-            .map(|(skill_id, score)| SkillHit { skill_id, score })
-            .collect();
+        // Ordering-only RRF scores.
+        let hits = to_skill_hits(fused, true);
         (hits, stage)
     }
 
@@ -305,10 +326,8 @@ impl SkillRegistry {
         let Some(arm) = arm else {
             // No graph, or nothing matched: the original path with raw BM25
             // scores, unchanged.
-            let hits: Vec<SkillHit> = bm25_search(self.bm25_docs(), query, top_k)
-                .into_iter()
-                .map(|(skill_id, score)| SkillHit { skill_id, score })
-                .collect();
+            // Raw BM25 scores — not fused.
+            let hits = to_skill_hits(bm25_search(self.bm25_docs(), query, top_k), false);
             let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
             self.record_search(
@@ -383,10 +402,8 @@ impl SkillRegistry {
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let Some(arm) = arm else {
-            let hits: Vec<SkillHit> = ranked
-                .into_iter()
-                .map(|(skill_id, score)| SkillHit { skill_id, score })
-                .collect();
+            // Raw cosine scores — not fused.
+            let hits = to_skill_hits(ranked, false);
             let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
             self.record_search(
@@ -604,6 +621,28 @@ mod tests {
             &["backend", "api"],
         ));
         reg
+    }
+
+    #[test]
+    fn skill_hits_carry_rank_and_unfused_scores_without_a_graph() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill(
+            "design-api",
+            "design-api",
+            "design a REST endpoint",
+            &[],
+        ));
+        reg.register(skill(
+            "html-slides",
+            "html-slides",
+            "build html slide decks",
+            &[],
+        ));
+        let hits = reg.search("design a REST endpoint", 5);
+        for (i, h) in hits.iter().enumerate() {
+            assert_eq!(h.rank, i as u32);
+            assert!(!h.fused, "no graph → not fused");
+        }
     }
 
     #[test]

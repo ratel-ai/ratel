@@ -144,6 +144,8 @@ impl Task for ToolSearchTask {
                     .map(|hit| SearchHit {
                         tool_id: hit.tool_id,
                         score: hit.score as f64,
+                        rank: hit.rank,
+                        fused: hit.fused,
                     })
                     .collect()
             })
@@ -219,6 +221,8 @@ impl Task for SkillSearchTask {
                     .map(|hit| SkillHit {
                         skill_id: hit.skill_id,
                         score: hit.score as f64,
+                        rank: hit.rank,
+                        fused: hit.fused,
                     })
                     .collect()
             })
@@ -298,11 +302,19 @@ pub struct Tool {
 pub struct SearchHit {
     /// Id of the matched tool, as registered.
     pub tool_id: String,
-    /// Relevance score; higher is better, ties break by id ascending. The scale
-    /// depends on the method: raw BM25 (unbounded) for `"bm25"`, cosine
-    /// similarity for `"semantic"`, Reciprocal Rank Fusion for `"hybrid"` —
-    /// comparable within one result list, not across methods.
+    /// Relevance score; higher is better, ties break by id ascending. Its scale
+    /// depends on the method (raw BM25 / cosine / RRF) AND on `fused` — with
+    /// adaptive ranking a matched query returns small RRF scores while an
+    /// unmatched one on the same catalog returns the raw score. Order by `rank`
+    /// and branch on `fused`; treat `score` as a within-list hint only.
     pub score: f64,
+    /// 0-based position in this result list (best is `0`). Stable across methods
+    /// and across the `fused` switch — the field to order or threshold on.
+    pub rank: u32,
+    /// `true` when `score` is an RRF score (ordering-only) rather than the raw
+    /// method score: the usage arm fused into this search, or the method is
+    /// hybrid. Uniform across one result list; lets a caller detect the scale.
+    pub fused: bool,
 }
 
 /// Destination for the local trace stream (ADR-0007): `"noop"` discards,
@@ -509,6 +521,8 @@ impl ToolRegistry {
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect()
     }
@@ -531,6 +545,8 @@ impl ToolRegistry {
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect()
     }
@@ -571,6 +587,8 @@ impl ToolRegistry {
             .map(|hit| SearchHit {
                 tool_id: hit.tool_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect())
     }
@@ -751,9 +769,13 @@ pub struct Skill {
 pub struct SkillHit {
     /// Id of the matched skill, as registered.
     pub skill_id: String,
-    /// Relevance score; higher is better, ties break by id ascending. Scale
-    /// depends on the method (BM25 / cosine / RRF), as on `SearchHit.score`.
+    /// Relevance score; scale depends on the method and on `fused`, as on
+    /// `SearchHit.score`. Order by `rank`, branch on `fused`.
     pub score: f64,
+    /// 0-based position in this result list — as on `SearchHit.rank`.
+    pub rank: u32,
+    /// `true` when `score` is an RRF score — as on `SearchHit.fused`.
+    pub fused: bool,
 }
 
 /// Node binding over the `ratel-ai-core` skill registry — the skill twin of
@@ -837,6 +859,8 @@ impl SkillRegistry {
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect()
     }
@@ -856,6 +880,8 @@ impl SkillRegistry {
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect()
     }
@@ -895,6 +921,8 @@ impl SkillRegistry {
             .map(|hit| SkillHit {
                 skill_id: hit.skill_id,
                 score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
             })
             .collect())
     }

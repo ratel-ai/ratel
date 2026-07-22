@@ -164,3 +164,25 @@ async def test_one_graph_is_shared_between_tool_and_skill_catalogs() -> None:
     wire = json.loads(graph.to_json())
     assert "gh_run_list" in wire["intents"][0]["tools"]
     assert "ci-triage" in wire["intents"][0]["skills"]
+
+
+@pytest.mark.asyncio
+async def test_rank_and_fused_expose_the_scale_switch() -> None:
+    catalog = await build_catalog()
+    graph = IntentGraph()
+    catalog.enable_adaptive_ranking(graph)
+
+    cold = catalog.search("why is the build broken", 5)
+    assert [h.rank for h in cold] == list(range(len(cold)))
+    assert all(h.fused is False for h in cold)
+
+    await use_it(catalog, "why is the build broken", "gh_run_list")
+    await use_it(catalog, "is the build broken again", "gh_run_list")
+    await use_it(catalog, "the build broken on main", "gh_run_list")
+
+    warm = catalog.search("why is the build broken", 5)
+    assert warm[0].rank == 0
+    assert all(h.fused is True for h in warm)
+
+    # Unrelated query on the same catalog stays unfused.
+    assert all(not h.fused for h in catalog.search("read a file from disk", 5))

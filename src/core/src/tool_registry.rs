@@ -35,7 +35,39 @@ pub struct SearchHit {
     /// Scores are comparable within one result list, not across methods or
     /// corpora. Ties are broken by `tool_id` ascending, so ordering is
     /// deterministic across processes.
+    ///
+    /// **The scale also depends on [`fused`](Self::fused).** With adaptive
+    /// ranking on, a matched query returns RRF scores (~0.03) while an unmatched
+    /// one on the same catalog returns the raw method score (~0.9) — so `score`
+    /// switches scale *between calls*. Order by [`rank`](Self::rank) and branch
+    /// on [`fused`](Self::fused); treat `score` as a within-list hint only.
     pub score: f32,
+    /// 0-based position in this result list (best is `0`). Scale-invariant and
+    /// stable across methods and across the [`fused`](Self::fused) switch — the
+    /// signal to order or threshold on, in place of the wobbling [`score`](Self::score).
+    pub rank: u32,
+    /// Whether [`score`](Self::score) is a Reciprocal Rank Fusion score (only its
+    /// *ordering* is meaningful) rather than the raw method score. Uniform across
+    /// all hits of one search: `true` when the usage arm fused into this search
+    /// (or the method is hybrid, always RRF), `false` for a plain BM25/semantic
+    /// result. Lets a caller detect the scale their `score` is on.
+    pub fused: bool,
+}
+
+/// Build hits from an already-ranked, best-first `(id, score)` list: `rank` is
+/// the position, `fused` says whether these are RRF scores. One place so the two
+/// new fields cannot drift between the fused and raw paths.
+fn to_search_hits(ranked: Vec<(String, f32)>, fused: bool) -> Vec<SearchHit> {
+    ranked
+        .into_iter()
+        .enumerate()
+        .map(|(i, (tool_id, score))| SearchHit {
+            tool_id,
+            score,
+            rank: i as u32,
+            fused,
+        })
+        .collect()
 }
 
 impl Embeddable for Tool {
@@ -380,10 +412,8 @@ impl ToolRegistry {
             took_ms: t.elapsed().as_millis() as u64,
             top_score: fused.first().map(|(_, s)| *s as f64),
         };
-        let hits = fused
-            .into_iter()
-            .map(|(tool_id, score)| SearchHit { tool_id, score })
-            .collect();
+        // These came out of RRF, so their magnitude is ordering-only.
+        let hits = to_search_hits(fused, true);
         (hits, stage)
     }
 
@@ -407,10 +437,8 @@ impl ToolRegistry {
         let Some(arm) = arm else {
             // No graph, or nothing matched: the original path, unchanged, with
             // raw BM25 scores. ADR-0011's byte-for-byte promise lives here.
-            let hits: Vec<SearchHit> = bm25_search(self.bm25_docs(), query, top_k)
-                .into_iter()
-                .map(|(tool_id, score)| SearchHit { tool_id, score })
-                .collect();
+            // Raw BM25 scores — not fused.
+            let hits = to_search_hits(bm25_search(self.bm25_docs(), query, top_k), false);
             let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
             self.record_search(
@@ -488,10 +516,8 @@ impl ToolRegistry {
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let Some(arm) = arm else {
-            let hits: Vec<SearchHit> = ranked
-                .into_iter()
-                .map(|(tool_id, score)| SearchHit { tool_id, score })
-                .collect();
+            // Raw cosine scores — not fused.
+            let hits = to_search_hits(ranked, false);
             let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
             self.record_search(
@@ -1337,6 +1363,20 @@ mod tests {
             1,
             "one search must embed the query exactly once"
         );
+    }
+
+    #[test]
+    fn hybrid_scores_are_always_flagged_fused() {
+        // Hybrid is RRF-scale with or without a graph, so `fused` is always true
+        // — retroactively documenting what was already the case.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(tool("read_file", "read a file"));
+        reg.build_embeddings().unwrap();
+        let hits = reg
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Hybrid)
+            .unwrap();
+        assert!(!hits.is_empty());
+        assert!(hits.iter().all(|h| h.fused), "hybrid is always RRF-scale");
     }
 
     #[test]

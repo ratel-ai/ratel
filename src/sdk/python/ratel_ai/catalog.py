@@ -466,7 +466,8 @@ class ToolRegistry:
 
         Only queries matching a cluster are affected. With a graph attached the
         hit ``score`` becomes a fusion score rather than a raw BM25 score, so
-        compare ordering rather than magnitudes.
+        use ``rank`` for ordering and ``fused`` to detect the scale, not the
+        raw ``score``.
         """
         self._native.enable_adaptive_ranking(graph)
 
@@ -727,7 +728,8 @@ class ToolCatalog:
 
         Only queries matching a cluster are affected. With a graph attached the
         hit ``score`` becomes a fusion score rather than a raw BM25 score, so
-        compare ordering rather than magnitudes.
+        use ``rank`` for ordering and ``fused`` to detect the scale, not the
+        raw ``score``.
         """
         self._registry.enable_adaptive_ranking(graph)
 

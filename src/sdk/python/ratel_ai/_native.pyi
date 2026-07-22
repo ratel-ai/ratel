@@ -19,9 +19,27 @@ class SearchHit:
     def score(self) -> float:
         """Relevance score; higher ranks first.
 
-        The scale depends on the search method: raw BM25 (unbounded) for
-        "bm25", cosine similarity for "semantic", reciprocal-rank-fusion for
-        "hybrid" — scores from different methods are not comparable.
+        The scale depends on the search method (raw BM25 / cosine / RRF) AND on
+        `fused` — with adaptive ranking a matched query returns small RRF scores
+        while an unmatched one on the same catalog returns the raw score. Order
+        by `rank`, branch on `fused`; treat `score` as a within-list hint only.
+        """
+
+    @property
+    def rank(self) -> int:
+        """0-based position in this result list (best is 0).
+
+        Stable across methods and across the `fused` switch — the field to order
+        or threshold on, in place of the scale-shifting `score`.
+        """
+
+    @property
+    def fused(self) -> bool:
+        """Whether `score` is a Reciprocal Rank Fusion score (ordering-only).
+
+        `True` when the usage arm fused into this search or the method is hybrid;
+        `False` for a plain BM25/semantic result. Uniform across one result list;
+        lets you detect which scale `score` is on.
         """
 
 class IntentGraph:
@@ -171,7 +189,7 @@ class ToolRegistry:
 
         Only queries matching a cluster are affected. With a graph attached
         `SearchHit.score` becomes a fusion score rather than a raw BM25 score,
-        so compare ordering rather than magnitudes.
+        so use `rank` for ordering and `fused` to detect the scale.
         """
 
     def disable_adaptive_ranking(self) -> None:
@@ -208,9 +226,17 @@ class SkillHit:
     def score(self) -> float:
         """Relevance score; higher ranks first.
 
-        Same method-dependent scale as `SearchHit.score`, computed against the
-        skill corpus.
+        Scale depends on the method and on `fused`, as on `SearchHit.score`.
+        Order by `rank`, branch on `fused`.
         """
+
+    @property
+    def rank(self) -> int:
+        """0-based position — as on `SearchHit.rank`."""
+
+    @property
+    def fused(self) -> bool:
+        """Whether `score` is an RRF score — as on `SearchHit.fused`."""
 
 class SkillRegistry:
     """Private native metadata registry over the skill corpus.
@@ -305,7 +331,7 @@ class SkillRegistry:
 
         Only queries matching a cluster are affected. With a graph attached
         `SearchHit.score` becomes a fusion score rather than a raw BM25 score,
-        so compare ordering rather than magnitudes.
+        so use `rank` for ordering and `fused` to detect the scale.
         """
 
     def disable_adaptive_ranking(self) -> None:
