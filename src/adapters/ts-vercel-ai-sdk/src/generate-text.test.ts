@@ -1,55 +1,174 @@
-import { ratel, SEARCH_CAPABILITIES_ID } from "@ratel-ai/sdk";
-import { generateText, type LanguageModel, type ModelMessage, tool } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
+import { ratel } from "@ratel-ai/sdk";
+import {
+  generateText,
+  type LanguageModel,
+  type ModelMessage,
+  stepCountIs,
+  streamText,
+  tool,
+} from "ai";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { aiSdk } from "./aisdk.js";
 
-// The LanguageModelV3 usage/finishReason shape the mock returns per step (mirrors
-// examples/ai-sdk/test/agent.test.ts, the repo's proven mock wiring).
+interface ModelCall {
+  prompt: unknown[];
+}
+
+class MockLanguageModelV2 {
+  readonly specificationVersion = "v2";
+  readonly provider = "mock-provider";
+  readonly modelId = "mock-model";
+  readonly supportedUrls = {};
+  readonly doGenerateCalls: ModelCall[] = [];
+  readonly doStreamCalls: ModelCall[] = [];
+
+  constructor(
+    private readonly generateResults: unknown[] = [],
+    private readonly streamResults: unknown[] = [],
+  ) {}
+
+  async doGenerate(options: ModelCall): Promise<unknown> {
+    const index = this.doGenerateCalls.push(options) - 1;
+    return this.generateResults[index];
+  }
+
+  async doStream(options: ModelCall): Promise<unknown> {
+    const index = this.doStreamCalls.push(options) - 1;
+    return this.streamResults[index];
+  }
+}
+
 const usage = {
-  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 1, text: 1, reasoning: 0 },
+  inputTokens: 1,
+  outputTokens: 1,
+  totalTokens: 2,
 };
 
-describe("generateText integration (the real ai@7 loop)", () => {
-  it("awaits the async prepareStep and applies its messages override on step 0", async () => {
+describe("AI SDK loop integration", () => {
+  it("keeps one recall pair in both prompts of a two-step generateText loop", async () => {
     const view = ratel().adaptTo(aiSdk());
-    view.tools.register({
+    let executions = 0;
+    await view.tools.register({
       deploy_app: tool({
         description: "Deploy the app to production servers.",
         inputSchema: z.object({}),
-        execute: async () => ({ deployed: true }),
+        execute: async () => {
+          executions++;
+          return { deployed: true };
+        },
       }),
     });
-
-    // One-shot model: answer immediately, so exactly one step runs.
-    const model = new MockLanguageModelV3({
-      doGenerate: async () => ({
-        content: [{ type: "text", text: "deployed." }],
-        finishReason: { unified: "stop", raw: undefined },
+    const model = new MockLanguageModelV2([
+      {
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "invoke-0",
+            toolName: "invoke_tool",
+            input: JSON.stringify({ toolId: "deploy_app", args: {} }),
+          },
+        ],
+        finishReason: "tool-calls",
         usage,
         warnings: [],
-      }),
-    });
+      },
+      {
+        content: [{ type: "text", text: "deployed." }],
+        finishReason: "stop",
+        usage,
+        warnings: [],
+      },
+    ]);
+    const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
 
     const result = await generateText({
       model: model as unknown as LanguageModel,
       tools: view.modelTools(),
-      messages: [{ role: "user", content: "deploy to production" }] as ModelMessage[],
+      messages,
       prepareStep: view.prepareStep,
+      stopWhen: stepCountIs(2),
     });
 
     expect(result.text).toBe("deployed.");
-    expect(model.doGenerateCalls).toHaveLength(1);
+    expect(executions).toBe(1);
+    expect(model.doGenerateCalls).toHaveLength(2);
+    expect(recallIdOccurrences(model.doGenerateCalls[0].prompt, "recall_0")).toBe(2);
+    expect(recallIdOccurrences(model.doGenerateCalls[1].prompt, "recall_0")).toBe(2);
+    expect(messages).toEqual([{ role: "user", content: "deploy to production" }]);
 
-    // The step-0 prompt the model actually received carries the synthetic recall
-    // pair — proving ai@7 awaited the async prepareStep and applied its messages
-    // override. The input had no tool turn, so a `tool` message can only be the
-    // injected recall result, and the query text is not in the tool defs (those
-    // travel separately), so its presence here is the injection.
-    const prompt = model.doGenerateCalls[0].prompt;
-    expect(prompt.some((message) => message.role === "tool")).toBe(true);
-    expect(JSON.stringify(prompt)).toContain(SEARCH_CAPABILITIES_ID);
+    const next: ModelMessage[] = [{ role: "user", content: "deploy again" }];
+    await view.appendRecall(next);
+    expect(JSON.stringify(next)).toContain("recall_1");
+  });
+
+  it("keeps one recall pair in both prompts of a two-step streamText loop", async () => {
+    const view = ratel().adaptTo(aiSdk());
+    let executions = 0;
+    await view.tools.register({
+      deploy_app: tool({
+        description: "Deploy the app to production servers.",
+        inputSchema: z.object({}),
+        execute: async () => {
+          executions++;
+          return { deployed: true };
+        },
+      }),
+    });
+    const model = new MockLanguageModelV2(
+      [],
+      [
+        streamResult(
+          {
+            type: "tool-call",
+            toolCallId: "invoke-0",
+            toolName: "invoke_tool",
+            input: JSON.stringify({ toolId: "deploy_app", args: {} }),
+          },
+          { type: "finish", finishReason: "tool-calls", usage },
+        ),
+        streamResult(
+          { type: "text-start", id: "text-0" },
+          { type: "text-delta", id: "text-0", delta: "deployed." },
+          { type: "text-end", id: "text-0" },
+          { type: "finish", finishReason: "stop", usage },
+        ),
+      ],
+    );
+    const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+
+    const result = streamText({
+      model: model as unknown as LanguageModel,
+      tools: view.modelTools(),
+      messages,
+      prepareStep: view.prepareStep,
+      stopWhen: stepCountIs(2),
+    });
+
+    expect(await result.text).toBe("deployed.");
+    expect(executions).toBe(1);
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(recallIdOccurrences(model.doStreamCalls[0].prompt, "recall_0")).toBe(2);
+    expect(recallIdOccurrences(model.doStreamCalls[1].prompt, "recall_0")).toBe(2);
+    expect(messages).toEqual([{ role: "user", content: "deploy to production" }]);
+
+    const next: ModelMessage[] = [{ role: "user", content: "deploy again" }];
+    await view.appendRecall(next);
+    expect(JSON.stringify(next)).toContain("recall_1");
   });
 });
+
+function recallIdOccurrences(prompt: unknown[], callId: string): number {
+  return JSON.stringify(prompt).split(callId).length - 1;
+}
+
+function streamResult(...chunks: unknown[]): { stream: ReadableStream<unknown> } {
+  return {
+    stream: new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    }),
+  };
+}

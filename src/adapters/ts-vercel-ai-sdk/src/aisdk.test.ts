@@ -337,4 +337,80 @@ describe("prepareStep (extend)", () => {
       "recall_0",
     );
   });
+
+  it("reinserts the step-0 recall before accumulated responses when a later prompt drops it", async () => {
+    const view = viewWithDeployTool();
+    const steps: unknown[] = [];
+    const initial: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+    const first = await view.prepareStep({ stepNumber: 0, messages: initial, steps });
+    const firstMessages = (first as { messages: ModelMessage[] }).messages;
+    const accumulated: ModelMessage[] = [
+      ...initial,
+      { role: "assistant", content: "working on it" },
+    ];
+
+    const later = await view.prepareStep({ stepNumber: 1, messages: accumulated, steps });
+    const laterMessages = (later as { messages: ModelMessage[] }).messages;
+
+    expect(laterMessages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+    ]);
+    expect(callPartOf(laterMessages[1]).toolCallId).toBe(callPartOf(firstMessages[1]).toolCallId);
+    expect(accumulated).toHaveLength(2);
+  });
+
+  it("does not duplicate a cloned recall pair that a later prompt already carries", async () => {
+    const view = viewWithDeployTool();
+    const steps: unknown[] = [];
+    const initial: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+    const first = await view.prepareStep({ stepNumber: 0, messages: initial, steps });
+    const carried = structuredClone((first as { messages: ModelMessage[] }).messages);
+    carried.push({ role: "assistant", content: "working on it" });
+
+    expect(await view.prepareStep({ stepNumber: 1, messages: carried, steps })).toBeUndefined();
+  });
+
+  it("keeps interleaved runs isolated and performs recall only once per run", async () => {
+    const view = viewWithDeployTool();
+    const stepsA: unknown[] = [];
+    const stepsB: unknown[] = [];
+    const initialA: ModelMessage[] = [{ role: "user", content: "deploy app A" }];
+    const initialB: ModelMessage[] = [{ role: "user", content: "deploy app B" }];
+    await view.prepareStep({ stepNumber: 0, messages: initialA, steps: stepsA });
+    await view.prepareStep({ stepNumber: 0, messages: initialB, steps: stepsB });
+
+    const laterA = await view.prepareStep({
+      stepNumber: 1,
+      messages: [...initialA, { role: "assistant", content: "A" }],
+      steps: stepsA,
+    });
+    const laterB = await view.prepareStep({
+      stepNumber: 1,
+      messages: [...initialB, { role: "assistant", content: "B" }],
+      steps: stepsB,
+    });
+    const messagesA = (laterA as { messages: ModelMessage[] }).messages;
+    const messagesB = (laterB as { messages: ModelMessage[] }).messages;
+    expect(callPartOf(messagesA[1]).toolCallId).toBe("recall_0");
+    expect(callPartOf(messagesB[1]).toolCallId).toBe("recall_1");
+
+    const next: ModelMessage[] = [{ role: "user", content: "deploy app C" }];
+    await view.appendRecall(next);
+    expect(callPartOf(next[1]).toolCallId).toBe("recall_2");
+  });
+
+  it("stores no run state and spends no id when step 0 has no hits", async () => {
+    const view = viewWithDeployTool();
+    const steps: unknown[] = [];
+    const misses: ModelMessage[] = [{ role: "user", content: "zzzqqq utterly unrelated" }];
+    expect(await view.prepareStep({ stepNumber: 0, messages: misses, steps })).toBeUndefined();
+    expect(await view.prepareStep({ stepNumber: 1, messages: misses, steps })).toBeUndefined();
+
+    const real: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
+    await view.appendRecall(real);
+    expect(callPartOf(real[1]).toolCallId).toBe("recall_0");
+  });
 });

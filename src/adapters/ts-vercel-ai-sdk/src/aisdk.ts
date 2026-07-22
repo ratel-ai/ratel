@@ -10,6 +10,12 @@ import { asSchema, jsonSchema, type ModelMessage, type Tool, tool } from "ai";
 
 type SchemaField = "inputSchema" | "outputSchema";
 
+interface RecallRunState {
+  callId: string;
+  insertionIndex: number;
+  pair: ModelMessage[];
+}
+
 /**
  * The AI SDK-idiomatic per-turn recall helpers {@link aiSdk} merges onto the
  * adapted view via the SPI's `extend` hook. Two ways to inject the same
@@ -29,16 +35,19 @@ export interface AiSdkExt {
    */
   appendRecall(messages: ModelMessage[]): Promise<ModelMessage[]>;
   /**
-   * A `prepareStep` for `generateText` / `streamText` / `ToolLoopAgent`: on step
-   * 0 with a user turn and hits, return a fresh messages array with the recall
-   * pair appended (never mutating the caller's — an ai `messages` override
-   * carries forward across steps); `undefined` on every other path (later steps,
-   * no user text, no hits), spending no call id. Structurally assignable to
-   * `PrepareStepFunction<TOOLS>` for any `TOOLS`.
+   * A `prepareStep` for `generateText` / `streamText` / an Agent: on step 0 with
+   * a user turn and hits, append a cached recall pair to a fresh messages array.
+   * On later steps, return `undefined` when the host already carried the pair
+   * forward (ai@7), or reinsert the cached pair at its original boundary when
+   * the host rebuilt the prompt without it (ai@5/6). Never mutates the caller's
+   * messages or repeats recall within one run. Structurally assignable to
+   * `PrepareStepFunction<TOOLS>` for any `TOOLS`; direct step-0 calls may omit
+   * `steps` when no multi-step carry-forward is needed.
    */
   prepareStep(options: {
     stepNumber: number;
     messages: ModelMessage[];
+    steps?: readonly unknown[];
   }): Promise<{ messages: ModelMessage[] } | undefined>;
 }
 
@@ -129,6 +138,7 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
     },
 
     extend(base) {
+      const recallRuns = new WeakMap<readonly unknown[], RecallRunState>();
       return {
         async appendRecall(messages) {
           const query = lastUserText(messages);
@@ -138,15 +148,30 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
           return messages;
         },
 
-        async prepareStep({ stepNumber, messages }) {
-          // Recall belongs only on the first step's freshly-built prompt.
-          if (stepNumber !== 0) return undefined;
+        async prepareStep({ stepNumber, messages, steps }) {
+          if (stepNumber !== 0) {
+            if (!steps) return undefined;
+            const state = recallRuns.get(steps);
+            if (!state) return undefined;
+            if (hasRecallPair(messages, state.callId)) return undefined;
+            return {
+              messages: [
+                ...messages.slice(0, state.insertionIndex),
+                ...state.pair,
+                ...messages.slice(state.insertionIndex),
+              ],
+            };
+          }
           const query = lastUserText(messages);
           if (!query) return undefined;
           const pair = await base.recall(query);
           if (pair.length === 0) return undefined;
-          // Fresh array: an ai `messages` override carries forward across steps,
-          // so never mutate the caller's array.
+          const callId = recallCallId(pair);
+          if (steps && callId) {
+            recallRuns.set(steps, { callId, insertionIndex: messages.length, pair });
+          }
+          // Always return a fresh array. Some ai majors carry this override
+          // forward; the run cache above repairs those that rebuild the prompt.
           return { messages: [...messages, ...pair] };
         },
       };
@@ -185,6 +210,37 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     (typeof value === "object" || typeof value === "function") &&
     typeof (value as { then?: unknown }).then === "function"
   );
+}
+
+function recallCallId(messages: ModelMessage[]): string | undefined {
+  for (const message of messages) {
+    if (!Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (
+        part.type === "tool-call" &&
+        part.toolName === SEARCH_CAPABILITIES_ID &&
+        typeof part.toolCallId === "string"
+      ) {
+        return part.toolCallId;
+      }
+    }
+  }
+  return undefined;
+}
+
+function hasRecallPair(messages: ModelMessage[], callId: string): boolean {
+  let hasCall = false;
+  let hasResult = false;
+  for (const message of messages) {
+    if (!Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (part.type !== "tool-call" && part.type !== "tool-result") continue;
+      if (part.toolCallId !== callId || part.toolName !== SEARCH_CAPABILITIES_ID) continue;
+      if (part.type === "tool-call") hasCall = true;
+      if (part.type === "tool-result") hasResult = true;
+    }
+  }
+  return hasCall && hasResult;
 }
 
 // The recall query is the last message's text iff it is a user turn: recall only
