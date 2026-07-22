@@ -86,8 +86,33 @@ pub struct SkillHitTrace {
 /// name in snake_case (`IndexChurn` → `index_churn`), with the variant's
 /// fields flattened beside it; sinks wrap it in a [`TraceEnvelope`]. All
 /// `took_ms` fields are wall time in milliseconds.
+///
+/// `#[non_exhaustive]` is what makes "new variants are additive" *true* rather
+/// than aspirational: it requires downstream `match`es to carry a `_ =>` arm, so
+/// a future event variant lands there instead of breaking their compile. Two
+/// axes, only the first mechanical:
+///
+/// - **New variant** → non-breaking, enforced here.
+/// - **New field on an existing variant** → non-breaking only if consumers
+///   destructure with a trailing `..` (as this crate always does); variant-level
+///   non-exhaustiveness is intentionally *not* used, since it would also block
+///   downstream from constructing events by literal.
+///
+/// Renames and removals are breaking on both axes.
+///
+/// ```
+/// use ratel_ai_core::TraceEvent;
+/// // A downstream matcher must include `_ =>`, and is then future-proof:
+/// fn kind(e: &TraceEvent) -> &str {
+///     match e {
+///         TraceEvent::Search { .. } => "search",
+///         _ => "other",
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum TraceEvent {
     /// A [`crate::ToolRegistry`] search completed (any [`crate::SearchMethod`]).
     /// Carries the query, the requested `top_k`, the ranked `hits` with
