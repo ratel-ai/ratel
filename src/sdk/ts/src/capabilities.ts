@@ -440,7 +440,9 @@ export interface InvokeToolToolOptions {
  * the `<server>__` id prefix, a `ratel.auth.flow` span records the outcome,
  * and the result is `{ error: "needs_auth", isError: true, upstream?, hint }`.
  * A call with `args` missing (or `null`) is tolerated by treating the
- * remaining top-level keys as the arguments. Outcomes are recorded as
+ * remaining top-level keys as the arguments. The capability executor's optional
+ * opaque context is forwarded unchanged to the selected catalog executor; the
+ * core never reads or records it. Outcomes are recorded as
  * `gateway_invoke` / `gateway_error` events on the local trace stream.
  *
  * @param catalog - Catalog whose tools this executes.
@@ -476,7 +478,7 @@ export function invokeToolTool(
       required: ["toolId", "args"],
     },
     outputSchema: { type: "object" },
-    execute: async (input) => {
+    execute: async (input, context) => {
       const inputObj = input as Record<string, unknown>;
       const toolId = inputObj.toolId as string;
       if (!catalog.has(toolId)) {
@@ -511,7 +513,7 @@ export function invokeToolTool(
       }
       const startedAt = Date.now();
       try {
-        const result = await catalog.invoke(toolId, args);
+        const result = await catalog.invoke(toolId, args, context);
         catalog.recordEvent({
           type: "gateway_invoke",
           tool_id: toolId,

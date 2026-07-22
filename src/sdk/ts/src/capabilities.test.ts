@@ -263,6 +263,22 @@ describe("invokeToolTool", () => {
     expect(result).toEqual({ contents: "contents of /tmp/x" });
   });
 
+  it("forwards an opaque invocation context to the selected tool by identity", async () => {
+    const context = { adapter: "test", value: { tenantId: "tenant-42" } };
+    const tools = new ToolCatalog();
+    await tools.register({
+      ...readFile,
+      execute: (_input, receivedContext) => ({ sameContext: receivedContext === context }),
+    });
+
+    const result = await invokeToolTool(tools).execute(
+      { toolId: "fs__read_file", args: { path: "/tmp/x" } },
+      context,
+    );
+
+    expect(result).toEqual({ sameContext: true });
+  });
+
   it("tolerates flattened args", async () => {
     const tools = new ToolCatalog();
     await tools.register(readFile);
