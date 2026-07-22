@@ -3,8 +3,7 @@
 How a new version of a Ratel package is published. Read end-to-end before cutting a release.
 
 Ratel releases **per unit** (ADR-0008): nine independently-versioned release units, each on
-its own tag prefix, routed through one `release.yml` (except `vercel-ai-sdk`, which is
-manual-publish-only for now — see its note below). There is no workspace-shared version —
+its own tag prefix, routed through one `release.yml`. There is no workspace-shared version —
 each unit carries its own version in its own manifest and ships on its own cadence.
 
 ## Release units
@@ -25,12 +24,12 @@ The units are registered once, in [`scripts/release-units.mjs`](scripts/release-
 — the single source of truth that the tag gate, the `releasable` helper, the changelog
 drafter, and the manual publish helper all read. Adding a future unit is a one-place change.
 
-The `vercel-ai-sdk` framework adapter is registered here so the tag gate, `releasable`, and
-`publish-rc.sh` recognise it, but it is **not yet wired into `release.yml`'s triggers or a
-Trusted Publisher**. First-publish it manually with `scripts/publish-rc.sh --unit
-vercel-ai-sdk` (pure-TS, built + `pnpm pack`ed locally, like the telemetry npm units); then add
-its `vercel-ai-sdk-v*` trigger to `release.yml`, the `release` environment's tag policy, and a
-Trusted Publisher to move it onto the OIDC path (mirrors the telemetry bootstrap).
+The `vercel-ai-sdk` framework adapter is wired into `release.yml`'s triggers and its own
+`publish-vercel-ai-sdk` job (pure-TS, built + `pnpm pack`ed locally, like the telemetry npm
+units), publishing over OIDC via a Trusted Publisher. Its npm name was bootstrapped by a manual
+first-publish (`scripts/publish-rc.sh --unit vercel-ai-sdk`) before the Trusted Publisher could
+exist. The `release` environment's tag policy must allow `vercel-ai-sdk-v*`, or the publish job
+hangs at the deploy gate.
 
 The `sdk-ts` unit is internally lockstep: the loader `@ratel-ai/sdk`, its five per-OS native
 packages (`@ratel-ai/sdk-darwin-arm64`, `-darwin-x64`, `-linux-x64-gnu`, `-linux-arm64-gnu`,
@@ -58,7 +57,8 @@ need no prebuilt artifact.
 ## How the release pipeline is wired
 
 - **`release.yml`** — fires on any `core-v*` / `sdk-ts-v*` / `sdk-py-v*` / `telemetry-core-v*` /
-  `telemetry-ts-v*` / `telemetry-py-v*` / `telemetry-ts-otlp-v*` / `mastra-v*` tag push (and
+  `telemetry-ts-v*` / `telemetry-py-v*` / `telemetry-ts-otlp-v*` / `mastra-v*` /
+  `vercel-ai-sdk-v*` tag push (and
   supports `workflow_dispatch` with `dry_run: true` for rehearsal). Its first job,
   `tag-version-check`, runs [`scripts/check-release-tag.mjs`](scripts/check-release-tag.mjs) to
   route the tag to its unit and verify **only that unit's** manifests + CHANGELOG carry the
@@ -127,20 +127,19 @@ rstagi with a one-member team. Run the E2E locally per `e2e/README.md`.
 
 - `@ratel-ai` npm org exists; the publishing account is a member with `developer`+ role; 2FA enabled.
 - `ratel-ai-core` (crates.io) and `ratel-ai` (PyPI) names are registered.
-- Trusted Publishers are configured on all **8** registry names — the 6 npm packages, the
-  `ratel-ai-core` crate, and the `ratel-ai` PyPI project — each pointing at this repo /
-  `release.yml` / the `release` environment. **The 4 telemetry names
+- Trusted Publishers are configured on the 6 SDK npm packages, the `ratel-ai-core` crate, the
+  `ratel-ai` PyPI project, and the `@ratel-ai/vercel-ai-sdk` npm name — each pointing at this
+  repo / `release.yml` / the `release` environment. **The 4 telemetry names
   (`@ratel-ai/telemetry` + `@ratel-ai/telemetry-otlp` on npm, `ratel-ai-telemetry` on PyPI +
-  crates.io) and the `@ratel-ai/mastra` + `@ratel-ai/vercel-ai-sdk` npm names are not yet
-  registered** — they are added at their first-time bootstrap, taking the total 8 → 12
-  (telemetry) → 13 (mastra) → 14 (vercel-ai-sdk).
+  crates.io) and the `@ratel-ai/mastra` npm name are not yet registered** — they are added at
+  their first-time bootstrap.
 - A `release` GitHub Environment exists whose **deployment tag policy allows the unit
   prefixes** — `core-v*`, `sdk-ts-v*`, `sdk-py-v*`. Keep the environment *name* `release`
   unchanged (it's what binds the Trusted Publishers); only its tag policy lists the prefixes.
   A tag not matched by the policy hangs the publish job at the deploy gate. **Add
   `telemetry-core-v*`, `telemetry-ts-v*`, `telemetry-py-v*`, `telemetry-ts-otlp-v*` to the policy
-  before cutting the first telemetry release, and `mastra-v*` before the first CI-driven
-  adapter release** (still pending).
+  before cutting the first telemetry release, and `mastra-v*` + `vercel-ai-sdk-v*` before their
+  first CI-driven adapter release.**
 
 ### Per-release flow (one unit at a time)
 
