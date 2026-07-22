@@ -3,8 +3,7 @@
 How a new version of a Ratel package is published. Read end-to-end before cutting a release.
 
 Ratel releases **per unit** (ADR-0008): nine independently-versioned release units, each on
-its own tag prefix, routed through one `release.yml` (except `vercel-ai-sdk`, which is
-manual-publish-only for now — see its note below). There is no workspace-shared version —
+its own tag prefix, routed through one `release.yml`. There is no workspace-shared version —
 each unit carries its own version in its own manifest and ships on its own cadence.
 
 ## Release units
@@ -25,13 +24,12 @@ The units are registered once, in [`scripts/release-units.mjs`](scripts/release-
 — the single source of truth that the tag gate, the `releasable` helper, the changelog
 drafter, and the manual publish helper all read. Adding a future unit is a one-place change.
 
-The `vercel-ai-sdk` framework adapter is registered here so the tag gate, `releasable`, and
-`publish-rc.sh` recognise it, but it is **not yet wired into `release.yml`'s triggers or a
-Trusted Publisher**. It has already been bootstrapped on npm; publish every adapter version
-manually with `scripts/publish-rc.sh --unit vercel-ai-sdk --tag <rc|latest>` after pushing its
-version tag. Then verify the exact published version with `verify-install.yml`. Add its
-`vercel-ai-sdk-v*` trigger to `release.yml`, the `release` environment's tag policy, and a
-Trusted Publisher before moving it onto the OIDC path.
+The `vercel-ai-sdk` framework adapter is wired into `release.yml`'s triggers and its own
+`publish-vercel-ai-sdk` job (pure-TS, built + `pnpm pack`ed locally, like the telemetry npm
+units), publishing over OIDC via a Trusted Publisher. Its npm name was bootstrapped by a manual
+first-publish (`scripts/publish-rc.sh --unit vercel-ai-sdk`) before the Trusted Publisher could
+exist. The `release` environment's tag policy must allow `vercel-ai-sdk-v*`, or the publish job
+hangs at the deploy gate.
 
 The `sdk-ts` unit is internally lockstep: the loader `@ratel-ai/sdk`, its five per-OS native
 packages (`@ratel-ai/sdk-darwin-arm64`, `-darwin-x64`, `-linux-x64-gnu`, `-linux-arm64-gnu`,
@@ -59,7 +57,8 @@ need no prebuilt artifact.
 ## How the release pipeline is wired
 
 - **`release.yml`** — fires on any `core-v*` / `sdk-ts-v*` / `sdk-py-v*` / `telemetry-core-v*` /
-  `telemetry-ts-v*` / `telemetry-py-v*` / `telemetry-ts-otlp-v*` / `mastra-v*` tag push (and
+  `telemetry-ts-v*` / `telemetry-py-v*` / `telemetry-ts-otlp-v*` / `mastra-v*` /
+  `vercel-ai-sdk-v*` tag push (and
   supports `workflow_dispatch` with `dry_run: true` for rehearsal). Its first job,
   `tag-version-check`, runs [`scripts/check-release-tag.mjs`](scripts/check-release-tag.mjs) to
   route the tag to its unit and verify **only that unit's** manifests + CHANGELOG carry the
@@ -130,21 +129,19 @@ rstagi with a one-member team. Run the E2E locally per `e2e/README.md`.
 
 - `@ratel-ai` npm org exists; the publishing account is a member with `developer`+ role; 2FA enabled.
 - `ratel-ai-core` (crates.io) and `ratel-ai` (PyPI) names are registered.
-- Trusted Publishers are configured on all **8** registry names — the 6 npm packages, the
-  `ratel-ai-core` crate, and the `ratel-ai` PyPI project — each pointing at this repo /
-  `release.yml` / the `release` environment. **The 4 telemetry names
+- Trusted Publishers are configured on the 6 SDK npm packages, the `ratel-ai-core` crate, the
+  `ratel-ai` PyPI project, and the `@ratel-ai/vercel-ai-sdk` npm name — each pointing at this
+  repo / `release.yml` / the `release` environment. **The 4 telemetry names
   (`@ratel-ai/telemetry` + `@ratel-ai/telemetry-otlp` on npm, `ratel-ai-telemetry` on PyPI +
-  crates.io) and the `@ratel-ai/mastra` name are not yet registered** — they are added
-  at their first-time bootstrap, taking the total 8 → 12 (telemetry) → 13 (mastra).
-  `@ratel-ai/vercel-ai-sdk` exists on npm but remains outside this count until its workflow
-  job and Trusted Publisher are configured.
+  crates.io) and the `@ratel-ai/mastra` npm name are not yet registered** — they are added at
+  their first-time bootstrap.
 - A `release` GitHub Environment exists whose **deployment tag policy allows the unit
   prefixes** — `core-v*`, `sdk-ts-v*`, `sdk-py-v*`. Keep the environment *name* `release`
   unchanged (it's what binds the Trusted Publishers); only its tag policy lists the prefixes.
   A tag not matched by the policy hangs the publish job at the deploy gate. **Add
   `telemetry-core-v*`, `telemetry-ts-v*`, `telemetry-py-v*`, `telemetry-ts-otlp-v*` to the policy
-  before cutting the first telemetry release, and `mastra-v*` before the first CI-driven
-  adapter release** (still pending).
+  before cutting the first telemetry release, and `mastra-v*` + `vercel-ai-sdk-v*` before their
+  first CI-driven adapter release.**
 
 ### Per-release flow (one unit at a time)
 
@@ -176,19 +173,14 @@ rstagi with a one-member team. Run the E2E locally per `e2e/README.md`.
      (for a `vercel-ai-sdk` release)
 5. **(Optional dry-run, workflow-wired units only)** `workflow_dispatch` `release.yml` with
    the tag (e.g. `sdk-py-v0.2.1-rc.1`) and `dry_run: true` to validate the auth + publish path
-   without consuming a version number. Skip this for `vercel-ai-sdk` while it remains
-   manual-publish-only.
+   without consuming a version number.
 6. **Commit, tag, push:**
    ```
    git commit -am "release: <unit>-vX.Y.Z"
    git tag <unit>-vX.Y.Z          # e.g. sdk-py-v0.2.1-rc.1
    git push origin main <unit>-vX.Y.Z
    ```
-7. **Publish:**
-   - `vercel-ai-sdk`: run `scripts/publish-rc.sh --unit vercel-ai-sdk --tag rc` for an RC,
-     or `--tag latest` for a GA. It builds and packs the adapter locally; do not wait for
-     `release.yml`, which has no adapter publish job yet.
-   - Every other unit: watch `release.yml` to completion and inspect the GitHub Release.
+7. **Publish:** watch `release.yml` to completion and inspect the GitHub Release.
 8. **Verify the install:** run `verify-install.yml` for the unit + version
    (`gh workflow run verify-install.yml -f unit=$UNIT -f version=X.Y.Z`).
 9. **For RCs:** iterate (`-rc.2`, `-rc.3`, …) until happy, then bump to the un-suffixed
