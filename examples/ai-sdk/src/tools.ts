@@ -1,93 +1,64 @@
-import { type ExecutableTool, ToolCatalog } from "@ratel-ai/sdk";
 import { jsonSchema, tool } from "ai";
 
-export const tools: ExecutableTool[] = [
-  {
-    id: "read_file",
-    name: "read_file",
+// A demo catalog of AI SDK-native tools — defined with `tool()` exactly as any
+// AI SDK app would, no Ratel-specific shapes. The adapter view ingests these
+// as-is (`view.tools.register(tools)`); stub executors stand in for real ones.
+export const tools = {
+  read_file: tool({
     description: "Read a file from local disk and return its textual contents.",
-    inputSchema: {
+    inputSchema: jsonSchema<{ path: string }>({
       type: "object",
       properties: {
         path: { type: "string", description: "absolute path to the file" },
       },
       required: ["path"],
-    },
-    outputSchema: {
-      type: "object",
-      properties: { contents: { type: "string" } },
-    },
+    }),
     execute: async ({ path }) => ({ contents: `(stub) contents of ${path}` }),
-  },
-  {
-    id: "write_file",
-    name: "write_file",
+  }),
+  write_file: tool({
     description: "Write textual contents to a file on local disk.",
-    inputSchema: {
+    inputSchema: jsonSchema<{ path: string; contents: string }>({
       type: "object",
       properties: {
         path: { type: "string", description: "absolute path to the file" },
         contents: { type: "string", description: "bytes to write" },
       },
       required: ["path", "contents"],
-    },
-    outputSchema: { type: "object" },
+    }),
     execute: async ({ path }) => ({ ok: true, path }),
-  },
-  {
-    id: "search_files",
-    name: "search_files",
+  }),
+  search_files: tool({
     description: "Grep across files in a directory using a regular expression.",
-    inputSchema: {
+    inputSchema: jsonSchema<{ root: string; pattern: string }>({
       type: "object",
       properties: {
         root: { type: "string", description: "directory to scan recursively" },
         pattern: { type: "string", description: "regular expression to match" },
       },
       required: ["root", "pattern"],
-    },
-    outputSchema: {
-      type: "object",
-      properties: {
-        matches: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              path: { type: "string" },
-              line: { type: "number" },
-            },
-          },
-        },
-      },
-    },
+    }),
     execute: async ({ root, pattern }) => ({
       matches: [{ path: `${root}/example.ts`, line: 42, match: pattern }],
     }),
-  },
-  {
-    id: "run_command",
-    name: "run_command",
+  }),
+  run_command: tool({
     description: "Execute a shell command and capture stdout, stderr, and exit code.",
-    inputSchema: {
+    inputSchema: jsonSchema<{ command: string }>({
       type: "object",
       properties: {
         command: { type: "string", description: "command line to run" },
       },
       required: ["command"],
-    },
-    outputSchema: { type: "object" },
+    }),
     execute: async ({ command }) => ({
       stdout: `(stub) ran ${command}`,
       stderr: "",
       exitCode: 0,
     }),
-  },
-  {
-    id: "send_email",
-    name: "send_email",
+  }),
+  send_email: tool({
     description: "Send an email to a recipient via SMTP.",
-    inputSchema: {
+    inputSchema: jsonSchema<{ to: string; subject: string; body: string }>({
       type: "object",
       properties: {
         to: { type: "string", description: "recipient email address" },
@@ -95,36 +66,18 @@ export const tools: ExecutableTool[] = [
         body: { type: "string" },
       },
       required: ["to", "subject", "body"],
-    },
-    outputSchema: { type: "object" },
+    }),
     execute: async ({ to }) => ({ messageId: `msg-${Date.now()}`, to }),
-  },
-  {
-    id: "query_database",
-    name: "query_database",
+  }),
+  query_database: tool({
     description: "Run a SQL query against the application database.",
-    inputSchema: {
+    inputSchema: jsonSchema<{ sql: string }>({
       type: "object",
       properties: {
         sql: { type: "string", description: "SQL statement to execute" },
       },
       required: ["sql"],
-    },
-    outputSchema: { type: "object" },
+    }),
     execute: async ({ sql }) => ({ rows: [], sql }),
-  },
-];
-
-export async function buildCatalog(): Promise<ToolCatalog> {
-  const catalog = new ToolCatalog();
-  await catalog.register(tools);
-  return catalog;
-}
-
-export function toAISDKTool(executable: ExecutableTool) {
-  return tool({
-    description: executable.description,
-    inputSchema: jsonSchema(executable.inputSchema),
-    execute: executable.execute,
-  });
-}
+  }),
+};
