@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.5] - 2026-07-22
+
+### Added
+
+- Live execution-context forwarding: when the model runs one of your tools through `invoke_tool`, the adapter now forwards the AI SDK's complete live execution options (`toolCallId`, `messages`, `abortSignal`, and the version's `experimental_context` / `context`) unchanged to the tool, instead of a fabricated options object. The whole context rides through the catalog as an opaque value under a private, package-stable symbol tag (ADR-0013), so a sibling framework view over the same catalog can never have its context mistaken for AI SDK options. The driver-level `r.tools.catalog.invoke(id, args)` escape hatch — which has no AI SDK invocation to thread — keeps the fabricated fallback. Requires `@ratel-ai/sdk@^0.5.1-rc.1` (the opaque invocation-context forwarding release).
+
+## [0.1.0-rc.4] - 2026-07-22
+
+### Changed
+
+- Rebuilt against `@ratel-ai/sdk@0.5.1-rc.1`: the packed `@ratel-ai/sdk` peer range moves up from `^0.5.0` — which the prerelease `0.5.1-rc.1` does not satisfy — to `^0.5.1-rc.1`, so the adapter installs cleanly alongside the current SDK. No adapter source changes since rc.3; the model-facing SDK API the adapter builds on is unchanged. (rc.3 was tagged but never published to npm, so this is the first published adapter release since rc.2.)
+
 ## [0.1.0-rc.3] - 2026-07-22
 
 ### Added
