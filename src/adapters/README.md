@@ -6,7 +6,7 @@ Directories are language-prefixed (`ts-*`, `py-*`) since a framework gets one ad
 
 ## Layout
 
-- `ts-vercel-ai-sdk/` — [`@ratel-ai/vercel-ai-sdk`](ts-vercel-ai-sdk/README.md): the [Vercel AI SDK](https://sdk.vercel.ai) (`ai@7`) adapter.
+- `ts-vercel-ai-sdk/` — [`@ratel-ai/vercel-ai-sdk`](ts-vercel-ai-sdk/README.md): the [Vercel AI SDK](https://sdk.vercel.ai) (`ai@^5 || ^6 || ^7`) adapter.
 
 ## Build & test
 

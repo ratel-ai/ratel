@@ -53,8 +53,8 @@ export interface AiSdkExt {
 
 /**
  * The Vercel AI SDK adapter: `ratel(config).adaptTo(aiSdk())` gives the
- * framework-neutral core `ai@7`'s native {@link Tool} and {@link ModelMessage}
- * shapes. The core owns every guard (reserved ids, top-K clamp,
+ * framework-neutral core the AI SDK's native {@link Tool} and
+ * {@link ModelMessage} shapes, across `ai@5`, `ai@6`, and `ai@7`. The core owns every guard (reserved ids, top-K clamp,
  * first-registration-wins, recall-id counter), so the adapter is just the three
  * codecs — `ingest` / `expose` / `recallMessages` — plus the {@link AiSdkExt}
  * recall helpers.
