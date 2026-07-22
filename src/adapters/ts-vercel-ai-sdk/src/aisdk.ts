@@ -10,6 +10,12 @@ import { asSchema, jsonSchema, type ModelMessage, type Tool, tool } from "ai";
 
 type SchemaField = "inputSchema" | "outputSchema";
 
+// Package-stable and collision-resistant across multiple AI SDK views or package
+// copies sharing one catalog: `Symbol.for` keys the global registry so every copy
+// resolves the same symbol. Other framework adapters tag with their own key, so a
+// foreign adapter's context can never be mistaken for live AI SDK options.
+const AI_SDK_CONTEXT_KEY = Symbol.for("@ratel-ai/vercel-ai-sdk.execution-context");
+
 interface RecallRunState {
   callId: string;
   insertionIndex: number;
@@ -82,17 +88,15 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
       const registration: CatalogRegistration = {
         description: resolveDescription(t.description),
         inputSchema: toJsonSchema(id, "inputSchema", t.inputSchema),
-        execute: (input) =>
-          (execute as (input: unknown, options: unknown) => unknown)(input, {
-            // Catalog executors receive only the args object: fabricate minimal
-            // AI SDK execution options so a tool reading options.messages or its
-            // version's context field gets a fake ([] / undefined) rather than
-            // crashing. ai@5/6 use `experimental_context`; ai@7 uses `context`.
-            toolCallId: `ratel_${id}`,
-            messages: [],
-            experimental_context: undefined,
-            context: undefined,
-          }),
+        // A model-facing capability call threads the live AI SDK options through
+        // the catalog as an opaque, adapter-tagged value (set by `expose`). A
+        // direct `catalog.invoke` — or a foreign adapter's context sharing the
+        // catalog — carries no such tag, so fall back to fabricated options.
+        execute: (input, invocationContext) =>
+          (execute as (input: unknown, options: unknown) => unknown)(
+            input,
+            aiSdkContext(invocationContext) ?? fabricatedOptions(id),
+          ),
       };
       // Leave a missing output schema absent — the core defaults it to
       // `{ type: "object" }`; the adapter never fabricates one.
@@ -106,7 +110,10 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
       return tool({
         description: t.description,
         inputSchema: jsonSchema(t.inputSchema as Record<string, unknown>),
-        execute: (args) => t.execute(args),
+        // Carry the framework's complete live execution options through the
+        // catalog as an opaque, adapter-tagged value (ADR-0013). The core never
+        // reads it; only this adapter's ingest unwraps the tag.
+        execute: (args, options) => t.execute(args, { [AI_SDK_CONTEXT_KEY]: options }),
       });
     },
 
@@ -176,6 +183,29 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
         },
       };
     },
+  };
+}
+
+// Recover the live AI SDK options only from this adapter's own tag. A missing or
+// foreign tag yields undefined, so the ingested executor takes the fabricated
+// fallback — several framework views may share one catalog (ADR-0013).
+function aiSdkContext(value: unknown): unknown {
+  if (value === null || typeof value !== "object" || !(AI_SDK_CONTEXT_KEY in value)) {
+    return undefined;
+  }
+  return (value as { [AI_SDK_CONTEXT_KEY]: unknown })[AI_SDK_CONTEXT_KEY];
+}
+
+// The AI SDK execution options fabricated when the catalog runs an ingested tool
+// with no live invocation to thread. A tool reading options.messages or its
+// version's context field sees an explicit fake ([] / undefined) rather than
+// crashing. ai@5/6 read `experimental_context`; ai@7 reads `context`, so set both.
+function fabricatedOptions(id: string): Record<string, unknown> {
+  return {
+    toolCallId: `ratel_${id}`,
+    messages: [],
+    experimental_context: undefined,
+    context: undefined,
   };
 }
 

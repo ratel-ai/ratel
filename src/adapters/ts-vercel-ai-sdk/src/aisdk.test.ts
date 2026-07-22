@@ -1,4 +1,9 @@
-import { ratel, SEARCH_CAPABILITIES_ID, type SearchCapabilitiesResult } from "@ratel-ai/sdk";
+import {
+  INVOKE_TOOL_ID,
+  ratel,
+  SEARCH_CAPABILITIES_ID,
+  type SearchCapabilitiesResult,
+} from "@ratel-ai/sdk";
 import { jsonSchema, type ModelMessage, type Tool, tool } from "ai";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -195,6 +200,135 @@ describe("expose codec", () => {
     // Execution delegates to the capability's own executor.
     const run = exposed.execute as (args: unknown, opts: unknown) => Promise<unknown>;
     expect(await run({ q: "hi" }, {})).toEqual({ echoed: { q: "hi" } });
+  });
+});
+
+describe("live execution context", () => {
+  // The private, package-stable tag the adapter wraps the framework's live
+  // execution context under (ADR-0013: opaque to the core, unwrappable only here).
+  const AI_SDK_CONTEXT_KEY = Symbol.for("@ratel-ai/vercel-ai-sdk.execution-context");
+
+  it("expose passes the live options to the capability executor under the private tag", async () => {
+    let seenContext: unknown;
+    const capability = {
+      id: "cap",
+      name: "cap",
+      description: "a capability tool",
+      inputSchema: { type: "object" },
+      outputSchema: { type: "object" },
+      execute: async (_args: unknown, context: unknown) => {
+        seenContext = context;
+        return { ok: true };
+      },
+    };
+    const exposed = aiSdk().expose(capability);
+    const options = { toolCallId: "x", messages: [] };
+    await (exposed.execute as (a: unknown, o: unknown) => Promise<unknown>)({}, options);
+    // The whole options object rides under the private symbol — opaque to the core.
+    expect((seenContext as Record<symbol, unknown>)[AI_SDK_CONTEXT_KEY]).toBe(options);
+  });
+
+  it("threads the caller's live options through invoke_tool to the ingested tool", async () => {
+    let seen: Record<string, unknown> | undefined;
+    const view = ratel().adaptTo(aiSdk());
+    view.tools.register({
+      probe: tool({
+        description: "reads its live execution context",
+        inputSchema: z.object({}),
+        execute: ((_input: unknown, options: Record<string, unknown>) => {
+          seen = options;
+          return { ok: true };
+        }) as unknown as Tool["execute"],
+      }),
+    });
+
+    const liveOptions = {
+      toolCallId: "call-live-1",
+      messages: [{ role: "assistant", content: "prior turn" }],
+      experimental_context: { tenantId: "tenant-42" },
+      context: { tenantId: "tenant-42" },
+      abortSignal: new AbortController().signal,
+    };
+    const invokeTool = view.modelTools()[INVOKE_TOOL_ID] as Tool;
+    const run = invokeTool.execute as (args: unknown, options: unknown) => Promise<unknown>;
+    const out = await run({ toolId: "probe", args: {} }, liveOptions);
+
+    expect(out).toEqual({ ok: true });
+    // The ingested tool receives the caller's real options object by identity.
+    expect(seen).toBe(liveOptions);
+  });
+
+  it("falls back to fabricated options for a direct catalog invocation", async () => {
+    let seen: Record<string, unknown> | undefined;
+    const view = ratel().adaptTo(aiSdk());
+    view.tools.register({
+      probe: tool({
+        description: "reads its live execution context",
+        inputSchema: z.object({}),
+        execute: ((_input: unknown, options: Record<string, unknown>) => {
+          seen = options;
+          return { ok: true };
+        }) as unknown as Tool["execute"],
+      }),
+    });
+
+    // The driver-level escape hatch has no AI SDK invocation to thread.
+    await view.tools.catalog.invoke("probe", {});
+
+    expect(seen?.toolCallId).toBe("ratel_probe");
+    expect(seen?.messages).toEqual([]);
+    expect(seen && "context" in seen).toBe(true);
+    expect(seen && "experimental_context" in seen).toBe(true);
+  });
+
+  it("does not unwrap a foreign adapter's tagged context (fabricates instead)", async () => {
+    let seen: Record<string, unknown> | undefined;
+    const view = ratel().adaptTo(aiSdk());
+    view.tools.register({
+      probe: tool({
+        description: "reads its live execution context",
+        inputSchema: z.object({}),
+        execute: ((_input: unknown, options: Record<string, unknown>) => {
+          seen = options;
+          return { ok: true };
+        }) as unknown as Tool["execute"],
+      }),
+    });
+
+    // A sibling view over the same catalog tags with a different private symbol;
+    // its context must never be mistaken for live AI SDK options.
+    const foreign = {
+      [Symbol.for("@ratel-ai/mastra.execution-context")]: { requestContext: "x" },
+    };
+    await view.tools.catalog.invoke("probe", {}, foreign);
+
+    // Fabricated fallback fired, and — the ADR-0013 cross-view property — the
+    // sibling view's context did not leak in: no foreign symbol tag, no payload.
+    expect(seen?.toolCallId).toBe("ratel_probe");
+    expect(Object.getOwnPropertySymbols(seen ?? {})).toHaveLength(0);
+    expect(seen && "requestContext" in seen).toBe(false);
+  });
+
+  it("unwraps its own tag on a direct catalog invocation", async () => {
+    let seen: Record<string, unknown> | undefined;
+    const view = ratel().adaptTo(aiSdk());
+    view.tools.register({
+      probe: tool({
+        description: "reads its live execution context",
+        inputSchema: z.object({}),
+        execute: ((_input: unknown, options: Record<string, unknown>) => {
+          seen = options;
+          return { ok: true };
+        }) as unknown as Tool["execute"],
+      }),
+    });
+
+    // The positive counterpart to the foreign-tag test: this adapter's own tag
+    // unwraps to the live options by identity, even on the direct catalog path.
+    const liveOptions = { toolCallId: "call-direct", messages: [] };
+    await view.tools.catalog.invoke("probe", {}, { [AI_SDK_CONTEXT_KEY]: liveOptions });
+
+    expect(seen).toBe(liveOptions);
   });
 });
 
