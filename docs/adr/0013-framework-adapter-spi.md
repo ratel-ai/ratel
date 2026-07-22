@@ -133,6 +133,13 @@ is additive.
   and result shape is the core's job and is tested once. This is what makes community adapters
   safe: a runner-agnostic conformance testkit (`@ratel-ai/sdk/testkit`) pins the contract, driven
   by framework-supplied hooks and shipped with a reference adapter as the worked example.
+- The first adapter (`@ratel-ai/vercel-ai-sdk`) sets the host-version compatibility policy
+  adapters follow: peer on every supported host major at once (`ai@^5.0.0 || ^6.0.0 || ^7.0.0`;
+  `ai@4` predates the v5 tool/message reshape and is out of scope), one shared code path
+  absorbing per-major differences at runtime rather than per-major builds, and CI rows at each
+  supported major's exact floor + latest verified release (build, typecheck, test, pack,
+  packed-consumer typecheck per row). Narrowing the supported-majors peer range is a breaking
+  change of the adapter — never a patch or minor; widening to a new host major is additive.
 - Telemetry stamping of the adapter's `name` as a `ratel.adapter` attribute is deferred to the
   adapter packages: the attribute is a vocabulary addition across the Rust/TS/Python telemetry
   triple (ADR-0007) and lands with the first adapter that emits it, not with the core SPI. The
