@@ -145,6 +145,10 @@ describe("AI SDK loop integration", () => {
       stopWhen: stepCountIs(2),
     });
 
+    // ai@5.0.0 (the v5 floor) resolves `result.text` only after the stream is
+    // consumed; later releases auto-consume on await. Consume explicitly so the
+    // same test runs at every supported release.
+    await result.consumeStream();
     expect(await result.text).toBe("deployed.");
     expect(executions).toBe(1);
     expect(model.doStreamCalls).toHaveLength(2);
