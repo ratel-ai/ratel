@@ -8,6 +8,8 @@ import type {
 import { SEARCH_CAPABILITIES_ID } from "@ratel-ai/sdk";
 import { asSchema, jsonSchema, type ModelMessage, type Tool, tool } from "ai";
 
+type SchemaField = "inputSchema" | "outputSchema";
+
 /**
  * The AI SDK-idiomatic per-turn recall helpers {@link aiSdk} merges onto the
  * adapted view via the SPI's `extend` hook. Two ways to inject the same
@@ -56,32 +58,38 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
 
     ingest(id, t) {
       const execute = t.execute;
+      const toolType = (t as { type?: string }).type;
       // Two kinds of tool must stay eagerly exposed in native shape rather than
       // being funneled through the catalog:
-      //   - any `type: "provider"` tool — the catalog can't carry its load-bearing
-      //     type / `<provider>.<tool>` id / args and it has no rankable description
-      //     (`description?: never`), so it passes through even when a
-      //     provider-DEFINED tool supplies its own client-side `execute`;
+      //   - any provider-defined tool (`provider-defined` in ai@5, `provider` in
+      //     ai@6/7) — the catalog can't carry its load-bearing type /
+      //     `<provider>.<tool>` id / args and it has no rankable description, so
+      //     it passes through even when it supplies its own client-side `execute`;
       //   - any tool with no `execute` (provider- or client-run) — not invocable
       //     through the catalog at all.
-      if (t.type === "provider" || !execute) return "passthrough";
+      if (toolType === "provider" || toolType === "provider-defined" || !execute) {
+        return "passthrough";
+      }
       const registration: CatalogRegistration = {
         description: resolveDescription(t.description),
-        inputSchema: toJsonSchema(t.inputSchema),
+        inputSchema: toJsonSchema(id, "inputSchema", t.inputSchema),
         execute: (input) =>
           (execute as (input: unknown, options: unknown) => unknown)(input, {
             // Catalog executors receive only the args object: fabricate minimal
-            // AI SDK execution options so a tool reading options.messages /
-            // options.context gets a fake ([] / undefined) rather than crashing.
-            // ai@7 requires `context`, so it is present (undefined) on purpose.
+            // AI SDK execution options so a tool reading options.messages or its
+            // version's context field gets a fake ([] / undefined) rather than
+            // crashing. ai@5/6 use `experimental_context`; ai@7 uses `context`.
             toolCallId: `ratel_${id}`,
             messages: [],
+            experimental_context: undefined,
             context: undefined,
           }),
       };
       // Leave a missing output schema absent — the core defaults it to
       // `{ type: "object" }`; the adapter never fabricates one.
-      if (t.outputSchema) registration.outputSchema = toJsonSchema(t.outputSchema);
+      if (t.outputSchema) {
+        registration.outputSchema = toJsonSchema(id, "outputSchema", t.outputSchema);
+      }
       return registration;
     },
 
@@ -157,10 +165,26 @@ function resolveDescription(
 }
 
 // Convert an AI SDK FlexibleSchema (zod, JSON-Schema wrapper, ...) into the
-// catalog's public {@link JSONSchema7} spelling — one of the adapter's two
-// JSONSchema7 cast points.
-function toJsonSchema(schema: unknown): JSONSchema7 {
-  return asSchema(schema as never).jsonSchema as unknown as JSONSchema7;
+// catalog's public {@link JSONSchema7} spelling. Ratel registration is
+// synchronous, so fail before the staged batch commits when ai exposes a
+// Promise-like JSON Schema.
+function toJsonSchema(id: string, field: SchemaField, schema: unknown): JSONSchema7 {
+  const converted = asSchema(schema as never).jsonSchema as unknown;
+  if (isPromiseLike(converted)) {
+    throw new TypeError(
+      `ratel: AI SDK tool "${id}" has an asynchronous ${field}; ` +
+        "@ratel-ai/vercel-ai-sdk requires schemas to resolve synchronously",
+    );
+  }
+  return converted as JSONSchema7;
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
 }
 
 // The recall query is the last message's text iff it is a user turn: recall only

@@ -21,8 +21,8 @@ describe("published vercel-ai-sdk dependency layout", () => {
     expect(manifest.dependencies ?? {}).toEqual({});
   });
 
-  it("peers on ai@^7 and the workspace SDK", () => {
-    expect(manifest.peerDependencies?.ai).toBe("^7.0.0");
+  it("peers on AI SDK 5–7 and the workspace SDK", () => {
+    expect(manifest.peerDependencies?.ai).toBe("^5.0.0 || ^6.0.0 || ^7.0.0");
     expect(manifest.peerDependencies?.["@ratel-ai/sdk"]).toBe("workspace:^");
   });
 
