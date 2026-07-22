@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0-rc.3] - 2026-07-22
+
+### Added
+
+- AI SDK v5 and v6 support: the `ai` peer range widens from `^7.0.0` to `^5.0.0 || ^6.0.0 || ^7.0.0` (`ai@4` stays excluded — it predates the v5 tool/message reshape). One shared code path absorbs the per-major differences: provider-defined tools pass through under both discriminators (`provider-defined` in `ai@5`, `provider` in `ai@6`/`ai@7`), catalog executors receive both context spellings (`experimental_context` and `context`), and a Promise-like JSON Schema is rejected synchronously before the registration batch commits.
+- Exact-version compatibility matrix in CI: `ai@5.0.0`, `5.0.217`, `6.0.0`, `6.0.232`, `7.0.0`, and `7.0.33` each build, typecheck, test, pack, and typecheck a packed-tarball consumer. Narrowing the supported-majors peer range is a breaking change of the adapter (see the README's Compatibility section).
+
+### Fixed
+
+- `prepareStep` now preserves the injected recall pair across the steps of one `generateText` / `streamText` / `ToolLoopAgent` run on `ai@5`/`ai@6`, which rebuild the prompt per step (the pair is reinserted at its original boundary from per-run state); on `ai@7`, which carries the step-0 override forward itself, the duplicate check makes reinsertion a no-op.
+
 ## [0.1.0-rc.2] - 2026-07-21
 
 ### Changed
