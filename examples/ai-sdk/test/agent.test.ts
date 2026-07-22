@@ -2,18 +2,18 @@
 // examples/pydantic-ai/test_agent.py). Drives the real `ToolLoopAgent` loop with a
 // scripted MockLanguageModelV3 — no API key, no network — so it exercises the parts
 // that break on SDK/AI-SDK drift but the SDK-level e2e can't see:
-//   - toAISDKTool bridging the SDK's JSON-Schema tool defs into `tool()`/`jsonSchema()`
+//   - the adapter view ingesting AI SDK-native `tool()` defs into the catalog
 //   - the capability tools (search_capabilities / invoke_tool) registering + being invoked
+//   - `prepareStep` landing the per-turn recall pair in the model's prompt
 //   - argument marshaling + result flow through the agent's tool loop
 //
-// Run: `tsx test/agent.test.ts` (the `example` CI job builds @ratel-ai/sdk first).
+// Run: `tsx test/agent.test.ts` (the `example` CI job builds the workspace first).
 import assert from "node:assert/strict";
 
 import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModel } from "ai";
 
-import { runAgent } from "../src/agent.js";
-import { buildCatalog } from "../src/tools.js";
+import { createRatelView, runAgent } from "../src/agent.js";
 
 const usage = {
   inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
@@ -42,20 +42,26 @@ function finalText(text: string) {
 
 async function main() {
   // Scripted model: search the catalog, invoke a discovered tool, then answer.
+  // One result per doGenerate call, consumed in order via an explicit function
+  // (the array form's consumption semantics drifted across ai majors).
+  const scripted = [
+    toolCall("search_capabilities", { query: "read a file from local disk", topKTools: 3 }),
+    toolCall("invoke_tool", { toolId: "read_file", args: { path: "/tmp/x" } }),
+    finalText("done: read the file"),
+  ];
+  let scriptedIndex = 0;
   const model = new MockLanguageModelV3({
-    // one provider result per agent step; consumed in order
-    doGenerate: [
-      toolCall("search_capabilities", { query: "read a file from local disk", topKTools: 3 }),
-      toolCall("invoke_tool", { toolId: "read_file", args: { path: "/tmp/x" } }),
-      finalText("done: read the file"),
-    ] as unknown as ConstructorParameters<typeof MockLanguageModelV3>[0]["doGenerate"],
+    doGenerate: (async () =>
+      scripted[scriptedIndex++]) as unknown as ConstructorParameters<
+      typeof MockLanguageModelV3
+    >[0]["doGenerate"],
   });
 
+  const { view } = await createRatelView();
   const result = await runAgent({
     prompt: "read a file from local disk",
     model: model as unknown as LanguageModel,
-    catalog: await buildCatalog(),
-    initialTopK: 3,
+    view,
     maxSteps: 8,
   });
 
@@ -69,6 +75,13 @@ async function main() {
   assert.ok(result.text.includes("done"), `unexpected final text: ${result.text}`);
   // The mock must have actually been consumed (proves the loop, not a short-circuit).
   assert.ok(model.doGenerateCalls.length >= 2, "model was not driven through the tool loop");
+  // prepareStep must have landed the synthetic recall pair in every step's prompt.
+  for (const [i, call] of model.doGenerateCalls.entries()) {
+    assert.ok(
+      JSON.stringify(call.prompt).includes("recall_0"),
+      `recall pair missing from step ${i}'s prompt`,
+    );
+  }
 
   console.log(
     `PASS (ai-sdk example): ${result.steps} steps, tools=[${result.activeTools.join(", ")}], text=${JSON.stringify(result.text)}`,
