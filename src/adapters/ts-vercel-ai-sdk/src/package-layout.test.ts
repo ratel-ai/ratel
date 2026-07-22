@@ -26,11 +26,10 @@ describe("published vercel-ai-sdk dependency layout", () => {
     expect(manifest.peerDependencies?.["@ratel-ai/sdk"]).toBe("workspace:^");
   });
 
-  it("dev-pins ai to the live-verified release and the workspace SDK", () => {
-    // A pinned dev `ai` (not a range) keeps the type-tests honest against the
-    // exact release the adapter was verified on; the workspace SDK satisfies
-    // its own peer locally and forces the topological build edge.
-    expect(manifest.devDependencies?.ai).toBe("7.0.26");
+  it("dev-pins the exact AI SDK release selected for this verification run", () => {
+    // CI replaces this exact dev version per matrix row. The environment keeps
+    // the assertion exact without hard-wiring every row to the default v7 pin.
+    expect(manifest.devDependencies?.ai).toBe(process.env.AI_SDK_VERSION ?? "7.0.33");
     expect(manifest.devDependencies?.["@ratel-ai/sdk"]).toBe("workspace:^");
   });
 
