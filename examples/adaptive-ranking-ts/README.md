@@ -1,6 +1,6 @@
 # `examples/adaptive-ranking-ts` — Ratel adaptive usage ranking
 
-Shows [adaptive usage ranking](../../docs/adr/0013-adaptive-usage-ranking.md) end to end: a `ToolCatalog` learns from the tools an agent actually invokes and reranks similar future queries, then persists what it learned and reloads it in a fresh process. **No model or API key** — it is a pure-Ratel feature demo over BM25.
+Shows [adaptive usage ranking](../../docs/adr/0014-adaptive-usage-ranking.md) end to end: a `ToolCatalog` learns from the tools an agent actually invokes and reranks similar future queries, then persists what it learned and reloads it in a fresh process. **No model or API key** — it is a pure-Ratel feature demo over BM25.
 
 The scenario is a case description-writing can't fix: BM25 ranks `docker_build` first for *"why is the build broken"* (the token *build*), but the tool people reach for is `gh_run_list`. After a few real invocations the graph closes that gap. See [Capability tools](https://docs.ratel.sh/docs/capability-tools) for the broader wiring; the Python mirror is [`examples/adaptive-ranking-python`](../adaptive-ranking-python/README.md).
 
