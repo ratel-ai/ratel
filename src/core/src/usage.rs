@@ -881,34 +881,31 @@ impl IntentGraph {
             .unwrap_or_default()
     }
 
-    /// Class-based TF-IDF: terms frequent in this cluster and rare across the
-    /// others. Each cluster is treated as one document (BERTopic's method), so
-    /// the result is what distinguishes this cluster rather than what is merely
-    /// common in it.
-    fn c_tf_idf(&self, idx: usize) -> Vec<String> {
+    /// The distinguishing terms for one cluster: class-based TF-IDF (BERTopic's
+    /// method — each cluster is one document, so a term ranks by how much it sets
+    /// this cluster apart, not how common it is within it).
+    ///
+    /// Takes the corpus-wide stats — `total` tokens across the graph, `avg`
+    /// tokens per cluster, and `global` per-token occurrence counts — as
+    /// arguments because they are identical for every cluster. [`Self::labeled`]
+    /// builds them once and hands them to each call rather than rebuilding the
+    /// whole-corpus index per cluster (which made labeling O(N²) in cluster
+    /// count on a path `toJson` may run often).
+    fn c_tf_idf_terms(
+        cluster_tokens: &[String],
+        total: usize,
+        avg: f32,
+        global: &std::collections::HashMap<&str, usize>,
+    ) -> Vec<String> {
         use std::collections::HashMap;
-        let per_cluster: Vec<Vec<String>> = self
-            .intents
-            .iter()
-            .map(|it| it.members.iter().flat_map(|m| tokenize(m)).collect())
-            .collect();
-        let total: usize = per_cluster.iter().map(|c| c.len()).sum();
-        if total == 0 || per_cluster[idx].is_empty() {
+        if total == 0 || cluster_tokens.is_empty() {
             return Vec::new();
         }
-        let avg = total as f32 / per_cluster.len() as f32;
-
-        let mut global: HashMap<&str, usize> = HashMap::new();
-        for c in &per_cluster {
-            for t in c {
-                *global.entry(t.as_str()).or_insert(0) += 1;
-            }
-        }
         let mut local: HashMap<&str, usize> = HashMap::new();
-        for t in &per_cluster[idx] {
+        for t in cluster_tokens {
             *local.entry(t.as_str()).or_insert(0) += 1;
         }
-        let len = per_cluster[idx].len() as f32;
+        let len = cluster_tokens.len() as f32;
 
         let mut scored: Vec<(String, f32)> = local
             .into_iter()
@@ -929,13 +926,38 @@ impl IntentGraph {
     /// when a cluster was last written goes stale as soon as the graph grows.
     /// And computing them on write meant re-tokenizing every member of every
     /// cluster on every invocation — for strings ranking never reads.
+    ///
+    /// The whole-corpus token index (`per_cluster`, `global`, `avg`) is built
+    /// **once** here and shared by every cluster's c-TF-IDF; building it inside
+    /// each call made this quadratic in cluster count.
     pub fn labeled(&self) -> Vec<Intent> {
+        use std::collections::HashMap;
+        // Tokenize every member of every cluster once, in `intents` order.
+        let per_cluster: Vec<Vec<String>> = self
+            .intents
+            .iter()
+            .map(|it| it.members.iter().flat_map(|m| tokenize(m)).collect())
+            .collect();
+        let total: usize = per_cluster.iter().map(|c| c.len()).sum();
+        let avg = if per_cluster.is_empty() {
+            0.0
+        } else {
+            total as f32 / per_cluster.len() as f32
+        };
+        // Corpus-wide occurrence count per token, shared across all clusters.
+        let mut global: HashMap<&str, usize> = HashMap::new();
+        for c in &per_cluster {
+            for t in c {
+                *global.entry(t.as_str()).or_insert(0) += 1;
+            }
+        }
+
         self.intents
             .iter()
             .enumerate()
             .map(|(i, it)| Intent {
                 label: self.medoid(i),
-                terms: self.c_tf_idf(i),
+                terms: Self::c_tf_idf_terms(&per_cluster[i], total, avg, &global),
                 ..it.clone()
             })
             .collect()
