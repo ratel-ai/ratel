@@ -9,6 +9,7 @@ import {
   type ExecutableTool,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  runCapabilitiesSearch,
   SEARCH_CAPABILITIES_ID,
   type SearchCapabilitiesResult,
   type Skill,
@@ -162,6 +163,7 @@ describe("searchCapabilitiesTool", () => {
     const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
     const gw = events.find((e) => e.type === "gateway_search");
     expect(gw?.top_k).toBe(3);
+    expect(gw?.origin).toBe("agent"); // searchCapabilitiesTool drives runCapabilitiesSearch as origin "agent"
   });
 
   it("clamps a non-positive / non-integer topK back to the default", async () => {
@@ -197,6 +199,57 @@ describe("searchCapabilitiesTool", () => {
     // an empty catalog is treated as no skills
     const emptyCatalog = searchCapabilitiesTool(tools, new SkillCatalog());
     expect(emptyCatalog.description).not.toContain("get_skill_content");
+  });
+
+  it("advertiseSkills overrides the size-based description default in both directions", async () => {
+    const tools = new ToolCatalog();
+    await tools.register(readFile);
+    // A host that always exposes get_skill_content pins the skills clause on…
+    const pinnedOn = searchCapabilitiesTool(tools, new SkillCatalog(), { advertiseSkills: true });
+    expect(pinnedOn.description).toContain("get_skill_content");
+    // …and one that never exposes it pins the clause off despite a genuinely
+    // non-empty catalog — awaited, so the "despite live skills" precondition is
+    // real and the override (not a short-circuit on an unresolved Promise) is
+    // what suppresses the clause.
+    const pinnedOff = searchCapabilitiesTool(tools, await skillCatalogWith(vercelSkill), {
+      advertiseSkills: false,
+    });
+    expect(pinnedOff.description).not.toContain("get_skill_content");
+  });
+});
+
+describe("runCapabilitiesSearch", () => {
+  it("records one gateway_search event stamped with the given origin", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    tools.register(readFile);
+    tools.drainTraceEvents();
+
+    await runCapabilitiesSearch(tools, "read a file", { topKTools: 3, origin: "direct" });
+
+    const ev = (tools.drainTraceEvents() as Array<Record<string, unknown>>).find(
+      (e) => e.type === "gateway_search",
+    );
+    // Every field of the behavior-identity contract, not just origin: a dropped
+    // hits/query would silently break gateway_search analytics on both paths.
+    expect(ev?.origin).toBe("direct");
+    expect(ev?.top_k).toBe(3);
+    expect(ev?.query).toBe("read a file");
+    expect(ev?.hits).toBe(1); // only readFile is registered and it matches
+  });
+
+  it("produces the same shape searchCapabilitiesTool returns (single source of truth)", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    tools.register(sendEmail);
+    const skills = await skillCatalogWith(vercelSkill);
+
+    const direct = await runCapabilitiesSearch(tools, "read a file", { skillCatalog: skills });
+    const viaTool = (await searchCapabilitiesTool(tools, skills).execute({
+      query: "read a file",
+    })) as SearchCapabilitiesResult;
+
+    expect(direct.tools.groups[0].server.name).toBe(viaTool.tools.groups[0].server.name);
+    expect(direct.tools.groups[0].hits[0].toolId).toBe(viaTool.tools.groups[0].hits[0].toolId);
   });
 });
 
