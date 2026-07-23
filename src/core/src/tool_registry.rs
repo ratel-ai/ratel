@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, PoisonError, RwLock};
 use std::time::Instant;
 
 use indexmap::IndexMap;
@@ -222,7 +222,11 @@ impl ToolRegistry {
         let Some(graph) = self.graph.as_ref() else {
             return AdaptiveRankingStatus::Inactive;
         };
-        let g = graph.read().expect("intent graph lock poisoned");
+        // A poisoned lock must not crash a status query — the same policy the
+        // search path uses. "Can't tell" is the honest answer, not a panic.
+        let Ok(g) = graph.read() else {
+            return AdaptiveRankingStatus::Unknown;
+        };
         // A lexical graph (no centroids) is model-agnostic — always active.
         if !g.intents.iter().any(|i| i.centroid.is_some()) {
             return AdaptiveRankingStatus::Active;
@@ -263,8 +267,13 @@ impl ToolRegistry {
         };
         // Snapshot members under the read lock, then embed WITHOUT holding it —
         // embedding can be slow and must not block concurrent searches.
+        //
+        // A poisoned lock is recovered rather than a panic: rebuild is the repair
+        // path and overwrites every centroid wholesale, so it has no reason to
+        // refuse a graph whose state an earlier panic left in doubt — and
+        // `members` are model-independent text, untouched by that overwrite.
         let members: Vec<Vec<String>> = {
-            let g = graph.read().expect("intent graph lock poisoned");
+            let g = graph.read().unwrap_or_else(PoisonError::into_inner);
             g.intents.iter().map(|i| i.members.clone()).collect()
         };
         let mut per_cluster = Vec::with_capacity(members.len());
@@ -279,7 +288,7 @@ impl ToolRegistry {
             per_cluster.push(vectors);
         }
         if let Some(fp) = fingerprint {
-            let mut g = graph.write().expect("intent graph lock poisoned");
+            let mut g = graph.write().unwrap_or_else(PoisonError::into_inner);
             g.rebuild_centroids(per_cluster, fp);
         }
         Ok(())
@@ -1497,6 +1506,50 @@ mod tests {
         let events = model_mismatch_events(&sink);
         assert_eq!(events.len(), 1);
         assert!(!events[0].2, "same-dim swap → dim_mismatch false");
+    }
+
+    /// Poison a graph's lock the only way locks poison: panic while holding the
+    /// write guard. The join swallows the panic; the lock stays poisoned.
+    fn poison(graph: &Arc<RwLock<IntentGraph>>) {
+        let g = graph.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = g.write().expect("first writer takes the lock");
+            panic!("intentional poison");
+        })
+        .join();
+        assert!(
+            graph.is_poisoned(),
+            "lock should be poisoned after the panic"
+        );
+    }
+
+    #[test]
+    fn a_poisoned_graph_lock_reports_unknown_not_a_panic() {
+        // The search path degrades on a poisoned lock; a status query must too —
+        // a read-only getter that can crash the caller is a footgun.
+        let mut reg = ToolRegistry::new();
+        reg.register(tool("read_file", "read a file"));
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
+        poison(&graph);
+        reg.set_intent_graph(Some(graph));
+
+        assert_eq!(
+            reg.adaptive_ranking_status(),
+            AdaptiveRankingStatus::Unknown
+        );
+    }
+
+    #[test]
+    fn rebuild_recovers_a_poisoned_graph_lock_not_a_panic() {
+        // rebuild is the repair path — it overwrites every centroid, so a lock an
+        // earlier panic poisoned is recovered and the call completes, never panics.
+        let mut reg = ToolRegistry::new();
+        reg.register(tool("read_file", "read a file"));
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
+        poison(&graph);
+        reg.set_intent_graph(Some(graph));
+
+        assert!(reg.rebuild_intent_graph().is_ok());
     }
 
     #[test]

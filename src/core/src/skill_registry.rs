@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, PoisonError, RwLock};
 use std::time::Instant;
 
 use indexmap::IndexMap;
@@ -156,7 +156,11 @@ impl SkillRegistry {
         let Some(graph) = self.graph.as_ref() else {
             return AdaptiveRankingStatus::Inactive;
         };
-        let g = graph.read().expect("intent graph lock poisoned");
+        // A poisoned lock must not crash a status query — the same policy the
+        // search path uses. "Can't tell" is the honest answer, not a panic.
+        let Ok(g) = graph.read() else {
+            return AdaptiveRankingStatus::Unknown;
+        };
         // A lexical graph (no centroids) is model-agnostic — always active.
         if !g.intents.iter().any(|i| i.centroid.is_some()) {
             return AdaptiveRankingStatus::Active;
@@ -187,8 +191,11 @@ impl SkillRegistry {
         let Some(graph) = self.graph.as_ref() else {
             return Ok(());
         };
+        // A poisoned lock is recovered rather than a panic: rebuild overwrites
+        // every centroid wholesale, so it has no reason to refuse a graph whose
+        // state an earlier panic left in doubt (mirrors the tool registry).
         let members: Vec<Vec<String>> = {
-            let g = graph.read().expect("intent graph lock poisoned");
+            let g = graph.read().unwrap_or_else(PoisonError::into_inner);
             g.intents.iter().map(|i| i.members.clone()).collect()
         };
         let mut per_cluster = Vec::with_capacity(members.len());
@@ -203,7 +210,7 @@ impl SkillRegistry {
             per_cluster.push(vectors);
         }
         if let Some(fp) = fingerprint {
-            let mut g = graph.write().expect("intent graph lock poisoned");
+            let mut g = graph.write().unwrap_or_else(PoisonError::into_inner);
             g.rebuild_centroids(per_cluster, fp);
         }
         Ok(())
