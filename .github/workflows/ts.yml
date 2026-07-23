@@ -44,6 +44,29 @@ jobs:
       # See examples/ai-sdk/test/agent.test.ts.
       - name: Test the AI SDK example wiring
         run: pnpm --filter @ratel-ai/example-ai-sdk exec tsx test/agent.test.ts
+      # Example wiring (Mastra) — parity with the AI SDK row. Drives a real 1.51
+      # Agent loop with Mastra's built-in mock model (no API key).
+      # @ratel-ai/mastra is already built by `pnpm -r build` above.
+      # See examples/mastra/test/agent.test.ts.
+      - name: Test the Mastra example wiring
+        run: pnpm --filter @ratel-ai/example-mastra exec tsx test/agent.test.ts
+      # Re-run the adapter at the customer's 1.31 line and its declared floor after
+      # all 1.51 workspace consumers are done. `--no-lockfile` keeps these ephemeral
+      # CI substitutions out of the lock.
+      - name: Install customer-line Mastra
+        run: pnpm --filter @ratel-ai/mastra add --save-dev --save-exact @mastra/core@1.31.0 --no-lockfile
+      - name: Test Mastra 1.31
+        run: |
+          pnpm --filter @ratel-ai/mastra build
+          pnpm --filter @ratel-ai/mastra typecheck
+          pnpm --filter @ratel-ai/mastra test
+      - name: Install minimum supported Mastra
+        run: pnpm --filter @ratel-ai/mastra add --save-dev --save-exact @mastra/core@1.11.0 --no-lockfile
+      - name: Test minimum supported Mastra
+        run: |
+          pnpm --filter @ratel-ai/mastra build
+          pnpm --filter @ratel-ai/mastra typecheck
+          pnpm --filter @ratel-ai/mastra test
       # Telemetry example — runs offline (console exporter), emitting a ratel.search
       # + execute_tool trace through the OTel SDK, so it verifies the `ratel.*` vocab
       # end-to-end. @ratel-ai/telemetry and @ratel-ai/telemetry-otlp (the example imports

@@ -48,6 +48,9 @@ function makeRepo(version = "0.2.0", pyVersion = version) {
   // vercel-ai-sdk: the Vercel AI SDK framework adapter — an independent npm unit.
   write("src/adapters/ts-vercel-ai-sdk/package.json", json("@ratel-ai/vercel-ai-sdk"));
   write("src/adapters/ts-vercel-ai-sdk/CHANGELOG.md", changelog(version));
+  // mastra: the Mastra framework adapter — an independent npm unit.
+  write("src/adapters/ts-mastra/package.json", json("@ratel-ai/mastra"));
+  write("src/adapters/ts-mastra/CHANGELOG.md", changelog(version));
 
   return { root, write, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -62,6 +65,7 @@ test("parseTag splits prefix and version for every unit", () => {
   assert.deepEqual(parseTag("telemetry-py-v0.2.0-rc.2"), { unit: "telemetry-py", version: "0.2.0-rc.2" });
   assert.deepEqual(parseTag("telemetry-ts-otlp-v0.1.0-rc.3"), { unit: "telemetry-ts-otlp", version: "0.1.0-rc.3" });
   assert.deepEqual(parseTag("vercel-ai-sdk-v0.1.0-rc.1"), { unit: "vercel-ai-sdk", version: "0.1.0-rc.1" });
+  assert.deepEqual(parseTag("mastra-v0.1.0-rc.1"), { unit: "mastra", version: "0.1.0-rc.1" });
 });
 
 test("parseTag rejects the old lockstep tag and unknown prefixes", () => {
@@ -78,6 +82,19 @@ test("vercel-ai-sdk rc tag passes when the adapter package + its changelog match
     const r = checkReleaseTag("vercel-ai-sdk-v0.1.0-rc.1", { root: repo.root });
     assert.equal(r.ok, true, r.errors.join("; "));
     assert.equal(r.unit, "vercel-ai-sdk");
+    assert.equal(r.version, "0.1.0-rc.1");
+    assert.equal(r.distTag, "rc");
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("mastra rc tag passes when the adapter package + its changelog match", () => {
+  const repo = makeRepo("0.1.0-rc.1");
+  try {
+    const r = checkReleaseTag("mastra-v0.1.0-rc.1", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+    assert.equal(r.unit, "mastra");
     assert.equal(r.version, "0.1.0-rc.1");
     assert.equal(r.distTag, "rc");
   } finally {
