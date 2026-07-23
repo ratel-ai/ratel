@@ -383,9 +383,17 @@ fn resolve_embedding(config: Option<EmbeddingConfig>) -> napi::Result<Option<Emb
 /// model mismatch"`; `built`/`active`/`dimMismatch` are set only when paused.
 #[napi(object)]
 pub struct AdaptiveRankingStatus {
+    /// One of `"active" | "inactive" | "unknown" | "paused: dim mismatch" |
+    /// "paused: model mismatch"`.
     pub status: String,
+    /// When paused: the embedding model (or its dimension) the graph's centroids
+    /// were built with. Absent unless paused.
     pub built: Option<String>,
+    /// When paused: the currently active embedding model (or its dimension).
+    /// Absent unless paused.
     pub active: Option<String>,
+    /// When paused: `true` if the mismatch is a dimension difference, `false` if
+    /// it is a same-dimension model-identity difference. Absent unless paused.
     pub dim_mismatch: Option<bool>,
 }
 

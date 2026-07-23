@@ -11,7 +11,7 @@
  * @packageDocumentation
  */
 
-export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
+export type { AdaptiveRankingStatus, SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
 export type {
   CapabilitySkillHit,
   CapabilityToolGroup,

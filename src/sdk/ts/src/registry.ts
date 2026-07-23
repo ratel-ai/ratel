@@ -174,12 +174,6 @@ export class ToolRegistry {
   }
 
   /**
-   * Turn adaptive usage ranking off: ranking returns to the base engine and the
-   * graph stops growing. The graph keeps what it learned, so re-enabling
-   * resumes rather than restarts.
-   */
-
-  /**
    * Re-embed the intent graph's members under the current embedding model and
    * replace its centroids. Call after changing the model: a graph's centroids
    * are only comparable to queries from the model that built them, so on a swap
@@ -219,6 +213,11 @@ export class ToolRegistry {
     );
   }
 
+  /**
+   * Turn adaptive usage ranking off: ranking returns to the base engine and the
+   * graph stops growing. The graph keeps what it learned, so re-enabling
+   * resumes rather than restarts.
+   */
   disableAdaptiveRanking(): void {
     this.native.disableAdaptiveRanking();
   }
@@ -360,12 +359,6 @@ export class SkillRegistry {
   }
 
   /**
-   * Turn adaptive usage ranking off: ranking returns to the base engine and the
-   * graph stops growing. The graph keeps what it learned, so re-enabling
-   * resumes rather than restarts.
-   */
-
-  /**
    * Re-embed the intent graph's members under the current embedding model and
    * replace its centroids. Call after changing the model: a graph's centroids
    * are only comparable to queries from the model that built them, so on a swap
@@ -405,6 +398,11 @@ export class SkillRegistry {
     );
   }
 
+  /**
+   * Turn adaptive usage ranking off: ranking returns to the base engine and the
+   * graph stops growing. The graph keeps what it learned, so re-enabling
+   * resumes rather than restarts.
+   */
   disableAdaptiveRanking(): void {
     this.native.disableAdaptiveRanking();
   }
