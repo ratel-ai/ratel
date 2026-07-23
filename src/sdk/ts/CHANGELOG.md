@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-07-24
+
+### Changed
+
+- Ship the native addon built with symbol stripping and thin LTO (`[profile.release]`), shrinking the `.node` binary ~26% (9.90 MB → 7.36 MB on the sdk-ts cdylib). No API or behavior change.
+
 ## [0.5.1] - 2026-07-23
 
 ### Added
