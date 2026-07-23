@@ -205,8 +205,16 @@ jobs:
           else
             adapter_spec="$REQUESTED_TAG"
           fi
+          # Pull the SDK from the channel that MATCHES the adapter: GA mastra peers
+          # on a GA SDK (^0.5.2), which the `rc` SDK dist-tag (an older 0.5.x-rc)
+          # would not satisfy → ERESOLVE. An rc adapter pairs with the rc SDK.
+          if [[ "$adapter_spec" == "rc" || "$adapter_spec" == *-rc.* ]]; then
+            sdk_spec="rc"
+          else
+            sdk_spec="latest"
+          fi
           printf 'adapter_spec=%s\n' "$adapter_spec" >> "$GITHUB_OUTPUT"
-          printf 'sdk_spec=%s\n' "$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+          printf 'sdk_spec=%s\n' "$sdk_spec" >> "$GITHUB_OUTPUT"
       - name: Install + smoke-test the published adapter
         shell: bash
         # Installs the adapter against @ratel-ai/sdk plus its @mastra/core peer, then
