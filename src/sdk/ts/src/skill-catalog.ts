@@ -22,11 +22,17 @@ export interface SkillCatalogOptions {
  * engine. The on-demand analog of {@link ToolCatalog}: registered skills are
  * searched by relevance; the matching body is fetched only on
  * {@link SkillCatalog.invoke}.
+ *
+ * The catalog is mutable at runtime — the loader-facing seam: an external
+ * loader (any package holding a catalog and mirroring a source into it) pushes
+ * with {@link SkillCatalog.upsert}, drops with {@link SkillCatalog.remove},
+ * and the host observes churn via {@link SkillCatalog.onChange}.
  */
 export class SkillCatalog {
   private readonly registry: SkillRegistry;
   private readonly skills = new Map<string, Skill>();
   private readonly method: SearchMethod;
+  private readonly listeners = new Set<() => void>();
 
   /**
    * Create an empty catalog.
@@ -43,14 +49,16 @@ export class SkillCatalog {
   }
 
   /**
-   * Add one skill or a batch to the catalog — the single entry point for
-   * both. Replaces an id in place when already registered. Name,
-   * description, and tags are indexed for ranking; `tools`, `metadata`, and
-   * `body` are stored but not indexed (`body` is the dispatch payload,
-   * fetched by {@link SkillCatalog.invoke}). On a `"semantic"`/`"hybrid"`
-   * catalog, embeds the batch in one pass on a libuv worker after metadata is
-   * indexed — embedding errors surface **here**, at registration. A
-   * `"bm25"` catalog never loads a model.
+   * Add one skill or a batch to the catalog, or replace an id in place when
+   * already registered — the single entry point for both. Name, description,
+   * and tags are indexed for ranking; `tools`, `metadata`, and `body` are
+   * stored but not indexed (`body` is the dispatch payload, fetched by
+   * {@link SkillCatalog.invoke}). On a `"semantic"`/`"hybrid"` catalog, embeds
+   * the batch in one pass on a libuv worker after metadata is indexed —
+   * embedding errors surface **here**, at registration. The skills are
+   * indexed by then, so {@link SkillCatalog.onChange} subscribers are still
+   * notified before the error propagates. A `"bm25"` catalog never loads a
+   * model.
    *
    * A model or dimension change is not recovered in place — construct a new
    * catalog and re-register.
@@ -64,7 +72,68 @@ export class SkillCatalog {
     for (const skill of batch) {
       this.skills.set(skill.id, skill);
     }
-    await this.registry.buildDense();
+    try {
+      await this.registry.buildDense();
+    } finally {
+      // Metadata is committed above; a failed embedding pass must not swallow
+      // the staleness signal.
+      this.notifyChange();
+    }
+  }
+
+  /**
+   * {@link SkillCatalog.register} for a single skill that also reports whether
+   * the id was already present — the added-vs-replaced signal an external
+   * loader needs to mirror a source into the catalog. Same replace-in-place,
+   * embedding, and change-notification behavior as `register`.
+   *
+   * @param skill - The skill to add or replace; `id` is its lookup key.
+   * @returns `true` when an already-registered id was replaced, `false` when
+   *   the skill is new.
+   */
+  async upsert(skill: Skill): Promise<boolean> {
+    const replaced = this.skills.has(skill.id);
+    await this.register(skill);
+    return replaced;
+  }
+
+  /**
+   * Remove a skill by id. The index entry and its cached embedding drop
+   * together, so a semantic/hybrid catalog keeps searching with no rebuild.
+   * Notifies {@link SkillCatalog.onChange} subscribers on a hit; an unknown id
+   * is a silent no-op (no notification).
+   *
+   * @param skillId - Id of the skill to remove.
+   * @returns `true` when the id was present, `false` otherwise.
+   */
+  remove(skillId: string): boolean {
+    const removed = this.registry.remove(skillId);
+    this.skills.delete(skillId);
+    if (removed) {
+      this.notifyChange();
+    }
+    return removed;
+  }
+
+  /**
+   * Subscribe to catalog churn: the listener fires after every mutation —
+   * `register`, `upsert`, and a `remove` that hit. It is a low-level signal
+   * (an initial registration burst fires it once per `register`/`upsert` call;
+   * debouncing is the subscriber's job) and the single staleness hook for
+   * hosts: re-emit
+   * `tools/list_changed` from it, and if the `search_capabilities` description
+   * was cached, re-read it on an empty↔non-empty transition. A listener that
+   * throws is swallowed — it breaks neither the mutation nor other listeners.
+   * Subscribing the same function twice keeps one subscription.
+   *
+   * @param listener - Called (with no arguments) after each mutation.
+   * @returns An unsubscribe function; call it to stop the notifications.
+   */
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   /**
@@ -180,5 +249,16 @@ export class SkillCatalog {
       });
       return body;
     });
+  }
+
+  /** Fire every subscriber over a snapshot; a throwing one is isolated. */
+  private notifyChange(): void {
+    for (const listener of [...this.listeners]) {
+      try {
+        listener();
+      } catch {
+        // A bad subscriber must not break the mutation or its siblings.
+      }
+    }
   }
 }

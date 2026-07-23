@@ -699,6 +699,15 @@ impl SkillRegistry {
         Ok(())
     }
 
+    /// Remove a skill by id, dropping its index entry and cached embedding
+    /// together (semantic search keeps working, no rebuild). Returns whether
+    /// the id was present; an unknown id is a silent no-op.
+    #[napi]
+    pub fn remove(&self, skill_id: String) -> napi::Result<bool> {
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        Ok(registry.remove(&skill_id))
+    }
+
     /// Lexical BM25 search over skills — see `ToolRegistry.search` for the
     /// contract (best-first, ties by id, infallible, traced as `"direct"`).
     #[napi]

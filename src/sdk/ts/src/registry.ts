@@ -205,6 +205,17 @@ export class SkillRegistry {
     }
   }
 
+  /**
+   * Drop a skill by id: the index entry and its cached embedding go together,
+   * so a semantic/hybrid registry keeps searching with no rebuild.
+   *
+   * @param skillId - Id of the skill to remove.
+   * @returns `true` when the id was present, `false` otherwise.
+   */
+  remove(skillId: string): boolean {
+    return this.native.remove(skillId);
+  }
+
   /** Lexical BM25 search over skills — see `ToolRegistry.search`. */
   search(query: string, topK: number): SkillHit[] {
     return this.native.search(query, topK);

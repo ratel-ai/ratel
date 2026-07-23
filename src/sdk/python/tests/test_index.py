@@ -32,6 +32,10 @@ def test_public_exports_present() -> None:
         "Skill",
         "GET_SKILL_CONTENT_ID",
         "get_skill_content_tool",
+        # loader seam
+        "CatalogLoader",
+        "CatalogLoaderHandle",
+        "attach_loader",
     }
     assert expected.issubset(set(ratel_ai.__all__))
     for name in expected:

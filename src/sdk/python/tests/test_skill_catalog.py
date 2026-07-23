@@ -65,6 +65,169 @@ async def test_minimal_skill_without_tags_or_body() -> None:
     assert catalog.search("minimal", 5)[0].skill_id == "min"
 
 
+async def test_upsert_returns_false_for_new_and_true_for_replace() -> None:
+    catalog = SkillCatalog()
+    skill = Skill(id="s", name="s", description="REST API design")
+    assert await catalog.upsert(skill) is False
+    assert await catalog.upsert(Skill(id="s", name="s", description="d", body="# Updated")) is True
+    assert catalog.size() == 1
+    assert catalog.get("s").body == "# Updated"
+
+
+async def test_remove_drops_the_skill_and_returns_presence() -> None:
+    catalog = await _catalog(
+        Skill(id="slides", name="slides", description="Animation-rich HTML presentations."),
+        Skill(id="api", name="api", description="REST API design."),
+    )
+    assert catalog.remove("slides") is True
+    assert not catalog.has("slides")
+    assert catalog.size() == 1
+    hits = catalog.search("animation-rich HTML presentations", 5)
+    assert all(h.skill_id != "slides" for h in hits)
+    assert catalog.remove("slides") is False
+
+
+async def test_remove_emits_skill_churn_remove_event() -> None:
+    from ratel_ai import TraceSinkConfig
+
+    catalog = SkillCatalog(trace=TraceSinkConfig(kind="memory", session_id="t"))
+    await catalog.register(Skill(id="s", name="s", description="d"))
+    catalog.drain_trace_events()
+
+    catalog.remove("s")
+
+    events = catalog.drain_trace_events()
+    churn = [e for e in events if e["type"] == "skill_churn"]
+    assert len(churn) == 1
+    assert churn[0]["kind"] == "remove"
+    assert churn[0]["skill_id"] == "s"
+
+
+async def test_on_change_fires_on_register_upsert_remove_and_unsubscribes() -> None:
+    catalog = SkillCatalog()
+    calls = []
+    unsubscribe = catalog.on_change(lambda: calls.append(1))
+
+    await catalog.register(Skill(id="s", name="s", description="d"))
+    assert len(calls) == 1
+    await catalog.upsert(Skill(id="s", name="s", description="d", body="# Updated"))
+    assert len(calls) == 2
+    catalog.remove("s")
+    assert len(calls) == 3
+
+    unsubscribe()
+    await catalog.register(Skill(id="t", name="t", description="d"))
+    assert len(calls) == 3
+
+
+def test_on_change_does_not_fire_for_unknown_remove() -> None:
+    catalog = SkillCatalog()
+    calls = []
+    catalog.on_change(lambda: calls.append(1))
+    assert catalog.remove("missing") is False
+    assert calls == []
+
+
+async def test_on_change_same_listener_twice_fires_once() -> None:
+    catalog = SkillCatalog()
+    calls = []
+
+    def listener() -> None:
+        calls.append(1)
+
+    catalog.on_change(listener)
+    catalog.on_change(listener)
+    await catalog.register(Skill(id="s", name="s", description="d"))
+    assert len(calls) == 1
+
+
+async def test_notifies_even_when_embedding_fails_mid_register() -> None:
+    # On a semantic catalog metadata is indexed before the embedding pass; if
+    # the embedder then fails, the error propagates when awaited but the
+    # staleness hook must still fire — the host has a committed mutation.
+    class _FailingBuild:
+        def __init__(self, inner: object) -> None:
+            self._inner = inner
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+        def _build_tracked(self, has_items: bool) -> object:
+            async def _boom() -> None:
+                raise RuntimeError("stub embed failure")
+
+            return _boom()
+
+    catalog = SkillCatalog(method="semantic")
+    catalog._registry = _FailingBuild(catalog._registry)  # type: ignore[assignment]
+    calls = []
+    catalog.on_change(lambda: calls.append(1))
+
+    with pytest.raises(RuntimeError, match="stub embed failure"):
+        await catalog.register(Skill(id="s", name="s", description="d"))
+    assert catalog.has("s")
+    assert len(calls) == 1
+
+
+async def test_listener_unsubscribing_itself_mid_notify_is_isolated() -> None:
+    catalog = SkillCatalog()
+    sibling_calls = []
+    unsubscribes = []
+
+    def self_removing() -> None:
+        unsubscribes[0]()
+
+    unsubscribes.append(catalog.on_change(self_removing))
+    catalog.on_change(lambda: sibling_calls.append(1))
+
+    await catalog.register(Skill(id="s", name="s", description="d"))
+    assert len(sibling_calls) == 1
+    await catalog.register(Skill(id="t", name="t", description="d"))
+    assert len(sibling_calls) == 2
+
+
+async def test_listener_subscribed_mid_notify_fires_on_next_mutation() -> None:
+    catalog = SkillCatalog()
+    late_calls = []
+    subscribed = []
+
+    def subscriber() -> None:
+        if not subscribed:
+            subscribed.append(True)
+            catalog.on_change(lambda: late_calls.append(1))
+
+    catalog.on_change(subscriber)
+    await catalog.register(Skill(id="s", name="s", description="d"))
+    assert late_calls == []
+    await catalog.register(Skill(id="t", name="t", description="d"))
+    assert len(late_calls) == 1
+
+
+async def test_listeners_observe_settled_post_mutation_state() -> None:
+    catalog = SkillCatalog()
+    seen = []
+    catalog.on_change(lambda: seen.append((catalog.size(), catalog.has("s"))))
+
+    await catalog.register(Skill(id="s", name="s", description="d"))
+    catalog.remove("s")
+    assert seen == [(1, True), (0, False)]
+
+
+async def test_throwing_listener_breaks_neither_mutation_nor_siblings() -> None:
+    catalog = SkillCatalog()
+    calls = []
+
+    def bad() -> None:
+        raise RuntimeError("bad subscriber")
+
+    catalog.on_change(bad)
+    catalog.on_change(lambda: calls.append(1))
+
+    await catalog.register(Skill(id="s", name="s", description="d"))
+    assert len(calls) == 1
+    assert catalog.has("s")
+
+
 async def test_re_register_replaces_in_place() -> None:
     # Re-registering an id replaces it in the native corpus, not appends a
     # duplicate: the id ranks once and the latest metadata wins (RAT-378).

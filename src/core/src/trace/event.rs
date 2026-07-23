@@ -108,7 +108,8 @@ pub enum TraceEvent {
     },
     /// The tool corpus changed: [`crate::ToolRegistry::register`] emits this
     /// with [`ChurnKind::Add`] for both a fresh registration and a
-    /// replace-in-place re-register.
+    /// replace-in-place re-register; [`crate::ToolRegistry::remove`] with
+    /// [`ChurnKind::Remove`] when the id was present.
     IndexChurn {
         /// Whether the id was added or removed.
         kind: ChurnKind,
@@ -132,7 +133,8 @@ pub enum TraceEvent {
         took_ms: u64,
     },
     /// The skill corpus changed — the skill-side twin of
-    /// [`TraceEvent::IndexChurn`], emitted by [`crate::SkillRegistry::register`].
+    /// [`TraceEvent::IndexChurn`], emitted by [`crate::SkillRegistry::register`]
+    /// (`Add`) and [`crate::SkillRegistry::remove`] (`Remove`).
     SkillChurn {
         /// Whether the id was added or removed.
         kind: ChurnKind,

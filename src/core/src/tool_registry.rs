@@ -165,6 +165,43 @@ impl ToolRegistry {
         });
     }
 
+    /// Remove a tool by id, dropping its corpus entry and its cached embedding
+    /// together — the cache keeps covering the corpus, so semantic/hybrid
+    /// searches keep working with no rebuild. `shift_remove` preserves the
+    /// insertion order of the survivors (deterministic ranking ties). Emits a
+    /// [`ChurnKind::Remove`] churn event on a hit; an unknown id is a silent
+    /// no-op (returns `false`, no event).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ratel_ai_core::{Tool, ToolRegistry};
+    ///
+    /// let mut registry = ToolRegistry::new();
+    /// registry.register(Tool {
+    ///     id: "read_file".into(),
+    ///     name: "read_file".into(),
+    ///     description: "Read a file".into(),
+    ///     input_schema: serde_json::json!({}),
+    ///     output_schema: serde_json::json!({}),
+    /// });
+    ///
+    /// assert!(registry.remove("read_file"));
+    /// assert!(!registry.remove("read_file")); // already gone
+    /// assert!(registry.is_empty());
+    /// ```
+    pub fn remove(&mut self, tool_id: &str) -> bool {
+        if self.tools.shift_remove(tool_id).is_none() {
+            return false;
+        }
+        self.dense.invalidate(tool_id);
+        self.sink.record(TraceEvent::IndexChurn {
+            kind: ChurnKind::Remove,
+            tool_id: tool_id.to_string(),
+        });
+        true
+    }
+
     /// Number of registered tools (distinct ids).
     pub fn len(&self) -> usize {
         self.tools.len()
@@ -961,6 +998,97 @@ mod tests {
             .search_with_method("anything", 5, Origin::Direct, SearchMethod::Semantic)
             .unwrap();
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn remove_drops_the_tool_and_returns_true() {
+        let mut reg = ToolRegistry::new();
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a file"));
+        assert!(reg.remove("read_file"));
+        assert_eq!(reg.len(), 1);
+        let hits = reg.search("read a file", 5);
+        assert!(
+            !hits.iter().any(|h| h.tool_id == "read_file"),
+            "a removed tool never ranks"
+        );
+    }
+
+    #[test]
+    fn remove_unknown_id_is_a_silent_no_op() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = ToolRegistry::with_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        sink.drain();
+        assert!(!reg.remove("missing"));
+        assert_eq!(reg.len(), 1);
+        assert!(sink.drain().is_empty(), "no churn event for an unknown id");
+    }
+
+    #[test]
+    fn remove_emits_remove_churn_once() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = ToolRegistry::with_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        sink.drain();
+        reg.remove("read_file");
+        let events = sink.drain();
+        let removes: Vec<_> = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    &e.event,
+                    TraceEvent::IndexChurn {
+                        kind: ChurnKind::Remove,
+                        tool_id,
+                    } if tool_id == "read_file"
+                )
+            })
+            .collect();
+        assert_eq!(removes.len(), 1, "exactly one Remove churn event");
+    }
+
+    #[test]
+    fn semantic_search_succeeds_after_remove_without_rebuild() {
+        // Removing a tool drops its corpus entry and its cached vector together,
+        // so the cache still covers the corpus — no manual rebuild needed.
+        let mut reg = catalog(Arc::new(StubEmbedder));
+        reg.build_embeddings().unwrap();
+        assert!(reg.remove("read_file"));
+        let hits = reg
+            .search_with_method(
+                "delete something",
+                5,
+                Origin::Direct,
+                SearchMethod::Semantic,
+            )
+            .expect("no EmbeddingsNotBuilt after remove");
+        assert_eq!(
+            hits.first().map(|h| h.tool_id.as_str()),
+            Some("delete_file")
+        );
+        assert!(!hits.iter().any(|h| h.tool_id == "read_file"));
+    }
+
+    #[test]
+    fn removed_then_re_registered_id_re_embeds_fresh() {
+        // Remove must invalidate the cached vector: a later register of the same
+        // id (a fresh insert, so register's replace path never fires) would
+        // otherwise reuse the stale embedding.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(tool("t", "read a file")); // dense vec keyed on "read"
+        reg.build_embeddings().unwrap();
+        reg.remove("t");
+        reg.register(tool("t", "delete a file")); // fresh insert, keyed on "delete"
+        reg.build_embeddings().unwrap();
+        let hits = reg
+            .search_with_method("delete", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(hits.first().map(|h| h.tool_id.as_str()), Some("t"));
+        assert!(
+            hits[0].score > 0.9,
+            "ranks with the freshly-embedded vector"
+        );
     }
 
     #[test]

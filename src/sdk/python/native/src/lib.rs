@@ -486,6 +486,13 @@ impl SkillRegistry {
         });
     }
 
+    /// Remove a skill by id, dropping its index entry and cached embedding
+    /// together (semantic search keeps working, no rebuild). Returns whether
+    /// the id was present; an unknown id is a silent no-op.
+    fn remove(&mut self, skill_id: String) -> bool {
+        self.inner.remove(&skill_id)
+    }
+
     /// Register a batch only after PyO3 has converted every item's full shape.
     /// A bad later item therefore fails before this method mutates the registry.
     fn _register_many(&mut self, skills: Vec<SkillBatchItem>) {

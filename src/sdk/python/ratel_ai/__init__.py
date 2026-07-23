@@ -36,6 +36,7 @@ from .catalog import (
     ToolRegistry,
     TraceSinkConfig,
 )
+from .catalog_loader import CatalogLoader, CatalogLoaderHandle, attach_loader
 
 # Deprecated pre-0.2.0 surface (see compat.py) — kept so `ratel-ai==0.1.x`
 # callers keep working after upgrading to 0.2.0. Slated for removal (RAT-250).
@@ -56,6 +57,8 @@ __all__ = [
     "INVOKE_TOOL_ID",
     "SEARCH_CAPABILITIES_ID",
     "SEARCH_TOOLS_ID",
+    "CatalogLoader",
+    "CatalogLoaderHandle",
     "DimensionMismatchError",
     "EmbedderError",
     "EmbeddingModelConfig",
@@ -80,6 +83,7 @@ __all__ = [
     "ToolRegistry",
     "TraceSinkConfig",
     "UpstreamServerInfo",
+    "attach_loader",
     "configure_telemetry",
     "format_upstream_line",
     "get_skill_content_tool",
