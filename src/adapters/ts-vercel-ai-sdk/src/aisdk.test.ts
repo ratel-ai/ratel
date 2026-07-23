@@ -10,9 +10,9 @@ import { z } from "zod";
 import { aiSdk } from "./aisdk.js";
 
 // A view over a fresh core with one BM25-discoverable executable tool.
-function viewWithDeployTool() {
+async function viewWithDeployTool() {
   const view = ratel().adaptTo(aiSdk());
-  view.tools.register({
+  await view.tools.register({
     deploy_app: tool({
       description: "Deploy the app to production servers.",
       inputSchema: z.object({}),
@@ -403,7 +403,7 @@ describe("recallMessages codec", () => {
 
 describe("appendRecall (extend)", () => {
   it("appends the recall pair at the suffix and returns the same array reference", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
     const returned = await view.appendRecall(messages);
     // Mutate-and-return: a suffix append extends the cached prefix.
@@ -416,7 +416,7 @@ describe("appendRecall (extend)", () => {
   });
 
   it("no-ops (array untouched, no id spent) when the last message is not a user turn", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const messages: ModelMessage[] = [
       { role: "user", content: "deploy to production" },
       { role: "assistant", content: "on it" },
@@ -429,7 +429,7 @@ describe("appendRecall (extend)", () => {
   });
 
   it("no-ops on empty user text and on a zero-hit query, preserving id economy", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     expect(await view.appendRecall([{ role: "user", content: "" }])).toHaveLength(1);
     expect(
       await view.appendRecall([{ role: "user", content: "zzzqqq utterly unrelated" }]),
@@ -440,7 +440,7 @@ describe("appendRecall (extend)", () => {
   });
 
   it("joins multi-part user text with newlines for the recall query", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const messages: ModelMessage[] = [
       {
         role: "user",
@@ -458,7 +458,7 @@ describe("appendRecall (extend)", () => {
 
 describe("prepareStep (extend)", () => {
   it("injects a fresh messages array on step 0, leaving the caller's array untouched", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
     const result = await view.prepareStep({ stepNumber: 0, messages });
     const injected = (result as { messages: ModelMessage[] }).messages;
@@ -475,7 +475,7 @@ describe("prepareStep (extend)", () => {
   });
 
   it("returns undefined on later steps, a non-user last message, and zero hits (id economy)", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const messages: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
     expect(await view.prepareStep({ stepNumber: 1, messages })).toBeUndefined();
     expect(
@@ -495,7 +495,7 @@ describe("prepareStep (extend)", () => {
   });
 
   it("reinserts the step-0 recall before accumulated responses when a later prompt drops it", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const steps: unknown[] = [];
     const initial: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
     const first = await view.prepareStep({ stepNumber: 0, messages: initial, steps });
@@ -519,7 +519,7 @@ describe("prepareStep (extend)", () => {
   });
 
   it("does not duplicate a cloned recall pair that a later prompt already carries", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const steps: unknown[] = [];
     const initial: ModelMessage[] = [{ role: "user", content: "deploy to production" }];
     const first = await view.prepareStep({ stepNumber: 0, messages: initial, steps });
@@ -530,7 +530,7 @@ describe("prepareStep (extend)", () => {
   });
 
   it("keeps interleaved runs isolated and performs recall only once per run", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const stepsA: unknown[] = [];
     const stepsB: unknown[] = [];
     const initialA: ModelMessage[] = [{ role: "user", content: "deploy app A" }];
@@ -559,7 +559,7 @@ describe("prepareStep (extend)", () => {
   });
 
   it("stores no run state and spends no id when step 0 has no hits", async () => {
-    const view = viewWithDeployTool();
+    const view = await viewWithDeployTool();
     const steps: unknown[] = [];
     const misses: ModelMessage[] = [{ role: "user", content: "zzzqqq utterly unrelated" }];
     expect(await view.prepareStep({ stepNumber: 0, messages: misses, steps })).toBeUndefined();
