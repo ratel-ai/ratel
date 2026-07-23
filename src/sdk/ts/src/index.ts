@@ -11,8 +11,12 @@
  * @packageDocumentation
  */
 
+// The catalog's JSON-Schema spelling, re-exported so framework adapters type
+// their CatalogRegistration schemas without a cast.
+export type { JSONSchema7 } from "json-schema";
 export type { SearchHit, Skill, SkillHit, Tool } from "../native/index.cjs";
 export type {
+  CapabilitiesSearchOptions,
   CapabilitySkillHit,
   CapabilityToolGroup,
   CapabilityToolHit,
@@ -25,6 +29,7 @@ export {
   formatUpstreamLine,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  runCapabilitiesSearch,
   SEARCH_CAPABILITIES_ID,
   searchCapabilitiesTool,
 } from "./capabilities.js";
@@ -51,6 +56,19 @@ export { SEARCH_TOOLS_ID, searchToolsTool } from "./compat.js";
 export { DimensionMismatchError, EmbedderError } from "./errors.js";
 export type { McpServerHandle, RegisterMcpServerOptions } from "./mcp.js";
 export { registerMcpServer } from "./mcp.js";
+// The framework-adapter SPI and factory (ADR-0013): `ratel(config).adaptTo(adapter)`.
+export type {
+  AdaptedBase,
+  AdaptedRatel,
+  AdaptedToolCollection,
+  CatalogRegistration,
+  Ratel,
+  RatelAdapter,
+  RatelConfig,
+  RecallRef,
+  ToolCollection,
+} from "./ratel.js";
+export { ratel } from "./ratel.js";
 export { SkillRegistry, ToolRegistry } from "./registry.js";
 export type { SkillCatalogOptions } from "./skill-catalog.js";
 export { SkillCatalog } from "./skill-catalog.js";
