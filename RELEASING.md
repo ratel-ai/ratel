@@ -159,7 +159,8 @@ rstagi with a one-member team. Run the E2E locally per `e2e/README.md`.
    - `telemetry-py` → `src/telemetry/python/pyproject.toml` (PEP 440 spelling, e.g. `0.1.0rc1`).
    - `telemetry-ts-otlp` → `src/telemetry/ts-otlp/package.json`.
    - `vercel-ai-sdk` → `src/adapters/ts-vercel-ai-sdk/package.json`.
-     The four telemetry units and the adapter version independently; bump only the unit(s)
+   - `mastra` → `src/adapters/ts-mastra/package.json`.
+     The four telemetry units and the adapters version independently; bump only the unit(s)
      you are releasing.
 3. **Update the CHANGELOG:** run the `/changelog` skill (`.claude/skills/changelog/`) for
    `$UNIT`. It drafts entries with [git-cliff](https://git-cliff.org) scoped to the unit,
