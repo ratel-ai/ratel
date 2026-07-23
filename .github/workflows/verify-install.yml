@@ -8,8 +8,7 @@ name: Verify install
 # surfaces here.
 #
 # workflow_dispatch: pick a `unit` and (optionally) a `version` to verify just
-# that one. The daily cron runs `unit: all` at each unit's `latest`, except the
-# prerelease-only vercel-ai-sdk adapter, which stays on `rc` until its first GA.
+# that one. The daily cron runs `unit: all` at each unit's `latest`.
 
 on:
   workflow_dispatch:
@@ -104,10 +103,9 @@ jobs:
         env:
           REQUESTED_UNIT: ${{ inputs.unit }}
           REQUESTED_VERSION: ${{ inputs.version }}
-          REQUESTED_TAG: ${{ inputs.tag || 'rc' }}
-        # No GA exists yet: the useful package pair is on `rc`, while npm's
-        # `latest` still points at the incompatible first adapter RC. A caller
-        # can explicitly select `latest` to reproduce that path.
+          REQUESTED_TAG: ${{ inputs.tag || 'latest' }}
+        # vercel-ai-sdk is GA (0.1.0 on `latest`): the cron verifies `latest`.
+        # A caller can pin a version or select the `rc` tag explicitly.
         run: |
           set -euo pipefail
           case "$REQUESTED_TAG" in
@@ -126,8 +124,16 @@ jobs:
           else
             adapter_spec="$REQUESTED_TAG"
           fi
+          # Pull the SDK from the channel that MATCHES the adapter: a GA adapter
+          # peers on a GA SDK, which the `rc` SDK dist-tag would not satisfy →
+          # ERESOLVE. An rc adapter pairs with the rc SDK.
+          if [[ "$adapter_spec" == "rc" || "$adapter_spec" == *-rc.* ]]; then
+            sdk_spec="rc"
+          else
+            sdk_spec="latest"
+          fi
           printf 'adapter_spec=%s\n' "$adapter_spec" >> "$GITHUB_OUTPUT"
-          printf 'sdk_spec=%s\n' "$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+          printf 'sdk_spec=%s\n' "$sdk_spec" >> "$GITHUB_OUTPUT"
       - name: Install + smoke-test the published adapter
         shell: bash
         run: |
