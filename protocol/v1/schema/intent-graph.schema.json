@@ -84,6 +84,11 @@
           "minimum": 1,
           "description": "Count of distinct confirmed searches behind this cluster \u2014 searches that were followed by an invoke. One search that invokes several capabilities counts ONCE (it adds several edges but is one observation). Consumers scale the ranking arm by this (ADR-0013): one observation nudges, several carry full weight, so a single misclick cannot dictate ranking. Always >= 1."
         },
+        "last_ts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "OPTIONAL epoch-millis of this cluster's most recent observation. Drives recency weighting and eviction (ADR-0013): a cluster keeps full weight for a grace period after its last use, then its arm weight decays and it is eventually evicted. Absent (or 0) means 'as current as the graph' \u2014 a loaded graph is not treated as instantly stale."
+        },
         "tools": {
           "$ref": "#/$defs/edges"
         },

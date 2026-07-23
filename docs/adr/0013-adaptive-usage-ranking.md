@@ -64,6 +64,13 @@ a `label`, `terms`, `support`, and `tools` / `skills` edge maps.
   to answer one question. Counting invokes let a single query reach full weight
   immediately, defeating the ramp — which is the normal shape of `search_capabilities`,
   not an edge case.
+- **Clusters age out.** The arm weight is `W · min(1, support/3) · recency`, where recency is
+  `1` for a grace period (90d) after a cluster's last use and then halves every half-life
+  (90d), evaluated against the newest observed event — so a topic that falls out of use fades
+  and, past a floor, is evicted, while support stays a pure count (confidence). Recency is on
+  the *arm weight*, not the edges: edge decay was invisible because RRF fuses on rank. Members
+  are capped per cluster. Together these bound relevance drift and the unbounded growth of
+  memory and cluster count (which is the search cost). The constants are unswept defaults.
 - **Edge weights are plain invocation counts.** No recency term: only their *order* within
   a cluster reaches the fusion, so a decay factor applied uniformly to a cluster changed
   nothing that ranking could observe (see Rejected).

@@ -64,6 +64,41 @@ pub(crate) const TAU_LEXICAL: f32 = 0.5;
 /// How many c-TF-IDF terms a cluster's display label carries.
 const MAX_TERMS: usize = 5;
 
+const MS_PER_DAY: f64 = 86_400_000.0;
+
+/// A cluster keeps full weight for this long after its last use, then decays.
+/// Recent work should not be discounted at all; only topics that have genuinely
+/// gone quiet fade (ADR-0013, blocker #3).
+const RECENCY_GRACE_DAYS: f64 = 90.0;
+
+/// After the grace period, the recency factor halves every this many days —
+/// gentle: a topic idle for a year still weighs ~0.12, only near-zero by ~2y.
+const RECENCY_HALF_LIFE_DAYS: f64 = 90.0;
+
+/// A cluster whose recency factor falls below this is evicted on the next
+/// observation — it no longer boosts, and dropping it bounds cluster count (the
+/// search cost) and memory. `0.01` ≈ idle ~2 years at the defaults above.
+const EVICTION_FLOOR: f32 = 0.01;
+
+/// Cap on members kept per cluster. Bounds the lexical token bags and per-cluster
+/// memory; the centroid is a running mean and is unaffected by dropping members.
+const MEMBER_CAP: usize = 50;
+
+/// Recency weight for a cluster last touched at `last_ts`, evaluated against the
+/// graph's newest observed event `now_ts`. `1.0` within the grace period, then
+/// `2^(−(Δdays − grace)/half_life)`.
+///
+/// Measured against the newest **observed** event, not the wall clock, so the
+/// graph stays a pure function of its trace log — a topic fades relative to how
+/// much other activity has happened since, and an idle graph does not decay.
+fn recency_factor(now_ts: u64, last_ts: u64) -> f32 {
+    let dt_days = now_ts.saturating_sub(last_ts) as f64 / MS_PER_DAY;
+    if dt_days <= RECENCY_GRACE_DAYS {
+        return 1.0;
+    }
+    2f64.powf(-(dt_days - RECENCY_GRACE_DAYS) / RECENCY_HALF_LIFE_DAYS) as f32
+}
+
 /// The effective weight of the usage arm for a cluster with `support`
 /// observations: `USAGE_WEIGHT · min(1, support / SUPPORT_FULL)`.
 pub(crate) fn usage_weight(support: u32) -> f32 {
@@ -91,16 +126,23 @@ pub(crate) struct UsageArm {
     /// `[0, 1]`, but they are **different scales** — compare within a tier, not
     /// across. Reported so near-misses are visible, not just hits.
     pub similarity: f32,
-    /// The cluster's observation count, which sets the arm's weight.
+    /// The cluster's observation count. Sets the confidence ramp of the weight
+    /// and is reported on the trace event; the final weight also folds in
+    /// recency (see [`Self::weight`]).
     pub support: u32,
+    /// The arm's full fusion weight — the support ramp times the cluster's
+    /// recency factor, precomputed at match time because recency needs the
+    /// graph's newest-event anchor.
+    pub weight: f32,
     /// Capability ids, best-first. Already filtered to ids the registry knows.
     pub ids: Vec<String>,
 }
 
 impl UsageArm {
-    /// This arm's fusion weight — see [`usage_weight`].
+    /// This arm's fusion weight — the support ramp times recency, precomputed
+    /// when the arm was built.
     pub(crate) fn weight(&self) -> f32 {
-        usage_weight(self.support)
+        self.weight
     }
 }
 
@@ -205,6 +247,10 @@ pub struct Intent {
     pub centroid: Option<Vec<f32>>,
     /// Confirmed search-then-invoke observations behind this cluster.
     pub support: u32,
+    /// Epoch-millis of this cluster's most recent observation. Drives the
+    /// recency factor and eviction; `0` (default) means "as old as the graph".
+    #[serde(default)]
+    pub last_ts: u64,
     /// Tool id → count of confirmed invocations. Orders the arm; the
     /// magnitude is discarded by the fusion.
     #[serde(default)]
@@ -291,6 +337,18 @@ impl Intent {
             _ => vector.to_vec(),
         };
         self.centroid = Some(normalize(merged));
+    }
+
+    /// Drop the oldest members past [`MEMBER_CAP`], keeping the token caches in
+    /// step. Bounds per-cluster memory and lexical-match cost; the centroid is a
+    /// cumulative mean, so trimming members does not disturb it.
+    fn cap_members(&mut self) {
+        while self.members.len() > MEMBER_CAP {
+            self.members.remove(0);
+            self.member_bags.remove(0);
+        }
+        // The union bag is derived from the surviving members.
+        self.bag = self.member_bags.iter().flatten().cloned().collect();
     }
 
     /// Every distinct content token across this cluster's members.
@@ -457,6 +515,16 @@ impl IntentGraph {
         if graph.v != GRAPH_VERSION {
             return Err(IntentGraphError::UnsupportedVersion(graph.v));
         }
+        // A cluster with no recorded `last_ts` (an older or cloud-built graph
+        // that didn't track it) is treated as current at load — decay begins
+        // from the graph's own timestamp, not epoch 0, so a freshly loaded graph
+        // is not instantly stale.
+        let anchor = graph.built_from_ts;
+        for it in &mut graph.intents {
+            if it.last_ts == 0 {
+                it.last_ts = anchor;
+            }
+        }
         graph.rebuild_caches();
         Ok(graph)
     }
@@ -569,6 +637,7 @@ impl IntentGraph {
                     members: Vec::new(),
                     centroid: None,
                     support: 0,
+                    last_ts: 0,
                     tools: BTreeMap::new(),
                     skills: BTreeMap::new(),
                     bag: std::collections::HashSet::new(),
@@ -591,6 +660,7 @@ impl IntentGraph {
                 if let Some(v) = vector.as_deref() {
                     it.absorb_vector(v);
                 }
+                it.cap_members();
             }
             // `|| support == 0` is load-bearing: a cluster moves as it learns, so
             // a later invoke from the same search can match a cluster the first
@@ -600,6 +670,7 @@ impl IntentGraph {
             if first_confirmation || it.support == 0 {
                 it.support = it.support.saturating_add(1);
             }
+            it.last_ts = it.last_ts.max(ts_ms);
             let edges = match kind {
                 Capability::Tool => &mut it.tools,
                 Capability::Skill => &mut it.skills,
@@ -608,10 +679,18 @@ impl IntentGraph {
         }
 
         // Stamp the model the first time a centroid actually exists, so later
-        // observations under a different model can be detected and frozen.
+        // observations under a different model can be detected and frozen. Done
+        // before eviction, while `idx` is still valid.
         if self.model.is_none() && self.intents[idx].centroid.is_some() {
             self.model = fingerprint;
         }
+
+        // Evict clusters decayed past the floor — last, since it renumbers
+        // `intents`. The just-touched cluster has `last_ts == built_from_ts`, so
+        // it is never evicted here.
+        let now = self.built_from_ts;
+        self.intents
+            .retain(|it| recency_factor(now, it.last_ts) >= EVICTION_FLOOR);
     }
 
     /// Whether this graph's centroids can be trusted against the currently active
@@ -887,7 +966,7 @@ impl IntentGraph {
             })
             .filter(|(_, sim)| *sim >= TAU_COSINE)
             .max_by(pick_best)?;
-        arm_from(best.0, best.1, kind, known)
+        arm_from(best.0, best.1, self.built_from_ts, kind, known)
     }
 
     /// Match `query` lexically against each cluster's member-token bag and
@@ -913,7 +992,7 @@ impl IntentGraph {
             .map(|it| (it, it.lexical_score(&q)))
             .filter(|(_, score)| *score >= TAU_LEXICAL)
             .max_by(pick_best)?;
-        arm_from(best.0, best.1, kind, known)
+        arm_from(best.0, best.1, self.built_from_ts, kind, known)
     }
 }
 
@@ -929,6 +1008,7 @@ fn pick_best(a: &(&Intent, f32), b: &(&Intent, f32)) -> std::cmp::Ordering {
 fn arm_from(
     intent: &Intent,
     similarity: f32,
+    now_ts: u64,
     kind: Capability,
     known: &dyn Fn(&str) -> bool,
 ) -> Option<UsageArm> {
@@ -936,10 +1016,12 @@ fn arm_from(
     if ids.is_empty() {
         return None; // matched, but nothing it remembers still exists
     }
+    let weight = usage_weight(intent.support) * recency_factor(now_ts, intent.last_ts);
     Some(UsageArm {
         intent_id: intent.id.clone(),
         similarity,
         support: intent.support,
+        weight,
         ids,
     })
 }
@@ -1004,6 +1086,7 @@ mod tests {
             members: members.iter().map(|m| m.to_string()).collect(),
             centroid: None,
             support: 5,
+            last_ts: 0,
             tools: tools.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
             skills: BTreeMap::new(),
             bag: std::collections::HashSet::new(),
@@ -1892,5 +1975,120 @@ mod tests {
             !json.contains("model"),
             "no model field for a centroid-less graph"
         );
+    }
+    // ---- recency: decay, eviction, member cap (blocker #3) -----------------
+
+    const DAY: u64 = 86_400_000;
+
+    #[test]
+    fn a_recent_cluster_keeps_full_weight_within_the_grace() {
+        let mut g = IntentGraph::empty();
+        for _ in 0..3 {
+            g.observe("why is the build broken", Capability::Tool, "t", T0, true);
+        }
+        // now == last_ts → Δt 0 → recency 1; support 3 → ramp 1.
+        let arm = g
+            .arm(
+                "why is the build broken",
+                None,
+                Capability::Tool,
+                &all_known,
+            )
+            .unwrap();
+        assert!((arm.weight() - USAGE_WEIGHT).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_stale_cluster_decays_after_the_grace() {
+        let mut g = IntentGraph::empty();
+        for _ in 0..3 {
+            g.observe("why is the build broken", Capability::Tool, "t", T0, true);
+        }
+        // Advance the graph's clock 200 days via a different topic.
+        g.observe(
+            "rotate the signing key",
+            Capability::Tool,
+            "v",
+            T0 + 200 * DAY,
+            true,
+        );
+
+        let arm = g
+            .arm(
+                "why is the build broken",
+                None,
+                Capability::Tool,
+                &all_known,
+            )
+            .unwrap();
+        let expected = USAGE_WEIGHT * 2f32.powf(-((200.0 - 90.0) / 90.0));
+        assert!(
+            (arm.weight() - expected).abs() < 1e-3,
+            "got {} expected {expected}",
+            arm.weight()
+        );
+        assert!(
+            arm.weight() < USAGE_WEIGHT,
+            "a cold cluster must weigh less"
+        );
+    }
+
+    #[test]
+    fn a_long_idle_cluster_is_evicted() {
+        let mut g = IntentGraph::empty();
+        for _ in 0..3 {
+            g.observe("why is the build broken", Capability::Tool, "t", T0, true);
+        }
+        assert_eq!(g.len(), 1);
+        // ~2 years of other activity later: the build cluster is past the floor.
+        g.observe(
+            "rotate the signing key",
+            Capability::Tool,
+            "v",
+            T0 + 700 * DAY,
+            true,
+        );
+        assert_eq!(
+            g.len(),
+            1,
+            "the stale cluster was evicted, the fresh one stays"
+        );
+        assert!(
+            g.arm(
+                "why is the build broken",
+                None,
+                Capability::Tool,
+                &all_known
+            )
+            .is_none(),
+            "an evicted cluster contributes no arm"
+        );
+    }
+
+    #[test]
+    fn members_are_capped_per_cluster() {
+        let mut g = IntentGraph::empty();
+        for i in 0..MEMBER_CAP + 20 {
+            g.observe(
+                &format!("build broken variant{i}"),
+                Capability::Tool,
+                "t",
+                T0,
+                true,
+            );
+        }
+        assert_eq!(g.len(), 1, "near-repeats form one cluster");
+        assert!(
+            g.intents[0].members.len() <= MEMBER_CAP,
+            "members capped, got {}",
+            g.intents[0].members.len()
+        );
+        // The token cache stays in step with the trimmed members.
+        let fresh: std::collections::HashSet<String> = g.intents[0]
+            .members
+            .iter()
+            .flat_map(|m| tokenize(m))
+            .collect();
+        assert_eq!(g.intents[0].token_bag(), &fresh);
     }
 }
