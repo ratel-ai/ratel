@@ -38,6 +38,7 @@ publish helpers read:
 | `telemetry-ts` | `telemetry-ts-v*` | `@ratel-ai/telemetry` on npm |
 | `telemetry-py` | `telemetry-py-v*` | `ratel-ai-telemetry` on PyPI |
 | `telemetry-ts-otlp` | `telemetry-ts-otlp-v*` | `@ratel-ai/telemetry-otlp` on npm |
+| `vercel-ai-sdk` | `vercel-ai-sdk-v*` | `@ratel-ai/vercel-ai-sdk` on npm |
 
 The `sdk-ts` unit is **internally lockstep**: the loader, its five per-OS native packages,
 and the `ts-native` crate must share a version, because the loader's `optionalDependencies`
@@ -46,29 +47,41 @@ throws on divergence before publish. This is the only lockstep left, and it is a
 invariant, not a coupling convenience. Versions diverge across units by design; cross-unit
 compatibility is expressed by dependency ranges, not a shared semver.
 
+The `vercel-ai-sdk` framework adapter is an independent, pure-TypeScript unit. It peers on
+`@ratel-ai/sdk`; its release therefore changes only the adapter version while the packed
+artifact replaces the workspace peer with the compatible published SDK range.
+It is a temporary implementation exception to the OIDC route: the npm package is already
+bootstrapped, but each version is still published with `scripts/publish-rc.sh --unit
+vercel-ai-sdk --tag <rc|latest>` after its version tag is pushed. It joins `release.yml` only
+after its trigger, publish job, environment tag policy, and Trusted Publisher are configured.
+
 ### One `release.yml`, routed by prefix
 
-A single `release.yml` fires on the prefix set and routes the tag to its unit: only that
-unit's manifests and CHANGELOG are checked (`tag-version-check`), only its build/publish jobs
-run. Splitting into per-unit workflow files would de-register every Trusted Publisher. The
-`release` environment keeps its name; only its deployment tag policy lists the prefixes (a
-repo-settings change, invisible in git, that must move together with the trigger).
+For OIDC-wired units, a single `release.yml` fires on the prefix set and routes the tag to its
+unit: only that unit's manifests and CHANGELOG are checked (`tag-version-check`), only its
+build/publish jobs run. The adapter follows the manual exception above until it is wired into
+this same workflow. Splitting into per-unit workflow files would de-register every Trusted
+Publisher. The `release` environment keeps its name; only its deployment tag policy lists
+the prefixes (a repo-settings change, invisible in git, that must move together with the
+trigger).
 
 ### RC-first, OIDC everywhere
 
 Every release ships as `-rc.N` first and is promoted to GA only after the RC is exercised.
 RCs publish under the npm `rc` dist-tag / PEP 440 pre-release; GA under `latest`. No
 long-lived registry tokens anywhere. A new unit's first publish is a one-time manual push
-(a Trusted Publisher cannot bind to a package that does not exist yet).
+(a Trusted Publisher cannot bind to a package that does not exist yet). The adapter's
+temporary recurring manual path above remains the sole exception until its OIDC wiring lands.
 
-### Per-package CHANGELOGs, skill-curated, CI-gated
+### Per-package CHANGELOGs, skill-curated, workflow-gated
 
 Every published package keeps a Keep-a-Changelog `CHANGELOG.md` in its directory. Drafts come
 from git-cliff (repo-root `cliff.toml`, path-scoped per package at invocation); curation runs
 through the repo-local `/changelog` skill; commit-prefix discipline (`feat`/`fix`/
 `refactor`/`perf` appear, `docs`/`chore`/`ci` do not) is load-bearing for draft quality. At
-GA, existing `X.Y.Z-rc.*` sections collapse into a single `X.Y.Z` section. The CI gate blocks
-publish if the tagged unit's CHANGELOG lacks the version heading.
+GA, existing `X.Y.Z-rc.*` sections collapse into a single `X.Y.Z` section. For workflow-wired
+units, the CI gate blocks publish if the tagged unit's CHANGELOG lacks the version heading.
+The adapter follows the same convention manually until it joins the workflow.
 
 ### No first-party CLI
 

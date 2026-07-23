@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Manual per-unit publish helper for first-publish-of-a-new-package situations
-# (Trusted Publishers can't be configured for a package that doesn't exist yet).
+# Manual per-unit publish helper for package bootstrap (Trusted Publishers can't
+# bind before a package exists) and temporarily manual release units.
 #
 # After Trusted Publishers are configured, use the release.yml workflow instead —
-# it publishes via OIDC with provenance and no stored tokens.
+# it publishes via OIDC with provenance and no stored tokens. `vercel-ai-sdk`
+# remains on this helper for every release until its workflow/OIDC wiring lands.
 #
 # Release units (ADR-0008), each publishable independently:
 #   core           -> ratel-ai-core on crates.io          (cargo publish)
@@ -25,6 +26,7 @@
 #   scripts/publish-rc.sh --unit sdk-py --from-dir <path>   [--dry-run]
 #   scripts/publish-rc.sh --unit core                       [--dry-run]
 #   scripts/publish-rc.sh --unit telemetry-ts               [--dry-run]
+#   scripts/publish-rc.sh --unit vercel-ai-sdk [--tag rc|latest] [--dry-run]
 #   scripts/publish-rc.sh --from-dir <path>                 # all units
 #
 # Options:
@@ -58,7 +60,7 @@ while [[ $# -gt 0 ]]; do
     --from-dir) FROM_DIR="$2"; shift 2 ;;
     --tag)      TAG="$2"; shift 2 ;;
     --dry-run)  DRY_RUN=1; shift ;;
-    -h|--help)  sed -n '2,36p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,44p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
