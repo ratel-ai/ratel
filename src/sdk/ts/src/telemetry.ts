@@ -54,6 +54,7 @@ import {
   type SearchTarget,
   setContentCapture,
 } from "@ratel-ai/telemetry";
+import { isAsyncIterable, isPromiseLike } from "./async.js";
 import type { SearchOrigin } from "./catalog.js";
 
 const TRACER_NAME = "@ratel-ai/sdk";
@@ -215,22 +216,6 @@ async function closeAsyncIterator(
     onError(error);
     throw error;
   }
-}
-
-function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === "function"
-  );
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
 }
 
 /**

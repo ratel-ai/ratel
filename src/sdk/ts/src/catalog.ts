@@ -1,5 +1,6 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
 import type { SearchHit, Tool } from "../native/index.cjs";
+import { isAsyncIterable, isPromiseLike } from "./async.js";
 import { ToolRegistry } from "./registry.js";
 import {
   argsSizeBytes,
@@ -457,7 +458,7 @@ export class ToolCatalog {
     if (!this.executors.has(toolId)) {
       throw new Error(`unknown toolId: ${toolId}`);
     }
-    return mapInputValidation(this.validateInput(toolId, args), (validated) =>
+    return runIfValid(this.validateInput(toolId, args), (validated) =>
       this.invokeValidatedRaw(toolId, validated, context),
     );
   }
@@ -510,7 +511,8 @@ export class ToolCatalog {
   }
 }
 
-function mapInputValidation(
+/** Unwrap a (possibly async) validation result and continue with its value, or throw its error. */
+function runIfValid(
   result: InputValidationResult | PromiseLike<InputValidationResult>,
   onSuccess: (value: unknown) => unknown,
 ): unknown {
@@ -564,20 +566,4 @@ async function* observeAsyncIterable(
   } finally {
     if (!failed) onSuccess(lastValue);
   }
-}
-
-function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === "function"
-  );
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
 }

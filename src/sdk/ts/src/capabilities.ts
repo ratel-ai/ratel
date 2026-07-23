@@ -1,3 +1,4 @@
+import { isAsyncIterable, isPromiseLike } from "./async.js";
 import type {
   ExecutableTool,
   InputValidationResult,
@@ -594,14 +595,15 @@ function validateInvokeInput(
     return { success: true, value: input };
   }
 
-  return mapInputValidation(catalog.validateInput(inputObj.toolId, args), (validated) => {
+  return mapValidationValue(catalog.validateInput(inputObj.toolId, args), (validated) => {
     const transformed = { ...inputObj, args: validated };
     prevalidatedInputs.add(transformed);
     return transformed;
   });
 }
 
-function mapInputValidation(
+/** Map the success value of a (possibly async) validation result; a failure passes through unchanged. */
+function mapValidationValue(
   result: InputValidationResult | PromiseLike<InputValidationResult>,
   onSuccess: (value: unknown) => unknown,
 ): InputValidationResult | PromiseLike<InputValidationResult> {
@@ -701,20 +703,4 @@ function brandedInvokeError(message: string, cause: unknown): InvokeToolError {
 function isUnauthorizedError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   return err.name === "UnauthorizedError";
-}
-
-function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === "function"
-  );
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
 }
