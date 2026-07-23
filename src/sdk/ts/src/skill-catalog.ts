@@ -147,7 +147,7 @@ export class SkillCatalog {
   }
 
   /**
-   * Turn on adaptive usage ranking against `graph` (ADR-0013): the catalog
+   * Turn on adaptive usage ranking against `graph` (ADR-0014): the catalog
    * ranks against what users have actually invoked after similar queries, and
    * keeps learning as it is used.
    *

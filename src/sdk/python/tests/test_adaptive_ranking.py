@@ -1,4 +1,4 @@
-"""Adaptive usage ranking through the Python SDK (ADR-0013).
+"""Adaptive usage ranking through the Python SDK (ADR-0014).
 
 The catalog learns from what people invoke after a search, then ranks with it.
 The load-bearing negative is that a query with no evidence behind it is

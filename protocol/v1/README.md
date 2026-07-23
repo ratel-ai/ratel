@@ -186,7 +186,7 @@ pin the wire shapes.
 ## Intent graph
 
 [`schema/intent-graph.schema.json`](schema/intent-graph.schema.json) specifies the
-**usage-ranking read model** ([ADR-0013](../../docs/adr/0013-adaptive-usage-ranking.md)):
+**usage-ranking read model** ([ADR-0014](../../docs/adr/0014-adaptive-usage-ranking.md)):
 clusters of past queries, each carrying weighted edges to the capabilities users actually
 invoked after them. A retrieval engine consumes it as an extra ranking arm beside BM25 and
 dense retrieval.

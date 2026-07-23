@@ -17,7 +17,7 @@ loader and source implementations live outside `protocol/`.
   shapes, the error model, and the versioning rules, plus its JSON Schemas (`v1/schema/`) and
   executable conformance vectors (`v1/conformance/`). It also publishes the `IntentGraph`
   usage-ranking shape — a producer contract shared by the local learner and Ratel Cloud, not
-  a synced endpoint ([ADR-0013](../docs/adr/0013-adaptive-usage-ranking.md)).
+  a synced endpoint ([ADR-0014](../docs/adr/0014-adaptive-usage-ranking.md)).
 
 ## Versioning
 

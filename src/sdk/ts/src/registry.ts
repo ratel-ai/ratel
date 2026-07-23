@@ -149,7 +149,7 @@ export class ToolRegistry {
   }
 
   /**
-   * Turn on adaptive usage ranking against `graph` (ADR-0013).
+   * Turn on adaptive usage ranking against `graph` (ADR-0014).
    *
    * Wires both halves: the registry ranks against the graph, and its trace sink
    * is decorated with a learner that grows it from search-then-invoke pairs — a
@@ -334,7 +334,7 @@ export class SkillRegistry {
   }
 
   /**
-   * Turn on adaptive usage ranking against `graph` (ADR-0013).
+   * Turn on adaptive usage ranking against `graph` (ADR-0014).
    *
    * Wires both halves: the registry ranks against the graph, and its trace sink
    * is decorated with a learner that grows it from search-then-invoke pairs — a

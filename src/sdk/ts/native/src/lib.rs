@@ -436,7 +436,7 @@ fn map_status(s: core::AdaptiveRankingStatus) -> AdaptiveRankingStatus {
     }
 }
 
-/// A shared usage-ranking intent graph (ADR-0013): clusters of past queries,
+/// A shared usage-ranking intent graph (ADR-0014): clusters of past queries,
 /// each remembering the capabilities invoked after them.
 ///
 /// **Hand the same instance to both registries.** One cluster carries a `tools`
@@ -760,7 +760,7 @@ impl ToolRegistry {
         Ok(())
     }
 
-    /// Turn on adaptive usage ranking against `graph` (ADR-0013).
+    /// Turn on adaptive usage ranking against `graph` (ADR-0014).
     ///
     /// Wires both halves at once: the registry **ranks** against the graph, and
     /// the trace sink is decorated with a learner that **grows** it from
@@ -1112,7 +1112,7 @@ impl SkillRegistry {
         Ok(())
     }
 
-    /// Turn on adaptive usage ranking against `graph` (ADR-0013).
+    /// Turn on adaptive usage ranking against `graph` (ADR-0014).
     ///
     /// Wires both halves at once: the registry **ranks** against the graph, and
     /// the trace sink is decorated with a learner that **grows** it from

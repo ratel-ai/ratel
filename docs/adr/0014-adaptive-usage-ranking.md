@@ -1,4 +1,4 @@
-# 13. Adaptive usage ranking: an online usage arm over the existing fusion
+# 14. Adaptive usage ranking: an online usage arm over the existing fusion
 
 Date: 2026-07-20
 

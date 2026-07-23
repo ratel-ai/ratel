@@ -1,4 +1,4 @@
-//! Adaptive usage ranking end to end through the public API (ADR-0013).
+//! Adaptive usage ranking end to end through the public API (ADR-0014).
 //!
 //! The load-bearing guarantee is the negative one: a registry with no intent
 //! graph — or one whose graph matches nothing — must rank *byte-identically* to
@@ -327,7 +327,7 @@ fn an_unboosted_search_keeps_its_single_bm25_stage() {
 
 #[test]
 fn a_tool_the_base_ranker_never_retrieved_is_not_promoted() {
-    // ADR-0013's honest boundary for W < 1: the arm can lift a capability the
+    // ADR-0014's honest boundary for W < 1: the arm can lift a capability the
     // base ranker scored poorly, but not one it never returned at all. Pinned as
     // a test so the limitation is discovered here rather than in production.
     let mut r = ToolRegistry::new();

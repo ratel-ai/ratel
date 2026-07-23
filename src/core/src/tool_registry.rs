@@ -17,7 +17,7 @@ use crate::trace::{
 use crate::usage::{Capability, IntentGraph, UsageArm};
 
 /// Whether adaptive usage ranking is currently contributing to a registry's
-/// results — the SDK-facing view of the model-compatibility check (ADR-0013).
+/// results — the SDK-facing view of the model-compatibility check (ADR-0014).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdaptiveRankingStatus {
     /// No intent graph attached.
@@ -131,7 +131,7 @@ pub struct ToolRegistry {
     /// the cache built first). A pure BM25 user never populates it and never loads
     /// the model (see ADR-0011 and [`DenseCache`]).
     dense: DenseCache,
-    /// Optional usage-ranking read model (ADR-0013). `None` — the default — is
+    /// Optional usage-ranking read model (ADR-0014). `None` — the default — is
     /// today's behavior exactly: no extra arm, no `UsageBoost` event, BM25
     /// scores unchanged. Shared behind a lock because the learner writes to the
     /// same graph the search path reads.
@@ -195,7 +195,7 @@ impl ToolRegistry {
     }
 
     /// Attach (or with `None`, detach) the usage-ranking read model — adaptive
-    /// ranking is **opt-in** (ADR-0013).
+    /// ranking is **opt-in** (ADR-0014).
     ///
     /// With a graph attached, a query that matches one of its clusters gains a
     /// third fusion arm ranked by what users invoked after similar queries. That
@@ -729,7 +729,7 @@ impl ToolRegistry {
             top_score: dense_ranked.first().map(|(_, s)| *s as f64),
         };
 
-        // 3. Usage (ADR-0013), matched on the vector the dense arm already
+        // 3. Usage (ADR-0014), matched on the vector the dense arm already
         //    embedded. Absent unless a graph is attached and the query matches.
         let t = Instant::now();
         let arm = self.usage_arm(query, Some(&query_vec));
@@ -1399,7 +1399,7 @@ mod tests {
         );
     }
 
-    // ---- usage ranking on the dense paths (ADR-0013) -----------------------
+    // ---- usage ranking on the dense paths (ADR-0014) -----------------------
 
     /// A graph whose single cluster carries the stub embedder's "read" vector,
     /// so a query containing "read" matches it at cosine 1.0.

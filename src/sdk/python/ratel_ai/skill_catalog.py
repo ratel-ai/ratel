@@ -295,7 +295,7 @@ class SkillRegistry:
     def enable_adaptive_ranking(
         self, graph: IntentGraph, *, warn_on_model_mismatch: bool = True
     ) -> None:
-        """Turn on adaptive usage ranking against ``graph`` (ADR-0013).
+        """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
         Wires both halves: this registry ranks against what users have actually
         invoked after similar queries, and keeps learning as it is used. Pass
@@ -540,7 +540,7 @@ class SkillCatalog:
     def enable_adaptive_ranking(
         self, graph: IntentGraph, *, warn_on_model_mismatch: bool = True
     ) -> None:
-        """Turn on adaptive usage ranking against ``graph`` (ADR-0013).
+        """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
         Wires both halves: this catalog ranks against what users have actually
         invoked after similar queries, and keeps learning as it is used. Pass

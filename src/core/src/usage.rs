@@ -1,6 +1,6 @@
 //! The usage-ranking read model: clusters of past queries, each carrying
 //! weighted edges to the capabilities users actually invoked after them
-//! (ADR-0013).
+//! (ADR-0014).
 //!
 //! A query is matched to at most one cluster, and that cluster's capabilities
 //! become an extra ranked arm for [`crate::fusion::rrf_fuse_weighted`] beside
@@ -36,7 +36,7 @@ use crate::fusion::sort_and_truncate;
 /// Fraction of the usage arm's full weight granted per unit of support, capped
 /// at 1.0 once `SUPPORT_FULL` observations agree. One confirmed observation
 /// nudges the ranking; it must never dictate it, or a single misclick becomes
-/// policy (ADR-0013).
+/// policy (ADR-0014).
 pub(crate) const SUPPORT_FULL: u32 = 3;
 
 /// The usage arm's full weight, relative to the BM25/dense arms at 1.0.
@@ -57,7 +57,7 @@ pub(crate) const TAU_COSINE: f32 = 0.70;
 /// Scored per member rather than against the members' union: a union only
 /// grows, so union scoring let a mature cluster absorb unrelated asks and grow
 /// further still. Per-member scoring reaches repeats and near-repeats, which is
-/// this tier's documented ceiling (ADR-0013) — distant wording is the dense
+/// this tier's documented ceiling (ADR-0014) — distant wording is the dense
 /// tier's job.
 pub(crate) const TAU_LEXICAL: f32 = 0.5;
 
@@ -68,7 +68,7 @@ const MS_PER_DAY: f64 = 86_400_000.0;
 
 /// A cluster keeps full weight for this long after its last use, then decays.
 /// Recent work should not be discounted at all; only topics that have genuinely
-/// gone quiet fade (ADR-0013, blocker #3).
+/// gone quiet fade (ADR-0014, blocker #3).
 const RECENCY_GRACE_DAYS: f64 = 90.0;
 
 /// After the grace period, the recency factor halves every this many days —
@@ -264,7 +264,7 @@ pub struct Intent {
     /// Matching scores a query against **individual members**, not their union:
     /// the union only grows, so scoring against it made a mature cluster
     /// recognize most of the vocabulary and absorb unrelated asks, which grew it
-    /// further (ADR-0013). Derived from `members`, so never serialized and never
+    /// further (ADR-0014). Derived from `members`, so never serialized and never
     /// part of identity.
     #[serde(skip)]
     member_bags: Vec<std::collections::HashSet<String>>,
@@ -587,7 +587,7 @@ impl IntentGraph {
     /// Fold one confirmed observation — a query, and the capability invoked
     /// after it — into the graph.
     ///
-    /// This is the whole learning step (ADR-0013). It:
+    /// This is the whole learning step (ADR-0014). It:
     ///
     /// 1. finds the cluster this query belongs to — by centroid when the search
     ///    path stashed an embedding, else by token overlap — or **seeds a new
@@ -1347,7 +1347,7 @@ mod tests {
 
     #[test]
     fn lexical_match_cannot_bridge_disjoint_vocabulary() {
-        // The documented ceiling of the Bm25 tier (ADR-0013): no shared content
+        // The documented ceiling of the Bm25 tier (ADR-0014): no shared content
         // tokens means no match, however semantically close the two queries are.
         // This is what the dense tier exists to fix — pinned so the boundary is a
         // test, not a claim in prose.

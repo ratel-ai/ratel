@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ratel.sh/protocol/v1/intent-graph.schema.json",
   "title": "IntentGraph",
-  "description": "The usage-ranking read model (ADR-0013): clusters of past queries, each carrying weighted edges to the capabilities invoked after them. Produced by two independent builders \u2014 the in-process local learner in ratel-ai-core and the hosted Ratel Cloud builder \u2014 and consumed as a scoring arm alongside BM25/dense retrieval. NOT a synced wire artifact in v1: it has no ETag semantics and is not served by GET /v1/catalog. It is specified here because it is the contract shared between those two producers, so neither can silently become the definition.",
+  "description": "The usage-ranking read model (ADR-0014): clusters of past queries, each carrying weighted edges to the capabilities invoked after them. Produced by two independent builders \u2014 the in-process local learner in ratel-ai-core and the hosted Ratel Cloud builder \u2014 and consumed as a scoring arm alongside BM25/dense retrieval. NOT a synced wire artifact in v1: it has no ETag semantics and is not served by GET /v1/catalog. It is specified here because it is the contract shared between those two producers, so neither can silently become the definition.",
   "type": "object",
   "required": [
     "v",
@@ -23,12 +23,12 @@
     "model": {
       "type": "string",
       "minLength": 1,
-      "description": "OPTIONAL fingerprint of the embedding model the centroids were built with. Present only for a graph that carries centroids; absent for a lexically-clustered graph. A consumer MUST NOT cosine a query against centroids built by a different model \u2014 it detects the swap (dimension or fingerprint) and pauses the usage arm until the graph is rebuilt. See ADR-0013."
+      "description": "OPTIONAL fingerprint of the embedding model the centroids were built with. Present only for a graph that carries centroids; absent for a lexically-clustered graph. A consumer MUST NOT cosine a query against centroids built by a different model \u2014 it detects the swap (dimension or fingerprint) and pauses the usage arm until the graph is rebuilt. See ADR-0014."
     },
     "rev": {
       "type": "integer",
       "minimum": 0,
-      "description": "OPTIONAL monotonic write counter, bumped once per mutation of the graph (a confirmed observation, a centroid rebuild). Never read during ranking \u2014 it is a primitive for the caller's storage layer, which owns persistence. Two uses: save-when-changed (persist only when `rev` differs from the last saved value) and stale-base detection (before overwriting a stored graph, compare its `rev` to the one you loaded; a higher value means another writer moved ahead \u2014 single-writer is the supported model, so this makes a clobber detectable, not merged). Absent means treat as 0; the counter continues up from there. See ADR-0013."
+      "description": "OPTIONAL monotonic write counter, bumped once per mutation of the graph (a confirmed observation, a centroid rebuild). Never read during ranking \u2014 it is a primitive for the caller's storage layer, which owns persistence. Two uses: save-when-changed (persist only when `rev` differs from the last saved value) and stale-base detection (before overwriting a stored graph, compare its `rev` to the one you loaded; a higher value means another writer moved ahead \u2014 single-writer is the supported model, so this makes a clobber detectable, not merged). Absent means treat as 0; the counter continues up from there. See ADR-0014."
     },
     "intents": {
       "type": "array",
@@ -87,12 +87,12 @@
         "support": {
           "type": "integer",
           "minimum": 1,
-          "description": "Count of distinct confirmed searches behind this cluster \u2014 searches that were followed by an invoke. One search that invokes several capabilities counts ONCE (it adds several edges but is one observation). Consumers scale the ranking arm by this (ADR-0013): one observation nudges, several carry full weight, so a single misclick cannot dictate ranking. Always >= 1."
+          "description": "Count of distinct confirmed searches behind this cluster \u2014 searches that were followed by an invoke. One search that invokes several capabilities counts ONCE (it adds several edges but is one observation). Consumers scale the ranking arm by this (ADR-0014): one observation nudges, several carry full weight, so a single misclick cannot dictate ranking. Always >= 1."
         },
         "last_ts": {
           "type": "integer",
           "minimum": 0,
-          "description": "OPTIONAL epoch-millis of this cluster's most recent observation. Drives recency weighting and eviction (ADR-0013): a cluster keeps full weight for a grace period after its last use, then its arm weight decays and it is eventually evicted. Absent (or 0) means 'as current as the graph' \u2014 a loaded graph is not treated as instantly stale."
+          "description": "OPTIONAL epoch-millis of this cluster's most recent observation. Drives recency weighting and eviction (ADR-0014): a cluster keeps full weight for a grace period after its last use, then its arm weight decays and it is eventually evicted. Absent (or 0) means 'as current as the graph' \u2014 a loaded graph is not treated as instantly stale."
         },
         "tools": {
           "$ref": "#/$defs/edges"
@@ -104,7 +104,7 @@
     },
     "edges": {
       "type": "object",
-      "description": "Capability id -> count of confirmed invocations. Weights come from INVOCATIONS, never from what retrieval returned \u2014 recording the ranker's own output would reinforce its errors (ADR-0013). Only relative order within a cluster is load-bearing: the consumer ranks by weight and fuses on rank position, so absolute magnitudes never need reconciling with BM25 or cosine scores. MAY be empty. An id with no definition in the consumer's registry MUST be dropped, not ranked.",
+      "description": "Capability id -> count of confirmed invocations. Weights come from INVOCATIONS, never from what retrieval returned \u2014 recording the ranker's own output would reinforce its errors (ADR-0014). Only relative order within a cluster is load-bearing: the consumer ranks by weight and fuses on rank position, so absolute magnitudes never need reconciling with BM25 or cosine scores. MAY be empty. An id with no definition in the consumer's registry MUST be dropped, not ranked.",
       "additionalProperties": {
         "type": "number",
         "exclusiveMinimum": 0

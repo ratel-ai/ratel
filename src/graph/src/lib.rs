@@ -1,5 +1,5 @@
 //! Rebuild a usage-ranking [`IntentGraph`] by replaying local trace logs
-//! (ADR-0013).
+//! (ADR-0014).
 //!
 //! The learner in `ratel-ai-core` grows a graph from live events, but it lives
 //! in memory: a fresh process starts knowing nothing. `JsonlSink` has been

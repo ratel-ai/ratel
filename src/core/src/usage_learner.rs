@@ -1,5 +1,5 @@
 //! The online learner: turns the trace stream into an [`IntentGraph`]
-//! (ADR-0013).
+//! (ADR-0014).
 //!
 //! # Why this is a sink
 //!
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn what_retrieval_returned_never_becomes_an_edge() {
-        // The central rule (ADR-0013): only invocations are evidence. This search
+        // The central rule (ADR-0014): only invocations are evidence. This search
         // reports `docker_build` as its top hit and the user invokes something
         // else — the graph must learn the invoke, not the hit.
         let (l, graph) = learner();

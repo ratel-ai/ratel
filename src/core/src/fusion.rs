@@ -23,7 +23,7 @@ pub(crate) type WeightedArm<'a> = (&'a [String], f32);
 /// `score(id) = Σ_arms w_arm · 1 / (k + rank_in_arm)`.
 ///
 /// [`rrf_fuse`] is this at `w = 1.0` for every arm. The weight exists for the
-/// usage-ranking arm (ADR-0013), which is deliberately sub-unit: at the same rank
+/// usage-ranking arm (ADR-0014), which is deliberately sub-unit: at the same rank
 /// a capability the query lexically matched outranks one only usage history
 /// supports. A sub-unit arm still promotes a deeply-ranked id past another arm's
 /// rank-0 hit, because the id accumulates from both arms — it damps the arm
@@ -168,11 +168,11 @@ mod tests {
 
     #[test]
     fn sub_unit_usage_weight_lets_the_lexical_arm_win_at_equal_rank() {
-        // ADR-0013 ships W < 1: at the SAME rank, a capability the query lexically
+        // ADR-0014 ships W < 1: at the SAME rank, a capability the query lexically
         // matched must outrank one only usage history supports. `c` sits at rank 2 of
         // the usage arm (w=0.5), `d` at rank 2 of the lexical arm (w=1) — so `d` wins.
         // At w=1 they would tie and fall back to id order, which is the boundary this
-        // pins. See the risk note in ADR-0013 on W's direction.
+        // pins. See the risk note in ADR-0014 on W's direction.
         let lexical = ids(&["a", "b", "d"]);
         let usage = ids(&["a", "b", "c"]);
         let fused = rrf_fuse_weighted(&[(lexical.as_slice(), 1.0), (usage.as_slice(), 0.5)], RRF_K);

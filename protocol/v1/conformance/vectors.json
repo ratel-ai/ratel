@@ -482,7 +482,7 @@
     "note": "Secrets never appear on the wire. A conforming projection emits exactly `skillFields`; any field whose lowercased name contains one of `forbiddenFieldSubstrings` MUST NOT appear in a v1 payload. Implementations assert this structurally (a test fails if such a field enters a wire shape)."
   },
   "graph": {
-    "note": "Conformance fixtures for the intent-graph read model (ADR-0013, schema/intent-graph.schema.json). Unlike the catalog vectors these pin STRUCTURE, not ETags: the graph is not a synced wire artifact in v1. Both producers — the in-process local learner and the Ratel Cloud builder — MUST emit graphs that validate, and every consumer MUST reject the `invalid` set.",
+    "note": "Conformance fixtures for the intent-graph read model (ADR-0014, schema/intent-graph.schema.json). Unlike the catalog vectors these pin STRUCTURE, not ETags: the graph is not a synced wire artifact in v1. Both producers — the in-process local learner and the Ratel Cloud builder — MUST emit graphs that validate, and every consumer MUST reject the `invalid` set.",
     "consumerRules": [
       "An edge naming a capability absent from the consumer's registry MUST be dropped, never ranked — the catalog may have changed since the graph was grown.",
       "`centroid` MAY be absent; a consumer without an embedder matches lexically over `members`, and one with an embedder MAY derive a centroid from `members`.",

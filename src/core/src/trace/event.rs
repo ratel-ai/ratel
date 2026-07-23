@@ -325,7 +325,7 @@ pub enum TraceEvent {
     /// active one, so cosine across the two spaces would be meaningless. Unlike
     /// [`Self::EmbedderModelMismatch`] (corpus, fatal), the usage arm merely
     /// **pauses** — base ranking is unaffected — until the graph is rebuilt. See
-    /// `usage.rs` and ADR-0013.
+    /// `usage.rs` and ADR-0014.
     UsageModelMismatch {
         /// The graph's model — its fingerprint, or its centroid width when the
         /// mismatch is dimensional.
@@ -338,7 +338,7 @@ pub enum TraceEvent {
         dim_mismatch: bool,
     },
     /// Emitted on every search of a registry that has an intent graph attached,
-    /// recording whether usage history contributed to the ranking (ADR-0013).
+    /// recording whether usage history contributed to the ranking (ADR-0014).
     /// A registry with no graph emits nothing, so this event's presence is
     /// itself the signal that adaptive ranking is switched on.
     ///

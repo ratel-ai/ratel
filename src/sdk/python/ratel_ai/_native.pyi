@@ -43,7 +43,7 @@ class SearchHit:
         """
 
 class IntentGraph:
-    """A shared usage-ranking intent graph (ADR-0013).
+    """A shared usage-ranking intent graph (ADR-0014).
 
     Clusters of past queries, each remembering the capabilities invoked after
     them. Hand the *same* instance to a tool catalog and a skill catalog: one
@@ -207,7 +207,7 @@ class ToolRegistry:
         """(status, built, active, dim_mismatch) — adaptive ranking model check."""
 
     def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
-        """Turn on adaptive usage ranking against `graph` (ADR-0013).
+        """Turn on adaptive usage ranking against `graph` (ADR-0014).
 
         Wires both halves: this registry ranks against the graph, and its trace
         sink is decorated with a learner that grows it from search-then-invoke
@@ -357,7 +357,7 @@ class SkillRegistry:
         """(status, built, active, dim_mismatch) — adaptive ranking model check."""
 
     def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
-        """Turn on adaptive usage ranking against `graph` (ADR-0013).
+        """Turn on adaptive usage ranking against `graph` (ADR-0014).
 
         Wires both halves: this registry ranks against the graph, and its trace
         sink is decorated with a learner that grows it from search-then-invoke

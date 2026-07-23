@@ -69,7 +69,7 @@ export type {
   ToolCollection,
 } from "./ratel.js";
 export { ratel } from "./ratel.js";
-/** Adaptive usage ranking: the shared read model of what users invoke (ADR-0013). */
+/** Adaptive usage ranking: the shared read model of what users invoke (ADR-0014). */
 export { IntentGraph, SkillRegistry, ToolRegistry } from "./registry.js";
 export type { SkillCatalogOptions } from "./skill-catalog.js";
 export { SkillCatalog } from "./skill-catalog.js";

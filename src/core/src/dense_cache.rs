@@ -278,7 +278,7 @@ impl DenseCache {
     /// build/rebuild cannot replace the vector space between the query identity
     /// check and cosine ranking.
     ///
-    /// The query vector escapes because the usage-ranking arm (ADR-0013) matches
+    /// The query vector escapes because the usage-ranking arm (ADR-0014) matches
     /// it against intent centroids: reusing it here is what makes adaptive
     /// ranking free on the semantic and hybrid paths instead of costing a second
     /// inference. The match happens after this returns but within the same

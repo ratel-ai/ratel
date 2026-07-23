@@ -16,7 +16,7 @@ observation is a search and an invoke from *one* session, and pairing across ses
 invent edges nobody produced.
 
 The graph shape is [`protocol/v1`](../../protocol/v1/README.md); the decisions behind it are
-[ADR-0013](../../docs/adr/0013-adaptive-usage-ranking.md).
+[ADR-0014](../../docs/adr/0014-adaptive-usage-ranking.md).
 
 ## Layout
 

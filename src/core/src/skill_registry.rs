@@ -75,7 +75,7 @@ pub struct SkillRegistry {
     /// Dense embeddings for `skills`, keyed by id and built on demand — the
     /// skill-side twin of [`crate::ToolRegistry`]'s field (see [`DenseCache`]).
     dense: DenseCache,
-    /// Optional usage-ranking read model (ADR-0013). `None` — the default — is
+    /// Optional usage-ranking read model (ADR-0014). `None` — the default — is
     /// today's behavior exactly. Shared behind a lock because the learner writes
     /// to the same graph the search path reads.
     graph: Option<Arc<RwLock<IntentGraph>>>,
@@ -139,7 +139,7 @@ impl SkillRegistry {
 
     /// Attach (or with `None`, detach) the usage-ranking read model — the
     /// skill-side twin of [`crate::ToolRegistry::set_intent_graph`], reading the
-    /// same graph's `skills` edges (ADR-0013).
+    /// same graph's `skills` edges (ADR-0014).
     ///
     /// Opt-in for the same reason: with an arm in play [`SkillHit::score`]
     /// becomes an RRF score rather than a BM25 one.
