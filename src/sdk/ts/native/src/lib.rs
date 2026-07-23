@@ -485,6 +485,11 @@ impl IntentGraph {
     /// confirmed invoke, so unsaved observations are lost on a crash — persist on
     /// a cadence or at shutdown. Use `rev` to save only when it changed and to
     /// detect a concurrent writer; single-writer is the supported model.
+    ///
+    /// SENSITIVE: the output contains the raw text of past user queries (the
+    /// cluster `members`). Treat a persisted graph like your query/telemetry log
+    /// — restrict permissions (`0600`), keep it out of version control and
+    /// images, and do not ship it to a less-trusted store.
     #[napi]
     pub fn to_json(&self) -> napi::Result<String> {
         let guard = self

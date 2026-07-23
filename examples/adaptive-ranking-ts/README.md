@@ -35,7 +35,7 @@ test/adaptive.test.ts model-free assertion that learning promotes the real tool 
 ## How it works, in three calls
 
 - `catalog.enableAdaptiveRanking(graph)` — attach a shared `IntentGraph`; the catalog now learns from every `search` followed by an `invoke`.
-- `graph.toJson()` / `IntentGraph.fromJson(...)` — the graph lives in memory, so this is how learning outlives the process. Persist the bytes wherever you keep state.
+- `graph.toJson()` / `IntentGraph.fromJson(...)` — the graph lives in memory, so this is how learning outlives the process. Persist the bytes wherever you keep state. **Sensitive:** they contain the raw text of past user queries (the cluster `members`) — treat a saved graph like your query/telemetry log (restrict permissions, keep it out of version control and images).
 - `graph.rev` — a monotonic write counter. Persist only when it changed since your last save (**save-when-changed**), and compare it to a stored graph's `rev` before overwriting to catch a concurrent writer (**stale-base detection**). Single-writer is the supported model.
 
 Semantic and hybrid catalogs work the same way and cluster queries by *meaning* rather than shared words — attach the graph exactly as here; the only cost is the first-run embedding-model download.
