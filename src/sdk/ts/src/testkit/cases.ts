@@ -386,29 +386,35 @@ export function adapterConformanceCases<TTool, TMessage>(
         const makePassthrough = options.makePassthroughTool;
         if (!makePassthrough) return;
         const core = ratel();
-        const view = core.adaptTo(options.adapter());
-        // A passthrough claims its id: a later executable must not shadow it.
+        const first = core.adaptTo(options.adapter());
+        const later = core.adaptTo(options.adapter());
+        // A passthrough claims its id core-wide: an executable from another
+        // view must not shadow it, while the framework value stays view-local.
         const provider = makePassthrough({ description: "provider-run" });
-        await view.tools.register({ claimed: provider });
-        await view.tools.register({
+        await first.tools.register({ claimed: provider });
+        await later.tools.register({
           claimed: options.makeExecutableTool({ description: "late executable" }),
         });
         assert.ok(
-          !view.tools.catalog.has("claimed"),
+          !first.tools.catalog.has("claimed"),
           "the executable did not shadow the passthrough",
         );
         assert.strictEqual(
-          view.modelTools().claimed,
+          first.modelTools().claimed,
           provider,
           "the first passthrough still owns the id",
         );
+        assert.ok(
+          !("claimed" in later.modelTools()),
+          "the passthrough value stays in its originating view",
+        );
         // The reverse: an executable claims its id, a later passthrough must not shadow it.
-        await view.tools.register({
+        await first.tools.register({
           dup: options.makeExecutableTool({ description: "first description" }),
         });
-        await view.tools.register({ dup: makePassthrough({ description: "late passthrough" }) });
-        assert.ok(view.tools.catalog.has("dup"), "the executable kept its id");
-        assert.ok(!("dup" in view.modelTools()), "the late passthrough is not exposed");
+        await later.tools.register({ dup: makePassthrough({ description: "late passthrough" }) });
+        assert.ok(first.tools.catalog.has("dup"), "the executable kept its id");
+        assert.ok(!("dup" in later.modelTools()), "the late passthrough is not exposed");
       },
     },
     {

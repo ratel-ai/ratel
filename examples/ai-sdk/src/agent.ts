@@ -1,6 +1,7 @@
-import { invokeToolTool, searchCapabilitiesTool, type ToolCatalog } from "@ratel-ai/sdk";
-import { type LanguageModel, stepCountIs, type Tool, ToolLoopAgent } from "ai";
-import { toAISDKTool } from "./tools.js";
+import { ratel } from "@ratel-ai/sdk";
+import { aiSdk } from "@ratel-ai/vercel-ai-sdk";
+import { type LanguageModel, stepCountIs, ToolLoopAgent } from "ai";
+import { tools } from "./tools.js";
 
 export type AgentResult = {
   text: string;
@@ -9,33 +10,40 @@ export type AgentResult = {
   finishReason: string;
 };
 
+export type RatelWiring = Awaited<ReturnType<typeof createRatelView>>;
+
+// One core + one AI SDK view over it: the adapter ingests the AI SDK-native
+// `tool()` definitions straight into the shared catalog — no conversion glue.
+export async function createRatelView() {
+  const core = ratel();
+  const view = core.adaptTo(aiSdk());
+  await view.tools.register(tools);
+  return { core, view };
+}
+
 export async function runAgent(args: {
   prompt: string;
   model: LanguageModel;
-  catalog: ToolCatalog;
-  initialTopK?: number;
+  view: RatelWiring["view"];
   maxSteps?: number;
 }): Promise<AgentResult> {
-  const { prompt, model, catalog } = args;
-  const initialTopK = args.initialTopK ?? 3;
+  const { prompt, model, view } = args;
   const maxSteps = args.maxSteps ?? 8;
 
-  const tools: Record<string, Tool> = {
-    search_capabilities: toAISDKTool(searchCapabilitiesTool(catalog)),
-    invoke_tool: toAISDKTool(invokeToolTool(catalog)),
-  };
-  for (const hit of catalog.search(prompt, initialTopK)) {
-    const exec = catalog.getExecutable(hit.toolId);
-    if (exec) tools[exec.id] = toAISDKTool(exec);
-  }
+  // The model sees only the three capability tools; everything else stays in
+  // the catalog and is reached through search_capabilities / invoke_tool.
+  // `prepareStep` injects the per-turn recall pair (top-ranked catalog hits
+  // for the user prompt) on step 0 and keeps it present across loop steps.
+  const modelTools = view.modelTools();
 
-  console.log(`active tools: ${Object.keys(tools).join(", ")}`);
+  console.log(`model tools: ${Object.keys(modelTools).join(", ")}`);
 
   const agent = new ToolLoopAgent({
     model,
-    tools,
+    tools: modelTools,
     toolChoice: "auto",
     stopWhen: stepCountIs(maxSteps),
+    prepareStep: view.prepareStep,
   });
 
   const result = await agent.generate({ prompt });
@@ -51,7 +59,7 @@ export async function runAgent(args: {
   return {
     text: result.text,
     steps: result.steps.length,
-    activeTools: Object.keys(tools),
+    activeTools: Object.keys(modelTools),
     finishReason: result.finishReason,
   };
 }

@@ -1,4 +1,10 @@
-import type { ExecutableTool, SearchOrigin, ToolCatalog } from "./catalog.js";
+import { isAsyncIterable, isPromiseLike } from "./async.js";
+import type {
+  ExecutableTool,
+  InputValidationResult,
+  SearchOrigin,
+  ToolCatalog,
+} from "./catalog.js";
 import { compactDescription } from "./compact.js";
 import type { SkillCatalog } from "./skill-catalog.js";
 import { recordAuthNeeded, upstreamFromToolId } from "./telemetry.js";
@@ -427,20 +433,50 @@ export interface InvokeToolToolOptions {
   onUnauthorized?: (upstream: string) => void | Promise<void>;
 }
 
+/** Non-enumerable cause carried by a structured error from a target executor. */
+export const INVOKE_TOOL_ERROR_CAUSE: unique symbol = Symbol.for(
+  "@ratel-ai/sdk.invoke-tool-error-cause",
+) as never;
+
+/** A generic `invoke_tool` error whose original target failure is available to framework adapters. */
+export interface InvokeToolError {
+  /** Human-readable failure passed to the model. */
+  error: string;
+  /** Stable discriminator used by generic capability hosts. */
+  isError: true;
+  /** Original thrown value, hidden from enumeration and serialization. */
+  readonly [INVOKE_TOOL_ERROR_CAUSE]: unknown;
+}
+
+/** Whether `value` is a structured error produced from a target executor failure. */
+export function isInvokeToolError(value: unknown): value is InvokeToolError {
+  return (
+    value !== null && typeof value === "object" && Object.hasOwn(value, INVOKE_TOOL_ERROR_CAUSE)
+  );
+}
+
 /**
  * Build the `invoke_tool` capability tool: the execution counterpart to
- * {@link searchCapabilitiesTool}. Takes `{ toolId, args }` and runs the
- * catalog tool via {@link ToolCatalog.invoke}, returning its result.
+ * {@link searchCapabilitiesTool}. Takes `{ toolId, args }`, delegates input
+ * parsing to the selected catalog tool's live validator, then runs the
+ * prevalidated input through {@link ToolCatalog.invokeValidatedRaw}. That
+ * preserves a target `AsyncIterable` so framework adapters can expose
+ * preliminary outputs even when validation itself was asynchronous.
  *
  * Failures come back as structured `{ error, isError: true }` results, not
  * rejections, so the model can read and recover from them: an unknown
  * `toolId` (with a hint to search first), a non-object `args`, or a thrown
- * executor error. A tool that throws `UnauthorizedError` gets special
+ * executor error. Target executor errors also carry their original thrown
+ * value under the non-enumerable {@link INVOKE_TOOL_ERROR_CAUSE} marker so an
+ * adapter can restore its framework's native error lifecycle. A tool that
+ * throws `UnauthorizedError` gets special
  * handling — `opts.onUnauthorized` fires with the upstream name inferred from
  * the `<server>__` id prefix, a `ratel.auth.flow` span records the outcome,
  * and the result is `{ error: "needs_auth", isError: true, upstream?, hint }`.
  * A call with `args` missing (or `null`) is tolerated by treating the
- * remaining top-level keys as the arguments. Outcomes are recorded as
+ * remaining top-level keys as the arguments. The capability executor's optional
+ * opaque context is forwarded unchanged to the selected catalog executor; the
+ * core never reads or records it. Outcomes are recorded as
  * `gateway_invoke` / `gateway_error` events on the local trace stream.
  *
  * @param catalog - Catalog whose tools this executes.
@@ -451,6 +487,7 @@ export function invokeToolTool(
   catalog: ToolCatalog,
   opts: InvokeToolToolOptions = {},
 ): ExecutableTool {
+  const prevalidatedInputs = new WeakSet<object>();
   return {
     id: INVOKE_TOOL_ID,
     name: INVOKE_TOOL_ID,
@@ -476,7 +513,8 @@ export function invokeToolTool(
       required: ["toolId", "args"],
     },
     outputSchema: { type: "object" },
-    execute: async (input) => {
+    validateInput: (input) => validateInvokeInput(catalog, input, prevalidatedInputs),
+    execute: (input, context) => {
       const inputObj = input as Record<string, unknown>;
       const toolId = inputObj.toolId as string;
       if (!catalog.has(toolId)) {
@@ -490,9 +528,12 @@ export function invokeToolTool(
           isError: true,
         };
       }
+      const prevalidated = prevalidatedInputs.delete(inputObj);
       const nested = inputObj.args;
-      let args: Record<string, unknown>;
-      if (nested === undefined || nested === null) {
+      let args: unknown;
+      if (prevalidated) {
+        args = nested;
+      } else if (nested === undefined || nested === null) {
         // No `args` given — tolerate a flattened call by treating the remaining
         // top-level keys as the arguments. Drop `args` too, so an explicit
         // `args: null` can't forward a stray `args` key to the tool.
@@ -511,42 +552,152 @@ export function invokeToolTool(
       }
       const startedAt = Date.now();
       try {
-        const result = await catalog.invoke(toolId, args);
-        catalog.recordEvent({
-          type: "gateway_invoke",
-          tool_id: toolId,
-          took_ms: Date.now() - startedAt,
-        });
-        return result;
+        return observeGatewayResult(
+          prevalidated
+            ? catalog.invokeValidatedRaw(toolId, args, context)
+            : catalog.invokeRaw(toolId, args as Record<string, unknown>, context),
+          () => {
+            catalog.recordEvent({
+              type: "gateway_invoke",
+              tool_id: toolId,
+              took_ms: Date.now() - startedAt,
+            });
+          },
+          (error) => handleInvokeError(error, toolId, startedAt, catalog, opts),
+        );
       } catch (err) {
-        if (isUnauthorizedError(err)) {
-          const upstream = upstreamFromToolId(toolId);
-          if (upstream && opts.onUnauthorized) {
-            await opts.onUnauthorized(upstream);
-          }
-          recordAuthNeeded(upstream);
-          catalog.recordEvent({
-            type: "gateway_error",
-            tool_id: toolId,
-            error: "needs_auth",
-          });
-          const payload: { error: string; isError: true; upstream?: string; hint: string } = {
-            error: "needs_auth",
-            isError: true,
-            hint: `call the auth tool to re-authorize${upstream ? ` ${upstream}` : ""}`,
-          };
-          if (upstream) payload.upstream = upstream;
-          return payload;
-        }
-        catalog.recordEvent({
-          type: "gateway_error",
-          tool_id: toolId,
-          error: (err as Error).message ?? String(err),
-        });
-        return { error: `tool ${toolId} threw: ${(err as Error).message}`, isError: true };
+        return handleInvokeError(err, toolId, startedAt, catalog, opts);
       }
     },
   };
+}
+
+function validateInvokeInput(
+  catalog: ToolCatalog,
+  input: unknown,
+  prevalidatedInputs: WeakSet<object>,
+): InputValidationResult | PromiseLike<InputValidationResult> {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return { success: true, value: input };
+  }
+  const inputObj = input as Record<string, unknown>;
+  if (typeof inputObj.toolId !== "string") return { success: true, value: input };
+
+  const nested = inputObj.args;
+  let args: Record<string, unknown>;
+  if (nested === undefined || nested === null) {
+    args = Object.fromEntries(
+      Object.entries(inputObj).filter(([key]) => key !== "toolId" && key !== "args"),
+    );
+  } else if (typeof nested === "object" && !Array.isArray(nested)) {
+    args = nested as Record<string, unknown>;
+  } else {
+    return { success: true, value: input };
+  }
+
+  return mapValidationValue(catalog.validateInput(inputObj.toolId, args), (validated) => {
+    const transformed = { ...inputObj, args: validated };
+    prevalidatedInputs.add(transformed);
+    return transformed;
+  });
+}
+
+/** Map the success value of a (possibly async) validation result; a failure passes through unchanged. */
+function mapValidationValue(
+  result: InputValidationResult | PromiseLike<InputValidationResult>,
+  onSuccess: (value: unknown) => unknown,
+): InputValidationResult | PromiseLike<InputValidationResult> {
+  const settle = (validated: InputValidationResult): InputValidationResult =>
+    validated.success ? { success: true, value: onSuccess(validated.value) } : validated;
+  return isPromiseLike(result) ? Promise.resolve(result).then(settle) : settle(result);
+}
+
+function observeGatewayResult(
+  result: unknown,
+  onSuccess: () => void,
+  onError: (error: unknown) => unknown,
+): unknown {
+  if (isAsyncIterable(result)) {
+    return observeGatewayIterable(result, onSuccess, onError);
+  }
+  if (isPromiseLike(result)) {
+    return Promise.resolve(result).then(
+      (value) => {
+        onSuccess();
+        return value;
+      },
+      (error) => onError(error),
+    );
+  }
+  onSuccess();
+  return result;
+}
+
+async function* observeGatewayIterable(
+  iterable: AsyncIterable<unknown>,
+  onSuccess: () => void,
+  onError: (error: unknown) => unknown,
+): AsyncGenerator<unknown> {
+  let failed = false;
+  try {
+    for await (const value of iterable) yield value;
+  } catch (error) {
+    failed = true;
+    yield await onError(error);
+  } finally {
+    if (!failed) onSuccess();
+  }
+}
+
+function handleInvokeError(
+  error: unknown,
+  toolId: string,
+  startedAt: number,
+  catalog: ToolCatalog,
+  opts: InvokeToolToolOptions,
+): unknown {
+  if (isUnauthorizedError(error)) {
+    const upstream = upstreamFromToolId(toolId);
+    const finish = () => {
+      recordAuthNeeded(upstream);
+      catalog.recordEvent({
+        type: "gateway_error",
+        tool_id: toolId,
+        error: "needs_auth",
+      });
+      const payload: { error: string; isError: true; upstream?: string; hint: string } = {
+        error: "needs_auth",
+        isError: true,
+        hint: `call the auth tool to re-authorize${upstream ? ` ${upstream}` : ""}`,
+      };
+      if (upstream) payload.upstream = upstream;
+      return payload;
+    };
+    if (upstream && opts.onUnauthorized) {
+      return Promise.resolve(opts.onUnauthorized(upstream)).then(finish);
+    }
+    return finish();
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  catalog.recordEvent({
+    type: "gateway_error",
+    tool_id: toolId,
+    error: message,
+    took_ms: Date.now() - startedAt,
+  });
+  return brandedInvokeError(`tool ${toolId} threw: ${message}`, error);
+}
+
+function brandedInvokeError(message: string, cause: unknown): InvokeToolError {
+  const payload = { error: message, isError: true as const } as InvokeToolError;
+  Object.defineProperty(payload, INVOKE_TOOL_ERROR_CAUSE, {
+    value: cause,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return payload;
 }
 
 function isUnauthorizedError(err: unknown): boolean {

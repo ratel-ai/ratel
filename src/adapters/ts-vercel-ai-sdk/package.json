@@ -1,0 +1,60 @@
+{
+  "name": "@ratel-ai/vercel-ai-sdk",
+  "version": "0.1.0-rc.5",
+  "description": "Vercel AI SDK adapter for Ratel — adapts the context-engineering core to the AI SDK's (ai@5-7) tool and message shapes, with per-turn recall helpers.",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "author": "Agentified",
+  "homepage": "https://github.com/ratel-ai/ratel",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ratel-ai/ratel.git",
+    "directory": "src/adapters/ts-vercel-ai-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/ratel-ai/ratel/issues"
+  },
+  "keywords": [
+    "ratel",
+    "vercel-ai-sdk",
+    "ai-sdk",
+    "framework-adapter",
+    "tool-calling",
+    "context-engineering",
+    "ai-agents"
+  ],
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.type-tests.json",
+    "lint": "biome check src",
+    "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "peerDependencies": {
+    "@ratel-ai/sdk": "workspace:^",
+    "ai": "^5.0.0 || ^6.0.0 || ^7.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
+    "@ratel-ai/sdk": "workspace:^",
+    "ai": "7.0.33",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5",
+    "zod": "^4.4.3"
+  }
+}
