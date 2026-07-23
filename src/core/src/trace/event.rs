@@ -320,6 +320,23 @@ pub enum TraceEvent {
         /// The model now configured.
         active: String,
     },
+    /// Emitted once when a semantic/hybrid search finds the attached intent
+    /// graph's centroids were built with a *different* embedding model than the
+    /// active one, so cosine across the two spaces would be meaningless. Unlike
+    /// [`Self::EmbedderModelMismatch`] (corpus, fatal), the usage arm merely
+    /// **pauses** — base ranking is unaffected — until the graph is rebuilt. See
+    /// `usage.rs` and ADR-0013.
+    UsageModelMismatch {
+        /// The graph's model — its fingerprint, or its centroid width when the
+        /// mismatch is dimensional.
+        built: String,
+        /// The active model, in the same units as `built`.
+        active: String,
+        /// `true` when the models differ in output dimension, `false` when only
+        /// the model identity differs at the same width (a same-dim swap a length
+        /// check cannot catch).
+        dim_mismatch: bool,
+    },
     /// Emitted on every search of a registry that has an intent graph attached,
     /// recording whether usage history contributed to the ranking (ADR-0013).
     /// A registry with no graph emits nothing, so this event's presence is

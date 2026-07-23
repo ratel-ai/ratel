@@ -115,6 +115,41 @@ impl DenseCache {
     /// search after churn correctly reports `EmbeddingsNotBuilt` until the next
     /// [`Self::extend`] — the same "build after registering" contract as a fresh
     /// register.
+    /// The output width of the cached vectors, or `None` before any embedding
+    /// has run. Equals the active model's output dimension.
+    pub(crate) fn dim(&self) -> Option<usize> {
+        self.state.lock().expect("dense cache mutex poisoned").dim
+    }
+
+    /// The fingerprint of the model that built the current cache, or `None`
+    /// before any embedding has run. After a successful search this is the active
+    /// model's identity (query and corpus must agree, or `embed_query` errored),
+    /// so it doubles as "the model the query was embedded with" for the intent
+    /// graph's model check.
+    pub(crate) fn built_fingerprint(&self) -> Option<String> {
+        self.state
+            .lock()
+            .expect("dense cache mutex poisoned")
+            .built_fingerprint
+            .clone()
+    }
+
+    /// Embed arbitrary texts under the active model, returning the vectors and
+    /// the model fingerprint. Used to re-embed an intent graph's members when
+    /// rebuilding its centroids after a model change.
+    pub(crate) fn embed_texts_with_identity(
+        &self,
+        texts: &[String],
+        sink: &dyn TraceSink,
+    ) -> Result<(Vec<Vec<f32>>, String), EmbedderError> {
+        if texts.is_empty() {
+            return Ok((Vec::new(), self.built_fingerprint().unwrap_or_default()));
+        }
+        let embedder = self.resolve_embedder(sink)?;
+        let embedded = embedder.embed_batch_with_identity(texts)?;
+        Ok((embedded.value, embedded.fingerprint))
+    }
+
     pub(crate) fn require_built(&self, corpus_len: usize) -> Result<(), EmbedderError> {
         let cached = self
             .state

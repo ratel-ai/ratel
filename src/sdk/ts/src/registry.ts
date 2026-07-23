@@ -1,4 +1,5 @@
 import {
+  type AdaptiveRankingStatus,
   IntentGraph,
   type EmbeddingConfig as NativeEmbeddingConfig,
   SkillRegistry as NativeSkillRegistry,
@@ -31,6 +32,8 @@ function toNativeEmbedding(
  */
 export class ToolRegistry {
   private readonly native: NativeToolRegistry;
+  #warnOnModelMismatch = true;
+  #adaptiveWarned = false;
   private readonly eager: boolean;
 
   /**
@@ -88,6 +91,7 @@ export class ToolRegistry {
     } catch (error) {
       throw mapEmbedderError(error);
     }
+    this.#maybeWarnModelMismatch();
   }
 
   /**
@@ -162,8 +166,11 @@ export class ToolRegistry {
    * score rather than a raw BM25 score, so use `rank` for ordering and
    * `fused` to detect the scale, not the raw `score`.
    */
-  enableAdaptiveRanking(graph: IntentGraph): void {
+  enableAdaptiveRanking(graph: IntentGraph, options: { warnOnModelMismatch?: boolean } = {}): void {
+    this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
+    this.#adaptiveWarned = false;
     this.native.enableAdaptiveRanking(graph);
+    this.#maybeWarnModelMismatch();
   }
 
   /**
@@ -171,6 +178,47 @@ export class ToolRegistry {
    * graph stops growing. The graph keeps what it learned, so re-enabling
    * resumes rather than restarts.
    */
+
+  /**
+   * Re-embed the intent graph's members under the current embedding model and
+   * replace its centroids. Call after changing the model: a graph's centroids
+   * are only comparable to queries from the model that built them, so on a swap
+   * the usage arm pauses until this runs. Members, support, and edges are
+   * preserved — only the centroids move to the new space.
+   */
+  async rebuildIntentGraph(): Promise<void> {
+    await this.native.rebuildIntentGraph();
+    this.#adaptiveWarned = false;
+    this.#maybeWarnModelMismatch();
+  }
+
+  /**
+   * Whether adaptive usage ranking is contributing (`"active"`), off
+   * (`"inactive"`), not yet determinable (`"unknown"`), or paused because the
+   * embedding model changed (`"paused: dim mismatch"` / `"paused: model
+   * mismatch"`). Gate on this instead of reading stderr if you prefer.
+   */
+  get adaptiveRankingStatus(): AdaptiveRankingStatus {
+    return this.native.adaptiveRankingStatus();
+  }
+
+  /** One-time stderr warning when the attached graph's model no longer matches
+   * the catalog's. A dev-time config error that otherwise silently pauses
+   * ranking — printed unless `warnOnModelMismatch: false`. */
+  #maybeWarnModelMismatch(): void {
+    if (this.#adaptiveWarned || !this.#warnOnModelMismatch) return;
+    const s = this.native.adaptiveRankingStatus();
+    if (!s.status.startsWith("paused")) return;
+    this.#adaptiveWarned = true;
+    const how = s.dimMismatch
+      ? `built with a ${s.built}-dim embedding model but the active model outputs ${s.active} dims`
+      : `built with embedding model '${s.built}' but the active model is '${s.active}'`;
+    console.warn(
+      `ratel: intent graph was ${how}. Adaptive usage ranking is PAUSED — ` +
+        `call rebuildIntentGraph() to rebuild it with the current model.`,
+    );
+  }
+
   disableAdaptiveRanking(): void {
     this.native.disableAdaptiveRanking();
   }
@@ -188,6 +236,8 @@ export class ToolRegistry {
  */
 export class SkillRegistry {
   private readonly native: NativeSkillRegistry;
+  #warnOnModelMismatch = true;
+  #adaptiveWarned = false;
   private readonly eager: boolean;
 
   /**
@@ -237,6 +287,7 @@ export class SkillRegistry {
     } catch (error) {
       throw mapEmbedderError(error);
     }
+    this.#maybeWarnModelMismatch();
   }
 
   /** Lexical BM25 search over skills — see `ToolRegistry.search`. */
@@ -301,8 +352,11 @@ export class SkillRegistry {
    * score rather than a raw BM25 score, so use `rank` for ordering and
    * `fused` to detect the scale, not the raw `score`.
    */
-  enableAdaptiveRanking(graph: IntentGraph): void {
+  enableAdaptiveRanking(graph: IntentGraph, options: { warnOnModelMismatch?: boolean } = {}): void {
+    this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
+    this.#adaptiveWarned = false;
     this.native.enableAdaptiveRanking(graph);
+    this.#maybeWarnModelMismatch();
   }
 
   /**
@@ -310,6 +364,47 @@ export class SkillRegistry {
    * graph stops growing. The graph keeps what it learned, so re-enabling
    * resumes rather than restarts.
    */
+
+  /**
+   * Re-embed the intent graph's members under the current embedding model and
+   * replace its centroids. Call after changing the model: a graph's centroids
+   * are only comparable to queries from the model that built them, so on a swap
+   * the usage arm pauses until this runs. Members, support, and edges are
+   * preserved — only the centroids move to the new space.
+   */
+  async rebuildIntentGraph(): Promise<void> {
+    await this.native.rebuildIntentGraph();
+    this.#adaptiveWarned = false;
+    this.#maybeWarnModelMismatch();
+  }
+
+  /**
+   * Whether adaptive usage ranking is contributing (`"active"`), off
+   * (`"inactive"`), not yet determinable (`"unknown"`), or paused because the
+   * embedding model changed (`"paused: dim mismatch"` / `"paused: model
+   * mismatch"`). Gate on this instead of reading stderr if you prefer.
+   */
+  get adaptiveRankingStatus(): AdaptiveRankingStatus {
+    return this.native.adaptiveRankingStatus();
+  }
+
+  /** One-time stderr warning when the attached graph's model no longer matches
+   * the catalog's. A dev-time config error that otherwise silently pauses
+   * ranking — printed unless `warnOnModelMismatch: false`. */
+  #maybeWarnModelMismatch(): void {
+    if (this.#adaptiveWarned || !this.#warnOnModelMismatch) return;
+    const s = this.native.adaptiveRankingStatus();
+    if (!s.status.startsWith("paused")) return;
+    this.#adaptiveWarned = true;
+    const how = s.dimMismatch
+      ? `built with a ${s.built}-dim embedding model but the active model outputs ${s.active} dims`
+      : `built with embedding model '${s.built}' but the active model is '${s.active}'`;
+    console.warn(
+      `ratel: intent graph was ${how}. Adaptive usage ranking is PAUSED — ` +
+        `call rebuildIntentGraph() to rebuild it with the current model.`,
+    );
+  }
+
   disableAdaptiveRanking(): void {
     this.native.disableAdaptiveRanking();
   }

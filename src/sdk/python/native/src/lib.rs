@@ -170,6 +170,33 @@ impl SkillHit {
     }
 }
 
+/// Map the core status enum to the tuple the Python facade renders.
+fn map_adaptive_status(
+    s: core::AdaptiveRankingStatus,
+) -> (String, Option<String>, Option<String>, Option<bool>) {
+    use core::AdaptiveRankingStatus as S;
+    match s {
+        S::Inactive => ("inactive".into(), None, None, None),
+        S::Active => ("active".into(), None, None, None),
+        S::Unknown => ("unknown".into(), None, None, None),
+        S::Paused {
+            dim_mismatch,
+            built,
+            active,
+        } => (
+            if dim_mismatch {
+                "paused: dim mismatch"
+            } else {
+                "paused: model mismatch"
+            }
+            .into(),
+            Some(built),
+            Some(active),
+            Some(dim_mismatch),
+        ),
+    }
+}
+
 /// Decorate `sink` with a [`UsageLearner`] when adaptive ranking is on, so the
 /// graph keeps growing across a sink change. Without this, `set_trace_sink`
 /// would quietly stop learning.
@@ -433,6 +460,20 @@ impl ToolRegistry {
     fn _rebuild_embeddings(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.rebuild_embeddings())
             .map_err(map_embedder_err)
+    }
+
+    /// Re-embed the intent graph's members under the current model and replace
+    /// its centroids. GIL-releasing worker; the Python facade wraps it as
+    /// `rebuild_intent_graph`.
+    fn _rebuild_intent_graph(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.rebuild_intent_graph())
+            .map_err(map_embedder_err)
+    }
+
+    /// `(status, built, active, dim_mismatch)` — whether adaptive usage ranking
+    /// is contributing, paused by a model change, or off.
+    fn adaptive_ranking_status(&self) -> (String, Option<String>, Option<String>, Option<bool>) {
+        map_adaptive_status(self.inner.adaptive_ranking_status())
     }
 
     /// Record an SDK-layer trace event into the active sink. `event` must be a
@@ -716,6 +757,20 @@ impl SkillRegistry {
     fn _rebuild_embeddings(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.rebuild_embeddings())
             .map_err(map_embedder_err)
+    }
+
+    /// Re-embed the intent graph's members under the current model and replace
+    /// its centroids. GIL-releasing worker; the Python facade wraps it as
+    /// `rebuild_intent_graph`.
+    fn _rebuild_intent_graph(&self, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(|| self.inner.rebuild_intent_graph())
+            .map_err(map_embedder_err)
+    }
+
+    /// `(status, built, active, dim_mismatch)` — whether adaptive usage ranking
+    /// is contributing, paused by a model change, or off.
+    fn adaptive_ranking_status(&self) -> (String, Option<String>, Option<String>, Option<bool>) {
+        map_adaptive_status(self.inner.adaptive_ranking_status())
     }
 
     /// Record an SDK-layer trace event into the active sink — see

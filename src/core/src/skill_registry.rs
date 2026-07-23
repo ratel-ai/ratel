@@ -11,6 +11,7 @@ use crate::method::SearchMethod;
 use crate::search::bm25_search;
 use crate::skill::Skill;
 use crate::skill_indexing::searchable_text;
+use crate::tool_registry::AdaptiveRankingStatus;
 use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchStage, SkillHitTrace, TraceEvent, TraceSink,
 };
@@ -146,29 +147,102 @@ impl SkillRegistry {
         self.graph = graph;
     }
 
+    /// A snapshot of whether adaptive usage ranking is currently contributing, so
+    /// the SDK can surface a model-mismatch to the user without draining the trace
+    /// stream. Computed from the attached graph's model vs the active embedder;
+    /// `Unknown` until embeddings have been built (the active model's identity is
+    /// not known before then).
+    pub fn adaptive_ranking_status(&self) -> AdaptiveRankingStatus {
+        let Some(graph) = self.graph.as_ref() else {
+            return AdaptiveRankingStatus::Inactive;
+        };
+        let g = graph.read().expect("intent graph lock poisoned");
+        // A lexical graph (no centroids) is model-agnostic — always active.
+        if !g.intents.iter().any(|i| i.centroid.is_some()) {
+            return AdaptiveRankingStatus::Active;
+        }
+        let Some(active_fp) = self.dense.built_fingerprint() else {
+            return AdaptiveRankingStatus::Unknown;
+        };
+        let active_dim = self.dense.dim().unwrap_or(0);
+        match g.model_status(&active_fp, active_dim).describe() {
+            None => AdaptiveRankingStatus::Active,
+            Some((built, active, dim_mismatch)) => AdaptiveRankingStatus::Paused {
+                dim_mismatch,
+                built,
+                active,
+            },
+        }
+    }
+
+    /// Re-embed the attached intent graph's members under the current model and
+    /// replace its centroids — the skill-side twin of
+    /// [`crate::ToolRegistry::rebuild_intent_graph`]. Preserves members, support,
+    /// and edges.
+    ///
+    /// # Errors
+    ///
+    /// Any [`EmbedderError`] from embedding the members under the current model.
+    pub fn rebuild_intent_graph(&self) -> Result<(), EmbedderError> {
+        let Some(graph) = self.graph.as_ref() else {
+            return Ok(());
+        };
+        let members: Vec<Vec<String>> = {
+            let g = graph.read().expect("intent graph lock poisoned");
+            g.intents.iter().map(|i| i.members.clone()).collect()
+        };
+        let mut per_cluster = Vec::with_capacity(members.len());
+        let mut fingerprint = None;
+        for cluster_members in &members {
+            let (vectors, fp) = self
+                .dense
+                .embed_texts_with_identity(cluster_members, self.sink.as_ref())?;
+            if !cluster_members.is_empty() {
+                fingerprint = Some(fp);
+            }
+            per_cluster.push(vectors);
+        }
+        if let Some(fp) = fingerprint {
+            let mut g = graph.write().expect("intent graph lock poisoned");
+            g.rebuild_centroids(per_cluster, fp);
+        }
+        Ok(())
+    }
+
     /// Resolve the usage arm for one query and record the outcome. See
     /// `ToolRegistry::usage_arm`; this reads the `skills` edge map instead.
     fn usage_arm(&self, query: &str, query_vec: Option<&[f32]>) -> Option<UsageArm> {
         let graph = self.graph.as_ref()?;
+        // The model that embedded this query (semantic/hybrid only), compared
+        // against the graph's model so a swap pauses the arm.
+        let fingerprint = self.dense.built_fingerprint();
         // Usage ranking is an enhancement; a poisoned lock degrades to today's
         // behavior rather than failing the search.
-        let arm = {
+        let (arm, mismatch) = {
             let guard = graph.read().ok()?;
-            // Hand the embedded query to the learner: it only sees trace events,
-            // which carry text and not vectors, so this is how a locally-grown
-            // cluster gets a real centroid instead of clustering on words alone.
-            if let Some(v) = query_vec {
-                guard.note_query_vector(query, v);
+            let mismatch = match (query_vec, &fingerprint) {
+                (Some(v), Some(fp)) => guard.model_status(fp, v.len()).describe(),
+                _ => None,
+            };
+            if mismatch.is_some() {
+                (None, mismatch)
+            } else {
+                if let (Some(v), Some(fp)) = (query_vec, &fingerprint) {
+                    guard.note_query_vector(query, v, fp);
+                }
+                let known = |id: &str| self.skills.contains_key(id);
+                (guard.arm(query, query_vec, Capability::Skill, &known), None)
             }
-            let known = |id: &str| self.skills.contains_key(id);
-            // The graph picks the match tier from what it carries; a lexically
-            // grown graph has no centroids to compare a query vector against.
-            guard.arm(query, query_vec, Capability::Skill, &known)
         };
-        // The read guard is released BEFORE the sink runs. A `UsageLearner` sink
-        // takes the write lock on this same graph, and `RwLock` is not
-        // reentrant — recording while still holding the read guard would
-        // deadlock the search path.
+        // The read guard is released BEFORE the sink runs (RwLock is not
+        // reentrant and a `UsageLearner` sink takes the write lock).
+        if let Some((built, active, dim_mismatch)) = mismatch {
+            self.sink.record(TraceEvent::UsageModelMismatch {
+                built,
+                active,
+                dim_mismatch,
+            });
+        }
         self.sink.record(TraceEvent::UsageBoost {
             intent: arm.as_ref().map(|a| a.intent_id.clone()),
             similarity: arm.as_ref().map_or(0.0, |a| a.similarity as f64),

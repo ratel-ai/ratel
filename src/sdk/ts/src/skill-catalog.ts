@@ -154,8 +154,23 @@ export class SkillCatalog {
    * Pass the same {@link IntentGraph} to a {@link ToolCatalog} so both learn
    * into one set of clusters.
    */
-  enableAdaptiveRanking(graph: IntentGraph): void {
-    this.registry.enableAdaptiveRanking(graph);
+  enableAdaptiveRanking(graph: IntentGraph, options: { warnOnModelMismatch?: boolean } = {}): void {
+    this.registry.enableAdaptiveRanking(graph, options);
+  }
+
+  /**
+   * Re-embed the intent graph's members under the current model and replace its
+   * centroids — call after changing the embedding model. Preserves members,
+   * support, and edges. See {@link enableAdaptiveRanking}.
+   */
+  async rebuildIntentGraph(): Promise<void> {
+    await this.registry.rebuildIntentGraph();
+  }
+
+  /** Whether adaptive usage ranking is active, inactive, or paused by a model
+   * change — see the native `AdaptiveRankingStatus`. */
+  get adaptiveRankingStatus() {
+    return this.registry.adaptiveRankingStatus;
   }
 
   /** Turn adaptive usage ranking off; the graph keeps what it learned. */

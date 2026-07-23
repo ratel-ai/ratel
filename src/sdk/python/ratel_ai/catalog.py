@@ -12,6 +12,7 @@ import inspect
 import json
 import threading
 import time
+import warnings
 from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, TypedDict, TypeVar, Union, overload
@@ -314,6 +315,8 @@ class ToolRegistry:
         )
         self._native = _NativeToolRegistry(**kwargs)
         self._eager = method in ("semantic", "hybrid")
+        self._warn_on_model_mismatch = True
+        self._adaptive_warned = False
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
@@ -456,7 +459,9 @@ class ToolRegistry:
             self._raise_if_busy()
             self._native.set_trace_sink(kind, session_id, path)
 
-    def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
+    def enable_adaptive_ranking(
+        self, graph: IntentGraph, *, warn_on_model_mismatch: bool = True
+    ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0013).
 
         Wires both halves: this registry ranks against what users have actually
@@ -468,12 +473,52 @@ class ToolRegistry:
         hit ``score`` becomes a fusion score rather than a raw BM25 score, so
         use ``rank`` for ordering and ``fused`` to detect the scale, not the
         raw ``score``.
+
+        On a model change the arm pauses and a one-time warning is issued unless
+        ``warn_on_model_mismatch`` is False; call :meth:`rebuild_intent_graph`.
         """
+        self._warn_on_model_mismatch = warn_on_model_mismatch
+        self._adaptive_warned = False
         self._native.enable_adaptive_ranking(graph)
+        self._maybe_warn_model_mismatch()
 
     def disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
         self._native.disable_adaptive_ranking()
+
+    async def rebuild_intent_graph(self) -> None:
+        """Re-embed the graph's members under the current model; preserves learning.
+
+        Call after changing the embedding model: a graph's centroids are only
+        comparable to queries from the model that built them, so on a swap the
+        usage arm pauses until this runs.
+        """
+        await self._run_dense(self._native._rebuild_intent_graph)
+        self._adaptive_warned = False
+        self._maybe_warn_model_mismatch()
+
+    @property
+    def adaptive_ranking_status(self) -> str:
+        """Adaptive-ranking status string; gate on this instead of stderr."""
+        return self._native.adaptive_ranking_status()[0]
+
+    def _maybe_warn_model_mismatch(self) -> None:
+        if self._adaptive_warned or not self._warn_on_model_mismatch:
+            return
+        status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
+        if not status.startswith("paused"):
+            return
+        self._adaptive_warned = True
+        how = (
+            f"built with a {built}-dim embedding model but the active model outputs {active} dims"
+            if dim_mismatch
+            else f"built with embedding model '{built}' but the active model is '{active}'"
+        )
+        warnings.warn(
+            f"ratel: intent graph was {how}. Adaptive usage ranking is PAUSED — "
+            "call rebuild_intent_graph() to rebuild it with the current model.",
+            stacklevel=2,
+        )
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
         """Drain captured native trace events."""
@@ -718,7 +763,9 @@ class ToolCatalog:
         """
         self._registry.record_event(event)
 
-    def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
+    def enable_adaptive_ranking(
+        self, graph: IntentGraph, *, warn_on_model_mismatch: bool = True
+    ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0013).
 
         Wires both halves: this catalog ranks against what users have actually
@@ -731,7 +778,16 @@ class ToolCatalog:
         use ``rank`` for ordering and ``fused`` to detect the scale, not the
         raw ``score``.
         """
-        self._registry.enable_adaptive_ranking(graph)
+        self._registry.enable_adaptive_ranking(graph, warn_on_model_mismatch=warn_on_model_mismatch)
+
+    async def rebuild_intent_graph(self) -> None:
+        """Re-embed the graph's members under the current model; preserves learning."""
+        await self._registry.rebuild_intent_graph()
+
+    @property
+    def adaptive_ranking_status(self) -> str:
+        """Adaptive-ranking status: active, inactive, unknown, or paused."""
+        return self._registry.adaptive_ranking_status
 
     def disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""

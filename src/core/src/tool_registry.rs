@@ -16,6 +16,30 @@ use crate::trace::{
 };
 use crate::usage::{Capability, IntentGraph, UsageArm};
 
+/// Whether adaptive usage ranking is currently contributing to a registry's
+/// results — the SDK-facing view of the model-compatibility check (ADR-0013).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AdaptiveRankingStatus {
+    /// No intent graph attached.
+    Inactive,
+    /// Attached and usable (matching model, or a lexical graph with no centroids).
+    Active,
+    /// Attached, but embeddings have not been built yet, so the active model's
+    /// identity — and thus compatibility — is not yet known.
+    Unknown,
+    /// Attached but paused: the graph's centroids were built with a different
+    /// embedding model, so the usage arm is off until `rebuild_intent_graph`.
+    Paused {
+        /// `true` when the models differ in output dimension, `false` for a
+        /// same-width model change.
+        dim_mismatch: bool,
+        /// The graph's model (fingerprint, or centroid width when dimensional).
+        built: String,
+        /// The active model, in the same units.
+        active: String,
+    },
+}
+
 /// One ranked match from a [`ToolRegistry`] search, best-first in the
 /// returned `Vec`.
 pub struct SearchHit {
@@ -189,6 +213,78 @@ impl ToolRegistry {
         self.graph = graph;
     }
 
+    /// A snapshot of whether adaptive usage ranking is currently contributing, so
+    /// the SDK can surface a model-mismatch to the user without draining the trace
+    /// stream. Computed from the attached graph's model vs the active embedder;
+    /// `Unknown` until embeddings have been built (the active model's identity is
+    /// not known before then).
+    pub fn adaptive_ranking_status(&self) -> AdaptiveRankingStatus {
+        let Some(graph) = self.graph.as_ref() else {
+            return AdaptiveRankingStatus::Inactive;
+        };
+        let g = graph.read().expect("intent graph lock poisoned");
+        // A lexical graph (no centroids) is model-agnostic — always active.
+        if !g.intents.iter().any(|i| i.centroid.is_some()) {
+            return AdaptiveRankingStatus::Active;
+        }
+        let Some(active_fp) = self.dense.built_fingerprint() else {
+            return AdaptiveRankingStatus::Unknown;
+        };
+        let active_dim = self.dense.dim().unwrap_or(0);
+        match g.model_status(&active_fp, active_dim).describe() {
+            None => AdaptiveRankingStatus::Active,
+            Some((built, active, dim_mismatch)) => AdaptiveRankingStatus::Paused {
+                dim_mismatch,
+                built,
+                active,
+            },
+        }
+    }
+
+    /// Re-embed the attached intent graph's members under the current model and
+    /// replace its centroids, restamping the graph's model fingerprint.
+    ///
+    /// Call this after changing the embedding model: a graph's centroids are only
+    /// comparable to queries embedded by the same model, so on a swap the usage
+    /// arm pauses (a [`TraceEvent::UsageModelMismatch`] is emitted) until this
+    /// runs. Members, support, and edges are model-independent and preserved —
+    /// only the centroids move to the new space.
+    ///
+    /// No-op when no graph is attached, or when the graph is lexical (no
+    /// centroids). Loads the model, so callers run it off the hot path (the SDK
+    /// exposes it as an async method).
+    ///
+    /// # Errors
+    ///
+    /// Any [`EmbedderError`] from embedding the members under the current model.
+    pub fn rebuild_intent_graph(&self) -> Result<(), EmbedderError> {
+        let Some(graph) = self.graph.as_ref() else {
+            return Ok(());
+        };
+        // Snapshot members under the read lock, then embed WITHOUT holding it —
+        // embedding can be slow and must not block concurrent searches.
+        let members: Vec<Vec<String>> = {
+            let g = graph.read().expect("intent graph lock poisoned");
+            g.intents.iter().map(|i| i.members.clone()).collect()
+        };
+        let mut per_cluster = Vec::with_capacity(members.len());
+        let mut fingerprint = None;
+        for cluster_members in &members {
+            let (vectors, fp) = self
+                .dense
+                .embed_texts_with_identity(cluster_members, self.sink.as_ref())?;
+            if !cluster_members.is_empty() {
+                fingerprint = Some(fp);
+            }
+            per_cluster.push(vectors);
+        }
+        if let Some(fp) = fingerprint {
+            let mut g = graph.write().expect("intent graph lock poisoned");
+            g.rebuild_centroids(per_cluster, fp);
+        }
+        Ok(())
+    }
+
     /// Resolve the usage arm for one query, and record the outcome.
     ///
     /// `query_vec` carries the already-computed query embedding on the
@@ -201,25 +297,47 @@ impl ToolRegistry {
     /// exactly as before.
     fn usage_arm(&self, query: &str, query_vec: Option<&[f32]>) -> Option<UsageArm> {
         let graph = self.graph.as_ref()?;
+        // The model that embedded this query (semantic/hybrid only). Compared
+        // against the graph's model so a swap pauses the arm instead of cosine-ing
+        // across incompatible vector spaces.
+        let fingerprint = self.dense.built_fingerprint();
         // A poisoned lock must not take down a search: usage ranking is an
         // enhancement, and losing it degrades to today's behavior.
-        let arm = {
+        let (arm, mismatch) = {
             let guard = graph.read().ok()?;
-            // Hand the embedded query to the learner: it only sees trace events,
-            // which carry text and not vectors, so this is how a locally-grown
-            // cluster gets a real centroid instead of clustering on words alone.
-            if let Some(v) = query_vec {
-                guard.note_query_vector(query, v);
+            let mismatch = match (query_vec, &fingerprint) {
+                (Some(v), Some(fp)) => guard.model_status(fp, v.len()).describe(),
+                _ => None,
+            };
+            if mismatch.is_some() {
+                // Paused: the graph's centroids belong to another model. Base
+                // ranking is untouched; the query is NOT noted, so the learner
+                // does not fold a foreign-model vector.
+                (None, mismatch)
+            } else {
+                // Hand the embedded query to the learner: it only sees trace
+                // events, which carry text and not vectors, so this is how a
+                // locally-grown cluster gets a real centroid.
+                if let (Some(v), Some(fp)) = (query_vec, &fingerprint) {
+                    guard.note_query_vector(query, v, fp);
+                }
+                let known = |id: &str| self.tools.contains_key(id);
+                // The graph picks the match tier from what it carries; a lexically
+                // grown graph has no centroids to compare a query vector against.
+                (guard.arm(query, query_vec, Capability::Tool, &known), None)
             }
-            let known = |id: &str| self.tools.contains_key(id);
-            // The graph picks the match tier from what it carries; a lexically
-            // grown graph has no centroids to compare a query vector against.
-            guard.arm(query, query_vec, Capability::Tool, &known)
         };
         // The read guard is released BEFORE the sink runs. A `UsageLearner` sink
         // takes the write lock on this same graph, and `RwLock` is not
         // reentrant — recording while still holding the read guard would
         // deadlock the search path.
+        if let Some((built, active, dim_mismatch)) = mismatch {
+            self.sink.record(TraceEvent::UsageModelMismatch {
+                built,
+                active,
+                dim_mismatch,
+            });
+        }
         self.sink.record(TraceEvent::UsageBoost {
             intent: arm.as_ref().map(|a| a.intent_id.clone()),
             similarity: arm.as_ref().map_or(0.0, |a| a.similarity as f64),
@@ -1261,7 +1379,7 @@ mod tests {
         // Keying it by query text means the mismatch degrades to lexical
         // clustering rather than attaching the wrong embedding to a question.
         let graph = IntentGraph::empty();
-        graph.note_query_vector("some other query", &[1.0, 0.0, 0.0]);
+        graph.note_query_vector("some other query", &[1.0, 0.0, 0.0], "m");
         let mut graph = graph;
         graph.observe("delete a path", Capability::Tool, "delete_file", 1, true);
 
@@ -1318,6 +1436,123 @@ mod tests {
             assert_eq!(a.tool_id, b.tool_id);
             assert_eq!(a.score, b.score, "cosine score changed for {}", a.tool_id);
         }
+    }
+
+    /// A graph with an explicit model fingerprint and a chosen centroid width,
+    /// for the model-change tests.
+    fn graph_with_model(
+        tool_id: &str,
+        centroid: Vec<f32>,
+        model: &str,
+    ) -> Arc<RwLock<IntentGraph>> {
+        let c: Vec<String> = centroid.iter().map(|x| x.to_string()).collect();
+        let json = format!(
+            r#"{{"v":1,"built_from_ts":1,"model":"{model}",
+                 "intents":[{{"id":"i0","label":"l","terms":[],
+                 "members":["read a file"],"centroid":[{}],
+                 "support":9,"tools":{{"{tool_id}":1.0}},"skills":{{}}}}]}}"#,
+            c.join(",")
+        );
+        Arc::new(RwLock::new(IntentGraph::from_json(&json).expect("valid")))
+    }
+
+    fn model_mismatch_events(sink: &MemorySink) -> Vec<(String, String, bool)> {
+        sink.drain()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                TraceEvent::UsageModelMismatch {
+                    built,
+                    active,
+                    dim_mismatch,
+                } => Some((built, active, dim_mismatch)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_same_dim_model_mismatch_pauses_the_arm_and_warns() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a path")); // dense-orthogonal → ranks last
+        reg.build_embeddings().unwrap();
+
+        // Graph says boost delete_file for this intent — but its centroid was
+        // built by a different model (same 3-dim width the stub uses).
+        reg.set_intent_graph(Some(graph_with_model(
+            "delete_file",
+            vec![1.0, 0.0, 0.0],
+            "a-different-model",
+        )));
+        let hits = reg
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        // Paused: delete_file is NOT lifted; it stays last, as with no graph.
+        assert_eq!(hits.last().map(|h| h.tool_id.as_str()), Some("delete_file"));
+        assert!(hits.iter().all(|h| !h.fused), "no fusion — the arm paused");
+
+        let events = model_mismatch_events(&sink);
+        assert_eq!(events.len(), 1);
+        assert!(!events[0].2, "same-dim swap → dim_mismatch false");
+    }
+
+    #[test]
+    fn a_dim_mismatch_pauses_the_arm_and_warns() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a path"));
+        reg.build_embeddings().unwrap();
+
+        // Centroid is 5-dim; the stub embeds queries to 3-dim.
+        reg.set_intent_graph(Some(graph_with_model(
+            "delete_file",
+            vec![1.0, 0.0, 0.0, 0.0, 0.0],
+            "some-model",
+        )));
+        let hits = reg
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        assert_eq!(hits.last().map(|h| h.tool_id.as_str()), Some("delete_file"));
+        let events = model_mismatch_events(&sink);
+        assert_eq!(events.len(), 1);
+        assert!(events[0].2, "different width → dim_mismatch true");
+    }
+
+    #[test]
+    fn rebuild_intent_graph_restores_the_arm_after_a_model_change() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a path"));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(Some(graph_with_model(
+            "read_file",
+            vec![1.0, 0.0, 0.0],
+            "a-different-model",
+        )));
+
+        // Paused before rebuild.
+        reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(model_mismatch_events(&sink).len(), 1);
+
+        // Rebuild re-embeds members under the stub model → arm active again.
+        reg.rebuild_intent_graph().unwrap();
+        let after = reg
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert!(after.iter().all(|h| h.fused), "arm resumed → fused ranking");
+        assert!(
+            model_mismatch_events(&sink).is_empty(),
+            "no mismatch after rebuild"
+        );
     }
 
     #[test]

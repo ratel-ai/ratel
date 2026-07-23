@@ -6,6 +6,9 @@ completely unaffected.
 """
 
 import json
+import os
+import warnings
+from pathlib import Path
 
 import pytest
 
@@ -186,3 +189,91 @@ async def test_rank_and_fused_expose_the_scale_switch() -> None:
 
     # Unrelated query on the same catalog stays unfused.
     assert all(not h.fused for h in catalog.search("read a file from disk", 5))
+
+
+# ---- embedding-model change detection ---------------------------------------
+
+_hub = Path(
+    os.environ.get(
+        "HF_HUB_CACHE",
+        Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "hub",
+    )
+)
+_bge = (
+    _hub
+    / "models--BAAI--bge-small-en-v1.5"
+    / "snapshots"
+    / "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
+)
+_has_model = (_bge / "config.json").exists() and (_bge / "tokenizer.json").exists()
+
+
+def _stale_graph() -> IntentGraph:
+    centroid = [1.0 if i == 0 else 0.0 for i in range(384)]
+    return IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "model": "some-other-model",
+                "intents": [
+                    {
+                        "id": "intent_0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "centroid": centroid,
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+
+
+async def _semantic_catalog() -> ToolCatalog:
+    catalog = ToolCatalog(method="semantic")
+    await catalog.register(
+        [
+            ExecutableTool(
+                id="gh_run_list",
+                name="gh_run_list",
+                description="list CI runs",
+                execute=lambda _a: "ok",
+            ),
+            ExecutableTool(
+                id="docker_build",
+                name="docker_build",
+                description="build an image",
+                execute=lambda _a: "ok",
+            ),
+        ]
+    )
+    return catalog
+
+
+@pytest.mark.skipif(not _has_model, reason="bge-small not cached")
+@pytest.mark.asyncio
+async def test_model_mismatch_pauses_warns_and_rebuild_restores() -> None:
+    catalog = await _semantic_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.enable_adaptive_ranking(_stale_graph())
+        assert catalog.adaptive_ranking_status == "paused: model mismatch"
+        assert any("rebuild_intent_graph()" in str(w.message) for w in caught)
+
+    await catalog.rebuild_intent_graph()
+    assert catalog.adaptive_ranking_status == "active"
+
+
+@pytest.mark.skipif(not _has_model, reason="bge-small not cached")
+@pytest.mark.asyncio
+async def test_warn_can_be_suppressed() -> None:
+    catalog = await _semantic_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.enable_adaptive_ranking(_stale_graph(), warn_on_model_mismatch=False)
+        assert catalog.adaptive_ranking_status == "paused: model mismatch"
+        assert not caught

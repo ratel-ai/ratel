@@ -97,7 +97,7 @@ pub use method::{ParseSearchMethodError, SearchMethod};
 pub use skill::Skill;
 pub use skill_registry::{SkillHit, SkillRegistry};
 pub use tool::Tool;
-pub use tool_registry::{SearchHit, ToolRegistry};
+pub use tool_registry::{AdaptiveRankingStatus, SearchHit, ToolRegistry};
 pub use trace::{
     ChurnKind, EmbedderLoadStatus, JsonlSink, MemorySink, NoopSink, Origin, SearchHitTrace,
     SearchStage, SkillHitTrace, TraceEnvelope, TraceEvent, TraceSink,

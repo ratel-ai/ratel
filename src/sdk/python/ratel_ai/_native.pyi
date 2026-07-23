@@ -179,6 +179,14 @@ class ToolRegistry:
         jsonl path that cannot be opened.
         """
 
+    def _rebuild_intent_graph(self) -> None:
+        """Re-embed the intent graph's members under the current model (worker)."""
+
+    def adaptive_ranking_status(
+        self,
+    ) -> tuple[str, str | None, str | None, bool | None]:
+        """(status, built, active, dim_mismatch) — adaptive ranking model check."""
+
     def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
         """Turn on adaptive usage ranking against `graph` (ADR-0013).
 
@@ -320,6 +328,14 @@ class SkillRegistry:
         path: str | None = ...,
     ) -> None:
         """Route trace events to a sink — see `ToolRegistry.set_trace_sink`."""
+
+    def _rebuild_intent_graph(self) -> None:
+        """Re-embed the intent graph's members under the current model (worker)."""
+
+    def adaptive_ranking_status(
+        self,
+    ) -> tuple[str, str | None, str | None, bool | None]:
+        """(status, built, active, dim_mismatch) — adaptive ranking model check."""
 
     def enable_adaptive_ranking(self, graph: IntentGraph) -> None:
         """Turn on adaptive usage ranking against `graph` (ADR-0013).

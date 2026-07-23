@@ -124,6 +124,9 @@ export function validateGraph(doc) {
   if (!(isInt(doc.built_from_ts) && doc.built_from_ts >= 0)) {
     errs.push(`built_from_ts must be a non-negative integer, got ${JSON.stringify(doc.built_from_ts)}`);
   }
+  if (doc.model !== undefined && !(typeof doc.model === 'string' && doc.model.length > 0)) {
+    errs.push(`model, when present, must be a non-empty string, got ${JSON.stringify(doc.model)}`);
+  }
   if (!Array.isArray(doc.intents)) return errs.concat('intents must be an array');
 
   const seen = new Set();

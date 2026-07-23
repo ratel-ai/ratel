@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IntentGraph, SkillCatalog, ToolCatalog } from "./index.js";
 
 /**
@@ -179,5 +179,101 @@ describe("adaptive usage ranking", () => {
     // An unrelated query on the same catalog stays unfused — the between-calls
     // switch `fused` exists to expose.
     expect(catalog.search("read a file from disk", 5).every((h) => !h.fused)).toBe(true);
+  });
+});
+
+// ---- embedding-model change detection ---------------------------------------
+
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const hub =
+  process.env.HF_HUB_CACHE ??
+  join(process.env.HF_HOME ?? join(homedir(), ".cache", "huggingface"), "hub");
+const bgeSmall = join(
+  hub,
+  "models--BAAI--bge-small-en-v1.5",
+  "snapshots",
+  "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+);
+const hasModel =
+  existsSync(join(bgeSmall, "config.json")) && existsSync(join(bgeSmall, "tokenizer.json"));
+
+/** A graph carrying a 384-dim centroid stamped with a DIFFERENT model than the
+ * catalog will use — the persisted-graph-after-model-swap scenario. */
+function staleModelGraph(): IntentGraph {
+  const centroid = Array.from({ length: 384 }, (_, i) => (i === 0 ? 1 : 0));
+  return IntentGraph.fromJson(
+    JSON.stringify({
+      v: 1,
+      built_from_ts: 1,
+      model: "some-other-model",
+      intents: [
+        {
+          id: "intent_0",
+          label: "l",
+          terms: [],
+          members: ["why is the build broken"],
+          centroid,
+          support: 9,
+          tools: { gh_run_list: 1.0 },
+          skills: {},
+        },
+      ],
+    }),
+  );
+}
+
+describe.skipIf(!hasModel)("adaptive ranking model-change detection", () => {
+  async function semanticCatalog(): Promise<ToolCatalog> {
+    const catalog = new ToolCatalog({ method: "semantic" });
+    await catalog.register([
+      {
+        id: "gh_run_list",
+        name: "gh_run_list",
+        description: "list CI runs",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      },
+      {
+        id: "docker_build",
+        name: "docker_build",
+        description: "build an image",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      },
+    ]);
+    return catalog;
+  }
+
+  it("pauses and warns on a model mismatch, and rebuild restores it", async () => {
+    const catalog = await semanticCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.enableAdaptiveRanking(staleModelGraph());
+      expect(catalog.adaptiveRankingStatus.status).toBe("paused: model mismatch");
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("rebuildIntentGraph()");
+
+      await catalog.rebuildIntentGraph();
+      expect(catalog.adaptiveRankingStatus.status).toBe("active");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("stays silent when warnOnModelMismatch is false", async () => {
+    const catalog = await semanticCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.enableAdaptiveRanking(staleModelGraph(), { warnOnModelMismatch: false });
+      expect(catalog.adaptiveRankingStatus.status).toBe("paused: model mismatch");
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

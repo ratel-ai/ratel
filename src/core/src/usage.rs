@@ -143,7 +143,7 @@ const GRAPH_VERSION: u32 = 1;
 /// and the learner share nothing else, and it is a `Mutex` so the search path
 /// can write it while holding only a read lock.
 #[derive(Debug, Default)]
-struct PendingQuery(Mutex<Option<(String, Vec<f32>)>>);
+struct PendingQuery(Mutex<Option<(String, Vec<f32>, String)>>);
 
 impl Clone for PendingQuery {
     /// A clone starts empty: a half-finished search is not worth copying.
@@ -159,23 +159,24 @@ impl PartialEq for PendingQuery {
 }
 
 impl PendingQuery {
-    fn set(&self, query: &str, vector: &[f32]) {
+    fn set(&self, query: &str, vector: &[f32], fingerprint: &str) {
         if let Ok(mut slot) = self.0.lock() {
-            *slot = Some((query.to_string(), vector.to_vec()));
+            *slot = Some((query.to_string(), vector.to_vec(), fingerprint.to_string()));
         }
     }
 
-    /// The stashed vector, but **only if it belongs to `query`**. Reads without
-    /// clearing: several invokes may follow one search, and each needs to see it.
+    /// The stashed vector and the fingerprint of the model that produced it, but
+    /// **only if it belongs to `query`**. Reads without clearing: several invokes
+    /// may follow one search, and each needs to see it.
     ///
     /// Sessions share a graph, so a concurrent search can overwrite the slot
     /// between one session's search and its invoke. Keying by the query text
     /// means a clobbered slot degrades to lexical clustering rather than
     /// attaching one session's embedding to another's question.
-    fn vector_for(&self, query: &str) -> Option<Vec<f32>> {
+    fn vector_for(&self, query: &str) -> Option<(Vec<f32>, String)> {
         let slot = self.0.lock().ok()?;
         match slot.as_ref() {
-            Some((q, v)) if q == query => Some(v.clone()),
+            Some((q, v, fp)) if q == query => Some((v.clone(), fp.clone())),
             _ => None,
         }
     }
@@ -372,9 +373,51 @@ pub struct IntentGraph {
     pub built_from_ts: u64,
     /// The clusters. Order is not significant.
     pub intents: Vec<Intent>,
+    /// Fingerprint of the embedding model the centroids were built with, or
+    /// `None` for a lexically-grown graph that has none.
+    ///
+    /// Centroids are only comparable to a query embedded by the **same** model.
+    /// This lets a consumer detect a model swap (`GraphModelStatus`) instead of
+    /// cosine-ing across incompatible vector spaces. Stamped when the first
+    /// centroid is grown, or by a producer (e.g. Ratel Cloud) that builds
+    /// centroids offline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     /// Scratch for the search path → learner handoff; never serialized.
     #[serde(skip)]
     pending: PendingQuery,
+}
+
+/// Whether an [`IntentGraph`]'s centroids can be trusted against the currently
+/// active embedding model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum GraphModelStatus {
+    /// Usable: no centroids (lexical graph), or the model matches.
+    Ok,
+    /// Centroid width differs from the active model's output — a different model
+    /// family. Dense matching is meaningless; the arm must pause.
+    DimMismatch { built: usize, active: usize },
+    /// Same width but a different model fingerprint (a fine-tune, or another
+    /// model of the same dimension). Cosine across the two spaces is garbage; the
+    /// arm must pause. A length check alone cannot catch this.
+    ModelMismatch { built: String, active: String },
+}
+
+impl GraphModelStatus {
+    /// `(built, active, dim_mismatch)` for [`crate::TraceEvent::UsageModelMismatch`],
+    /// or `None` when there is no mismatch. Dimensions are stringified so both
+    /// cases share one event shape.
+    pub(crate) fn describe(&self) -> Option<(String, String, bool)> {
+        match self {
+            GraphModelStatus::Ok => None,
+            GraphModelStatus::DimMismatch { built, active } => {
+                Some((built.to_string(), active.to_string(), true))
+            }
+            GraphModelStatus::ModelMismatch { built, active } => {
+                Some((built.clone(), active.clone(), false))
+            }
+        }
+    }
 }
 
 /// Serializing materializes the derived display fields, so the wire form always
@@ -383,9 +426,13 @@ pub struct IntentGraph {
 impl Serialize for IntentGraph {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let mut out = serializer.serialize_struct("IntentGraph", 3)?;
+        let len = 3 + usize::from(self.model.is_some());
+        let mut out = serializer.serialize_struct("IntentGraph", len)?;
         out.serialize_field("v", &self.v)?;
         out.serialize_field("built_from_ts", &self.built_from_ts)?;
+        if let Some(model) = &self.model {
+            out.serialize_field("model", model)?;
+        }
         out.serialize_field("intents", &self.labeled())?;
         out.end()
     }
@@ -429,6 +476,7 @@ impl IntentGraph {
             v: GRAPH_VERSION,
             built_from_ts: 0,
             intents: Vec::new(),
+            model: None,
             pending: PendingQuery::default(),
         }
     }
@@ -451,8 +499,8 @@ impl IntentGraph {
     /// already embedded the query for its own ranking — so this costs nothing
     /// beyond a copy. Takes `&self`: the slot is a `Mutex`, so the search path
     /// never needs the write lock.
-    pub(crate) fn note_query_vector(&self, query: &str, vector: &[f32]) {
-        self.pending.set(query, vector);
+    pub(crate) fn note_query_vector(&self, query: &str, vector: &[f32], fingerprint: &str) {
+        self.pending.set(query, vector, fingerprint);
     }
 
     /// Fold one confirmed observation — a query, and the capability invoked
@@ -486,11 +534,28 @@ impl IntentGraph {
     ) {
         // A query vector is available only when the search path was
         // semantic/hybrid AND the slot still belongs to this query.
-        let vector = self.pending.vector_for(query);
-        if vector.is_none() && tokenize(query).is_empty() {
+        let stashed = self.pending.vector_for(query);
+        if stashed.is_none() && tokenize(query).is_empty() {
             return; // no words to cluster on and no embedding either
         }
         self.built_from_ts = self.built_from_ts.max(ts_ms);
+
+        // Only fold the vector if it was produced by the graph's model. On a
+        // model swap (fingerprint differs from `self.model`) we FREEZE: the
+        // member, support, and edge still update — they are model-independent —
+        // but the centroid is left untouched rather than blended across two
+        // vector spaces. `None` model means no centroids yet; the first fold
+        // stamps it.
+        let usable = match (&self.model, &stashed) {
+            (Some(m), Some((_, fp))) => m == fp,
+            _ => true,
+        };
+        let vector: Option<Vec<f32>> = if usable {
+            stashed.as_ref().map(|(v, _)| v.clone())
+        } else {
+            None
+        };
+        let fingerprint: Option<String> = stashed.as_ref().map(|(_, fp)| fp.clone());
 
         let idx = match self.best_match(query, vector.as_deref()) {
             Some(i) => i,
@@ -541,6 +606,75 @@ impl IntentGraph {
             };
             *edges.entry(capability_id.to_string()).or_insert(0.0) += 1.0;
         }
+
+        // Stamp the model the first time a centroid actually exists, so later
+        // observations under a different model can be detected and frozen.
+        if self.model.is_none() && self.intents[idx].centroid.is_some() {
+            self.model = fingerprint;
+        }
+    }
+
+    /// Whether this graph's centroids can be trusted against the currently active
+    /// embedding model, whose vectors are `query_dim`-wide with identity
+    /// `active_fingerprint`.
+    ///
+    /// A lexical graph (no centroids) is always [`GraphModelStatus::Ok`] — it has
+    /// nothing model-specific. A dense graph must agree on both width and model
+    /// identity; the width check alone cannot catch a same-dimension model swap.
+    pub(crate) fn model_status(
+        &self,
+        active_fingerprint: &str,
+        query_dim: usize,
+    ) -> GraphModelStatus {
+        let Some(built_dim) = self
+            .intents
+            .iter()
+            .find_map(|i| i.centroid.as_ref().map(Vec::len))
+        else {
+            return GraphModelStatus::Ok; // no centroids — lexical, model-agnostic
+        };
+        if built_dim != query_dim {
+            return GraphModelStatus::DimMismatch {
+                built: built_dim,
+                active: query_dim,
+            };
+        }
+        match &self.model {
+            Some(built) if built != active_fingerprint => GraphModelStatus::ModelMismatch {
+                built: built.clone(),
+                active: active_fingerprint.to_string(),
+            },
+            _ => GraphModelStatus::Ok,
+        }
+    }
+
+    /// Re-embed every cluster's members under a new model and replace the
+    /// centroids, restamping [`Self::model`]. `per_cluster` is the embeddings of
+    /// each cluster's `members`, in `intents` order and member order.
+    ///
+    /// Members, support, and edges are model-independent and untouched, so all
+    /// learning survives a model change — only the centroids move to the new
+    /// space. A cluster with no members (or none embedded) keeps whatever
+    /// centroid it had.
+    pub(crate) fn rebuild_centroids(
+        &mut self,
+        per_cluster: Vec<Vec<Vec<f32>>>,
+        fingerprint: String,
+    ) {
+        for (it, vectors) in self.intents.iter_mut().zip(per_cluster) {
+            if vectors.is_empty() {
+                continue;
+            }
+            let dim = vectors[0].len();
+            let mut sum = vec![0.0f32; dim];
+            for v in &vectors {
+                for (s, x) in sum.iter_mut().zip(v) {
+                    *s += x;
+                }
+            }
+            it.centroid = Some(normalize(sum));
+        }
+        self.model = Some(fingerprint);
     }
 
     /// The cluster this query belongs to: by cosine when an embedding is
@@ -884,6 +1018,7 @@ mod tests {
             v: 1,
             built_from_ts: 1_753_000_000_000,
             intents,
+            model: None,
             pending: PendingQuery::default(),
         }
     }
@@ -1396,9 +1531,9 @@ mod tests {
         let v2 = [0.0f32, 1.0, 0.0];
         let build = |extra: usize| {
             let mut g = IntentGraph::empty();
-            g.note_query_vector("build broken", &v1);
+            g.note_query_vector("build broken", &v1, "m");
             g.observe("build broken", Capability::Tool, "a", T0, true);
-            g.note_query_vector("build broken again", &v2);
+            g.note_query_vector("build broken again", &v2, "m");
             g.observe("build broken again", Capability::Tool, "b", T0, true);
             for i in 0..extra {
                 g.observe(
@@ -1642,5 +1777,120 @@ mod tests {
         );
         let back = IntentGraph::from_json(&serde_json::to_string(&g).unwrap()).unwrap();
         assert_eq!(g, back);
+    }
+    // ---- embedding-model change detection (centroids are model-specific) -----
+
+    fn dense_intent(id: &str, centroid: Vec<f32>) -> Intent {
+        let mut it = intent(id, &["why is the build broken"], &[("gh_run_list", 1.0)]);
+        it.centroid = Some(normalize(centroid));
+        it
+    }
+
+    #[test]
+    fn model_status_ok_for_a_lexical_graph() {
+        // No centroids → nothing model-specific → always usable.
+        let g = graph(vec![intent("i0", &["build broken"], &[("t", 1.0)])]);
+        assert_eq!(g.model_status("any-model", 384), GraphModelStatus::Ok);
+    }
+
+    #[test]
+    fn model_status_flags_a_dimension_change() {
+        let mut g = graph(vec![dense_intent("i0", vec![1.0, 0.0, 0.0])]);
+        g.model = Some("bge-small".into());
+        assert_eq!(
+            g.model_status("bge-base", 768),
+            GraphModelStatus::DimMismatch {
+                built: 3,
+                active: 768
+            }
+        );
+    }
+
+    #[test]
+    fn model_status_flags_a_same_dim_model_change() {
+        // The case a length check cannot catch: same width, different model.
+        let mut g = graph(vec![dense_intent("i0", vec![1.0, 0.0, 0.0])]);
+        g.model = Some("model-a".into());
+        assert_eq!(
+            g.model_status("model-b", 3),
+            GraphModelStatus::ModelMismatch {
+                built: "model-a".into(),
+                active: "model-b".into()
+            }
+        );
+    }
+
+    #[test]
+    fn model_status_ok_when_the_model_matches() {
+        let mut g = graph(vec![dense_intent("i0", vec![1.0, 0.0, 0.0])]);
+        g.model = Some("model-a".into());
+        assert_eq!(g.model_status("model-a", 3), GraphModelStatus::Ok);
+    }
+
+    #[test]
+    fn observe_stamps_the_model_on_the_first_centroid() {
+        let mut g = IntentGraph::empty();
+        g.note_query_vector("build broken", &[1.0, 0.0, 0.0], "model-a");
+        g.observe("build broken", Capability::Tool, "t", T0, true);
+        assert_eq!(g.model.as_deref(), Some("model-a"));
+    }
+
+    #[test]
+    fn observe_freezes_the_centroid_on_a_model_change() {
+        // Grow under model-a, then an observation arrives embedded by model-b.
+        // Member/support must still update, but the centroid must NOT blend the
+        // two vector spaces.
+        let mut g = IntentGraph::empty();
+        g.note_query_vector("build broken", &[1.0, 0.0, 0.0], "model-a");
+        g.observe("build broken", Capability::Tool, "t", T0, true);
+        let frozen = g.intents[0].centroid.clone();
+
+        g.note_query_vector("build broken again", &[0.0, 1.0, 0.0], "model-b");
+        g.observe("build broken again", Capability::Tool, "t", T0, true);
+
+        assert_eq!(
+            g.intents[0].centroid, frozen,
+            "centroid must not blend models"
+        );
+        assert_eq!(g.intents[0].members.len(), 2, "member still recorded");
+        assert_eq!(g.intents[0].support, 2, "support still counts");
+        assert_eq!(g.model.as_deref(), Some("model-a"), "model unchanged");
+    }
+
+    #[test]
+    fn rebuild_centroids_re_embeds_members_and_restamps() {
+        let mut g = IntentGraph::empty();
+        g.note_query_vector("build broken", &[1.0, 0.0, 0.0], "model-a");
+        g.observe("build broken", Capability::Tool, "gh_run_list", T0, true);
+
+        // Members re-embedded under model-b (here, just different vectors).
+        g.rebuild_centroids(vec![vec![vec![0.0, 1.0, 0.0]]], "model-b".into());
+
+        assert_eq!(g.model.as_deref(), Some("model-b"));
+        assert_eq!(g.model_status("model-b", 3), GraphModelStatus::Ok);
+        // Learning preserved.
+        assert_eq!(g.intents[0].support, 1);
+        assert_eq!(g.intents[0].tools.get("gh_run_list"), Some(&1.0));
+        // Centroid moved to the new (normalized) vector.
+        let c = g.intents[0].centroid.as_ref().unwrap();
+        assert!((c[1] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_model_field_round_trips_through_json() {
+        let mut g = graph(vec![dense_intent("i0", vec![0.6, 0.8, 0.0])]);
+        g.model = Some("bge-small".into());
+        let back = IntentGraph::from_json(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back.model.as_deref(), Some("bge-small"));
+    }
+
+    #[test]
+    fn a_lexical_graph_omits_the_model_on_the_wire() {
+        let g = graph(vec![intent("i0", &["build broken"], &[("t", 1.0)])]);
+        let json = serde_json::to_string(&g).unwrap();
+        assert!(
+            !json.contains("model"),
+            "no model field for a centroid-less graph"
+        );
     }
 }

@@ -27,6 +27,7 @@ const REGISTRY_BUSY_MESSAGE: &str =
 enum EmbeddingOperation {
     Build,
     Rebuild,
+    RebuildIntentGraph,
 }
 
 struct DenseOperationPermit {
@@ -96,6 +97,7 @@ impl Task for ToolEmbeddingTask {
         match self.operation {
             EmbeddingOperation::Build => registry.build_embeddings(),
             EmbeddingOperation::Rebuild => registry.rebuild_embeddings(),
+            EmbeddingOperation::RebuildIntentGraph => registry.rebuild_intent_graph(),
         }
         .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
@@ -173,6 +175,7 @@ impl Task for SkillEmbeddingTask {
         match self.operation {
             EmbeddingOperation::Build => registry.build_embeddings(),
             EmbeddingOperation::Rebuild => registry.rebuild_embeddings(),
+            EmbeddingOperation::RebuildIntentGraph => registry.rebuild_intent_graph(),
         }
         .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
@@ -373,6 +376,56 @@ fn resolve_embedding(config: Option<EmbeddingConfig>) -> napi::Result<Option<Emb
     EmbeddingModel::resolve(spec)
         .map(Some)
         .map_err(|e| napi::Error::from_reason(e.to_string()))
+}
+
+/// SDK-facing view of whether adaptive usage ranking is contributing. `status`
+/// is `"active" | "inactive" | "unknown" | "paused: dim mismatch" | "paused:
+/// model mismatch"`; `built`/`active`/`dimMismatch` are set only when paused.
+#[napi(object)]
+pub struct AdaptiveRankingStatus {
+    pub status: String,
+    pub built: Option<String>,
+    pub active: Option<String>,
+    pub dim_mismatch: Option<bool>,
+}
+
+fn map_status(s: core::AdaptiveRankingStatus) -> AdaptiveRankingStatus {
+    use core::AdaptiveRankingStatus as S;
+    match s {
+        S::Inactive => AdaptiveRankingStatus {
+            status: "inactive".into(),
+            built: None,
+            active: None,
+            dim_mismatch: None,
+        },
+        S::Active => AdaptiveRankingStatus {
+            status: "active".into(),
+            built: None,
+            active: None,
+            dim_mismatch: None,
+        },
+        S::Unknown => AdaptiveRankingStatus {
+            status: "unknown".into(),
+            built: None,
+            active: None,
+            dim_mismatch: None,
+        },
+        S::Paused {
+            dim_mismatch,
+            built,
+            active,
+        } => AdaptiveRankingStatus {
+            status: if dim_mismatch {
+                "paused: dim mismatch"
+            } else {
+                "paused: model mismatch"
+            }
+            .into(),
+            built: Some(built),
+            active: Some(active),
+            dim_mismatch: Some(dim_mismatch),
+        },
+    }
 }
 
 /// A shared usage-ranking intent graph (ADR-0013): clusters of past queries,
@@ -719,6 +772,30 @@ impl ToolRegistry {
         Ok(())
     }
 
+    /// Re-embed the intent graph's members under the current model and replace
+    /// its centroids — call after changing the embedding model. Preserves
+    /// members, support, and edges.
+    #[napi(ts_return_type = "Promise<void>")]
+    pub fn rebuild_intent_graph(&self) -> AsyncTask<ToolEmbeddingTask> {
+        AsyncTask::new(ToolEmbeddingTask {
+            inner: self.inner.clone(),
+            dense_gate: self.dense_gate.clone(),
+            operation: EmbeddingOperation::RebuildIntentGraph,
+            _permit: DenseOperationPermit::new(self.pending_dense.clone()),
+        })
+    }
+
+    /// Whether adaptive usage ranking is contributing, paused (model changed),
+    /// or inactive — see `AdaptiveRankingStatus`.
+    #[napi]
+    pub fn adaptive_ranking_status(&self) -> napi::Result<AdaptiveRankingStatus> {
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
+        Ok(map_status(registry.adaptive_ranking_status()))
+    }
+
     /// Drain captured envelopes from the active sink. Returns `[]` unless the
     /// active sink is "memory".
     #[napi]
@@ -1045,6 +1122,30 @@ impl SkillRegistry {
         drop(registry);
         self.graph = None;
         Ok(())
+    }
+
+    /// Re-embed the intent graph's members under the current model and replace
+    /// its centroids — call after changing the embedding model. Preserves
+    /// members, support, and edges.
+    #[napi(ts_return_type = "Promise<void>")]
+    pub fn rebuild_intent_graph(&self) -> AsyncTask<SkillEmbeddingTask> {
+        AsyncTask::new(SkillEmbeddingTask {
+            inner: self.inner.clone(),
+            dense_gate: self.dense_gate.clone(),
+            operation: EmbeddingOperation::RebuildIntentGraph,
+            _permit: DenseOperationPermit::new(self.pending_dense.clone()),
+        })
+    }
+
+    /// Whether adaptive usage ranking is contributing, paused (model changed),
+    /// or inactive — see `AdaptiveRankingStatus`.
+    #[napi]
+    pub fn adaptive_ranking_status(&self) -> napi::Result<AdaptiveRankingStatus> {
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("skill registry lock poisoned"))?;
+        Ok(map_status(registry.adaptive_ranking_status()))
     }
 
     /// Drain captured envelopes from the active sink. Returns `[]` unless the

@@ -109,6 +109,25 @@ caller's search method**: a semantic catalog handed a centroid-less graph matche
 lexically rather than seeing nothing. Without that fallback the in-process learner's own
 output would be invisible to the very methods it is meant to improve.
 
+### Embedding-model changes
+
+Centroids are model-specific — cosine only means anything against a query embedded by the
+*same* model. The graph therefore records its model as an optional `model` fingerprint
+(absent for a lexical graph), and a semantic/hybrid search compares it against the active
+model. On a mismatch — a different output dimension, or the same width with a different
+identity (a fine-tune; a length check cannot catch this) — the usage arm **pauses** (base
+ranking is untouched) rather than cosine across incompatible spaces, and the learner
+**freezes** centroid growth so it never blends two spaces. This deliberately differs from the
+corpus cache, which hard-errors: the corpus cannot produce dense results without matching
+embeddings, but the usage arm has a valid fall-through (no boost), so breaking search over a
+stale *enhancement* would be worse than the problem.
+
+The mismatch is surfaced three ways: a `TraceEvent::UsageModelMismatch` (structured, always),
+a one-time SDK stderr warning (default on, `warnOnModelMismatch: false` to suppress), and an
+`adaptiveRankingStatus` the app can gate on. `rebuildIntentGraph()` re-embeds the graph's
+members under the current model and restamps — members, support, and edges are
+model-independent, so all learning survives; only the centroids move.
+
 ### Opt-in, per registry
 
 A usage arm turns `SearchHit.score` from a BM25 score into an RRF score. ADR-0011 promises

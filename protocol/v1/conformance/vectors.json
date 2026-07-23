@@ -711,6 +711,39 @@
           ],
           "generator": "ratel-cloud@2026-07"
         }
+      },
+      {
+        "name": "dense-with-model",
+        "why": "A dense graph declares the embedding model its centroids were built with, so a consumer can detect a model swap instead of cosine-ing across vector spaces.",
+        "doc": {
+          "v": 1,
+          "built_from_ts": 1753000000000,
+          "model": "hf:BAAI/bge-small-en-v1.5",
+          "intents": [
+            {
+              "id": "intent_0",
+              "label": "is the build green",
+              "terms": [
+                "build",
+                "ci"
+              ],
+              "members": [
+                "why is the build broken",
+                "did CI pass"
+              ],
+              "centroid": [
+                0.8,
+                0.577,
+                0.161
+              ],
+              "support": 5,
+              "tools": {
+                "gh_run_list": 0.8
+              },
+              "skills": {}
+            }
+          ]
+        }
       }
     ],
     "invalid": [
