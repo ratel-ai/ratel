@@ -7,8 +7,11 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type ExecutableTool,
+  INVOKE_TOOL_ERROR_CAUSE,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  isInvokeToolError,
+  runCapabilitiesSearch,
   SEARCH_CAPABILITIES_ID,
   type SearchCapabilitiesResult,
   type Skill,
@@ -162,6 +165,7 @@ describe("searchCapabilitiesTool", () => {
     const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
     const gw = events.find((e) => e.type === "gateway_search");
     expect(gw?.top_k).toBe(3);
+    expect(gw?.origin).toBe("agent"); // searchCapabilitiesTool drives runCapabilitiesSearch as origin "agent"
   });
 
   it("clamps a non-positive / non-integer topK back to the default", async () => {
@@ -198,6 +202,57 @@ describe("searchCapabilitiesTool", () => {
     const emptyCatalog = searchCapabilitiesTool(tools, new SkillCatalog());
     expect(emptyCatalog.description).not.toContain("get_skill_content");
   });
+
+  it("advertiseSkills overrides the size-based description default in both directions", async () => {
+    const tools = new ToolCatalog();
+    await tools.register(readFile);
+    // A host that always exposes get_skill_content pins the skills clause on…
+    const pinnedOn = searchCapabilitiesTool(tools, new SkillCatalog(), { advertiseSkills: true });
+    expect(pinnedOn.description).toContain("get_skill_content");
+    // …and one that never exposes it pins the clause off despite a genuinely
+    // non-empty catalog — awaited, so the "despite live skills" precondition is
+    // real and the override (not a short-circuit on an unresolved Promise) is
+    // what suppresses the clause.
+    const pinnedOff = searchCapabilitiesTool(tools, await skillCatalogWith(vercelSkill), {
+      advertiseSkills: false,
+    });
+    expect(pinnedOff.description).not.toContain("get_skill_content");
+  });
+});
+
+describe("runCapabilitiesSearch", () => {
+  it("records one gateway_search event stamped with the given origin", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    tools.register(readFile);
+    tools.drainTraceEvents();
+
+    await runCapabilitiesSearch(tools, "read a file", { topKTools: 3, origin: "direct" });
+
+    const ev = (tools.drainTraceEvents() as Array<Record<string, unknown>>).find(
+      (e) => e.type === "gateway_search",
+    );
+    // Every field of the behavior-identity contract, not just origin: a dropped
+    // hits/query would silently break gateway_search analytics on both paths.
+    expect(ev?.origin).toBe("direct");
+    expect(ev?.top_k).toBe(3);
+    expect(ev?.query).toBe("read a file");
+    expect(ev?.hits).toBe(1); // only readFile is registered and it matches
+  });
+
+  it("produces the same shape searchCapabilitiesTool returns (single source of truth)", async () => {
+    const tools = new ToolCatalog();
+    tools.register(readFile);
+    tools.register(sendEmail);
+    const skills = await skillCatalogWith(vercelSkill);
+
+    const direct = await runCapabilitiesSearch(tools, "read a file", { skillCatalog: skills });
+    const viaTool = (await searchCapabilitiesTool(tools, skills).execute({
+      query: "read a file",
+    })) as SearchCapabilitiesResult;
+
+    expect(direct.tools.groups[0].server.name).toBe(viaTool.tools.groups[0].server.name);
+    expect(direct.tools.groups[0].hits[0].toolId).toBe(viaTool.tools.groups[0].hits[0].toolId);
+  });
 });
 
 describe("invokeToolTool", () => {
@@ -208,6 +263,22 @@ describe("invokeToolTool", () => {
     expect(tool.id).toBe(INVOKE_TOOL_ID);
     const result = await tool.execute({ toolId: "fs__read_file", args: { path: "/tmp/x" } });
     expect(result).toEqual({ contents: "contents of /tmp/x" });
+  });
+
+  it("forwards an opaque invocation context to the selected tool by identity", async () => {
+    const context = { adapter: "test", value: { tenantId: "tenant-42" } };
+    const tools = new ToolCatalog();
+    await tools.register({
+      ...readFile,
+      execute: (_input, receivedContext) => ({ sameContext: receivedContext === context }),
+    });
+
+    const result = await invokeToolTool(tools).execute(
+      { toolId: "fs__read_file", args: { path: "/tmp/x" } },
+      context,
+    );
+
+    expect(result).toEqual({ sameContext: true });
   });
 
   it("tolerates flattened args", async () => {
@@ -224,6 +295,134 @@ describe("invokeToolTool", () => {
     const tool = invokeToolTool(tools);
     const out = await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });
     expect(out).toEqual({ contents: "contents of /x" });
+  });
+
+  it("preserves an AsyncIterable synchronously and settles trace events after iteration", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "stream" } });
+    await tools.register({
+      id: "jobs__watch",
+      name: "watch",
+      description: "Watch a job.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: () =>
+        (async function* () {
+          yield { progress: 25 };
+          yield { progress: 100 };
+        })(),
+    });
+    tools.drainTraceEvents();
+
+    const result = invokeToolTool(tools).execute({ toolId: "jobs__watch", args: {} });
+
+    expect(typeof (result as AsyncIterable<unknown>)[Symbol.asyncIterator]).toBe("function");
+    expect(typeof (result as { then?: unknown }).then).not.toBe("function");
+    expect(
+      (tools.drainTraceEvents() as Array<{ type: string }>).map((event) => event.type),
+    ).toEqual(["invoke_start"]);
+
+    const outputs: unknown[] = [];
+    for await (const output of result as AsyncIterable<unknown>) outputs.push(output);
+
+    expect(outputs).toEqual([{ progress: 25 }, { progress: 100 }]);
+    const eventTypes = (tools.drainTraceEvents() as Array<{ type: string }>).map(
+      (event) => event.type,
+    );
+    expect(eventTypes).toContain("invoke_end");
+    expect(eventTypes).toContain("gateway_invoke");
+  });
+
+  it("preserves a stream after the host prevalidates with an async target parser", async () => {
+    const tools = new ToolCatalog();
+    await tools.register({
+      id: "jobs__watch",
+      name: "watch",
+      description: "Watch a job.",
+      inputSchema: {},
+      outputSchema: {},
+      validateInput: async (input) => ({
+        success: true,
+        value: { jobId: String((input as { jobId: unknown }).jobId).toUpperCase() },
+      }),
+      execute: ({ jobId }) =>
+        (async function* () {
+          yield { jobId, progress: 100 };
+        })(),
+    });
+    const invoke = invokeToolTool(tools);
+    const parsed = await invoke.validateInput?.({
+      toolId: "jobs__watch",
+      args: { jobId: "job-1" },
+    });
+    if (!parsed?.success) throw parsed?.error ?? new Error("validation failed");
+
+    const result = invoke.execute(parsed.value);
+
+    expect(typeof (result as AsyncIterable<unknown>)[Symbol.asyncIterator]).toBe("function");
+    const outputs: unknown[] = [];
+    for await (const output of result as AsyncIterable<unknown>) outputs.push(output);
+    expect(outputs).toEqual([{ jobId: "JOB-1", progress: 100 }]);
+  });
+
+  it("brands a caught target error non-enumerably while keeping the generic result structured", async () => {
+    const failure = new Error("target failed");
+    const tools = new ToolCatalog();
+    await tools.register({
+      id: "jobs__fail",
+      name: "fail",
+      description: "Fail a job.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => {
+        throw failure;
+      },
+    });
+
+    const result = await invokeToolTool(tools).execute({ toolId: "jobs__fail", args: {} });
+
+    expect(result).toEqual({ error: "tool jobs__fail threw: target failed", isError: true });
+    expect(isInvokeToolError(result)).toBe(true);
+    if (!isInvokeToolError(result)) throw new Error("expected a branded invoke error");
+    expect(result[INVOKE_TOOL_ERROR_CAUSE]).toBe(failure);
+    expect(Object.keys(result)).toEqual(["error", "isError"]);
+    expect(Object.getOwnPropertyDescriptor(result, INVOKE_TOOL_ERROR_CAUSE)?.enumerable).toBe(
+      false,
+    );
+    expect(JSON.parse(JSON.stringify(result))).toEqual({
+      error: "tool jobs__fail threw: target failed",
+      isError: true,
+    });
+  });
+
+  it("settles an errored AsyncIterable as a branded result after its preliminary outputs", async () => {
+    const failure = new Error("stream failed");
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "stream-error" } });
+    await tools.register({
+      id: "jobs__broken_watch",
+      name: "broken_watch",
+      description: "Watch a broken job.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: () =>
+        (async function* () {
+          yield { progress: 25 };
+          throw failure;
+        })(),
+    });
+    tools.drainTraceEvents();
+
+    const result = invokeToolTool(tools).execute({ toolId: "jobs__broken_watch", args: {} });
+    const outputs: unknown[] = [];
+    for await (const output of result as AsyncIterable<unknown>) outputs.push(output);
+
+    expect(outputs[0]).toEqual({ progress: 25 });
+    expect(isInvokeToolError(outputs[1])).toBe(true);
+    const eventTypes = (tools.drainTraceEvents() as Array<{ type: string }>).map(
+      (event) => event.type,
+    );
+    expect(eventTypes).toContain("invoke_error");
+    expect(eventTypes).toContain("gateway_error");
+    expect(eventTypes).not.toContain("gateway_invoke");
   });
 
   it("returns an error object (with isError) for unknown toolId", async () => {

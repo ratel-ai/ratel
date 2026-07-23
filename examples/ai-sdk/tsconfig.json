@@ -6,7 +6,15 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    // The adapter is workspace-linked, so its d.ts would otherwise resolve the
+    // adapter's own dev `ai` (v7) alongside this example's v6 — two copies of
+    // the types in one program. A published install resolves the peer once;
+    // this mapping emulates that for the workspace.
+    "paths": {
+      "ai": ["./node_modules/ai"],
+      "ai/*": ["./node_modules/ai/*"]
+    }
   },
   "include": ["src/**/*"]
 }

@@ -1,13 +1,14 @@
 name: Verify install
 
 # Per-unit install smoke tests (ADR-0008). Each release unit — core (crate),
-# sdk-ts (npm), sdk-py (PyPI), and the four telemetry units (telemetry-core on
-# crates.io, telemetry-ts + telemetry-ts-otlp on npm, telemetry-py on PyPI) — is verified from its
-# public registry with no repo checkout and no local toolchain state, so a broken
-# publish surfaces here.
+# sdk-ts (npm), sdk-py (PyPI), vercel-ai-sdk (npm), and the four telemetry units
+# (telemetry-core on crates.io, telemetry-ts + telemetry-ts-otlp on npm,
+# telemetry-py on PyPI) — is verified from its public registry with no repo
+# checkout and no local toolchain state, so a broken publish surfaces here.
 #
 # workflow_dispatch: pick a `unit` and (optionally) a `version` to verify just
-# that one. The daily cron runs `unit: all` at each unit's `latest`.
+# that one. The daily cron runs `unit: all` at each unit's `latest`, except the
+# prerelease-only adapter, which stays on `rc` until its first GA.
 
 on:
   workflow_dispatch:
@@ -16,7 +17,7 @@ on:
         description: Release unit to verify
         type: choice
         default: all
-        options: [all, core, sdk-ts, sdk-py, telemetry-core, telemetry-ts, telemetry-py, telemetry-ts-otlp]
+        options: [all, core, sdk-ts, sdk-py, telemetry-core, telemetry-ts, telemetry-py, telemetry-ts-otlp, vercel-ai-sdk]
       version:
         description: Version to verify (e.g. 0.2.0-rc.2 or 0.2.0). Only applied when a single unit is selected; ignored for `all`.
         required: false
@@ -87,6 +88,86 @@ jobs:
           npm init -y >/dev/null
           npm install --no-audit --no-fund "@ratel-ai/sdk@${{ steps.ver.outputs.spec }}"
           node -e "const {ToolRegistry} = require('@ratel-ai/sdk'); const r = new ToolRegistry(); r.register({id:'x',name:'x',description:'x',inputSchema:{},outputSchema:{}}); const hits = r.search('x', 5); if (!Array.isArray(hits) || hits.length === 0) { console.error('search failed'); process.exit(1); } console.log('OK', hits);"
+
+  verify-vercel-ai-sdk:
+    name: verify vercel-ai-sdk (npm)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'vercel-ai-sdk'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve version
+        id: ver
+        shell: bash
+        env:
+          REQUESTED_UNIT: ${{ inputs.unit }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_TAG: ${{ inputs.tag || 'rc' }}
+        # No GA exists yet: the useful package pair is on `rc`, while npm's
+        # `latest` still points at the incompatible first adapter RC. A caller
+        # can explicitly select `latest` to reproduce that path.
+        run: |
+          set -euo pipefail
+          case "$REQUESTED_TAG" in
+            rc|latest) ;;
+            *)
+              echo "::error::tag must be rc or latest"
+              exit 2
+              ;;
+          esac
+          if [ "$REQUESTED_UNIT" = "vercel-ai-sdk" ] && [ -n "$REQUESTED_VERSION" ]; then
+            if [[ ! "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+              echo "::error::version must be X.Y.Z or X.Y.Z-rc.N"
+              exit 2
+            fi
+            adapter_spec="$REQUESTED_VERSION"
+          else
+            adapter_spec="$REQUESTED_TAG"
+          fi
+          printf 'adapter_spec=%s\n' "$adapter_spec" >> "$GITHUB_OUTPUT"
+          printf 'sdk_spec=%s\n' "$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+      - name: Install + smoke-test the published adapter
+        shell: bash
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund \
+            "@ratel-ai/sdk@${{ steps.ver.outputs.sdk_spec }}" \
+            "@ratel-ai/vercel-ai-sdk@${{ steps.ver.outputs.adapter_spec }}" \
+            "ai@^7.0.0"
+          node --input-type=module <<'EOF'
+          import { aiSdk } from "@ratel-ai/vercel-ai-sdk";
+          import { ratel } from "@ratel-ai/sdk";
+          import { jsonSchema, tool } from "ai";
+
+          const r = ratel().adaptTo(aiSdk());
+          await r.tools.register({
+            ping: tool({
+              description: "Return pong",
+              inputSchema: jsonSchema({ type: "object", additionalProperties: false }),
+              execute: async () => ({ pong: true }),
+            }),
+          });
+
+          const tools = r.modelTools();
+          for (const id of ["search_capabilities", "invoke_tool", "get_skill_content"]) {
+            if (typeof tools[id]?.execute !== "function") {
+              throw new Error(`missing executable capability: ${id}`);
+            }
+          }
+
+          const result = await tools.invoke_tool.execute(
+            { toolId: "ping", args: {} },
+            { toolCallId: "verify-install", messages: [] },
+          );
+          if (result?.pong !== true) {
+            throw new Error(`unexpected invoke_tool result: ${JSON.stringify(result)}`);
+          }
+          console.log("OK", result);
+          EOF
 
   verify-sdk-py:
     name: verify sdk-py (${{ matrix.label }})

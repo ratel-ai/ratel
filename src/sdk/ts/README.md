@@ -81,7 +81,56 @@ const [hit] = catalog.search("What is the weather in Rome?", 1);
 console.log(await catalog.invoke(hit.toolId, { city: "Rome" }));
 ```
 
+## Framework adapters
+
+To work in a host framework's native tool and message shapes, adapt the core with a
+`RatelAdapter` from a framework package instead of wiring the capability tools by hand:
+
+```js
+import { ratel } from "@ratel-ai/sdk";
+import { aiSdk } from "@ratel-ai/vercel-ai-sdk"; // ships separately
+
+const r = ratel({ recallTopK: 5 }).adaptTo(aiSdk());
+await r.tools.register(myTools);              // async; callable any time, also after modelTools()
+const tools = r.modelTools();                 // stable capability set — take once, reuse
+const messages = await r.appendRecall(history); // per-turn recall (AI SDK idiom)
+```
+
+`r.tools` is a handle over the core's one shared catalog — registration and exposure are separate
+acts, and tools registered after `modelTools()` are still discoverable because the capability tools
+search the live catalog. `register(...)` is async: it validates synchronously (a bad tool throws at
+the call site) and its promise resolves once the tools are indexed and, on a semantic/hybrid core,
+embedded — `await` it so embedding errors surface at registration. The core also works standalone,
+without any adapter: `ratel().tools.register(...)` takes native `ExecutableTool`s, `modelTools()`
+returns the three capability tools in native shape, and `recall(query)` is a pure query returning
+the canonical `search_capabilities` result.
+
+`ratel(config)` owns one `ToolCatalog` + `SkillCatalog` + recall-id counter and every
+framework-independent guard (reserved capability-tool ids, top-K clamp, first-registration-wins
+on the adapted path, passthrough of provider-run tools); an adapter is just three codecs
+(`ingest` / `expose` / `recallMessages`) plus its framework idioms. `adaptTo` infers the
+framework's tool and message types, so app code needs no casts. A framework tool registered on
+the un-adapted core throws an error pointing at the adapter package to install. See ADR-0013.
+
 Continue with the [TypeScript guide](https://docs.ratel.sh/docs/sdks/typescript), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-typescript), or the [Vercel AI SDK example](https://github.com/ratel-ai/ratel/tree/main/examples/ai-sdk).
+
+## Adapter conformance testkit
+
+Building a `RatelAdapter` for another framework? `@ratel-ai/sdk/testkit` ships a runner-agnostic
+battery that pins the SPI contract — ingest/expose round-trip, the reserved-id guard, recall
+top-K clamping, passthrough semantics, and recall-pair shape. Teach it your framework's tool and
+message shapes once, then run the whole battery under your test runner:
+
+```ts
+import { describe, it } from "vitest";
+import { describeAdapterConformance } from "@ratel-ai/sdk/testkit";
+import { myConformanceOptions } from "./conformance-options.js";
+
+describeAdapterConformance(myConformanceOptions(), { describe, it });
+```
+
+Assertions use `node:assert`, so no test runner leaks into your published types;
+`referenceConformanceOptions` is a worked example to copy. Prefer full control? `adapterConformanceCases(options)` returns the named cases to run yourself.
 
 Telemetry export is optional. With `@ratel-ai/telemetry-otlp` installed, `configureTelemetry()` reads `RATEL_URL` and `RATEL_API_KEY`, wires the exporter, and returns a shutdown handle. See the [telemetry guide](https://docs.ratel.sh/docs/telemetry).
 

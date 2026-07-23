@@ -155,6 +155,8 @@ src/
 ├── core/              # ratel-ai-core — Rust retrieval engine
 ├── sdk/ts/            # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
 ├── sdk/python/        # ratel-ai — Python SDK (PyO3-bound)
+├── adapters/ts-vercel-ai-sdk/ # @ratel-ai/vercel-ai-sdk — Vercel AI SDK adapter
+├── adapters/ts-mastra/ # @ratel-ai/mastra — Mastra adapter
 └── telemetry/         # OTel conventions + helper packages
 protocol/              # catalog-source wire contract
 examples/              # End-to-end SDK examples

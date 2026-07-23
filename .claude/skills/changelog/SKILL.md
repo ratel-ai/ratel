@@ -7,8 +7,10 @@ description: Update per-package CHANGELOG.md files for a Ratel release. Drafts e
 
 Updates a release unit's `CHANGELOG.md` in preparation for tagging it. Ratel releases
 **per unit** (ADR-0008): each unit ships on its own tag (`<prefix>-v*`) at its own version.
-The CI gate in `.github/workflows/release.yml` rejects any tag whose unit CHANGELOG doesn't
-contain the version being released, so this skill must run before `git tag`.
+For workflow-wired units, `.github/workflows/release.yml` rejects a tag whose unit CHANGELOG
+doesn't contain the version being released. `vercel-ai-sdk` is temporarily published
+manually via `scripts/publish-rc.sh`; still run this skill before its tag even though the
+workflow gate does not cover it yet.
 
 Run it **once per unit** you're releasing.
 
@@ -16,7 +18,7 @@ Run it **once per unit** you're releasing.
 
 The units and their manifests/CHANGELOGs live in one registry —
 `scripts/release-units.mjs` — which every release tool reads. Run `node scripts/release-units.mjs --list`
-for the authoritative set; the current units are:
+for the authoritative set; the current eight units are:
 
 | Unit | Registry | CHANGELOG path |
 |---|---|---|
@@ -27,6 +29,7 @@ for the authoritative set; the current units are:
 | `telemetry-ts` | `@ratel-ai/telemetry` (npm) | `src/telemetry/ts/CHANGELOG.md` |
 | `telemetry-py` | `ratel-ai-telemetry` (PyPI) | `src/telemetry/python/CHANGELOG.md` |
 | `telemetry-ts-otlp` | `@ratel-ai/telemetry-otlp` (npm) | `src/telemetry/ts-otlp/CHANGELOG.md` |
+| `vercel-ai-sdk` | `@ratel-ai/vercel-ai-sdk` (npm) | `src/adapters/ts-vercel-ai-sdk/CHANGELOG.md` |
 
 `@ratel-ai/mcp-server` lives in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) and maintains its own CHANGELOG there.
 
@@ -120,8 +123,10 @@ Tell the user:
 
 - The CHANGELOG is staged in the working tree (unstaged).
 - Next step is the release commit + `<unit>-v<version>` tag + push.
-- The `release.yml` `tag-version-check` job verifies the unit's CHANGELOG contains the tag
-  version; if it doesn't, the release is blocked.
+- For workflow-wired units, the `release.yml` `tag-version-check` job verifies the unit's
+  CHANGELOG contains the tag version; if it doesn't, the release is blocked.
+- For `vercel-ai-sdk`, publish manually with `scripts/publish-rc.sh` after the tag push; its
+  CHANGELOG is not workflow-gated yet.
 
 ## Conventions
 

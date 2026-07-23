@@ -35,8 +35,11 @@ the only loader.
   compared across the two text shapes. A matched skill also contributes its declared `tools`
   to the tools bucket, so the agent gets a playbook and its toolkit in one turn.
 - **`invoke_tool(toolId, args)`** runs a tool.
-- **`get_skill_content(skillId)`** returns `{ body }`; registered only when the skill catalog
-  is non-empty.
+- **`get_skill_content(skillId)`** returns `{ body }`. The `ratel()` factory's `modelTools()` always
+  advertises it so the exposed set never depends on registration order
+  ([ADR-0013](0013-framework-adapter-spi.md)); loading from an empty catalog returns a structured
+  error, not a missing tool. The piecemeal builders keep a size-gated default (pinnable via
+  `advertiseSkills`).
 
 The agent must search to find a load-bearing tool, so bundling skills into that same response
 means the tool's necessity carries the skill: more reliable than a separate, skippable

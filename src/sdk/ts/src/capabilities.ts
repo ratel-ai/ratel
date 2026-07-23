@@ -1,4 +1,10 @@
-import type { ExecutableTool, ToolCatalog } from "./catalog.js";
+import { isAsyncIterable, isPromiseLike } from "./async.js";
+import type {
+  ExecutableTool,
+  InputValidationResult,
+  SearchOrigin,
+  ToolCatalog,
+} from "./catalog.js";
 import { compactDescription } from "./compact.js";
 import type { SkillCatalog } from "./skill-catalog.js";
 import { recordAuthNeeded, upstreamFromToolId } from "./telemetry.js";
@@ -14,26 +20,28 @@ export const SEARCH_CAPABILITIES_ID = "search_capabilities" as const;
  */
 export const INVOKE_TOOL_ID = "invoke_tool" as const;
 
-const DEFAULT_TOP_K_TOOLS = 5;
+/** Default `tools` bucket size, and the fallback for an invalid host `search` top-K. */
+export const DEFAULT_TOP_K_TOOLS = 5;
 const DEFAULT_TOP_K_SKILLS = 3;
 const MAX_TOP_K = 50;
 
 /**
  * Clamp a model-supplied top-K to a positive integer in [1, MAX_TOP_K], falling
  * back to `fallback` for anything else (undefined, 0, negative, non-integer,
- * NaN). Tools and skills — and the TS and Python SDKs — run the same input
+ * NaN). Tools and skills — the capability funnel, the host-driven
+ * {@link ToolCollection.search}, and the TS and Python SDKs — run the same input
  * through this, so a stray `topK` can't silently return zero results (or, via a
  * negative wrapping to u32 in the native layer, an unbounded set).
  */
-function clampTopK(value: unknown, fallback: number): number {
+export function clampTopK(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
   return Math.min(value, MAX_TOP_K);
 }
 
-// The discovery prompt the model sees. The skills clause is only included when a
-// non-empty skill catalog is wired in — otherwise the tool would advertise a
-// `skills` bucket and `get_skill_content` that don't exist (the result would
-// always be `skills: []`).
+// The discovery prompt the model sees. By default the skills clause is only
+// included when a non-empty skill catalog is wired in — otherwise the tool would
+// advertise a `skills` bucket and `get_skill_content` that don't exist. Hosts
+// that always expose `get_skill_content` pin the clause via `advertiseSkills`.
 const SEARCH_INTRO =
   "Discover capabilities beyond the ones already in your direct tool list. Call this BEFORE refusing " +
   "a request, falling back to a generic capability (web fetch, shell, built-in search), or improvising " +
@@ -72,6 +80,13 @@ export interface UpstreamServerInfo {
 export interface SearchCapabilitiesOptions {
   /** Upstream MCP servers to advertise in the tool description and result groups. */
   upstreamServers?: readonly UpstreamServerInfo[];
+  /**
+   * Override the skills clause in the tool description. Default: present only
+   * when the skill catalog is non-empty at build time. Hosts that always expose
+   * `get_skill_content` (the `ratel()` facade) pass `true` so the description is
+   * byte-identical regardless of when the first skill registers.
+   */
+  advertiseSkills?: boolean;
 }
 
 /** One ranked tool in the `tools` bucket of {@link SearchCapabilitiesResult}. */
@@ -172,9 +187,11 @@ function buildSearchDescription(hasSkills: boolean, opts?: SearchCapabilitiesOpt
  * back to the default) and resolves to a {@link SearchCapabilitiesResult}. A
  * matched skill's declared tool dependencies are pulled into the `tools`
  * bucket additively — score `0`, beyond the `topKTools` budget, deduped
- * against query hits. The `skills` bucket (and its mention in the tool
- * description) exists only when `skillCatalog` is non-empty at build time.
- * Each call records a `gateway_search` event on the local trace stream.
+ * against query hits. The skills clause of the tool description appears when
+ * `skillCatalog` is non-empty at build time (override with
+ * {@link SearchCapabilitiesOptions.advertiseSkills}); the result's `skills`
+ * bucket always ranks the live catalog. Each call records a `gateway_search`
+ * event on the local trace stream.
  *
  * @param toolCatalog - Catalog the `tools` bucket is ranked from.
  * @param skillCatalog - Optional catalog the `skills` bucket is ranked from.
@@ -200,8 +217,8 @@ export function searchCapabilitiesTool(
   opts?: SearchCapabilitiesOptions,
 ): ExecutableTool {
   const upstreams = opts?.upstreamServers ?? [];
-  const upstreamByName = new Map(upstreams.map((u) => [u.name, u]));
-  const hasSkills = skillCatalog !== undefined && skillCatalog.size() > 0;
+  const hasSkills =
+    opts?.advertiseSkills ?? (skillCatalog !== undefined && skillCatalog.size() > 0);
   return {
     id: SEARCH_CAPABILITIES_ID,
     name: SEARCH_CAPABILITIES_ID,
@@ -279,85 +296,134 @@ export function searchCapabilitiesTool(
         topKTools?: number;
         topKSkills?: number;
       };
-      const kTools = clampTopK(topKTools, DEFAULT_TOP_K_TOOLS);
-      const kSkills = clampTopK(topKSkills, DEFAULT_TOP_K_SKILLS);
-      const startedAt = Date.now();
-
-      const toolHits = await toolCatalog.searchAsync(query, kTools, "agent");
-      toolCatalog.recordEvent({
-        type: "gateway_search",
-        query,
+      return runCapabilitiesSearch(toolCatalog, query, {
+        topKTools,
+        topKSkills,
+        skillCatalog,
         origin: "agent",
-        top_k: kTools,
-        hits: toolHits.length,
-        took_ms: Date.now() - startedAt,
+        upstreamServers: upstreams,
       });
-
-      const order: string[] = [];
-      const groups = new Map<string, CapabilityToolGroup>();
-      const seenTools = new Set<string>();
-      // Add a tool to its server group, deduped. `score` is the BM25 query score
-      // for a real match, or 0 for a skill-declared dependency (it rode in on the
-      // skill, it was never matched by the query).
-      const addTool = (toolId: string, score: number): void => {
-        if (seenTools.has(toolId)) return;
-        const tool = toolCatalog.get(toolId);
-        if (!tool) return; // a declared id the catalog doesn't have: skip
-        seenTools.add(toolId);
-        const sep = toolId.indexOf("__");
-        const serverName = sep > 0 ? toolId.slice(0, sep) : toolId;
-        let group = groups.get(serverName);
-        if (!group) {
-          const meta = upstreamByName.get(serverName);
-          group = {
-            server: {
-              name: serverName,
-              ...(meta?.description ? { description: meta.description } : {}),
-              ...(meta?.instructions ? { instructions: meta.instructions } : {}),
-            },
-            hits: [],
-          };
-          groups.set(serverName, group);
-          order.push(serverName);
-        }
-        group.hits.push({
-          toolId,
-          score,
-          description: tool.description ?? "",
-          inputSchema: (tool.inputSchema ?? {}) as Record<string, unknown>,
-        });
-      };
-      for (const h of toolHits) addTool(h.toolId, h.score);
-
-      // Skills are ranked in their own bucket against the same query (reserved
-      // budget → never starved by tools). SkillCatalog.search emits its own
-      // skill_search trace for the funnel.
-      const skills: CapabilitySkillHit[] = skillCatalog
-        ? (await skillCatalog.searchAsync(query, kSkills, "agent")).map((h) => ({
-            skillId: h.skillId,
-            score: h.score,
-            description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),
-          }))
-        : [];
-
-      // A matched skill's instructions name the tools they call. Pull those into
-      // the tools bucket so the agent gets the playbook and its toolkit in one
-      // turn — additively (score 0), beyond topKTools, deduped against query hits.
-      if (skillCatalog) {
-        for (const s of skills) {
-          for (const toolId of skillCatalog.get(s.skillId)?.tools ?? []) {
-            addTool(toolId, 0);
-          }
-        }
-      }
-
-      const result: SearchCapabilitiesResult = {
-        // biome-ignore lint/style/noNonNullAssertion: order entries are guaranteed by construction
-        tools: { groups: order.map((n) => groups.get(n)!) },
-        skills,
-      };
-      return result;
     },
+  };
+}
+
+/** Options for {@link runCapabilitiesSearch}. */
+export interface CapabilitiesSearchOptions {
+  /** Max tools bucket size; capped at 50, default 5 (same as the tool); 0, negative, or non-integer values fall back to the default. */
+  topKTools?: number;
+  /** Max skills bucket size; capped at 50, default 3; invalid values fall back to the default. */
+  topKSkills?: number;
+  /** Catalog the `skills` bucket is ranked from (and whose declared tool deps ride in). */
+  skillCatalog?: SkillCatalog;
+  /**
+   * Who initiated the search — stamped on the `gateway_search` trace event and
+   * the `ratel.search` span. Default `"agent"` (a model-synthesized call); the
+   * host-driven recall path passes `"direct"`.
+   */
+  origin?: SearchOrigin;
+  /** Upstream-server metadata attached to the matching result groups. */
+  upstreamServers?: readonly UpstreamServerInfo[];
+}
+
+/**
+ * Rank a query into the `search_capabilities` result shape — the single source
+ * of truth for that shape, shared by {@link searchCapabilitiesTool} (agent
+ * origin) and both `ratel()` recall paths, standalone core and adapted views
+ * (direct origin), so they can never drift. Ranks the `tools` bucket (grouped by
+ * upstream server, a matched skill's declared tool deps pulled in additively at
+ * score `0`, deduped) and the independently-budgeted `skills` bucket, caps both
+ * top-Ks at 50 (invalid values fall back to their defaults), and records one
+ * `gateway_search` event with the given `origin`.
+ *
+ * @param toolCatalog - Catalog the `tools` bucket is ranked from.
+ * @param query - Natural-language description of what the caller wants to do.
+ * @param opts - Bucket sizes, skill catalog, origin, and upstream metadata.
+ * @returns A promise for the {@link SearchCapabilitiesResult}.
+ */
+export async function runCapabilitiesSearch(
+  toolCatalog: ToolCatalog,
+  query: string,
+  opts: CapabilitiesSearchOptions = {},
+): Promise<SearchCapabilitiesResult> {
+  const kTools = clampTopK(opts.topKTools, DEFAULT_TOP_K_TOOLS);
+  const kSkills = clampTopK(opts.topKSkills, DEFAULT_TOP_K_SKILLS);
+  const origin = opts.origin ?? "agent";
+  const upstreamByName = new Map((opts.upstreamServers ?? []).map((u) => [u.name, u]));
+  const skillCatalog = opts.skillCatalog;
+  const startedAt = Date.now();
+
+  const toolHits = await toolCatalog.searchAsync(query, kTools, origin);
+  toolCatalog.recordEvent({
+    type: "gateway_search",
+    query,
+    origin,
+    top_k: kTools,
+    hits: toolHits.length,
+    took_ms: Date.now() - startedAt,
+  });
+
+  const order: string[] = [];
+  const groups = new Map<string, CapabilityToolGroup>();
+  const seenTools = new Set<string>();
+  // Add a tool to its server group, deduped. `score` is the BM25 query score
+  // for a real match, or 0 for a skill-declared dependency (it rode in on the
+  // skill, it was never matched by the query).
+  const addTool = (toolId: string, score: number): void => {
+    if (seenTools.has(toolId)) return;
+    const tool = toolCatalog.get(toolId);
+    if (!tool) return; // a declared id the catalog doesn't have: skip
+    seenTools.add(toolId);
+    const sep = toolId.indexOf("__");
+    const serverName = sep > 0 ? toolId.slice(0, sep) : toolId;
+    let group = groups.get(serverName);
+    if (!group) {
+      const meta = upstreamByName.get(serverName);
+      group = {
+        server: {
+          name: serverName,
+          ...(meta?.description ? { description: meta.description } : {}),
+          ...(meta?.instructions ? { instructions: meta.instructions } : {}),
+        },
+        hits: [],
+      };
+      groups.set(serverName, group);
+      order.push(serverName);
+    }
+    group.hits.push({
+      toolId,
+      score,
+      description: tool.description ?? "",
+      inputSchema: (tool.inputSchema ?? {}) as Record<string, unknown>,
+    });
+  };
+  for (const h of toolHits) addTool(h.toolId, h.score);
+
+  // Skills are ranked in their own bucket against the same query (reserved
+  // budget → never starved by tools). SkillCatalog.search emits its own
+  // skill_search trace for the funnel.
+  const skills: CapabilitySkillHit[] = skillCatalog
+    ? (await skillCatalog.searchAsync(query, kSkills, origin)).map((h) => ({
+        skillId: h.skillId,
+        score: h.score,
+        description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),
+      }))
+    : [];
+
+  // A matched skill's instructions name the tools they call. Pull those into
+  // the tools bucket so the agent gets the playbook and its toolkit in one
+  // turn — additively (score 0), beyond topKTools, deduped against query hits.
+  if (skillCatalog) {
+    for (const s of skills) {
+      for (const toolId of skillCatalog.get(s.skillId)?.tools ?? []) {
+        addTool(toolId, 0);
+      }
+    }
+  }
+
+  return {
+    // biome-ignore lint/style/noNonNullAssertion: order entries are guaranteed by construction
+    tools: { groups: order.map((n) => groups.get(n)!) },
+    skills,
   };
 }
 
@@ -367,20 +433,50 @@ export interface InvokeToolToolOptions {
   onUnauthorized?: (upstream: string) => void | Promise<void>;
 }
 
+/** Non-enumerable cause carried by a structured error from a target executor. */
+export const INVOKE_TOOL_ERROR_CAUSE: unique symbol = Symbol.for(
+  "@ratel-ai/sdk.invoke-tool-error-cause",
+) as never;
+
+/** A generic `invoke_tool` error whose original target failure is available to framework adapters. */
+export interface InvokeToolError {
+  /** Human-readable failure passed to the model. */
+  error: string;
+  /** Stable discriminator used by generic capability hosts. */
+  isError: true;
+  /** Original thrown value, hidden from enumeration and serialization. */
+  readonly [INVOKE_TOOL_ERROR_CAUSE]: unknown;
+}
+
+/** Whether `value` is a structured error produced from a target executor failure. */
+export function isInvokeToolError(value: unknown): value is InvokeToolError {
+  return (
+    value !== null && typeof value === "object" && Object.hasOwn(value, INVOKE_TOOL_ERROR_CAUSE)
+  );
+}
+
 /**
  * Build the `invoke_tool` capability tool: the execution counterpart to
- * {@link searchCapabilitiesTool}. Takes `{ toolId, args }` and runs the
- * catalog tool via {@link ToolCatalog.invoke}, returning its result.
+ * {@link searchCapabilitiesTool}. Takes `{ toolId, args }`, delegates input
+ * parsing to the selected catalog tool's live validator, then runs the
+ * prevalidated input through {@link ToolCatalog.invokeValidatedRaw}. That
+ * preserves a target `AsyncIterable` so framework adapters can expose
+ * preliminary outputs even when validation itself was asynchronous.
  *
  * Failures come back as structured `{ error, isError: true }` results, not
  * rejections, so the model can read and recover from them: an unknown
  * `toolId` (with a hint to search first), a non-object `args`, or a thrown
- * executor error. A tool that throws `UnauthorizedError` gets special
+ * executor error. Target executor errors also carry their original thrown
+ * value under the non-enumerable {@link INVOKE_TOOL_ERROR_CAUSE} marker so an
+ * adapter can restore its framework's native error lifecycle. A tool that
+ * throws `UnauthorizedError` gets special
  * handling — `opts.onUnauthorized` fires with the upstream name inferred from
  * the `<server>__` id prefix, a `ratel.auth.flow` span records the outcome,
  * and the result is `{ error: "needs_auth", isError: true, upstream?, hint }`.
  * A call with `args` missing (or `null`) is tolerated by treating the
- * remaining top-level keys as the arguments. Outcomes are recorded as
+ * remaining top-level keys as the arguments. The capability executor's optional
+ * opaque context is forwarded unchanged to the selected catalog executor; the
+ * core never reads or records it. Outcomes are recorded as
  * `gateway_invoke` / `gateway_error` events on the local trace stream.
  *
  * @param catalog - Catalog whose tools this executes.
@@ -391,6 +487,7 @@ export function invokeToolTool(
   catalog: ToolCatalog,
   opts: InvokeToolToolOptions = {},
 ): ExecutableTool {
+  const prevalidatedInputs = new WeakSet<object>();
   return {
     id: INVOKE_TOOL_ID,
     name: INVOKE_TOOL_ID,
@@ -416,7 +513,8 @@ export function invokeToolTool(
       required: ["toolId", "args"],
     },
     outputSchema: { type: "object" },
-    execute: async (input) => {
+    validateInput: (input) => validateInvokeInput(catalog, input, prevalidatedInputs),
+    execute: (input, context) => {
       const inputObj = input as Record<string, unknown>;
       const toolId = inputObj.toolId as string;
       if (!catalog.has(toolId)) {
@@ -430,9 +528,12 @@ export function invokeToolTool(
           isError: true,
         };
       }
+      const prevalidated = prevalidatedInputs.delete(inputObj);
       const nested = inputObj.args;
-      let args: Record<string, unknown>;
-      if (nested === undefined || nested === null) {
+      let args: unknown;
+      if (prevalidated) {
+        args = nested;
+      } else if (nested === undefined || nested === null) {
         // No `args` given — tolerate a flattened call by treating the remaining
         // top-level keys as the arguments. Drop `args` too, so an explicit
         // `args: null` can't forward a stray `args` key to the tool.
@@ -451,42 +552,152 @@ export function invokeToolTool(
       }
       const startedAt = Date.now();
       try {
-        const result = await catalog.invoke(toolId, args);
-        catalog.recordEvent({
-          type: "gateway_invoke",
-          tool_id: toolId,
-          took_ms: Date.now() - startedAt,
-        });
-        return result;
+        return observeGatewayResult(
+          prevalidated
+            ? catalog.invokeValidatedRaw(toolId, args, context)
+            : catalog.invokeRaw(toolId, args as Record<string, unknown>, context),
+          () => {
+            catalog.recordEvent({
+              type: "gateway_invoke",
+              tool_id: toolId,
+              took_ms: Date.now() - startedAt,
+            });
+          },
+          (error) => handleInvokeError(error, toolId, startedAt, catalog, opts),
+        );
       } catch (err) {
-        if (isUnauthorizedError(err)) {
-          const upstream = upstreamFromToolId(toolId);
-          if (upstream && opts.onUnauthorized) {
-            await opts.onUnauthorized(upstream);
-          }
-          recordAuthNeeded(upstream);
-          catalog.recordEvent({
-            type: "gateway_error",
-            tool_id: toolId,
-            error: "needs_auth",
-          });
-          const payload: { error: string; isError: true; upstream?: string; hint: string } = {
-            error: "needs_auth",
-            isError: true,
-            hint: `call the auth tool to re-authorize${upstream ? ` ${upstream}` : ""}`,
-          };
-          if (upstream) payload.upstream = upstream;
-          return payload;
-        }
-        catalog.recordEvent({
-          type: "gateway_error",
-          tool_id: toolId,
-          error: (err as Error).message ?? String(err),
-        });
-        return { error: `tool ${toolId} threw: ${(err as Error).message}`, isError: true };
+        return handleInvokeError(err, toolId, startedAt, catalog, opts);
       }
     },
   };
+}
+
+function validateInvokeInput(
+  catalog: ToolCatalog,
+  input: unknown,
+  prevalidatedInputs: WeakSet<object>,
+): InputValidationResult | PromiseLike<InputValidationResult> {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return { success: true, value: input };
+  }
+  const inputObj = input as Record<string, unknown>;
+  if (typeof inputObj.toolId !== "string") return { success: true, value: input };
+
+  const nested = inputObj.args;
+  let args: Record<string, unknown>;
+  if (nested === undefined || nested === null) {
+    args = Object.fromEntries(
+      Object.entries(inputObj).filter(([key]) => key !== "toolId" && key !== "args"),
+    );
+  } else if (typeof nested === "object" && !Array.isArray(nested)) {
+    args = nested as Record<string, unknown>;
+  } else {
+    return { success: true, value: input };
+  }
+
+  return mapValidationValue(catalog.validateInput(inputObj.toolId, args), (validated) => {
+    const transformed = { ...inputObj, args: validated };
+    prevalidatedInputs.add(transformed);
+    return transformed;
+  });
+}
+
+/** Map the success value of a (possibly async) validation result; a failure passes through unchanged. */
+function mapValidationValue(
+  result: InputValidationResult | PromiseLike<InputValidationResult>,
+  onSuccess: (value: unknown) => unknown,
+): InputValidationResult | PromiseLike<InputValidationResult> {
+  const settle = (validated: InputValidationResult): InputValidationResult =>
+    validated.success ? { success: true, value: onSuccess(validated.value) } : validated;
+  return isPromiseLike(result) ? Promise.resolve(result).then(settle) : settle(result);
+}
+
+function observeGatewayResult(
+  result: unknown,
+  onSuccess: () => void,
+  onError: (error: unknown) => unknown,
+): unknown {
+  if (isAsyncIterable(result)) {
+    return observeGatewayIterable(result, onSuccess, onError);
+  }
+  if (isPromiseLike(result)) {
+    return Promise.resolve(result).then(
+      (value) => {
+        onSuccess();
+        return value;
+      },
+      (error) => onError(error),
+    );
+  }
+  onSuccess();
+  return result;
+}
+
+async function* observeGatewayIterable(
+  iterable: AsyncIterable<unknown>,
+  onSuccess: () => void,
+  onError: (error: unknown) => unknown,
+): AsyncGenerator<unknown> {
+  let failed = false;
+  try {
+    for await (const value of iterable) yield value;
+  } catch (error) {
+    failed = true;
+    yield await onError(error);
+  } finally {
+    if (!failed) onSuccess();
+  }
+}
+
+function handleInvokeError(
+  error: unknown,
+  toolId: string,
+  startedAt: number,
+  catalog: ToolCatalog,
+  opts: InvokeToolToolOptions,
+): unknown {
+  if (isUnauthorizedError(error)) {
+    const upstream = upstreamFromToolId(toolId);
+    const finish = () => {
+      recordAuthNeeded(upstream);
+      catalog.recordEvent({
+        type: "gateway_error",
+        tool_id: toolId,
+        error: "needs_auth",
+      });
+      const payload: { error: string; isError: true; upstream?: string; hint: string } = {
+        error: "needs_auth",
+        isError: true,
+        hint: `call the auth tool to re-authorize${upstream ? ` ${upstream}` : ""}`,
+      };
+      if (upstream) payload.upstream = upstream;
+      return payload;
+    };
+    if (upstream && opts.onUnauthorized) {
+      return Promise.resolve(opts.onUnauthorized(upstream)).then(finish);
+    }
+    return finish();
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  catalog.recordEvent({
+    type: "gateway_error",
+    tool_id: toolId,
+    error: message,
+    took_ms: Date.now() - startedAt,
+  });
+  return brandedInvokeError(`tool ${toolId} threw: ${message}`, error);
+}
+
+function brandedInvokeError(message: string, cause: unknown): InvokeToolError {
+  const payload = { error: message, isError: true as const } as InvokeToolError;
+  Object.defineProperty(payload, INVOKE_TOOL_ERROR_CAUSE, {
+    value: cause,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return payload;
 }
 
 function isUnauthorizedError(err: unknown): boolean {

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Manual per-unit publish helper for first-publish-of-a-new-package situations
-# (Trusted Publishers can't be configured for a package that doesn't exist yet).
+# Manual per-unit publish helper for package bootstrap (Trusted Publishers can't
+# bind before a package exists) and temporarily manual release units.
 #
 # After Trusted Publishers are configured, use the release.yml workflow instead —
-# it publishes via OIDC with provenance and no stored tokens.
+# it publishes via OIDC with provenance and no stored tokens. `vercel-ai-sdk`
+# remains on this helper for every release until its workflow/OIDC wiring lands.
 #
 # Release units (ADR-0008), each publishable independently:
 #   core           -> ratel-ai-core on crates.io          (cargo publish)
@@ -13,6 +14,8 @@
 #   telemetry-ts   -> @ratel-ai/telemetry on npm           (npm publish, built locally)
 #   telemetry-py   -> ratel-ai-telemetry on PyPI           (twine upload, built locally)
 #   telemetry-ts-otlp -> @ratel-ai/telemetry-otlp on npm      (npm publish, pnpm-packed locally)
+#   vercel-ai-sdk  -> @ratel-ai/vercel-ai-sdk on npm       (npm publish, pnpm-packed locally)
+#   mastra -> @ratel-ai/mastra on npm      (npm publish, pnpm-packed locally)
 # Each unit's version is read from its own manifest via scripts/release-units.mjs
 # (the single source of truth) — units are NOT assumed to share a version.
 #
@@ -24,11 +27,14 @@
 #   scripts/publish-rc.sh --unit sdk-py --from-dir <path>   [--dry-run]
 #   scripts/publish-rc.sh --unit core                       [--dry-run]
 #   scripts/publish-rc.sh --unit telemetry-ts               [--dry-run]
+#   scripts/publish-rc.sh --unit vercel-ai-sdk [--tag rc|latest] [--dry-run]
 #   scripts/publish-rc.sh --from-dir <path>                 # all units
 #
 # Options:
 #   --unit <id>        core | sdk-ts | sdk-py | telemetry-core | telemetry-ts |
-#                      telemetry-py | telemetry-ts-otlp. Repeatable. Default: all.
+#                      telemetry-py | telemetry-ts-otlp | vercel-ai-sdk |
+#                      mastra.
+#                      Repeatable. Default: all.
 #   --from-run <id>    Download all artifacts from the given GH Actions run
 #                      (requires `gh auth login`); tarballs/wheels are found within.
 #   --from-dir <path>  Use a directory already holding the tarballs/wheels.
@@ -56,7 +62,7 @@ while [[ $# -gt 0 ]]; do
     --from-dir) FROM_DIR="$2"; shift 2 ;;
     --tag)      TAG="$2"; shift 2 ;;
     --dry-run)  DRY_RUN=1; shift ;;
-    -h|--help)  sed -n '2,36p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,44p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -296,6 +302,36 @@ publish_telemetry_ts_otlp() {
   echo "==> telemetry-ts-otlp publish complete"; echo
 }
 
+# ---------- vercel-ai-sdk: @ratel-ai/vercel-ai-sdk on npm, packed locally ----------
+# The Vercel AI SDK framework adapter. Pure-TS like telemetry-ts-otlp, with a
+# workspace:^ dep on @ratel-ai/sdk. `pnpm pack` rewrites that dep to a real version
+# range in the tarball, so a plain `npm publish <tarball>` (bootstrap: no OIDC, no
+# provenance) ships a valid manifest.
+publish_vercel_ai_sdk() {
+  local version; version="$(resolve_version vercel-ai-sdk)"
+  echo "===== vercel-ai-sdk @ $version (npm) ====="
+  echo "----- @ratel-ai/vercel-ai-sdk@$version (npm) -----"
+  local status
+  status="$(curl -sS -o /dev/null -w '%{http_code}' \
+    "https://registry.npmjs.org/@ratel-ai%2Fvercel-ai-sdk/${version}" || echo 000)"
+  if [[ "$status" == "200" ]]; then
+    echo "    already published, skipping npm"; echo; return 0
+  fi
+  if [[ $DRY_RUN -eq 0 ]] && ! npm whoami >/dev/null 2>&1; then
+    echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
+  fi
+  # Build the adapter + its @ratel-ai/sdk workspace dependency (topo order).
+  ( cd "$REPO_ROOT" && pnpm --filter "@ratel-ai/vercel-ai-sdk..." run build )
+  local tgz
+  tgz="$( cd "$REPO_ROOT/src/adapters/ts-vercel-ai-sdk" && pnpm pack --pack-destination "$(mktemp -d)" | tail -1 )"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] npm publish $tgz --access public --tag $TAG --provenance=false"
+  else
+    publish_one_npm "$tgz" || exit 1
+  fi
+  echo "==> vercel-ai-sdk publish complete"; echo
+}
+
 # ---------- telemetry-core: ratel-ai-telemetry on crates.io ----------
 publish_telemetry_core() {
   local version; version="$(resolve_version telemetry-core)"
@@ -322,6 +358,36 @@ publish_telemetry_core() {
   echo "==> telemetry-core publish complete"; echo
 }
 
+# ---------- mastra: @ratel-ai/mastra on npm, packed locally ----------
+# Pure-language framework adapter with a `workspace:^` peer on @ratel-ai/sdk.
+# `pnpm pack` rewrites that specifier to the concrete co-installed version in the
+# tarball, so a plain `npm publish <tarball>` (bootstrap: no OIDC, no provenance)
+# ships a valid manifest — same shape as telemetry-ts-otlp.
+publish_mastra() {
+  local version; version="$(resolve_version mastra)"
+  echo "===== mastra @ $version (npm) ====="
+  echo "----- @ratel-ai/mastra@$version (npm) -----"
+  local status
+  status="$(curl -sS -o /dev/null -w '%{http_code}' \
+    "https://registry.npmjs.org/@ratel-ai%2Fmastra/${version}" || echo 000)"
+  if [[ "$status" == "200" ]]; then
+    echo "    already published, skipping npm"; echo; return 0
+  fi
+  if [[ $DRY_RUN -eq 0 ]] && ! npm whoami >/dev/null 2>&1; then
+    echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
+  fi
+  # Build the adapter and its @ratel-ai/sdk workspace dependency (topo order).
+  ( cd "$REPO_ROOT" && pnpm --filter "@ratel-ai/mastra..." run build )
+  local tgz
+  tgz="$( cd "$REPO_ROOT/src/adapters/ts-mastra" && pnpm pack --pack-destination "$(mktemp -d)" | tail -1 )"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] npm publish $tgz --access public --tag $TAG --provenance=false"
+  else
+    publish_one_npm "$tgz" || exit 1
+  fi
+  echo "==> mastra publish complete"; echo
+}
+
 # Publish in a stable order regardless of --unit argument order.
 selected core           && publish_core
 selected sdk-ts         && publish_sdk_ts
@@ -330,6 +396,8 @@ selected telemetry-core && publish_telemetry_core
 selected telemetry-ts   && publish_telemetry_ts
 selected telemetry-ts-otlp && publish_telemetry_ts_otlp
 selected telemetry-py   && publish_telemetry_py
+selected vercel-ai-sdk  && publish_vercel_ai_sdk
+selected mastra && publish_mastra
 
 echo "==> done"
 echo
