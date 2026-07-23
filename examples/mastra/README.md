@@ -12,9 +12,9 @@ pnpm -F @ratel-ai/example-mastra start
 pnpm -F @ratel-ai/example-mastra start "send an email to alice@example.com saying ship it"
 ```
 
-Without a model API key the script runs in diagnostic mode — it prints Ratel's initial BM25 ranking for the prompt and exits before any model call.
+Diagnostic mode: with neither `OPENAI_API_KEY` nor `ANTHROPIC_API_KEY` set, the script prints Ratel's initial BM25 ranking for the prompt and exits before any model call.
 
-The model is a [Mastra model-router](https://mastra.ai/en/docs/getting-started/model-providers) id (default `openai/gpt-4o-mini`), so there is no provider SDK dependency — the router resolves the key from the environment. Override with `MASTRA_MODEL=anthropic/claude-haiku-4-5` (and set the matching key).
+The model is a [Mastra model-router](https://mastra.ai/en/docs/getting-started/model-providers) id (default `openai/gpt-4o-mini`), so there is no provider SDK dependency — the router resolves the key from the environment. Set `OPENAI_API_KEY` to run the default model, or `MASTRA_MODEL=anthropic/claude-haiku-4-5` with `ANTHROPIC_API_KEY`. The auto-run gate checks only those two keys, so a different provider key alone still lands in diagnostic mode.
 
 ## Layout
 

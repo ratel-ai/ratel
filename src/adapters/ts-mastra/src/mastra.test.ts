@@ -10,6 +10,10 @@ import {
 } from "@ratel-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+// A genuine zod 3 schema (the dev dep pins zod 4, which ships the v3 API under
+// its `zod/v3` export). The peer range allows zod 3, and Mastra routes v3 through
+// a different converter than v4, so the v3 ingest path needs its own coverage.
+import { z as z3 } from "zod/v3";
 import { mastra } from "./mastra.js";
 
 // A JSON Schema whose `properties` we read positionally in assertions.
@@ -90,6 +94,20 @@ describe("ingest codec", () => {
     // The `$schema` dialect marker is stripped; absent output schema stays absent.
     expect((reg.inputSchema as Record<string, unknown>).$schema).toBeUndefined();
     expect(reg.outputSchema).toBeUndefined();
+  });
+
+  it("ingests a tool built with a zod 3 schema (the peer's other converter)", () => {
+    const weather = createTool({
+      id: "weather",
+      description: "Get the weather in a location",
+      inputSchema: z3.object({ location: z3.string() }),
+      execute: async ({ location }) => ({ location, tempF: 70 }),
+    });
+    const reg = mastra().ingest("weather", weather);
+    if (reg === "passthrough") throw new Error("expected an executable registration");
+    const input = reg.inputSchema as JsonObjectSchema;
+    expect(input.type).toBe("object");
+    expect(input.properties?.location.type).toBe("string");
   });
 
   it("extracts JSON schema from a tool built with a raw JSON Schema", () => {
