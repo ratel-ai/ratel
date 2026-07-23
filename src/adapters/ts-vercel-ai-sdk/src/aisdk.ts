@@ -5,7 +5,12 @@ import type {
   RecallRef,
   SearchCapabilitiesResult,
 } from "@ratel-ai/sdk";
-import { SEARCH_CAPABILITIES_ID } from "@ratel-ai/sdk";
+import {
+  INVOKE_TOOL_ERROR_CAUSE,
+  INVOKE_TOOL_ID,
+  isInvokeToolError,
+  SEARCH_CAPABILITIES_ID,
+} from "@ratel-ai/sdk";
 import { asSchema, jsonSchema, type ModelMessage, type Tool, tool } from "ai";
 
 type SchemaField = "inputSchema" | "outputSchema";
@@ -20,6 +25,16 @@ interface RecallRunState {
   callId: string;
   insertionIndex: number;
   pair: ModelMessage[];
+}
+
+interface NormalizedSchema {
+  readonly jsonSchema: unknown;
+  readonly validate?: (
+    value: unknown,
+  ) =>
+    | { success: true; value: unknown }
+    | { success: false; error: Error }
+    | PromiseLike<{ success: true; value: unknown } | { success: false; error: Error }>;
 }
 
 /**
@@ -74,20 +89,29 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
     ingest(id, t) {
       const execute = t.execute;
       const toolType = (t as { type?: string }).type;
-      // Two kinds of tool must stay eagerly exposed in native shape rather than
-      // being funneled through the catalog:
+      // Tools whose full semantics cannot be represented by the generic
+      // capability funnel stay eagerly exposed in native shape:
       //   - any provider-defined tool (`provider-defined` in ai@5, `provider` in
       //     ai@6/7) — the catalog can't carry its load-bearing type /
       //     `<provider>.<tool>` id / args and it has no rankable description, so
       //     it passes through even when it supplies its own client-side `execute`;
       //   - any tool with no `execute` (provider- or client-run) — not invocable
-      //     through the catalog at all.
-      if (toolType === "provider" || toolType === "provider-defined" || !execute) {
+      //     through the catalog at all;
+      //   - dynamic tools and function tools with AI SDK-only model metadata or
+      //     lifecycle hooks, which are keyed to the original tool name.
+      if (
+        toolType === "provider" ||
+        toolType === "provider-defined" ||
+        toolType === "dynamic" ||
+        !execute ||
+        requiresNativeLifecycle(t)
+      ) {
         return "passthrough";
       }
+      const inputSchema = asSchema(t.inputSchema as never) as NormalizedSchema;
       const registration: CatalogRegistration = {
         description: resolveDescription(t.description),
-        inputSchema: toJsonSchema(id, "inputSchema", t.inputSchema),
+        inputSchema: toJsonSchema(id, "inputSchema", inputSchema),
         // A model-facing capability call threads the live AI SDK options through
         // the catalog as an opaque, adapter-tagged value (set by `expose`). A
         // direct `catalog.invoke` — or a foreign adapter's context sharing the
@@ -98,6 +122,7 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
             aiSdkContext(invocationContext) ?? fabricatedOptions(id),
           ),
       };
+      if (inputSchema.validate) registration.validateInput = inputSchema.validate;
       // Leave a missing output schema absent — the core defaults it to
       // `{ type: "object" }`; the adapter never fabricates one.
       if (t.outputSchema) {
@@ -109,11 +134,17 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
     expose(t) {
       return tool({
         description: t.description,
-        inputSchema: jsonSchema(t.inputSchema as Record<string, unknown>),
+        inputSchema:
+          t.id === INVOKE_TOOL_ID
+            ? invokeToolSchema(t.inputSchema, t.validateInput)
+            : jsonSchema(t.inputSchema as Record<string, unknown>),
         // Carry the framework's complete live execution options through the
         // catalog as an opaque, adapter-tagged value (ADR-0013). The core never
         // reads it; only this adapter's ingest unwraps the tag.
-        execute: (args, options) => t.execute(args, { [AI_SDK_CONTEXT_KEY]: options }),
+        execute: (args, options) => {
+          const result = t.execute(args, { [AI_SDK_CONTEXT_KEY]: options });
+          return t.id === INVOKE_TOOL_ID ? rethrowTargetFailure(result) : result;
+        },
       });
     },
 
@@ -186,6 +217,44 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
   };
 }
 
+function rethrowTargetFailure(result: unknown): unknown {
+  if (isAsyncIterable(result)) return rethrowTargetFailureFromIterable(result);
+  if (isPromiseLike(result)) return Promise.resolve(result).then(throwIfTargetFailure);
+  return throwIfTargetFailure(result);
+}
+
+async function* rethrowTargetFailureFromIterable(
+  iterable: AsyncIterable<unknown>,
+): AsyncGenerator<unknown> {
+  for await (const value of iterable) yield throwIfTargetFailure(value);
+}
+
+function throwIfTargetFailure(value: unknown): unknown {
+  if (isInvokeToolError(value)) throw value[INVOKE_TOOL_ERROR_CAUSE];
+  return value;
+}
+
+function invokeToolSchema(
+  schema: JSONSchema7,
+  validateInput: NormalizedSchema["validate"],
+): ReturnType<typeof jsonSchema> {
+  return jsonSchema(schema as Record<string, unknown>, {
+    validate: (value) => {
+      if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return { success: false, error: new TypeError("invoke_tool input must be an object") };
+      }
+      const input = value as Record<string, unknown>;
+      if (typeof input.toolId !== "string") {
+        return {
+          success: false,
+          error: new TypeError("invoke_tool input must include a string toolId"),
+        };
+      }
+      return validateInput ? validateInput(value) : { success: true, value };
+    },
+  });
+}
+
 // Recover the live AI SDK options only from this adapter's own tag. A missing or
 // foreign tag yields undefined, so the ingested executor takes the fabricated
 // fallback — several framework views may share one catalog (ADR-0013).
@@ -240,6 +309,35 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     (typeof value === "object" || typeof value === "function") &&
     typeof (value as { then?: unknown }).then === "function"
   );
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === "function"
+  );
+}
+
+// The capability funnel can faithfully carry a plain function tool's schema and
+// executor. AI SDK-only model metadata and lifecycle hooks are keyed to the
+// original tool name, however, while the model calls the generic `invoke_tool`.
+// Keep those tools native instead of silently weakening their behavior.
+function requiresNativeLifecycle(t: Tool): boolean {
+  const toolWithLifecycle = t as Tool & Record<string, unknown>;
+  return [
+    "contextSchema",
+    "needsApproval",
+    "onInputStart",
+    "onInputDelta",
+    "onInputAvailable",
+    "toModelOutput",
+    "providerOptions",
+    "metadata",
+    "strict",
+    "inputExamples",
+    "title",
+  ].some((field) => toolWithLifecycle[field] !== undefined);
 }
 
 function recallCallId(messages: ModelMessage[]): string | undefined {

@@ -13,6 +13,7 @@ import {
 import {
   type EmbeddingSpec,
   type ExecutableTool,
+  type InputValidator,
   type SearchMethod,
   ToolCatalog,
   type TraceSinkConfig,
@@ -52,6 +53,12 @@ export interface CatalogRegistration {
   inputSchema: JSONSchema7;
   /** Output JSON Schema; defaults to `{ type: "object" }` when omitted. */
   outputSchema?: JSONSchema7;
+  /**
+   * Framework-native parser retained in the shared catalog. Capability-tool
+   * exposure delegates to this live parser, so every adapted view observes
+   * native replacements and root-level transformations.
+   */
+  validateInput?: InputValidator;
   /** Runs the tool through the capability funnel with args and optional opaque
    * adapter context. An adapter that supports live framework context tags it in
    * `expose` and validates that private tag here before unwrapping it; a missing
@@ -151,8 +158,8 @@ export interface ToolCollection {
 /**
  * An adapted view's handle over the same shared catalog, speaking the
  * framework's tool shape. Registration runs the adapter's `ingest` codec;
- * first registration of an id wins across every view of the core (and across
- * this view's passthroughs), so repeated calls are idempotent.
+ * first registration of an id wins across every view of the core, including
+ * ids claimed by framework-local passthroughs, so repeated calls are idempotent.
  *
  * `register`/`has` are framework-aware (`register` takes the framework's tool
  * shape; `has` also covers this view's passthroughs); `get`/`search`/`invoke`
@@ -328,6 +335,9 @@ export function ratel(config: RatelConfig = {}): Ratel {
     embedding: config.embedding,
     trace: config.trace,
   });
+  // Framework-shaped passthrough values stay in their originating views, but
+  // their ids must participate in the core-wide adapted-path first-wins guard.
+  const claimedAdaptedToolIds = new Set<string>();
   // Recall call ids come from a private counter shared across every view of this
   // core: transcript positions are caller-owned (trimming/compaction repeats
   // them as tool-call ids), so they can't be the id source.
@@ -410,13 +420,15 @@ export function ratel(config: RatelConfig = {}): Ratel {
       // the native path, which validates the batch before touching the catalog.
       register(appTools) {
         const batch: ExecutableTool[] = [];
+        const stagedClaims: string[] = [];
         const stagedPassthrough: [string, unknown][] = [];
         for (const [id, tool] of Object.entries(appTools)) {
           assertUnreservedId(id);
           // First registration of an id wins, across every view of the core
-          // and across this view's passthroughs — repeated calls are idempotent.
-          if (catalog.has(id) || passthrough.has(id)) continue;
+          // and all views' passthrough ids — repeated calls are idempotent.
+          if (catalog.has(id) || claimedAdaptedToolIds.has(id)) continue;
           const registration = adapter.ingest(id, tool);
+          stagedClaims.push(id);
           if (registration === "passthrough") {
             stagedPassthrough.push([id, tool]);
             continue;
@@ -427,11 +439,13 @@ export function ratel(config: RatelConfig = {}): Ratel {
             description: registration.description,
             inputSchema: registration.inputSchema,
             outputSchema: registration.outputSchema ?? DEFAULT_OUTPUT_SCHEMA,
+            validateInput: registration.validateInput,
             execute: registration.execute,
           });
         }
         // The batch validated: commit the passthroughs, then index the executables.
         for (const [id, tool] of stagedPassthrough) passthrough.set(id, tool);
+        for (const id of stagedClaims) claimedAdaptedToolIds.add(id);
         return catalog.register(batch);
       },
     };

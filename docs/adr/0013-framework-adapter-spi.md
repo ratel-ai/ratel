@@ -74,6 +74,17 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   framework idioms (the AI SDK's mutate-and-append `appendRecall`, Mastra's `recallProcessor`)
   that surface on the adapted object with full framework typing via a `TExt` generic.
 
+- **Framework validation stays live and core-owned.** `CatalogRegistration` may carry the
+  framework's native `validateInput` parser alongside its JSON Schema. The shared `ToolCatalog`
+  retains that parser with the executor, so every adapted view sees one authoritative validator;
+  a native replacement replaces or clears it with the rest of the tool. Capability exposure
+  delegates host prevalidation to the selected tool's current parser, including defaults and
+  root-level transforms, then calls `invokeValidatedRaw` with that exact parsed value. Separating
+  validation from raw execution is what lets an asynchronous parser coexist with a synchronously
+  returned `AsyncIterable` and preserves framework streaming semantics. Direct `invoke` /
+  `invokeRaw` still validate themselves; `invokeValidatedRaw` is the explicit bridge path for
+  input already accepted by `validateInput`.
+
 - **Live execution context is opaque, call-local, and adapter-tagged.** `Executor` and
   `CatalogRegistration.execute` accept an optional second `unknown` argument, `ToolCatalog.invoke`
   an optional third, and `invoke_tool` forwards that value unchanged. A context-aware adapter's
@@ -99,9 +110,10 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   is capped at 50 (0, negative, or non-integer values fall back to the default 5, never an
   unbounded set); server grouping treats a leading `__` as no prefix. Duplicate-id
   semantics are split by path on purpose: the adapted (codec) path is first-registration-wins
-  across every view and the view's passthroughs, so repeated calls are idempotent and one view
-  can't clobber another; the native path keeps the catalog's own replace-in-place semantics — it
-  is the authoritative hot-swap path. The raw catalog stays reachable (`r.tools.catalog`) as the
+  across every view, including globally claimed passthrough ids whose framework values remain
+  local to their originating view, so repeated calls are idempotent and one view can't clobber
+  another; the native path keeps the catalog's own replace-in-place semantics — it is the
+  authoritative hot-swap path. The raw catalog stays reachable (`r.tools.catalog`) as the
   unguarded driver-level escape hatch.
 
 - **All three capability tools are always advertised.** `modelTools()` never gates

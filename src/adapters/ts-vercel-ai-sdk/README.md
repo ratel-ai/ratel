@@ -4,6 +4,15 @@ The [Vercel AI SDK](https://sdk.vercel.ai) (`ai@^5 || ^6 || ^7`) adapter for [Ra
 
 Ratel keeps the model's tool list small and stable: instead of advertising every tool, it exposes three capability tools (`search_capabilities` / `invoke_tool` / `get_skill_content`) and injects a ranked, per-turn `search_capabilities` result for the current user message. The core owns all state and every guard (reserved ids, top-K clamp, first-registration-wins, recall-id counter); the adapter is just three codecs plus two recall idioms.
 
+## Install
+
+The adapter is currently a release candidate. Until its first GA promotes npm's `latest`
+tag, install the compatible `rc` pair explicitly:
+
+```bash
+pnpm add @ratel-ai/sdk@rc @ratel-ai/vercel-ai-sdk@rc ai@^7
+```
+
 ## Usage
 
 ```ts
@@ -15,9 +24,9 @@ import { z } from "zod";
 
 const r = ratel({ method: "hybrid", recallTopK: 5 }).adaptTo(aiSdk());
 
-// Register the app's AI SDK tools into the shared catalog (any time, also after
-// modelTools()). Tools without an `execute` (provider-executed) pass through eagerly.
-r.tools.register({
+// Executable tools may register after modelTools(): they live behind the stable
+// capability set. Passthrough tools need a fresh modelTools() snapshot; see Limitations.
+await r.tools.register({
   weather: tool({
     description: "Get the weather in a location",
     inputSchema: z.object({ location: z.string() }),
@@ -25,8 +34,8 @@ r.tools.register({
   }),
 });
 
-// Take the model-facing set ONCE per agent and reuse it: the three capability
-// tools never change across turns, so the prompt cache survives.
+// Take the model-facing set once after registering passthrough tools, then reuse
+// it: the three capability tools never change across turns, so the prompt cache survives.
 const tools = r.modelTools();
 
 const messages: ModelMessage[] = [{ role: "user", content: "what's the weather in Paris?" }];
@@ -71,13 +80,18 @@ Rule of thumb: for a long-lived multi-turn agent that already persists `response
 ## Limitations
 
 - **Persist the response messages** (`await result.responseMessages` on `ai@7`; `(await result.response).messages` on `ai@5`/`ai@6`, which have no `responseMessages`). Recall fires only when the last message is the user's turn. If you drop the accumulated response messages between turns, turn *N+1* loses turn *N*'s tool calls and results — standard AI SDK message hygiene, load-bearing here.
-- **Live execution options thread through `invoke_tool`; direct catalog calls fall back.** When the model runs one of your tools through `invoke_tool`, the adapter forwards the AI SDK's complete live execution options unchanged — `toolCallId`, `messages`, `abortSignal`, and the version's context field (`experimental_context` on `ai@6`/late `ai@5`, `context` on `ai@7`) — so a tool that reads `options.experimental_context` / `options.context` sees the caller's real values. The driver-level escape hatch `r.tools.catalog.invoke(id, args)` has no AI SDK invocation to thread, so it keeps a fabricated fallback (`toolCallId: "ratel_<id>"`, `messages: []`, both context spellings `undefined`); pass tools through `modelTools()` when they depend on live options. Live-option forwarding spans this adapter and `@ratel-ai/sdk` — upgrade their RCs together; an older SDK (before `0.5.1-rc.1`) drops the opaque context before catalog execution.
+- **`modelTools()` snapshots passthrough tools.** Plain function tools enter the shared catalog and may register after a snapshot because the model still reaches them through the stable capability tools. Provider-defined/dynamic tools, tools without an `execute`, and tools with AI SDK-only model metadata or lifecycle behavior (`contextSchema`, approval/input hooks, `toModelOutput`, provider options/metadata, strict mode, input examples, or title) pass through directly so the adapter never weakens those semantics. Register passthroughs before taking the snapshot, or call `modelTools()` again and replace the model-facing set.
+- **Cataloged executable schemas must resolve synchronously.** Registration synchronously rejects a cataloged executable tool whose `inputSchema` or `outputSchema` converts to a Promise. The whole registration batch remains unchanged. Native passthrough tools never enter this conversion path. Use a synchronous Zod schema or static JSON Schema wrapper for cataloged tools.
+- **Live execution options thread through `invoke_tool`; direct catalog calls fall back.** When the model runs a cataloged tool through `invoke_tool`, the adapter forwards the AI SDK's complete live execution options unchanged — `toolCallId`, `messages`, `abortSignal`, and the outer capability's context field (`experimental_context` on `ai@6`/late `ai@5`, `context` on `ai@7`). A tool declaring its own `contextSchema` stays native, so the host validates and routes its named context normally. The driver-level escape hatch `r.tools.catalog.invoke(id, args)` has no AI SDK invocation to thread, so it validates the original input schema and uses a fabricated fallback (`toolCallId: "ratel_<id>"`, `messages: []`, both context spellings `undefined`). Live-option forwarding spans this adapter and `@ratel-ai/sdk` — upgrade their RCs together; an older SDK (before `0.5.1-rc.1`) drops the opaque context before catalog execution.
 - **`appendRecall` is async.** Core recall is asynchronous (unlike the sync prototype this was extracted from) — `await` it.
 - **Dynamic tool descriptions resolve once, at ingest.** Retrieval ranks on the description at registration time, so a function `description` is called once with a null context (`{ context: undefined }`) when the tool is registered. A description that depends on live tool context won't reflect it in ranking.
 
 ## Compatibility
 
 Peer range: **`ai@^5.0.0 || ^6.0.0 || ^7.0.0`** — one shared code path, no per-major builds. The differences the adapter absorbs: provider-defined tools use `type: "provider-defined"` in `ai@5` vs `type: "provider"` in `ai@6`/`ai@7`; tool executors get `experimental_context` in `ai@6` and later `ai@5` releases (the `5.0.0` floor predates any context field) vs `context` in `ai@7` — the adapter forwards whichever spelling the host set live through `invoke_tool`, and fabricates both only for the direct-call fallback; `prepareStep`'s step-0 override is carried forward by `ai@7` but rebuilt per step by `ai@5`/`ai@6` (the adapter reinserts). One difference stays host-side: the persisted-history accessor is `result.responseMessages` on `ai@7` vs `(await result.response).messages` on `ai@5`/`ai@6`.
+
+Approval (`needsApproval`) is available on AI SDK 6+, while per-tool `contextSchema` is AI
+SDK 7-only. When present, both stay on the native passthrough path.
 
 Each supported major is verified in CI at two exact releases — its floor and its latest verified release — as `ai@5.0.0`, `5.0.217`, `6.0.0`, `6.0.232`, `7.0.0`, `7.0.33` (the `ai-sdk compat` matrix in `.github/workflows/ts.yml`): every row builds, typechecks, tests, packs, and typechecks a packed-tarball consumer against that exact `ai`. Releases between floor and latest are covered by the range, not row-verified.
 
@@ -101,4 +115,4 @@ pnpm --filter @ratel-ai/vercel-ai-sdk lint
 pnpm --filter @ratel-ai/vercel-ai-sdk test
 ```
 
-The suite covers the three codecs, both recall helpers (including id economy on the no-op paths), mock-model integration tests that drive real two-step `generateText` / `streamText` loops, a compile-only type-test locking the `ai` surface, and the `@ratel-ai/sdk/testkit` conformance battery (21 cases, 0 skipped). The dev `ai` is pinned to the exact release the adapter was last live-verified on; the CI matrix re-pins it per row (see [Compatibility](#compatibility)).
+The suite covers the three codecs, both recall helpers (including id economy on the no-op paths), mock-model integration tests that drive real two-step `generateText` / `streamText` loops, a compile-only type-test locking the `ai` surface, and the `@ratel-ai/sdk/testkit` conformance battery (22 cases, 0 skipped). The dev `ai` is pinned to the exact release the adapter was last live-verified on; the CI matrix re-pins it per row (see [Compatibility](#compatibility)).

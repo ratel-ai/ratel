@@ -7,8 +7,10 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type ExecutableTool,
+  INVOKE_TOOL_ERROR_CAUSE,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  isInvokeToolError,
   runCapabilitiesSearch,
   SEARCH_CAPABILITIES_ID,
   type SearchCapabilitiesResult,
@@ -293,6 +295,134 @@ describe("invokeToolTool", () => {
     const tool = invokeToolTool(tools);
     const out = await tool.execute({ toolId: "fs__read_file", args: { path: "/x" } });
     expect(out).toEqual({ contents: "contents of /x" });
+  });
+
+  it("preserves an AsyncIterable synchronously and settles trace events after iteration", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "stream" } });
+    await tools.register({
+      id: "jobs__watch",
+      name: "watch",
+      description: "Watch a job.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: () =>
+        (async function* () {
+          yield { progress: 25 };
+          yield { progress: 100 };
+        })(),
+    });
+    tools.drainTraceEvents();
+
+    const result = invokeToolTool(tools).execute({ toolId: "jobs__watch", args: {} });
+
+    expect(typeof (result as AsyncIterable<unknown>)[Symbol.asyncIterator]).toBe("function");
+    expect(typeof (result as { then?: unknown }).then).not.toBe("function");
+    expect(
+      (tools.drainTraceEvents() as Array<{ type: string }>).map((event) => event.type),
+    ).toEqual(["invoke_start"]);
+
+    const outputs: unknown[] = [];
+    for await (const output of result as AsyncIterable<unknown>) outputs.push(output);
+
+    expect(outputs).toEqual([{ progress: 25 }, { progress: 100 }]);
+    const eventTypes = (tools.drainTraceEvents() as Array<{ type: string }>).map(
+      (event) => event.type,
+    );
+    expect(eventTypes).toContain("invoke_end");
+    expect(eventTypes).toContain("gateway_invoke");
+  });
+
+  it("preserves a stream after the host prevalidates with an async target parser", async () => {
+    const tools = new ToolCatalog();
+    await tools.register({
+      id: "jobs__watch",
+      name: "watch",
+      description: "Watch a job.",
+      inputSchema: {},
+      outputSchema: {},
+      validateInput: async (input) => ({
+        success: true,
+        value: { jobId: String((input as { jobId: unknown }).jobId).toUpperCase() },
+      }),
+      execute: ({ jobId }) =>
+        (async function* () {
+          yield { jobId, progress: 100 };
+        })(),
+    });
+    const invoke = invokeToolTool(tools);
+    const parsed = await invoke.validateInput?.({
+      toolId: "jobs__watch",
+      args: { jobId: "job-1" },
+    });
+    if (!parsed?.success) throw parsed?.error ?? new Error("validation failed");
+
+    const result = invoke.execute(parsed.value);
+
+    expect(typeof (result as AsyncIterable<unknown>)[Symbol.asyncIterator]).toBe("function");
+    const outputs: unknown[] = [];
+    for await (const output of result as AsyncIterable<unknown>) outputs.push(output);
+    expect(outputs).toEqual([{ jobId: "JOB-1", progress: 100 }]);
+  });
+
+  it("brands a caught target error non-enumerably while keeping the generic result structured", async () => {
+    const failure = new Error("target failed");
+    const tools = new ToolCatalog();
+    await tools.register({
+      id: "jobs__fail",
+      name: "fail",
+      description: "Fail a job.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => {
+        throw failure;
+      },
+    });
+
+    const result = await invokeToolTool(tools).execute({ toolId: "jobs__fail", args: {} });
+
+    expect(result).toEqual({ error: "tool jobs__fail threw: target failed", isError: true });
+    expect(isInvokeToolError(result)).toBe(true);
+    if (!isInvokeToolError(result)) throw new Error("expected a branded invoke error");
+    expect(result[INVOKE_TOOL_ERROR_CAUSE]).toBe(failure);
+    expect(Object.keys(result)).toEqual(["error", "isError"]);
+    expect(Object.getOwnPropertyDescriptor(result, INVOKE_TOOL_ERROR_CAUSE)?.enumerable).toBe(
+      false,
+    );
+    expect(JSON.parse(JSON.stringify(result))).toEqual({
+      error: "tool jobs__fail threw: target failed",
+      isError: true,
+    });
+  });
+
+  it("settles an errored AsyncIterable as a branded result after its preliminary outputs", async () => {
+    const failure = new Error("stream failed");
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "stream-error" } });
+    await tools.register({
+      id: "jobs__broken_watch",
+      name: "broken_watch",
+      description: "Watch a broken job.",
+      inputSchema: {},
+      outputSchema: {},
+      execute: () =>
+        (async function* () {
+          yield { progress: 25 };
+          throw failure;
+        })(),
+    });
+    tools.drainTraceEvents();
+
+    const result = invokeToolTool(tools).execute({ toolId: "jobs__broken_watch", args: {} });
+    const outputs: unknown[] = [];
+    for await (const output of result as AsyncIterable<unknown>) outputs.push(output);
+
+    expect(outputs[0]).toEqual({ progress: 25 });
+    expect(isInvokeToolError(outputs[1])).toBe(true);
+    const eventTypes = (tools.drainTraceEvents() as Array<{ type: string }>).map(
+      (event) => event.type,
+    );
+    expect(eventTypes).toContain("invoke_error");
+    expect(eventTypes).toContain("gateway_error");
+    expect(eventTypes).not.toContain("gateway_invoke");
   });
 
   it("returns an error object (with isError) for unknown toolId", async () => {

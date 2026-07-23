@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Framework adapters can attach an `InputValidator` to `CatalogRegistration` / `ExecutableTool`; the shared `ToolCatalog` keeps that parser authoritative across adapted views and native hot-swaps. `validateInput()` exposes the live parser, and `invokeValidatedRaw()` preserves a prevalidated executor's immediate scalar, promise, or `AsyncIterable` shape. `invokeRaw()` provides the same preservation after synchronous validation, while `invoke()` remains the Promise-based public convenience path.
+- `invoke_tool` target failures remain structured for generic hosts and now carry their original cause under a non-enumerable symbol for framework adapters.
+
+### Fixed
+
+- `invoke_tool` no longer collapses streamed tool results into an opaque object; local trace events and `execute_tool` spans now settle when iteration completes, is cancelled, or fails, including cancellation-cleanup failures.
+
 ## [0.5.1-rc.1] - 2026-07-21
 
 ### Changed

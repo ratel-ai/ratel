@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve AI SDK tool semantics through the capability funnel: nested input schemas now validate and apply defaults/transforms, streamed executors retain preliminary/final outputs, and target exceptions surface as native `tool-error` results. Tools with AI SDK-only lifecycle or model metadata stay eagerly exposed in their original shape, preserving approval, per-tool context routing, input hooks, and `toModelOutput`.
+
 ## [0.1.0-rc.5] - 2026-07-22
 
 ### Added

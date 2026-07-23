@@ -174,6 +174,90 @@ describe("execute_tool span", () => {
     expect(span.events.some((e) => e.name === "exception")).toBe(true);
   });
 
+  it("keeps an AsyncIterable span open until iteration completes", async () => {
+    const catalog = new ToolCatalog();
+    await catalog.register({
+      ...readFile,
+      id: "watch",
+      execute: () =>
+        (async function* () {
+          yield { progress: 25 };
+          yield { progress: 100 };
+        })(),
+    });
+
+    const result = catalog.invokeRaw("watch", {});
+    expect(spansNamed("execute_tool watch")).toHaveLength(0);
+
+    const outputs: unknown[] = [];
+    for await (const output of result as AsyncIterable<unknown>) outputs.push(output);
+
+    expect(outputs).toEqual([{ progress: 25 }, { progress: 100 }]);
+    const [span] = spansNamed("execute_tool watch");
+    expect(span.status.code).toBe(1);
+  });
+
+  it("marks an AsyncIterable span ERROR when iteration throws", async () => {
+    const catalog = new ToolCatalog();
+    await catalog.register({
+      ...readFile,
+      id: "broken_watch",
+      execute: () =>
+        (async function* () {
+          yield { progress: 25 };
+          throw new Error("stream failed");
+        })(),
+    });
+
+    const consume = async () => {
+      for await (const _output of catalog.invokeRaw("broken_watch", {}) as AsyncIterable<unknown>) {
+        // consume through the failure
+      }
+    };
+    await expect(consume()).rejects.toThrow("stream failed");
+
+    const [span] = spansNamed("execute_tool broken_watch");
+    expect(span.status.code).toBe(2);
+    expect(span.events.some((event) => event.name === "exception")).toBe(true);
+  });
+
+  it("ends the span as ERROR when AsyncIterable cancellation cleanup throws", async () => {
+    const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "s" } });
+    await catalog.register({
+      ...readFile,
+      id: "broken_cleanup",
+      execute: () => ({
+        [Symbol.asyncIterator]() {
+          return {
+            next: async () => ({ done: false as const, value: { progress: 25 } }),
+            return: async () => {
+              throw new Error("cleanup failed");
+            },
+          };
+        },
+      }),
+    });
+    catalog.drainTraceEvents();
+
+    const consumeOne = async () => {
+      for await (const _output of catalog.invokeRaw(
+        "broken_cleanup",
+        {},
+      ) as AsyncIterable<unknown>) {
+        break;
+      }
+    };
+    await expect(consumeOne()).rejects.toThrow("cleanup failed");
+
+    const [span] = spansNamed("execute_tool broken_cleanup");
+    expect(span, "one completed execute_tool span").toBeTruthy();
+    expect(span.status.code).toBe(2);
+    expect(span.events.some((event) => event.name === "exception")).toBe(true);
+    expect(
+      (catalog.drainTraceEvents() as Array<{ type: string }>).map((event) => event.type),
+    ).toEqual(["invoke_start", "invoke_error"]);
+  });
+
   it("leaves the local trace stream intact alongside the span", async () => {
     const catalog = new ToolCatalog({ trace: { kind: "memory", sessionId: "s" } });
     await catalog.register(readFile);
@@ -307,6 +391,37 @@ describe("span nesting", () => {
       expect(inner.spanContext().traceId).toBe(outer.spanContext().traceId);
     } finally {
       context.disable(); // drop the context manager so other tests keep ROOT context
+    }
+  });
+
+  it("keeps the execute_tool context active while an AsyncIterable advances", async () => {
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+    try {
+      const catalog = new ToolCatalog();
+      await catalog.register(readFile);
+      await catalog.register({
+        id: "stream_outer",
+        name: "stream_outer",
+        description: "streams after a nested search",
+        inputSchema: { properties: {} },
+        outputSchema: { properties: {} },
+        execute: () =>
+          (async function* () {
+            catalog.search("read", 3);
+            yield { ok: true };
+          })(),
+      });
+
+      for await (const _output of catalog.invokeRaw("stream_outer", {}) as AsyncIterable<unknown>) {
+        // consume the stream under test
+      }
+
+      const [outer] = spansNamed("execute_tool stream_outer");
+      const [inner] = spansNamed("ratel.search");
+      expect(inner.parentSpanContext?.spanId).toBe(outer.spanContext().spanId);
+      expect(inner.spanContext().traceId).toBe(outer.spanContext().traceId);
+    } finally {
+      context.disable();
     }
   });
 });

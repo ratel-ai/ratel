@@ -107,6 +107,51 @@ describe("ToolCatalog", () => {
     expect(result).toEqual({ contents: "contents of /tmp/x" });
   });
 
+  it("validates and transforms input before invoking the executor", async () => {
+    const catalog = new ToolCatalog();
+    let received: unknown;
+    await catalog.register({
+      ...readFile,
+      validateInput: async (input) => ({
+        success: true,
+        value: String((input as { path: unknown }).path).trim(),
+      }),
+      execute: (input) => {
+        received = input;
+        return { ok: true };
+      },
+    });
+
+    await catalog.invoke("read_file", { path: " /tmp/x " });
+
+    expect(received).toBe("/tmp/x");
+    expect(catalog.getExecutable("read_file")?.validateInput).toBeTypeOf("function");
+  });
+
+  it("clears a framework validator when native registration replaces the tool", async () => {
+    const catalog = new ToolCatalog();
+    await catalog.register({
+      ...readFile,
+      validateInput: async () => ({
+        success: false,
+        error: new Error("stale validator"),
+      }),
+    });
+    let received: unknown;
+    await catalog.register({
+      ...readFile,
+      execute: (input) => {
+        received = input;
+        return { ok: true };
+      },
+    });
+
+    await catalog.invoke("read_file", { path: "/tmp/new" });
+
+    expect(received).toEqual({ path: "/tmp/new" });
+    expect(catalog.getExecutable("read_file")?.validateInput).toBeUndefined();
+  });
+
   it("keeps legacy executors at one argument when no invocation context is supplied", async () => {
     const catalog = new ToolCatalog();
     await catalog.register({

@@ -72,6 +72,28 @@ describe("ingest codec", () => {
     expect(aiSdk().ingest("shell", providerTool)).toBe("passthrough");
   });
 
+  it.each([
+    ["approval", { needsApproval: true }],
+    ["context", { contextSchema: z.object({ tenantId: z.string() }) }],
+    ["input lifecycle", { onInputStart: async () => {} }],
+    [
+      "model output",
+      { toModelOutput: async () => ({ type: "text" as const, value: "formatted" }) },
+    ],
+    ["provider options", { providerOptions: { acme: { mode: "strict" } } }],
+  ])("passes through a function tool with native %s semantics", (_name, extension) => {
+    const native = {
+      ...tool({
+        description: "native lifecycle",
+        inputSchema: z.object({}),
+        execute: async () => ({ ok: true }),
+      }),
+      ...extension,
+    } as unknown as Tool;
+
+    expect(aiSdk().ingest("native", native)).toBe("passthrough");
+  });
+
   it("ingests an executable: resolves description, converts input schema, omits output schema", () => {
     const weather = tool({
       description: "Get the weather in a location",

@@ -17,7 +17,14 @@
  */
 
 import { createRequire } from "node:module";
-import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
+import {
+  context,
+  type Context as OtelContext,
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+} from "@opentelemetry/api";
 import {
   AuthOutcome,
   ContentCapture,
@@ -101,35 +108,128 @@ function fail(span: Span, err: unknown): void {
 /**
  * Wrap a tool invocation in a standard `execute_tool` span (`gen_ai.operation.name
  * = execute_tool`, enriched with `ratel.*`). Deliberately the OTel gen_ai tool
- * operation, not a bespoke span, so a generic backend understands it (ADR-0007).
+ * operation, not a bespoke span, so a generic backend understands it
+ * (ADR-0007). Preserves the executor's immediate return shape and keeps the
+ * span open through `AsyncIterable` completion, cancellation, or failure.
  */
-export function traceExecuteTool<T>(
-  toolId: string,
-  args: Record<string, unknown>,
-  run: () => Promise<T>,
-): Promise<T> {
+export function traceExecuteTool<T>(toolId: string, args: unknown, run: () => T): T {
   return getTracer().startActiveSpan(
     `${EXECUTE_TOOL} ${toolId}`,
     { kind: SpanKind.INTERNAL },
-    async (span) => {
+    (span) => {
       span.setAttribute(GEN_AI_OPERATION_NAME, EXECUTE_TOOL);
       span.setAttribute(GEN_AI_TOOL_NAME, toolId);
       const upstream = upstreamFromToolId(toolId);
       if (upstream) span.setAttribute(RATEL_UPSTREAM_SERVER, upstream);
       span.setAttribute(RATEL_TOOL_ARGS_SIZE_BYTES, argsSizeBytes(args));
       if (captureContentOnSpan()) span.setAttribute(GEN_AI_TOOL_CALL_ARGUMENTS, safeJson(args));
-      try {
-        const result = await run();
+
+      const succeed = (result: unknown): void => {
         if (captureContentOnSpan()) span.setAttribute(GEN_AI_TOOL_CALL_RESULT, safeJson(result));
         span.setStatus({ code: SpanStatusCode.OK });
-        return result;
-      } catch (err) {
-        fail(span, err);
-        throw err;
-      } finally {
         span.end();
+      };
+      const reject = (err: unknown): void => {
+        fail(span, err);
+        span.end();
+      };
+
+      try {
+        return observeExecutionResult(run(), succeed, reject, context.active()) as T;
+      } catch (err) {
+        reject(err);
+        throw err;
       }
     },
+  );
+}
+
+function observeExecutionResult(
+  result: unknown,
+  onSuccess: (result: unknown) => void,
+  onError: (error: unknown) => void,
+  activeContext: OtelContext,
+): unknown {
+  if (isAsyncIterable(result)) {
+    return observeAsyncIterable(result, onSuccess, onError, activeContext);
+  }
+  if (isPromiseLike(result)) {
+    return Promise.resolve(result).then(
+      (value) => {
+        onSuccess(value);
+        return value;
+      },
+      (error) => {
+        onError(error);
+        throw error;
+      },
+    );
+  }
+  onSuccess(result);
+  return result;
+}
+
+async function* observeAsyncIterable(
+  iterable: AsyncIterable<unknown>,
+  onSuccess: (result: unknown) => void,
+  onError: (error: unknown) => void,
+  activeContext: OtelContext,
+): AsyncGenerator<unknown> {
+  const iterator = iterable[Symbol.asyncIterator]();
+  let completed = false;
+  let failed = false;
+  let lastValue: unknown;
+  try {
+    while (true) {
+      const next = await context.with(activeContext, () => iterator.next());
+      if (next.done) {
+        completed = true;
+        break;
+      }
+      lastValue = next.value;
+      yield next.value;
+    }
+  } catch (error) {
+    failed = true;
+    onError(error);
+    throw error;
+  } finally {
+    if (!completed && !failed && iterator.return) {
+      await closeAsyncIterator(iterator, activeContext, (error) => {
+        failed = true;
+        onError(error);
+      });
+    }
+    if (!failed) onSuccess(lastValue);
+  }
+}
+
+async function closeAsyncIterator(
+  iterator: AsyncIterator<unknown>,
+  activeContext: OtelContext,
+  onError: (error: unknown) => void,
+): Promise<void> {
+  try {
+    await context.with(activeContext, () => iterator.return?.());
+  } catch (error) {
+    onError(error);
+    throw error;
+  }
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === "function"
+  );
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
   );
 }
 
