@@ -20,6 +20,7 @@ export type {
   CapabilitySkillHit,
   CapabilityToolGroup,
   CapabilityToolHit,
+  InvokeToolError,
   InvokeToolToolOptions,
   SearchCapabilitiesOptions,
   SearchCapabilitiesResult,
@@ -27,8 +28,10 @@ export type {
 } from "./capabilities.js";
 export {
   formatUpstreamLine,
+  INVOKE_TOOL_ERROR_CAUSE,
   INVOKE_TOOL_ID,
   invokeToolTool,
+  isInvokeToolError,
   runCapabilitiesSearch,
   SEARCH_CAPABILITIES_ID,
   searchCapabilitiesTool,
@@ -38,6 +41,8 @@ export type {
   EmbeddingSpec,
   ExecutableTool,
   Executor,
+  InputValidationResult,
+  InputValidator,
   SearchMethod,
   SearchOrigin,
   ToolCatalogOptions,

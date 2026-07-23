@@ -1,5 +1,6 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
 import type { SearchHit, Tool } from "../native/index.cjs";
+import { isAsyncIterable, isPromiseLike } from "./async.js";
 import { type IntentGraph, ToolRegistry } from "./registry.js";
 import {
   argsSizeBytes,
@@ -10,12 +11,41 @@ import {
 } from "./telemetry.js";
 
 /**
- * The function that runs a tool. Receives the arguments object and may return
- * either a plain value or a `Promise` — {@link ToolCatalog.invoke} awaits both,
- * so synchronous executors need no wrapping.
+ * The function that runs a tool. Receives the arguments object and an optional
+ * opaque invocation context supplied by a framework adapter. It may return
+ * a plain value, `Promise`, or `AsyncIterable`. {@link ToolCatalog.invoke}
+ * absorbs synchronous values and throws into its promise contract;
+ * {@link ToolCatalog.invokeRaw} preserves the immediate return shape when
+ * validation is synchronous, while {@link ToolCatalog.invokeValidatedRaw}
+ * guarantees that shape after a host has already validated the input.
+ * One-argument executors remain valid; framework-neutral callers normally omit
+ * `context`.
  */
 // biome-ignore lint/suspicious/noExplicitAny: tool inputs are heterogeneous across the catalog
-export type Executor = (input: any) => Promise<unknown> | unknown;
+export type Executor = (input: any, context?: unknown) => Promise<unknown> | unknown;
+
+/** Result returned by a framework-native input validator. */
+export type InputValidationResult =
+  | {
+      /** The input was accepted. */
+      success: true;
+      /** Parsed value, including defaults or transformations. */
+      value: unknown;
+    }
+  | {
+      /** The input was rejected. */
+      success: false;
+      /** Framework-native validation failure. */
+      error: Error;
+    };
+
+/**
+ * Optional framework-native parser retained by the shared catalog. It may
+ * validate, apply defaults, or transform the input before execution.
+ */
+export type InputValidator = (
+  input: unknown,
+) => InputValidationResult | PromiseLike<InputValidationResult>;
 
 /**
  * A tool the catalog can both retrieve *and* run: the searchable metadata of a
@@ -24,7 +54,9 @@ export type Executor = (input: any) => Promise<unknown> | unknown;
  * returns.
  */
 export interface ExecutableTool extends Tool {
-  /** Runs the tool. Called by {@link ToolCatalog.invoke} with the args object. */
+  /** Shared parser used before execution and by model-facing host bridges. */
+  validateInput?: InputValidator;
+  /** Runs the tool. Called by {@link ToolCatalog.invoke} with args and optional context. */
   execute: Executor;
 }
 
@@ -203,6 +235,7 @@ export interface ToolCatalogOptions {
 export class ToolCatalog {
   private readonly registry: ToolRegistry;
   private readonly executors = new Map<string, Executor>();
+  private readonly inputValidators = new Map<string, InputValidator>();
   private readonly tools = new Map<string, Tool>();
   private readonly method: SearchMethod;
 
@@ -249,10 +282,17 @@ export class ToolCatalog {
         throw new Error(`tool ${tool.id} has no execute handler`);
       }
     }
-    this.registry.registerItems(batch.map(({ execute, ...metadata }) => metadata));
+    this.registry.registerItems(
+      batch.map(({ execute: _execute, validateInput: _validateInput, ...metadata }) => metadata),
+    );
     for (const tool of batch) {
-      const { execute, ...metadata } = tool;
+      const { execute, validateInput, ...metadata } = tool;
       this.executors.set(tool.id, execute);
+      if (validateInput) {
+        this.inputValidators.set(tool.id, validateInput);
+      } else {
+        this.inputValidators.delete(tool.id);
+      }
       this.tools.set(tool.id, metadata);
     }
     await this.registry.buildDense();
@@ -326,7 +366,36 @@ export class ToolCatalog {
     const tool = this.tools.get(toolId);
     const execute = this.executors.get(toolId);
     if (!tool || !execute) return undefined;
-    return { ...tool, execute };
+    const validateInput = this.inputValidators.get(toolId);
+    return validateInput ? { ...tool, validateInput, execute } : { ...tool, execute };
+  }
+
+  /**
+   * Run a registered framework validator without executing the tool. A tool
+   * without one succeeds with its input unchanged. The returned success value
+   * is the exact input the executor should receive, including any defaults or
+   * root-level transformation.
+   */
+  validateInput(
+    toolId: string,
+    input: unknown,
+  ): InputValidationResult | Promise<InputValidationResult> {
+    const validate = this.inputValidators.get(toolId);
+    if (!validate) return { success: true, value: input };
+    try {
+      const result = validate(input);
+      return isPromiseLike(result)
+        ? Promise.resolve(result).catch((error) => ({
+            success: false as const,
+            error: error instanceof Error ? error : new Error(String(error)),
+          }))
+        : result;
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
   }
 
   /**
@@ -386,51 +455,147 @@ export class ToolCatalog {
   }
 
   /**
-   * Run a registered tool's executor. Sync-absorbing: the executor may return
-   * a plain value or a `Promise` (both are awaited), and a synchronous `throw`
-   * inside it surfaces as a rejection of the returned promise — `invoke` never
-   * throws synchronously, including for an unknown `toolId` (that rejects with
-   * `unknown toolId: …`).
+   * Run a registered tool's executor. Sync-absorbing: a plain value or
+   * `Promise` settles through the returned promise, and a synchronous `throw`
+   * surfaces as a rejection — `invoke` never throws synchronously, including
+   * for an unknown `toolId` (that rejects with `unknown toolId: …`). An
+   * `AsyncIterable` is the resolved value; its instrumentation settles when
+   * the iterator completes, is cancelled, or fails.
    *
    * The call is wrapped in an `execute_tool` OTel span and bracketed by
    * `invoke_start` / `invoke_end` (or `invoke_error`, with the error message)
    * events on the local trace stream, `took_ms` in wall-clock milliseconds.
    *
    * @param toolId - Id of a registered tool.
-   * @param args - Arguments object passed through to the executor unchanged.
+   * @param args - Arguments object validated and possibly transformed before execution.
+   * @param context - Optional opaque invocation context forwarded unchanged.
    * @returns Whatever the executor returns (resolved if it returned a promise).
    */
-  async invoke(toolId: string, args: Record<string, unknown>): Promise<unknown> {
+  async invoke(toolId: string, args: Record<string, unknown>, context?: unknown): Promise<unknown> {
+    return await this.invokeRaw(toolId, args, context);
+  }
+
+  /**
+   * Run a registered tool without erasing its immediate return shape after
+   * synchronous validation. A plain value stays plain, a promise stays a
+   * promise, and an `AsyncIterable` stays synchronously iterable. An async
+   * validator necessarily makes this method return a promise of the executor's
+   * result. Instrumentation settles only when that returned shape settles
+   * (including iterator completion, cancellation, or failure).
+   *
+   * Most callers should use {@link invoke}; capability-tool bridges use this
+   * path so a host framework can observe streamed preliminary outputs.
+   */
+  invokeRaw(toolId: string, args: Record<string, unknown>, context?: unknown): unknown {
+    if (!this.executors.has(toolId)) {
+      throw new Error(`unknown toolId: ${toolId}`);
+    }
+    return runIfValid(this.validateInput(toolId, args), (validated) =>
+      this.invokeValidatedRaw(toolId, validated, context),
+    );
+  }
+
+  /**
+   * Execute input already parsed by {@link validateInput}, preserving its
+   * immediate scalar, promise, or `AsyncIterable` return shape. Framework
+   * bridges call this only after their host has run the capability tool's live
+   * validator; ordinary callers should use {@link invoke}.
+   */
+  invokeValidatedRaw(toolId: string, input: unknown, context?: unknown): unknown {
     const fn = this.executors.get(toolId);
     if (!fn) {
       throw new Error(`unknown toolId: ${toolId}`);
     }
     // The `execute_tool` OTel span wraps the local trace stream; both record the
     // same invocation, on their two independent channels (ADR-0007).
-    return traceExecuteTool(toolId, args, async () => {
+    return traceExecuteTool(toolId, input, () => {
       this.registry.recordEvent({
         type: "invoke_start",
         tool_id: toolId,
-        args_size_bytes: argsSizeBytes(args),
+        args_size_bytes: argsSizeBytes(input),
       });
       const started = Date.now();
-      try {
-        const result = await fn(args);
+
+      const succeed = (_result: unknown): void => {
         this.registry.recordEvent({
           type: "invoke_end",
           tool_id: toolId,
           took_ms: Date.now() - started,
         });
-        return result;
-      } catch (err) {
+      };
+      const reject = (err: unknown): void => {
         this.registry.recordEvent({
           type: "invoke_error",
           tool_id: toolId,
           took_ms: Date.now() - started,
           error: errorMessage(err),
         });
+      };
+
+      try {
+        const result = context === undefined ? fn(input) : fn(input, context);
+        return observeInvocationResult(result, succeed, reject);
+      } catch (err) {
+        reject(err);
         throw err;
       }
     });
+  }
+}
+
+/** Unwrap a (possibly async) validation result and continue with its value, or throw its error. */
+function runIfValid(
+  result: InputValidationResult | PromiseLike<InputValidationResult>,
+  onSuccess: (value: unknown) => unknown,
+): unknown {
+  const settle = (validated: InputValidationResult): unknown => {
+    if (!validated.success) throw validated.error;
+    return onSuccess(validated.value);
+  };
+  return isPromiseLike(result) ? Promise.resolve(result).then(settle) : settle(result);
+}
+
+function observeInvocationResult(
+  result: unknown,
+  onSuccess: (result: unknown) => void,
+  onError: (error: unknown) => void,
+): unknown {
+  if (isAsyncIterable(result)) {
+    return observeAsyncIterable(result, onSuccess, onError);
+  }
+  if (isPromiseLike(result)) {
+    return Promise.resolve(result).then(
+      (value) => {
+        onSuccess(value);
+        return value;
+      },
+      (error) => {
+        onError(error);
+        throw error;
+      },
+    );
+  }
+  onSuccess(result);
+  return result;
+}
+
+async function* observeAsyncIterable(
+  iterable: AsyncIterable<unknown>,
+  onSuccess: (result: unknown) => void,
+  onError: (error: unknown) => void,
+): AsyncGenerator<unknown> {
+  let failed = false;
+  let lastValue: unknown;
+  try {
+    for await (const value of iterable) {
+      lastValue = value;
+      yield value;
+    }
+  } catch (error) {
+    failed = true;
+    onError(error);
+    throw error;
+  } finally {
+    if (!failed) onSuccess(lastValue);
   }
 }

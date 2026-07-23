@@ -1,0 +1,20 @@
+# Changelog
+
+All notable changes to `@ratel-ai/vercel-ai-sdk` are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this package adheres to [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-07-23
+
+### Added
+
+- Initial release: `@ratel-ai/vercel-ai-sdk`, the Vercel AI SDK adapter for Ratel. `ratel(config).adaptTo(aiSdk())` speaks the AI SDK's native `Tool` / `ModelMessage` shapes through the framework-adapter SPI (ADR-0013): the `ingest` / `expose` / `recallMessages` codecs plus two per-turn recall idioms — `appendRecall` (mutate-and-suffix-append, cache-preserving) and `prepareStep` (step-0 fresh-array override for `generateText` / `streamText` / `ToolLoopAgent`). Peers `@ratel-ai/sdk` with zero runtime dependencies; passes the `@ratel-ai/sdk/testkit` conformance battery (21 cases). Extracted from the live-verified `bratislava` prototype. (Supersedes the pre-release `@ratel-ai/ai-sdk-adapter@0.1.0-rc.1`, published under the old name before the rename.)
+- AI SDK v5, v6, and v7 support: the `ai` peer range is `^5.0.0 || ^6.0.0 || ^7.0.0` (`ai@4` predates the v5 tool/message reshape). One shared code path absorbs the per-major differences: provider-defined tools pass through under both discriminators (`provider-defined` in `ai@5`, `provider` in `ai@6`/`ai@7`), catalog executors receive both context spellings (`experimental_context` and `context`), and a Promise-like JSON Schema is rejected synchronously before the registration batch commits. CI pins an exact-version compatibility matrix (`ai@5.0.0`, `5.0.217`, `6.0.0`, `6.0.232`, `7.0.0`, `7.0.33`), each of which builds, typechecks, tests, packs, and typechecks a packed-tarball consumer. Narrowing the supported-majors peer range is a breaking change of the adapter (see the README's Compatibility section).
+- Live execution-context forwarding: when the model runs one of your tools through `invoke_tool`, the adapter forwards the AI SDK's complete live execution options (`toolCallId`, `messages`, `abortSignal`, and the version's `experimental_context` / `context`) unchanged to the tool, instead of a fabricated options object. The whole context rides through the catalog as an opaque value under a private, package-stable symbol tag (ADR-0013), so a sibling framework view over the same catalog can never have its context mistaken for AI SDK options. The driver-level `r.tools.catalog.invoke(id, args)` escape hatch — which has no AI SDK invocation to thread — keeps the fabricated fallback. Requires `@ratel-ai/sdk@^0.5.1`.
+
+### Fixed
+
+- `prepareStep` preserves the injected recall pair across the steps of one `generateText` / `streamText` / `ToolLoopAgent` run on `ai@5`/`ai@6`, which rebuild the prompt per step (the pair is reinserted at its original boundary from per-run state); on `ai@7`, which carries the step-0 override forward itself, the duplicate check makes reinsertion a no-op.
+- Preserve AI SDK tool semantics through the capability funnel: nested input schemas now validate and apply defaults/transforms, streamed executors retain preliminary/final outputs, and target exceptions surface as native `tool-error` results. Tools with AI SDK-only lifecycle or model metadata stay eagerly exposed in their original shape, preserving approval, per-tool context routing, input hooks, and `toModelOutput`.

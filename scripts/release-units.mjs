@@ -122,6 +122,33 @@ export const UNITS = {
       includePaths: ["src/telemetry/ts-otlp/**"],
     },
   },
+  // Framework adapters: npm-only, pure-language packages that peer-depend on
+  // @ratel-ai/sdk via `workspace:^` (rewritten to a concrete range at pack time,
+  // like telemetry-ts-otlp). Each ships independently on its own tag prefix.
+  "vercel-ai-sdk": {
+    tagPrefix: "vercel-ai-sdk-v",
+    label: "@ratel-ai/vercel-ai-sdk → npm",
+    versionManifest: { path: "src/adapters/ts-vercel-ai-sdk/package.json", kind: "json" },
+    manifests: [{ path: "src/adapters/ts-vercel-ai-sdk/package.json", kind: "json" }],
+    changelogs: ["src/adapters/ts-vercel-ai-sdk/CHANGELOG.md"],
+    srcPaths: ["src/adapters/ts-vercel-ai-sdk"],
+    changelog: {
+      name: "@ratel-ai/vercel-ai-sdk",
+      includePaths: ["src/adapters/ts-vercel-ai-sdk/**"],
+    },
+  },
+  "mastra": {
+    tagPrefix: "mastra-v",
+    label: "@ratel-ai/mastra → npm",
+    versionManifest: { path: "src/adapters/ts-mastra/package.json", kind: "json" },
+    manifests: [{ path: "src/adapters/ts-mastra/package.json", kind: "json" }],
+    changelogs: ["src/adapters/ts-mastra/CHANGELOG.md"],
+    srcPaths: ["src/adapters/ts-mastra"],
+    changelog: {
+      name: "@ratel-ai/mastra",
+      includePaths: ["src/adapters/ts-mastra/**"],
+    },
+  },
 };
 
 export const UNIT_IDS = Object.keys(UNITS);

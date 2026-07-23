@@ -74,6 +74,29 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   framework idioms (the AI SDK's mutate-and-append `appendRecall`, Mastra's `recallProcessor`)
   that surface on the adapted object with full framework typing via a `TExt` generic.
 
+- **Framework validation stays live and core-owned.** `CatalogRegistration` may carry the
+  framework's native `validateInput` parser alongside its JSON Schema. The shared `ToolCatalog`
+  retains that parser with the executor, so every adapted view sees one authoritative validator;
+  a native replacement replaces or clears it with the rest of the tool. Capability exposure
+  delegates host prevalidation to the selected tool's current parser, including defaults and
+  root-level transforms, then calls `invokeValidatedRaw` with that exact parsed value. Separating
+  validation from raw execution is what lets an asynchronous parser coexist with a synchronously
+  returned `AsyncIterable` and preserves framework streaming semantics. Direct `invoke` /
+  `invokeRaw` still validate themselves; `invokeValidatedRaw` is the explicit bridge path for
+  input already accepted by `validateInput`.
+
+- **Live execution context is opaque, call-local, and adapter-tagged.** `Executor` and
+  `CatalogRegistration.execute` accept an optional second `unknown` argument, `ToolCatalog.invoke`
+  an optional third, and `invoke_tool` forwards that value unchanged. A context-aware adapter's
+  `expose` codec wraps the framework's complete live context under a private package-stable tag;
+  its ingested executor unwraps only that tag. A missing or foreign tag takes the framework's
+  context-free fallback, which matters because several framework views may share one catalog.
+  The core never reads, stores, or traces the value: it may contain credentials, cyclic objects,
+  streams, or abort signals. Optional arguments preserve source compatibility and the exact
+  one-argument runtime call for existing executors. Rejected: shared mutable state or async-local
+  bridging (ambient coupling and tenant-leak risk), an untagged raw framework context (cross-view
+  confusion), and a core-owned context union (couples the SDK to every framework).
+
 - **Explicit `adaptTo(adapter())`, not string keys or auto-require.** Types flow through generics
   (`AdaptedRatel<A>` infers the framework's tool/message types and the adapter's helpers), so app
   code needs zero casts. A string key would need a module-augmentation registry plus a dynamic
@@ -87,9 +110,10 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   is capped at 50 (0, negative, or non-integer values fall back to the default 5, never an
   unbounded set); server grouping treats a leading `__` as no prefix. Duplicate-id
   semantics are split by path on purpose: the adapted (codec) path is first-registration-wins
-  across every view and the view's passthroughs, so repeated calls are idempotent and one view
-  can't clobber another; the native path keeps the catalog's own replace-in-place semantics — it
-  is the authoritative hot-swap path. The raw catalog stays reachable (`r.tools.catalog`) as the
+  across every view, including globally claimed passthrough ids whose framework values remain
+  local to their originating view, so repeated calls are idempotent and one view can't clobber
+  another; the native path keeps the catalog's own replace-in-place semantics — it is the
+  authoritative hot-swap path. The raw catalog stays reachable (`r.tools.catalog`) as the
   unguarded driver-level escape hatch.
 
 - **All three capability tools are always advertised.** `modelTools()` never gates
@@ -124,8 +148,8 @@ adapter is three pure codecs; the core owns all state and every framework-indepe
   it takes its own plain error path rather than the adapter hint.) Detection can't tell *installed*
   from *in use* (Mastra depends on `ai` internally), so it never drives behavior — only the hint.
 
-The existing piecemeal API (`ToolCatalog`, the capability-tool builders) is unchanged; the factory
-is additive.
+The existing piecemeal API remains source-compatible. The factory is additive; the only extension
+to the executor path is the optional opaque context argument described above.
 
 ## Consequences
 
@@ -133,6 +157,13 @@ is additive.
   and result shape is the core's job and is tested once. This is what makes community adapters
   safe: a runner-agnostic conformance testkit (`@ratel-ai/sdk/testkit`) pins the contract, driven
   by framework-supplied hooks and shipped with a reference adapter as the worked example.
+- The first adapter (`@ratel-ai/vercel-ai-sdk`) sets the host-version compatibility policy
+  adapters follow: peer on every supported host major at once (`ai@^5.0.0 || ^6.0.0 || ^7.0.0`;
+  `ai@4` predates the v5 tool/message reshape and is out of scope), one shared code path
+  absorbing per-major differences at runtime rather than per-major builds, and CI rows at each
+  supported major's exact floor + latest verified release (build, typecheck, test, pack,
+  packed-consumer typecheck per row). Narrowing the supported-majors peer range is a breaking
+  change of the adapter — never a patch or minor; widening to a new host major is additive.
 - Telemetry stamping of the adapter's `name` as a `ratel.adapter` attribute is deferred to the
   adapter packages: the attribute is a vocabulary addition across the Rust/TS/Python telemetry
   triple (ADR-0007) and lands with the first adapter that emits it, not with the core SPI. The

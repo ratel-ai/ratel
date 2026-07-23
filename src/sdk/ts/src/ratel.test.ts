@@ -441,6 +441,30 @@ describe("ratel().adaptTo(adapter)", () => {
     expect(b.modelTools()).not.toHaveProperty("provider_search"); // framework-shaped → per view
   });
 
+  it("a passthrough claims its id across adapter views without leaking its value", async () => {
+    const core = ratel();
+    const a = core.adaptTo(referenceAdapter());
+    const b = core.adaptTo(referenceAdapter());
+    const firstForExecutableCollision: FakeTool = { description: "provider a", inputSchema: {} };
+    const firstForPassthroughCollision: FakeTool = { description: "provider a", inputSchema: {} };
+    const latePassthrough: FakeTool = { description: "provider b", inputSchema: {} };
+
+    await a.tools.register({
+      executable_shadow: firstForExecutableCollision,
+      passthrough_shadow: firstForPassthroughCollision,
+    });
+    await b.tools.register({
+      executable_shadow: exec("late executable"),
+      passthrough_shadow: latePassthrough,
+    });
+
+    expect(core.tools.has("executable_shadow")).toBe(false);
+    expect(a.modelTools().executable_shadow).toBe(firstForExecutableCollision);
+    expect(a.modelTools().passthrough_shadow).toBe(firstForPassthroughCollision);
+    expect(b.modelTools()).not.toHaveProperty("executable_shadow");
+    expect(b.modelTools()).not.toHaveProperty("passthrough_shadow");
+  });
+
   it("exposes get/search/invoke on the adapted handle, at parity with the native ToolCollection", async () => {
     const a = ratel().adaptTo(referenceAdapter());
     await a.tools.register({ read_file: exec("Read a file from local disk.") });
