@@ -100,6 +100,25 @@ describe("adaptive usage ranking", () => {
     expect(order.indexOf("gh_run_list")).toBeLessThan(order.indexOf("docker_build"));
   });
 
+  it("tracks writes with a monotonic rev that survives the wire form", async () => {
+    // `rev` is the primitive for the caller's storage layer: save only when it
+    // changed, and detect a writer that moved past your base.
+    const catalog = await buildCatalog();
+    const graph = new IntentGraph();
+    catalog.enableAdaptiveRanking(graph);
+    expect(graph.rev).toBe(0);
+
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+    const afterOne = graph.rev;
+    expect(afterOne).toBeGreaterThan(0);
+
+    await useIt(catalog, "is the build broken again", "gh_run_list");
+    expect(graph.rev).toBeGreaterThan(afterOne);
+
+    // The counter is carried across a save/restore, so it stays monotonic.
+    expect(IntentGraph.fromJson(graph.toJson()).rev).toBe(graph.rev);
+  });
+
   it("rejects a graph from a schema version it does not read", () => {
     const future = JSON.stringify({
       v: 2,

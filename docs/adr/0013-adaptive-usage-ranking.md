@@ -135,6 +135,30 @@ a one-time SDK stderr warning (default on, `warnOnModelMismatch: false` to suppr
 members under the current model and restamps — members, support, and edges are
 model-independent, so all learning survives; only the centroids move.
 
+### Persistence, change-tracking, and forward compatibility
+
+The graph is in-process; the caller owns storage (`toJson`/`fromJson`). That is deliberate —
+Ratel runs with no infra and must not pick a backend (file, SQLite, the app's own DB, S3).
+But delegating storage without the primitives to do it safely is a trap, so the wire form
+carries a **monotonic `rev` counter**, bumped once per mutation (a confirmed observation, a
+rebuild) and never read during ranking. It answers two questions the caller otherwise cannot:
+
+- **Save-when-changed.** Learning happens on every confirmed invoke, in memory; a crash loses
+  whatever was not persisted. Rather than serialize on every invoke (wasteful) or guess
+  (lossy), the caller snapshots `rev` after each save and writes again only when it differs.
+- **Stale-base detection.** Two writers that both load, learn, and save would silently clobber
+  each other. Before overwriting a stored graph, the caller compares its `rev` to the one it
+  loaded; a higher value means another writer moved ahead. **Single-writer is the supported
+  model** — `rev` makes a collision *detectable*, not merged. Automatic merge is rejected: it
+  would mean owning the storage layer, the very thing delegation avoids.
+
+Forward compatibility is a contract, not a hope: within schema `v: 1` fields are **additive**,
+a consumer **ignores unknown fields** (no `deny_unknown_fields`; `additionalProperties: true`
+in the schema), and an unrecognized `v` is a **typed error** (`UnsupportedVersion`), never a
+panic or a silent degrade. An older graph missing a newer field (`model`, `last_ts`, `rev`)
+loads with a safe default. Conformance vectors pin all three guarantees so a future change
+cannot quietly regress them.
+
 ### Opt-in, per registry
 
 A usage arm turns `SearchHit.score` from a BM25 score into an RRF score. ADR-0011 promises
@@ -178,9 +202,10 @@ LLM-extracted intents populate the same `members` field.
 - **The graph accumulates from a stream ADR-0007 permits to drop events.** A dropped
   invoke is lost permanently rather than recovered on the next rebuild. Replay is the
   repair path.
-- Learning is process-scoped until durable storage lands; replaying `~/.ratel/telemetry` at
-  construction is the interim cross-session path, and needs no new storage because
-  `JsonlSink` already writes that log.
+- Persistence is the caller's: `toJson`/`fromJson` plus a monotonic `rev` for save-when-changed
+  and stale-base detection (single-writer supported; no built-in merge). Replaying
+  `~/.ratel/telemetry` at construction is an alternative cross-session path, and needs no new
+  storage because `JsonlSink` already writes that log.
 - `members` holds raw query text. Whatever persists it must match the `0600` treatment
   `JsonlSink` already applies.
 - A feedback loop is inherent — boosting used capabilities makes them more used. `W < 1`

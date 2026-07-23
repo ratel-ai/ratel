@@ -429,6 +429,17 @@ pub struct IntentGraph {
     /// Epoch-millis of the newest event folded in. Provenance only — it says how
     /// current the graph is, and nothing reads it during ranking.
     pub built_from_ts: u64,
+    /// Monotonic write counter, bumped once on every mutation ([`Self::observe`],
+    /// a centroid rebuild). Nothing reads it during ranking; it exists for the
+    /// caller's storage layer, which owns persistence (the graph is in-process
+    /// only). Two uses: **save-when-changed** — persist only when `rev` differs
+    /// from the last saved value; and **stale-base detection** — before
+    /// overwriting a stored graph, compare its `rev` to the one you loaded, and
+    /// if it advanced another writer got there first (single-writer is the
+    /// supported model; this makes a clobber *detectable*, not merged). Carried
+    /// in the wire form; an older graph without it loads as 0 and continues up.
+    #[serde(default)]
+    pub rev: u64,
     /// The clusters. Order is not significant.
     pub intents: Vec<Intent>,
     /// Fingerprint of the embedding model the centroids were built with, or
@@ -484,10 +495,11 @@ impl GraphModelStatus {
 impl Serialize for IntentGraph {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let len = 3 + usize::from(self.model.is_some());
+        let len = 4 + usize::from(self.model.is_some());
         let mut out = serializer.serialize_struct("IntentGraph", len)?;
         out.serialize_field("v", &self.v)?;
         out.serialize_field("built_from_ts", &self.built_from_ts)?;
+        out.serialize_field("rev", &self.rev)?;
         if let Some(model) = &self.model {
             out.serialize_field("model", model)?;
         }
@@ -543,6 +555,7 @@ impl IntentGraph {
         Self {
             v: GRAPH_VERSION,
             built_from_ts: 0,
+            rev: 0,
             intents: Vec::new(),
             model: None,
             pending: PendingQuery::default(),
@@ -691,6 +704,17 @@ impl IntentGraph {
         let now = self.built_from_ts;
         self.intents
             .retain(|it| recency_factor(now, it.last_ts) >= EVICTION_FLOOR);
+
+        // Every path that reaches here changed a member, an edge, or support, so
+        // count exactly one write. The early returns above (no words and no
+        // vector) leave `rev` alone — nothing was persisted-worthy.
+        self.rev += 1;
+    }
+
+    /// The write counter — see [`Self::rev`]. Snapshot it after each save; a
+    /// later value means unsaved learning, or another writer moved ahead of you.
+    pub fn rev(&self) -> u64 {
+        self.rev
     }
 
     /// Whether this graph's centroids can be trusted against the currently active
@@ -754,6 +778,9 @@ impl IntentGraph {
             it.centroid = Some(normalize(sum));
         }
         self.model = Some(fingerprint);
+        // A rebuild rewrites every centroid and restamps the model — a change the
+        // caller will want to persist.
+        self.rev += 1;
     }
 
     /// The cluster this query belongs to: by cosine when an embedding is
@@ -1100,6 +1127,7 @@ mod tests {
         IntentGraph {
             v: 1,
             built_from_ts: 1_753_000_000_000,
+            rev: 0,
             intents,
             model: None,
             pending: PendingQuery::default(),
@@ -1154,6 +1182,68 @@ mod tests {
             IntentGraph::from_json("not json"),
             Err(IntentGraphError::Malformed(_))
         ));
+    }
+
+    // ---- rev: the persistence write-counter --------------------------------
+
+    #[test]
+    fn observe_bumps_rev_once_per_mutation() {
+        let mut g = IntentGraph::empty();
+        assert_eq!(g.rev(), 0, "an empty graph has written nothing");
+        g.observe("build broken", Capability::Tool, "a", T0, true);
+        assert_eq!(g.rev(), 1);
+        // A second observe on the same search adds an edge — a real change even
+        // though it seeds no new member — so it must still count as one write.
+        g.observe("build broken", Capability::Tool, "b", T0, false);
+        assert_eq!(g.rev(), 2);
+    }
+
+    #[test]
+    fn a_no_op_observe_does_not_bump_rev() {
+        // No words to cluster on and no stashed vector: `observe` returns before
+        // changing anything, so the write-counter must not move. Guards against a
+        // "bump unconditionally" regression.
+        let mut g = IntentGraph::empty();
+        g.observe("   ", Capability::Tool, "a", T0, true);
+        assert_eq!(g.len(), 0);
+        assert_eq!(g.rev(), 0);
+    }
+
+    #[test]
+    fn rev_survives_a_round_trip() {
+        let mut g = IntentGraph::empty();
+        g.observe("build broken", Capability::Tool, "a", T0, true);
+        g.observe("rotate the signing key", Capability::Tool, "b", T0, true);
+        let before = g.rev();
+        assert_eq!(before, 2);
+        let back = IntentGraph::from_json(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!(back.rev(), before, "rev must persist across the wire form");
+    }
+
+    #[test]
+    fn a_graph_without_rev_loads_as_zero_then_continues() {
+        // An older or cloud-built graph carries no `rev`; it loads as 0 and the
+        // counter continues up from there — monotonic across the gap.
+        let json = r#"{"v":1,"built_from_ts":1,
+            "intents":[{"id":"i0","label":"l","members":["q"],"support":2,
+            "tools":{"t":1.0},"skills":{}}]}"#;
+        let mut g = IntentGraph::from_json(json).expect("valid graph");
+        assert_eq!(g.rev(), 0);
+        g.observe("something new", Capability::Tool, "t", T0, true);
+        assert_eq!(g.rev(), 1);
+    }
+
+    #[test]
+    fn an_unknown_field_is_ignored_on_load() {
+        // Forward compatibility: a field a future build adds must be dropped, not
+        // rejected — both at the graph and the intent level. Locks the current
+        // (no `deny_unknown_fields`) behavior against regression.
+        let json = r#"{"v":1,"built_from_ts":1,"future_top_level":42,
+            "intents":[{"id":"i0","label":"l","members":["q"],"support":2,
+            "tools":{"t":1.0},"skills":{},"future_intent_field":"x"}]}"#;
+        let g = IntentGraph::from_json(json).expect("unknown fields must be ignored");
+        assert_eq!(g.len(), 1);
+        assert_eq!(g.intents[0].support, 2);
     }
 
     #[test]
@@ -1945,10 +2035,13 @@ mod tests {
         let mut g = IntentGraph::empty();
         g.note_query_vector("build broken", &[1.0, 0.0, 0.0], "model-a");
         g.observe("build broken", Capability::Tool, "gh_run_list", T0, true);
+        let rev_before = g.rev();
 
         // Members re-embedded under model-b (here, just different vectors).
         g.rebuild_centroids(vec![vec![vec![0.0, 1.0, 0.0]]], "model-b".into());
 
+        // A rebuild is a persistable change — it must advance the write counter.
+        assert_eq!(g.rev(), rev_before + 1);
         assert_eq!(g.model.as_deref(), Some("model-b"));
         assert_eq!(g.model_status("model-b", 3), GraphModelStatus::Ok);
         // Learning preserved.

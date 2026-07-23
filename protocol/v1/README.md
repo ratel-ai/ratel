@@ -209,6 +209,25 @@ lexically (no `centroid`) is fully usable by a consumer that has an embedder, an
 versa. And edge weights come from **invocations**, never from what retrieval returned —
 recording a ranker's own output would reinforce its mistakes.
 
+### Persistence & compatibility contract
+
+The graph is held in memory; storing it is the caller's job. Three guarantees make that safe
+to delegate:
+
+- **Change-tracking.** The optional `rev` field is a monotonic write counter — bumped once per
+  mutation, never read during ranking. A caller persists only when `rev` changed since the last
+  save (**save-when-changed**), and before overwriting a stored graph compares its `rev` to the
+  base it loaded — a higher value means another writer got there first (**stale-base
+  detection**). Single-writer is the supported model; `rev` makes a clobber detectable, not
+  merged. Absent `rev` is treated as 0.
+- **Additive evolution.** Within `v: 1`, new fields are optional and a consumer **MUST ignore
+  fields it does not recognize** (the schema is `additionalProperties: true`). An older
+  consumer reads a newer graph; a graph missing a newer field (`model`, `last_ts`, `rev`) loads
+  with a safe default.
+- **Version safety.** A consumer **MUST reject an unrecognized `v`** with a clean error, never a
+  crash or a silent degrade.
+
 Structural fixtures live in [`conformance/vectors.json`](conformance/vectors.json) under
 `graph`, with the consumer rules a conforming implementation MUST follow; `node
-conformance/verify.mjs` checks them.
+conformance/verify.mjs` checks them — including a graph carrying `rev`, a graph with unknown
+extra fields (which MUST validate), and an unknown version (which MUST be rejected).

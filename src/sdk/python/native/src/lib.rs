@@ -247,6 +247,11 @@ impl IntentGraph {
 
     /// Serialize to the `protocol/v1` wire form — for inspection, or to carry
     /// what was learned across processes.
+    ///
+    /// The graph is in-process only; persistence is yours. It mutates on every
+    /// confirmed invoke, so unsaved observations are lost on a crash — persist on
+    /// a cadence or at shutdown. Use `rev` to save only when it changed and to
+    /// detect a concurrent writer; single-writer is the supported model.
     fn to_json(&self) -> PyResult<String> {
         let guard = self
             .inner
@@ -265,6 +270,20 @@ impl IntentGraph {
             .read()
             .map_err(|_| PyValueError::new_err("intent graph lock poisoned"))?;
         Ok(guard.len())
+    }
+
+    /// Monotonic write counter — bumped once per mutation (a confirmed
+    /// observation, a rebuild). Never affects ranking; it is a primitive for your
+    /// storage layer. Snapshot it after each save: a later value means unsaved
+    /// learning (save-when-changed), and a stored graph whose `rev` is higher than
+    /// the one you loaded was written by another process (stale-base detection).
+    #[getter]
+    fn rev(&self) -> PyResult<u64> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| PyValueError::new_err("intent graph lock poisoned"))?;
+        Ok(guard.rev())
     }
 }
 

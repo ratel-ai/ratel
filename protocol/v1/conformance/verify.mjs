@@ -127,6 +127,9 @@ export function validateGraph(doc) {
   if (doc.model !== undefined && !(typeof doc.model === 'string' && doc.model.length > 0)) {
     errs.push(`model, when present, must be a non-empty string, got ${JSON.stringify(doc.model)}`);
   }
+  if (doc.rev !== undefined && !(isInt(doc.rev) && doc.rev >= 0)) {
+    errs.push(`rev, when present, must be a non-negative integer, got ${JSON.stringify(doc.rev)}`);
+  }
   if (!Array.isArray(doc.intents)) return errs.concat('intents must be an array');
 
   const seen = new Set();

@@ -744,9 +744,64 @@
             }
           ]
         }
+      },
+      {
+        "name": "with-rev",
+        "why": "A graph carries an OPTIONAL monotonic write counter. It is metadata for the caller's storage layer (save-when-changed, stale-base detection) and never affects ranking; a consumer accepts it and otherwise ignores it.",
+        "doc": {
+          "v": 1,
+          "built_from_ts": 1753000000000,
+          "rev": 42,
+          "intents": [
+            {
+              "id": "intent_0",
+              "label": "is the build green",
+              "terms": [
+                "build",
+                "ci"
+              ],
+              "members": [
+                "why is the build broken",
+                "did CI pass"
+              ],
+              "support": 5,
+              "tools": {
+                "gh_run_list": 0.8
+              },
+              "skills": {}
+            }
+          ]
+        }
       }
     ],
     "invalid": [
+      {
+        "name": "rev-negative",
+        "because": "`rev`, when present, is a non-negative integer — it only ever counts up.",
+        "doc": {
+          "v": 1,
+          "built_from_ts": 1753000000000,
+          "rev": -1,
+          "intents": [
+            {
+              "id": "intent_0",
+              "label": "is the build green",
+              "terms": [
+                "build",
+                "ci"
+              ],
+              "members": [
+                "why is the build broken"
+              ],
+              "support": 5,
+              "tools": {
+                "gh_run_list": 0.8
+              },
+              "skills": {}
+            }
+          ]
+        }
+      },
       {
         "name": "unknown-version",
         "because": "`v` must be 1; a consumer rejects an unknown version rather than degrading.",

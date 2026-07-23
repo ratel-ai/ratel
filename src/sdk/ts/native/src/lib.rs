@@ -472,6 +472,11 @@ impl IntentGraph {
 
     /// Serialize to the `protocol/v1` wire form — for inspection, or to carry
     /// what was learned across processes.
+    ///
+    /// The graph is in-process only; persistence is yours. It mutates on every
+    /// confirmed invoke, so unsaved observations are lost on a crash — persist on
+    /// a cadence or at shutdown. Use `rev` to save only when it changed and to
+    /// detect a concurrent writer; single-writer is the supported model.
     #[napi]
     pub fn to_json(&self) -> napi::Result<String> {
         let guard = self
@@ -491,6 +496,20 @@ impl IntentGraph {
             .read()
             .map_err(|_| napi::Error::from_reason("intent graph lock poisoned"))?;
         Ok(guard.len() as u32)
+    }
+
+    /// Monotonic write counter — bumped once per mutation (a confirmed
+    /// observation, a rebuild). Never affects ranking; it is a primitive for your
+    /// storage layer. Snapshot it after each save: a later value means unsaved
+    /// learning (save-when-changed), and a stored graph whose `rev` is higher than
+    /// the one you loaded was written by another process (stale-base detection).
+    #[napi(getter)]
+    pub fn rev(&self) -> napi::Result<f64> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("intent graph lock poisoned"))?;
+        Ok(guard.rev() as f64)
     }
 }
 

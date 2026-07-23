@@ -25,6 +25,11 @@
       "minLength": 1,
       "description": "OPTIONAL fingerprint of the embedding model the centroids were built with. Present only for a graph that carries centroids; absent for a lexically-clustered graph. A consumer MUST NOT cosine a query against centroids built by a different model \u2014 it detects the swap (dimension or fingerprint) and pauses the usage arm until the graph is rebuilt. See ADR-0013."
     },
+    "rev": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "OPTIONAL monotonic write counter, bumped once per mutation of the graph (a confirmed observation, a centroid rebuild). Never read during ranking \u2014 it is a primitive for the caller's storage layer, which owns persistence. Two uses: save-when-changed (persist only when `rev` differs from the last saved value) and stale-base detection (before overwriting a stored graph, compare its `rev` to the one you loaded; a higher value means another writer moved ahead \u2014 single-writer is the supported model, so this makes a clobber detectable, not merged). Absent means treat as 0; the counter continues up from there. See ADR-0013."
+    },
     "intents": {
       "type": "array",
       "description": "The clusters. Order is not significant; consumers MUST NOT rely on it.",

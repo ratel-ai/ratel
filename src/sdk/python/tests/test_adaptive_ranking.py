@@ -112,6 +112,25 @@ async def test_learning_survives_a_restart_via_the_wire_form() -> None:
     assert order.index("gh_run_list") < order.index("docker_build")
 
 
+@pytest.mark.asyncio
+async def test_rev_tracks_writes_and_survives_the_wire_form() -> None:
+    """`rev` lets a caller save only when changed and detect a stale base."""
+    catalog = await build_catalog()
+    graph = IntentGraph()
+    catalog.enable_adaptive_ranking(graph)
+    assert graph.rev == 0
+
+    await use_it(catalog, "why is the build broken", "gh_run_list")
+    after_one = graph.rev
+    assert after_one > 0
+
+    await use_it(catalog, "is the build broken again", "gh_run_list")
+    assert graph.rev > after_one
+
+    # Carried across a save/restore, so the counter stays monotonic.
+    assert IntentGraph.from_json(graph.to_json()).rev == graph.rev
+
+
 def test_a_future_schema_version_is_rejected() -> None:
     future = json.dumps({"v": 2, "built_from_ts": 1, "intents": []})
     with pytest.raises(ValueError, match="version"):
