@@ -616,20 +616,26 @@ jobs:
           node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
       - name: Install
         run: pnpm install --frozen-lockfile
+      # The `...` build closure pulls @ratel-ai/sdk, whose build compiles the native
+      # ML crate — set up cargo + a warm cache so the release isn't cold-compiling.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/ts/native
       # Build the adapter and its @ratel-ai/sdk workspace dependency (topo order).
       - name: Build TS
         run: pnpm --filter "@ratel-ai/mastra..." run build
-      # npm keeps `workspace:` specifiers verbatim, so pin the @ratel-ai/sdk peer to
-      # the concrete co-released version before publishing (ephemeral CI edit; not
-      # committed). Keeps the npm-OIDC dir publish + provenance identical to the
-      # other units rather than switching to `pnpm publish`.
-      - name: Pin the @ratel-ai/sdk peer dependency for publish
+      # npm keeps `workspace:` specifiers verbatim, so pin the @ratel-ai/sdk peer AND
+      # dev deps to the concrete co-released version before publishing (ephemeral CI
+      # edit; not committed). Keeps the npm-OIDC dir publish + provenance identical to
+      # the other units rather than switching to `pnpm publish`.
+      - name: Pin the @ratel-ai/sdk peer and dev dependencies for publish
         shell: bash
         run: |
           set -e
           sdk_ver=$(node -p "require('./src/sdk/ts/package.json').version")
-          SDK_VER="$sdk_ver" node -e "const fs=require('fs'); const f='./src/adapters/ts-mastra/package.json'; const p=require(f); p.peerDependencies['@ratel-ai/sdk']='^'+process.env.SDK_VER; fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n')"
-          echo "pinned @ratel-ai/sdk -> $(node -p "require('./src/adapters/ts-mastra/package.json').peerDependencies['@ratel-ai/sdk']")"
+          SDK_VER="$sdk_ver" node -e "const fs=require('fs'); const f='./src/adapters/ts-mastra/package.json'; const p=require(f); const v='^'+process.env.SDK_VER; p.peerDependencies['@ratel-ai/sdk']=v; p.devDependencies['@ratel-ai/sdk']=v; fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n')"
+          echo "pinned @ratel-ai/sdk -> $(node -p "const p=require('./src/adapters/ts-mastra/package.json'); p.peerDependencies['@ratel-ai/sdk'] + ' (peer), ' + p.devDependencies['@ratel-ai/sdk'] + ' (dev)'")"
       # Preflight dry-run BEFORE the real (immutable) publish, mirroring the SDK job.
       - name: Preflight — dry-run npm publish
         shell: bash
@@ -680,20 +686,26 @@ jobs:
           node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
       - name: Install
         run: pnpm install --frozen-lockfile
+      # The `...` build closure pulls @ratel-ai/sdk, whose build compiles the native
+      # ML crate — set up cargo + a warm cache so the release isn't cold-compiling.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/ts/native
       # Build the adapter and its @ratel-ai/sdk workspace dependency (topo order).
       - name: Build TS
         run: pnpm --filter "@ratel-ai/vercel-ai-sdk..." run build
-      # npm keeps `workspace:` specifiers verbatim, so pin the @ratel-ai/sdk peer to
-      # the concrete co-released version before publishing (ephemeral CI edit; not
-      # committed). Keeps the npm-OIDC dir publish + provenance identical to the
-      # other units rather than switching to `pnpm publish`.
-      - name: Pin the @ratel-ai/sdk peer dependency for publish
+      # npm keeps `workspace:` specifiers verbatim, so pin the @ratel-ai/sdk peer AND
+      # dev deps to the concrete co-released version before publishing (ephemeral CI
+      # edit; not committed). Keeps the npm-OIDC dir publish + provenance identical to
+      # the other units rather than switching to `pnpm publish`.
+      - name: Pin the @ratel-ai/sdk peer and dev dependencies for publish
         shell: bash
         run: |
           set -e
           sdk_ver=$(node -p "require('./src/sdk/ts/package.json').version")
-          SDK_VER="$sdk_ver" node -e "const fs=require('fs'); const f='./src/adapters/ts-vercel-ai-sdk/package.json'; const p=require(f); p.peerDependencies['@ratel-ai/sdk']='^'+process.env.SDK_VER; fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n')"
-          echo "pinned @ratel-ai/sdk -> $(node -p "require('./src/adapters/ts-vercel-ai-sdk/package.json').peerDependencies['@ratel-ai/sdk']")"
+          SDK_VER="$sdk_ver" node -e "const fs=require('fs'); const f='./src/adapters/ts-vercel-ai-sdk/package.json'; const p=require(f); const v='^'+process.env.SDK_VER; p.peerDependencies['@ratel-ai/sdk']=v; p.devDependencies['@ratel-ai/sdk']=v; fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n')"
+          echo "pinned @ratel-ai/sdk -> $(node -p "const p=require('./src/adapters/ts-vercel-ai-sdk/package.json'); p.peerDependencies['@ratel-ai/sdk'] + ' (peer), ' + p.devDependencies['@ratel-ai/sdk'] + ' (dev)'")"
       # Preflight dry-run BEFORE the real (immutable) publish, mirroring the SDK job.
       - name: Preflight — dry-run npm publish
         shell: bash
