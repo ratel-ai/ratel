@@ -117,6 +117,20 @@ GEN_AI_TOOL_CALL_ARGUMENTS: Final = "gen_ai.tool.call.arguments"
 #: gen_ai.tool.call.result — tool result (Opt-In content, gated).
 GEN_AI_TOOL_CALL_RESULT: Final = "gen_ai.tool.call.result"
 
+# Tier 1 content, carried on the gen_ai.client.inference.operation.details event
+# (never span attributes; CONVENTIONS.md § Tier 1 content). Each holds a v1.42.0
+# message list ({role, parts[], name?}), JSON-encoded because OTel event
+# attributes are primitive-typed.
+
+#: gen_ai.system_instructions — the system prompt as a bare parts[] (Opt-In content).
+GEN_AI_SYSTEM_INSTRUCTIONS: Final = "gen_ai.system_instructions"
+
+#: gen_ai.input.messages — the input message list (Opt-In content).
+GEN_AI_INPUT_MESSAGES: Final = "gen_ai.input.messages"
+
+#: gen_ai.output.messages — the output message list (Opt-In content).
+GEN_AI_OUTPUT_MESSAGES: Final = "gen_ai.output.messages"
+
 
 class Origin(str, Enum):
     """Whether a ratel.* span was a direct library call or synthesized by the agent
@@ -191,7 +205,10 @@ __all__ = [
     "CAPTURE_CONTENT_ENV",
     "EXECUTE_TOOL",
     "GEN_AI_INFERENCE_DETAILS",
+    "GEN_AI_INPUT_MESSAGES",
     "GEN_AI_OPERATION_NAME",
+    "GEN_AI_OUTPUT_MESSAGES",
+    "GEN_AI_SYSTEM_INSTRUCTIONS",
     "GEN_AI_TOOL_CALL_ARGUMENTS",
     "GEN_AI_TOOL_CALL_ID",
     "GEN_AI_TOOL_CALL_RESULT",

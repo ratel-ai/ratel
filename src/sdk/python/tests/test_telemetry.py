@@ -9,6 +9,7 @@ host deployment would wire it. These tests need the OpenTelemetry SDK
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -67,6 +68,15 @@ def _spans_named(exp: Any, name: str) -> list[Any]:
     return [s for s in exp.get_finished_spans() if s.name == name]
 
 
+INFERENCE_DETAILS = "gen_ai.client.inference.operation.details"
+SEARCH_RESULTS = "ratel.search.results"
+
+
+def _event_named(span: Any, name: str) -> Any:
+    """The single span event with the given name, or None."""
+    return next((e for e in span.events if e.name == name), None)
+
+
 @pytest.mark.asyncio
 async def test_execute_tool_span_attributes(exporter: Any) -> None:
     catalog = ToolCatalog()
@@ -102,9 +112,102 @@ async def test_content_captured_when_gate_set(
     await catalog.register(_read_file())
     await catalog.invoke("read_file", {"path": "/p"})
 
-    attrs = _spans_named(exporter, "execute_tool read_file")[0].attributes
+    span = _spans_named(exporter, "execute_tool read_file")[0]
+    attrs = span.attributes
     assert attrs["gen_ai.tool.call.arguments"] == '{"path": "/p"}'
     assert "contents of /p" in attrs["gen_ai.tool.call.result"]
+    # Dual emission: the content event is present too.
+    event = _event_named(span, INFERENCE_DETAILS)
+    assert event is not None
+    assert "gen_ai.input.messages" in event.attributes
+    assert "gen_ai.output.messages" in event.attributes
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_emits_content_event_under_event_only(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "EVENT_ONLY")
+    catalog = ToolCatalog()
+    await catalog.register(_read_file())
+    await catalog.invoke("read_file", {"path": "/p"})
+
+    span = _spans_named(exporter, "execute_tool read_file")[0]
+    # Content rides the event, not span attributes.
+    assert "gen_ai.tool.call.arguments" not in span.attributes
+    assert "gen_ai.tool.call.result" not in span.attributes
+
+    event = _event_named(span, INFERENCE_DETAILS)
+    assert event is not None
+    assert json.loads(event.attributes["gen_ai.input.messages"]) == [
+        {
+            "role": "assistant",
+            "parts": [{"type": "tool_call", "name": "read_file", "arguments": {"path": "/p"}}],
+        }
+    ]
+    assert json.loads(event.attributes["gen_ai.output.messages"]) == [
+        {
+            "role": "tool",
+            "parts": [{"type": "tool_call_response", "response": {"contents": "contents of /p"}}],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_span_only_emits_no_content_event(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "SPAN_ONLY")
+    catalog = ToolCatalog()
+    await catalog.register(_read_file())
+    await catalog.invoke("read_file", {"path": "/p"})
+
+    span = _spans_named(exporter, "execute_tool read_file")[0]
+    assert span.attributes["gen_ai.tool.call.arguments"] == '{"path": "/p"}'
+    assert _event_named(span, INFERENCE_DETAILS) is None
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_no_content_emits_neither(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "NO_CONTENT")
+    catalog = ToolCatalog()
+    await catalog.register(_read_file())
+    await catalog.invoke("read_file", {"path": "/p"})
+
+    span = _spans_named(exporter, "execute_tool read_file")[0]
+    assert "gen_ai.tool.call.arguments" not in span.attributes
+    assert _event_named(span, INFERENCE_DETAILS) is None
+
+
+@pytest.mark.asyncio
+async def test_failed_tool_emits_input_message_only_under_event_only(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "EVENT_ONLY")
+
+    def boom(_args: dict[str, Any]) -> Any:
+        raise RuntimeError("kaboom")
+
+    catalog = ToolCatalog()
+    await catalog.register(
+        ExecutableTool(id="boom", name="boom", description="throws", execute=boom)
+    )
+    with pytest.raises(RuntimeError, match="kaboom"):
+        await catalog.invoke("boom", {"x": 1})
+
+    span = _spans_named(exporter, "execute_tool boom")[0]
+    assert span.status.status_code == StatusCode.ERROR
+    event = _event_named(span, INFERENCE_DETAILS)
+    assert event is not None
+    assert json.loads(event.attributes["gen_ai.input.messages"]) == [
+        {
+            "role": "assistant",
+            "parts": [{"type": "tool_call", "name": "boom", "arguments": {"x": 1}}],
+        }
+    ]
+    assert "gen_ai.output.messages" not in event.attributes
 
 
 @pytest.mark.asyncio
@@ -157,9 +260,39 @@ async def test_ratel_search_span_skill_with_query(
     await skills.register(Skill(id="pdf", name="pdf", description="fill pdf forms", body="b"))
     skills.search("pdf", 3)
 
-    attrs = _spans_named(exporter, "ratel.search")[0].attributes
-    assert attrs["ratel.search.target"] == "skill"
-    assert attrs["ratel.search.query"] == "pdf"
+    span = _spans_named(exporter, "ratel.search")[0]
+    assert span.attributes["ratel.search.target"] == "skill"
+    assert span.attributes["ratel.search.query"] == "pdf"
+    # SPAN_ONLY: query on the span, no results event.
+    assert _event_named(span, SEARCH_RESULTS) is None
+
+
+async def test_ratel_search_query_on_results_event_under_event_only(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "EVENT_ONLY")
+    catalog = ToolCatalog()
+    await catalog.register(_read_file())
+    catalog.search("read file", 5, "agent")
+
+    span = _spans_named(exporter, "ratel.search")[0]
+    assert "ratel.search.query" not in span.attributes  # content off the span
+    event = _event_named(span, SEARCH_RESULTS)
+    assert event is not None
+    assert event.attributes["ratel.search.query"] == "read file"
+
+
+async def test_ratel_search_query_on_both_under_span_and_event(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "SPAN_AND_EVENT")
+    catalog = ToolCatalog()
+    await catalog.register(_read_file())
+    catalog.search("read file", 5, "agent")
+
+    span = _spans_named(exporter, "ratel.search")[0]
+    assert span.attributes["ratel.search.query"] == "read file"
+    assert _event_named(span, SEARCH_RESULTS).attributes["ratel.search.query"] == "read file"
 
 
 async def test_ratel_skill_load_span(exporter: Any) -> None:

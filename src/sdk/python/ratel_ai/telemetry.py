@@ -26,7 +26,10 @@ try:
     from opentelemetry.trace import SpanKind, Status, StatusCode
     from ratel_ai_telemetry import (
         EXECUTE_TOOL,
+        GEN_AI_INFERENCE_DETAILS,
+        GEN_AI_INPUT_MESSAGES,
         GEN_AI_OPERATION_NAME,
+        GEN_AI_OUTPUT_MESSAGES,
         GEN_AI_TOOL_CALL_ARGUMENTS,
         GEN_AI_TOOL_CALL_RESULT,
         GEN_AI_TOOL_NAME,
@@ -36,6 +39,7 @@ try:
         RATEL_SEARCH,
         RATEL_SEARCH_HIT_COUNT,
         RATEL_SEARCH_QUERY,
+        RATEL_SEARCH_RESULTS,
         RATEL_SEARCH_TARGET,
         RATEL_SEARCH_TOP_K,
         RATEL_SKILL_ID,
@@ -71,6 +75,45 @@ def _tracer() -> Any:
 def _capture_content_on_span() -> bool:
     mode = content_capture_mode()
     return mode in (ContentCapture.SPAN_ONLY, ContentCapture.SPAN_AND_EVENT)
+
+
+def _capture_content_on_event() -> bool:
+    mode = content_capture_mode()
+    return mode in (ContentCapture.EVENT_ONLY, ContentCapture.SPAN_AND_EVENT)
+
+
+#: Sentinel distinguishing "no result" (error path) from a result that is falsy/None.
+_UNSET: Any = object()
+
+
+def _add_tool_content_event(span: Any, tool_id: str, args: Any, result: Any = _UNSET) -> None:
+    """Emit the Tier-1 content event for a tool invocation on ``span``.
+
+    The call as an assistant ``tool_call`` message and, when ``result`` is provided,
+    the result as a ``tool`` ``tool_call_response`` message (v1.42.0 message-part
+    schema, CONVENTIONS.md § Tier 1 content). Content rides this event, never span
+    attributes; the message lists are JSON-encoded (OTel event attributes are
+    primitive-typed).
+    """
+    input_messages = [
+        {"role": "assistant", "parts": [{"type": "tool_call", "name": tool_id, "arguments": args}]}
+    ]
+    attributes = {GEN_AI_INPUT_MESSAGES: _safe_json(input_messages)}
+    if result is not _UNSET:
+        output_messages = [
+            {"role": "tool", "parts": [{"type": "tool_call_response", "response": result}]}
+        ]
+        attributes[GEN_AI_OUTPUT_MESSAGES] = _safe_json(output_messages)
+    span.add_event(GEN_AI_INFERENCE_DETAILS, attributes)
+
+
+def _add_search_results_event(span: Any, query: str) -> None:
+    """Emit the Opt-In ``ratel.search.results`` content event carrying the search text.
+
+    Hit ids/scores/BM25 timing are local-stream only; the OTLP glue carries the gated
+    query it has (CONVENTIONS.md § ratel.search).
+    """
+    span.add_event(RATEL_SEARCH_RESULTS, {RATEL_SEARCH_QUERY: query})
 
 
 def _args_size_bytes(args: Any) -> int:
@@ -109,9 +152,16 @@ async def trace_execute_tool(
         if _capture_content_on_span():
             span.set_attribute(GEN_AI_TOOL_CALL_ARGUMENTS, _safe_json(args))
         # start_as_current_span records the exception + sets ERROR status on raise.
-        result = await run()
+        try:
+            result = await run()
+        except BaseException:
+            if _capture_content_on_event():
+                _add_tool_content_event(span, tool_id, args)  # input only; call failed
+            raise
         if _capture_content_on_span():
             span.set_attribute(GEN_AI_TOOL_CALL_RESULT, _safe_json(result))
+        if _capture_content_on_event():
+            _add_tool_content_event(span, tool_id, args, result=result)
         span.set_status(Status(StatusCode.OK))
         return result
 
@@ -138,6 +188,8 @@ def trace_search(
             span.set_attribute(RATEL_SEARCH_QUERY, query)
         hits = run()
         span.set_attribute(RATEL_SEARCH_HIT_COUNT, len(hits))  # type: ignore[arg-type]
+        if _capture_content_on_event():
+            _add_search_results_event(span, query)
         span.set_status(Status(StatusCode.OK))
         return hits
 
@@ -160,6 +212,8 @@ async def trace_search_async(
             span.set_attribute(RATEL_SEARCH_QUERY, query)
         hits = await run()
         span.set_attribute(RATEL_SEARCH_HIT_COUNT, len(hits))  # type: ignore[arg-type]
+        if _capture_content_on_event():
+            _add_search_results_event(span, query)
         span.set_status(Status(StatusCode.OK))
         return hits
 
