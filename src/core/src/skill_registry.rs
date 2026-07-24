@@ -483,8 +483,12 @@ impl SkillRegistry {
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let Some(arm) = arm else {
-            // Raw cosine scores — not fused.
-            let hits = to_skill_hits(ranked, false);
+            // Raw cosine scores — not fused. Retrieval ran deeper than `top_k`
+            // to give the usage arm room to re-rank; with no arm to fuse, trim
+            // back to what the caller asked for (the fused path does this in
+            // `fuse_arms`).
+            let mut hits = to_skill_hits(ranked, false);
+            hits.truncate(top_k);
             let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
             self.record_search(
@@ -702,6 +706,28 @@ mod tests {
             &["backend", "api"],
         ));
         reg
+    }
+
+    #[test]
+    fn semantic_search_truncates_to_top_k_when_the_graph_matches_no_cluster() {
+        // Cold start: an empty graph is still attached, so retrieval depth jumps
+        // to RETRIEVE_DEPTH — but no cluster can ever match. The no-match path
+        // must still hand back exactly `top_k`, not the deep candidate list.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        // Four skills that all embed to the stub's "api" vector, so dense ranks
+        // every one of them at cosine 1.0 — the deep list holds 4 entries.
+        reg.register(skill("api_a", "api_a", "rest api design", &[]));
+        reg.register(skill("api_b", "api_b", "rest api pagination", &[]));
+        reg.register(skill("api_c", "api_c", "rest api auth", &[]));
+        reg.register(skill("api_d", "api_d", "rest api versioning", &[]));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(Some(Arc::new(RwLock::new(IntentGraph::empty()))));
+
+        let hits = reg
+            .search_with_method("api", 2, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        assert_eq!(hits.len(), 2, "no-match dense path must honor top_k");
     }
 
     #[test]

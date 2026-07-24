@@ -643,8 +643,12 @@ impl ToolRegistry {
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let Some(arm) = arm else {
-            // Raw cosine scores — not fused.
-            let hits = to_search_hits(ranked, false);
+            // Raw cosine scores — not fused. Retrieval ran deeper than `top_k`
+            // to give the usage arm room to re-rank; with no arm to fuse, trim
+            // back to what the caller asked for (the fused path does this in
+            // `fuse_arms`).
+            let mut hits = to_search_hits(ranked, false);
+            hits.truncate(top_k);
             let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
             self.record_search(
@@ -1445,6 +1449,28 @@ mod tests {
             assert_eq!(a.tool_id, b.tool_id);
             assert_eq!(a.score, b.score, "cosine score changed for {}", a.tool_id);
         }
+    }
+
+    #[test]
+    fn semantic_search_truncates_to_top_k_when_the_graph_matches_no_cluster() {
+        // Cold start: an empty graph is still attached, so retrieval depth jumps
+        // to RETRIEVE_DEPTH — but no cluster can ever match. The no-match path
+        // must still hand back exactly `top_k`, not the deep candidate list.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        // Four tools that all embed to the stub's "read" vector, so dense ranks
+        // every one of them at cosine 1.0 — the deep list holds 4 entries.
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("read_path", "read a path"));
+        reg.register(tool("read_bytes", "read bytes"));
+        reg.register(tool("read_conf", "read config"));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(Some(Arc::new(RwLock::new(IntentGraph::empty()))));
+
+        let hits = reg
+            .search_with_method("read", 2, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        assert_eq!(hits.len(), 2, "no-match dense path must honor top_k");
     }
 
     /// A graph with an explicit model fingerprint and a chosen centroid width,
