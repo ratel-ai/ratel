@@ -6,13 +6,14 @@ The catalog / capability-tool / skill / MCP paths call these helpers to open a s
 each operation, alongside the local `record_event` stream (untouched). Span names
 and attribute keys come from the OTel-free `ratel_ai_telemetry` vocabulary.
 
-Emission is **transparent and optional**: the OpenTelemetry API and the vocabulary
-are imported lazily. If neither is installed (the base `ratel-ai` install), every
-helper is a straight pass-through — zero overhead, no spans. Installing
-`ratel-ai[otlp]` (or having OpenTelemetry present) lights emission up; spans then go
-to whatever provider is registered, exactly as a host deployment wires it. Content
-(`ratel.search.query`, tool args/result) rides span attributes only when the
-ecosystem capture gate is on (default off).
+Emission is **transparent and optional**: the `ratel_ai_telemetry` vocabulary ships
+with the base install (it is OTel-free), but the OpenTelemetry API is imported lazily.
+Without OpenTelemetry present, every helper is a straight pass-through — zero overhead,
+no spans. A host that registers its own OpenTelemetry provider (or installs
+`ratel-ai[otlp]`) lights emission up; spans then go to whatever provider is registered,
+exactly as a host deployment wires it. Content (`ratel.search.query`, tool args/result,
+and the content events) is emitted only when the ecosystem capture gate is on (default
+off).
 """
 
 from __future__ import annotations

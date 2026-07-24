@@ -10,9 +10,11 @@ host deployment would wire it. These tests need the OpenTelemetry SDK
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
+import tomllib
 
 pytest.importorskip("opentelemetry.sdk.trace", reason="OpenTelemetry SDK not installed")
 pytest.importorskip("ratel_ai_telemetry", reason="ratel-ai telemetry vocabulary not installed")
@@ -293,6 +295,33 @@ async def test_ratel_search_query_on_both_under_span_and_event(
     span = _spans_named(exporter, "ratel.search")[0]
     assert span.attributes["ratel.search.query"] == "read file"
     assert _event_named(span, SEARCH_RESULTS).attributes["ratel.search.query"] == "read file"
+
+
+@pytest.mark.asyncio
+async def test_host_owned_provider_receives_spans_without_configure_telemetry(
+    exporter: Any,
+) -> None:
+    """The base-SDK contract (ADR-0007): with a host-registered OTel provider and no
+    configure_telemetry() call, the SDK's spans flow to that provider. This module's
+    TracerProvider is exactly such a host-owned provider."""
+    catalog = ToolCatalog()
+    await catalog.register(_read_file())
+    await catalog.invoke("read_file", {"path": "/tmp/x"})
+
+    assert len(_spans_named(exporter, "execute_tool read_file")) == 1
+
+
+def test_base_sdk_depends_on_the_vocabulary_so_host_owned_otel_works() -> None:
+    """Regression for the host-owned base path: emission imports the ratel_ai_telemetry
+    vocabulary, so the base install must ship it (not only the [otlp] extra). Otherwise a
+    host bringing its own OpenTelemetry provider on a base install gets no Ratel spans —
+    contradicting the documented behavior. The vocabulary is OTel-free, so this keeps the
+    base install lightweight (the [otlp] extra still adds the exporter/OTel SDK)."""
+    pyproject = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())
+    base_deps = pyproject["project"]["dependencies"]
+    assert any(dep.startswith("ratel-ai-telemetry") for dep in base_deps), (
+        f"base dependencies must include ratel-ai-telemetry; got {base_deps}"
+    )
 
 
 async def test_ratel_skill_load_span(exporter: Any) -> None:
