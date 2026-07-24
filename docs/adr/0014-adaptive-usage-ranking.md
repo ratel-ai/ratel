@@ -135,6 +135,17 @@ a one-time SDK stderr warning (default on, `warnOnModelMismatch: false` to suppr
 members under the current model and restamps — members, support, and edges are
 model-independent, so all learning survives; only the centroids move.
 
+Recovery is **explicit by default**: the arm stays paused until the caller invokes
+`rebuildIntentGraph()`, because a rebuild is an embedding pass (cost, can fail, mutates the
+graph and bumps `rev`) and the paused fall-through is safe in the meantime. For zero-touch
+recovery, `enableAdaptiveRanking(graph, { rebuildOnModelChange: true })` (`rebuild_on_model_change=True`
+in Python) opts in: the next dense search re-embeds the graph before searching, then proceeds.
+It lives on the catalog, not `IntentGraph` — the graph is a pure wire type with no embedder;
+only the catalog owns the model. Recovery is lazy (dense search is async-only, `enable` is
+sync), so `adaptiveRankingStatus` reads `paused` until that first dense search; a failed
+rebuild raises the same `EmbedderError` the dense query itself would. Off by default keeps the
+expensive, fallible operation from being implicit.
+
 ### Persistence, change-tracking, and forward compatibility
 
 The graph is in-process; the caller owns storage (`toJson`/`fromJson`). That is deliberate —

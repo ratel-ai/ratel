@@ -417,8 +417,16 @@ export class ToolCatalog {
    *
    * Pass the same {@link IntentGraph} to a {@link SkillCatalog} so both learn
    * into one set of clusters.
+   *
+   * Set `rebuildOnModelChange` to auto-recover a model-mismatched graph on the
+   * next dense (semantic/hybrid) search rather than staying paused until you
+   * call {@link rebuildIntentGraph} yourself. Off by default — the rebuild is an
+   * embedding pass (cost, possible `EmbedderError`, and it mutates the graph).
    */
-  enableAdaptiveRanking(graph: IntentGraph, options: { warnOnModelMismatch?: boolean } = {}): void {
+  enableAdaptiveRanking(
+    graph: IntentGraph,
+    options: { warnOnModelMismatch?: boolean; rebuildOnModelChange?: boolean } = {},
+  ): void {
     this.registry.enableAdaptiveRanking(graph, options);
   }
 

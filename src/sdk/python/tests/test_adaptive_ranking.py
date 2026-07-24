@@ -9,6 +9,7 @@ import json
 import os
 import warnings
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -188,6 +189,81 @@ async def test_jsonl_sink_survives_disabling_adaptive_ranking(tmp_path: Path) ->
     assert path.stat().st_size > before
 
 
+class _FakeNative:
+    """Stands in for the pyo3 native registry (which can't be monkeypatched) so
+    the auto-rebuild trigger can be tested without a real embedding model. A
+    dense search returns nothing; status is scripted."""
+
+    def __init__(self, status: str) -> None:
+        self._status = status
+
+    def adaptive_ranking_status(self) -> tuple[str, str, str, bool]:
+        return (self._status, "old-model", "new-model", False)
+
+    def _search_with_method(self, query: str, top_k: int, origin: str, method: str) -> list:
+        return []
+
+
+async def _semantic_with_fake(status: str, *, flag: bool):
+    """A semantic tool catalog whose native layer is faked and whose rebuild is
+    spied. `flag` sets rebuild_on_model_change without touching the native."""
+    catalog = ToolCatalog(method="semantic", embedding={"local": "/missing/ratel-model"})
+    reg = catalog._registry
+    reg._native = _FakeNative(status)
+    reg._rebuild_on_model_change = flag
+    reg.rebuild_intent_graph = AsyncMock()  # type: ignore[method-assign]
+    return catalog, reg
+
+
+@pytest.mark.asyncio
+async def test_auto_rebuild_recovers_a_paused_graph_on_the_next_dense_search() -> None:
+    catalog, reg = await _semantic_with_fake("paused: model mismatch", flag=True)
+    await catalog.search_async("anything", 5, method="semantic")
+    reg.rebuild_intent_graph.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_auto_rebuild_is_off_by_default() -> None:
+    catalog, reg = await _semantic_with_fake("paused: model mismatch", flag=False)
+    await catalog.search_async("anything", 5, method="semantic")
+    reg.rebuild_intent_graph.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_rebuild_does_nothing_when_the_arm_is_active() -> None:
+    catalog, reg = await _semantic_with_fake("active", flag=True)
+    await catalog.search_async("anything", 5, method="semantic")
+    reg.rebuild_intent_graph.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_rebuild_stops_once_the_graph_is_recovered() -> None:
+    # A successful rebuild flips status to active, so a second dense search does
+    # not rebuild again — self-healing, not rebuild-every-search.
+    catalog, reg = await _semantic_with_fake("paused: model mismatch", flag=True)
+
+    async def _recover() -> None:
+        reg._native._status = "active"
+
+    reg.rebuild_intent_graph = AsyncMock(side_effect=_recover)  # type: ignore[method-assign]
+    await catalog.search_async("anything", 5, method="semantic")
+    await catalog.search_async("anything", 5, method="semantic")
+    reg.rebuild_intent_graph.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_skill_catalog_auto_rebuild_recovers_a_paused_graph() -> None:
+    # The skill twin runs the same trigger code.
+    catalog = SkillCatalog(method="semantic", embedding={"local": "/missing/ratel-model"})
+    reg = catalog._registry
+    reg._native = _FakeNative("paused: model mismatch")
+    reg._rebuild_on_model_change = True
+    reg.rebuild_intent_graph = AsyncMock()  # type: ignore[method-assign]
+
+    await catalog.search_async("anything", 5, method="semantic")
+    reg.rebuild_intent_graph.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_one_graph_is_shared_between_tool_and_skill_catalogs() -> None:
     """One cluster, two edge maps.
@@ -332,3 +408,19 @@ async def test_warn_can_be_suppressed() -> None:
         catalog.enable_adaptive_ranking(_stale_graph(), warn_on_model_mismatch=False)
         assert catalog.adaptive_ranking_status == "paused: model mismatch"
         assert not caught
+
+
+@pytest.mark.skipif(not _has_model, reason="bge-small not cached")
+@pytest.mark.asyncio
+async def test_rebuild_on_model_change_recovers_without_a_manual_rebuild() -> None:
+    # End to end with a real model: a stale-model graph pauses, but the first
+    # dense search rebuilds it under the active model and comes back active — no
+    # explicit rebuild_intent_graph() call.
+    catalog = await _semantic_catalog()
+    catalog.enable_adaptive_ranking(
+        _stale_graph(), warn_on_model_mismatch=False, rebuild_on_model_change=True
+    )
+    assert catalog.adaptive_ranking_status == "paused: model mismatch"
+
+    await catalog.search_async("why is the build broken", 5, method="semantic")
+    assert catalog.adaptive_ranking_status == "active"

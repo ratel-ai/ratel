@@ -317,6 +317,7 @@ class ToolRegistry:
         self._eager = method in ("semantic", "hybrid")
         self._warn_on_model_mismatch = True
         self._adaptive_warned = False
+        self._rebuild_on_model_change = False
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
@@ -443,6 +444,7 @@ class ToolRegistry:
             return self.search_with_origin(query, top_k, origin)
         if self._undriven_builds > 0:
             raise RuntimeError(_UNAWAITED_REGISTER)
+        await self._maybe_rebuild_on_model_change()
         return await self._run_dense(
             lambda: self._native._search_with_method(query, top_k, origin, method)
         )
@@ -460,7 +462,11 @@ class ToolRegistry:
             self._native.set_trace_sink(kind, session_id, path)
 
     def enable_adaptive_ranking(
-        self, graph: IntentGraph, *, warn_on_model_mismatch: bool = True
+        self,
+        graph: IntentGraph,
+        *,
+        warn_on_model_mismatch: bool = True,
+        rebuild_on_model_change: bool = False,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
@@ -476,15 +482,39 @@ class ToolRegistry:
 
         On a model change the arm pauses and a one-time warning is issued unless
         ``warn_on_model_mismatch`` is False; call :meth:`rebuild_intent_graph`.
+
+        Set ``rebuild_on_model_change`` to recover automatically instead: the
+        next dense (semantic/hybrid) search re-embeds the graph under the current
+        model before searching, so a persisted graph self-heals after a model
+        swap. It is off by default because the rebuild is an embedding pass —
+        expensive, able to raise :class:`EmbedderError`, and it mutates the graph
+        (new centroids, bumped ``rev``). Recovery is lazy: status stays
+        ``paused`` until that first dense search.
         """
         self._warn_on_model_mismatch = warn_on_model_mismatch
+        self._rebuild_on_model_change = rebuild_on_model_change
         self._adaptive_warned = False
         self._native.enable_adaptive_ranking(graph)
         self._maybe_warn_model_mismatch()
 
     def disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
+        self._rebuild_on_model_change = False
         self._native.disable_adaptive_ranking()
+
+    async def _maybe_rebuild_on_model_change(self) -> None:
+        """Auto-recover a model-mismatched graph before a dense search, opt-in.
+
+        A no-op unless ``rebuild_on_model_change`` was set and the arm is paused.
+        Re-checks each dense search: once rebuilt the status reads ``active`` and
+        this stops rebuilding, so a model that is briefly unavailable heals on a
+        later search rather than staying paused forever.
+        """
+        if not self._rebuild_on_model_change:
+            return
+        status, _built, _active, _dim = self._native.adaptive_ranking_status()
+        if status.startswith("paused"):
+            await self.rebuild_intent_graph()
 
     async def rebuild_intent_graph(self) -> None:
         """Re-embed the graph's members under the current model; preserves learning.
@@ -764,7 +794,11 @@ class ToolCatalog:
         self._registry.record_event(event)
 
     def enable_adaptive_ranking(
-        self, graph: IntentGraph, *, warn_on_model_mismatch: bool = True
+        self,
+        graph: IntentGraph,
+        *,
+        warn_on_model_mismatch: bool = True,
+        rebuild_on_model_change: bool = False,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
@@ -777,8 +811,17 @@ class ToolCatalog:
         hit ``score`` becomes a fusion score rather than a raw BM25 score, so
         use ``rank`` for ordering and ``fused`` to detect the scale, not the
         raw ``score``.
+
+        Set ``rebuild_on_model_change`` to auto-recover a model-mismatched graph
+        on the next dense search rather than staying paused until you call
+        :meth:`rebuild_intent_graph` yourself. Off by default — the rebuild is an
+        embedding pass (cost, possible :class:`EmbedderError`, mutates the graph).
         """
-        self._registry.enable_adaptive_ranking(graph, warn_on_model_mismatch=warn_on_model_mismatch)
+        self._registry.enable_adaptive_ranking(
+            graph,
+            warn_on_model_mismatch=warn_on_model_mismatch,
+            rebuild_on_model_change=rebuild_on_model_change,
+        )
 
     async def rebuild_intent_graph(self) -> None:
         """Re-embed the graph's members under the current model; preserves learning."""

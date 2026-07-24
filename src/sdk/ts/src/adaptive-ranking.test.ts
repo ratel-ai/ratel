@@ -1,7 +1,14 @@
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
-import { IntentGraph, SkillCatalog, ToolCatalog } from "./index.js";
+import {
+  EmbedderError,
+  IntentGraph,
+  SkillCatalog,
+  SkillRegistry,
+  ToolCatalog,
+  ToolRegistry,
+} from "./index.js";
 
 /**
  * A catalog where lexical retrieval is confidently wrong: "why is the build
@@ -241,6 +248,128 @@ describe("adaptive usage ranking", () => {
   });
 });
 
+// ---- opt-in auto-rebuild on model change ------------------------------------
+
+/** The pyo3/napi native can't be monkeypatched, so swap the whole native for a
+ * fake to exercise the trigger without a real embedding model. `status` is
+ * scripted; a dense search returns nothing. */
+function fakeNative(state: { status: string }) {
+  return {
+    enableAdaptiveRanking: () => {},
+    adaptiveRankingStatus: () => ({
+      status: state.status,
+      built: "old-model",
+      active: "new-model",
+      dimMismatch: false,
+    }),
+    searchWithMethodAsync: async () => [],
+  };
+}
+
+describe("rebuildOnModelChange", () => {
+  it("recovers a paused graph on the next dense search when enabled", async () => {
+    const reg = new ToolRegistry();
+    const state = { status: "paused: model mismatch" };
+    (reg as unknown as { native: unknown }).native = fakeNative(state);
+    reg.enableAdaptiveRanking(new IntentGraph(), {
+      rebuildOnModelChange: true,
+      warnOnModelMismatch: false,
+    });
+    const rebuild = vi.spyOn(reg, "rebuildIntentGraph").mockResolvedValue();
+
+    await reg.searchWithMethodAsync("anything", 5, "direct", "semantic");
+    expect(rebuild).toHaveBeenCalledOnce();
+  });
+
+  it("is off by default", async () => {
+    const reg = new ToolRegistry();
+    (reg as unknown as { native: unknown }).native = fakeNative({
+      status: "paused: model mismatch",
+    });
+    reg.enableAdaptiveRanking(new IntentGraph(), { warnOnModelMismatch: false });
+    const rebuild = vi.spyOn(reg, "rebuildIntentGraph").mockResolvedValue();
+
+    await reg.searchWithMethodAsync("anything", 5, "direct", "semantic");
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the arm is active", async () => {
+    const reg = new ToolRegistry();
+    (reg as unknown as { native: unknown }).native = fakeNative({ status: "active" });
+    reg.enableAdaptiveRanking(new IntentGraph(), { rebuildOnModelChange: true });
+    const rebuild = vi.spyOn(reg, "rebuildIntentGraph").mockResolvedValue();
+
+    await reg.searchWithMethodAsync("anything", 5, "direct", "semantic");
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  it("stops rebuilding once the graph is recovered", async () => {
+    const reg = new ToolRegistry();
+    const state = { status: "paused: model mismatch" };
+    (reg as unknown as { native: unknown }).native = fakeNative(state);
+    reg.enableAdaptiveRanking(new IntentGraph(), {
+      rebuildOnModelChange: true,
+      warnOnModelMismatch: false,
+    });
+    // A successful rebuild flips status to active, so the second search skips it.
+    const rebuild = vi.spyOn(reg, "rebuildIntentGraph").mockImplementation(async () => {
+      state.status = "active";
+    });
+
+    await reg.searchWithMethodAsync("anything", 5, "direct", "semantic");
+    await reg.searchWithMethodAsync("anything", 5, "direct", "semantic");
+    expect(rebuild).toHaveBeenCalledOnce();
+  });
+
+  it("also drives the skill registry twin", async () => {
+    const reg = new SkillRegistry();
+    (reg as unknown as { native: unknown }).native = fakeNative({
+      status: "paused: model mismatch",
+    });
+    reg.enableAdaptiveRanking(new IntentGraph(), {
+      rebuildOnModelChange: true,
+      warnOnModelMismatch: false,
+    });
+    const rebuild = vi.spyOn(reg, "rebuildIntentGraph").mockResolvedValue();
+
+    await reg.searchWithMethodAsync("anything", 5, "direct", "semantic");
+    expect(rebuild).toHaveBeenCalledOnce();
+  });
+});
+
+describe("rebuildIntentGraph error mapping (#6)", () => {
+  it("surfaces an embedding failure as a typed EmbedderError", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      embedding: { local: "/definitely/missing/ratel-embedding-model" },
+    });
+    const graph = IntentGraph.fromJson(
+      JSON.stringify({
+        v: 1,
+        built_from_ts: 1,
+        intents: [
+          {
+            id: "i0",
+            label: "l",
+            terms: [],
+            members: ["read a file"],
+            centroid: [1, 0, 0],
+            support: 9,
+            tools: {},
+            skills: {},
+          },
+        ],
+      }),
+    );
+    catalog.enableAdaptiveRanking(graph, { warnOnModelMismatch: false });
+
+    // Rebuild re-embeds the member under the missing model → load failure. The
+    // sibling paths already map this; rebuildIntentGraph must too.
+    const error = await catalog.rebuildIntentGraph().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(EmbedderError);
+  });
+});
+
 // ---- embedding-model change detection ---------------------------------------
 
 import { existsSync } from "node:fs";
@@ -334,5 +463,19 @@ describe.skipIf(!hasModel)("adaptive ranking model-change detection", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it("auto-recovers on the next dense search with rebuildOnModelChange", async () => {
+    // End to end with a real model: a stale-model graph pauses, but the first
+    // dense search rebuilds it under the active model — no manual rebuild call.
+    const catalog = await semanticCatalog();
+    catalog.enableAdaptiveRanking(staleModelGraph(), {
+      warnOnModelMismatch: false,
+      rebuildOnModelChange: true,
+    });
+    expect(catalog.adaptiveRankingStatus.status).toBe("paused: model mismatch");
+
+    await catalog.searchAsync("why is the build broken", 5, "direct", "semantic");
+    expect(catalog.adaptiveRankingStatus.status).toBe("active");
   });
 });

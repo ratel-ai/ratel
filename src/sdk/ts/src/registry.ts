@@ -34,6 +34,7 @@ export class ToolRegistry {
   private readonly native: NativeToolRegistry;
   #warnOnModelMismatch = true;
   #adaptiveWarned = false;
+  #rebuildOnModelChange = false;
   private readonly eager: boolean;
 
   /**
@@ -129,6 +130,12 @@ export class ToolRegistry {
     method: SearchMethod,
   ): Promise<SearchHit[]> {
     try {
+      // Guard the await behind the flag so the default path stays synchronous
+      // up to the native call — the pending-dense counter must increment before
+      // control yields, or a following register() would slip past serialization.
+      if (method !== "bm25" && this.#rebuildOnModelChange) {
+        await this.#maybeRebuildOnModelChange();
+      }
       return await this.native.searchWithMethodAsync(query, topK, origin, method);
     } catch (error) {
       throw mapEmbedderError(error);
@@ -166,8 +173,12 @@ export class ToolRegistry {
    * score rather than a raw BM25 score, so use `rank` for ordering and
    * `fused` to detect the scale, not the raw `score`.
    */
-  enableAdaptiveRanking(graph: IntentGraph, options: { warnOnModelMismatch?: boolean } = {}): void {
+  enableAdaptiveRanking(
+    graph: IntentGraph,
+    options: { warnOnModelMismatch?: boolean; rebuildOnModelChange?: boolean } = {},
+  ): void {
     this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
+    this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
     this.#adaptiveWarned = false;
     this.native.enableAdaptiveRanking(graph);
     this.#maybeWarnModelMismatch();
@@ -181,7 +192,11 @@ export class ToolRegistry {
    * preserved — only the centroids move to the new space.
    */
   async rebuildIntentGraph(): Promise<void> {
-    await this.native.rebuildIntentGraph();
+    try {
+      await this.native.rebuildIntentGraph();
+    } catch (error) {
+      throw mapEmbedderError(error);
+    }
     this.#adaptiveWarned = false;
     this.#maybeWarnModelMismatch();
   }
@@ -213,12 +228,25 @@ export class ToolRegistry {
     );
   }
 
+  /** Opt-in auto-recovery (see {@link enableAdaptiveRanking}): when the arm is
+   * paused because the graph's model no longer matches, re-embed the graph under
+   * the current model before the dense search. Re-checks each search, so once
+   * rebuilt it stops; a failed rebuild throws `EmbedderError`, exactly as the
+   * dense query itself would. */
+  async #maybeRebuildOnModelChange(): Promise<void> {
+    if (!this.#rebuildOnModelChange) return;
+    if (this.native.adaptiveRankingStatus().status.startsWith("paused")) {
+      await this.rebuildIntentGraph();
+    }
+  }
+
   /**
    * Turn adaptive usage ranking off: ranking returns to the base engine and the
    * graph stops growing. The graph keeps what it learned, so re-enabling
    * resumes rather than restarts.
    */
   disableAdaptiveRanking(): void {
+    this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
   }
 
@@ -237,6 +265,7 @@ export class SkillRegistry {
   private readonly native: NativeSkillRegistry;
   #warnOnModelMismatch = true;
   #adaptiveWarned = false;
+  #rebuildOnModelChange = false;
   private readonly eager: boolean;
 
   /**
@@ -317,6 +346,12 @@ export class SkillRegistry {
     method: SearchMethod,
   ): Promise<SkillHit[]> {
     try {
+      // Guard the await behind the flag so the default path stays synchronous
+      // up to the native call — the pending-dense counter must increment before
+      // control yields, or a following register() would slip past serialization.
+      if (method !== "bm25" && this.#rebuildOnModelChange) {
+        await this.#maybeRebuildOnModelChange();
+      }
       return await this.native.searchWithMethodAsync(query, topK, origin, method);
     } catch (error) {
       throw mapEmbedderError(error);
@@ -351,8 +386,12 @@ export class SkillRegistry {
    * score rather than a raw BM25 score, so use `rank` for ordering and
    * `fused` to detect the scale, not the raw `score`.
    */
-  enableAdaptiveRanking(graph: IntentGraph, options: { warnOnModelMismatch?: boolean } = {}): void {
+  enableAdaptiveRanking(
+    graph: IntentGraph,
+    options: { warnOnModelMismatch?: boolean; rebuildOnModelChange?: boolean } = {},
+  ): void {
     this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
+    this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
     this.#adaptiveWarned = false;
     this.native.enableAdaptiveRanking(graph);
     this.#maybeWarnModelMismatch();
@@ -366,7 +405,11 @@ export class SkillRegistry {
    * preserved — only the centroids move to the new space.
    */
   async rebuildIntentGraph(): Promise<void> {
-    await this.native.rebuildIntentGraph();
+    try {
+      await this.native.rebuildIntentGraph();
+    } catch (error) {
+      throw mapEmbedderError(error);
+    }
     this.#adaptiveWarned = false;
     this.#maybeWarnModelMismatch();
   }
@@ -398,12 +441,25 @@ export class SkillRegistry {
     );
   }
 
+  /** Opt-in auto-recovery (see {@link enableAdaptiveRanking}): when the arm is
+   * paused because the graph's model no longer matches, re-embed the graph under
+   * the current model before the dense search. Re-checks each search, so once
+   * rebuilt it stops; a failed rebuild throws `EmbedderError`, exactly as the
+   * dense query itself would. */
+  async #maybeRebuildOnModelChange(): Promise<void> {
+    if (!this.#rebuildOnModelChange) return;
+    if (this.native.adaptiveRankingStatus().status.startsWith("paused")) {
+      await this.rebuildIntentGraph();
+    }
+  }
+
   /**
    * Turn adaptive usage ranking off: ranking returns to the base engine and the
    * graph stops growing. The graph keeps what it learned, so re-enabling
    * resumes rather than restarts.
    */
   disableAdaptiveRanking(): void {
+    this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
   }
 
