@@ -29,10 +29,10 @@ function viewWithDeployTool() {
 describe("Agent integration (the real Mastra loop)", () => {
   it("injects the recall pair into the model prompt for a user turn", async () => {
     const view = viewWithDeployTool();
-    const prompts: string[] = [];
+    const prompts: unknown[][] = [];
     const model = createMockModel({
       mockText: "deployed.",
-      spyGenerate: (props: { prompt: unknown }) => prompts.push(JSON.stringify(props.prompt)),
+      spyGenerate: (props: { prompt: unknown[] }) => prompts.push(props.prompt),
     });
     const agent = new Agent({
       id: "integration",
@@ -46,21 +46,25 @@ describe("Agent integration (the real Mastra loop)", () => {
     const result = await agent.generate("deploy to production");
     expect(result.text).toContain("deployed");
     expect(prompts).toHaveLength(1);
-    // Recall reached the model: the synthetic search_capabilities pair and the
-    // user's query both appear in the prompt the model actually saw.
-    expect(prompts[0]).toContain(SEARCH_CAPABILITIES_ID);
-    expect(prompts[0]).toContain("deploy to production");
-    // Exactly one recall pair for the turn — recall_0, never re-injected as recall_1.
-    expect(prompts[0]).toContain("recall_0");
-    expect(prompts[0]).not.toContain("recall_1");
+    // Both halves of the recall reached the model: Mastra expands the single
+    // format-2 assistant message into an assistant tool-CALL plus a role:"tool"
+    // tool-RESULT, so the recall id appears exactly twice. A dropped or reshaped
+    // tool-result half pushes the count below 2 and fails this assertion.
+    expect(recallIdOccurrences(prompts[0], "recall_0")).toBe(2);
+    expect(JSON.stringify(prompts[0])).toContain(SEARCH_CAPABILITIES_ID);
+    // The recalled capability id rode along in the tool-result payload — guards
+    // the result half specifically, not just the assistant tool-call.
+    expect(JSON.stringify(prompts[0])).toContain("deploy_app");
+    // Exactly one recall pair for the turn — never re-injected as recall_1.
+    expect(recallIdOccurrences(prompts[0], "recall_1")).toBe(0);
   });
 
   it("mints a fresh recall id per user turn (processInput = once per generation)", async () => {
     const view = viewWithDeployTool();
-    const prompts: string[] = [];
+    const prompts: unknown[][] = [];
     const model = createMockModel({
       mockText: "ok",
-      spyGenerate: (props: { prompt: unknown }) => prompts.push(JSON.stringify(props.prompt)),
+      spyGenerate: (props: { prompt: unknown[] }) => prompts.push(props.prompt),
     });
     const agent = new Agent({
       id: "integration2",
@@ -73,8 +77,8 @@ describe("Agent integration (the real Mastra loop)", () => {
 
     await agent.generate("deploy to production");
     await agent.generate("deploy the service again");
-    expect(prompts[0]).toContain("recall_0");
-    expect(prompts[1]).toContain("recall_1");
+    expect(recallIdOccurrences(prompts[0], "recall_0")).toBe(2);
+    expect(recallIdOccurrences(prompts[1], "recall_1")).toBe(2);
   });
 
   it("recalls via processInput, not processInputStep (no re-injection during the tool loop)", () => {
@@ -86,3 +90,11 @@ describe("Agent integration (the real Mastra loop)", () => {
     expect(processor.processInputStep).toBeUndefined();
   });
 });
+
+// Count a recall call id's occurrences in the raw prompt the model saw. A live
+// recall pair is rendered as two model messages (assistant tool-call + tool
+// result), so a surviving pair shows the id twice. Mirrors the sibling AI SDK
+// adapter's `generate-text.test.ts` helper.
+function recallIdOccurrences(prompt: unknown[], callId: string): number {
+  return JSON.stringify(prompt).split(callId).length - 1;
+}

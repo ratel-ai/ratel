@@ -10,6 +10,7 @@ import {
   GEN_AI_TOOL_CALL_RESULT,
   GEN_AI_TOOL_NAME,
   Origin,
+  OTLP_ENDPOINT_ENV,
   RATEL_AUTH_FLOW,
   RATEL_AUTH_OUTCOME,
   RATEL_ORIGIN,
@@ -37,6 +38,15 @@ describe("ratel telemetry vocabulary", () => {
 
   it("gates content capture on the ecosystem instrumentation env var", () => {
     expect(CAPTURE_CONTENT_ENV).toBe("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT");
+  });
+
+  it("exports the dedicated OTLP endpoint env var", () => {
+    expect(OTLP_ENDPOINT_ENV).toBe("RATEL_OTLP_ENDPOINT");
+  });
+
+  it("does not export the removed RATEL_URL endpoint config", async () => {
+    const telemetry = await import("./index.js");
+    expect(telemetry).not.toHaveProperty("ENDPOINT_ENV");
   });
 
   it("names the ratel.* spans per the pin", () => {

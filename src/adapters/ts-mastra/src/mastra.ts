@@ -123,7 +123,7 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
       return createTool({
         id: tool.id,
         description: tool.description,
-        inputSchema: capabilitySchema(tool.id, tool.inputSchema as JSONSchema7),
+        inputSchema: capabilitySchema(tool.id),
         // Keep the whole live context opaque to the core. The stable private
         // symbol lets any Mastra view over this catalog recover it, while a
         // different adapter's carrier can never be mistaken for Mastra's.
@@ -172,9 +172,10 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
               const query = lastUserText(args.messages);
               if (!query) return args.messages;
               // base.recall mints the id and returns [] on no hits (spending none).
-              const pair = await base.recall(query);
-              if (pair.length === 0) return args.messages;
-              return [...args.messages, ...pair];
+              // Mastra recall is a single message (unlike the AI SDK adapter's pair).
+              const recalled = await base.recall(query);
+              if (recalled.length === 0) return args.messages;
+              return [...args.messages, ...recalled];
             },
           };
         },
@@ -205,10 +206,9 @@ function isMastraValidationError(value: unknown): value is MastraValidationError
 // Hand-written, deliberately permissive zod schemas for the three capability
 // tools (the model-facing shapes). topK carries no int/min/max — the core owns
 // clamping, so an out-of-range value must reach it rather than being rejected
-// here. An unknown id (defensive: the core only exposes the three) passes the
-// catalog's own JSON Schema straight through — `createTool` accepts a raw JSON
-// Schema, so there is still no schema converter in the adapter.
-function capabilitySchema(id: string, fallback: JSONSchema7): z.ZodTypeAny {
+// here. The core only ever exposes these three ids, so an unknown id is a broken
+// invariant — throw rather than guess a schema.
+function capabilitySchema(id: string): z.ZodTypeAny {
   switch (id) {
     case SEARCH_CAPABILITIES_ID:
       // Descriptions mirror the core's canonical schema so the model keeps the
@@ -237,7 +237,7 @@ function capabilitySchema(id: string, fallback: JSONSchema7): z.ZodTypeAny {
           .describe("id of the skill to load (use search_capabilities to find available ids)"),
       });
     default:
-      return fallback as unknown as z.ZodTypeAny;
+      throw new Error(`mastra: no capability schema for id "${id}"`);
   }
 }
 

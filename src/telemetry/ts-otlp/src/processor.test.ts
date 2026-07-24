@@ -1,6 +1,6 @@
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { BatchSpanProcessor, type ReadableSpan } from "@opentelemetry/sdk-trace-base";
-import { ENDPOINT_ENV } from "@ratel-ai/telemetry";
+import { OTLP_ENDPOINT_ENV } from "@ratel-ai/telemetry";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ratelSignalFilter, ratelSpanProcessor, ratelTraceExporter } from "./processor.js";
 
@@ -35,14 +35,14 @@ describe("ratelTraceExporter", () => {
     );
   });
 
-  it("throws when there is no endpoint and no RATEL_URL", () => {
-    const saved = process.env[ENDPOINT_ENV];
-    delete process.env[ENDPOINT_ENV];
+  it("throws when there is no endpoint and no RATEL_OTLP_ENDPOINT", () => {
+    const saved = process.env[OTLP_ENDPOINT_ENV];
+    delete process.env[OTLP_ENDPOINT_ENV];
     try {
-      expect(() => ratelTraceExporter({ apiKey: "k" })).toThrow(ENDPOINT_ENV);
+      expect(() => ratelTraceExporter({ apiKey: "k" })).toThrow(OTLP_ENDPOINT_ENV);
     } finally {
-      if (saved === undefined) delete process.env[ENDPOINT_ENV];
-      else process.env[ENDPOINT_ENV] = saved;
+      if (saved === undefined) delete process.env[OTLP_ENDPOINT_ENV];
+      else process.env[OTLP_ENDPOINT_ENV] = saved;
     }
   });
 });
@@ -51,8 +51,8 @@ describe("ratelSpanProcessor", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("returns a no-op processor without requiring endpoint configuration when disabled", async () => {
-    const saved = process.env[ENDPOINT_ENV];
-    delete process.env[ENDPOINT_ENV];
+    const saved = process.env[OTLP_ENDPOINT_ENV];
+    delete process.env[OTLP_ENDPOINT_ENV];
     try {
       const proc = ratelSpanProcessor({ enabled: false });
 
@@ -60,8 +60,8 @@ describe("ratelSpanProcessor", () => {
       await expect(proc.forceFlush()).resolves.toBeUndefined();
       await expect(proc.shutdown()).resolves.toBeUndefined();
     } finally {
-      if (saved === undefined) delete process.env[ENDPOINT_ENV];
-      else process.env[ENDPOINT_ENV] = saved;
+      if (saved === undefined) delete process.env[OTLP_ENDPOINT_ENV];
+      else process.env[OTLP_ENDPOINT_ENV] = saved;
     }
   });
 

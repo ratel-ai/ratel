@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-24
+
+### Changed
+
+- Ship the native extension built with symbol stripping and thin LTO (`[profile.release]`), materially shrinking the wheel's compiled binary. No API or behavior change.
+
 ## [0.5.0] - 2026-07-20
 
 ### Added

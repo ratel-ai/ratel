@@ -1,14 +1,14 @@
 name: Verify install
 
 # Per-unit install smoke tests (ADR-0008). Each release unit — core (crate),
-# sdk-ts (npm), sdk-py (PyPI), vercel-ai-sdk (npm), and the four telemetry units
-# (telemetry-core on crates.io, telemetry-ts + telemetry-ts-otlp on npm,
-# telemetry-py on PyPI) — is verified from its public registry with no repo
-# checkout and no local toolchain state, so a broken publish surfaces here.
+# sdk-ts (npm), sdk-py (PyPI), the framework adapters vercel-ai-sdk + mastra (npm),
+# and the four telemetry units (telemetry-core on crates.io, telemetry-ts +
+# telemetry-ts-otlp on npm, telemetry-py on PyPI) — is verified from its public
+# registry with no repo checkout and no local toolchain state, so a broken publish
+# surfaces here.
 #
 # workflow_dispatch: pick a `unit` and (optionally) a `version` to verify just
-# that one. The daily cron runs `unit: all` at each unit's `latest`, except the
-# prerelease-only adapter, which stays on `rc` until its first GA.
+# that one. The daily cron runs `unit: all` at each unit's `latest`.
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
         description: Release unit to verify
         type: choice
         default: all
-        options: [all, core, sdk-ts, sdk-py, telemetry-core, telemetry-ts, telemetry-py, telemetry-ts-otlp, vercel-ai-sdk]
+        options: [all, core, sdk-ts, sdk-py, telemetry-core, telemetry-ts, telemetry-py, telemetry-ts-otlp, vercel-ai-sdk, mastra]
       version:
         description: Version to verify (e.g. 0.2.0-rc.2 or 0.2.0). Only applied when a single unit is selected; ignored for `all`.
         required: false
@@ -103,10 +103,9 @@ jobs:
         env:
           REQUESTED_UNIT: ${{ inputs.unit }}
           REQUESTED_VERSION: ${{ inputs.version }}
-          REQUESTED_TAG: ${{ inputs.tag || 'rc' }}
-        # No GA exists yet: the useful package pair is on `rc`, while npm's
-        # `latest` still points at the incompatible first adapter RC. A caller
-        # can explicitly select `latest` to reproduce that path.
+          REQUESTED_TAG: ${{ inputs.tag || 'latest' }}
+        # vercel-ai-sdk is GA (0.1.0 on `latest`): the cron verifies `latest`.
+        # A caller can pin a version or select the `rc` tag explicitly.
         run: |
           set -euo pipefail
           case "$REQUESTED_TAG" in
@@ -125,8 +124,16 @@ jobs:
           else
             adapter_spec="$REQUESTED_TAG"
           fi
+          # Pull the SDK from the channel that MATCHES the adapter: a GA adapter
+          # peers on a GA SDK, which the `rc` SDK dist-tag would not satisfy →
+          # ERESOLVE. An rc adapter pairs with the rc SDK.
+          if [[ "$adapter_spec" == "rc" || "$adapter_spec" == *-rc.* ]]; then
+            sdk_spec="rc"
+          else
+            sdk_spec="latest"
+          fi
           printf 'adapter_spec=%s\n' "$adapter_spec" >> "$GITHUB_OUTPUT"
-          printf 'sdk_spec=%s\n' "$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+          printf 'sdk_spec=%s\n' "$sdk_spec" >> "$GITHUB_OUTPUT"
       - name: Install + smoke-test the published adapter
         shell: bash
         run: |
@@ -163,6 +170,104 @@ jobs:
             { toolId: "ping", args: {} },
             { toolCallId: "verify-install", messages: [] },
           );
+          if (result?.pong !== true) {
+            throw new Error(`unexpected invoke_tool result: ${JSON.stringify(result)}`);
+          }
+          console.log("OK", result);
+          EOF
+
+  verify-mastra:
+    name: verify mastra (npm)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'mastra'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve version
+        id: ver
+        shell: bash
+        env:
+          REQUESTED_UNIT: ${{ inputs.unit }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_TAG: ${{ inputs.tag || 'latest' }}
+        # mastra has a GA on `latest` (unlike vercel-ai-sdk): the cron verifies
+        # `latest`. A caller can pin a version or select the `rc` tag explicitly.
+        run: |
+          set -euo pipefail
+          case "$REQUESTED_TAG" in
+            rc|latest) ;;
+            *)
+              echo "::error::tag must be rc or latest"
+              exit 2
+              ;;
+          esac
+          if [ "$REQUESTED_UNIT" = "mastra" ] && [ -n "$REQUESTED_VERSION" ]; then
+            if [[ ! "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+              echo "::error::version must be X.Y.Z or X.Y.Z-rc.N"
+              exit 2
+            fi
+            adapter_spec="$REQUESTED_VERSION"
+          else
+            adapter_spec="$REQUESTED_TAG"
+          fi
+          # Pull the SDK from the channel that MATCHES the adapter: GA mastra peers
+          # on a GA SDK (^0.5.2), which the `rc` SDK dist-tag (an older 0.5.x-rc)
+          # would not satisfy → ERESOLVE. An rc adapter pairs with the rc SDK.
+          if [[ "$adapter_spec" == "rc" || "$adapter_spec" == *-rc.* ]]; then
+            sdk_spec="rc"
+          else
+            sdk_spec="latest"
+          fi
+          printf 'adapter_spec=%s\n' "$adapter_spec" >> "$GITHUB_OUTPUT"
+          printf 'sdk_spec=%s\n' "$sdk_spec" >> "$GITHUB_OUTPUT"
+      - name: Install + smoke-test the published adapter
+        shell: bash
+        # Installs the adapter against @ratel-ai/sdk plus its @mastra/core peer, then
+        # drives ratel().adaptTo(mastra()): the exposed capability tools must be real
+        # Mastra tools and invoke_tool must run a registered tool end to end.
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund \
+            "@ratel-ai/sdk@${{ steps.ver.outputs.sdk_spec }}" \
+            "@ratel-ai/mastra@${{ steps.ver.outputs.adapter_spec }}" \
+            "@mastra/core@^1.11.0" \
+            "zod@^4.0.0"
+          node --input-type=module <<'EOF'
+          import { mastra } from "@ratel-ai/mastra";
+          import { ratel } from "@ratel-ai/sdk";
+          import { createTool } from "@mastra/core/tools";
+
+          const r = ratel().adaptTo(mastra());
+          await r.tools.register({
+            ping: createTool({
+              id: "ping",
+              description: "Return pong",
+              execute: async () => ({ pong: true }),
+            }),
+          });
+
+          const tools = r.modelTools();
+          for (const id of ["search_capabilities", "invoke_tool", "get_skill_content"]) {
+            if (typeof tools[id]?.execute !== "function") {
+              throw new Error(`missing executable capability: ${id}`);
+            }
+          }
+
+          // Mastra tool execute is (input, executionContext); supply the minimal
+          // no-op observer the adapter threads through (its "valid minimal context").
+          const ctx = {
+            observe: {
+              async span(_name, fn) {
+                return fn();
+              },
+              log() {},
+            },
+          };
+          const result = await tools.invoke_tool.execute({ toolId: "ping", args: {} }, ctx);
           if (result?.pong !== true) {
             throw new Error(`unexpected invoke_tool result: ${JSON.stringify(result)}`);
           }

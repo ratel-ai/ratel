@@ -10,8 +10,10 @@
 
 import { CAPTURE_CONTENT_ENV } from "./index.js";
 
-/** Env var whose value is the default OTLP endpoint. */
-export const ENDPOINT_ENV = "RATEL_URL";
+/**
+ * Env var whose value is the OTLP traces endpoint.
+ */
+export const OTLP_ENDPOINT_ENV = "RATEL_OTLP_ENDPOINT";
 
 /** Env var whose value is the default Ratel API key. */
 export const API_KEY_ENV = "RATEL_API_KEY";
@@ -20,19 +22,20 @@ export const API_KEY_ENV = "RATEL_API_KEY";
 export const DEFAULT_SERVICE_NAME = "ratel";
 
 /**
- * `init()` (in `@ratel-ai/telemetry-otlp`) resolves endpoint + auth from
- * `RATEL_URL` / `RATEL_API_KEY`, with explicit `{ endpoint, apiKey }` values
- * taking precedence over the environment. An explicit `apiKey` sets the Bearer
- * header; the `RATEL_API_KEY` fallback only applies when neither `apiKey` nor an
- * explicit `Authorization` header is given, so ambient env never overrides an
- * auth header the caller passed on purpose.
+ * `init()` (in `@ratel-ai/telemetry-otlp`) resolves the endpoint from
+ * `RATEL_OTLP_ENDPOINT` and auth from `RATEL_API_KEY`, with explicit
+ * `{ endpoint, apiKey }` values taking precedence over the environment. An
+ * explicit `apiKey` sets the Bearer header; the
+ * `RATEL_API_KEY` fallback only applies when neither `apiKey` nor an explicit
+ * `Authorization` header is given, so ambient env never overrides an auth header
+ * the caller passed on purpose.
  */
 export interface InitOptions {
   /** `service.name` resource attribute. Defaults to {@link DEFAULT_SERVICE_NAME}. */
   serviceName?: string;
   /** Ratel API key; sent as `Authorization: Bearer <apiKey>`. Defaults to `RATEL_API_KEY`. */
   apiKey?: string;
-  /** Full OTLP traces URL (incl. `/v1/traces`). Defaults to `RATEL_URL`. */
+  /** Full OTLP traces URL (incl. `/v1/traces`). Defaults to `RATEL_OTLP_ENDPOINT`. */
   endpoint?: string;
   /** Extra headers merged onto the request. An explicit `Authorization` here is kept over the `RATEL_API_KEY` env fallback. */
   headers?: Record<string, string>;
@@ -53,10 +56,11 @@ export function resolveOtlpConfig(
   opts: InitOptions = {},
   env: Record<string, string | undefined> = process.env,
 ): ResolvedOtlpConfig {
-  const url = opts.endpoint ?? env[ENDPOINT_ENV];
+  const url = opts.endpoint ?? env[OTLP_ENDPOINT_ENV];
   if (!url) {
     throw new Error(
-      `ratel telemetry init: no endpoint. Pass { endpoint } or set ${ENDPOINT_ENV} (use { apiKey } or ${API_KEY_ENV} for Bearer auth).`,
+      `ratel telemetry init: no endpoint. Pass { endpoint } or set ${OTLP_ENDPOINT_ENV} ` +
+        `(use { apiKey } or ${API_KEY_ENV} for Bearer auth).`,
     );
   }
   const headers: Record<string, string> = { ...opts.headers };

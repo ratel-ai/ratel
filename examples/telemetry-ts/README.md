@@ -16,7 +16,7 @@ pnpm -F @ratel-ai/example-telemetry start
 To export a real trace instead of printing, set the endpoint and run again:
 
 ```bash
-export RATEL_URL=https://cloud.ratel.sh/v1/traces
+export RATEL_OTLP_ENDPOINT=https://cloud.ratel.sh/v1/traces
 export RATEL_API_KEY=sk-...          # optional; sent as Authorization: Bearer
 pnpm -F @ratel-ai/example-telemetry start
 ```
@@ -25,7 +25,7 @@ pnpm -F @ratel-ai/example-telemetry start
 
 - **The vocabulary is just constants.** `RATEL_SEARCH`, `EXECUTE_TOOL`, `RATEL_ORIGIN`, `GEN_AI_TOOL_NAME`, … are `import`ed from `@ratel-ai/telemetry` and set as attributes on stock OTel spans. The `Origin` / `SearchTarget` value enums carry the exact wire strings.
 - **Tool calls are standard `gen_ai` spans.** The invocation is an `execute_tool` span (so any OTel backend understands it), enriched with `ratel.*` attributes — not a bespoke Ratel span.
-- **`init()` is optional sugar.** `resolveOtlpConfig()` (pure, shown in the output) resolves `RATEL_URL` + `RATEL_API_KEY`; `init()` wires an OTLP `http/protobuf` exporter and returns a shutdown handle. The example calls it once with `enabled: Boolean(process.env.RATEL_URL)`, so the disabled path needs no env gate or error handling. A caller already running the OTel SDK adds `ratelSpanProcessor()` instead.
+- **`init()` is optional sugar.** `resolveOtlpConfig()` (pure, shown in the output) resolves `RATEL_OTLP_ENDPOINT` + `RATEL_API_KEY`; `init()` wires an OTLP `http/protobuf` exporter and returns a shutdown handle. The example enables it only when `RATEL_OTLP_ENDPOINT` is set, so the disabled path needs no env gate or error handling. A caller already running the OTel SDK adds `ratelSpanProcessor()` instead.
 - **Content capture is gated.** `contentCaptureMode()` reads `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` (default `NO_CONTENT`).
 
 ## Layout

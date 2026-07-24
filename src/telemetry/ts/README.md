@@ -10,8 +10,9 @@ vocabulary weight-free ([ADR-0007](../../../docs/adr/0007-telemetry-two-streams.
 The `init()` exporter, which does wire the OTel SDK, lives in the companion
 [`@ratel-ai/telemetry-otlp`](../ts-otlp/README.md) package.
 
-`resolveOtlpConfig()` reads `RATEL_URL` and `RATEL_API_KEY` as fallbacks; explicit
-`endpoint` / `apiKey` values win over the environment.
+`resolveOtlpConfig()` reads the OTLP traces endpoint from `RATEL_OTLP_ENDPOINT` and auth from
+`RATEL_API_KEY`; explicit `endpoint` / `apiKey` values win over the environment. The package
+exports these names as `OTLP_ENDPOINT_ENV` and `API_KEY_ENV`.
 
 ## Usage
 

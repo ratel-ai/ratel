@@ -12,12 +12,12 @@
 export {
   API_KEY_ENV,
   DEFAULT_SERVICE_NAME,
-  ENDPOINT_ENV,
   type InitOptions,
+  OTLP_ENDPOINT_ENV,
   type ResolvedOtlpConfig,
   resolveOtlpConfig,
 } from "@ratel-ai/telemetry";
-export { init, type TelemetryHandle, type TelemetryInitOptions } from "./init.js";
+export { init, startTelemetry, type TelemetryHandle, type TelemetryInitOptions } from "./init.js";
 export {
   type RatelSpanProcessorOptions,
   ratelSignalFilter,

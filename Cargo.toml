@@ -20,3 +20,13 @@ authors = ["Agentified"]
 
 [workspace.dependencies]
 ratel-ai-core = { path = "src/core" }
+
+# Release builds ship as native addons (SDK cdylibs) where binary size is user-
+# facing install weight. `strip` drops symbol/debug tables that serve no runtime
+# purpose; `lto = "thin"` + `codegen-units = 1` let dead-code elimination cross
+# crate boundaries (unused candle-transformers models, gemm kernels). Must live
+# in the workspace root — cargo ignores `[profile]` in member manifests.
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
