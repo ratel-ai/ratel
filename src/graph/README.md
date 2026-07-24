@@ -45,12 +45,13 @@ they are very different problems.
 is the build broken again  (3 observations)
   terms:   broken, build, again, main
   members: 3
-  tools:   gh_run_list 2.80
+  tools:   gh_run_list 2.00
 ```
 
-An edge weight is below its observation count because weights decay: three uses spread over
-four days are worth less than three today. Only the relative order within a cluster is
-load-bearing.
+An edge weight is the number of times that capability was invoked after a query in the
+cluster — each invocation adds `1`. It can sit below the cluster's observation count when
+some observations invoked a different capability (here, one of the three did). Only the
+relative order within a cluster is load-bearing.
 
 Nothing is written to disk — `build` prints to stdout, so redirect it where you want it.
 Durable storage for graphs is a separate concern.

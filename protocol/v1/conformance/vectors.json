@@ -919,7 +919,7 @@
       },
       {
         "name": "negative-edge-weight",
-        "because": "Edge weights are decayed positive counts; zero or negative is meaningless and would invert the arm's order.",
+        "because": "Edge weights are positive invocation counts; zero or negative is meaningless and would invert the arm's order.",
         "doc": {
           "v": 1,
           "built_from_ts": 1753000000000,

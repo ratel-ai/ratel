@@ -221,10 +221,11 @@ LLM-extracted intents populate the same `members` field.
   `JsonlSink` already applies.
 - A feedback loop is inherent — boosting used capabilities makes them more used. `W < 1`
   and the support ramp bound it; they do not remove it.
-- **Nothing expires.** A cluster nobody has queried in a year still boosts at full weight,
-  because `support` does not age and no cluster is evicted. Handling staleness is deferred
-  rather than solved; it needs to act on the arm's weight or on cluster lifetime, not on
-  edge magnitudes.
+- **Clusters fade and evict, but `support` only rises.** A topic that falls out of use
+  loses arm weight through the recency multiplier and, past the eviction floor, is dropped
+  (see Decision). `support` itself is a pure count that never decreases, so it records
+  confidence, not currency — staleness is handled on the arm weight and cluster lifetime,
+  never on edge magnitudes.
 
 ## Rejected
 
