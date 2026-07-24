@@ -265,6 +265,37 @@ async def test_skill_catalog_auto_rebuild_recovers_a_paused_graph() -> None:
 
 
 @pytest.mark.asyncio
+async def test_enable_adaptive_ranking_raises_the_typed_busy_error_mid_build() -> None:
+    # enable/disable take &mut self natively; called during an in-flight dense
+    # build they must surface the SDK's typed busy error, not a raw pyo3
+    # "Already borrowed". _dense_pending > 0 stands in for the in-flight build.
+    catalog = await build_catalog()
+    catalog._registry._dense_pending = 1
+    with pytest.raises(RuntimeError, match="registry busy"):
+        catalog.enable_adaptive_ranking(IntentGraph())
+
+
+@pytest.mark.asyncio
+async def test_disable_adaptive_ranking_raises_the_typed_busy_error_mid_build() -> None:
+    catalog = await build_catalog()
+    catalog._registry._dense_pending = 1
+    with pytest.raises(RuntimeError, match="registry busy"):
+        catalog.disable_adaptive_ranking()
+
+
+@pytest.mark.asyncio
+async def test_skill_enable_adaptive_ranking_raises_the_typed_busy_error_mid_build() -> None:
+    # The skill twin runs the same guard.
+    catalog = SkillCatalog()
+    await catalog.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    catalog._registry._dense_pending = 1
+    with pytest.raises(RuntimeError, match="registry busy"):
+        catalog.enable_adaptive_ranking(IntentGraph())
+
+
+@pytest.mark.asyncio
 async def test_one_graph_is_shared_between_tool_and_skill_catalogs() -> None:
     """One cluster, two edge maps.
 

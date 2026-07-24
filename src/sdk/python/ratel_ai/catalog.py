@@ -491,16 +491,24 @@ class ToolRegistry:
         (new centroids, bumped ``rev``). Recovery is lazy: status stays
         ``paused`` until that first dense search.
         """
-        self._warn_on_model_mismatch = warn_on_model_mismatch
-        self._rebuild_on_model_change = rebuild_on_model_change
-        self._adaptive_warned = False
-        self._native.enable_adaptive_ranking(graph)
+        # `enable_adaptive_ranking` takes `&mut self` natively, so it must not run
+        # while an in-flight dense build holds the registry — guard it like
+        # `set_trace_sink`, surfacing the typed busy error rather than a raw
+        # pyo3 "Already borrowed".
+        with self._dense_state:
+            self._raise_if_busy()
+            self._warn_on_model_mismatch = warn_on_model_mismatch
+            self._rebuild_on_model_change = rebuild_on_model_change
+            self._adaptive_warned = False
+            self._native.enable_adaptive_ranking(graph)
         self._maybe_warn_model_mismatch()
 
     def disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
-        self._rebuild_on_model_change = False
-        self._native.disable_adaptive_ranking()
+        with self._dense_state:
+            self._raise_if_busy()
+            self._rebuild_on_model_change = False
+            self._native.disable_adaptive_ranking()
 
     async def _maybe_rebuild_on_model_change(self) -> None:
         """Auto-recover a model-mismatched graph before a dense search, opt-in.
