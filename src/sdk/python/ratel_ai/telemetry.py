@@ -308,6 +308,7 @@ def configure_telemetry(
     service_name: str | None = None,
     capture_content: ContentCapture | str | None = None,
     include_span_and_events: bool | None = None,
+    export_all_spans: bool = False,
 ) -> Any:
     """Register a Ratel-owned OTLP exporter (convenience wiring for the greenfield case).
 
@@ -334,6 +335,10 @@ def configure_telemetry(
         service_name: ``service.name`` resource attribute; defaults per `init`.
         capture_content: Exact content-capture mode to set (see above).
         include_span_and_events: Boolean sugar for `capture_content` (see above).
+        export_all_spans: Export every span, not just the ``gen_ai.*``/``ratel.*``
+            signal. Default False: this high-level path defaults to
+            ``ratel_signal_filter`` so unrelated HTTP/database/application spans are
+            not shipped to Ratel (privacy + cost). Set True to forward all spans.
 
     Returns:
         A per-call shutdown handle (``handle.shutdown()`` / ``handle.force_flush()``),
@@ -348,7 +353,12 @@ def configure_telemetry(
             any exporter is wired, so a bad option has no side effects.
     """
     try:
-        from ratel_ai_telemetry import clear_content_capture, init, set_content_capture
+        from ratel_ai_telemetry import (
+            clear_content_capture,
+            init,
+            ratel_signal_filter,
+            set_content_capture,
+        )
     except ModuleNotFoundError as exc:  # pragma: no cover - exercised only without the extra
         raise ModuleNotFoundError(
             "configure_telemetry() needs the OpenTelemetry exporter. Install the extra: "
@@ -356,13 +366,22 @@ def configure_telemetry(
             "since the SDK emits ratel.*/gen_ai.* spans to whatever provider is active."
         ) from exc
 
+    # High-level config defaults to the ratel.*/gen_ai.* signal filter, so unrelated
+    # application spans are not shipped (privacy + cost); opt in to all spans explicitly.
+    # init() itself keeps its accept-all turnkey default (CONVENTIONS.md § init() surface).
+    span_filter = None if export_all_spans else ratel_signal_filter
+
     capture = _resolve_capture_override(capture_content, include_span_and_events)
     if capture is None:
         # No override: the env var keeps ruling; nothing to set or undo. Still wrap so the
         # return shape (a per-call handle delegating to the shared provider) matches the
         # capture path below, rather than leaking init()'s shared handle directly.
         handle = init(
-            api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
+            api_key=api_key,
+            endpoint=endpoint,
+            headers=headers,
+            service_name=service_name,
+            span_filter=span_filter,
         )
         return _TelemetryHandle(handle, handle.shutdown)
 
@@ -372,7 +391,11 @@ def configure_telemetry(
     generation = set_content_capture(capture)
     try:
         provider = init(
-            api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
+            api_key=api_key,
+            endpoint=endpoint,
+            headers=headers,
+            service_name=service_name,
+            span_filter=span_filter,
         )
     except BaseException:
         clear_content_capture(generation)

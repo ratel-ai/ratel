@@ -498,3 +498,62 @@ async def test_raises_on_garbage_capture_content_before_wiring_the_exporter(
     assert await _invoke_and_read_args(exporter) == '{"path": "/p"}'
     monkeypatch.delenv(CAPTURE_ENV, raising=False)
     assert await _invoke_and_read_args(exporter) is None
+
+
+# --- configure_telemetry default span filtering (RS-15) ----------------------
+# configure_telemetry (the high-level SDK path) must default to the ratel.*/gen_ai.*
+# signal filter and require export_all_spans to forward everything. The filter lives
+# inside init()'s provider (which never exports in-process), so init() is stubbed to
+# capture exactly the span_filter configure_telemetry hands it.
+
+
+class _FakeSpan:
+    """Minimal ReadableSpan stand-in: ratel_signal_filter reads name + attributes."""
+
+    def __init__(self, name: str, attributes: dict[str, Any]) -> None:
+        self.name = name
+        self.attributes = attributes
+
+
+@pytest.fixture()
+def capturing_init(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Replace init() with one that records the kwargs configure_telemetry passes."""
+    captured: dict[str, Any] = {}
+
+    def _init(**kwargs: Any) -> _FakeProvider:
+        captured.update(kwargs)
+        return _FakeProvider()
+
+    monkeypatch.setattr("ratel_ai_telemetry.otlp.init", _init)
+    return captured
+
+
+@pytest.mark.asyncio
+async def test_configure_telemetry_defaults_to_the_signal_filter(
+    capturing_init: dict[str, Any],
+) -> None:
+    handle = configure_telemetry()
+    try:
+        span_filter = capturing_init["span_filter"]
+        assert span_filter is not None
+        assert span_filter(_FakeSpan("ratel.search", {})) is True
+        assert (
+            span_filter(_FakeSpan("execute_tool x", {"gen_ai.operation.name": "execute_tool"}))
+            is True
+        )
+        # An unrelated framework/HTTP span carries no gen_ai/ratel signal -> dropped.
+        assert span_filter(_FakeSpan("GET /api", {"http.method": "GET"})) is False
+    finally:
+        handle.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_configure_telemetry_export_all_spans_forwards_everything(
+    capturing_init: dict[str, Any],
+) -> None:
+    handle = configure_telemetry(export_all_spans=True)
+    try:
+        # None -> init()'s accept-all turnkey default.
+        assert capturing_init["span_filter"] is None
+    finally:
+        handle.shutdown()

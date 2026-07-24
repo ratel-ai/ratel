@@ -408,6 +408,14 @@ export interface ConfigureTelemetryOptions extends InitOptions {
    * keeps ruling.
    */
   includeSpanAndEvents?: boolean;
+  /**
+   * Export every span, not just the `gen_ai.*`/`ratel.*` signal. Default `false`:
+   * this high-level path defaults to the `ratelSignalFilter` so unrelated HTTP /
+   * database / application spans are not shipped to Ratel (privacy + cost). Set
+   * `true` to forward all spans — e.g. when Ratel Cloud is your only tracing
+   * backend and you want full-app traces.
+   */
+  exportAllSpans?: boolean;
 }
 
 /**
@@ -458,8 +466,15 @@ export async function configureTelemetry(
   const {
     captureContent: _captureContent,
     includeSpanAndEvents: _include,
-    ...initOptions
+    exportAllSpans,
+    ...baseOptions
   } = options;
+  // High-level SDK config defaults to the ratel.*/gen_ai.* signal filter, so unrelated
+  // application spans are not shipped (privacy + cost); opt in to all spans explicitly.
+  // `init()` itself keeps its accept-all turnkey default (CONVENTIONS.md § init() surface).
+  const initOptions = exportAllSpans
+    ? baseOptions
+    : { ...baseOptions, spanFilter: otlp.ratelSignalFilter };
   const capture = resolveCaptureOverride(options);
   if (capture === undefined) return otlp.init(initOptions); // env keeps ruling; nothing to undo
   // Apply (and validate — an unrecognized mode throws a TypeError) the override
