@@ -126,6 +126,25 @@ convention `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`. Note this is an
 convention, not a semconv-v1.42.0 attribute. Honor it rather than inventing a Ratel flag. Values:
 legacy boolean, or the enum `NO_CONTENT` (default) | `SPAN_ONLY` | `EVENT_ONLY` | `SPAN_AND_EVENT`.
 
+The four values select **two independent channels** — span attributes and span events — and every
+content-bearing helper honors both, so a mode is truthful (no mode silently drops content it names):
+
+| Value | Span attributes | Span events |
+|---|---|---|
+| `NO_CONTENT` (default) | — | — |
+| `SPAN_ONLY` | yes | — |
+| `EVENT_ONLY` | — | yes |
+| `SPAN_AND_EVENT` | yes | yes (both) |
+
+- **Span-attribute channel** (`SPAN_ONLY`/`SPAN_AND_EVENT`): tool content on `gen_ai.tool.call.arguments`
+  / `gen_ai.tool.call.result`; search text on `ratel.search.query`.
+- **Span-event channel** (`EVENT_ONLY`/`SPAN_AND_EVENT`): tool content on a
+  `gen_ai.client.inference.operation.details` event carrying the call as
+  `gen_ai.input.messages` (an assistant `tool_call` part) and, on success,
+  `gen_ai.output.messages` (a `tool` `tool_call_response` part); search text on a
+  `ratel.search.results` event carrying `ratel.search.query`. In the SDK helpers that event carries
+  only the query — hit ids/scores/BM25 timing live on the local trace stream, not the OTLP glue.
+
 ---
 
 ## Tier 2: the Ratel funnel (`ratel.*`)
@@ -150,8 +169,10 @@ upstream-MCP ingest, auth / `needs_auth`. Each becomes a span (or attributes on 
 | `ratel.search.query` | string | **content, gated** like message content; may hold user/agent text |
 | `ratel.origin` | enum | `direct \| agent` |
 
-Hit ids + scores (and per-stage BM25 timing) ride an Opt-In span event **`ratel.search.results`**, gated with
-the same content flag; the span itself carries only counts.
+The search text rides an Opt-In span event **`ratel.search.results`** (as `ratel.search.query`), gated
+with the same content flag under the event channel; the span itself carries only counts. Hit ids + scores +
+per-stage BM25 timing are richer detail that lives on the local trace stream (the SDK's OTLP glue does not
+have them at the span boundary), not this remote event.
 
 ### tool invocation: `execute_tool` span + `ratel.*`
 
@@ -168,8 +189,10 @@ already understands it) enriched with `ratel.*`:
 | `ratel.origin` | enum | `direct \| agent` |
 
 Span duration is the invoke latency; failure sets span status `ERROR`. Tool arguments/results are Opt-In
-content on the span attributes `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` (distinct from the
-`tool_call_response` message part's `response` field above), gated like messages.
+content: on the span attributes `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` under the
+span-attribute channel, and/or on a `gen_ai.client.inference.operation.details` event (the call as a
+`tool_call` input message + `tool_call_response` output message) under the span-event channel — gated like
+messages, per the two-channel table in § Tier 1 content.
 
 > **Decided (2026-07-05):** invoke is modelled as an `execute_tool` span enriched with `ratel.*`, for
 > OTel-backend interop, not a pure `ratel.invoke` span. The considered alternative (a pure `ratel.invoke`
