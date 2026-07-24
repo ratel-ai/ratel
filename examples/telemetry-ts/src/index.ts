@@ -6,7 +6,7 @@
  * (no collector, no API key). The only Ratel-specific part is the vocabulary from
  * `@ratel-ai/telemetry` — the constants and value enums you set as span attributes.
  * In production you swap the console exporter for `init()` (shown at the end), which
- * wires the OTLP exporter to `RATEL_URL`; everything else stays identical.
+ * wires the OTLP exporter to `RATEL_OTLP_ENDPOINT`; everything else stays identical.
  */
 
 import { context, type Tracer, trace } from "@opentelemetry/api";
@@ -21,6 +21,7 @@ import {
   EXECUTE_TOOL,
   GEN_AI_OPERATION_NAME,
   GEN_AI_TOOL_NAME,
+  OTLP_ENDPOINT_ENV,
   Origin,
   RATEL_ORIGIN,
   RATEL_SEARCH,
@@ -118,12 +119,15 @@ async function main(): Promise<void> {
 
   // One startup call for both on/off paths. When disabled, init() needs no endpoint and
   // returns a no-op shutdown handle; when enabled it also reads RATEL_API_KEY from env.
-  const telemetry = init({ enabled: Boolean(process.env.RATEL_URL) });
-  if (process.env.RATEL_URL) {
-    console.log(`\n--- RATEL_URL set — exporting a real trace to ${process.env.RATEL_URL} ---`);
+  const endpoint = process.env[OTLP_ENDPOINT_ENV];
+  const telemetry = init({ enabled: Boolean(endpoint) });
+  if (endpoint) {
+    console.log(`\n--- ${OTLP_ENDPOINT_ENV} set — exporting a real trace to ${endpoint} ---`);
     emitRatelTrace(trace.getTracer("@ratel-ai/example-telemetry"));
   } else {
-    console.log("\n(set RATEL_URL — and optionally RATEL_API_KEY — to export a real trace via init())");
+    console.log(
+      `\n(set ${OTLP_ENDPOINT_ENV} — and optionally RATEL_API_KEY — to export a real trace via init())`,
+    );
   }
   await telemetry.shutdown();
 

@@ -5,7 +5,7 @@ import {
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { ENDPOINT_ENV } from "@ratel-ai/telemetry";
+import { OTLP_ENDPOINT_ENV } from "@ratel-ai/telemetry";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { init, startTelemetry } from "./init.js";
 
@@ -29,8 +29,8 @@ describe("init", () => {
   });
 
   it("returns a no-op handle without endpoint or provider side effects when disabled", async () => {
-    const saved = process.env[ENDPOINT_ENV];
-    delete process.env[ENDPOINT_ENV];
+    const saved = process.env[OTLP_ENDPOINT_ENV];
+    delete process.env[OTLP_ENDPOINT_ENV];
     const existing = new NodeTracerProvider();
     existing.register();
     const activeBefore = trace.getTracerProvider();
@@ -40,8 +40,8 @@ describe("init", () => {
       expect(trace.getTracerProvider()).toBe(activeBefore);
       await expect(handle.shutdown()).resolves.toBeUndefined();
     } finally {
-      if (saved === undefined) delete process.env[ENDPOINT_ENV];
-      else process.env[ENDPOINT_ENV] = saved;
+      if (saved === undefined) delete process.env[OTLP_ENDPOINT_ENV];
+      else process.env[OTLP_ENDPOINT_ENV] = saved;
       await existing.shutdown();
     }
   });
@@ -108,16 +108,16 @@ describe("init", () => {
     }
   });
 
-  it("throws on misconfiguration (no endpoint, no RATEL_URL)", () => {
-    const saved = process.env[ENDPOINT_ENV];
-    delete process.env[ENDPOINT_ENV];
+  it("throws on misconfiguration (no endpoint, no RATEL_OTLP_ENDPOINT)", () => {
+    const saved = process.env[OTLP_ENDPOINT_ENV];
+    delete process.env[OTLP_ENDPOINT_ENV];
     try {
-      expect(() => init({ apiKey: "k" })).toThrow(ENDPOINT_ENV);
+      expect(() => init({ apiKey: "k" })).toThrow(OTLP_ENDPOINT_ENV);
     } finally {
       if (saved === undefined) {
-        delete process.env[ENDPOINT_ENV];
+        delete process.env[OTLP_ENDPOINT_ENV];
       } else {
-        process.env[ENDPOINT_ENV] = saved;
+        process.env[OTLP_ENDPOINT_ENV] = saved;
       }
     }
   });
@@ -135,15 +135,15 @@ describe("init", () => {
   });
 
   it("reports a foreign provider before validating endpoint configuration", async () => {
-    const saved = process.env[ENDPOINT_ENV];
-    delete process.env[ENDPOINT_ENV];
+    const saved = process.env[OTLP_ENDPOINT_ENV];
+    delete process.env[OTLP_ENDPOINT_ENV];
     const existing = new NodeTracerProvider();
     existing.register();
     try {
       expect(() => init()).toThrow(/ratelSpanProcessor/);
     } finally {
-      if (saved === undefined) delete process.env[ENDPOINT_ENV];
-      else process.env[ENDPOINT_ENV] = saved;
+      if (saved === undefined) delete process.env[OTLP_ENDPOINT_ENV];
+      else process.env[OTLP_ENDPOINT_ENV] = saved;
       await existing.shutdown();
     }
   });
