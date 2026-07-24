@@ -31,7 +31,10 @@ import {
   clearContentCapture,
   contentCaptureMode,
   EXECUTE_TOOL,
+  GEN_AI_INFERENCE_DETAILS,
+  GEN_AI_INPUT_MESSAGES,
   GEN_AI_OPERATION_NAME,
+  GEN_AI_OUTPUT_MESSAGES,
   GEN_AI_TOOL_CALL_ARGUMENTS,
   GEN_AI_TOOL_CALL_RESULT,
   GEN_AI_TOOL_NAME,
@@ -42,6 +45,7 @@ import {
   RATEL_SEARCH,
   RATEL_SEARCH_HIT_COUNT,
   RATEL_SEARCH_QUERY,
+  RATEL_SEARCH_RESULTS,
   RATEL_SEARCH_TARGET,
   RATEL_SEARCH_TOP_K,
   RATEL_SKILL_ID,
@@ -67,6 +71,47 @@ function getTracer() {
 function captureContentOnSpan(): boolean {
   const mode = contentCaptureMode();
   return mode === ContentCapture.SpanOnly || mode === ContentCapture.SpanAndEvent;
+}
+
+/** Content rides span events only when the capture gate selects an event mode. */
+function captureContentOnEvent(): boolean {
+  const mode = contentCaptureMode();
+  return mode === ContentCapture.EventOnly || mode === ContentCapture.SpanAndEvent;
+}
+
+/**
+ * Emit the Tier-1 content event for a tool invocation on `span`: the call as an
+ * assistant `tool_call` message and, on success, the result as a `tool`
+ * `tool_call_response` message (v1.42.0 message-part schema, CONVENTIONS.md
+ * § Tier 1 content). Content rides this event, never span attributes; the message
+ * lists are JSON-encoded because OTel event attributes are primitive-typed.
+ */
+function addToolContentEvent(
+  span: Span,
+  toolId: string,
+  args: unknown,
+  result?: { value: unknown },
+): void {
+  const input = [
+    { role: "assistant", parts: [{ type: "tool_call", name: toolId, arguments: args }] },
+  ];
+  const attributes: Record<string, string> = { [GEN_AI_INPUT_MESSAGES]: safeJson(input) };
+  if (result) {
+    const output = [
+      { role: "tool", parts: [{ type: "tool_call_response", response: result.value }] },
+    ];
+    attributes[GEN_AI_OUTPUT_MESSAGES] = safeJson(output);
+  }
+  span.addEvent(GEN_AI_INFERENCE_DETAILS, attributes);
+}
+
+/**
+ * Emit the Opt-In `ratel.search.results` content event on `span`, carrying the
+ * search text (CONVENTIONS.md § ratel.search). Hit ids/scores/BM25 timing are
+ * local-stream only; the OTLP glue carries the gated query it has.
+ */
+function addSearchResultsEvent(span: Span, query: string): void {
+  span.addEvent(RATEL_SEARCH_RESULTS, { [RATEL_SEARCH_QUERY]: query });
 }
 
 /** UTF-8 byte size of the JSON-encoded args (0 if not encodable). */
@@ -127,10 +172,12 @@ export function traceExecuteTool<T>(toolId: string, args: unknown, run: () => T)
 
       const succeed = (result: unknown): void => {
         if (captureContentOnSpan()) span.setAttribute(GEN_AI_TOOL_CALL_RESULT, safeJson(result));
+        if (captureContentOnEvent()) addToolContentEvent(span, toolId, args, { value: result });
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
       };
       const reject = (err: unknown): void => {
+        if (captureContentOnEvent()) addToolContentEvent(span, toolId, args); // input only; call failed
         fail(span, err);
         span.end();
       };
@@ -238,6 +285,7 @@ export function traceSearch<T extends { length: number }>(
     try {
       const hits = run();
       span.setAttribute(RATEL_SEARCH_HIT_COUNT, hits.length);
+      if (captureContentOnEvent()) addSearchResultsEvent(span, query);
       span.setStatus({ code: SpanStatusCode.OK });
       return hits;
     } catch (err) {
@@ -265,6 +313,7 @@ export function traceSearchAsync<T extends { length: number }>(
     try {
       const hits = await run();
       span.setAttribute(RATEL_SEARCH_HIT_COUNT, hits.length);
+      if (captureContentOnEvent()) addSearchResultsEvent(span, query);
       span.setStatus({ code: SpanStatusCode.OK });
       return hits;
     } catch (err) {

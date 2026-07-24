@@ -141,6 +141,20 @@ export const GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments";
 /** `gen_ai.tool.call.result` — tool result (Opt-In content, gated). */
 export const GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result";
 
+// Tier 1 content, carried on the `gen_ai.client.inference.operation.details`
+// event (never span attributes; CONVENTIONS.md § Tier 1 content). Each holds a
+// v1.42.0 message list (`{ role, parts[], name? }`), JSON-encoded because OTel
+// event attributes are primitive-typed.
+
+/** `gen_ai.system_instructions` — the system prompt as a bare `parts[]` (Opt-In content). */
+export const GEN_AI_SYSTEM_INSTRUCTIONS = "gen_ai.system_instructions";
+
+/** `gen_ai.input.messages` — the input message list (Opt-In content). */
+export const GEN_AI_INPUT_MESSAGES = "gen_ai.input.messages";
+
+/** `gen_ai.output.messages` — the output message list (Opt-In content). */
+export const GEN_AI_OUTPUT_MESSAGES = "gen_ai.output.messages";
+
 // ---------------------------------------------------------------------------
 // Enum wire values (CONVENTIONS.md, Tier 2)
 //
