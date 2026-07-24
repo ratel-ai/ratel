@@ -31,6 +31,10 @@ function fakeSpan(name: string, attributes: Record<string, unknown>): never {
   return { name, attributes } as never;
 }
 
+function fakeLog(eventName?: string): never {
+  return { eventName } as never;
+}
+
 afterEach(() => {
   captured.initOptions = undefined;
 });
@@ -48,10 +52,21 @@ describe("configureTelemetry default span filtering (RS-15)", () => {
     );
     // An unrelated framework/HTTP span carries no gen_ai/ratel signal -> dropped.
     expect(filter(fakeSpan("GET /api", { "http.method": "GET" }))).toBe(false);
+
+    const logFilter = captured.initOptions?.logFilter as ((r: never) => boolean) | undefined;
+    expect(logFilter, "configureTelemetry passes a default logFilter to init()").toBeTruthy();
+    if (!logFilter) return;
+    expect(logFilter(fakeLog("ratel.search.results"))).toBe(true);
+    expect(logFilter(fakeLog("app.debug"))).toBe(false);
   });
 
-  it("forwards every span when exportAllSpans is true (init()'s accept-all default)", async () => {
+  it("widens spans only when exportAllSpans is true", async () => {
     await configureTelemetry({ endpoint: ENDPOINT, exportAllSpans: true });
     expect(captured.initOptions?.spanFilter).toBeUndefined();
+    const logFilter = captured.initOptions?.logFilter as ((r: never) => boolean) | undefined;
+    expect(logFilter).toBeTruthy();
+    if (!logFilter) return;
+    expect(logFilter(fakeLog("ratel.tool.execution.details"))).toBe(true);
+    expect(logFilter(fakeLog("app.debug"))).toBe(false);
   });
 });

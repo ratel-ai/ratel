@@ -1,4 +1,10 @@
 import { trace } from "@opentelemetry/api";
+import { logs } from "@opentelemetry/api-logs";
+import {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+  type LogRecordProcessor,
+} from "@opentelemetry/sdk-logs";
 import {
   BatchSpanProcessor,
   type ReadableSpan,
@@ -13,6 +19,7 @@ describe("init", () => {
   // init() registers a global provider; reset it so each case starts clean.
   afterEach(() => {
     trace.disable();
+    logs.disable();
     vi.restoreAllMocks();
   });
 
@@ -26,6 +33,21 @@ describe("init", () => {
     // Best-effort cleanup: the export target is absent in unit tests, so the
     // handle shape (not shutdown's network resolution) is the contract asserted.
     await handle.shutdown().catch(() => {});
+  });
+
+  it("registers an OTLP Logs provider for EventRecords", async () => {
+    const onEmit = vi
+      .spyOn(BatchLogRecordProcessor.prototype, "onEmit")
+      .mockImplementation(() => {});
+    const handle = init({
+      endpoint: "http://localhost:4318/v1/traces",
+      serviceName: "test",
+    });
+
+    logs.getLogger("test").emit({ eventName: "ratel.search.results" });
+
+    expect(onEmit).toHaveBeenCalledTimes(1);
+    await handle.shutdown();
   });
 
   it("returns a no-op handle without endpoint or provider side effects when disabled", async () => {
@@ -73,6 +95,17 @@ describe("init", () => {
     }
   });
 
+  it("does not report success when its paired LoggerProvider is no longer active", async () => {
+    const handle = init({ endpoint: "http://localhost:4318/v1/traces" });
+    logs.disable();
+    try {
+      expect(() => init()).toThrow(/LoggerProvider/);
+      expect(() => init({ enabled: false })).toThrow(/LoggerProvider/);
+    } finally {
+      await handle.shutdown().catch(() => {});
+    }
+  });
+
   it("recognizes its provider after the init module is re-evaluated", async () => {
     const handle = init({ endpoint: "http://localhost:4318/v1/traces" });
     try {
@@ -96,10 +129,11 @@ describe("init", () => {
     expect(() => init({ enabled: false })).toThrow(/already shut down/);
   });
 
-  it("re-initializes with a fresh handle after trace.disable() clears the global", async () => {
+  it("re-initializes after both global providers are disabled", async () => {
     const first = init({ endpoint: "http://localhost:4318/v1/traces" });
     await first.shutdown().catch(() => {});
-    trace.disable(); // the documented escape hatch to re-init in the same process
+    trace.disable();
+    logs.disable();
     const second = init({ endpoint: "http://localhost:4318/v1/traces" });
     try {
       expect(second).not.toBe(first);
@@ -134,6 +168,20 @@ describe("init", () => {
     }
   });
 
+  it("rejects a foreign LoggerProvider before registering a tracer provider", async () => {
+    const existing = new LoggerProvider();
+    logs.setGlobalLoggerProvider(existing);
+    const register = vi.spyOn(NodeTracerProvider.prototype, "register");
+    try {
+      expect(() => init({ endpoint: "http://localhost:4318/v1/traces" })).toThrow(
+        /ratelLogRecordProcessor/,
+      );
+      expect(register).not.toHaveBeenCalled();
+    } finally {
+      await existing.shutdown();
+    }
+  });
+
   it("reports a foreign provider before validating endpoint configuration", async () => {
     const saved = process.env[OTLP_ENDPOINT_ENV];
     delete process.env[OTLP_ENDPOINT_ENV];
@@ -149,15 +197,16 @@ describe("init", () => {
   });
 });
 
-describe("startTelemetry", () => {
-  // startTelemetry registers a global provider; reset it so each case starts clean.
+describe("startTelemetry compatibility", () => {
   afterEach(() => {
     trace.disable();
+    logs.disable();
     vi.restoreAllMocks();
   });
 
-  it("returns a handle exposing forceFlush and shutdown", async () => {
-    const handle = startTelemetry({ endpoint: "http://localhost:4318/v1/traces" });
+  it("keeps init as an alias with forceFlush and shutdown", async () => {
+    expect(init).toBe(startTelemetry);
+    const handle = init({ endpoint: "http://localhost:4318/v1/traces" });
     try {
       expect(typeof handle.forceFlush).toBe("function");
       expect(typeof handle.shutdown).toBe("function");
@@ -167,59 +216,66 @@ describe("startTelemetry", () => {
     }
   });
 
-  it("keeps init working as a back-compat alias carrying the new handle shape", async () => {
-    const handle = init({ endpoint: "http://localhost:4318/v1/traces" });
-    try {
-      expect(typeof handle.forceFlush).toBe("function");
-      expect(typeof handle.shutdown).toBe("function");
-    } finally {
-      await handle.shutdown().catch(() => {});
-    }
-  });
-
-  it("fans finished spans out to host spanProcessors on the Ratel-owned provider", async () => {
-    // Neutralize the Ratel BatchSpanProcessor's real export path (no network in unit tests);
-    // the host processor below is a plain object, so its onEnd stays observable.
+  it("composes host span and log processors on the owned providers", async () => {
     vi.spyOn(BatchSpanProcessor.prototype, "onEnd").mockImplementation(() => {});
-    const hostOnEnd = vi.fn();
-    const host: SpanProcessor = {
+    vi.spyOn(BatchLogRecordProcessor.prototype, "onEmit").mockImplementation(() => {});
+    const hostSpanOnEnd = vi.fn();
+    const hostLogOnEmit = vi.fn();
+    const hostSpanProcessor: SpanProcessor = {
       onStart: () => {},
-      onEnd: hostOnEnd,
+      onEnd: hostSpanOnEnd,
+      forceFlush: async () => {},
+      shutdown: async () => {},
+    };
+    const hostLogProcessor: LogRecordProcessor = {
+      enabled: () => true,
+      onEmit: hostLogOnEmit,
       forceFlush: async () => {},
       shutdown: async () => {},
     };
     const handle = startTelemetry({
       endpoint: "http://localhost:4318/v1/traces",
-      spanProcessors: [host],
+      spanProcessors: [hostSpanProcessor],
+      logRecordProcessors: [hostLogProcessor],
     });
     try {
       trace.getTracer("test").startSpan("ratel.search").end();
+      logs.getLogger("test").emit({ eventName: "ratel.search.results" });
 
-      // The host processor is a first-class entry on the same provider, so it sees the
-      // provider's whole span stream — independent of the Ratel processor's own filter.
-      expect(hostOnEnd).toHaveBeenCalledTimes(1);
-      expect((hostOnEnd.mock.calls[0]?.[0] as ReadableSpan).name).toBe("ratel.search");
+      expect(hostSpanOnEnd).toHaveBeenCalledTimes(1);
+      expect((hostSpanOnEnd.mock.calls[0]?.[0] as ReadableSpan).name).toBe("ratel.search");
+      expect(hostLogOnEmit).toHaveBeenCalledTimes(1);
+      expect(hostLogOnEmit.mock.calls[0]?.[0].eventName).toBe("ratel.search.results");
     } finally {
       await handle.shutdown().catch(() => {});
     }
   });
 
-  it("flushes every registered processor when the handle is force-flushed", async () => {
-    const hostForceFlush = vi.fn(async () => {});
-    const host: SpanProcessor = {
+  it("force-flushes every owned-provider processor", async () => {
+    const hostSpanForceFlush = vi.fn(async () => {});
+    const hostLogForceFlush = vi.fn(async () => {});
+    const hostSpanProcessor: SpanProcessor = {
       onStart: () => {},
       onEnd: () => {},
-      forceFlush: hostForceFlush,
+      forceFlush: hostSpanForceFlush,
+      shutdown: async () => {},
+    };
+    const hostLogProcessor: LogRecordProcessor = {
+      enabled: () => true,
+      onEmit: () => {},
+      forceFlush: hostLogForceFlush,
       shutdown: async () => {},
     };
     const handle = startTelemetry({
       endpoint: "http://localhost:4318/v1/traces",
-      spanProcessors: [host],
+      spanProcessors: [hostSpanProcessor],
+      logRecordProcessors: [hostLogProcessor],
     });
     try {
       await handle.forceFlush();
 
-      expect(hostForceFlush).toHaveBeenCalledTimes(1);
+      expect(hostSpanForceFlush).toHaveBeenCalledTimes(1);
+      expect(hostLogForceFlush).toHaveBeenCalledTimes(1);
     } finally {
       await handle.shutdown().catch(() => {});
     }

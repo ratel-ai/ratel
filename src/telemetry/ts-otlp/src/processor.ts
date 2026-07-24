@@ -9,7 +9,13 @@
  * so the partner's framework `ai.*` noise stays out of Ratel.
  */
 
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-proto";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
+import {
+  BatchLogRecordProcessor,
+  type LogRecordProcessor,
+  type SdkLogRecord,
+} from "@opentelemetry/sdk-logs";
 import {
   BatchSpanProcessor,
   type ReadableSpan,
@@ -20,9 +26,18 @@ import { type InitOptions, resolveOtlpConfig } from "@ratel-ai/telemetry";
 /** Predicate deciding whether a finished span is forwarded to Ratel. */
 export type SpanFilter = (span: ReadableSpan) => boolean;
 
+/** Predicate deciding whether an EventRecord is forwarded to Ratel. */
+export type LogFilter = (record: SdkLogRecord) => boolean;
+
 const NOOP_SPAN_PROCESSOR: SpanProcessor = {
   onStart: () => {},
   onEnd: () => {},
+  forceFlush: async () => {},
+  shutdown: async () => {},
+};
+const NOOP_LOG_RECORD_PROCESSOR: LogRecordProcessor = {
+  enabled: () => false,
+  onEmit: () => {},
   forceFlush: async () => {},
   shutdown: async () => {},
 };
@@ -42,6 +57,14 @@ export function ratelSignalFilter(span: ReadableSpan): boolean {
   return false;
 }
 
+/** Default log filter: forward only named `gen_ai.*` / `ratel.*` EventRecords. */
+export function ratelEventFilter(record: SdkLogRecord): boolean {
+  return (
+    record.eventName?.startsWith("gen_ai.") === true ||
+    record.eventName?.startsWith("ratel.") === true
+  );
+}
+
 /**
  * Build the OTLP `http/protobuf` trace exporter at the resolved Ratel endpoint. The
  * standalone exporter for callers wiring their own span-processor; {@link ratelSpanProcessor}
@@ -50,6 +73,38 @@ export function ratelSignalFilter(span: ReadableSpan): boolean {
 export function ratelTraceExporter(opts: InitOptions = {}): OTLPTraceExporter {
   const { url, headers } = resolveOtlpConfig(opts);
   return new OTLPTraceExporter({ url, headers });
+}
+
+/** Build the OTLP `http/protobuf` logs exporter at the resolved logs endpoint. */
+export function ratelLogExporter(opts: InitOptions = {}): OTLPLogExporter {
+  const { logsUrl, headers } = resolveOtlpConfig(opts);
+  return new OTLPLogExporter({ url: logsUrl, headers });
+}
+
+/** Options for {@link ratelLogRecordProcessor}. */
+export interface RatelLogRecordProcessorOptions extends InitOptions {
+  /** Set false to skip exporter construction and return a no-op processor. */
+  enabled?: boolean;
+  /** Override the default {@link ratelEventFilter}; `() => true` forwards every log. */
+  logFilter?: LogFilter;
+}
+
+/** Composable filtered OTLP Logs processor for a host-owned LoggerProvider. */
+export function ratelLogRecordProcessor(
+  opts: RatelLogRecordProcessorOptions = {},
+): LogRecordProcessor {
+  const { enabled = true, logFilter = ratelEventFilter, ...exporterOpts } = opts;
+  if (!enabled) return NOOP_LOG_RECORD_PROCESSOR;
+  const inner = new BatchLogRecordProcessor({
+    exporter: ratelLogExporter(exporterOpts),
+  });
+  return {
+    onEmit: (record) => {
+      if (logFilter(record)) inner.onEmit(record);
+    },
+    forceFlush: () => inner.forceFlush(),
+    shutdown: () => inner.shutdown(),
+  };
 }
 
 /** Options for {@link ratelSpanProcessor}: the OTLP endpoint/auth plus an optional filter. */

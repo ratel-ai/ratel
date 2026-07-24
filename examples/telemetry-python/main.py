@@ -1,11 +1,11 @@
 """examples/telemetry-python — emit Ratel's `ratel.*` telemetry through the standard
 OpenTelemetry Python SDK. The Python mirror of `examples/telemetry-ts/src/index.ts`.
 
-Runnable offline: it wires a ConsoleSpanExporter so the spans print to stdout (no
-collector, no API key). The only Ratel-specific part is the vocabulary from
+Runnable offline: its trace-only demo wires a ConsoleSpanExporter so spans print to
+stdout (no collector, no API key). The Ratel-specific part is the vocabulary from
 `ratel_ai_telemetry` — the constants and value enums you set as span attributes. In
 production you swap the console exporter for `init()` (shown at the end), which wires
-the OTLP exporter to RATEL_URL; everything else stays identical.
+OTLP trace and Logs exporters to RATEL_URL; everything else stays identical.
 
     uv run main.py                       # print the spans (offline)
     RATEL_URL=... uv run main.py         # export a real trace via init()
@@ -19,7 +19,6 @@ from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 from opentelemetry.trace import Tracer, set_span_in_context
-
 from ratel_ai_telemetry import (
     CAPTURE_CONTENT_ENV,
     EXECUTE_TOOL,
@@ -109,12 +108,13 @@ def main() -> None:
     provider.force_flush()
     provider.shutdown()
 
-    # --- Production wiring: the same spans, exported to Ratel via init() ---
+    # --- Production wiring: traces + EventRecords exported to Ratel via init() ---
     # resolve_otlp_config is pure (no network), so we can show how endpoint + auth
     # resolve without sending anything:
     cfg = resolve_otlp_config(api_key="sk-demo", endpoint="https://cloud.ratel.sh/v1/traces")
     print("\n--- how init() resolves options -> exporter config (illustrative demo values) ---")
     print(f"  url:          {cfg.url}")
+    print(f"  logs_url:     {cfg.logs_url}")
     print(f"  service_name: {cfg.service_name} (default {DEFAULT_SERVICE_NAME})")
     print(f"  headers:      {', '.join(cfg.headers) or '(none)'}")
 

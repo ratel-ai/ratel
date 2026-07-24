@@ -18,8 +18,11 @@ describe("published OpenTelemetry dependency layout", () => {
     expect(manifest.devDependencies?.["@opentelemetry/api"]).toBeDefined();
 
     for (const dependency of [
+      "@opentelemetry/api-logs",
+      "@opentelemetry/exporter-logs-otlp-proto",
       "@opentelemetry/exporter-trace-otlp-proto",
       "@opentelemetry/resources",
+      "@opentelemetry/sdk-logs",
       "@opentelemetry/sdk-trace-base",
       "@opentelemetry/sdk-trace-node",
       "@opentelemetry/semantic-conventions",

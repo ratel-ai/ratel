@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-24
+
+### Added
+
+- `GEN_AI_SYSTEM_INSTRUCTIONS`, `GEN_AI_INPUT_MESSAGES`, `GEN_AI_OUTPUT_MESSAGES`, and
+  `RATEL_TOOL_EXECUTION_DETAILS` EventRecord constants.
+
+### Changed
+
+- Clarify that content events use the OpenTelemetry Logs Event API and that inference output messages require `finish_reason`.
+
 ## [0.1.0] - 2026-07-06
 
 ### Added

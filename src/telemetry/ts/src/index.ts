@@ -66,18 +66,20 @@ export const RATEL_UPSTREAM_REGISTER = "ratel.upstream.register";
 export const RATEL_AUTH_FLOW = "ratel.auth.flow";
 
 // ---------------------------------------------------------------------------
-// Span event names (CONVENTIONS.md)
+// EventRecord names (CONVENTIONS.md)
 // ---------------------------------------------------------------------------
 
 /**
- * `ratel.search.results` — Opt-In event carrying hit ids + scores + per-stage
- * BM25 timing; gated like content. The `ratel.search` span itself carries only counts.
+ * `ratel.search.results` — Opt-In search-content event; gated like content.
  */
 export const RATEL_SEARCH_RESULTS = "ratel.search.results";
 
+/** `ratel.tool.execution.details` — Opt-In structured tool arguments/result event. */
+export const RATEL_TOOL_EXECUTION_DETAILS = "ratel.tool.execution.details";
+
 /**
- * `gen_ai.client.inference.operation.details` — the event that carries message
- * text and tool-call content (never span attributes). Borrowed from gen_ai (Tier 1).
+ * `gen_ai.client.inference.operation.details` — the event that carries inference
+ * request and response content. Borrowed from gen_ai (Tier 1).
  */
 export const GEN_AI_INFERENCE_DETAILS = "gen_ai.client.inference.operation.details";
 
@@ -142,9 +144,8 @@ export const GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments";
 export const GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result";
 
 // Tier 1 content, carried on the `gen_ai.client.inference.operation.details`
-// event (never span attributes; CONVENTIONS.md § Tier 1 content). Each holds a
-// v1.42.0 message list (`{ role, parts[], name? }`), JSON-encoded because OTel
-// event attributes are primitive-typed.
+// EventRecord (never span attributes; CONVENTIONS.md § Tier 1 content). Each
+// holds a structured v1.42.0 message list (`{ role, parts[], name? }`).
 
 /** `gen_ai.system_instructions` — the system prompt as a bare `parts[]` (Opt-In content). */
 export const GEN_AI_SYSTEM_INSTRUCTIONS = "gen_ai.system_instructions";
@@ -152,7 +153,7 @@ export const GEN_AI_SYSTEM_INSTRUCTIONS = "gen_ai.system_instructions";
 /** `gen_ai.input.messages` — the input message list (Opt-In content). */
 export const GEN_AI_INPUT_MESSAGES = "gen_ai.input.messages";
 
-/** `gen_ai.output.messages` — the output message list (Opt-In content). */
+/** `gen_ai.output.messages` — generated outputs; every message includes `finish_reason`. */
 export const GEN_AI_OUTPUT_MESSAGES = "gen_ai.output.messages";
 
 // ---------------------------------------------------------------------------

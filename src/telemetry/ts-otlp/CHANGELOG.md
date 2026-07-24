@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-24
+
+### Added
+
+- OTLP Logs export through `init()`, plus composable `ratelLogRecordProcessor`, `ratelLogExporter`, and `ratelEventFilter` helpers for host-owned logger providers.
+- `logsEndpoint`, `logFilter`, and `logRecordProcessors` configuration.
+
+### Changed
+
+- `startTelemetry()` / `init()` now own, flush, and shut down matched tracer and logger providers while preserving the existing host `spanProcessors` composition API.
+
 ## [0.1.1] - 2026-07-11
 
 ### Added
@@ -13,7 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - On first setup, `TelemetryInitOptions.enabled: false` returns a no-op shutdown handle without endpoint or provider setup; once Ratel owns the provider, repeated calls return its original handle. `RatelSpanProcessorOptions.enabled: false` always returns a no-op processor.
 - `TelemetryInitOptions.spanFilter` lets the turnkey provider select spans without hand-building a `NodeTracerProvider`; omitting it preserves the export-everything default.
 - `init()` is idempotent to the provider it installed: repeated and module-reloaded calls return the exact original handle, while a foreign global provider still raises the composition error. If another `init()` wins the registration race, the loser now returns that Ratel-owned handle instead of raising.
-- Re-exports `API_KEY_ENV` from `@ratel-ai/telemetry` alongside `ENDPOINT_ENV`.
+- Re-exports `API_KEY_ENV` from `@ratel-ai/telemetry` alongside `OTLP_ENDPOINT_ENV`.
 
 ### Changed
 

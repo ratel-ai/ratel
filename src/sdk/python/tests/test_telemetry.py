@@ -19,7 +19,12 @@ import tomllib
 pytest.importorskip("opentelemetry.sdk.trace", reason="OpenTelemetry SDK not installed")
 pytest.importorskip("ratel_ai_telemetry", reason="ratel-ai telemetry vocabulary not installed")
 
-from opentelemetry import trace  # noqa: E402
+from opentelemetry import _logs, trace  # noqa: E402
+from opentelemetry.sdk._logs import LoggerProvider  # noqa: E402
+from opentelemetry.sdk._logs.export import (  # noqa: E402
+    InMemoryLogRecordExporter,
+    SimpleLogRecordProcessor,
+)
 from opentelemetry.sdk.trace import TracerProvider  # noqa: E402
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (  # noqa: E402
@@ -45,6 +50,10 @@ _EXPORTER = InMemorySpanExporter()
 _PROVIDER = TracerProvider()
 _PROVIDER.add_span_processor(SimpleSpanProcessor(_EXPORTER))
 trace.set_tracer_provider(_PROVIDER)
+_LOG_EXPORTER = InMemoryLogRecordExporter()
+_LOG_PROVIDER = LoggerProvider()
+_LOG_PROVIDER.add_log_record_processor(SimpleLogRecordProcessor(_LOG_EXPORTER))
+_logs.set_logger_provider(_LOG_PROVIDER)
 
 
 @pytest.fixture()
@@ -52,6 +61,7 @@ def exporter(monkeypatch: pytest.MonkeyPatch) -> Any:
     """The shared in-memory exporter, cleared so each test sees only its own spans."""
     monkeypatch.delenv(CAPTURE_ENV, raising=False)
     _EXPORTER.clear()
+    _LOG_EXPORTER.clear()
     return _EXPORTER
 
 
@@ -79,6 +89,14 @@ def _event_named(span: Any, name: str) -> Any:
     return next((e for e in span.events if e.name == name), None)
 
 
+def _log_events_named(name: str) -> list[Any]:
+    return [
+        readable.log_record
+        for readable in _LOG_EXPORTER.get_finished_logs()
+        if readable.log_record.event_name == name
+    ]
+
+
 @pytest.mark.asyncio
 async def test_execute_tool_span_attributes(exporter: Any) -> None:
     catalog = ToolCatalog()
@@ -103,6 +121,7 @@ async def test_content_not_captured_by_default(exporter: Any) -> None:
     attrs = _spans_named(exporter, "execute_tool read_file")[0].attributes
     assert "gen_ai.tool.call.arguments" not in attrs
     assert "gen_ai.tool.call.result" not in attrs
+    assert _log_events_named("ratel.tool.execution.details") == []
 
 
 @pytest.mark.asyncio
@@ -118,11 +137,13 @@ async def test_content_captured_when_gate_set(
     attrs = span.attributes
     assert attrs["gen_ai.tool.call.arguments"] == '{"path": "/p"}'
     assert "contents of /p" in attrs["gen_ai.tool.call.result"]
-    # Dual emission: the content event is present too.
-    event = _event_named(span, INFERENCE_DETAILS)
-    assert event is not None
-    assert "gen_ai.input.messages" in event.attributes
-    assert "gen_ai.output.messages" in event.attributes
+    # Dual emission: the structured EventRecord is present too.
+    assert _event_named(span, INFERENCE_DETAILS) is None
+    event = _log_events_named("ratel.tool.execution.details")[0]
+    assert event.attributes["gen_ai.tool.call.arguments"] == {"path": "/p"}
+    assert event.attributes["gen_ai.tool.call.result"] == {"contents": "contents of /p"}
+    assert event.trace_id == span.context.trace_id
+    assert event.span_id == span.context.span_id
 
 
 @pytest.mark.asyncio
@@ -139,20 +160,118 @@ async def test_execute_tool_emits_content_event_under_event_only(
     assert "gen_ai.tool.call.arguments" not in span.attributes
     assert "gen_ai.tool.call.result" not in span.attributes
 
-    event = _event_named(span, INFERENCE_DETAILS)
-    assert event is not None
-    assert json.loads(event.attributes["gen_ai.input.messages"]) == [
-        {
-            "role": "assistant",
-            "parts": [{"type": "tool_call", "name": "read_file", "arguments": {"path": "/p"}}],
+    assert _event_named(span, INFERENCE_DETAILS) is None
+    event = _log_events_named("ratel.tool.execution.details")[0]
+    assert event.attributes["gen_ai.operation.name"] == "execute_tool"
+    assert event.attributes["gen_ai.tool.name"] == "read_file"
+    assert event.attributes["gen_ai.tool.call.arguments"] == {"path": "/p"}
+    assert event.attributes["gen_ai.tool.call.result"] == {"contents": "contents of /p"}
+    assert "gen_ai.input.messages" not in event.attributes
+    assert "gen_ai.output.messages" not in event.attributes
+
+
+@pytest.mark.asyncio
+async def test_real_mcp_result_is_normalized_for_span_and_event(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mcp_types = pytest.importorskip("mcp.types", reason="MCP requires Python 3.10+")
+    monkeypatch.setenv(CAPTURE_ENV, "SPAN_AND_EVENT")
+    result = mcp_types.CallToolResult(
+        content=[mcp_types.TextContent(type="text", text="done")],
+        structuredContent={"ok": True},
+        isError=False,
+    )
+    catalog = ToolCatalog()
+    await catalog.register(
+        ExecutableTool(
+            id="mcp__call",
+            name="call",
+            description="Return a real MCP result model.",
+            execute=lambda _args: result,
+        )
+    )
+
+    await catalog.invoke("mcp__call", {})
+
+    span = _spans_named(exporter, "execute_tool mcp__call")[0]
+    normalized = {
+        "content": [{"type": "text", "text": "done"}],
+        "structuredContent": {"ok": True},
+        "isError": False,
+    }
+    assert json.loads(span.attributes["gen_ai.tool.call.result"]) == normalized
+    event = _log_events_named("ratel.tool.execution.details")[0]
+    event_result = event.attributes["gen_ai.tool.call.result"]
+    assert not isinstance(event_result, str)
+    assert json.loads(json.dumps(event_result)) == normalized
+
+
+@pytest.mark.asyncio
+async def test_unserializable_result_cannot_break_tool_execution(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "EVENT_ONLY")
+
+    class BrokenModel:
+        def model_dump(self, **_kwargs: Any) -> Any:
+            raise ValueError("cannot dump")
+
+    result = BrokenModel()
+    catalog = ToolCatalog()
+    await catalog.register(
+        ExecutableTool(
+            id="broken_result",
+            name="broken_result",
+            description="Return an unserializable result.",
+            execute=lambda _args: result,
+        )
+    )
+
+    assert await catalog.invoke("broken_result", {}) is result
+    event = _log_events_named("ratel.tool.execution.details")[0]
+    assert event.attributes["gen_ai.tool.call.result"] is None
+
+
+@pytest.mark.asyncio
+async def test_unserializable_arguments_cannot_mask_tool_failure(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "EVENT_ONLY")
+    cyclic: dict[str, Any] = {}
+    cyclic["self"] = cyclic
+
+    def boom(_args: dict[str, Any]) -> Any:
+        raise RuntimeError("business failure")
+
+    catalog = ToolCatalog()
+    await catalog.register(
+        ExecutableTool(id="boom", name="boom", description="throws", execute=boom)
+    )
+
+    with pytest.raises(RuntimeError, match="business failure"):
+        await catalog.invoke("boom", cyclic)
+    event = _log_events_named("ratel.tool.execution.details")[0]
+    assert event.attributes["gen_ai.tool.call.arguments"] is None
+    assert "gen_ai.tool.call.result" not in event.attributes
+
+
+@pytest.mark.asyncio
+async def test_heterogeneous_arrays_remain_lossless_in_event_attributes(
+    exporter: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CAPTURE_ENV, "EVENT_ONLY")
+    catalog = ToolCatalog()
+    await catalog.register(_read_file())
+
+    await catalog.invoke("read_file", {"values": [1, "two", True]})
+
+    event = _log_events_named("ratel.tool.execution.details")[0]
+    assert event.attributes["gen_ai.tool.call.arguments"] == {
+        "values": {
+            "ratel.type": "array",
+            "ratel.items": {"0": 1, "1": "two", "2": True},
         }
-    ]
-    assert json.loads(event.attributes["gen_ai.output.messages"]) == [
-        {
-            "role": "tool",
-            "parts": [{"type": "tool_call_response", "response": {"contents": "contents of /p"}}],
-        }
-    ]
+    }
 
 
 @pytest.mark.asyncio
@@ -167,6 +286,7 @@ async def test_execute_tool_span_only_emits_no_content_event(
     span = _spans_named(exporter, "execute_tool read_file")[0]
     assert span.attributes["gen_ai.tool.call.arguments"] == '{"path": "/p"}'
     assert _event_named(span, INFERENCE_DETAILS) is None
+    assert _log_events_named("ratel.tool.execution.details") == []
 
 
 @pytest.mark.asyncio
@@ -181,10 +301,11 @@ async def test_execute_tool_no_content_emits_neither(
     span = _spans_named(exporter, "execute_tool read_file")[0]
     assert "gen_ai.tool.call.arguments" not in span.attributes
     assert _event_named(span, INFERENCE_DETAILS) is None
+    assert _log_events_named("ratel.tool.execution.details") == []
 
 
 @pytest.mark.asyncio
-async def test_failed_tool_emits_input_message_only_under_event_only(
+async def test_failed_tool_emits_arguments_without_result_under_event_only(
     exporter: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(CAPTURE_ENV, "EVENT_ONLY")
@@ -201,15 +322,10 @@ async def test_failed_tool_emits_input_message_only_under_event_only(
 
     span = _spans_named(exporter, "execute_tool boom")[0]
     assert span.status.status_code == StatusCode.ERROR
-    event = _event_named(span, INFERENCE_DETAILS)
-    assert event is not None
-    assert json.loads(event.attributes["gen_ai.input.messages"]) == [
-        {
-            "role": "assistant",
-            "parts": [{"type": "tool_call", "name": "boom", "arguments": {"x": 1}}],
-        }
-    ]
-    assert "gen_ai.output.messages" not in event.attributes
+    assert _event_named(span, INFERENCE_DETAILS) is None
+    event = _log_events_named("ratel.tool.execution.details")[0]
+    assert event.attributes["gen_ai.tool.call.arguments"] == {"x": 1}
+    assert "gen_ai.tool.call.result" not in event.attributes
 
 
 @pytest.mark.asyncio
@@ -267,6 +383,7 @@ async def test_ratel_search_span_skill_with_query(
     assert span.attributes["ratel.search.query"] == "pdf"
     # SPAN_ONLY: query on the span, no results event.
     assert _event_named(span, SEARCH_RESULTS) is None
+    assert _log_events_named(SEARCH_RESULTS) == []
 
 
 async def test_ratel_search_query_on_results_event_under_event_only(
@@ -279,8 +396,8 @@ async def test_ratel_search_query_on_results_event_under_event_only(
 
     span = _spans_named(exporter, "ratel.search")[0]
     assert "ratel.search.query" not in span.attributes  # content off the span
-    event = _event_named(span, SEARCH_RESULTS)
-    assert event is not None
+    assert _event_named(span, SEARCH_RESULTS) is None
+    event = _log_events_named(SEARCH_RESULTS)[0]
     assert event.attributes["ratel.search.query"] == "read file"
 
 
@@ -294,7 +411,8 @@ async def test_ratel_search_query_on_both_under_span_and_event(
 
     span = _spans_named(exporter, "ratel.search")[0]
     assert span.attributes["ratel.search.query"] == "read file"
-    assert _event_named(span, SEARCH_RESULTS).attributes["ratel.search.query"] == "read file"
+    assert _event_named(span, SEARCH_RESULTS) is None
+    assert _log_events_named(SEARCH_RESULTS)[0].attributes["ratel.search.query"] == "read file"
 
 
 @pytest.mark.asyncio
@@ -544,6 +662,13 @@ class _FakeSpan:
         self.attributes = attributes
 
 
+class _FakeLogRecord:
+    """Minimal ReadWriteLogRecord stand-in for ratel_event_filter."""
+
+    def __init__(self, event_name: str | None) -> None:
+        self.log_record = type("_LogRecord", (), {"event_name": event_name})()
+
+
 @pytest.fixture()
 def capturing_init(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Replace init() with one that records the kwargs configure_telemetry passes."""
@@ -572,6 +697,9 @@ async def test_configure_telemetry_defaults_to_the_signal_filter(
         )
         # An unrelated framework/HTTP span carries no gen_ai/ratel signal -> dropped.
         assert span_filter(_FakeSpan("GET /api", {"http.method": "GET"})) is False
+        log_filter = capturing_init["log_filter"]
+        assert log_filter(_FakeLogRecord("ratel.search.results")) is True
+        assert log_filter(_FakeLogRecord("app.started")) is False
     finally:
         handle.shutdown()
 

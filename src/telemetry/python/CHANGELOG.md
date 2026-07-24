@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-24
+
+### Added
+
+- `GEN_AI_SYSTEM_INSTRUCTIONS`, `GEN_AI_INPUT_MESSAGES`, `GEN_AI_OUTPUT_MESSAGES`,
+  `RATEL_TOOL_EXECUTION_DETAILS`, distinct Logs endpoint resolution, and composable
+  `ratel_log_record_processor`, `ratel_log_exporter`, and `ratel_event_filter` helpers.
+
+### Changed
+
+- `init()` now owns and shuts down matched tracer and logger providers.
+- Define content events as structured OpenTelemetry Logs `EventRecord`s and reserve inference output messages for model outputs with `finish_reason`.
+
 ## [0.1.2] - 2026-07-11
 
 ### Added

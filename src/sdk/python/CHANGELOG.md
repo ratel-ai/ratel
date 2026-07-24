@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-07-24
+
+### Fixed
+
+- Emit content capture as structured OpenTelemetry Logs `EventRecord`s, keep tool results out of inference-output messages, and export those records through `configure_telemetry()`.
+- Serialize real MCP `CallToolResult` values into telemetry instead of recording an empty string.
+- Preserve heterogeneous JSON arrays losslessly despite OpenTelemetry Python 1.41's
+  homogeneous-array limitation.
+- Ship and require the OTel-free telemetry vocabulary version that defines the EventRecord
+  contract, so base installs emit into host-owned OpenTelemetry providers.
+
 ## [0.5.1] - 2026-07-24
 
 ### Changed
