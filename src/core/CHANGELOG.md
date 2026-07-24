@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- `TraceEvent` is now `#[non_exhaustive]`. Downstream `match`es over it must include a `_ =>` arm; in return, future event variants (such as the new `usage_boost`) are non-breaking. In-crate matches and the serde wire form are unaffected.
+
 ## [0.5.0] - 2026-07-20
 
 ### Added
