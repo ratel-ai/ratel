@@ -40,6 +40,25 @@ test/adaptive.test.ts model-free assertion that learning promotes the real tool 
 
 Semantic and hybrid catalogs work the same way and cluster queries by *meaning* rather than shared words — attach the graph exactly as here; the only cost is the first-run embedding-model download.
 
+## Recovering from an embedding-model swap
+
+```bash
+pnpm start:model-swap
+```
+
+A graph's centroids are tied to the model that built them, so a persisted graph reloaded under a *different* embedding model can't be cosine-compared — the boost **pauses** (base ranking is untouched) rather than rank across incompatible vector spaces. `src/model-swap.ts` shows the recovery both ways. Unlike `index.ts` it uses a **semantic** catalog, so it needs the default model (bge-small) locally; it prints a skip notice and exits cleanly if the model can't load. Expected output:
+
+```
+after a model swap  : paused: model mismatch
+after rebuild       : active
+auto, before search : paused: model mismatch
+auto, after search  : active
+```
+
+- `catalog.adaptiveRankingStatus.status` — `"paused: model mismatch"` after the swap; gate on this instead of reading stderr.
+- `await catalog.rebuildIntentGraph()` — re-embeds every cluster's members under the current model; support and edges survive, only centroids move. Throws `EmbedderError` if the model can't load.
+- `enableAdaptiveRanking(graph, { rebuildOnModelChange: true })` — opt in and the **next dense search** recovers for you. Recovery is lazy (`enable` is sync, the rebuild is async), so the status stays `paused` until that first search. Off by default because a rebuild is an embedding pass — cost, possible failure, and it mutates the graph.
+
 ## Why it's a separate workspace package
 
 Examples don't ship in `@ratel-ai/sdk` — keeping them out of the published artifact keeps the public API surface narrow and dependency-free. This one pulls only `@ratel-ai/sdk` itself, so it doubles as the smallest possible integration check.
