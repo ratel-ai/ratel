@@ -990,6 +990,14 @@ impl IntentGraph {
     /// handed such a graph must still match it lexically rather than see nothing
     /// at all. Falling back here is what makes the format portable across
     /// producers in practice, not just on paper.
+    ///
+    /// On a **mixed** graph (some clusters carry centroids, some don't), a vector
+    /// query matches the centroid-bearing clusters densely and, on a miss, the
+    /// centroid-less clusters lexically. The lexical fallback is restricted to
+    /// centroid-less clusters on purpose: a fingerprinted cluster dense matching
+    /// already rejected must never be rescued by token overlap (that would let
+    /// words override meaning), but a centroid-less cluster has no other way to
+    /// match at all, so it gets the lexical shot it is due (#5).
     pub(crate) fn arm(
         &self,
         query: &str,
@@ -998,7 +1006,9 @@ impl IntentGraph {
         known: &dyn Fn(&str) -> bool,
     ) -> Option<UsageArm> {
         match query_vec {
-            Some(v) if self.has_centroids() => self.arm_dense(v, kind, known),
+            Some(v) if self.has_centroids() => self
+                .arm_dense(v, kind, known)
+                .or_else(|| self.arm_lexical_matching(query, kind, known, true)),
             _ => self.arm_lexical(query, kind, known),
         }
     }
@@ -1049,6 +1059,22 @@ impl IntentGraph {
         kind: Capability,
         known: &dyn Fn(&str) -> bool,
     ) -> Option<UsageArm> {
+        self.arm_lexical_matching(query, kind, known, false)
+    }
+
+    /// Lexical match, optionally limited to centroid-less clusters. The dense
+    /// serving fallback sets `centroidless_only` so a fingerprinted cluster that
+    /// dense matching already rejected is never rescued by token overlap; only
+    /// clusters dense cannot see (no centroid) get a lexical match (see [`arm`]).
+    ///
+    /// [`arm`]: Self::arm
+    fn arm_lexical_matching(
+        &self,
+        query: &str,
+        kind: Capability,
+        known: &dyn Fn(&str) -> bool,
+        centroidless_only: bool,
+    ) -> Option<UsageArm> {
         let q: std::collections::HashSet<String> = tokenize(query).into_iter().collect();
         if q.is_empty() {
             return None;
@@ -1056,6 +1082,7 @@ impl IntentGraph {
         let best = self
             .intents
             .iter()
+            .filter(|it| !centroidless_only || it.centroid.is_none())
             .map(|it| (it, it.lexical_score(&q)))
             .filter(|(_, score)| *score >= TAU_LEXICAL)
             .max_by(pick_best)?;
@@ -1176,6 +1203,69 @@ mod tests {
 
     fn all_known(_: &str) -> bool {
         true
+    }
+
+    // ---- mixed-graph serving fallback (#5) ---------------------------------
+
+    #[test]
+    fn a_vector_query_boosts_a_centroidless_cluster_when_dense_misses() {
+        // Mixed graph: one dense cluster (fingerprinted) and one word-only
+        // cluster carrying its own tool edge. A vector query orthogonal to the
+        // dense centroid must still reach the word-only cluster lexically — its
+        // learned evidence is otherwise permanently invisible to dense queries.
+        let mut dense = intent(
+            "dense",
+            &["why is the build broken"],
+            &[("gh_run_list", 1.0)],
+        );
+        dense.centroid = Some(normalize(vec![1.0, 0.0, 0.0]));
+        let lexical = intent(
+            "lexical",
+            &["deploy the app to prod"],
+            &[("deploy_tool", 1.0)],
+        );
+        let g = graph(vec![dense, lexical]);
+
+        // Orthogonal to the dense centroid → dense miss; shares every word with
+        // the word-only cluster → lexical hit.
+        let arm = g.arm(
+            "deploy the app to prod",
+            Some(&[0.0, 1.0, 0.0]),
+            Capability::Tool,
+            &all_known,
+        );
+
+        let arm = arm.expect("word-only cluster must still boost on a dense miss");
+        assert_eq!(arm.intent_id, "lexical");
+        assert_eq!(arm.ids, vec!["deploy_tool".to_string()]);
+    }
+
+    #[test]
+    fn a_dense_rejected_cluster_is_not_rescued_by_word_overlap() {
+        // The guard on the fallback: a fingerprinted cluster that dense matching
+        // rejected must NOT be pulled back by token overlap — that would let a
+        // shallow word match override the embedder's "not similar" verdict.
+        let mut dense = intent(
+            "dense",
+            &["deploy the app to prod"],
+            &[("gh_run_list", 1.0)],
+        );
+        dense.centroid = Some(normalize(vec![1.0, 0.0, 0.0]));
+        let g = graph(vec![dense]);
+
+        // Orthogonal → dense miss; but the query shares every word with the
+        // cluster's member, so an unrestricted lexical fallback would match it.
+        let arm = g.arm(
+            "deploy the app to prod",
+            Some(&[0.0, 1.0, 0.0]),
+            Capability::Tool,
+            &all_known,
+        );
+
+        assert!(
+            arm.is_none(),
+            "a fingerprinted cluster dense rejected must not match lexically, got {arm:?}"
+        );
     }
 
     // ---- support ramp ------------------------------------------------------
