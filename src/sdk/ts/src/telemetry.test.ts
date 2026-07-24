@@ -1,4 +1,4 @@
-import { context, trace } from "@opentelemetry/api";
+import { context, propagation, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import {
@@ -64,6 +64,11 @@ afterEach(() => {
   setContentCapture(null); // never leak a programmatic capture override across tests
   trace.disable(); // reset the global provider to the no-op default
   logs.disable();
+  // Tests that register a real NodeTracerProvider (startTelemetry / configureTelemetry) get a
+  // global context manager + propagator installed as a side effect of provider.register();
+  // trace.disable() drops only the provider, so reset those too or a later test inherits them.
+  context.disable();
+  propagation.disable();
 });
 
 const readFile: ExecutableTool = {
@@ -542,8 +547,9 @@ describe("span nesting", () => {
 
 describe("startTelemetry (SDK one-import re-export)", () => {
   it("returns synchronously a forceFlush + shutdown handle when Ratel owns the provider", async () => {
-    // startTelemetry owns the global provider, so drop the beforeEach one first.
+    // startTelemetry owns both global providers, so drop the beforeEach tracer + logger first.
     trace.disable();
+    logs.disable();
     const handle = startTelemetry({ endpoint: "http://localhost:4318/v1/traces" });
     // Synchronous: the return value is the handle, not a Promise — the whole point of
     // this path over the async configureTelemetry() compat sugar.
@@ -566,6 +572,17 @@ describe("requireOtlpPeer (startTelemetry install probe)", () => {
   it("loads the installed peer and exposes startTelemetry", () => {
     // The real peer is a workspace dep, so it resolves and loads synchronously.
     expect(typeof requireOtlpPeer().startTelemetry).toBe("function");
+  });
+
+  it("steers a present-but-async-graph peer to configureTelemetry instead of leaking the raw error", () => {
+    // A real .mjs whose top-level await makes require() throw ERR_REQUIRE_ASYNC_MODULE on every
+    // Node: drives the catch branch end-to-end (its message wraps the code and points at the
+    // async path). Resolved relative to telemetry.ts, where requireOtlpPeer's createRequire roots.
+    const asyncPeer = "./test-support/async-esm-peer.mjs";
+    expect(() => requireOtlpPeer(asyncPeer)).toThrow(/could not load .* synchronously/i);
+    expect(() => requireOtlpPeer(asyncPeer)).toThrow(/ERR_REQUIRE_ASYNC_MODULE/);
+    // A bare rethrow would omit this steer — the whole reason the branch exists.
+    expect(() => requireOtlpPeer(asyncPeer)).toThrow(/configureTelemetry/);
   });
 });
 
