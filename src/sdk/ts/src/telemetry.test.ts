@@ -1,4 +1,4 @@
-import { context, trace } from "@opentelemetry/api";
+import { context, propagation, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import {
@@ -20,10 +20,17 @@ import {
   type ExecutableTool,
   SkillCatalog,
   setContentCapture,
+  startTelemetry,
   type TelemetryHandle,
   ToolCatalog,
 } from "./index.js";
-import { isModuleNotFound, isPeerInstalled, recordAuthNeeded } from "./telemetry.js";
+import {
+  isModuleNotFound,
+  isPeerInstalled,
+  isRequireEsmUnsupported,
+  recordAuthNeeded,
+  requireOtlpPeer,
+} from "./telemetry.js";
 
 /**
  * Instrumentation is verified through the public OTel API: register an in-memory
@@ -57,6 +64,11 @@ afterEach(() => {
   setContentCapture(null); // never leak a programmatic capture override across tests
   trace.disable(); // reset the global provider to the no-op default
   logs.disable();
+  // Tests that register a real NodeTracerProvider (startTelemetry / configureTelemetry) get a
+  // global context manager + propagator installed as a side effect of provider.register();
+  // trace.disable() drops only the provider, so reset those too or a later test inherits them.
+  context.disable();
+  propagation.disable();
 });
 
 const readFile: ExecutableTool = {
@@ -530,6 +542,69 @@ describe("span nesting", () => {
     } finally {
       context.disable();
     }
+  });
+});
+
+describe("startTelemetry (SDK one-import re-export)", () => {
+  it("returns synchronously a forceFlush + shutdown handle when Ratel owns the provider", async () => {
+    // startTelemetry owns both global providers, so drop the beforeEach tracer + logger first.
+    trace.disable();
+    logs.disable();
+    const handle = startTelemetry({ endpoint: "http://localhost:4318/v1/traces" });
+    // Synchronous: the return value is the handle, not a Promise — the whole point of
+    // this path over the async configureTelemetry() compat sugar.
+    expect(handle).not.toBeInstanceOf(Promise);
+    expect(typeof handle.forceFlush).toBe("function");
+    expect(typeof handle.shutdown).toBe("function");
+    await handle.forceFlush();
+    await handle.shutdown();
+  });
+});
+
+describe("requireOtlpPeer (startTelemetry install probe)", () => {
+  it("throws actionable install guidance naming the absent peer", () => {
+    const absent = "@ratel-ai/definitely-not-a-real-package";
+    expect(() => requireOtlpPeer(absent)).toThrow(new RegExp(absent.replace("/", "\\/")));
+    expect(() => requireOtlpPeer(absent)).toThrow(/install/i);
+    expect(() => requireOtlpPeer(absent)).toThrow(/npm i/);
+  });
+
+  it("loads the installed peer and exposes startTelemetry", () => {
+    // The real peer is a workspace dep, so it resolves and loads synchronously.
+    expect(typeof requireOtlpPeer().startTelemetry).toBe("function");
+  });
+
+  it("steers a present-but-async-graph peer to configureTelemetry instead of leaking the raw error", () => {
+    // A real .mjs whose top-level await makes require() throw ERR_REQUIRE_ASYNC_MODULE on every
+    // Node: drives the catch branch end-to-end (its message wraps the code and points at the
+    // async path). Resolved relative to telemetry.ts, where requireOtlpPeer's createRequire roots.
+    const asyncPeer = "./test-support/async-esm-peer.mjs";
+    expect(() => requireOtlpPeer(asyncPeer)).toThrow(/could not load .* synchronously/i);
+    expect(() => requireOtlpPeer(asyncPeer)).toThrow(/ERR_REQUIRE_ASYNC_MODULE/);
+    // A bare rethrow would omit this steer — the whole reason the branch exists.
+    expect(() => requireOtlpPeer(asyncPeer)).toThrow(/configureTelemetry/);
+  });
+});
+
+describe("isRequireEsmUnsupported (old-Node sync-load classifier)", () => {
+  it("is true only when Node cannot require() the ES-module peer", () => {
+    // require(esm) is unflagged from Node 20.19 / 22.12; older Node throws ERR_REQUIRE_ESM,
+    // and an ESM graph with top-level await throws ERR_REQUIRE_ASYNC_MODULE. Both mean
+    // "load it asynchronously instead" (configureTelemetry).
+    expect(
+      isRequireEsmUnsupported(Object.assign(new Error("x"), { code: "ERR_REQUIRE_ESM" })),
+    ).toBe(true);
+    expect(
+      isRequireEsmUnsupported(Object.assign(new Error("x"), { code: "ERR_REQUIRE_ASYNC_MODULE" })),
+    ).toBe(true);
+  });
+
+  it("is false for an absent package or a plain load failure (those are not the sync-load limit)", () => {
+    expect(
+      isRequireEsmUnsupported(Object.assign(new Error("x"), { code: "ERR_MODULE_NOT_FOUND" })),
+    ).toBe(false);
+    expect(isRequireEsmUnsupported(new Error("plain error, no code"))).toBe(false);
+    expect(isRequireEsmUnsupported(undefined)).toBe(false);
   });
 });
 
