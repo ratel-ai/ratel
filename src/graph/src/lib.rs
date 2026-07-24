@@ -9,13 +9,18 @@
 //!
 //! Replay runs through **the same** [`UsageLearner`] the live path uses, via
 //! [`UsageLearner::replay`], which stamps each observation with the envelope's
-//! own timestamp. So a replayed graph is what the live path would have grown,
-//! not an approximation of it.
+//! own timestamp. For a **single-session, lexical (BM25) graph** this rebuilds
+//! exactly what the live path grew. It is an **approximation** in two cases:
+//! trace logs record query *text* but never query *vectors*, so a dense graph's
+//! centroids cannot be reproduced (only its lexical clusters); and multiple
+//! sessions are replayed one after another (see below) rather than interleaved
+//! by arrival as they were live — and clustering is order-dependent.
 //!
 //! **Sessions are replayed separately.** A confirmed observation is a search and
 //! an invoke from *one* session; feeding two interleaved sessions through one
 //! learner would pair one session's search with another's invoke and invent
-//! edges nobody produced. [`replay_envelopes`] groups by `session_id` first.
+//! edges nobody produced. [`replay_envelopes`] groups by `session_id` first —
+//! faithful within each session, but the cross-session order differs from live.
 
 #![warn(missing_docs)]
 

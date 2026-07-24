@@ -10,10 +10,13 @@ already a durable record of everything the learner would have seen. Replaying it
 reconstructs the graph without introducing any storage of its own.
 
 Replay runs through the **same** `UsageLearner` the live path uses, stamped with each
-envelope's own timestamp, so a replayed graph is what the live path would have grown rather
-than an approximation of it. Sessions are grouped and replayed separately: a confirmed
-observation is a search and an invoke from *one* session, and pairing across sessions would
-invent edges nobody produced.
+envelope's own timestamp. For a single-session, lexical (BM25) graph this rebuilds exactly
+what the live path grew; it is an **approximation** for two cases — trace logs record query
+*text* but never query *vectors*, so a dense graph's centroids cannot be reproduced (only its
+lexical clusters), and multiple sessions are replayed one after another rather than
+interleaved by arrival as they were live (clustering is order-dependent). Sessions are grouped
+and replayed separately: a confirmed observation is a search and an invoke from *one* session,
+and pairing across sessions would invent edges nobody produced.
 
 The graph shape is [`protocol/v1`](../../protocol/v1/README.md); the decisions behind it are
 [ADR-0014](../../docs/adr/0014-adaptive-usage-ranking.md).
