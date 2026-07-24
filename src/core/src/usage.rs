@@ -122,7 +122,7 @@ pub(crate) struct UsageArm {
     /// Id of the cluster that matched — carried into `TraceEvent::UsageBoost`.
     pub intent_id: String,
     /// How well the query matched: cosine against the centroid on the dense
-    /// tier, share of query tokens known on the lexical one. Both are in
+    /// tier, the best per-member Jaccard overlap on the lexical one. Both are in
     /// `[0, 1]`, but they are **different scales** — compare within a tier, not
     /// across. Reported so near-misses are visible, not just hits.
     pub similarity: f32,
@@ -1175,13 +1175,16 @@ impl IntentGraph {
         arm_from(best.0, best.1, self.built_from_ts, kind, known)
     }
 
-    /// Match `query` lexically against each cluster's member-token bag and
-    /// return the best cluster's arm.
+    /// Match `query` lexically against each cluster's members and return the best
+    /// cluster's arm.
     ///
-    /// The score is the share of the query's content tokens the cluster already
-    /// knows, so it is bounded in `[0, 1]` and thresholds meaningfully — unlike
-    /// a raw BM25 score, which is unbounded and corpus-relative. `None` when
-    /// nothing clears [`TAU_LEXICAL`] or the match has no surviving edges.
+    /// The score is the best **per-member Jaccard overlap** — `|q ∩ m| / |q ∪ m|`
+    /// against the cluster's closest single member, not against the members'
+    /// union (which only grows, letting a mature cluster absorb unrelated asks;
+    /// see [`Intent::lexical_score`]). Bounded in `[0, 1]`, so it thresholds
+    /// meaningfully — unlike a raw BM25 score, which is unbounded and
+    /// corpus-relative. `None` when nothing clears [`TAU_LEXICAL`] or the match
+    /// has no surviving edges.
     pub(crate) fn arm_lexical(
         &self,
         query: &str,
