@@ -224,6 +224,55 @@ impl PendingQuery {
     }
 }
 
+/// Which query is currently owed a support credit, and whether an invoke has
+/// already claimed it. Lives on the shared graph — not the learner — so the
+/// per-registry tool and skill learners that a `search_capabilities` fan-out
+/// drives (same query, two learners) credit **one** observation between them,
+/// not one each. A `Mutex` so a search can arm it while holding only a read
+/// lock, mirroring [`PendingQuery`].
+#[derive(Debug, Default)]
+struct CreditSlot(Mutex<Option<(String, bool)>>);
+
+impl Clone for CreditSlot {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for CreditSlot {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl CreditSlot {
+    /// Arm `query` for a support credit. Called on every search; re-arming with
+    /// the same text before any invoke is idempotent, so a fanned-out capability
+    /// search still yields a single credit.
+    fn arm(&self, query: &str) {
+        if let Ok(mut slot) = self.0.lock() {
+            *slot = Some((query.to_string(), false));
+        }
+    }
+
+    /// `true` for the first invoke of an armed `query` — and marks it claimed so
+    /// later invokes of the same question (a tool *and* a skill) do not re-credit.
+    /// Keyed by query text: a slot clobbered by another session's search reads as
+    /// "not first" rather than crediting the wrong question.
+    fn claim(&self, query: &str) -> bool {
+        let Ok(mut slot) = self.0.lock() else {
+            return false;
+        };
+        match slot.as_mut() {
+            Some((q, credited)) if q == query && !*credited => {
+                *credited = true;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
 /// One cluster: the queries it covers and the capabilities invoked after them.
 ///
 /// `label` and `terms` are **derived**, not stored: they are computed from the
@@ -455,6 +504,10 @@ pub struct IntentGraph {
     /// Scratch for the search path → learner handoff; never serialized.
     #[serde(skip)]
     pending: PendingQuery,
+    /// Which query is owed a support credit, shared across the tool and skill
+    /// learners so one fanned-out question counts once. Never serialized.
+    #[serde(skip)]
+    credit: CreditSlot,
 }
 
 /// Whether an [`IntentGraph`]'s centroids can be trusted against the currently
@@ -559,6 +612,7 @@ impl IntentGraph {
             intents: Vec::new(),
             model: None,
             pending: PendingQuery::default(),
+            credit: CreditSlot::default(),
         }
     }
 
@@ -582,6 +636,20 @@ impl IntentGraph {
     /// never needs the write lock.
     pub(crate) fn note_query_vector(&self, query: &str, vector: &[f32], fingerprint: &str) {
         self.pending.set(query, vector, fingerprint);
+    }
+
+    /// Arm `query` for a support credit on the shared credit slot — called by the
+    /// learner on every search. See [`CreditSlot`] for why this lives on the
+    /// graph rather than the learner.
+    pub(crate) fn arm_credit(&self, query: &str) {
+        self.credit.arm(query);
+    }
+
+    /// Whether this invoke is the first confirmation of `query` across every
+    /// learner sharing the graph. Marks the credit claimed, so a tool invoke and
+    /// a skill invoke for one fanned-out question yield a single support bump.
+    pub(crate) fn claim_credit(&self, query: &str) -> bool {
+        self.credit.claim(query)
     }
 
     /// Fold one confirmed observation — a query, and the capability invoked
@@ -1198,6 +1266,7 @@ mod tests {
             intents,
             model: None,
             pending: PendingQuery::default(),
+            credit: CreditSlot::default(),
         }
     }
 

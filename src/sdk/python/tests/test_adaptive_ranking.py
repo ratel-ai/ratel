@@ -332,6 +332,42 @@ async def test_one_graph_is_shared_between_tool_and_skill_catalogs() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_capability_search_answered_by_both_counts_support_once() -> None:
+    # search_capabilities fans ONE query to both catalogs (both searches happen
+    # before any invoke). A tool AND a skill used for that one question must bump
+    # the shared cluster's support by 1, not 1 per catalog (#3). Each catalog has
+    # its own learner; they dedup through the credit slot on the shared graph.
+    graph = IntentGraph()
+    tools = await build_catalog()
+    skills = SkillCatalog()
+    await skills.register(
+        Skill(
+            id="ci-triage",
+            name="ci-triage",
+            description="Diagnose why the build failed in CI",
+            tags=[],
+            tools=[],
+            metadata={},
+            body="# steps",
+        )
+    )
+    tools.enable_adaptive_ranking(graph)
+    skills.enable_adaptive_ranking(graph)
+
+    # Fan-out ordering: both searches (same query) before any invoke.
+    tools.search("why is the build broken", 5)
+    skills.search("why is the build broken", 5)
+    await tools.invoke("gh_run_list", {})
+    skills.invoke("ci-triage")
+
+    wire = json.loads(graph.to_json())
+    assert graph.cluster_count == 1
+    assert wire["intents"][0]["support"] == 1, "one question, not one per catalog"
+    assert "gh_run_list" in wire["intents"][0]["tools"]
+    assert "ci-triage" in wire["intents"][0]["skills"]
+
+
+@pytest.mark.asyncio
 async def test_rank_and_fused_expose_the_scale_switch() -> None:
     catalog = await build_catalog()
     graph = IntentGraph()

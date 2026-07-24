@@ -185,6 +185,41 @@ describe("adaptive usage ranking", () => {
     expect(Object.keys(wire.intents[0].skills)).toContain("ci-triage");
   });
 
+  it("counts support once when one capability search is answered by a tool and a skill", async () => {
+    // search_capabilities fans one query to both catalogs (both searches before
+    // any invoke). A tool AND a skill used for that question must bump the shared
+    // cluster's support by 1, not 1 per catalog (#3) — the two per-catalog
+    // learners dedup through the credit slot on the shared graph.
+    const graph = new IntentGraph();
+    const tools = await buildCatalog();
+    const skills = new SkillCatalog();
+    await skills.register([
+      {
+        id: "ci-triage",
+        name: "ci-triage",
+        description: "Diagnose why the build failed in CI",
+        tags: [],
+        tools: [],
+        metadata: {},
+        body: "# steps",
+      },
+    ]);
+    tools.enableAdaptiveRanking(graph);
+    skills.enableAdaptiveRanking(graph);
+
+    // Fan-out ordering: both searches (same query) before any invoke.
+    tools.search("why is the build broken", 5);
+    skills.search("why is the build broken", 5);
+    await tools.invoke("gh_run_list", {});
+    skills.invoke("ci-triage");
+
+    const wire = JSON.parse(graph.toJson());
+    expect(graph.clusterCount).toBe(1);
+    expect(wire.intents[0].support).toBe(1);
+    expect(Object.keys(wire.intents[0].tools)).toContain("gh_run_list");
+    expect(Object.keys(wire.intents[0].skills)).toContain("ci-triage");
+  });
+
   it("exposes rank and fused so callers avoid the scale-shifting score", async () => {
     const catalog = await buildCatalog();
     const graph = new IntentGraph();

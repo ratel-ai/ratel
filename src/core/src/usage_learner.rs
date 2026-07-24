@@ -48,13 +48,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::trace::{TraceEnvelope, TraceEvent, TraceSink};
 use crate::usage::{Capability, IntentGraph};
 
-/// The session's most recent search, and whether an invoke has already credited
-/// it. An agent that searches once and uses three tools confirmed three
-/// *capabilities* but asked one *question*, so only the first invoke counts as
-/// an observation.
+/// The learner's most recent search — the query an invoke attributes to. Kept
+/// per-learner (not read from the shared graph) so a concurrent search from
+/// another session cannot misattribute this learner's invoke. Whether the
+/// question has already been credited a support bump lives on the shared graph
+/// ([`IntentGraph::claim_credit`]), so per-catalog tool and skill learners count
+/// one fanned-out question once between them, not once each.
 struct Pending {
     query: String,
-    credited: bool,
 }
 
 /// A [`TraceSink`] decorator that grows an [`IntentGraph`] from the events
@@ -111,19 +112,23 @@ impl UsageLearner {
         self.graph.clone()
     }
 
-    /// Record the search awaiting confirmation, re-arming the credit.
+    /// Record the search awaiting confirmation, and arm the shared credit.
     ///
-    /// Re-arming unconditionally is safe even though `search_capabilities`
-    /// emits both a `Search` and a `SkillSearch` for one question: both arrive
-    /// *before* any invoke, so only one credit follows either way. Over-counting
-    /// would need a credit, then another search of the same text, then another
-    /// credit — which is two real searches and should count twice.
+    /// Arming on the graph re-arms unconditionally: `search_capabilities` emits
+    /// a `Search` and a `SkillSearch` for one question, but both arrive *before*
+    /// any invoke, so one credit follows either way. Because the credit lives on
+    /// the graph the two catalogs share, this holds even though each catalog has
+    /// its own learner — the previous per-learner flag credited once *each*.
+    /// Over-counting still needs a credit, then another search of the same text,
+    /// then another credit — two real searches, which should count twice.
     fn remember_query(&self, query: &str) {
         if let Ok(mut pending) = self.pending.lock() {
             *pending = Some(Pending {
                 query: query.to_string(),
-                credited: false,
             });
+        }
+        if let Ok(graph) = self.graph.read() {
+            graph.arm_credit(query);
         }
     }
 
@@ -133,19 +138,18 @@ impl UsageLearner {
     /// or a missing pending query drops the evidence rather than disturbing the
     /// agent loop (ADR-0007's query-log semantics).
     fn confirm(&self, kind: Capability, capability_id: &str, ts_ms: u64) {
-        let Ok(mut pending) = self.pending.lock() else {
+        let Ok(pending) = self.pending.lock() else {
             return;
         };
-        let Some(p) = pending.as_mut() else {
+        let Some(query) = pending.as_ref().map(|p| p.query.clone()) else {
             return; // an invoke with no search before it proves nothing
         };
-        let query = p.query.clone();
-        // The first invoke after a search is what makes it an observation; the
-        // rest are further capabilities used for the same question.
-        let first_confirmation = !p.credited;
-        p.credited = true;
         drop(pending);
         if let Ok(mut graph) = self.graph.write() {
+            // The first invoke of this question, across every learner sharing the
+            // graph, is what makes it an observation; the rest add edges for the
+            // same question without re-bumping support.
+            let first_confirmation = graph.claim_credit(&query);
             graph.observe(&query, kind, capability_id, ts_ms, first_confirmation);
         }
     }
@@ -368,6 +372,43 @@ mod tests {
         );
         assert_eq!(g.intents[0].tools.len(), 1);
         assert_eq!(g.intents[0].skills.len(), 1);
+    }
+
+    #[test]
+    fn two_learners_sharing_a_graph_count_a_capability_search_once() {
+        // The real SDK topology: `search_capabilities` fans one query to a tool
+        // catalog and a skill catalog, each with its OWN learner but ONE shared
+        // graph. Per-learner crediting double-counts support; the shared credit
+        // slot on the graph collapses them into a single observation.
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
+        let tools = Arc::new(UsageLearner::new(graph.clone(), Arc::new(NoopSink)));
+        let skills = Arc::new(UsageLearner::new(graph.clone(), Arc::new(NoopSink)));
+
+        // Fan-out: both searches (same query) arrive before any invoke.
+        tools.record(search("why is the build broken"));
+        skills.record(TraceEvent::SkillSearch {
+            query: "why is the build broken".into(),
+            origin: Origin::Agent,
+            top_k: 5,
+            hits: Vec::new(),
+            stages: Vec::new(),
+            took_ms: 0,
+        });
+        // The agent uses a tool AND a skill for the one question.
+        tools.record(invoke("gh_run_list"));
+        skills.record(TraceEvent::SkillInvoke {
+            skill_id: "ci-triage".into(),
+            took_ms: 1,
+        });
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.len(), 1);
+        assert_eq!(
+            g.intents[0].support, 1,
+            "one question, even across two per-catalog learners"
+        );
+        assert_eq!(g.intents[0].tools.get("gh_run_list"), Some(&1.0));
+        assert_eq!(g.intents[0].skills.get("ci-triage"), Some(&1.0));
     }
 
     #[test]
