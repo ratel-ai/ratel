@@ -1,9 +1,13 @@
 import { trace } from "@opentelemetry/api";
-import { BatchSpanProcessor, type ReadableSpan } from "@opentelemetry/sdk-trace-base";
+import {
+  BatchSpanProcessor,
+  type ReadableSpan,
+  type SpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ENDPOINT_ENV } from "@ratel-ai/telemetry";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { init } from "./init.js";
+import { init, startTelemetry } from "./init.js";
 
 describe("init", () => {
   // init() registers a global provider; reset it so each case starts clean.
@@ -141,6 +145,83 @@ describe("init", () => {
       if (saved === undefined) delete process.env[ENDPOINT_ENV];
       else process.env[ENDPOINT_ENV] = saved;
       await existing.shutdown();
+    }
+  });
+});
+
+describe("startTelemetry", () => {
+  // startTelemetry registers a global provider; reset it so each case starts clean.
+  afterEach(() => {
+    trace.disable();
+    vi.restoreAllMocks();
+  });
+
+  it("returns a handle exposing forceFlush and shutdown", async () => {
+    const handle = startTelemetry({ endpoint: "http://localhost:4318/v1/traces" });
+    try {
+      expect(typeof handle.forceFlush).toBe("function");
+      expect(typeof handle.shutdown).toBe("function");
+      await expect(handle.forceFlush()).resolves.toBeUndefined();
+    } finally {
+      await handle.shutdown().catch(() => {});
+    }
+  });
+
+  it("keeps init working as a back-compat alias carrying the new handle shape", async () => {
+    const handle = init({ endpoint: "http://localhost:4318/v1/traces" });
+    try {
+      expect(typeof handle.forceFlush).toBe("function");
+      expect(typeof handle.shutdown).toBe("function");
+    } finally {
+      await handle.shutdown().catch(() => {});
+    }
+  });
+
+  it("fans finished spans out to host spanProcessors on the Ratel-owned provider", async () => {
+    // Neutralize the Ratel BatchSpanProcessor's real export path (no network in unit tests);
+    // the host processor below is a plain object, so its onEnd stays observable.
+    vi.spyOn(BatchSpanProcessor.prototype, "onEnd").mockImplementation(() => {});
+    const hostOnEnd = vi.fn();
+    const host: SpanProcessor = {
+      onStart: () => {},
+      onEnd: hostOnEnd,
+      forceFlush: async () => {},
+      shutdown: async () => {},
+    };
+    const handle = startTelemetry({
+      endpoint: "http://localhost:4318/v1/traces",
+      spanProcessors: [host],
+    });
+    try {
+      trace.getTracer("test").startSpan("ratel.search").end();
+
+      // The host processor is a first-class entry on the same provider, so it sees the
+      // provider's whole span stream — independent of the Ratel processor's own filter.
+      expect(hostOnEnd).toHaveBeenCalledTimes(1);
+      expect((hostOnEnd.mock.calls[0]?.[0] as ReadableSpan).name).toBe("ratel.search");
+    } finally {
+      await handle.shutdown().catch(() => {});
+    }
+  });
+
+  it("flushes every registered processor when the handle is force-flushed", async () => {
+    const hostForceFlush = vi.fn(async () => {});
+    const host: SpanProcessor = {
+      onStart: () => {},
+      onEnd: () => {},
+      forceFlush: hostForceFlush,
+      shutdown: async () => {},
+    };
+    const handle = startTelemetry({
+      endpoint: "http://localhost:4318/v1/traces",
+      spanProcessors: [host],
+    });
+    try {
+      await handle.forceFlush();
+
+      expect(hostForceFlush).toHaveBeenCalledTimes(1);
+    } finally {
+      await handle.shutdown().catch(() => {});
     }
   });
 });

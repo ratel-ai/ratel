@@ -1,12 +1,14 @@
 # `@ratel-ai/telemetry-otlp`
 
 The OTLP exporter surface for Ratel telemetry over the OTel-free [`@ratel-ai/telemetry`](../ts/README.md)
-vocabulary: turnkey `init()` wiring for a greenfield app, plus a composable `ratelSpanProcessor`
-for coexisting with a provider a partner already owns. `init()` wires an OTLP `http/protobuf`
-exporter from `RATEL_URL` + `RATEL_API_KEY` (or explicit `{ endpoint, apiKey, headers }`) with a
-`service.name` resource and batch processor over the
-[OpenTelemetry JS SDK](https://opentelemetry.io/docs/languages/js/), registers it as the global
-tracer provider, and returns a shutdown handle. It is split from the vocabulary package
+vocabulary: turnkey `startTelemetry()` wiring for a greenfield app (with `init` retained as a
+back-compat alias), plus a composable `ratelSpanProcessor` for coexisting with a provider a partner
+already owns. `startTelemetry()` wires an OTLP `http/protobuf` exporter from `RATEL_URL` +
+`RATEL_API_KEY` (or explicit `{ endpoint, apiKey, headers }`) with a `service.name` resource and
+batch processor over the [OpenTelemetry JS SDK](https://opentelemetry.io/docs/languages/js/),
+registers it as the global tracer provider, and returns a handle with `forceFlush()` and
+`shutdown()`. Pass host processors via `spanProcessors` to fan the same span stream out to another
+backend (e.g. Langfuse) without ceding the provider. It is split from the vocabulary package
 (ADR-0007) so importing the `ratel.*` constants never pulls the OpenTelemetry SDK.
 
 ## Usage
@@ -14,10 +16,10 @@ tracer provider, and returns a shutdown handle. It is split from the vocabulary 
 ```ts
 import { trace } from "@opentelemetry/api";
 import { EXECUTE_TOOL, GEN_AI_OPERATION_NAME, GEN_AI_TOOL_NAME, Origin, RATEL_ORIGIN } from "@ratel-ai/telemetry";
-import { init } from "@ratel-ai/telemetry-otlp";
+import { startTelemetry } from "@ratel-ai/telemetry-otlp";
 
 // Wire the exporter from RATEL_URL + RATEL_API_KEY once at startup.
-const telemetry = init();
+const telemetry = startTelemetry();
 
 // Emit a standard gen_ai `execute_tool` span enriched with the ratel.* overlay.
 const span = trace.getTracer("my-agent").startSpan(EXECUTE_TOOL, {
@@ -29,19 +31,23 @@ const span = trace.getTracer("my-agent").startSpan(EXECUTE_TOOL, {
 });
 span.end();
 
-await telemetry.shutdown(); // flush the exporter on exit
+await telemetry.forceFlush(); // drain pending spans (serverless / batch jobs)
+await telemetry.shutdown(); // flush + stop the exporter on exit
 ```
 
 Explicit options beat the environment: an explicit `apiKey` sets the Bearer header, and the
 `RATEL_API_KEY` fallback never overrides an `Authorization` header you pass yourself. On first
-setup, pass `enabled: false` to get a no-op shutdown handle without requiring endpoint
-configuration, or `spanFilter` to narrow the spans exported by the turnkey provider (the default
-exports every span). Repeated `init()` calls return the exact handle from the first successful
-Ratel-owned initialization—even if a later caller is disabled—so hot reload and multiple callers
-do not fight over the global provider; the first call's configuration remains authoritative, and
-shutting that shared handle down stops export for every caller. A foreign provider still produces
-the actionable `ratelSpanProcessor` error before endpoint validation. Shutdown is terminal: after
-`handle.shutdown()`, a later `init()` throws (call `trace.disable()` first to re-initialize).
+setup, pass `enabled: false` to get a no-op handle without requiring endpoint configuration, or
+`spanFilter` to narrow the spans exported by the turnkey provider (the default exports every span).
+Pass `spanProcessors: [...]` to compose host processors (e.g. `new LangfuseSpanProcessor()`) onto
+the same owned provider — every finished span fans out to all of them, each applying its own filter
+— and call `handle.forceFlush()` to drain them all (serverless / jobs). Repeated `startTelemetry`
+calls return the exact handle from the first successful Ratel-owned initialization—even if a later
+caller is disabled—so hot reload and multiple callers do not fight over the global provider; the
+first call's configuration remains authoritative, and shutting that shared handle down stops export
+for every caller. A foreign provider still produces the actionable `ratelSpanProcessor` error before
+endpoint validation. Shutdown is terminal: after `handle.shutdown()`, a later call throws (call
+`trace.disable()` first to re-initialize).
 
 A complete, offline-runnable version (console exporter + a `ratel.search` → `execute_tool` trace)
 is in
@@ -50,7 +56,7 @@ is in
 ## Coexisting with another provider (Langfuse, the Vercel AI SDK, ...)
 
 OpenTelemetry's model is **one provider, many span-processors**. When a partner already owns
-the provider, add `ratelSpanProcessor` to it instead of calling `init()` — every span fans out
+the provider, add `ratelSpanProcessor` to it instead of calling `startTelemetry()` — every span fans out
 to both, and Ratel ingests only the `gen_ai.*` / `ratel.*` signal (the default
 `ratelSignalFilter`), so the framework's `ai.*` wrapper noise stays out:
 
@@ -96,7 +102,8 @@ pnpm --filter @ratel-ai/telemetry-otlp lint
 pnpm --filter @ratel-ai/telemetry-otlp test
 ```
 
-The tests cover disabled, filtered, idempotent, misconfigured, and foreign-provider `init()`
-behavior; the published dependency layout; and that `ratelSpanProcessor` forwards only the spans
-its filter accepts. Endpoint/auth resolution is covered in
+The tests cover disabled, filtered, idempotent, misconfigured, and foreign-provider `startTelemetry`
+behavior, host-processor composition and `forceFlush` fan-out, the `init` alias, the published
+dependency layout, and that `ratelSpanProcessor` forwards only the spans its filter accepts.
+Endpoint/auth resolution is covered in
 [`@ratel-ai/telemetry`](../ts/README.md) (the pure `resolveOtlpConfig`).

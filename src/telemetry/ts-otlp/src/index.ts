@@ -17,7 +17,7 @@ export {
   type ResolvedOtlpConfig,
   resolveOtlpConfig,
 } from "@ratel-ai/telemetry";
-export { init, type TelemetryHandle, type TelemetryInitOptions } from "./init.js";
+export { init, startTelemetry, type TelemetryHandle, type TelemetryInitOptions } from "./init.js";
 export {
   type RatelSpanProcessorOptions,
   ratelSignalFilter,
