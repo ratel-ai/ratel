@@ -929,4 +929,184 @@ mod tests {
             TraceEvent::SkillSearch { origin: Origin::Agent, hits, .. } if !hits.is_empty()
         )));
     }
+
+    // ---- usage ranking on the dense paths (ADR-0014) -----------------------
+    // Twins of the ToolRegistry battery: the skill registry runs its own copy of
+    // `usage_arm`/`semantic_search_traced`/`rebuild_intent_graph`, so the
+    // model-mismatch, poison, and rebuild guarantees need their own coverage.
+
+    /// A graph whose single cluster boosts `skill_id`, carrying `centroid`
+    /// stamped with `model`. The member text embeds to the stub's "api" vector.
+    fn graph_with_model(
+        skill_id: &str,
+        centroid: Vec<f32>,
+        model: &str,
+    ) -> Arc<RwLock<IntentGraph>> {
+        let c: Vec<String> = centroid.iter().map(|x| x.to_string()).collect();
+        let json = format!(
+            r#"{{"v":1,"built_from_ts":1,"model":"{model}",
+                 "intents":[{{"id":"i0","label":"l","terms":[],
+                 "members":["rest api design"],"centroid":[{}],
+                 "support":9,"tools":{{}},"skills":{{"{skill_id}":1.0}}}}]}}"#,
+            c.join(",")
+        );
+        Arc::new(RwLock::new(IntentGraph::from_json(&json).expect("valid")))
+    }
+
+    fn model_mismatch_events(sink: &MemorySink) -> Vec<(String, String, bool)> {
+        sink.drain()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                TraceEvent::UsageModelMismatch {
+                    built,
+                    active,
+                    dim_mismatch,
+                } => Some((built, active, dim_mismatch)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Two skills: `api-design` matches an "api" query at cosine 1.0; `frontend`
+    /// embeds orthogonally, so dense ranks it last.
+    fn mismatch_registry(sink: Arc<MemorySink>) -> SkillRegistry {
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink);
+        reg.register(skill("api-design", "api-design", "rest api design", &[]));
+        reg.register(skill("frontend", "frontend", "frontend slides", &[]));
+        reg.build_embeddings().unwrap();
+        reg
+    }
+
+    #[test]
+    fn a_same_dim_model_mismatch_pauses_the_arm_and_warns() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = mismatch_registry(sink.clone());
+
+        // Graph says boost frontend for this intent — but its centroid was built
+        // by a different model (same 3-dim width the stub uses).
+        reg.set_intent_graph(Some(graph_with_model(
+            "frontend",
+            vec![1.0, 0.0, 0.0],
+            "a-different-model",
+        )));
+        let hits = reg
+            .search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        // Paused: frontend is NOT lifted; it stays last, as with no graph.
+        assert_eq!(hits.last().map(|h| h.skill_id.as_str()), Some("frontend"));
+        assert!(hits.iter().all(|h| !h.fused), "no fusion — the arm paused");
+
+        let events = model_mismatch_events(&sink);
+        assert_eq!(events.len(), 1);
+        assert!(!events[0].2, "same-dim swap → dim_mismatch false");
+    }
+
+    #[test]
+    fn a_dim_mismatch_pauses_the_arm_and_warns() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = mismatch_registry(sink.clone());
+
+        // Centroid is 5-dim; the stub embeds queries to 3-dim.
+        reg.set_intent_graph(Some(graph_with_model(
+            "frontend",
+            vec![1.0, 0.0, 0.0, 0.0, 0.0],
+            "some-model",
+        )));
+        let hits = reg
+            .search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        assert_eq!(hits.last().map(|h| h.skill_id.as_str()), Some("frontend"));
+        let events = model_mismatch_events(&sink);
+        assert_eq!(events.len(), 1);
+        assert!(events[0].2, "different width → dim_mismatch true");
+    }
+
+    #[test]
+    fn rebuild_intent_graph_restores_the_arm_after_a_model_change() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = mismatch_registry(sink.clone());
+        reg.set_intent_graph(Some(graph_with_model(
+            "api-design",
+            vec![1.0, 0.0, 0.0],
+            "a-different-model",
+        )));
+
+        // Paused before rebuild.
+        reg.search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert_eq!(model_mismatch_events(&sink).len(), 1);
+
+        // Rebuild re-embeds members under the stub model → arm active again.
+        reg.rebuild_intent_graph().unwrap();
+        let after = reg
+            .search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert!(after.iter().all(|h| h.fused), "arm resumed → fused ranking");
+        assert!(
+            model_mismatch_events(&sink).is_empty(),
+            "no mismatch after rebuild"
+        );
+    }
+
+    /// Poison a graph's lock the only way locks poison: panic while holding the
+    /// write guard. The join swallows the panic; the lock stays poisoned.
+    fn poison(graph: &Arc<RwLock<IntentGraph>>) {
+        let g = graph.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = g.write().expect("first writer takes the lock");
+            panic!("intentional poison");
+        })
+        .join();
+        assert!(
+            graph.is_poisoned(),
+            "lock should be poisoned after the panic"
+        );
+    }
+
+    #[test]
+    fn a_poisoned_graph_lock_reports_unknown_not_a_panic() {
+        // The search path degrades on a poisoned lock; a status query must too —
+        // a read-only getter that can crash the caller is a footgun.
+        let mut reg = SkillRegistry::new();
+        reg.register(skill("api-design", "api-design", "rest api design", &[]));
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
+        poison(&graph);
+        reg.set_intent_graph(Some(graph));
+
+        assert_eq!(
+            reg.adaptive_ranking_status(),
+            AdaptiveRankingStatus::Unknown
+        );
+    }
+
+    #[test]
+    fn a_poisoned_graph_lock_degrades_the_search_path_not_a_panic() {
+        // The load-bearing guarantee: a search over a poisoned graph must fall
+        // back to plain ranking, never panic.
+        let mut reg = mismatch_registry(Arc::new(MemorySink::new("s")));
+        let graph = graph_with_model("frontend", vec![0.0, 1.0, 0.0], "m");
+        poison(&graph);
+        reg.set_intent_graph(Some(graph));
+
+        let hits = reg
+            .search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert!(hits.iter().all(|h| !h.fused), "poisoned lock → arm paused");
+    }
+
+    #[test]
+    fn rebuild_recovers_a_poisoned_graph_lock_not_a_panic() {
+        // rebuild is the repair path — it overwrites every centroid, so a lock an
+        // earlier panic poisoned is recovered and the call completes, never panics.
+        let mut reg = SkillRegistry::new();
+        reg.register(skill("api-design", "api-design", "rest api design", &[]));
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
+        poison(&graph);
+        reg.set_intent_graph(Some(graph));
+
+        assert!(reg.rebuild_intent_graph().is_ok());
+    }
 }

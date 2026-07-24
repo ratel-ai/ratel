@@ -1566,6 +1566,24 @@ mod tests {
     }
 
     #[test]
+    fn a_poisoned_graph_lock_degrades_the_search_path_not_a_panic() {
+        // The load-bearing guarantee: a search over a poisoned graph must fall
+        // back to plain ranking, never panic.
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a path"));
+        reg.build_embeddings().unwrap();
+        let graph = graph_with_model("delete_file", vec![0.0, 1.0, 0.0], "m");
+        poison(&graph);
+        reg.set_intent_graph(Some(graph));
+
+        let hits = reg
+            .search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+        assert!(hits.iter().all(|h| !h.fused), "poisoned lock → arm paused");
+    }
+
+    #[test]
     fn rebuild_recovers_a_poisoned_graph_lock_not_a_panic() {
         // rebuild is the repair path — it overwrites every centroid, so a lock an
         // earlier panic poisoned is recovered and the call completes, never panics.
