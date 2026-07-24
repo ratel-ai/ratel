@@ -194,20 +194,26 @@ impl SkillRegistry {
         // A poisoned lock is recovered rather than a panic: rebuild overwrites
         // every centroid wholesale, so it has no reason to refuse a graph whose
         // state an earlier panic left in doubt (mirrors the tool registry).
-        let members: Vec<Vec<String>> = {
+        // Snapshot `(id, members)` — centroids are reattached by id, so a
+        // concurrent `observe()` that reorders `intents` between here and the
+        // write lock cannot misassign them (see `rebuild_centroids`).
+        let members: Vec<(String, Vec<String>)> = {
             let g = graph.read().unwrap_or_else(PoisonError::into_inner);
-            g.intents.iter().map(|i| i.members.clone()).collect()
+            g.intents
+                .iter()
+                .map(|i| (i.id.clone(), i.members.clone()))
+                .collect()
         };
         let mut per_cluster = Vec::with_capacity(members.len());
         let mut fingerprint = None;
-        for cluster_members in &members {
+        for (id, cluster_members) in &members {
             let (vectors, fp) = self
                 .dense
                 .embed_texts_with_identity(cluster_members, self.sink.as_ref())?;
             if !cluster_members.is_empty() {
                 fingerprint = Some(fp);
             }
-            per_cluster.push(vectors);
+            per_cluster.push((id.clone(), vectors));
         }
         if let Some(fp) = fingerprint {
             let mut g = graph.write().unwrap_or_else(PoisonError::into_inner);

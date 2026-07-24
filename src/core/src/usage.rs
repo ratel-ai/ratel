@@ -752,8 +752,17 @@ impl IntentGraph {
     }
 
     /// Re-embed every cluster's members under a new model and replace the
-    /// centroids, restamping [`Self::model`]. `per_cluster` is the embeddings of
-    /// each cluster's `members`, in `intents` order and member order.
+    /// centroids, restamping [`Self::model`]. Each entry is a cluster **id** and
+    /// the embeddings of its `members` (in member order).
+    ///
+    /// Assignment is **by id, not position**. `rebuild_intent_graph` snapshots
+    /// members and embeds them without the graph lock (so searches are not
+    /// blocked), then re-locks to apply here — and a concurrent `observe()` in
+    /// that window can evict or seed a cluster, shifting positions since the
+    /// snapshot. Zipping by position would stamp a centroid onto the wrong
+    /// cluster, silently, because the fresh model fingerprint hides the swap. An
+    /// id absent now (evicted since the snapshot) is skipped; a cluster seeded
+    /// since is simply left for the next rebuild.
     ///
     /// Members, support, and edges are model-independent and untouched, so all
     /// learning survives a model change — only the centroids move to the new
@@ -761,13 +770,22 @@ impl IntentGraph {
     /// centroid it had.
     pub(crate) fn rebuild_centroids(
         &mut self,
-        per_cluster: Vec<Vec<Vec<f32>>>,
+        per_cluster: Vec<(String, Vec<Vec<f32>>)>,
         fingerprint: String,
     ) {
-        for (it, vectors) in self.intents.iter_mut().zip(per_cluster) {
+        let index: std::collections::HashMap<String, usize> = self
+            .intents
+            .iter()
+            .enumerate()
+            .map(|(i, it)| (it.id.clone(), i))
+            .collect();
+        for (id, vectors) in per_cluster {
             if vectors.is_empty() {
                 continue;
             }
+            let Some(&i) = index.get(&id) else {
+                continue; // evicted since the snapshot — nothing to attach to
+            };
             let dim = vectors[0].len();
             let mut sum = vec![0.0f32; dim];
             for v in &vectors {
@@ -775,7 +793,7 @@ impl IntentGraph {
                     *s += x;
                 }
             }
-            it.centroid = Some(normalize(sum));
+            self.intents[i].centroid = Some(normalize(sum));
         }
         self.model = Some(fingerprint);
         // A rebuild rewrites every centroid and restamps the model — a change the
@@ -2060,7 +2078,8 @@ mod tests {
         let rev_before = g.rev();
 
         // Members re-embedded under model-b (here, just different vectors).
-        g.rebuild_centroids(vec![vec![vec![0.0, 1.0, 0.0]]], "model-b".into());
+        let id = g.intents[0].id.clone();
+        g.rebuild_centroids(vec![(id, vec![vec![0.0, 1.0, 0.0]])], "model-b".into());
 
         // A rebuild is a persistable change — it must advance the write counter.
         assert_eq!(g.rev(), rev_before + 1);
@@ -2072,6 +2091,51 @@ mod tests {
         // Centroid moved to the new (normalized) vector.
         let c = g.intents[0].centroid.as_ref().unwrap();
         assert!((c[1] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rebuild_centroids_follows_ids_when_a_cluster_is_evicted_mid_rebuild() {
+        // `rebuild_intent_graph` snapshots members, embeds WITHOUT the lock, then
+        // re-locks to apply — a concurrent `observe()` can evict a cluster in
+        // that window and shift positions. Centroids must reattach by id, not by
+        // position, or a survivor silently inherits the evicted cluster's vector
+        // (and the fresh model stamp hides it).
+        let mut g = IntentGraph::empty();
+        g.observe("alpha query", Capability::Tool, "a", T0, true);
+        g.observe("bravo query", Capability::Tool, "b", T0, true);
+        g.observe("charlie query", Capability::Tool, "c", T0, true);
+        assert_eq!(g.len(), 3, "three disjoint queries → three clusters");
+        let id_a = g.intents[0].id.clone();
+        let id_b = g.intents[1].id.clone();
+        let id_c = g.intents[2].id.clone();
+
+        // Embeddings computed from the snapshot order [a, b, c], each a distinct
+        // axis so a misassignment is unambiguous.
+        let per_cluster = vec![
+            (id_a.clone(), vec![vec![1.0, 0.0, 0.0]]),
+            (id_b.clone(), vec![vec![0.0, 1.0, 0.0]]),
+            (id_c.clone(), vec![vec![0.0, 0.0, 1.0]]),
+        ];
+
+        // ...but by apply time an observe() evicted cluster A, shifting b and c
+        // down one slot. Position-zip would give b the [1,0,0] meant for a.
+        g.intents.retain(|it| it.id != id_a);
+        assert_eq!(g.len(), 2);
+
+        g.rebuild_centroids(per_cluster, "model-b".into());
+
+        let b = g.intents.iter().find(|it| it.id == id_b).unwrap();
+        assert!(
+            (b.centroid.as_ref().unwrap()[1] - 1.0).abs() < 1e-6,
+            "cluster b must keep its own centroid, got {:?}",
+            b.centroid
+        );
+        let c = g.intents.iter().find(|it| it.id == id_c).unwrap();
+        assert!(
+            (c.centroid.as_ref().unwrap()[2] - 1.0).abs() < 1e-6,
+            "cluster c must keep its own centroid, got {:?}",
+            c.centroid
+        );
     }
 
     #[test]
