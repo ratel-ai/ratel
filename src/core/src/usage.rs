@@ -149,7 +149,9 @@ impl UsageArm {
 /// A graph that could not be adopted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntentGraphError {
-    /// The bytes were not the expected JSON shape.
+    /// The bytes were not the expected JSON shape, or a value broke a semantic
+    /// rule of the wire contract (e.g. a zero-support cluster, a duplicate intent
+    /// id) that the shape alone cannot enforce.
     Malformed(String),
     /// The graph declares a schema version this build does not know. A consumer
     /// rejects rather than degrading, since an unknown version may have changed
@@ -580,6 +582,7 @@ impl IntentGraph {
         if graph.v != GRAPH_VERSION {
             return Err(IntentGraphError::UnsupportedVersion(graph.v));
         }
+        graph.validate()?;
         // A cluster with no recorded `last_ts` (an older or cloud-built graph
         // that didn't track it) is treated as current at load — decay begins
         // from the graph's own timestamp, not epoch 0, so a freshly loaded graph
@@ -592,6 +595,52 @@ impl IntentGraph {
         }
         graph.rebuild_caches();
         Ok(graph)
+    }
+
+    /// Reject a structurally-parseable graph that breaks a semantic rule the wire
+    /// contract requires (`protocol/v1/conformance/vectors.json`, the `invalid`
+    /// set). Serde already catches shape errors (a missing `members`, a negative
+    /// `rev`); these are the value-level rules it cannot express.
+    fn validate(&self) -> Result<(), IntentGraphError> {
+        let mut seen = std::collections::HashSet::with_capacity(self.intents.len());
+        for it in &self.intents {
+            if !seen.insert(it.id.as_str()) {
+                return Err(IntentGraphError::Malformed(format!(
+                    "duplicate intent id {:?}",
+                    it.id
+                )));
+            }
+            if it.members.is_empty() {
+                return Err(IntentGraphError::Malformed(format!(
+                    "intent {:?} has no members",
+                    it.id
+                )));
+            }
+            if it.support < 1 {
+                return Err(IntentGraphError::Malformed(format!(
+                    "intent {:?} has support 0 (a confirmed cluster is at least 1)",
+                    it.id
+                )));
+            }
+            if it.centroid.as_ref().is_some_and(|c| c.is_empty()) {
+                return Err(IntentGraphError::Malformed(format!(
+                    "intent {:?} has an empty centroid",
+                    it.id
+                )));
+            }
+            if it
+                .tools
+                .values()
+                .chain(it.skills.values())
+                .any(|w| *w <= 0.0)
+            {
+                return Err(IntentGraphError::Malformed(format!(
+                    "intent {:?} has a non-positive edge weight",
+                    it.id
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Rebuild every cluster's derived token cache. The cache is skipped on the
@@ -2303,6 +2352,35 @@ mod tests {
         g.model = Some("bge-small".into());
         let back = IntentGraph::from_json(&serde_json::to_string(&g).unwrap()).unwrap();
         assert_eq!(back.model.as_deref(), Some("bge-small"));
+    }
+
+    #[test]
+    fn from_json_matches_the_conformance_valid_and_invalid_sets() {
+        // The protocol mandates every consumer reject the `invalid` set and
+        // accept the `valid` set (protocol/v1/conformance/vectors.json). Drive
+        // both directly off the fixtures so this consumer stays conformant.
+        let vectors: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../protocol/v1/conformance/vectors.json"
+        ))
+        .expect("conformance vectors parse");
+        let graph = &vectors["graph"];
+
+        for case in graph["invalid"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let doc = serde_json::to_string(&case["doc"]).unwrap();
+            assert!(
+                IntentGraph::from_json(&doc).is_err(),
+                "invalid vector `{name}` must be rejected"
+            );
+        }
+        for case in graph["valid"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let doc = serde_json::to_string(&case["doc"]).unwrap();
+            assert!(
+                IntentGraph::from_json(&doc).is_ok(),
+                "valid vector `{name}` must be accepted"
+            );
+        }
     }
 
     #[test]
