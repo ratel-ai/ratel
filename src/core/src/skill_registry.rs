@@ -149,9 +149,10 @@ impl SkillRegistry {
 
     /// A snapshot of whether adaptive usage ranking is currently contributing, so
     /// the SDK can surface a model-mismatch to the user without draining the trace
-    /// stream. Computed from the attached graph's model vs the active embedder;
-    /// `Unknown` until embeddings have been built (the active model's identity is
-    /// not known before then).
+    /// stream. Computed from the attached graph's model vs the active embedder.
+    /// A dense graph on a catalog with no built embeddings (a BM25 catalog) still
+    /// boosts lexically, so it reads `Active`; `Unknown` is reserved for a
+    /// poisoned lock, where the state genuinely can't be read.
     pub fn adaptive_ranking_status(&self) -> AdaptiveRankingStatus {
         let Some(graph) = self.graph.as_ref() else {
             return AdaptiveRankingStatus::Inactive;
@@ -165,8 +166,12 @@ impl SkillRegistry {
         if !g.intents.iter().any(|i| i.centroid.is_some()) {
             return AdaptiveRankingStatus::Active;
         }
+        // Centroids exist, but no embeddings are built here (a BM25 catalog, which
+        // never builds, or one not yet built). Dense matching cannot run, so a
+        // query with no vector takes the lexical path and the arm still boosts —
+        // model-agnostic and live, so Active rather than Unknown.
         let Some(active_fp) = self.dense.built_fingerprint() else {
-            return AdaptiveRankingStatus::Unknown;
+            return AdaptiveRankingStatus::Active;
         };
         let active_dim = self.dense.dim().unwrap_or(0);
         match g.model_status(&active_fp, active_dim).describe() {
@@ -1070,6 +1075,20 @@ mod tests {
             graph.is_poisoned(),
             "lock should be poisoned after the panic"
         );
+    }
+
+    #[test]
+    fn a_dense_graph_on_a_bm25_catalog_reports_active_not_unknown() {
+        // A BM25 catalog never builds embeddings, so a centroid-bearing graph can
+        // only boost lexically — and it does. Status must report the arm is live.
+        let mut reg = SkillRegistry::new();
+        reg.register(skill("api-design", "api-design", "rest api design", &[]));
+        reg.set_intent_graph(Some(graph_with_model(
+            "api-design",
+            vec![1.0, 0.0, 0.0],
+            "some-model",
+        )));
+        assert_eq!(reg.adaptive_ranking_status(), AdaptiveRankingStatus::Active);
     }
 
     #[test]
