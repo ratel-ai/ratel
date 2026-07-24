@@ -263,3 +263,11 @@ A caller who already runs the OTel SDK skips `init()` and adds `ratelSpanProcess
 signal filter and can be overridden. Installing `@ratel-ai/telemetry-otlp` or the Python `[otlp]`
 extra supplies the complete exporter/SDK implementation; callers do not assemble the individual
 OpenTelemetry packages themselves.
+
+**Composition on the owned provider (TS).** The TS turnkey entry is now `startTelemetry`
+(`init` retained as a back-compat alias). Beyond `spanFilter`, it accepts host `spanProcessors`
+registered alongside Ratel's on the same owned provider — one span stream fans out to all of
+them, each applying its own filter — so a greenfield caller dual-exports (e.g. to Langfuse)
+without ceding the global provider to a foreign one. The returned handle adds `forceFlush()`
+(drain every registered processor; for serverless/jobs) beside `shutdown()`. Additive per
+ADR-0007 schema discipline; the Python helper keeps the `init()` surface until it follows.
