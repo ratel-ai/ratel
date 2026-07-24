@@ -1,12 +1,61 @@
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-proto";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
+import { BatchLogRecordProcessor, type SdkLogRecord } from "@opentelemetry/sdk-logs";
 import { BatchSpanProcessor, type ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import { OTLP_ENDPOINT_ENV } from "@ratel-ai/telemetry";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ratelSignalFilter, ratelSpanProcessor, ratelTraceExporter } from "./processor.js";
+import {
+  ratelEventFilter,
+  ratelLogExporter,
+  ratelLogRecordProcessor,
+  ratelSignalFilter,
+  ratelSpanProcessor,
+  ratelTraceExporter,
+} from "./processor.js";
 
 // The filter reads only a span's name + attribute keys, so a minimal shape suffices.
 const span = (name: string, attributes: Record<string, unknown> = {}): ReadableSpan =>
   ({ name, attributes }) as unknown as ReadableSpan;
+
+const event = (eventName?: string): SdkLogRecord =>
+  ({ eventName, attributes: {} }) as unknown as SdkLogRecord;
+
+describe("ratelEventFilter", () => {
+  it("forwards only gen_ai.* and ratel.* EventRecords", () => {
+    expect(ratelEventFilter(event("ratel.search.results"))).toBe(true);
+    expect(ratelEventFilter(event("gen_ai.client.inference.operation.details"))).toBe(true);
+    expect(ratelEventFilter(event("app.started"))).toBe(false);
+    expect(ratelEventFilter(event())).toBe(false);
+  });
+});
+
+describe("ratelLogExporter", () => {
+  it("builds an OTLP logs exporter at the resolved logs endpoint", () => {
+    expect(ratelLogExporter({ endpoint: "http://localhost:4318/v1/traces" })).toBeInstanceOf(
+      OTLPLogExporter,
+    );
+  });
+});
+
+describe("ratelLogRecordProcessor", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("forwards only Ratel and GenAI EventRecords by default", async () => {
+    const onEmit = vi
+      .spyOn(BatchLogRecordProcessor.prototype, "onEmit")
+      .mockImplementation(() => {});
+    const processor = ratelLogRecordProcessor({
+      endpoint: "http://localhost:4318/v1/traces",
+    });
+
+    processor.onEmit(event("ratel.search.results"));
+    processor.onEmit(event("gen_ai.client.inference.operation.details"));
+    processor.onEmit(event("app.started"));
+
+    expect(onEmit).toHaveBeenCalledTimes(2);
+    await processor.shutdown();
+  });
+});
 
 describe("ratelSignalFilter", () => {
   it("forwards spans named ratel.*", () => {

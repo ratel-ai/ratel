@@ -1,5 +1,12 @@
 import { context, trace } from "@opentelemetry/api";
+import { logs } from "@opentelemetry/api-logs";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
+import {
+  InMemoryLogRecordExporter,
+  LoggerProvider,
+  type ReadableLogRecord,
+  SimpleLogRecordProcessor,
+} from "@opentelemetry/sdk-logs";
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -25,6 +32,7 @@ import { isModuleNotFound, isPeerInstalled, recordAuthNeeded } from "./telemetry
  * exactly as a host deployment would wire it.
  */
 let exporter: InMemorySpanExporter;
+let logExporter: InMemoryLogRecordExporter;
 
 const CAPTURE_ENV = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
 
@@ -36,12 +44,19 @@ beforeEach(() => {
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
   trace.setGlobalTracerProvider(provider);
+  logExporter = new InMemoryLogRecordExporter();
+  logs.setGlobalLoggerProvider(
+    new LoggerProvider({
+      processors: [new SimpleLogRecordProcessor({ exporter: logExporter })],
+    }),
+  );
 });
 
 afterEach(() => {
   delete process.env[CAPTURE_ENV];
   setContentCapture(null); // never leak a programmatic capture override across tests
   trace.disable(); // reset the global provider to the no-op default
+  logs.disable();
 });
 
 const readFile: ExecutableTool = {
@@ -83,6 +98,18 @@ function attrs(span: ReadableSpan): Record<string, unknown> {
   return span.attributes as Record<string, unknown>;
 }
 
+function logEventsNamed(name: string): ReadableLogRecord[] {
+  return logExporter.getFinishedLogRecords().filter((record) => record.eventName === name);
+}
+
+/** The single span event with the given name, or undefined. */
+function eventNamed(span: ReadableSpan, name: string) {
+  return span.events.find((e) => e.name === name);
+}
+
+const INFERENCE_DETAILS = "gen_ai.client.inference.operation.details";
+const SEARCH_RESULTS = "ratel.search.results";
+
 describe("execute_tool span", () => {
   it("wraps a tool invocation with gen_ai + ratel attributes", async () => {
     const catalog = new ToolCatalog();
@@ -105,9 +132,10 @@ describe("execute_tool span", () => {
     const [span] = spansNamed("execute_tool read_file");
     expect(attrs(span)["gen_ai.tool.call.arguments"]).toBeUndefined();
     expect(attrs(span)["gen_ai.tool.call.result"]).toBeUndefined();
+    expect(logEventsNamed("ratel.tool.execution.details")).toHaveLength(0);
   });
 
-  it("captures content when the ecosystem gate is set", async () => {
+  it("under SPAN_AND_EVENT captures content on both the span and the event", async () => {
     process.env[CAPTURE_ENV] = "SPAN_AND_EVENT";
     const catalog = new ToolCatalog();
     await catalog.register(readFile);
@@ -116,20 +144,68 @@ describe("execute_tool span", () => {
     const [span] = spansNamed("execute_tool read_file");
     expect(attrs(span)["gen_ai.tool.call.arguments"]).toBe('{"path":"/p"}');
     expect(attrs(span)["gen_ai.tool.call.result"]).toContain("contents of /p");
+    // Dual emission: the structured EventRecord is present too.
+    expect(eventNamed(span, INFERENCE_DETAILS)).toBeUndefined();
+    const [event] = logEventsNamed("ratel.tool.execution.details");
+    expect(event.attributes["gen_ai.tool.call.arguments"]).toEqual({ path: "/p" });
+    expect(event.attributes["gen_ai.tool.call.result"]).toEqual({
+      contents: "contents of /p",
+    });
+    expect(event.spanContext?.traceId).toBe(span.spanContext().traceId);
+    expect(event.spanContext?.spanId).toBe(span.spanContext().spanId);
   });
 
-  it("keeps content off the span under EVENT_ONLY (content rides events, not spans)", async () => {
+  it("under SPAN_ONLY captures content on the span but emits no content event", async () => {
+    process.env[CAPTURE_ENV] = "SPAN_ONLY";
+    const catalog = new ToolCatalog();
+    await catalog.register(readFile);
+    await catalog.invoke("read_file", { path: "/p" });
+
+    const [span] = spansNamed("execute_tool read_file");
+    expect(attrs(span)["gen_ai.tool.call.arguments"]).toBe('{"path":"/p"}');
+    expect(eventNamed(span, INFERENCE_DETAILS)).toBeUndefined();
+    expect(logEventsNamed("ratel.tool.execution.details")).toHaveLength(0);
+  });
+
+  it("under EVENT_ONLY a failed tool emits arguments without a result", async () => {
+    process.env[CAPTURE_ENV] = "EVENT_ONLY";
+    const catalog = new ToolCatalog();
+    await catalog.register(boom);
+    await expect(catalog.invoke("boom", { x: 1 })).rejects.toThrow("kaboom");
+
+    const [span] = spansNamed("execute_tool boom");
+    expect(span.status.code).toBe(2); // ERROR
+    expect(eventNamed(span, INFERENCE_DETAILS)).toBeUndefined();
+    const [event] = logEventsNamed("ratel.tool.execution.details");
+    expect(event.attributes["gen_ai.tool.call.arguments"]).toEqual({ x: 1 });
+    expect(event.attributes["gen_ai.tool.call.result"]).toBeUndefined();
+  });
+
+  it("under EVENT_ONLY emits a content event and keeps content off the span", async () => {
     process.env[CAPTURE_ENV] = "EVENT_ONLY";
     const catalog = new ToolCatalog();
     await catalog.register(readFile);
     await catalog.invoke("read_file", { path: "/p" });
 
     const [span] = spansNamed("execute_tool read_file");
+    // Content rides the event, not span attributes.
     expect(attrs(span)["gen_ai.tool.call.arguments"]).toBeUndefined();
     expect(attrs(span)["gen_ai.tool.call.result"]).toBeUndefined();
+
+    expect(eventNamed(span, INFERENCE_DETAILS)).toBeUndefined();
+    const [event] = logEventsNamed("ratel.tool.execution.details");
+    expect(event, "ratel.tool.execution.details EventRecord").toBeTruthy();
+    expect(event.attributes["gen_ai.operation.name"]).toBe("execute_tool");
+    expect(event.attributes["gen_ai.tool.name"]).toBe("read_file");
+    expect(event.attributes["gen_ai.tool.call.arguments"]).toEqual({ path: "/p" });
+    expect(event.attributes["gen_ai.tool.call.result"]).toEqual({
+      contents: "contents of /p",
+    });
+    expect(event.attributes["gen_ai.input.messages"]).toBeUndefined();
+    expect(event.attributes["gen_ai.output.messages"]).toBeUndefined();
   });
 
-  it("keeps content off the span under explicit NO_CONTENT", async () => {
+  it("keeps content off the span and emits no event under explicit NO_CONTENT", async () => {
     process.env[CAPTURE_ENV] = "NO_CONTENT";
     const catalog = new ToolCatalog();
     await catalog.register(readFile);
@@ -138,6 +214,8 @@ describe("execute_tool span", () => {
     const [span] = spansNamed("execute_tool read_file");
     expect(attrs(span)["gen_ai.tool.call.arguments"]).toBeUndefined();
     expect(attrs(span)["gen_ai.tool.call.result"]).toBeUndefined();
+    expect(eventNamed(span, INFERENCE_DETAILS)).toBeUndefined();
+    expect(logEventsNamed("ratel.tool.execution.details")).toHaveLength(0);
   });
 
   it("records args_size_bytes as UTF-8 bytes, not UTF-16 characters", async () => {
@@ -300,6 +378,35 @@ describe("ratel.search span", () => {
     const [span] = spansNamed("ratel.search");
     expect(attrs(span)["ratel.search.target"]).toBe("skill");
     expect(attrs(span)["ratel.search.query"]).toBe("pdf");
+    // SPAN_ONLY: query on the span, no results event.
+    expect(eventNamed(span, SEARCH_RESULTS)).toBeUndefined();
+    expect(logEventsNamed(SEARCH_RESULTS)).toHaveLength(0);
+  });
+
+  it("under EVENT_ONLY carries the query on a ratel.search.results event, not the span", async () => {
+    process.env[CAPTURE_ENV] = "EVENT_ONLY";
+    const catalog = new ToolCatalog();
+    await catalog.register(readFile);
+    catalog.search("read file", 5, "agent");
+
+    const [span] = spansNamed("ratel.search");
+    expect(attrs(span)["ratel.search.query"]).toBeUndefined(); // content off the span
+    expect(eventNamed(span, SEARCH_RESULTS)).toBeUndefined();
+    const [event] = logEventsNamed(SEARCH_RESULTS);
+    expect(event, "ratel.search.results EventRecord").toBeTruthy();
+    expect(event.attributes["ratel.search.query"]).toBe("read file");
+  });
+
+  it("under SPAN_AND_EVENT carries the query on both the span and the results event", async () => {
+    process.env[CAPTURE_ENV] = "SPAN_AND_EVENT";
+    const catalog = new ToolCatalog();
+    await catalog.register(readFile);
+    catalog.search("read file", 5, "agent");
+
+    const [span] = spansNamed("ratel.search");
+    expect(attrs(span)["ratel.search.query"]).toBe("read file");
+    expect(eventNamed(span, SEARCH_RESULTS)).toBeUndefined();
+    expect(logEventsNamed(SEARCH_RESULTS)[0]?.attributes["ratel.search.query"]).toBe("read file");
   });
 });
 
@@ -449,14 +556,22 @@ describe("configureTelemetry content-capture options", () => {
     opts: Parameters<typeof configureTelemetry>[0],
   ): Promise<TelemetryHandle> {
     trace.disable();
+    logs.disable();
     const handle = await configureTelemetry({
       endpoint: "http://localhost:4318/v1/traces",
       ...opts,
     });
     trace.disable();
+    logs.disable();
     exporter = new InMemorySpanExporter();
     trace.setGlobalTracerProvider(
       new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] }),
+    );
+    logExporter = new InMemoryLogRecordExporter();
+    logs.setGlobalLoggerProvider(
+      new LoggerProvider({
+        processors: [new SimpleLogRecordProcessor({ exporter: logExporter })],
+      }),
     );
     return handle;
   }
@@ -555,6 +670,7 @@ describe("configureTelemetry content-capture options", () => {
 
   it("throws a TypeError on garbage captureContent before any exporter side effects", async () => {
     trace.disable();
+    logs.disable();
     await expect(
       configureTelemetry({
         endpoint: "http://localhost:4318/v1/traces",

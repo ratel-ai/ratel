@@ -1,19 +1,19 @@
 /**
  * OpenTelemetry emission for the SDK's `ratel.*` / `gen_ai.*` funnel (ADR-0007).
  * The catalog, capability-tool, skill, and MCP paths call these helpers to
- * open a span around each operation; the span names and attribute keys come from
- * the OTel-free `@ratel-ai/telemetry` vocabulary.
+ * open a span around each operation and, when selected by content capture, emit a
+ * structured Logs EventRecord. Names and attribute keys come from the OTel-free
+ * `@ratel-ai/telemetry` vocabulary.
  *
- * Emission is **transparent**: spans go to whatever OpenTelemetry provider is
- * registered globally (`@opentelemetry/api`). Until a provider is wired — via a
+ * Emission is **transparent**: records go to whichever OpenTelemetry tracer and logger
+ * providers are registered globally. Until providers are wired — via a
  * host's own OTel SDK, or the convenience `configureTelemetry()` below — every
  * span is a no-op `NonRecordingSpan`, so instrumentation is effectively free and
  * the local trace stream (`recordEvent`) is untouched. This mirrors how the
  * Vercel AI SDK instruments: the library emits; the app decides where it goes.
  *
- * Message/tool content (`ratel.search.query`, tool args/result) rides span
- * attributes only when the ecosystem capture gate is on (default off), per
- * ADR-0007.
+ * Message/tool content (`ratel.search.query`, tool args/result) follows the ecosystem
+ * capture gate's span-attribute and Logs EventRecord channels (default off), per ADR-0007.
  */
 
 import { createRequire } from "node:module";
@@ -25,6 +25,7 @@ import {
   SpanStatusCode,
   trace,
 } from "@opentelemetry/api";
+import { type AnyValue, logs } from "@opentelemetry/api-logs";
 import {
   AuthOutcome,
   ContentCapture,
@@ -42,11 +43,13 @@ import {
   RATEL_SEARCH,
   RATEL_SEARCH_HIT_COUNT,
   RATEL_SEARCH_QUERY,
+  RATEL_SEARCH_RESULTS,
   RATEL_SEARCH_TARGET,
   RATEL_SEARCH_TOP_K,
   RATEL_SKILL_ID,
   RATEL_SKILL_LOAD,
   RATEL_TOOL_ARGS_SIZE_BYTES,
+  RATEL_TOOL_EXECUTION_DETAILS,
   RATEL_UPSTREAM_REGISTER,
   RATEL_UPSTREAM_SERVER,
   RATEL_UPSTREAM_TOOL_COUNT,
@@ -58,15 +61,61 @@ import { isAsyncIterable, isPromiseLike } from "./async.js";
 import type { SearchOrigin } from "./catalog.js";
 
 const TRACER_NAME = "@ratel-ai/sdk";
+const LOGGER_NAME = "@ratel-ai/sdk";
 
 function getTracer() {
   return trace.getTracer(TRACER_NAME);
+}
+
+function getLogger() {
+  return logs.getLogger(LOGGER_NAME);
 }
 
 /** Content rides span attributes only when the capture gate selects a span mode. */
 function captureContentOnSpan(): boolean {
   const mode = contentCaptureMode();
   return mode === ContentCapture.SpanOnly || mode === ContentCapture.SpanAndEvent;
+}
+
+/** Content rides Logs EventRecords when the capture gate selects an event mode. */
+function captureContentOnEvent(): boolean {
+  const mode = contentCaptureMode();
+  return mode === ContentCapture.EventOnly || mode === ContentCapture.SpanAndEvent;
+}
+
+/**
+ * Emit the Opt-In tool execution EventRecord with structured arguments and,
+ * on success, a structured result.
+ */
+function addToolContentEvent(
+  toolId: string,
+  args: unknown,
+  eventContext: OtelContext,
+  result?: { value: unknown },
+): void {
+  const attributes = {
+    [GEN_AI_OPERATION_NAME]: EXECUTE_TOOL,
+    [GEN_AI_TOOL_NAME]: toolId,
+    [GEN_AI_TOOL_CALL_ARGUMENTS]: toLogValue(args),
+    ...(result ? { [GEN_AI_TOOL_CALL_RESULT]: toLogValue(result.value) } : {}),
+  };
+  getLogger().emit({
+    eventName: RATEL_TOOL_EXECUTION_DETAILS,
+    attributes,
+    context: eventContext,
+  });
+}
+
+/**
+ * Emit the Opt-In `ratel.search.results` EventRecord carrying the search text.
+ * Hit ids/scores/BM25 timing are local-stream only.
+ */
+function addSearchResultsEvent(query: string, eventContext: OtelContext): void {
+  getLogger().emit({
+    eventName: RATEL_SEARCH_RESULTS,
+    attributes: { [RATEL_SEARCH_QUERY]: query },
+    context: eventContext,
+  });
 }
 
 /** UTF-8 byte size of the JSON-encoded args (0 if not encodable). */
@@ -84,6 +133,12 @@ function safeJson(value: unknown): string {
   } catch {
     return "";
   }
+}
+
+function toLogValue(value: unknown): AnyValue {
+  const encoded = safeJson(value);
+  if (encoded === "") return null;
+  return JSON.parse(encoded) as AnyValue;
 }
 
 export function errorMessage(err: unknown): string {
@@ -118,6 +173,7 @@ export function traceExecuteTool<T>(toolId: string, args: unknown, run: () => T)
     `${EXECUTE_TOOL} ${toolId}`,
     { kind: SpanKind.INTERNAL },
     (span) => {
+      const activeContext = trace.setSpan(context.active(), span);
       span.setAttribute(GEN_AI_OPERATION_NAME, EXECUTE_TOOL);
       span.setAttribute(GEN_AI_TOOL_NAME, toolId);
       const upstream = upstreamFromToolId(toolId);
@@ -127,16 +183,20 @@ export function traceExecuteTool<T>(toolId: string, args: unknown, run: () => T)
 
       const succeed = (result: unknown): void => {
         if (captureContentOnSpan()) span.setAttribute(GEN_AI_TOOL_CALL_RESULT, safeJson(result));
+        if (captureContentOnEvent()) {
+          addToolContentEvent(toolId, args, activeContext, { value: result });
+        }
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
       };
       const reject = (err: unknown): void => {
+        if (captureContentOnEvent()) addToolContentEvent(toolId, args, activeContext);
         fail(span, err);
         span.end();
       };
 
       try {
-        return observeExecutionResult(run(), succeed, reject, context.active()) as T;
+        return observeExecutionResult(run(), succeed, reject, activeContext) as T;
       } catch (err) {
         reject(err);
         throw err;
@@ -231,6 +291,7 @@ export function traceSearch<T extends { length: number }>(
   run: () => T,
 ): T {
   return getTracer().startActiveSpan(RATEL_SEARCH, { kind: SpanKind.INTERNAL }, (span) => {
+    const eventContext = trace.setSpan(context.active(), span);
     span.setAttribute(RATEL_SEARCH_TARGET, target);
     span.setAttribute(RATEL_SEARCH_TOP_K, topK);
     span.setAttribute(RATEL_ORIGIN, origin);
@@ -238,6 +299,7 @@ export function traceSearch<T extends { length: number }>(
     try {
       const hits = run();
       span.setAttribute(RATEL_SEARCH_HIT_COUNT, hits.length);
+      if (captureContentOnEvent()) addSearchResultsEvent(query, eventContext);
       span.setStatus({ code: SpanStatusCode.OK });
       return hits;
     } catch (err) {
@@ -258,6 +320,7 @@ export function traceSearchAsync<T extends { length: number }>(
   run: () => Promise<T>,
 ): Promise<T> {
   return getTracer().startActiveSpan(RATEL_SEARCH, { kind: SpanKind.INTERNAL }, async (span) => {
+    const eventContext = trace.setSpan(context.active(), span);
     span.setAttribute(RATEL_SEARCH_TARGET, target);
     span.setAttribute(RATEL_SEARCH_TOP_K, topK);
     span.setAttribute(RATEL_ORIGIN, origin);
@@ -265,6 +328,7 @@ export function traceSearchAsync<T extends { length: number }>(
     try {
       const hits = await run();
       span.setAttribute(RATEL_SEARCH_HIT_COUNT, hits.length);
+      if (captureContentOnEvent()) addSearchResultsEvent(query, eventContext);
       span.setStatus({ code: SpanStatusCode.OK });
       return hits;
     } catch (err) {
@@ -334,9 +398,9 @@ export function recordAuthNeeded(server?: string): void {
   span.end();
 }
 
-/** Handle returned by {@link configureTelemetry}; `shutdown()` flushes the exporter. */
+/** Handle returned by {@link configureTelemetry}; `shutdown()` flushes both exporters. */
 export interface TelemetryHandle {
-  /** Flush pending spans and shut the exporter down. Call once at process exit. */
+  /** Flush pending spans/EventRecords and shut both exporters down. Call once at exit. */
   shutdown(): Promise<void>;
 }
 
@@ -359,6 +423,14 @@ export interface ConfigureTelemetryOptions extends InitOptions {
    * keeps ruling.
    */
   includeSpanAndEvents?: boolean;
+  /**
+   * Export every span, not just the `gen_ai.*`/`ratel.*` signal. Default `false`:
+   * this high-level path defaults to the `ratelSignalFilter` so unrelated HTTP /
+   * database / application spans are not shipped to Ratel (privacy + cost). Set
+   * `true` to forward all spans — e.g. when Ratel Cloud is your only tracing
+   * backend and you want full-app traces.
+   */
+  exportAllSpans?: boolean;
 }
 
 /**
@@ -376,12 +448,12 @@ function resolveCaptureOverride(options: ConfigureTelemetryOptions): ContentCapt
 const OTLP_PACKAGE = "@ratel-ai/telemetry-otlp";
 
 /**
- * Convenience wiring for the greenfield case: register a Ratel-owned OTLP exporter
- * so the spans this SDK emits are shipped to Ratel Cloud (or any OTLP endpoint).
+ * Convenience wiring for the greenfield case: register Ratel-owned OTLP trace and Logs
+ * exporters so this SDK's spans and EventRecords reach Ratel Cloud (or any OTLP endpoint).
  * Delegates to the optional `@ratel-ai/telemetry-otlp` package, lazily imported so
  * the base SDK install stays OTel-SDK-free (ADR-0007). A host that already runs its
- * own OpenTelemetry provider should skip this — the SDK's spans flow to that
- * provider automatically — and add `ratelSpanProcessor` from `@ratel-ai/telemetry-otlp`.
+ * own OpenTelemetry providers should skip this — SDK telemetry flows to those providers —
+ * and add both `ratelSpanProcessor` and `ratelLogRecordProcessor`.
  *
  * `captureContent` / `includeSpanAndEvents` opt into content capture in code via
  * `setContentCapture` (an unrecognized `captureContent` throws a `TypeError`
@@ -402,15 +474,26 @@ export async function configureTelemetry(
     throw new Error(
       `configureTelemetry() needs the optional ${OTLP_PACKAGE} package. Install it ` +
         `(e.g. \`npm i ${OTLP_PACKAGE}\`), or register your own OpenTelemetry provider — ` +
-        "the SDK emits ratel.*/gen_ai.* spans to whatever provider is active.",
+        "the SDK emits ratel.*/gen_ai.* telemetry to whichever providers are active.",
     );
   }
   const otlp: typeof import("@ratel-ai/telemetry-otlp") = await import(OTLP_PACKAGE);
   const {
     captureContent: _captureContent,
     includeSpanAndEvents: _include,
-    ...initOptions
+    exportAllSpans,
+    ...baseOptions
   } = options;
+  // High-level SDK config defaults to the ratel.*/gen_ai.* signal filter, so unrelated
+  // application spans are not shipped (privacy + cost); opt in to all spans explicitly.
+  // `init()` itself keeps its accept-all turnkey default (CONVENTIONS.md § init() surface).
+  const initOptions = exportAllSpans
+    ? { ...baseOptions, logFilter: otlp.ratelEventFilter }
+    : {
+        ...baseOptions,
+        spanFilter: otlp.ratelSignalFilter,
+        logFilter: otlp.ratelEventFilter,
+      };
   const capture = resolveCaptureOverride(options);
   if (capture === undefined) return otlp.init(initOptions); // env keeps ruling; nothing to undo
   // Apply (and validate — an unrecognized mode throws a TypeError) the override

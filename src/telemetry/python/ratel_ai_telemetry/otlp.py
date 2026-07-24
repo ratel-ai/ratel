@@ -3,11 +3,10 @@
 Two entry points, no custom transport and no schema (ADR-0007, CONVENTIONS.md § init()
 surface):
 
-- ``init()`` — the turnkey greenfield path: wires an OTLP http/protobuf exporter and
-  registers a provider Ratel owns.
-- ``ratel_span_processor()`` / ``ratel_span_exporter()`` — compose Ratel onto a provider a
-  partner already owns (Langfuse, the Vercel AI SDK, ...), since OpenTelemetry's
-  coexistence model is one provider with many span-processors.
+- ``init()`` — the turnkey greenfield path: wires OTLP http/protobuf trace and Logs
+  exporters and registers providers Ratel owns.
+- Span/log processor and exporter helpers — compose Ratel onto providers a partner already
+  owns (Langfuse, the Vercel AI SDK, ...).
 
 The OpenTelemetry SDK is an optional ``[otlp]`` extra: this module imports it lazily, inside
 the functions that need it, so the config/gate helpers (``resolve_otlp_config``,
@@ -18,15 +17,19 @@ Only wiring an exporter needs the extra.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from threading import RLock
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from . import CAPTURE_CONTENT_ENV
 
 if TYPE_CHECKING:
+    from opentelemetry.sdk._logs import LogRecordProcessor, ReadWriteLogRecord
+    from opentelemetry.sdk._logs.export import LogRecordExporter
     from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
     from opentelemetry.sdk.trace.export import SpanExporter
 
@@ -34,10 +37,9 @@ if TYPE_CHECKING:
 class TelemetryHandle(Protocol):
     """What init() returns: a shutdown handle, not a full provider.
 
-    Both the enabled path (a live TracerProvider) and the disabled/no-op path satisfy this,
-    so the return type is honest either way. Emit spans through the global OpenTelemetry API
-    (``opentelemetry.trace.get_tracer(...)``), not off this handle — init() registers the
-    provider globally.
+    Both the enabled path and the disabled/no-op path satisfy this, so the return type is
+    honest either way. Emit telemetry through the global OpenTelemetry APIs, not off this
+    handle — init() registers both signal providers globally.
     """
 
     def shutdown(self) -> Any: ...
@@ -69,12 +71,22 @@ _PROVIDER_HANDLE_ATTR = "_ratel_ai_telemetry_handle"
 # terminal state loudly instead of silently handing back a provider whose exporter is dead.
 _PROVIDER_SHUTDOWN_ATTR = "_ratel_ai_telemetry_shutdown"
 
+# The LoggerProvider paired with the tracer-provider handle, plus a readiness marker set
+# only after both globals are installed. They make idempotence a two-signal invariant.
+_PROVIDER_LOGGER_ATTR = "_ratel_ai_telemetry_logger_provider"
+_PROVIDER_READY_ATTR = "_ratel_ai_telemetry_ready"
+
+# Python callers may initialize from concurrent worker threads. Serialize the set-once global
+# registrations so no caller can observe and return a tracer provider before Logs is ready.
+_INIT_LOCK = RLock()
+
 
 @dataclass(frozen=True)
 class OtlpConfig:
     """Resolved exporter configuration; the pure core of init()."""
 
     url: str
+    logs_url: str
     headers: dict[str, str]
     service_name: str
 
@@ -83,6 +95,7 @@ def resolve_otlp_config(
     *,
     api_key: str | None = None,
     endpoint: str | None = None,
+    logs_endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
     service_name: str | None = None,
     env: Mapping[str, str] | None = None,
@@ -111,9 +124,14 @@ def resolve_otlp_config(
         resolved_headers["Authorization"] = f"Bearer {resolved_env[API_KEY_ENV]}"
     return OtlpConfig(
         url=url,
+        logs_url=logs_endpoint or _derive_logs_url(url),
         headers=resolved_headers,
         service_name=service_name or DEFAULT_SERVICE_NAME,
     )
+
+
+def _derive_logs_url(traces_url: str) -> str:
+    return re.sub(r"/v1/traces(?=/?(?:[?#]|$))", "/v1/logs", traces_url, count=1)
 
 
 def _has_authorization_header(headers: Mapping[str, str]) -> bool:
@@ -123,6 +141,7 @@ def _has_authorization_header(headers: Mapping[str, str]) -> bool:
 
 #: Predicate deciding whether a finished span is forwarded to Ratel.
 SpanFilter = Callable[["ReadableSpan"], bool]
+LogFilter = Callable[["ReadWriteLogRecord"], bool]
 
 
 def ratel_signal_filter(span: ReadableSpan) -> bool:
@@ -139,8 +158,22 @@ def ratel_signal_filter(span: ReadableSpan) -> bool:
     return any(key.startswith("gen_ai.") or key.startswith("ratel.") for key in attributes)
 
 
+def ratel_event_filter(record: ReadWriteLogRecord) -> bool:
+    """Default log filter: forward only named gen_ai.* / ratel.* EventRecords."""
+    event_name = record.log_record.event_name
+    return bool(
+        event_name
+        and (event_name.startswith("gen_ai.") or event_name.startswith("ratel."))
+    )
+
+
 def _accept_all_spans(_span: ReadableSpan) -> bool:
     """The filter init() uses: it owns the provider, so it exports every span."""
+    return True
+
+
+def _accept_all_logs(_record: ReadWriteLogRecord) -> bool:
+    """The filter init() uses: it owns the provider, so it exports every EventRecord."""
     return True
 
 
@@ -151,6 +184,19 @@ class _NoOpSpanProcessor:
         return None
 
     def on_end(self, span: object) -> None:
+        return None
+
+    def shutdown(self) -> None:
+        return None
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        return True
+
+
+class _NoOpLogRecordProcessor:
+    """OTel-free disabled-mode log processor with the standard lifecycle surface."""
+
+    def on_emit(self, log_record: object) -> None:
         return None
 
     def shutdown(self) -> None:
@@ -176,12 +222,21 @@ def _owned_provider(provider: object) -> object | None:
     return handle if handle is provider else None
 
 
+def _owned_provider_is_ready(provider: object, logger_provider: object) -> bool:
+    return bool(
+        _owned_provider(provider) is not None
+        and getattr(provider, _PROVIDER_READY_ATTR, False)
+        and getattr(provider, _PROVIDER_LOGGER_ATTR, None) is logger_provider
+    )
+
+
 def _foreign_provider_error() -> RuntimeError:
     return RuntimeError(
-        "ratel telemetry init(): an OpenTelemetry TracerProvider is already registered "
-        "globally, so init() (the turnkey path that owns the provider) cannot take over. "
-        "To send Ratel telemetry alongside an existing provider (e.g. Langfuse + the Vercel "
-        "AI SDK), add ratel_span_processor(api_key=...) to that provider instead of init()."
+        "ratel telemetry init(): an OpenTelemetry TracerProvider or LoggerProvider is already "
+        "registered globally, so init() (the turnkey path that owns the providers) cannot "
+        "take over. To send Ratel telemetry alongside existing providers (e.g. Langfuse + "
+        "the Vercel AI SDK), add ratel_span_processor(api_key=...) and "
+        "ratel_log_record_processor(api_key=...) to the host providers instead of init()."
     )
 
 
@@ -211,6 +266,27 @@ def ratel_span_exporter(
         raise ModuleNotFoundError(_EXTRA_HINT) from exc
     cfg = resolve_otlp_config(api_key=api_key, endpoint=endpoint, headers=headers)
     return OTLPSpanExporter(endpoint=cfg.url, headers=dict(cfg.headers))
+
+
+def ratel_log_exporter(
+    *,
+    api_key: str | None = None,
+    endpoint: str | None = None,
+    logs_endpoint: str | None = None,
+    headers: Mapping[str, str] | None = None,
+) -> LogRecordExporter:
+    """Build the OTLP http/protobuf log exporter at the resolved logs endpoint."""
+    try:
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(_EXTRA_HINT) from exc
+    cfg = resolve_otlp_config(
+        api_key=api_key,
+        endpoint=endpoint,
+        logs_endpoint=logs_endpoint,
+        headers=headers,
+    )
+    return OTLPLogExporter(endpoint=cfg.logs_url, headers=dict(cfg.headers))
 
 
 def ratel_span_processor(
@@ -248,19 +324,53 @@ def ratel_span_processor(
     return _RatelSpanProcessor(exporter)
 
 
+def ratel_log_record_processor(
+    *,
+    api_key: str | None = None,
+    endpoint: str | None = None,
+    logs_endpoint: str | None = None,
+    headers: Mapping[str, str] | None = None,
+    log_filter: LogFilter | None = None,
+    enabled: bool = True,
+) -> LogRecordProcessor:
+    """A filtered BatchLogRecordProcessor for a host-owned LoggerProvider."""
+    if not enabled:
+        return cast("LogRecordProcessor", _NoOpLogRecordProcessor())
+
+    try:
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(_EXTRA_HINT) from exc
+    active_filter = log_filter or ratel_event_filter
+    exporter = ratel_log_exporter(
+        api_key=api_key,
+        endpoint=endpoint,
+        logs_endpoint=logs_endpoint,
+        headers=headers,
+    )
+
+    class _RatelLogRecordProcessor(BatchLogRecordProcessor):
+        def on_emit(self, log_record: ReadWriteLogRecord) -> None:
+            if active_filter(log_record):
+                super().on_emit(log_record)
+
+    return _RatelLogRecordProcessor(exporter)
+
+
 def init(
     *,
     api_key: str | None = None,
     endpoint: str | None = None,
+    logs_endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
     service_name: str | None = None,
     span_filter: SpanFilter | None = None,
+    log_filter: LogFilter | None = None,
     enabled: bool = True,
 ) -> TelemetryHandle:
-    """Wire an OTLP http/protobuf exporter + batch processor + service.name resource,
-    register it as the global tracer provider, and return a shutdown handle (call
-    handle.shutdown() / handle.force_flush()). Emit spans through the global OTel API
-    (``opentelemetry.trace.get_tracer(...)``); everything else is the untouched OTel SDK.
+    """Wire OTLP http/protobuf exporters + batch processors + one service.name resource,
+    register global tracer and logger providers, and return a shutdown handle (call
+    handle.shutdown() / handle.force_flush()). Emit through the global OTel APIs.
 
     init() owns the global provider, so it exports every span by default (unlike
     ratel_span_processor, whose default gen_ai.*/ratel.* filter exists for sharing a provider);
@@ -274,19 +384,48 @@ def init(
     the dead provider (OTel's global provider is set once per process). Note that the handle is
     shared across repeated calls, so shutting it down stops export for every caller.
     """
+    with _INIT_LOCK:
+        return _init_locked(
+            api_key=api_key,
+            endpoint=endpoint,
+            logs_endpoint=logs_endpoint,
+            headers=headers,
+            service_name=service_name,
+            span_filter=span_filter,
+            log_filter=log_filter,
+            enabled=enabled,
+        )
+
+
+def _init_locked(
+    *,
+    api_key: str | None,
+    endpoint: str | None,
+    logs_endpoint: str | None,
+    headers: Mapping[str, str] | None,
+    service_name: str | None,
+    span_filter: SpanFilter | None,
+    log_filter: LogFilter | None,
+    enabled: bool,
+) -> TelemetryHandle:
     if not enabled:
         # Preserve an already-active, live Ratel provider without importing OTel on the
         # genuinely disabled/base-only path. A prior successful init loaded this module already.
         trace_module = sys.modules.get("opentelemetry.trace")
-        if trace_module is not None:
+        logs_module = sys.modules.get("opentelemetry._logs")
+        if trace_module is not None and logs_module is not None:
             current_provider = trace_module.get_tracer_provider()
-            owned = _owned_provider(current_provider)
-            if owned is not None and not getattr(owned, _PROVIDER_SHUTDOWN_ATTR, False):
-                return cast("TelemetryHandle", owned)
+            current_logger_provider = logs_module.get_logger_provider()
+            if _owned_provider_is_ready(current_provider, current_logger_provider) and not getattr(
+                current_provider, _PROVIDER_SHUTDOWN_ATTR, False
+            ):
+                return cast("TelemetryHandle", current_provider)
         return _NoOpHandle()
 
     try:
-        from opentelemetry import trace
+        from opentelemetry import _logs, trace
+        from opentelemetry._logs._internal import ProxyLoggerProvider
+        from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.trace import ProxyTracerProvider
@@ -300,13 +439,22 @@ def init(
     if owned is not None:
         if getattr(owned, _PROVIDER_SHUTDOWN_ATTR, False):
             raise _already_shut_down_error()
+        if not _owned_provider_is_ready(current_provider, _logs.get_logger_provider()):
+            raise _foreign_provider_error()
         return cast("TelemetryHandle", owned)
     if not isinstance(current_provider, ProxyTracerProvider):
         raise _foreign_provider_error()
+    if not isinstance(_logs.get_logger_provider(), ProxyLoggerProvider):
+        raise _foreign_provider_error()
     cfg = resolve_otlp_config(
-        api_key=api_key, endpoint=endpoint, headers=headers, service_name=service_name
+        api_key=api_key,
+        endpoint=endpoint,
+        logs_endpoint=logs_endpoint,
+        headers=headers,
+        service_name=service_name,
     )
-    provider = TracerProvider(resource=Resource.create({SERVICE_NAME: cfg.service_name}))
+    resource = Resource.create({SERVICE_NAME: cfg.service_name})
+    provider = TracerProvider(resource=resource)
     provider.add_span_processor(
         ratel_span_processor(
             api_key=api_key,
@@ -315,8 +463,19 @@ def init(
             span_filter=_accept_all_spans if span_filter is None else span_filter,
         )
     )
+    logger_provider = LoggerProvider(resource=resource)
+    logger_provider.add_log_record_processor(
+        ratel_log_record_processor(
+            api_key=api_key,
+            endpoint=endpoint,
+            logs_endpoint=logs_endpoint,
+            headers=headers,
+            log_filter=_accept_all_logs if log_filter is None else log_filter,
+        )
+    )
     setattr(provider, _PROVIDER_HANDLE_ATTR, provider)
-    _mark_shutdown_on_teardown(provider)
+    setattr(provider, _PROVIDER_LOGGER_ATTR, logger_provider)
+    _attach_logger_lifecycle(provider, logger_provider)
     trace.set_tracer_provider(provider)
     winner = trace.get_tracer_provider()
     if winner is not provider:
@@ -324,32 +483,57 @@ def init(
         # provider, honor idempotence and return it; only a truly foreign winner is an error.
         provider.shutdown()
         owned_winner = _owned_provider(winner)
-        if owned_winner is not None:
+        if owned_winner is not None and _owned_provider_is_ready(
+            winner, _logs.get_logger_provider()
+        ):
             return cast("TelemetryHandle", owned_winner)
         raise _foreign_provider_error()
+    _logs.set_logger_provider(logger_provider)
+    if _logs.get_logger_provider() is not logger_provider:
+        provider.shutdown()
+        raise _foreign_provider_error()
+    setattr(provider, _PROVIDER_READY_ATTR, True)
     return cast("TelemetryHandle", provider)
 
 
-def _mark_shutdown_on_teardown(provider: object) -> None:
-    """Wrap the provider's shutdown so it flags the provider as torn down.
+def _attach_logger_lifecycle(provider: object, logger_provider: object) -> None:
+    """Make the tracer-provider handle flush and shut down both signal providers.
 
     One-time, single-owner wrap set at provider creation (unlike the removed multi-generation
-    shutdown mutation): it only records terminal state so a later init() fails loud instead of
-    returning a provider whose exporter is already stopped.
+    shutdown mutation). It also records terminal state so a later init() fails loud instead of
+    returning providers whose exporters are already stopped.
     """
-    # provider is typed `object` (the SDK class is a lazy import); the attribute name goes
-    # through a variable so getattr/setattr stay dynamic (and ruff does not rewrite them to
-    # attribute access that would not type-check).
     shutdown_name = "shutdown"
+    force_flush_name = "force_flush"
     original_shutdown = getattr(provider, shutdown_name)
+    original_force_flush = getattr(provider, force_flush_name)
+    logger_shutdown = getattr(logger_provider, shutdown_name)
+    logger_force_flush = getattr(logger_provider, force_flush_name)
 
     def _shutdown() -> Any:
+        failure: BaseException | None = None
         try:
-            return original_shutdown()
+            original_shutdown()
+        except BaseException as exc:
+            failure = exc
+        try:
+            logger_shutdown()
+        except BaseException as exc:
+            if failure is None:
+                failure = exc
         finally:
             setattr(provider, _PROVIDER_SHUTDOWN_ATTR, True)
+        if failure is not None:
+            raise failure
+        return None
+
+    def _force_flush(timeout_millis: int = 30_000) -> bool:
+        trace_flushed = bool(original_force_flush(timeout_millis))
+        logs_flushed = bool(logger_force_flush(timeout_millis))
+        return trace_flushed and logs_flushed
 
     setattr(provider, shutdown_name, _shutdown)
+    setattr(provider, force_flush_name, _force_flush)
 
 
 class ContentCapture(str, Enum):

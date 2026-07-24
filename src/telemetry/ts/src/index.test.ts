@@ -23,6 +23,7 @@ import {
   RATEL_SKILL_ID,
   RATEL_SKILL_LOAD,
   RATEL_TOOL_ARGS_SIZE_BYTES,
+  RATEL_TOOL_EXECUTION_DETAILS,
   RATEL_UPSTREAM_REGISTER,
   RATEL_UPSTREAM_SERVER,
   RATEL_UPSTREAM_TOOL_COUNT,
@@ -56,8 +57,9 @@ describe("ratel telemetry vocabulary", () => {
     expect(RATEL_AUTH_FLOW).toBe("ratel.auth.flow");
   });
 
-  it("names the span events per the pin", () => {
+  it("names the EventRecords per the pin", () => {
     expect(RATEL_SEARCH_RESULTS).toBe("ratel.search.results");
+    expect(RATEL_TOOL_EXECUTION_DETAILS).toBe("ratel.tool.execution.details");
     expect(GEN_AI_INFERENCE_DETAILS).toBe("gen_ai.client.inference.operation.details");
   });
 

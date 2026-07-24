@@ -37,6 +37,8 @@ export interface InitOptions {
   apiKey?: string;
   /** Full OTLP traces URL (incl. `/v1/traces`). Defaults to `RATEL_OTLP_ENDPOINT`. */
   endpoint?: string;
+  /** Full OTLP logs URL. Defaults to the sibling `/v1/logs` URL derived from {@link endpoint}. */
+  logsEndpoint?: string;
   /** Extra headers merged onto the request. An explicit `Authorization` here is kept over the `RATEL_API_KEY` env fallback. */
   headers?: Record<string, string>;
 }
@@ -44,6 +46,7 @@ export interface InitOptions {
 /** Resolved exporter configuration; the pure core of the OTLP exporter, exposed for testing. */
 export interface ResolvedOtlpConfig {
   url: string;
+  logsUrl: string;
   headers: Record<string, string>;
   serviceName: string;
 }
@@ -72,7 +75,16 @@ export function resolveOtlpConfig(
   } else if (env[API_KEY_ENV] && !hasAuthorizationHeader(headers)) {
     headers.Authorization = `Bearer ${env[API_KEY_ENV]}`;
   }
-  return { url, headers, serviceName: opts.serviceName ?? DEFAULT_SERVICE_NAME };
+  return {
+    url,
+    logsUrl: opts.logsEndpoint ?? deriveLogsUrl(url),
+    headers,
+    serviceName: opts.serviceName ?? DEFAULT_SERVICE_NAME,
+  };
+}
+
+function deriveLogsUrl(tracesUrl: string): string {
+  return tracesUrl.replace(/\/v1\/traces(?=\/?(?:[?#]|$))/, "/v1/logs");
 }
 
 /** Whether the caller already supplied an `Authorization` header (any casing). */

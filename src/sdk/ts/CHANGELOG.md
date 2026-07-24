@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-07-24
+
+### Fixed
+
+- Emit content capture as structured OpenTelemetry Logs `EventRecord`s, keep tool results out of inference-output messages, and export those records through `configureTelemetry()`.
+- Require the telemetry vocabulary version that defines the EventRecord contract.
+
 ## [0.5.2] - 2026-07-24
 
 ### Changed

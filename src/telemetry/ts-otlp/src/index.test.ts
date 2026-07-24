@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { OTLP_ENDPOINT_ENV } from "./index.js";
+import { init, OTLP_ENDPOINT_ENV, startTelemetry } from "./index.js";
 
 describe("@ratel-ai/telemetry-otlp public API", () => {
-  it("exports the OTLP endpoint env var", () => {
+  it("preserves the endpoint and startTelemetry compatibility exports", () => {
     expect(OTLP_ENDPOINT_ENV).toBe("RATEL_OTLP_ENDPOINT");
+    expect(init).toBe(startTelemetry);
   });
 });

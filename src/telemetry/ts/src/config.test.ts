@@ -52,6 +52,24 @@ describe("resolveOtlpConfig", () => {
     expect(cfg.headers.Authorization).toBeUndefined();
   });
 
+  it("derives the OTLP logs URL from the full traces URL", () => {
+    const cfg = resolveOtlpConfig({ endpoint: "http://localhost:4318/v1/traces" }, {});
+
+    expect(cfg.logsUrl).toBe("http://localhost:4318/v1/logs");
+  });
+
+  it("uses an explicit logs endpoint instead of deriving one", () => {
+    const cfg = resolveOtlpConfig(
+      {
+        endpoint: "http://traces.example/v1/traces",
+        logsEndpoint: "http://logs.example/custom",
+      },
+      {},
+    );
+
+    expect(cfg.logsUrl).toBe("http://logs.example/custom");
+  });
+
   it("prefers an explicit endpoint over RATEL_OTLP_ENDPOINT", () => {
     const cfg = resolveOtlpConfig(
       { endpoint: "https://explicit/v1/traces", apiKey: "k" },

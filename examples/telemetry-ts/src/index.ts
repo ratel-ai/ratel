@@ -2,11 +2,11 @@
  * `examples/telemetry-ts` — emit Ratel's `ratel.*` telemetry through the standard
  * OpenTelemetry JS SDK.
  *
- * Runnable offline: it wires a `ConsoleSpanExporter` so the spans print to stdout
- * (no collector, no API key). The only Ratel-specific part is the vocabulary from
+ * Runnable offline: its trace-only demo wires a `ConsoleSpanExporter` so spans print
+ * to stdout (no collector, no API key). The Ratel-specific part is the vocabulary from
  * `@ratel-ai/telemetry` — the constants and value enums you set as span attributes.
  * In production you swap the console exporter for `init()` (shown at the end), which
- * wires the OTLP exporter to `RATEL_OTLP_ENDPOINT`; everything else stays identical.
+ * wires OTLP trace and Logs exporters from `RATEL_OTLP_ENDPOINT`; everything else stays identical.
  */
 
 import { context, type Tracer, trace } from "@opentelemetry/api";
@@ -108,12 +108,13 @@ async function main(): Promise<void> {
   await provider.forceFlush();
   await provider.shutdown();
 
-  // --- Production wiring: the same spans, exported to Ratel via init() ---
+  // --- Production wiring: traces + EventRecords exported to Ratel via init() ---
   // `resolveOtlpConfig` is pure (no network), so we can show how endpoint + auth
   // resolve without sending anything:
   const cfg = resolveOtlpConfig({ apiKey: "sk-demo", endpoint: "https://cloud.ratel.sh/v1/traces" });
   console.log("\n--- how init() resolves options -> exporter config (illustrative demo values) ---");
   console.log(`  url:         ${cfg.url}`);
+  console.log(`  logsUrl:     ${cfg.logsUrl}`);
   console.log(`  serviceName: ${cfg.serviceName} (default ${DEFAULT_SERVICE_NAME})`);
   console.log(`  headers:     ${Object.keys(cfg.headers).join(", ") || "(none)"}`);
 
