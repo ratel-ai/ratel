@@ -93,6 +93,18 @@ pub const GEN_AI_TOOL_CALL_ARGUMENTS: &str = "gen_ai.tool.call.arguments";
 /// `gen_ai.tool.call.result` — tool result (Opt-In content, gated).
 pub const GEN_AI_TOOL_CALL_RESULT: &str = "gen_ai.tool.call.result";
 
+// Tier 1 content, carried on the `gen_ai.client.inference.operation.details`
+// event (never span attributes; CONVENTIONS.md § Tier 1 content). Each holds a
+// v1.42.0 message list (`{ role, parts[], name? }`), JSON-encoded because OTel
+// event attributes are primitive-typed.
+
+/// `gen_ai.system_instructions` — the system prompt as a bare `parts[]` (Opt-In content).
+pub const GEN_AI_SYSTEM_INSTRUCTIONS: &str = "gen_ai.system_instructions";
+/// `gen_ai.input.messages` — the input message list (Opt-In content).
+pub const GEN_AI_INPUT_MESSAGES: &str = "gen_ai.input.messages";
+/// `gen_ai.output.messages` — the output message list (Opt-In content).
+pub const GEN_AI_OUTPUT_MESSAGES: &str = "gen_ai.output.messages";
+
 /// Whether a `ratel.*` span was a direct library call or synthesized by the
 /// agent inside its loop. Emitted as the `ratel.origin` attribute; mirrors the
 /// local trace `Origin` (ADR-0007).
@@ -227,6 +239,26 @@ mod tests {
     }
 
     #[test]
+    fn gen_ai_content_message_keys_match_the_pin() {
+        // Tier 1 content carried on the inference-details event (CONVENTIONS.md
+        // § Tier 1 content): borrowed verbatim from gen_ai, never renamed.
+        assert_eq!(GEN_AI_SYSTEM_INSTRUCTIONS, "gen_ai.system_instructions");
+        assert_eq!(GEN_AI_INPUT_MESSAGES, "gen_ai.input.messages");
+        assert_eq!(GEN_AI_OUTPUT_MESSAGES, "gen_ai.output.messages");
+        for key in [
+            GEN_AI_SYSTEM_INSTRUCTIONS,
+            GEN_AI_INPUT_MESSAGES,
+            GEN_AI_OUTPUT_MESSAGES,
+        ] {
+            assert!(key.starts_with("gen_ai."), "{key} is not under gen_ai.*");
+            assert!(
+                !key.starts_with("ratel."),
+                "{key} must not be renamed into ratel.*"
+            );
+        }
+    }
+
+    #[test]
     fn span_names_match_the_pin() {
         assert_eq!(RATEL_SEARCH, "ratel.search");
         assert_eq!(RATEL_SKILL_LOAD, "ratel.skill.load");
@@ -306,6 +338,9 @@ mod tests {
             GEN_AI_TOOL_CALL_ID,
             GEN_AI_TOOL_CALL_ARGUMENTS,
             GEN_AI_TOOL_CALL_RESULT,
+            GEN_AI_SYSTEM_INSTRUCTIONS,
+            GEN_AI_INPUT_MESSAGES,
+            GEN_AI_OUTPUT_MESSAGES,
         ];
         let unique: std::collections::HashSet<&str> = keys.iter().copied().collect();
         assert_eq!(unique.len(), keys.len(), "duplicate attribute key");
