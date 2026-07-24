@@ -342,6 +342,13 @@ pub struct Intent {
     /// Rebuilt after deserialization by [`IntentGraph::rebuild_caches`].
     #[serde(skip)]
     bag: std::collections::HashSet<String>,
+    /// How many query vectors have been folded into `centroid` — the weight of
+    /// the running mean in [`Self::absorb_vector`]. Distinct from `members.len()`
+    /// because a cluster can gain members lexically (no vector), which must not
+    /// inflate the weight. Live-learning scratch: not serialized (a reloaded
+    /// centroid is treated as a single prior sample), so never part of identity.
+    #[serde(skip)]
+    vector_n: u32,
 }
 
 /// Identity is the evidence — members, centroid, support, edges. The derived
@@ -390,15 +397,23 @@ impl Intent {
     /// embedding model changed — replaces the centroid rather than being
     /// averaged into a space it does not share.
     fn absorb_vector(&mut self, vector: &[f32]) {
-        let n = self.members.len().max(1) as f32;
         let merged: Vec<f32> = match self.centroid.as_deref() {
-            Some(c) if c.len() == vector.len() => c
-                .iter()
-                .zip(vector)
-                .map(|(c, v)| c * (n - 1.0) + v)
-                .collect(),
-            _ => vector.to_vec(),
+            // Weight the running mean by vectors ALREADY folded (`vector_n`), not
+            // by `members.len()`: a cluster can gain members lexically with no
+            // vector, and counting those would pin the centroid to the first
+            // vector after such growth (it would arrive with weight ~n).
+            Some(c) if c.len() == vector.len() => {
+                let k = self.vector_n.max(1) as f32;
+                c.iter().zip(vector).map(|(c, v)| c * k + v).collect()
+            }
+            // A first vector — or one of a different width (the embedding model
+            // changed) — starts the mean fresh rather than blending across spaces.
+            _ => {
+                self.vector_n = 0;
+                vector.to_vec()
+            }
         };
+        self.vector_n = self.vector_n.saturating_add(1);
         self.centroid = Some(normalize(merged));
     }
 
@@ -412,11 +427,6 @@ impl Intent {
         }
         // The union bag is derived from the surviving members.
         self.bag = self.member_bags.iter().flatten().cloned().collect();
-    }
-
-    /// Every distinct content token across this cluster's members.
-    fn token_bag(&self) -> &std::collections::HashSet<String> {
-        &self.bag
     }
 
     /// Fold a newly added member's tokens into the cache. O(tokens in that one
@@ -784,6 +794,7 @@ impl IntentGraph {
                     skills: BTreeMap::new(),
                     bag: std::collections::HashSet::new(),
                     member_bags: Vec::new(),
+                    vector_n: 0,
                 });
                 self.intents.len() - 1
             }
@@ -999,25 +1010,36 @@ impl IntentGraph {
             .map_or(0, |m| m + 1)
     }
 
-    /// The member that best covers the cluster's own token bag — a real past
-    /// query rather than a generated summary, so it can never misdescribe the
-    /// cluster. Ties break by the member text.
+    /// The most central member — the one whose tokens the *rest* of the cluster
+    /// shares most — as a real past query rather than a generated summary, so it
+    /// can never misdescribe the cluster. Ties break by the member text.
+    ///
+    /// Scored against the *other* members, not the cluster's union bag: the union
+    /// contains every member's tokens by construction, so coverage-of-the-union
+    /// is a constant `1.0` and would leave the label to the tie-break alone.
     fn medoid(&self, idx: usize) -> String {
         let it = &self.intents[idx];
-        let bag = it.token_bag();
-        it.members
+        let tokenized: Vec<(&String, Vec<String>)> =
+            it.members.iter().map(|m| (m, tokenize(m))).collect();
+        tokenized
             .iter()
-            .map(|m| {
-                let t = tokenize(m);
-                let hits = t.iter().filter(|x| bag.contains(*x)).count();
-                (
-                    m,
-                    if t.is_empty() {
-                        0.0
-                    } else {
-                        hits as f32 / t.len() as f32
-                    },
-                )
+            .enumerate()
+            .map(|(i, (m, t))| {
+                let shared = t
+                    .iter()
+                    .filter(|tok| {
+                        tokenized
+                            .iter()
+                            .enumerate()
+                            .any(|(j, (_, other))| j != i && other.contains(*tok))
+                    })
+                    .count();
+                let score = if t.is_empty() {
+                    0.0
+                } else {
+                    shared as f32 / t.len() as f32
+                };
+                (*m, score)
             })
             .max_by(|a, b| {
                 a.1.partial_cmp(&b.1)
@@ -1317,6 +1339,7 @@ mod tests {
             skills: BTreeMap::new(),
             bag: std::collections::HashSet::new(),
             member_bags: Vec::new(),
+            vector_n: 0,
         };
         it.rebuild_bag(); // the cache is derived from members — keep them in step
         it
@@ -1399,6 +1422,53 @@ mod tests {
             arm.is_none(),
             "a fingerprinted cluster dense rejected must not match lexically, got {arm:?}"
         );
+    }
+
+    // ---- centroid running mean ---------------------------------------------
+
+    #[test]
+    fn absorb_vector_weights_by_vectors_folded_not_member_count() {
+        // A cluster that grew lexically (members added with no vector) must not
+        // let those members inflate the running-mean weight — otherwise the first
+        // vector after lexical growth dominates the centroid.
+        let mut it = intent("i0", &["a", "b", "c", "d"], &[("t", 1.0)]);
+        assert!(
+            it.centroid.is_none(),
+            "four lexical members, no centroid yet"
+        );
+
+        it.absorb_vector(&[1.0, 0.0, 0.0]); // first vector → centroid is e_x
+        it.absorb_vector(&[0.0, 1.0, 0.0]); // second → equal-weight mean of the two
+
+        // Two equal-weight orthogonal unit vectors → normalize(e_x + e_y).
+        let c = it.centroid.as_ref().unwrap();
+        assert!(
+            (c[0] - c[1]).abs() < 1e-6,
+            "equal-weight vectors → symmetric centroid, got {c:?}"
+        );
+        assert!(
+            (c[0] - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-6,
+            "expected ~0.707 per axis, got {c:?}"
+        );
+    }
+
+    #[test]
+    fn medoid_labels_the_most_central_member_not_the_alphabetical_first() {
+        // The old scoring was a constant 1.0 (every member's tokens are in the
+        // union bag), so the label was just the tie-break — the alphabetically
+        // first member. It should be the member most shared with the rest.
+        let g = graph(vec![intent(
+            "i0",
+            &[
+                "a lonely unique phrase",
+                "build broken ci",
+                "build broken pipeline",
+            ],
+            &[("t", 1.0)],
+        )]);
+        // "a lonely…" sorts first but shares no tokens; the build-broken members
+        // are central. Most-covered wins, tie broken alphabetically among equals.
+        assert_eq!(g.medoid(0), "build broken ci");
     }
 
     // ---- support ramp ------------------------------------------------------
@@ -1917,7 +1987,7 @@ mod tests {
         let it = &g.intents[0];
         let fresh: std::collections::HashSet<String> =
             it.members.iter().flat_map(|m| tokenize(m)).collect();
-        assert_eq!(it.token_bag(), &fresh, "union cache drifted from members");
+        assert_eq!(&it.bag, &fresh, "union cache drifted from members");
 
         // The per-member sets are what scoring actually reads, and they are
         // positional — a drift here silently stops a cluster matching queries it
@@ -2520,6 +2590,6 @@ mod tests {
             .iter()
             .flat_map(|m| tokenize(m))
             .collect();
-        assert_eq!(g.intents[0].token_bag(), &fresh);
+        assert_eq!(&g.intents[0].bag, &fresh);
     }
 }
