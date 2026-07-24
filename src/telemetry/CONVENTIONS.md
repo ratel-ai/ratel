@@ -234,11 +234,14 @@ against the v1.42.0 table above.
 Each helper is `init()` sugar over the standard OTel SDK plus the `ratel.*` constants: no transport, no FFI,
 no schema crate. `init()`:
 
-- Resolves endpoint + auth from `RATEL_URL` / `RATEL_API_KEY`; explicit `endpoint` / `apiKey`
-  (`endpoint=` / `api_key=` in Python) values win over the environment. Custom `headers` compose
-  with either form. An explicit `apiKey` sets `Authorization: Bearer ...`; the `RATEL_API_KEY`
-  fallback applies only when neither `apiKey` nor an explicit `Authorization` header is given, so
-  ambient env never clobbers auth the caller set on purpose.
+- Resolves the endpoint from `RATEL_OTLP_ENDPOINT` (the dedicated OTLP traces var), falling back to
+  the legacy `RATEL_URL`, and auth from `RATEL_API_KEY`; explicit `endpoint` / `apiKey`
+  (`endpoint=` / `api_key=` in Python) values win over the environment. `RATEL_OTLP_ENDPOINT` keeps
+  `RATEL_URL` from doubling as the OTLP URL (it also selects the SDK catalog source); it is TS-only
+  for now — the Python helper still reads `RATEL_URL`. Custom `headers` compose with either form. An
+  explicit `apiKey` sets `Authorization: Bearer ...`; the `RATEL_API_KEY` fallback applies only when
+  neither `apiKey` nor an explicit `Authorization` header is given, so ambient env never clobbers
+  auth the caller set on purpose.
 - On first setup, accepts `enabled: false` (`enabled=False`) before resolving configuration or
   registering a provider, returning a no-op shutdown handle (in Python this also avoids importing
   the OTel SDK at all; the TS package statically imports the SDK at module load either way). The

@@ -6,6 +6,7 @@ import {
   contentCaptureMode,
   DEFAULT_SERVICE_NAME,
   ENDPOINT_ENV,
+  OTLP_ENDPOINT_ENV,
   resolveOtlpConfig,
   setContentCapture,
 } from "./config.js";
@@ -61,6 +62,27 @@ describe("resolveOtlpConfig", () => {
     expect(cfg.headers.Authorization).toBe("Bearer k");
   });
 
+  it("reads RATEL_OTLP_ENDPOINT as the dedicated OTLP traces endpoint", () => {
+    const cfg = resolveOtlpConfig({}, { [OTLP_ENDPOINT_ENV]: "https://otlp/v1/traces" });
+    expect(cfg.url).toBe("https://otlp/v1/traces");
+  });
+
+  it("prefers RATEL_OTLP_ENDPOINT over the legacy RATEL_URL when both are set", () => {
+    const cfg = resolveOtlpConfig(
+      {},
+      { [OTLP_ENDPOINT_ENV]: "https://otlp/v1/traces", [ENDPOINT_ENV]: "https://legacy/v1/traces" },
+    );
+    expect(cfg.url).toBe("https://otlp/v1/traces");
+  });
+
+  it("prefers an explicit endpoint over RATEL_OTLP_ENDPOINT", () => {
+    const cfg = resolveOtlpConfig(
+      { endpoint: "https://explicit/v1/traces" },
+      { [OTLP_ENDPOINT_ENV]: "https://otlp/v1/traces" },
+    );
+    expect(cfg.url).toBe("https://explicit/v1/traces");
+  });
+
   it("respects a custom service name", () => {
     const cfg = resolveOtlpConfig({ endpoint: "https://x/v1/traces", serviceName: "my-agent" }, {});
     expect(cfg.serviceName).toBe("my-agent");
@@ -109,7 +131,8 @@ describe("resolveOtlpConfig", () => {
     }
   });
 
-  it("throws when no endpoint and no RATEL_URL", () => {
+  it("throws when no endpoint, naming both the dedicated var and the legacy RATEL_URL fallback", () => {
+    expect(() => resolveOtlpConfig({ apiKey: "k" }, {})).toThrow(OTLP_ENDPOINT_ENV);
     expect(() => resolveOtlpConfig({ apiKey: "k" }, {})).toThrow(ENDPOINT_ENV);
   });
 });
