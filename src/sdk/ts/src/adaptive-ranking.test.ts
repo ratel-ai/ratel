@@ -1,3 +1,5 @@
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import { IntentGraph, SkillCatalog, ToolCatalog } from "./index.js";
 
@@ -198,6 +200,44 @@ describe("adaptive usage ranking", () => {
     // An unrelated query on the same catalog stays unfused — the between-calls
     // switch `fused` exists to expose.
     expect(catalog.search("read a file from disk", 5).every((h) => !h.fused)).toBe(true);
+  });
+
+  // Regression for the base-sink bug: enable/disable rebuilt the learner's inner
+  // sink from the memory-sink handle only, dropping a configured jsonl sink to
+  // noop — so the trace file silently stopped growing. Registration writes a
+  // churn event *before* the toggle, so assert the file grows *after* it.
+  async function jsonlCatalog(): Promise<{ catalog: ToolCatalog; size: () => number }> {
+    const path = join(mkdtempSync(join(tmpdir(), "ratel-trace-")), "trace.jsonl");
+    const catalog = new ToolCatalog({ trace: { kind: "jsonl", sessionId: "s", path } });
+    await catalog.register([
+      {
+        id: "t",
+        name: "t",
+        description: "a tool",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      },
+    ]);
+    return { catalog, size: () => readFileSync(path, "utf8").length };
+  }
+
+  it("keeps writing to a configured jsonl sink after enabling adaptive ranking", async () => {
+    const { catalog, size } = await jsonlCatalog();
+    catalog.enableAdaptiveRanking(new IntentGraph());
+
+    const before = size();
+    catalog.search("anything", 5);
+    expect(size()).toBeGreaterThan(before);
+  });
+
+  it("keeps writing to a configured jsonl sink after disabling adaptive ranking", async () => {
+    const { catalog, size } = await jsonlCatalog();
+    catalog.disableAdaptiveRanking(); // clobbered the sink even when never enabled
+
+    const before = size();
+    catalog.search("anything", 5);
+    expect(size()).toBeGreaterThan(before);
   });
 });
 

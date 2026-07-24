@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from ratel_ai import ExecutableTool, IntentGraph, SkillCatalog, ToolCatalog
+from ratel_ai import ExecutableTool, IntentGraph, SkillCatalog, ToolCatalog, TraceSinkConfig
 from ratel_ai.skill_catalog import Skill
 
 
@@ -150,6 +150,42 @@ async def test_disabling_stops_ranking_but_keeps_what_was_learned() -> None:
     assert ids(catalog.search("why is the build broken", 5))[0] == "docker_build"
     assert graph.cluster_count == 1
     assert "gh_run_list" in graph.to_json()
+
+
+async def _jsonl_catalog(path: Path) -> ToolCatalog:
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="jsonl", session_id="s", path=str(path)))
+    await catalog.register(
+        ExecutableTool(id="t", name="t", description="a tool", execute=lambda _a: "ok")
+    )
+    return catalog
+
+
+@pytest.mark.asyncio
+async def test_jsonl_sink_survives_enabling_adaptive_ranking(tmp_path: Path) -> None:
+    # Regression: enable/disable rebuilt the learner's inner sink from the
+    # memory-sink handle only, dropping a configured jsonl sink to noop — so the
+    # trace file silently stopped growing. Registration writes a churn event
+    # before the toggle, so assert the file grows *after* it.
+    path = tmp_path / "trace.jsonl"
+    catalog = await _jsonl_catalog(path)
+    catalog.enable_adaptive_ranking(IntentGraph())
+
+    before = path.stat().st_size
+    catalog.search("anything", 5)
+    assert path.stat().st_size > before
+
+
+@pytest.mark.asyncio
+async def test_jsonl_sink_survives_disabling_adaptive_ranking(tmp_path: Path) -> None:
+    # The disable path clobbered the sink the same way, even when adaptive
+    # ranking was never enabled.
+    path = tmp_path / "trace.jsonl"
+    catalog = await _jsonl_catalog(path)
+    catalog.disable_adaptive_ranking()
+
+    before = path.stat().st_size
+    catalog.search("anything", 5)
+    assert path.stat().st_size > before
 
 
 @pytest.mark.asyncio

@@ -299,6 +299,10 @@ impl IntentGraph {
 pub struct ToolRegistry {
     inner: core::ToolRegistry,
     memory_sink: Option<Arc<MemorySink>>,
+    /// The current undecorated sink, whatever its kind. Retained so
+    /// enable/disable adaptive ranking can re-wrap or restore it; rebuilding
+    /// from `memory_sink` alone would drop a configured jsonl sink to noop.
+    base_sink: Arc<dyn core::TraceSink>,
     /// Retained so `set_trace_sink` can re-wrap the new sink in a learner —
     /// otherwise changing sinks would silently switch learning off.
     graph: Option<Arc<RwLock<core::IntentGraph>>>,
@@ -346,6 +350,7 @@ impl ToolRegistry {
         Ok(Self {
             inner,
             memory_sink: None,
+            base_sink: Arc::new(NoopSink),
             graph: None,
         })
     }
@@ -527,7 +532,8 @@ impl ToolRegistry {
         match kind.as_str() {
             "noop" => {
                 self.memory_sink = None;
-                let sink = wrap_learner(Arc::new(NoopSink), self.graph.as_ref());
+                self.base_sink = Arc::new(NoopSink);
+                let sink = wrap_learner(self.base_sink.clone(), self.graph.as_ref());
                 self.inner.set_trace_sink(sink);
             }
             "memory" => {
@@ -535,7 +541,8 @@ impl ToolRegistry {
                     .ok_or_else(|| PyValueError::new_err("memory sink requires session_id"))?;
                 let sink = Arc::new(MemorySink::new(session_id));
                 self.memory_sink = Some(sink.clone());
-                let sink = wrap_learner(sink, self.graph.as_ref());
+                self.base_sink = sink;
+                let sink = wrap_learner(self.base_sink.clone(), self.graph.as_ref());
                 self.inner.set_trace_sink(sink);
             }
             "jsonl" => {
@@ -545,7 +552,8 @@ impl ToolRegistry {
                 let sink = JsonlSink::new(session_id, &path)
                     .map_err(|e| PyValueError::new_err(format!("open jsonl sink: {e}")))?;
                 self.memory_sink = None;
-                let sink = wrap_learner(Arc::new(sink), self.graph.as_ref());
+                self.base_sink = Arc::new(sink);
+                let sink = wrap_learner(self.base_sink.clone(), self.graph.as_ref());
                 self.inner.set_trace_sink(sink);
             }
             other => {
@@ -569,10 +577,7 @@ impl ToolRegistry {
     /// compare ordering rather than magnitudes.
     fn enable_adaptive_ranking(&mut self, graph: &IntentGraph) {
         let handle = graph.inner.clone();
-        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
-            Some(memory) => memory.clone(),
-            None => Arc::new(NoopSink),
-        };
+        let inner_sink = self.base_sink.clone();
         self.inner
             .set_trace_sink(Arc::new(UsageLearner::new(handle.clone(), inner_sink)));
         self.inner.set_intent_graph(Some(handle.clone()));
@@ -582,10 +587,7 @@ impl ToolRegistry {
     /// Turn adaptive usage ranking off: ranking returns to the base engine and
     /// the graph stops growing. The graph keeps what it learned.
     fn disable_adaptive_ranking(&mut self) {
-        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
-            Some(memory) => memory.clone(),
-            None => Arc::new(NoopSink),
-        };
+        let inner_sink = self.base_sink.clone();
         self.inner.set_trace_sink(inner_sink);
         self.inner.set_intent_graph(None);
         self.graph = None;
@@ -613,6 +615,10 @@ impl ToolRegistry {
 pub struct SkillRegistry {
     inner: core::SkillRegistry,
     memory_sink: Option<Arc<MemorySink>>,
+    /// The current undecorated sink, whatever its kind. Retained so
+    /// enable/disable adaptive ranking can re-wrap or restore it; rebuilding
+    /// from `memory_sink` alone would drop a configured jsonl sink to noop.
+    base_sink: Arc<dyn core::TraceSink>,
     /// Retained so `set_trace_sink` can re-wrap the new sink in a learner —
     /// otherwise changing sinks would silently switch learning off.
     graph: Option<Arc<RwLock<core::IntentGraph>>>,
@@ -657,6 +663,7 @@ impl SkillRegistry {
         Ok(Self {
             inner,
             memory_sink: None,
+            base_sink: Arc::new(NoopSink),
             graph: None,
         })
     }
@@ -820,7 +827,8 @@ impl SkillRegistry {
         match kind.as_str() {
             "noop" => {
                 self.memory_sink = None;
-                let sink = wrap_learner(Arc::new(NoopSink), self.graph.as_ref());
+                self.base_sink = Arc::new(NoopSink);
+                let sink = wrap_learner(self.base_sink.clone(), self.graph.as_ref());
                 self.inner.set_trace_sink(sink);
             }
             "memory" => {
@@ -828,7 +836,8 @@ impl SkillRegistry {
                     .ok_or_else(|| PyValueError::new_err("memory sink requires session_id"))?;
                 let sink = Arc::new(MemorySink::new(session_id));
                 self.memory_sink = Some(sink.clone());
-                let sink = wrap_learner(sink, self.graph.as_ref());
+                self.base_sink = sink;
+                let sink = wrap_learner(self.base_sink.clone(), self.graph.as_ref());
                 self.inner.set_trace_sink(sink);
             }
             "jsonl" => {
@@ -838,7 +847,8 @@ impl SkillRegistry {
                 let sink = JsonlSink::new(session_id, &path)
                     .map_err(|e| PyValueError::new_err(format!("open jsonl sink: {e}")))?;
                 self.memory_sink = None;
-                let sink = wrap_learner(Arc::new(sink), self.graph.as_ref());
+                self.base_sink = Arc::new(sink);
+                let sink = wrap_learner(self.base_sink.clone(), self.graph.as_ref());
                 self.inner.set_trace_sink(sink);
             }
             other => {
@@ -862,10 +872,7 @@ impl SkillRegistry {
     /// compare ordering rather than magnitudes.
     fn enable_adaptive_ranking(&mut self, graph: &IntentGraph) {
         let handle = graph.inner.clone();
-        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
-            Some(memory) => memory.clone(),
-            None => Arc::new(NoopSink),
-        };
+        let inner_sink = self.base_sink.clone();
         self.inner
             .set_trace_sink(Arc::new(UsageLearner::new(handle.clone(), inner_sink)));
         self.inner.set_intent_graph(Some(handle.clone()));
@@ -875,10 +882,7 @@ impl SkillRegistry {
     /// Turn adaptive usage ranking off: ranking returns to the base engine and
     /// the graph stops growing. The graph keeps what it learned.
     fn disable_adaptive_ranking(&mut self) {
-        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
-            Some(memory) => memory.clone(),
-            None => Arc::new(NoopSink),
-        };
+        let inner_sink = self.base_sink.clone();
         self.inner.set_trace_sink(inner_sink);
         self.inner.set_intent_graph(None);
         self.graph = None;

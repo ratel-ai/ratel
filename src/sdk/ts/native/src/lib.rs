@@ -536,6 +536,10 @@ pub struct ToolRegistry {
     dense_gate: Arc<Mutex<()>>,
     pending_dense: Arc<AtomicUsize>,
     memory_sink: Option<Arc<MemorySink>>,
+    /// The current undecorated sink, whatever its kind. Retained so
+    /// enable/disable adaptive ranking can re-wrap or restore it; rebuilding
+    /// from `memory_sink` alone would drop a configured jsonl sink to noop.
+    base_sink: Arc<dyn core::TraceSink>,
     /// Retained so `setTraceSink` can re-wrap the new sink in a learner —
     /// otherwise changing sinks would silently switch learning off.
     graph: Option<Arc<RwLock<core::IntentGraph>>>,
@@ -557,6 +561,7 @@ impl ToolRegistry {
             dense_gate: Arc::new(Mutex::new(())),
             pending_dense: Arc::new(AtomicUsize::new(0)),
             memory_sink: None,
+            base_sink: Arc::new(NoopSink),
             graph: None,
         })
     }
@@ -745,6 +750,9 @@ impl ToolRegistry {
     #[napi]
     pub fn set_trace_sink(&mut self, config: TraceSinkConfig) -> napi::Result<()> {
         let (sink, memory) = build_trace_sink(config)?;
+        // Retain the raw sink so enable/disable can re-wrap or restore it —
+        // rebuilding from `memory_sink` alone would drop a jsonl sink to noop.
+        self.base_sink = sink.clone();
         // Re-wrap: adaptive ranking learns by decorating the sink, so replacing
         // the sink outright would quietly stop learning.
         let sink = match &self.graph {
@@ -774,10 +782,7 @@ impl ToolRegistry {
     #[napi]
     pub fn enable_adaptive_ranking(&mut self, graph: &IntentGraph) -> napi::Result<()> {
         let handle = graph.inner.clone();
-        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
-            Some(memory) => memory.clone(),
-            None => Arc::new(NoopSink),
-        };
+        let inner_sink = self.base_sink.clone();
         let learner = Arc::new(UsageLearner::new(handle.clone(), inner_sink));
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(learner);
@@ -792,10 +797,7 @@ impl ToolRegistry {
     /// resumes from what it already learned.
     #[napi]
     pub fn disable_adaptive_ranking(&mut self) -> napi::Result<()> {
-        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
-            Some(memory) => memory.clone(),
-            None => Arc::new(NoopSink),
-        };
+        let inner_sink = self.base_sink.clone();
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(inner_sink);
         registry.set_intent_graph(None);
@@ -897,6 +899,10 @@ pub struct SkillRegistry {
     dense_gate: Arc<Mutex<()>>,
     pending_dense: Arc<AtomicUsize>,
     memory_sink: Option<Arc<MemorySink>>,
+    /// The current undecorated sink, whatever its kind. Retained so
+    /// enable/disable adaptive ranking can re-wrap or restore it; rebuilding
+    /// from `memory_sink` alone would drop a configured jsonl sink to noop.
+    base_sink: Arc<dyn core::TraceSink>,
     /// Retained so `setTraceSink` can re-wrap the new sink in a learner —
     /// otherwise changing sinks would silently switch learning off.
     graph: Option<Arc<RwLock<core::IntentGraph>>>,
@@ -916,6 +922,7 @@ impl SkillRegistry {
             dense_gate: Arc::new(Mutex::new(())),
             pending_dense: Arc::new(AtomicUsize::new(0)),
             memory_sink: None,
+            base_sink: Arc::new(NoopSink),
             graph: None,
         })
     }
@@ -1097,6 +1104,9 @@ impl SkillRegistry {
     #[napi]
     pub fn set_trace_sink(&mut self, config: TraceSinkConfig) -> napi::Result<()> {
         let (sink, memory) = build_trace_sink(config)?;
+        // Retain the raw sink so enable/disable can re-wrap or restore it —
+        // rebuilding from `memory_sink` alone would drop a jsonl sink to noop.
+        self.base_sink = sink.clone();
         // Re-wrap: adaptive ranking learns by decorating the sink, so replacing
         // the sink outright would quietly stop learning.
         let sink = match &self.graph {
@@ -1126,10 +1136,7 @@ impl SkillRegistry {
     #[napi]
     pub fn enable_adaptive_ranking(&mut self, graph: &IntentGraph) -> napi::Result<()> {
         let handle = graph.inner.clone();
-        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
-            Some(memory) => memory.clone(),
-            None => Arc::new(NoopSink),
-        };
+        let inner_sink = self.base_sink.clone();
         let learner = Arc::new(UsageLearner::new(handle.clone(), inner_sink));
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(learner);
@@ -1144,10 +1151,7 @@ impl SkillRegistry {
     /// resumes from what it already learned.
     #[napi]
     pub fn disable_adaptive_ranking(&mut self) -> napi::Result<()> {
-        let inner_sink: Arc<dyn core::TraceSink> = match &self.memory_sink {
-            Some(memory) => memory.clone(),
-            None => Arc::new(NoopSink),
-        };
+        let inner_sink = self.base_sink.clone();
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(inner_sink);
         registry.set_intent_graph(None);
