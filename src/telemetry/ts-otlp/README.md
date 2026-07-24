@@ -3,12 +3,13 @@
 The OTLP exporter surface for Ratel telemetry over the OTel-free [`@ratel-ai/telemetry`](../ts/README.md)
 vocabulary: turnkey `startTelemetry()` wiring for a greenfield app (with `init` retained as a
 back-compat alias), plus a composable `ratelSpanProcessor` for coexisting with a provider a partner
-already owns. `startTelemetry()` wires an OTLP `http/protobuf` exporter from `RATEL_URL` +
-`RATEL_API_KEY` (or explicit `{ endpoint, apiKey, headers }`) with a `service.name` resource and
-batch processor over the [OpenTelemetry JS SDK](https://opentelemetry.io/docs/languages/js/),
-registers it as the global tracer provider, and returns a handle with `forceFlush()` and
-`shutdown()`. Pass host processors via `spanProcessors` to fan the same span stream out to another
-backend (e.g. Langfuse) without ceding the provider. It is split from the vocabulary package
+already owns. `startTelemetry()` wires an OTLP `http/protobuf` exporter from
+`RATEL_OTLP_ENDPOINT` + `RATEL_API_KEY` (or explicit
+`{ endpoint, apiKey, headers }`) with a `service.name` resource and batch processor over the
+[OpenTelemetry JS SDK](https://opentelemetry.io/docs/languages/js/), registers it as the global
+tracer provider, and returns a handle with `forceFlush()` and `shutdown()`. Pass host processors
+via `spanProcessors` to fan the same span stream out to another backend (e.g. Langfuse) without
+ceding the provider. It is split from the vocabulary package
 (ADR-0007) so importing the `ratel.*` constants never pulls the OpenTelemetry SDK.
 
 ## Usage
@@ -18,7 +19,7 @@ import { trace } from "@opentelemetry/api";
 import { EXECUTE_TOOL, GEN_AI_OPERATION_NAME, GEN_AI_TOOL_NAME, Origin, RATEL_ORIGIN } from "@ratel-ai/telemetry";
 import { startTelemetry } from "@ratel-ai/telemetry-otlp";
 
-// Wire the exporter from RATEL_URL + RATEL_API_KEY once at startup.
+// Wire the exporter from RATEL_OTLP_ENDPOINT + RATEL_API_KEY once at startup.
 const telemetry = startTelemetry();
 
 // Emit a standard gen_ai `execute_tool` span enriched with the ratel.* overlay.
@@ -68,7 +69,7 @@ import { ratelSpanProcessor } from "@ratel-ai/telemetry-otlp";
 const provider = new NodeTracerProvider({
   spanProcessors: [
     new LangfuseSpanProcessor(),                                // Langfuse keeps every span
-    ratelSpanProcessor(),  // reads RATEL_URL + RATEL_API_KEY; Ratel takes gen_ai.*/ratel.* only
+    ratelSpanProcessor(),  // reads RATEL_OTLP_ENDPOINT + RATEL_API_KEY; Ratel takes gen_ai.*/ratel.* only
   ],
 });
 provider.register();

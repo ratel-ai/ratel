@@ -5,11 +5,10 @@ import {
   clearContentCapture,
   contentCaptureMode,
   DEFAULT_SERVICE_NAME,
-  ENDPOINT_ENV,
   OTLP_ENDPOINT_ENV,
   resolveOtlpConfig,
   setContentCapture,
-} from "./config.js";
+} from "./index.js";
 
 describe("resolveOtlpConfig", () => {
   it("uses RATEL_API_KEY as the apiKey fallback", () => {
@@ -30,10 +29,10 @@ describe("resolveOtlpConfig", () => {
     expect(cfg.headers.Authorization).toBe("Bearer explicit-secret");
   });
 
-  it("uses the apiKey form: endpoint from RATEL_URL, Bearer auth, default service name", () => {
+  it("uses the apiKey form: endpoint from RATEL_OTLP_ENDPOINT, Bearer auth, default service name", () => {
     const cfg = resolveOtlpConfig(
       { apiKey: "secret" },
-      { [ENDPOINT_ENV]: "https://collector.ratel.sh/v1/traces" },
+      { [OTLP_ENDPOINT_ENV]: "https://collector.ratel.sh/v1/traces" },
     );
     expect(cfg.url).toBe("https://collector.ratel.sh/v1/traces");
     expect(cfg.headers.Authorization).toBe("Bearer secret");
@@ -53,10 +52,10 @@ describe("resolveOtlpConfig", () => {
     expect(cfg.headers.Authorization).toBeUndefined();
   });
 
-  it("prefers an explicit endpoint over RATEL_URL", () => {
+  it("prefers an explicit endpoint over RATEL_OTLP_ENDPOINT", () => {
     const cfg = resolveOtlpConfig(
       { endpoint: "https://explicit/v1/traces", apiKey: "k" },
-      { [ENDPOINT_ENV]: "https://env/v1/traces" },
+      { [OTLP_ENDPOINT_ENV]: "https://env/v1/traces" },
     );
     expect(cfg.url).toBe("https://explicit/v1/traces");
     expect(cfg.headers.Authorization).toBe("Bearer k");
@@ -67,20 +66,14 @@ describe("resolveOtlpConfig", () => {
     expect(cfg.url).toBe("https://otlp/v1/traces");
   });
 
-  it("prefers RATEL_OTLP_ENDPOINT over the legacy RATEL_URL when both are set", () => {
-    const cfg = resolveOtlpConfig(
-      {},
-      { [OTLP_ENDPOINT_ENV]: "https://otlp/v1/traces", [ENDPOINT_ENV]: "https://legacy/v1/traces" },
+  it("does not use RATEL_URL as an endpoint", () => {
+    expect(() => resolveOtlpConfig({}, { RATEL_URL: "https://legacy.example/v1/traces" })).toThrow(
+      OTLP_ENDPOINT_ENV,
     );
-    expect(cfg.url).toBe("https://otlp/v1/traces");
   });
 
-  it("prefers an explicit endpoint over RATEL_OTLP_ENDPOINT", () => {
-    const cfg = resolveOtlpConfig(
-      { endpoint: "https://explicit/v1/traces" },
-      { [OTLP_ENDPOINT_ENV]: "https://otlp/v1/traces" },
-    );
-    expect(cfg.url).toBe("https://explicit/v1/traces");
+  it("rejects an empty RATEL_OTLP_ENDPOINT", () => {
+    expect(() => resolveOtlpConfig({}, { [OTLP_ENDPOINT_ENV]: "" })).toThrow(OTLP_ENDPOINT_ENV);
   });
 
   it("respects a custom service name", () => {
@@ -114,26 +107,29 @@ describe("resolveOtlpConfig", () => {
     expect(cfg.headers.Authorization).toBe("Api-Key abc");
   });
 
-  it("reads RATEL_API_KEY from the default process.env binding", () => {
+  it("reads RATEL_OTLP_ENDPOINT and RATEL_API_KEY from process.env", () => {
     // Exercises the default env parameter (not an injected env), the actual user-facing
-    // "set RATEL_API_KEY and call init()" path.
-    const savedUrl = process.env[ENDPOINT_ENV];
+    // "set the endpoint and API key, then call init()" path.
+    const savedEndpoint = process.env[OTLP_ENDPOINT_ENV];
     const savedKey = process.env[API_KEY_ENV];
-    process.env[ENDPOINT_ENV] = "https://collector.ratel.sh/v1/traces";
+    process.env[OTLP_ENDPOINT_ENV] = "https://collector.ratel.sh/v1/traces";
     process.env[API_KEY_ENV] = "process-env-secret";
     try {
-      expect(resolveOtlpConfig().headers.Authorization).toBe("Bearer process-env-secret");
+      const cfg = resolveOtlpConfig();
+      expect(cfg.url).toBe("https://collector.ratel.sh/v1/traces");
+      expect(cfg.headers.Authorization).toBe("Bearer process-env-secret");
     } finally {
-      if (savedUrl === undefined) delete process.env[ENDPOINT_ENV];
-      else process.env[ENDPOINT_ENV] = savedUrl;
+      if (savedEndpoint === undefined) delete process.env[OTLP_ENDPOINT_ENV];
+      else process.env[OTLP_ENDPOINT_ENV] = savedEndpoint;
       if (savedKey === undefined) delete process.env[API_KEY_ENV];
       else process.env[API_KEY_ENV] = savedKey;
     }
   });
 
-  it("throws when no endpoint, naming both the dedicated var and the legacy RATEL_URL fallback", () => {
-    expect(() => resolveOtlpConfig({ apiKey: "k" }, {})).toThrow(OTLP_ENDPOINT_ENV);
-    expect(() => resolveOtlpConfig({ apiKey: "k" }, {})).toThrow(ENDPOINT_ENV);
+  it("throws when no endpoint, naming only RATEL_OTLP_ENDPOINT", () => {
+    expect(() => resolveOtlpConfig({ apiKey: "k" }, {})).toThrow(
+      new RegExp(`${OTLP_ENDPOINT_ENV}(?![\\s\\S]*RATEL_URL)`),
+    );
   });
 });
 
