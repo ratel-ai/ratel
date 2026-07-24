@@ -232,6 +232,18 @@ impl PendingQuery {
 /// drives (same query, two learners) credit **one** observation between them,
 /// not one each. A `Mutex` so a search can arm it while holding only a read
 /// lock, mirroring [`PendingQuery`].
+///
+/// Identity is the **query text**, and there is one slot per graph — the same
+/// single-slot, best-effort posture as [`PendingQuery`]. This is exact for the
+/// fan-out it targets (one question, two catalogs, searches before invokes),
+/// but it cannot distinguish that from two *concurrent* sessions that ask the
+/// same text and each resolve a different catalog into the same cluster: those
+/// share the one slot and credit once, an under-count. The trade is deliberate
+/// — it removes the systematic over-count on every fanned-out question at the
+/// cost of a rare, order-of-magnitude-smaller concurrent edge, and it errs
+/// conservative (under-, not over-count, and support caps regardless). Making
+/// concurrent same-text sessions exact needs a per-turn correlation id threaded
+/// through the trace events, deferred as not worth the plumbing.
 #[derive(Debug, Default)]
 struct CreditSlot(Mutex<Option<(String, bool)>>);
 

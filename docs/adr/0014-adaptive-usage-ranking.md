@@ -63,7 +63,13 @@ a `label`, `terms`, `support`, and `tools` / `skills` edge maps.
   to three tool calls adds three edges but counts once: the agent used three capabilities
   to answer one question. Counting invokes let a single query reach full weight
   immediately, defeating the ramp — which is the normal shape of `search_capabilities`,
-  not an edge case.
+  not an edge case. This holds across catalogs too: `search_capabilities` fans one query
+  to the tool and skill catalogs, each with its own learner, so the credit that makes it
+  *one* observation lives on the shared graph, not per-learner (`CreditSlot`). That credit
+  is keyed by query text with a single slot, so it is exact for the fan-out but under-counts
+  two *concurrent* sessions that ask the same text and resolve different catalogs into one
+  cluster — a rare, conservative trade accepted over threading a per-turn correlation id
+  through the trace events; see `CreditSlot`.
 - **Clusters age out.** The arm weight is `W · min(1, support/3) · recency`, where recency is
   `1` for a grace period (90d) after a cluster's last use and then halves every half-life
   (90d), evaluated against the newest observed event — so a topic that falls out of use fades
