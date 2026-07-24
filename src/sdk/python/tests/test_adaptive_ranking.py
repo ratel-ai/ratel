@@ -296,6 +296,33 @@ async def test_skill_enable_adaptive_ranking_raises_the_typed_busy_error_mid_bui
 
 
 @pytest.mark.asyncio
+async def test_adaptive_ranking_status_exposes_the_model_detail() -> None:
+    # Parity with TS: the status is still a str (== / startswith work) but also
+    # carries which models a pause involves — otherwise only reachable via stderr.
+    catalog = await build_catalog()
+    catalog._registry._native = _FakeNative("paused: model mismatch")
+    s = catalog.adaptive_ranking_status
+    assert s == "paused: model mismatch"
+    assert s.startswith("paused")
+    assert s.built == "old-model"
+    assert s.active == "new-model"
+    assert s.dim_mismatch is False
+
+
+@pytest.mark.asyncio
+async def test_skill_adaptive_ranking_status_exposes_the_model_detail() -> None:
+    catalog = SkillCatalog()
+    await catalog.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    catalog._registry._native = _FakeNative("paused: model mismatch")
+    s = catalog.adaptive_ranking_status
+    assert s == "paused: model mismatch"
+    assert s.built == "old-model"
+    assert s.active == "new-model"
+
+
+@pytest.mark.asyncio
 async def test_one_graph_is_shared_between_tool_and_skill_catalogs() -> None:
     """One cluster, two edge maps.
 

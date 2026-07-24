@@ -21,6 +21,7 @@ from ._native import SkillRegistry as _NativeSkillRegistry
 from .catalog import (
     _REGISTRY_BUSY,
     _UNAWAITED_REGISTER,
+    AdaptiveRankingStatus,
     EmbeddingSpec,
     SearchMethod,
     SearchOrigin,
@@ -361,9 +362,10 @@ class SkillRegistry:
         self._maybe_warn_model_mismatch()
 
     @property
-    def adaptive_ranking_status(self) -> str:
-        """Adaptive-ranking status: active, inactive, unknown, or paused."""
-        return self._native.adaptive_ranking_status()[0]
+    def adaptive_ranking_status(self) -> AdaptiveRankingStatus:
+        """Adaptive-ranking status; a str that also carries a pause's model detail."""
+        status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
+        return AdaptiveRankingStatus(status, built, active, dim_mismatch)
 
     def _maybe_warn_model_mismatch(self) -> None:
         if self._adaptive_warned or not self._warn_on_model_mismatch:
@@ -610,7 +612,7 @@ class SkillCatalog:
         await self._registry.rebuild_intent_graph()
 
     @property
-    def adaptive_ranking_status(self) -> str:
+    def adaptive_ranking_status(self) -> AdaptiveRankingStatus:
         """Adaptive-ranking status: active, inactive, unknown, or paused."""
         return self._registry.adaptive_ranking_status
 

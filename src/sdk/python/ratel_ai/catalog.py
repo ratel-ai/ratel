@@ -215,6 +215,36 @@ class TraceSinkConfig:
     path: str | None = None
 
 
+class AdaptiveRankingStatus(str):
+    """The adaptive-ranking status, enriched with the models a pause involves.
+
+    A plain ``str`` — ``== "active"`` and ``.startswith("paused")`` work as before
+    — that also exposes, when the arm is paused by a model change, the fingerprint
+    the graph was ``built`` with, the currently ``active`` model, and whether it is
+    a ``dim_mismatch`` (different width) vs a same-width different model. All three
+    are ``None`` unless the status is a ``paused: ...``. Mirrors the object the TS
+    SDK returns, so the detail is reachable without parsing stderr.
+    """
+
+    built: str | None
+    active: str | None
+    dim_mismatch: bool | None
+
+    def __new__(
+        cls,
+        status: str,
+        built: str | None = None,
+        active: str | None = None,
+        dim_mismatch: bool | None = None,
+    ) -> AdaptiveRankingStatus:
+        """Build a status string carrying the model detail behind a pause."""
+        self = super().__new__(cls, status)
+        self.built = built
+        self.active = active
+        self.dim_mismatch = dim_mismatch
+        return self
+
+
 class ToolRegistry:
     """Typed Python facade over the private native tool registry."""
 
@@ -536,9 +566,10 @@ class ToolRegistry:
         self._maybe_warn_model_mismatch()
 
     @property
-    def adaptive_ranking_status(self) -> str:
-        """Adaptive-ranking status string; gate on this instead of stderr."""
-        return self._native.adaptive_ranking_status()[0]
+    def adaptive_ranking_status(self) -> AdaptiveRankingStatus:
+        """Adaptive-ranking status; a str that also carries a pause's model detail."""
+        status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
+        return AdaptiveRankingStatus(status, built, active, dim_mismatch)
 
     def _maybe_warn_model_mismatch(self) -> None:
         if self._adaptive_warned or not self._warn_on_model_mismatch:
@@ -836,7 +867,7 @@ class ToolCatalog:
         await self._registry.rebuild_intent_graph()
 
     @property
-    def adaptive_ranking_status(self) -> str:
+    def adaptive_ranking_status(self) -> AdaptiveRankingStatus:
         """Adaptive-ranking status: active, inactive, unknown, or paused."""
         return self._registry.adaptive_ranking_status
 
