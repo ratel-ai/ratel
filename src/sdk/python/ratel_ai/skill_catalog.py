@@ -805,11 +805,14 @@ class SkillCatalog:
         top_k: int,
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
+        turn_id: str | None = None,
     ) -> list[SkillHit]:
         """Rank registered skills synchronously with BM25.
 
         The skill twin of `ToolCatalog.search`: a dense resolved method raises
-        immediately with guidance to use `search_async`.
+        immediately with guidance to use `search_async`. `turn_id` correlates
+        this search with the invoke(s) that follow it for adaptive ranking's
+        pairing (ADR-0014); see `ToolCatalog.search`.
 
         Returns:
             Up to `top_k` `SkillHit`s, best first.
@@ -828,6 +831,7 @@ class SkillCatalog:
             top_k,
             origin,
             lambda projection: self._registry.search_with_origin(query, top_k, origin, projection),
+            turn_id,
         )
 
     async def search_async(
@@ -836,6 +840,7 @@ class SkillCatalog:
         top_k: int,
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
+        turn_id: str | None = None,
     ) -> list[SkillHit]:
         """Rank skills asynchronously with BM25, semantic, or hybrid retrieval.
 
@@ -850,6 +855,7 @@ class SkillCatalog:
             lambda projection: self._registry.search_async(
                 query, top_k, origin, resolved_method, projection
             ),
+            turn_id,
         )
 
     def has(self, skill_id: str) -> bool:
@@ -962,7 +968,7 @@ class SkillCatalog:
         """Drain captured trace envelopes; `[]` unless the sink is "memory"."""
         return self._registry.drain_trace_events()
 
-    def invoke(self, skill_id: str) -> str:
+    def invoke(self, skill_id: str, turn_id: str | None = None) -> str:
         """Return a skill's body for dispatch, recording a `skill_invoke` event.
 
         Synchronous, unlike `ToolCatalog.invoke` — the body is already in
@@ -970,6 +976,9 @@ class SkillCatalog:
 
         Args:
             skill_id: id of a registered skill.
+            turn_id: correlates this invoke with the search that found
+                `skill_id`, for adaptive ranking's pairing (ADR-0014). See
+                `ToolCatalog.invoke`.
 
         Returns:
             The skill's body (Markdown), verbatim as registered.
@@ -995,4 +1004,4 @@ class SkillCatalog:
             )
             return body
 
-        return trace_skill_load(skill_id, _run)
+        return trace_skill_load(skill_id, _run, turn_id)

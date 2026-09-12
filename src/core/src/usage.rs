@@ -26,7 +26,7 @@
 //! consumer. An edge weight is a plain count of confirmed invocations: it orders
 //! the arm and nothing more, since RRF then fuses on rank position.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -89,6 +89,72 @@ const EVICTION_FLOOR: f32 = 0.01;
 /// memory; the centroid is a running mean and is unaffected by dropping members.
 const MEMBER_CAP: usize = 50;
 
+/// Cap on concurrently-pending turn keys held by [`PendingQuery`] / [`CreditSlot`]
+/// and by [`crate::UsageLearner`]'s own pending map ([`BoundedMap`] is shared
+/// between them). Bounds memory from turns that search but never invoke;
+/// eviction is FIFO by first-touch, the same unsophisticated posture
+/// [`MEMBER_CAP`] already uses rather than a wall-clock TTL.
+pub(crate) const PENDING_CAP: usize = 256;
+
+/// A small map bounded to [`PENDING_CAP`] entries, evicting the
+/// longest-pending key (FIFO by first insertion) once full. Shared shape
+/// behind [`PendingQuery`] and [`CreditSlot`] here, and reused as-is by
+/// [`crate::UsageLearner`]'s own turn-keyed pending map — the three differ
+/// only in what they store per key, which `BoundedMap<V>` doesn't care about.
+///
+/// Keyed by `Option<String>` rather than `String` so "never supplied a
+/// `turn_id`" (`None`, the single legacy slot every such caller shares,
+/// reproducing the pre-`turn_id` cross-session collisions as ADR-0014's
+/// documented, accepted cost of opting out) is a structurally distinct case
+/// from "supplied some string" — including an empty one. A sentinel *string*
+/// for "no turn" is a value a caller's `turn_id` can also spell (an empty
+/// string is not exotic: `session.id ?? ""`, an unset env var), which would
+/// silently merge that caller's turn with every opted-out caller's shared
+/// slot; `None` has no such collision because it isn't a `String` at all.
+#[derive(Debug)]
+pub(crate) struct BoundedMap<V> {
+    slots: HashMap<Option<String>, V>,
+    order: VecDeque<Option<String>>,
+}
+
+// Written by hand rather than derived: `#[derive(Default)]` would add a spurious
+// `V: Default` bound (neither field actually needs one — an empty map holds no
+// `V` yet), which would rule out `BoundedMap<Pending>` since `Pending` has no
+// reason to implement `Default` itself.
+impl<V> Default for BoundedMap<V> {
+    fn default() -> Self {
+        Self {
+            slots: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+}
+
+impl<V> BoundedMap<V> {
+    pub(crate) fn insert(&mut self, key: Option<&str>, value: V) {
+        let key = key.map(str::to_string);
+        if !self.slots.contains_key(&key) {
+            self.order.push_back(key.clone());
+            while self.slots.len() >= PENDING_CAP {
+                if let Some(oldest) = self.order.pop_front() {
+                    self.slots.remove(&oldest);
+                } else {
+                    break;
+                }
+            }
+        }
+        self.slots.insert(key, value);
+    }
+
+    pub(crate) fn get(&self, key: Option<&str>) -> Option<&V> {
+        self.slots.get(&key.map(str::to_string))
+    }
+
+    pub(crate) fn get_mut(&mut self, key: Option<&str>) -> Option<&mut V> {
+        self.slots.get_mut(&key.map(str::to_string))
+    }
+}
+
 /// Recency weight for a cluster last touched at `last_ts`, evaluated against the
 /// graph's newest observed event `now_ts`. `1.0` within the grace period, then
 /// `2^(−(Δdays − grace)/half_life)`.
@@ -119,6 +185,10 @@ pub(crate) fn usage_weight(support: u32) -> f32 {
 /// search was acted on", the other is "this evidence came from a seeding pass".
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Observation<'a> {
+    /// The pending-state key this observation's query was stashed under — see
+    /// [`PendingQuery`]/[`CreditSlot`]. `None` for callers that never supply a
+    /// `turn_id`, sharing the one legacy slot every such caller shares.
+    pub turn_key: Option<&'a str>,
     /// The query text the invocation is attributed to — the cluster match key.
     pub query: &'a str,
     /// Which edge map the invoked capability belongs to.
@@ -265,6 +335,7 @@ impl IntentGraph {
         first_confirmation: bool,
     ) {
         self.observe(Observation {
+            turn_key: None,
             query,
             kind,
             capability_id,
@@ -337,8 +408,8 @@ impl std::error::Error for IntentGraphError {}
 /// The schema version this build reads.
 const GRAPH_VERSION: u32 = 1;
 
-/// The most recent query and its embedding, stashed by the search path so the
-/// learner can grow a real centroid.
+/// The most recent query and its embedding per pending turn, stashed by the
+/// search path so the learner can grow a real centroid.
 ///
 /// Transient scratch, **not part of the graph's value**: skipped on the wire,
 /// empty after a clone, and ignored by equality — two graphs that differ only
@@ -346,7 +417,7 @@ const GRAPH_VERSION: u32 = 1;
 /// and the learner share nothing else, and it is a `Mutex` so the search path
 /// can write it while holding only a read lock.
 #[derive(Debug, Default)]
-struct PendingQuery(Mutex<Option<(String, Vec<f32>, String)>>);
+struct PendingQuery(Mutex<BoundedMap<(String, Vec<f32>, String)>>);
 
 impl Clone for PendingQuery {
     /// A clone starts empty: a half-finished search is not worth copying.
@@ -362,9 +433,12 @@ impl PartialEq for PendingQuery {
 }
 
 impl PendingQuery {
-    fn set(&self, query: &str, vector: &[f32], fingerprint: &str) {
-        if let Ok(mut slot) = self.0.lock() {
-            *slot = Some((query.to_string(), vector.to_vec(), fingerprint.to_string()));
+    fn set(&self, turn_key: Option<&str>, query: &str, vector: &[f32], fingerprint: &str) {
+        if let Ok(mut slots) = self.0.lock() {
+            slots.insert(
+                turn_key,
+                (query.to_string(), vector.to_vec(), fingerprint.to_string()),
+            );
         }
     }
 
@@ -372,39 +446,37 @@ impl PendingQuery {
     /// **only if it belongs to `query`**. Reads without clearing: several invokes
     /// may follow one search, and each needs to see it.
     ///
-    /// Sessions share a graph, so a concurrent search can overwrite the slot
-    /// between one session's search and its invoke. Keying by the query text
-    /// means a clobbered slot degrades to lexical clustering rather than
-    /// attaching one session's embedding to another's question.
-    fn vector_for(&self, query: &str) -> Option<(Vec<f32>, String)> {
-        let slot = self.0.lock().ok()?;
-        match slot.as_ref() {
+    /// Keyed by `turn_key` first, so concurrent turns with distinct keys never
+    /// clobber each other. Callers that share `None` (never opted in) keep the
+    /// pre-`turn_id` behavior: a concurrent search can overwrite that one slot,
+    /// and the query-text check below degrades the clobbered read to lexical
+    /// clustering rather than attaching another turn's embedding.
+    fn vector_for(&self, turn_key: Option<&str>, query: &str) -> Option<(Vec<f32>, String)> {
+        let slots = self.0.lock().ok()?;
+        match slots.get(turn_key) {
             Some((q, v, fp)) if q == query => Some((v.clone(), fp.clone())),
             _ => None,
         }
     }
 }
 
-/// Which query is currently owed a support credit, and whether an invoke has
-/// already claimed it. Lives on the shared graph — not the learner — so the
-/// per-registry tool and skill learners that a `search_capabilities` fan-out
-/// drives (same query, two learners) credit **one** observation between them,
-/// not one each. A `Mutex` so a search can arm it while holding only a read
-/// lock, mirroring [`PendingQuery`].
+/// Which query is currently owed a support credit per pending turn, and
+/// whether an invoke has already claimed it. Lives on the shared graph — not
+/// the learner — so the per-registry tool and skill learners that a
+/// `search_capabilities` fan-out drives (same query, two learners) credit
+/// **one** observation between them, not one each. A `Mutex` so a search can
+/// arm it while holding only a read lock, mirroring [`PendingQuery`].
 ///
-/// Identity is the **query text**, and there is one slot per graph — the same
-/// single-slot, best-effort posture as [`PendingQuery`]. This is exact for the
-/// fan-out it targets (one question, two catalogs, searches before invokes),
-/// but it cannot distinguish that from two *concurrent* sessions that ask the
-/// same text and each resolve a different catalog into the same cluster: those
-/// share the one slot and credit once, an under-count. The trade is deliberate
-/// — it removes the systematic over-count on every fanned-out question at the
-/// cost of a rare, order-of-magnitude-smaller concurrent edge, and it errs
-/// conservative (under-, not over-count, and support caps regardless). Making
-/// concurrent same-text sessions exact needs a per-turn correlation id threaded
-/// through the trace events, deferred as not worth the plumbing.
+/// Keyed by `turn_key` first, query text second. A caller that supplies a
+/// `turn_id` gets an exact credit even when a concurrent turn asks identical
+/// text — the "per-turn correlation id threaded through the trace events"
+/// this graph's `CreditSlot` previously deferred. Callers that share `None`
+/// (never opted in) keep the pre-`turn_id` posture: one shared slot, exact for
+/// the intra-turn tool+skill fan-out it targets, but unable to distinguish
+/// that from two concurrent same-text sessions — which then share the slot
+/// and credit once, an accepted under-count for opting out.
 #[derive(Debug, Default)]
-struct CreditSlot(Mutex<Option<(String, bool)>>);
+struct CreditSlot(Mutex<BoundedMap<(String, bool)>>);
 
 impl Clone for CreditSlot {
     fn clone(&self) -> Self {
@@ -419,24 +491,26 @@ impl PartialEq for CreditSlot {
 }
 
 impl CreditSlot {
-    /// Arm `query` for a support credit. Called on every search; re-arming with
-    /// the same text before any invoke is idempotent, so a fanned-out capability
-    /// search still yields a single credit.
-    fn arm(&self, query: &str) {
-        if let Ok(mut slot) = self.0.lock() {
-            *slot = Some((query.to_string(), false));
+    /// Arm `query` for a support credit under `turn_key`. Called on every
+    /// search; re-arming the same key with the same text before any invoke is
+    /// idempotent, so a fanned-out capability search still yields a single
+    /// credit.
+    fn arm(&self, turn_key: Option<&str>, query: &str) {
+        if let Ok(mut slots) = self.0.lock() {
+            slots.insert(turn_key, (query.to_string(), false));
         }
     }
 
-    /// `true` for the first invoke of an armed `query` — and marks it claimed so
-    /// later invokes of the same question (a tool *and* a skill) do not re-credit.
-    /// Keyed by query text: a slot clobbered by another session's search reads as
-    /// "not first" rather than crediting the wrong question.
-    fn claim(&self, query: &str) -> bool {
-        let Ok(mut slot) = self.0.lock() else {
+    /// `true` for the first invoke of an armed `(turn_key, query)` — and marks
+    /// it claimed so later invokes of the same question (a tool *and* a skill)
+    /// do not re-credit. A slot clobbered by another turn sharing `turn_key`
+    /// (only possible under `None`) reads as "not first" rather than crediting
+    /// the wrong question.
+    fn claim(&self, turn_key: Option<&str>, query: &str) -> bool {
+        let Ok(mut slots) = self.0.lock() else {
             return false;
         };
-        match slot.as_mut() {
+        match slots.get_mut(turn_key) {
             Some((q, credited)) if q == query && !*credited => {
                 *credited = true;
                 true
@@ -893,22 +967,28 @@ impl IntentGraph {
     /// already embedded the query for its own ranking — so this costs nothing
     /// beyond a copy. Takes `&self`: the slot is a `Mutex`, so the search path
     /// never needs the write lock.
-    pub(crate) fn note_query_vector(&self, query: &str, vector: &[f32], fingerprint: &str) {
-        self.pending.set(query, vector, fingerprint);
+    pub(crate) fn note_query_vector(
+        &self,
+        turn_key: Option<&str>,
+        query: &str,
+        vector: &[f32],
+        fingerprint: &str,
+    ) {
+        self.pending.set(turn_key, query, vector, fingerprint);
     }
 
     /// Arm `query` for a support credit on the shared credit slot — called by the
     /// learner on every search. See [`CreditSlot`] for why this lives on the
     /// graph rather than the learner.
-    pub(crate) fn arm_credit(&self, query: &str) {
-        self.credit.arm(query);
+    pub(crate) fn arm_credit(&self, turn_key: Option<&str>, query: &str) {
+        self.credit.arm(turn_key, query);
     }
 
     /// Whether this invoke is the first confirmation of `query` across every
     /// learner sharing the graph. Marks the credit claimed, so a tool invoke and
     /// a skill invoke for one fanned-out question yield a single support bump.
-    pub(crate) fn claim_credit(&self, query: &str) -> bool {
-        self.credit.claim(query)
+    pub(crate) fn claim_credit(&self, turn_key: Option<&str>, query: &str) -> bool {
+        self.credit.claim(turn_key, query)
     }
 
     /// Fold one confirmed observation — a query, and the capability invoked
@@ -934,6 +1014,7 @@ impl IntentGraph {
     /// the pending search — see [`crate::UsageLearner`].
     pub(crate) fn observe(&mut self, obs: Observation<'_>) {
         let Observation {
+            turn_key,
             query,
             kind,
             capability_id,
@@ -943,7 +1024,7 @@ impl IntentGraph {
         } = obs;
         // A query vector is available only when the search path was
         // semantic/hybrid AND the slot still belongs to this query.
-        let stashed = self.pending.vector_for(query);
+        let stashed = self.pending.vector_for(turn_key, query);
         if stashed.is_none() && tokenize(query).is_empty() {
             return; // no words to cluster on and no embedding either
         }
@@ -1742,6 +1823,7 @@ mod tests {
     fn a_seeded_observation_records_provenance_beside_support() {
         let mut g = IntentGraph::empty();
         g.observe(Observation {
+            turn_key: None,
             query: "why is the build broken",
             kind: Capability::Tool,
             capability_id: "gh_run_list",
@@ -1769,6 +1851,7 @@ mod tests {
         // fanned-out baseline turn.
         let mut g = IntentGraph::empty();
         let obs = |id, first| Observation {
+            turn_key: None,
             query: "why is the build broken",
             kind: Capability::Tool,
             capability_id: id,
@@ -1791,6 +1874,7 @@ mod tests {
         // came from the baseline.
         let mut g = IntentGraph::empty();
         g.observe(Observation {
+            turn_key: None,
             query: "why is the build broken",
             kind: Capability::Tool,
             capability_id: "gh_run_list",
@@ -1827,6 +1911,7 @@ mod tests {
     fn seeded_support_round_trips_through_the_wire_form() {
         let mut g = IntentGraph::empty();
         g.observe(Observation {
+            turn_key: None,
             query: "why is the build broken",
             kind: Capability::Tool,
             capability_id: "t",
@@ -2439,9 +2524,9 @@ mod tests {
         let v2 = [0.0f32, 1.0, 0.0];
         let build = |extra: usize| {
             let mut g = IntentGraph::empty();
-            g.note_query_vector("build broken", &v1, "m");
+            g.note_query_vector(None, "build broken", &v1, "m");
             g.observe_live("build broken", Capability::Tool, "a", T0, true);
-            g.note_query_vector("build broken again", &v2, "m");
+            g.note_query_vector(None, "build broken again", &v2, "m");
             g.observe_live("build broken again", Capability::Tool, "b", T0, true);
             for i in 0..extra {
                 g.observe_live(
@@ -2757,7 +2842,7 @@ mod tests {
     #[test]
     fn observe_stamps_the_model_on_the_first_centroid() {
         let mut g = IntentGraph::empty();
-        g.note_query_vector("build broken", &[1.0, 0.0, 0.0], "model-a");
+        g.note_query_vector(None, "build broken", &[1.0, 0.0, 0.0], "model-a");
         g.observe_live("build broken", Capability::Tool, "t", T0, true);
         assert_eq!(g.model.as_deref(), Some("model-a"));
     }
@@ -2768,11 +2853,11 @@ mod tests {
         // Member/support must still update, but the centroid must NOT blend the
         // two vector spaces.
         let mut g = IntentGraph::empty();
-        g.note_query_vector("build broken", &[1.0, 0.0, 0.0], "model-a");
+        g.note_query_vector(None, "build broken", &[1.0, 0.0, 0.0], "model-a");
         g.observe_live("build broken", Capability::Tool, "t", T0, true);
         let frozen = g.intents[0].centroid.clone();
 
-        g.note_query_vector("build broken again", &[0.0, 1.0, 0.0], "model-b");
+        g.note_query_vector(None, "build broken again", &[0.0, 1.0, 0.0], "model-b");
         g.observe_live("build broken again", Capability::Tool, "t", T0, true);
 
         assert_eq!(
@@ -2787,7 +2872,7 @@ mod tests {
     #[test]
     fn rebuild_centroids_re_embeds_members_and_restamps() {
         let mut g = IntentGraph::empty();
-        g.note_query_vector("build broken", &[1.0, 0.0, 0.0], "model-a");
+        g.note_query_vector(None, "build broken", &[1.0, 0.0, 0.0], "model-a");
         g.observe_live("build broken", Capability::Tool, "gh_run_list", T0, true);
         let rev_before = g.rev();
 
@@ -3012,5 +3097,142 @@ mod tests {
             .flat_map(|m| tokenize(m))
             .collect();
         assert_eq!(&g.intents[0].bag, &fresh);
+    }
+
+    // ---- turn_id: PendingQuery / CreditSlot keying -------------------------
+
+    #[test]
+    fn two_concurrent_sessions_same_query_text_each_credit_once_with_turn_ids() {
+        // The exact case CreditSlot's doc names as under-counting without
+        // turn_id: two concurrent sessions ask identical text. Each supplies
+        // its own turn_id, so each earns its own support credit rather than
+        // sharing one slot.
+        let mut g = IntentGraph::empty();
+        g.arm_credit(Some("session-a"), "why is the build broken");
+        g.arm_credit(Some("session-b"), "why is the build broken");
+
+        let first_a = g.claim_credit(Some("session-a"), "why is the build broken");
+        let first_b = g.claim_credit(Some("session-b"), "why is the build broken");
+        assert!(first_a, "session A's invoke is its own first confirmation");
+        assert!(first_b, "session B's invoke is its own first confirmation");
+
+        g.observe(Observation {
+            turn_key: Some("session-a"),
+            query: "why is the build broken",
+            kind: Capability::Tool,
+            capability_id: "gh_run_list",
+            ts_ms: T0,
+            first_confirmation: first_a,
+            seeded: false,
+        });
+        g.observe(Observation {
+            turn_key: Some("session-b"),
+            query: "why is the build broken",
+            kind: Capability::Tool,
+            capability_id: "gh_run_list",
+            ts_ms: T0,
+            first_confirmation: first_b,
+            seeded: false,
+        });
+
+        assert_eq!(
+            g.intents[0].support, 2,
+            "two concurrent turns, two credited observations"
+        );
+    }
+
+    #[test]
+    fn an_explicit_empty_turn_id_does_not_collide_with_a_caller_who_never_opted_in() {
+        // The exact bug review comment #4 flagged: a sentinel *string* for "no
+        // turn" is a value a caller's turn_id can also spell (an empty string
+        // is not exotic: `session.id ?? ""`, an unset env var). Caller A
+        // explicitly supplies Some(""); caller B never opts in at all
+        // (None). They must not share a slot — Some("") is Option-distinct
+        // from None, not string-equal to whatever sentinel represents it.
+        let mut g = IntentGraph::empty();
+        g.arm_credit(Some(""), "rotate the signing key");
+        g.arm_credit(None, "delete a stale branch");
+
+        let first_a = g.claim_credit(Some(""), "rotate the signing key");
+        let first_b = g.claim_credit(None, "delete a stale branch");
+        assert!(first_a, "caller A's invoke is its own first confirmation");
+        assert!(first_b, "caller B's invoke is its own first confirmation");
+
+        g.observe(Observation {
+            turn_key: Some(""),
+            query: "rotate the signing key",
+            kind: Capability::Tool,
+            capability_id: "vault_rotate",
+            ts_ms: T0,
+            first_confirmation: first_a,
+            seeded: false,
+        });
+        g.observe(Observation {
+            turn_key: None,
+            query: "delete a stale branch",
+            kind: Capability::Tool,
+            capability_id: "git_branch_delete",
+            ts_ms: T0,
+            first_confirmation: first_b,
+            seeded: false,
+        });
+
+        assert_eq!(g.len(), 2, "two distinct questions, two clusters");
+        let a = g
+            .intents
+            .iter()
+            .find(|i| i.members.contains(&"rotate the signing key".to_string()))
+            .expect("caller A's query should have its own cluster");
+        assert_eq!(
+            a.tools.keys().collect::<Vec<_>>(),
+            vec!["vault_rotate"],
+            "caller A's (Some(\"\")) invoke must pair with caller A's search, not B's"
+        );
+        let b = g
+            .intents
+            .iter()
+            .find(|i| i.members.contains(&"delete a stale branch".to_string()))
+            .expect("caller B's query should have its own cluster");
+        assert_eq!(
+            b.tools.keys().collect::<Vec<_>>(),
+            vec!["git_branch_delete"],
+            "caller B's (None) invoke must pair with caller B's search, not A's"
+        );
+    }
+
+    #[test]
+    fn credit_slot_keyed_by_turn_id_still_dedupes_one_fanned_out_question() {
+        // Same turn_id, tool search + skill search fan-out (both land before
+        // either invoke): still credits once, same as the pre-turn_id
+        // behavior for one caller's own fan-out.
+        let g = IntentGraph::empty();
+        g.arm_credit(Some("turn-1"), "why is the build broken");
+        g.arm_credit(Some("turn-1"), "why is the build broken"); // re-arm, idempotent
+
+        let first = g.claim_credit(Some("turn-1"), "why is the build broken");
+        let second = g.claim_credit(Some("turn-1"), "why is the build broken");
+        assert!(first, "the first invoke claims the credit");
+        assert!(
+            !second,
+            "a later invoke of the same turn does not re-credit"
+        );
+    }
+
+    #[test]
+    fn pending_query_and_credit_slot_evict_oldest_past_cap() {
+        let g = IntentGraph::empty();
+        for i in 0..PENDING_CAP + 10 {
+            let turn_key = format!("turn-{i}");
+            g.note_query_vector(Some(&turn_key), "some query", &[1.0, 0.0, 0.0], "m");
+            g.arm_credit(Some(&turn_key), "some query");
+        }
+        // The oldest turn was evicted from both maps.
+        assert!(g.pending.vector_for(Some("turn-0"), "some query").is_none());
+        assert!(!g.claim_credit(Some("turn-0"), "some query"));
+
+        // A turn within the cap window is still present in both.
+        let last = format!("turn-{}", PENDING_CAP + 9);
+        assert!(g.pending.vector_for(Some(&last), "some query").is_some());
+        assert!(g.claim_credit(Some(&last), "some query"));
     }
 }

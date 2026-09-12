@@ -412,7 +412,12 @@ impl ToolRegistry {
     /// Emits [`TraceEvent::UsageBoost`] on hit *and* miss — but only when a
     /// graph is attached, so a registry without one is silent and behaves
     /// exactly as before.
-    fn usage_arm(&self, query: &str, query_vec: Option<&[f32]>) -> Option<UsageArm> {
+    fn usage_arm(
+        &self,
+        turn_key: Option<&str>,
+        query: &str,
+        query_vec: Option<&[f32]>,
+    ) -> Option<UsageArm> {
         let graph = self.graph.as_ref()?;
         // The model that embedded this query (semantic/hybrid only). Compared
         // against the graph's model so a swap pauses the arm instead of cosine-ing
@@ -436,7 +441,7 @@ impl ToolRegistry {
                 // events, which carry text and not vectors, so this is how a
                 // locally-grown cluster gets a real centroid.
                 if let (Some(v), Some(fp)) = (query_vec, &fingerprint) {
-                    guard.note_query_vector(query, v, fp);
+                    guard.note_query_vector(turn_key, query, v, fp);
                 }
                 let known = |id: &str| self.tools.contains_key(id);
                 // The graph picks the match tier from what it carries; a lexically
@@ -793,8 +798,9 @@ impl ToolRegistry {
         context: TraceEventContext,
     ) -> Vec<SearchHit> {
         let started = Instant::now();
+        let turn_key = context.turn_id.as_deref();
         let t = Instant::now();
-        let arm = self.usage_arm(query, None);
+        let arm = self.usage_arm(turn_key, query, None);
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let Some(arm) = arm else {
@@ -878,7 +884,8 @@ impl ToolRegistry {
 
         // Reuses the vector the dense arm just embedded — no second inference.
         let t = Instant::now();
-        let arm = self.usage_arm(query, Some(&query_vec));
+        let turn_key = context.turn_id.as_deref();
+        let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let Some(arm) = arm else {
@@ -972,7 +979,8 @@ impl ToolRegistry {
         // 3. Usage (ADR-0014), matched on the vector the dense arm already
         //    embedded. Absent unless a graph is attached and the query matches.
         let t = Instant::now();
-        let arm = self.usage_arm(query, Some(&query_vec));
+        let turn_key = context.turn_id.as_deref();
+        let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
         // 4. RRF fusion → final top_k.
@@ -1795,9 +1803,10 @@ mod tests {
         // Keying it by query text means the mismatch degrades to lexical
         // clustering rather than attaching the wrong embedding to a question.
         let graph = IntentGraph::empty();
-        graph.note_query_vector("some other query", &[1.0, 0.0, 0.0], "m");
+        graph.note_query_vector(None, "some other query", &[1.0, 0.0, 0.0], "m");
         let mut graph = graph;
         graph.observe(crate::usage::Observation {
+            turn_key: None,
             query: "delete a path",
             kind: Capability::Tool,
             capability_id: "delete_file",
@@ -1828,6 +1837,7 @@ mod tests {
             end_user_id: None,
             trace_id: None,
             span_id: None,
+            turn_id: None,
             event,
         }
     }

@@ -87,6 +87,7 @@ impl EnvelopeFactory {
             end_user_id: context.end_user_id,
             trace_id: context.trace_id,
             span_id: context.span_id,
+            turn_id: context.turn_id,
             event,
         }
     }

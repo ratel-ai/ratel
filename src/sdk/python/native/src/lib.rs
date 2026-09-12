@@ -152,6 +152,7 @@ fn trace_event_context(context: Option<&Bound<'_, PyAny>>) -> PyResult<core::Tra
         end_user_id: string("end_user_id"),
         trace_id: string("trace_id"),
         span_id: string("span_id"),
+        turn_id: string("turn_id"),
     })
 }
 

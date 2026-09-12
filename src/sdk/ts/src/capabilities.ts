@@ -290,7 +290,7 @@ export function searchCapabilitiesTool(
       },
       required: ["tools", "skills"],
     },
-    execute: async (input) => {
+    execute: async (input, _context, turnId) => {
       const { query, topKTools, topKSkills } = input as {
         query: string;
         topKTools?: number;
@@ -302,6 +302,7 @@ export function searchCapabilitiesTool(
         skillCatalog,
         origin: "agent",
         upstreamServers: upstreams,
+        turnId,
       });
     },
   };
@@ -323,6 +324,13 @@ export interface CapabilitiesSearchOptions {
   origin?: SearchOrigin;
   /** Upstream-server metadata attached to the matching result groups. */
   upstreamServers?: readonly UpstreamServerInfo[];
+  /**
+   * Correlates this search with the invoke(s) that confirm it, for
+   * adaptive-ranking pairing (ADR-0014). Pass the same id to
+   * {@link invokeToolTool}'s `execute` when multiple concurrent sessions
+   * share this catalog's graph.
+   */
+  turnId?: string;
 }
 
 /**
@@ -350,9 +358,10 @@ export async function runCapabilitiesSearch(
   const origin = opts.origin ?? "agent";
   const upstreamByName = new Map((opts.upstreamServers ?? []).map((u) => [u.name, u]));
   const skillCatalog = opts.skillCatalog;
+  const turnId = opts.turnId;
   const startedAt = Date.now();
 
-  const toolHits = await toolCatalog.searchAsync(query, kTools, origin);
+  const toolHits = await toolCatalog.searchAsync(query, kTools, origin, undefined, turnId);
   toolCatalog.recordEvent({
     type: "gateway_search",
     query,
@@ -402,7 +411,7 @@ export async function runCapabilitiesSearch(
   // budget → never starved by tools). SkillCatalog.search emits its own
   // skill_search trace for the funnel.
   const skills: CapabilitySkillHit[] = skillCatalog
-    ? (await skillCatalog.searchAsync(query, kSkills, origin)).map((h) => ({
+    ? (await skillCatalog.searchAsync(query, kSkills, origin, undefined, turnId)).map((h) => ({
         skillId: h.skillId,
         score: h.score,
         description: compactDescription(skillCatalog.get(h.skillId)?.description ?? ""),
@@ -476,7 +485,9 @@ export function isInvokeToolError(value: unknown): value is InvokeToolError {
  * A call with `args` missing (or `null`) is tolerated by treating the
  * remaining top-level keys as the arguments. The capability executor's optional
  * opaque context is forwarded unchanged to the selected catalog executor; the
- * core never reads or records it. Outcomes are recorded as
+ * core never reads or records it. A `turnId` third argument correlates this
+ * invoke with the search that armed it (see {@link searchCapabilitiesTool}) —
+ * see {@link CapabilitiesSearchOptions.turnId}. Outcomes are recorded as
  * `gateway_invoke` / `gateway_error` events on the local trace stream.
  *
  * @param catalog - Catalog whose tools this executes.
@@ -514,7 +525,7 @@ export function invokeToolTool(
     },
     outputSchema: { type: "object" },
     validateInput: (input) => validateInvokeInput(catalog, input, prevalidatedInputs),
-    execute: (input, context) => {
+    execute: (input, context, turnId) => {
       const inputObj = input as Record<string, unknown>;
       const toolId = inputObj.toolId as string;
       if (!catalog.has(toolId)) {
@@ -554,8 +565,8 @@ export function invokeToolTool(
       try {
         return observeGatewayResult(
           prevalidated
-            ? catalog.invokeValidatedRaw(toolId, args, context)
-            : catalog.invokeRaw(toolId, args as Record<string, unknown>, context),
+            ? catalog.invokeValidatedRaw(toolId, args, context, turnId)
+            : catalog.invokeRaw(toolId, args as Record<string, unknown>, context, turnId),
           () => {
             catalog.recordEvent({
               type: "gateway_invoke",

@@ -270,7 +270,12 @@ impl SkillRegistry {
 
     /// Resolve the usage arm for one query and record the outcome. See
     /// `ToolRegistry::usage_arm`; this reads the `skills` edge map instead.
-    fn usage_arm(&self, query: &str, query_vec: Option<&[f32]>) -> Option<UsageArm> {
+    fn usage_arm(
+        &self,
+        turn_key: Option<&str>,
+        query: &str,
+        query_vec: Option<&[f32]>,
+    ) -> Option<UsageArm> {
         let graph = self.graph.as_ref()?;
         // The model that embedded this query (semantic/hybrid only), compared
         // against the graph's model so a swap pauses the arm.
@@ -287,7 +292,7 @@ impl SkillRegistry {
                 (ArmOutcome::NoMatch, mismatch)
             } else {
                 if let (Some(v), Some(fp)) = (query_vec, &fingerprint) {
-                    guard.note_query_vector(query, v, fp);
+                    guard.note_query_vector(turn_key, query, v, fp);
                 }
                 let known = |id: &str| self.skills.contains_key(id);
                 (guard.arm(query, query_vec, Capability::Skill, &known), None)
@@ -704,8 +709,9 @@ impl SkillRegistry {
         context: TraceEventContext,
     ) -> Vec<SkillHit> {
         let started = Instant::now();
+        let turn_key = context.turn_id.as_deref();
         let t = Instant::now();
-        let arm = self.usage_arm(query, None);
+        let arm = self.usage_arm(turn_key, query, None);
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let Some(arm) = arm else {
@@ -786,7 +792,8 @@ impl SkillRegistry {
 
         // Reuses the vector the dense arm just embedded — no second inference.
         let t = Instant::now();
-        let arm = self.usage_arm(query, Some(&query_vec));
+        let turn_key = context.turn_id.as_deref();
+        let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let Some(arm) = arm else {
@@ -872,7 +879,8 @@ impl SkillRegistry {
 
         // Usage arm, matched on the vector the dense arm already embedded.
         let t = Instant::now();
-        let arm = self.usage_arm(query, Some(&query_vec));
+        let turn_key = context.turn_id.as_deref();
+        let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
         let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();

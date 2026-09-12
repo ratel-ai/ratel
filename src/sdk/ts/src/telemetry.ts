@@ -196,6 +196,13 @@ export interface RuntimeEventProjection {
   invocationId?: string;
   traceId?: string;
   spanId?: string;
+  /**
+   * Correlates one turn's search with the invoke(s) that confirm it, for
+   * adaptive ranking's pairing (ADR-0014) — distinct from the trace-stream
+   * session id fixed when the sink was configured. Caller-supplied only;
+   * never minted here.
+   */
+  turnId?: string;
 }
 
 /** @internal Definition fields shared by tool, skill, and fact registrations. */
@@ -322,13 +329,18 @@ function canonicalJson(value: unknown): string {
   return canonical;
 }
 
-function eventProjection(span: Span, invocationId?: string): RuntimeEventProjection {
+function eventProjection(
+  span: Span,
+  invocationId?: string,
+  turnId?: string,
+): RuntimeEventProjection {
   const eventId = newRuntimeEventId();
   const spanContext = span.spanContext();
   span.setAttribute(RATEL_EVENT_ID, eventId);
   return {
     eventId,
     ...(invocationId === undefined ? {} : { invocationId }),
+    ...(turnId === undefined ? {} : { turnId }),
     ...(spanContext.isRemote || /^0+$/.test(spanContext.traceId)
       ? {}
       : { traceId: spanContext.traceId, spanId: spanContext.spanId }),
@@ -763,13 +775,14 @@ export function traceExecuteTool<T>(
   toolId: string,
   args: unknown,
   run: (projection: RuntimeEventProjection) => T,
+  turnId?: string,
 ): T {
   return getTracer().startActiveSpan(
     `${EXECUTE_TOOL} ${toolId}`,
     { kind: SpanKind.INTERNAL },
     (span) => {
       const activeContext = trace.setSpan(context.active(), span);
-      const projection = eventProjection(span, newRuntimeEventId());
+      const projection = eventProjection(span, newRuntimeEventId(), turnId);
       span.setAttribute(GEN_AI_OPERATION_NAME, EXECUTE_TOOL);
       span.setAttribute(GEN_AI_TOOL_NAME, toolId);
       const upstream = upstreamFromToolId(toolId);
@@ -891,10 +904,11 @@ export function traceSearch<T extends { length: number }>(
   topK: number,
   origin: SearchOrigin,
   run: (projection: RuntimeEventProjection) => T,
+  turnId?: string,
 ): T {
   return getTracer().startActiveSpan(RATEL_SEARCH, { kind: SpanKind.INTERNAL }, (span) => {
     const eventContext = trace.setSpan(context.active(), span);
-    const projection = eventProjection(span);
+    const projection = eventProjection(span, undefined, turnId);
     span.setAttribute(RATEL_SEARCH_TARGET, target);
     span.setAttribute(RATEL_SEARCH_TOP_K, topK);
     span.setAttribute(RATEL_ORIGIN, origin);
@@ -921,10 +935,11 @@ export function traceSearchAsync<T extends { length: number }>(
   topK: number,
   origin: SearchOrigin,
   run: (projection: RuntimeEventProjection) => Promise<T>,
+  turnId?: string,
 ): Promise<T> {
   return getTracer().startActiveSpan(RATEL_SEARCH, { kind: SpanKind.INTERNAL }, async (span) => {
     const eventContext = trace.setSpan(context.active(), span);
-    const projection = eventProjection(span);
+    const projection = eventProjection(span, undefined, turnId);
     span.setAttribute(RATEL_SEARCH_TARGET, target);
     span.setAttribute(RATEL_SEARCH_TOP_K, topK);
     span.setAttribute(RATEL_ORIGIN, origin);
@@ -948,9 +963,10 @@ export function traceSearchAsync<T extends { length: number }>(
 export function traceSkillLoad<T>(
   skillId: string,
   run: (projection: RuntimeEventProjection) => T,
+  turnId?: string,
 ): T {
   return getTracer().startActiveSpan(RATEL_SKILL_LOAD, { kind: SpanKind.INTERNAL }, (span) => {
-    const projection = eventProjection(span);
+    const projection = eventProjection(span, undefined, turnId);
     span.setAttribute(RATEL_SKILL_ID, skillId);
     try {
       const body = run(projection);
