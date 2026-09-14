@@ -318,7 +318,7 @@ The public instance has five operations:
 | `select(params, options)` | Returns the transformed effective result plus `selectionId`, `assignedArm`, `effectiveArm`, and arm-callback `durationMs`. An explicit `arm` overrides `split`. |
 | `warm()` | Starts unresolved arm warmups concurrently. It never rejects; failed warmups remain cold and retry on the next call. Selection never waits for warmup. |
 | `drain()` | Waits for a snapshot of detached shadow and comparison work, always all-settled. It is repeatable, does not close the experiment, and does not include work started after the call. |
-| `reportInvocation({ unitId, toolId, turn? })` | Attributes a tool to the configured in-process invocation window. It is a no-op unless an invocation reference is configured. |
+| `reportInvocation({ unitId, toolId, turn? })` | Attributes a tool to the configured in-process invocation window. It is a no-op unless an invocation reference is configured. The reference's `attribution` picks the newest windowed selection (`last-selection`, default), the newest windowed selection whose ranking offered the tool (`last-offering-selection`), or every windowed selection (`all-in-window`). |
 | `reportOutcome({ selectionId, label?, score? })` | Appends a delayed outcome when `evaluation.outcome` is true. At least one non-empty label or finite score is required; repeated reports remain distinct. |
 
 Assignment hashes `JSON.stringify([experimentId, unitId])` with SHA-256 into the ordered integer
