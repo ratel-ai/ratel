@@ -712,6 +712,14 @@ pub struct TraceEventContext {
     pub trace_id: Option<String>,
     /// Active OpenTelemetry span id, when available.
     pub span_id: Option<String>,
+    /// Caller-supplied id correlating one logical turn's search with the
+    /// invoke(s) that confirm it, for [`crate::UsageLearner`]'s pairing.
+    /// Distinct from `session_id`: that names which trace *stream* an event
+    /// is written to (fixed once per sink), while this names which search a
+    /// later invoke attributes to — the concept multiple concurrent sessions
+    /// sharing one sink/learner need to stay untangled. Absent means "share
+    /// the single legacy pairing slot," reproducing pre-`turn_id` behavior.
+    pub turn_id: Option<String>,
 }
 
 impl TraceEventContext {
@@ -763,6 +771,9 @@ pub struct TraceEnvelope {
     /// Active OpenTelemetry span id, when available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub span_id: Option<String>,
+    /// See [`TraceEventContext::turn_id`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_id: Option<String>,
     /// The event itself, flattened into the envelope on the wire.
     #[serde(flatten)]
     pub event: TraceEvent,

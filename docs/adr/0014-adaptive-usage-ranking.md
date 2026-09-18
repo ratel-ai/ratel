@@ -34,6 +34,16 @@ Amended 2026-08-27: a cluster **records what its searches surfaced** — see [Im
 recorded, not consumed](#impressions-are-recorded-not-consumed). Edges still come from
 invocations only; the decision below is unchanged and nothing reads the new map.
 
+Amended 2026-09-07: the `CreditSlot`/`PendingQuery` single-slot posture accepted below for
+concurrent same-text sessions is closed for callers who opt in. `TraceEventContext` and
+`TraceEnvelope` gained an optional `turn_id`, distinct from the trace-*stream* `session_id` fixed
+at sink construction; `UsageLearner`'s pending-search state and `IntentGraph`'s `PendingQuery` and
+`CreditSlot` are now keyed by it (bounded, FIFO-evicted past a cap), with a reserved sentinel key
+reproducing the old single-slot behavior — cross-session collisions included — for callers that
+supply no `turn_id`. This is what the `CreditSlot` bullet below called "a per-turn correlation id
+threaded through the trace events, deferred as not worth the plumbing"; the plumbing has now
+landed. See the `## Rejected` section for the alternative of making `turn_id` mandatory.
+
 ## Context
 
 Every ranker in the engine scores **text similarity only** — BM25 over the flattened
@@ -93,10 +103,13 @@ a `label`, `terms`, `support`, and `tools` / `skills` edge maps.
   not an edge case. This holds across catalogs too: `search_capabilities` fans one query
   to the tool and skill catalogs, each with its own learner, so the credit that makes it
   *one* observation lives on the shared graph, not per-learner (`CreditSlot`). That credit
-  is keyed by query text with a single slot, so it is exact for the fan-out but under-counts
-  two *concurrent* sessions that ask the same text and resolve different catalogs into one
-  cluster — a rare, conservative trade accepted over threading a per-turn correlation id
-  through the trace events; see `CreditSlot`.
+  is keyed by `turn_id` first, query text second (amended 2026-09-07); a caller that
+  supplies its own `turn_id` per turn gets an exact credit even when a concurrent turn
+  asks identical text. A caller that supplies none shares the reserved sentinel key, which
+  keeps the original posture: exact for the fan-out (one caller, two catalogs, same turn),
+  but unable to distinguish that from two *concurrent* sessions asking the same text —
+  those share the slot and credit once, an accepted under-count for opting out; see
+  `CreditSlot`.
 - **Clusters age out.** The arm weight is `W · min(1, support/3) · recency`, where recency is
   `1` for a grace period (90d) after a cluster's last use and then halves every half-life
   (90d), evaluated against the newest observed event — so a topic that falls out of use fades
@@ -404,17 +417,20 @@ inspect it, and only then enable ranking.**
   covers any specific query poorly, so it stops boosting broadly. Re-clustering outright means
   replaying the trace log through `build_intent_graph`, or dropping the graph and relearning.
 - **The pairing rule exists once.** The live learner and the offline replay share one
-  `classify` step. They differ only in where pending state lives — a per-session learner holds
-  a slot, a replay holds a map keyed by `session_id` — because a log interleaves sessions by
-  construction and a single slot would cross-pair them. Replay walks the log in **its own
-  order, never re-sorted**: file order is arrival order, and sorting by `ts` would produce a
-  graph the live path could not have grown, since cluster membership depends on which clusters
+  `classify` step. They differ only in which id keys the pending-state map: the live path
+  keys by `turn_id` (2026-09-07 amendment), a replay keys by `session_id` — because a log
+  interleaves sessions by construction and a single key would cross-pair them, while the
+  live path has a session id available only after envelope-wrapping, downstream of where the
+  learner runs. Replay walks the log in **its own order, never re-sorted**: file order is
+  arrival order, and sorting by `ts` would produce a graph the live path could not have
+  grown, since cluster membership depends on which clusters
   existed when each query arrived. `ts` stamps observations; it does not order them.
 - **Equivalence is asserted by test, not by this document** — a graph built from a log *is*
   the graph live learning would have grown from the same events. It diverges in exactly one
-  place, and that divergence is also pinned: interleaved sessions asking identical text, where
-  the live path's single global credit slot under-counts (the trade the `CreditSlot` bullet
-  accepts) and replay, knowing the session, does not.
+  place, and that divergence is also pinned: interleaved sessions asking identical text with no
+  `turn_id` supplied on the live path, where the sentinel-keyed credit slot under-counts (the
+  trade the `CreditSlot` bullet accepts for opting out) and replay, always knowing the session,
+  does not. A live caller that supplies `turn_id` does not diverge here.
 - **Policy is a closed set, and applies to both paths.** `origins` (`any` | `agent` |
   `baseline`) selects which searches may open an observation window; `provenance` (`live` |
   `seeded`) selects whether what is learned is marked as seeded. What counts as evidence must
@@ -536,3 +552,10 @@ LLM-extracted intents populate the same `members` field.
 - **Shipping the graph down the catalog loader seam** (the brief's "no new machinery"): no
   `RATEL_URL` or `CatalogSource` exists in `src/` — the seam is specified, not built.
   Revisit when PSKS-5 lands.
+- **Always requiring an explicit `turn_id`** (2026-09-07 amendment): would make every
+  existing SDK caller a breaking change — search/invoke would need an id in every host
+  framework, whose turn/session structure Ratel does not control. A reserved sentinel key
+  that reproduces today's single-slot pairing exactly for callers who pass nothing keeps
+  adoption purely opt-in, per this project's additive-evolution convention, at the cost of
+  leaving the documented concurrent-same-text under-count in place only for callers who
+  don't ask for better.

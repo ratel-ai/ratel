@@ -38,11 +38,14 @@ from .telemetry import (
     trace_search_async,
 )
 
-Executor = Callable[[dict[str, Any]], Union[Awaitable[Any], Any]]
+Executor = Callable[..., Union[Awaitable[Any], Any]]
 """A tool handler: takes the tool's arguments dict, returns the result.
 
 May be sync or async (tool inputs are heterogeneous across the catalog);
-`ToolCatalog.invoke` absorbs the difference.
+`ToolCatalog.invoke` absorbs the difference. `Callable[..., ...]` rather than a
+precise arity because the capability-tool builders' own executors additionally
+take an optional trailing `turn_id: str | None` (correlating a search with the
+invoke(s) that confirm it, ADR-0014) that `Callable` cannot express as optional.
 """
 
 SearchOrigin = str
@@ -1086,6 +1089,7 @@ class ToolCatalog:
         top_k: int,
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
+        turn_id: str | None = None,
     ) -> list[SearchHit]:
         """Rank registered tools synchronously with BM25.
 
@@ -1095,6 +1099,11 @@ class ToolCatalog:
             origin: who initiated the search — labels the trace event only.
             method: per-call override of the catalog's default retrieval
                 method ("bm25" | "semantic" | "hybrid").
+            turn_id: correlates this search with the invoke(s) that follow it
+                for adaptive ranking's pairing (ADR-0014) — pass the same id
+                to `invoke` for this turn when multiple concurrent sessions
+                share this catalog's graph. Omit to keep single-session
+                behavior.
 
         Returns:
             Up to `top_k` `SearchHit`s, best first.
@@ -1118,6 +1127,7 @@ class ToolCatalog:
             top_k,
             origin,
             lambda projection: self._registry.search_with_origin(query, top_k, origin, projection),
+            turn_id,
         )
 
     async def search_async(
@@ -1126,6 +1136,7 @@ class ToolCatalog:
         top_k: int,
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
+        turn_id: str | None = None,
     ) -> list[SearchHit]:
         """Rank tools asynchronously with BM25, semantic, or hybrid retrieval.
 
@@ -1141,6 +1152,7 @@ class ToolCatalog:
             lambda projection: self._registry.search_async(
                 query, top_k, origin, resolved_method, projection
             ),
+            turn_id,
         )
 
     def has(self, tool_id: str) -> bool:
@@ -1358,7 +1370,9 @@ class ToolCatalog:
         """Drain captured trace envelopes; `[]` unless the sink is "memory"."""
         return self._registry.drain_trace_events()
 
-    async def invoke(self, tool_id: str, args: dict[str, Any]) -> Any:
+    async def invoke(
+        self, tool_id: str, args: dict[str, Any], turn_id: str | None = None
+    ) -> Any:
         """Run a registered tool's handler and return its result.
 
         This is the canonical place that absorbs the sync/async executor
@@ -1372,6 +1386,10 @@ class ToolCatalog:
         Args:
             tool_id: id of a registered tool.
             args: the arguments dict passed to the handler.
+            turn_id: correlates this invoke with the search that found
+                `tool_id`, for adaptive ranking's pairing (ADR-0014) — pass
+                the same id given to `search`/`search_async` for this turn.
+                Omit to keep single-session behavior.
 
         Returns:
             Whatever the handler returns (awaited if it returned an awaitable).
@@ -1449,7 +1467,7 @@ class ToolCatalog:
 
         # The `execute_tool` OTel span wraps the local trace stream; both record the
         # same invocation, on their two independent channels (ADR-0007).
-        return await trace_execute_tool(tool_id, args, _run)
+        return await trace_execute_tool(tool_id, args, _run, turn_id)
 
 
 def _args_size_bytes(args: Any) -> int:

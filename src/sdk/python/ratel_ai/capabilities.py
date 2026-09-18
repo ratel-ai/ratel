@@ -163,12 +163,12 @@ def search_capabilities_tool(
     upstream_by_name = {u.name: u for u in upstreams}
     has_skills = skill_catalog is not None and skill_catalog.size() > 0
 
-    async def execute(input: dict[str, Any]) -> dict[str, Any]:
+    async def execute(input: dict[str, Any], turn_id: str | None = None) -> dict[str, Any]:
         query = input["query"]
         k_tools = _clamp_top_k(input.get("topKTools"), _DEFAULT_TOP_K_TOOLS)
         k_skills = _clamp_top_k(input.get("topKSkills"), _DEFAULT_TOP_K_SKILLS)
         started_at = time.monotonic()
-        tool_hits = await catalog.search_async(query, k_tools, "agent")
+        tool_hits = await catalog.search_async(query, k_tools, "agent", turn_id=turn_id)
         catalog.record_event(
             {
                 "type": "gateway_search",
@@ -222,7 +222,7 @@ def search_capabilities_tool(
         # budget → never starved by tools).
         skills: list[dict[str, Any]] = []
         if skill_catalog is not None:
-            for sh in await skill_catalog.search_async(query, k_skills, "agent"):
+            for sh in await skill_catalog.search_async(query, k_skills, "agent", turn_id=turn_id):
                 sk = skill_catalog.get(sh.skill_id)
                 skills.append(
                     {
@@ -353,7 +353,7 @@ def invoke_tool_tool(
         An `ExecutableTool` to put in the agent's direct tool list.
     """
 
-    async def execute(input: dict[str, Any]) -> Any:
+    async def execute(input: dict[str, Any], turn_id: str | None = None) -> Any:
         tool_id = input.get("toolId")
         if not isinstance(tool_id, str) or not catalog.has(tool_id):
             # Missing/non-string id: structured error, not a KeyError — a malformed
@@ -391,7 +391,7 @@ def invoke_tool_tool(
             }
         started_at = time.monotonic()
         try:
-            result = await catalog.invoke(tool_id, args)
+            result = await catalog.invoke(tool_id, args, turn_id)
             catalog.record_event(
                 {
                     "type": "gateway_invoke",

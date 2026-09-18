@@ -32,11 +32,15 @@ import {
  * {@link ToolCatalog.invokeRaw} preserves the immediate return shape when
  * validation is synchronous, while {@link ToolCatalog.invokeValidatedRaw}
  * guarantees that shape after a host has already validated the input.
- * One-argument executors remain valid; framework-neutral callers normally omit
- * `context`.
+ * One- and two-argument executors remain valid; framework-neutral callers
+ * normally omit `context` and `turnId`.
  */
-// biome-ignore lint/suspicious/noExplicitAny: tool inputs are heterogeneous across the catalog
-export type Executor = (input: any, context?: unknown) => Promise<unknown> | unknown;
+export type Executor = (
+  // biome-ignore lint/suspicious/noExplicitAny: tool inputs are heterogeneous across the catalog
+  input: any,
+  context?: unknown,
+  turnId?: string,
+) => Promise<unknown> | unknown;
 
 /** Result returned by a framework-native input validator. */
 export type InputValidationResult =
@@ -575,6 +579,10 @@ export class ToolCatalog {
    * @param origin - Who initiated the call (default `"direct"`); recorded on
    *   the trace event and span, never affects ranking.
    * @param method - Per-call override of the catalog's default retrieval method.
+   * @param turnId - Correlates this search with the invoke(s) that follow it
+   *   for adaptive ranking's pairing (ADR-0014) — pass the same id to {@link
+   *   ToolCatalog.invoke} for this turn when multiple concurrent sessions
+   *   share this catalog's graph. Omit to keep single-session behavior.
    * @returns Up to `topK` BM25 hits, best-first with ties broken by tool id.
    *   Semantic/dense/hybrid methods throw migration guidance; use
    *   {@link ToolCatalog.searchAsync} for those methods.
@@ -584,9 +592,16 @@ export class ToolCatalog {
     topK: number,
     origin: SearchOrigin = "direct",
     method?: SearchMethod,
+    turnId?: string,
   ): SearchHit[] {
-    return traceSearch(SearchTarget.Tool, query, topK, origin, (projection) =>
-      this.registry.searchWithMethod(query, topK, origin, method ?? this.method, projection),
+    return traceSearch(
+      SearchTarget.Tool,
+      query,
+      topK,
+      origin,
+      (projection) =>
+        this.registry.searchWithMethod(query, topK, origin, method ?? this.method, projection),
+      turnId,
     );
   }
 
@@ -596,9 +611,16 @@ export class ToolCatalog {
     topK: number,
     origin: SearchOrigin = "direct",
     method?: SearchMethod,
+    turnId?: string,
   ): Promise<SearchHit[]> {
-    return traceSearchAsync(SearchTarget.Tool, query, topK, origin, (projection) =>
-      this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method, projection),
+    return traceSearchAsync(
+      SearchTarget.Tool,
+      query,
+      topK,
+      origin,
+      (projection) =>
+        this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method, projection),
+      turnId,
     );
   }
 
@@ -905,10 +927,19 @@ export class ToolCatalog {
    * @param toolId - Id of a registered tool.
    * @param args - Arguments object validated and possibly transformed before execution.
    * @param context - Optional opaque invocation context forwarded unchanged.
+   * @param turnId - Correlates this invoke with the search that found `toolId`,
+   *   for adaptive ranking's pairing (ADR-0014) — pass the same id given to
+   *   {@link ToolCatalog.search}/{@link ToolCatalog.searchAsync} for this
+   *   turn. Omit to keep single-session behavior.
    * @returns Whatever the executor returns (resolved if it returned a promise).
    */
-  async invoke(toolId: string, args: Record<string, unknown>, context?: unknown): Promise<unknown> {
-    return await this.invokeRaw(toolId, args, context);
+  async invoke(
+    toolId: string,
+    args: Record<string, unknown>,
+    context?: unknown,
+    turnId?: string,
+  ): Promise<unknown> {
+    return await this.invokeRaw(toolId, args, context, turnId);
   }
 
   /**
@@ -922,12 +953,17 @@ export class ToolCatalog {
    * Most callers should use {@link invoke}; capability-tool bridges use this
    * path so a host framework can observe streamed preliminary outputs.
    */
-  invokeRaw(toolId: string, args: Record<string, unknown>, context?: unknown): unknown {
+  invokeRaw(
+    toolId: string,
+    args: Record<string, unknown>,
+    context?: unknown,
+    turnId?: string,
+  ): unknown {
     if (!this.executors.has(toolId)) {
       throw new Error(`unknown toolId: ${toolId}`);
     }
     return runIfValid(this.validateInput(toolId, args), (validated) =>
-      this.invokeValidatedRaw(toolId, validated, context),
+      this.invokeValidatedRaw(toolId, validated, context, turnId),
     );
   }
 
@@ -937,13 +973,17 @@ export class ToolCatalog {
    * bridges call this only after their host has run the capability tool's live
    * validator; ordinary callers should use {@link invoke}.
    */
-  invokeValidatedRaw(toolId: string, input: unknown, context?: unknown): unknown {
+  invokeValidatedRaw(toolId: string, input: unknown, context?: unknown, turnId?: string): unknown {
     const fn = this.executors.get(toolId);
     if (!fn) {
       throw new Error(`unknown toolId: ${toolId}`);
     }
-    return runToolInvocation(this, toolId, input, () =>
-      context === undefined ? fn(input) : fn(input, context),
+    return runToolInvocation(
+      this,
+      toolId,
+      input,
+      () => (context === undefined ? fn(input) : fn(input, context)),
+      turnId,
     );
   }
 }
@@ -965,53 +1005,59 @@ export function runToolInvocation<T>(
   toolId: string,
   input: unknown,
   run: () => T,
+  turnId?: string,
 ): T {
   // The `execute_tool` OTel span wraps the local trace stream; both record the
   // same invocation, on their two independent channels (ADR-0007).
-  return traceExecuteTool(toolId, input, (projection) => {
-    catalog.recordEvent(
-      {
-        type: "invoke_start",
-        tool_id: toolId,
-        args_size_bytes: argsSizeBytes(input),
-      },
-      projection,
-    );
-    const started = Date.now();
+  return traceExecuteTool(
+    toolId,
+    input,
+    (projection) => {
+      catalog.recordEvent(
+        {
+          type: "invoke_start",
+          tool_id: toolId,
+          args_size_bytes: argsSizeBytes(input),
+        },
+        projection,
+      );
+      const started = Date.now();
 
-    const succeed = (result: unknown): void => {
-      if (reportsFailure(result)) {
-        reject(new Error("the tool reported a failure"));
-        return;
+      const succeed = (result: unknown): void => {
+        if (reportsFailure(result)) {
+          reject(new Error("the tool reported a failure"));
+          return;
+        }
+        catalog.recordEvent(
+          {
+            type: "invoke_end",
+            tool_id: toolId,
+            took_ms: Date.now() - started,
+          },
+          { ...projection, eventId: newRuntimeEventId() },
+        );
+      };
+      const reject = (err: unknown): void => {
+        catalog.recordEvent(
+          {
+            type: "invoke_error",
+            tool_id: toolId,
+            took_ms: Date.now() - started,
+            error: errorMessage(err),
+          },
+          { ...projection, eventId: newRuntimeEventId() },
+        );
+      };
+
+      try {
+        return observeInvocationResult(run(), succeed, reject) as T;
+      } catch (err) {
+        reject(err);
+        throw err;
       }
-      catalog.recordEvent(
-        {
-          type: "invoke_end",
-          tool_id: toolId,
-          took_ms: Date.now() - started,
-        },
-        { ...projection, eventId: newRuntimeEventId() },
-      );
-    };
-    const reject = (err: unknown): void => {
-      catalog.recordEvent(
-        {
-          type: "invoke_error",
-          tool_id: toolId,
-          took_ms: Date.now() - started,
-          error: errorMessage(err),
-        },
-        { ...projection, eventId: newRuntimeEventId() },
-      );
-    };
-
-    try {
-      return observeInvocationResult(run(), succeed, reject) as T;
-    } catch (err) {
-      reject(err);
-      throw err;
-    }
-  });
+    },
+    turnId,
+  );
 }
 
 /** Unwrap a (possibly async) validation result and continue with its value, or throw its error. */

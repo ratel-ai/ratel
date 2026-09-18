@@ -209,6 +209,7 @@ pub(crate) fn replay_under(
         // "fixture" against an embedder reporting "fixture:bge-small-en-v1.5"
         // serves with no usage arm at all, silently.
         g.note_query_vector(
+            None,
             &turn.query,
             &turn.vector,
             &FixtureEmbedder::new().fingerprint(),
@@ -541,7 +542,7 @@ pub(crate) fn replay_with_impressions(turns: &[Turn]) -> IntentGraph {
             .map(|h| h.tool_id)
             .collect();
         let mut g = shared.write().expect("graph lock");
-        g.note_query_vector(&turn.query, &turn.vector, &fingerprint);
+        g.note_query_vector(None, &turn.query, &turn.vector, &fingerprint);
         g.observe_surfacing(
             &turn.query,
             Capability::Tool,

@@ -16,7 +16,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from ratel_ai import ExecutableTool, IntentGraph, SkillCatalog, ToolCatalog, TraceSinkConfig
+from ratel_ai import (
+    ExecutableTool,
+    IntentGraph,
+    SkillCatalog,
+    ToolCatalog,
+    TraceSinkConfig,
+    get_skill_content_tool,
+    invoke_tool_tool,
+    search_capabilities_tool,
+)
 from ratel_ai.skill_catalog import Skill
 
 
@@ -95,6 +104,79 @@ async def test_a_query_with_no_evidence_is_unaffected() -> None:
     await use_it(catalog, "the build broken on main", "gh_run_list")
 
     assert ids(catalog.search("read a file from disk", 5)) == baseline
+
+
+@pytest.mark.asyncio
+async def test_two_concurrent_sessions_do_not_cross_pair_with_turn_id() -> None:
+    # The multi-session bug this fixes end to end: session A searches, then
+    # session B's search would clobber a single unkeyed pending slot, then A
+    # invokes -- without turn_id the graph would wrongly learn B's query ->
+    # A's tool. Distinct turn_ids keep each session's pairing exact.
+    catalog = await build_catalog()
+    graph = IntentGraph()
+    catalog.experimental_enable_adaptive_ranking(graph)
+
+    catalog.search("why is the build broken", 5, turn_id="session-a")
+    catalog.search("read a file from disk", 5, turn_id="session-b")
+    await catalog.invoke("gh_run_list", {}, turn_id="session-a")
+    await catalog.invoke("read_file", {}, turn_id="session-b")
+
+    wire = json.loads(graph.to_json())
+    assert len(wire["intents"]) == 2
+    a = next(i for i in wire["intents"] if "why is the build broken" in i["members"])
+    b = next(i for i in wire["intents"] if "read a file from disk" in i["members"])
+    assert list(a["tools"].keys()) == ["gh_run_list"]
+    assert list(b["tools"].keys()) == ["read_file"]
+
+
+@pytest.mark.asyncio
+async def test_does_not_cross_pair_through_the_capability_tool_funnel() -> None:
+    # The same bug as above, exercised through the actual paths a host wires up
+    # (search_capabilities_tool / invoke_tool_tool), not the raw catalog --
+    # what PR review comment #2 flagged as missing.
+    catalog = await build_catalog()
+    graph = IntentGraph()
+    catalog.experimental_enable_adaptive_ranking(graph)
+    discovery = search_capabilities_tool(catalog)
+    invoker = invoke_tool_tool(catalog)
+
+    await discovery.execute({"query": "why is the build broken"}, "session-a")
+    await discovery.execute({"query": "read a file from disk"}, "session-b")
+    await invoker.execute({"toolId": "gh_run_list", "args": {}}, "session-a")
+    await invoker.execute({"toolId": "read_file", "args": {}}, "session-b")
+
+    wire = json.loads(graph.to_json())
+    assert len(wire["intents"]) == 2
+    a = next(i for i in wire["intents"] if "why is the build broken" in i["members"])
+    b = next(i for i in wire["intents"] if "read a file from disk" in i["members"])
+    assert list(a["tools"].keys()) == ["gh_run_list"]
+    assert list(b["tools"].keys()) == ["read_file"]
+
+
+@pytest.mark.asyncio
+async def test_get_skill_content_tool_forwards_turn_id_onto_the_trace_event() -> None:
+    catalog = SkillCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
+    await catalog.register(
+        [
+            Skill(
+                id="ci-triage",
+                name="ci-triage",
+                description="Diagnose why the build failed in CI",
+                tags=[],
+                tools=[],
+                metadata={},
+                body="# steps",
+            )
+        ]
+    )
+    catalog.drain_trace_events()  # discard registration churn
+    loader = get_skill_content_tool(catalog)
+
+    await loader.execute({"skillId": "ci-triage"}, "session-a")
+
+    events = catalog.drain_trace_events()
+    invoke_event = next(e for e in events if e["type"] == "skill_invoke")
+    assert invoke_event["turn_id"] == "session-a"
 
 
 @pytest.mark.asyncio

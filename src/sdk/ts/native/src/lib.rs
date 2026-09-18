@@ -185,6 +185,10 @@ pub struct TraceEventContextConfig {
     pub invocation_id: Option<String>,
     pub trace_id: Option<String>,
     pub span_id: Option<String>,
+    /// Correlates one turn's search with the invoke(s) that confirm it, for
+    /// adaptive ranking's pairing — distinct from the trace-stream session id
+    /// fixed at sink construction. See `core::TraceEventContext::turn_id`.
+    pub turn_id: Option<String>,
 }
 
 fn trace_event_context(config: Option<TraceEventContextConfig>) -> core::TraceEventContext {
@@ -196,6 +200,7 @@ fn trace_event_context(config: Option<TraceEventContextConfig>) -> core::TraceEv
         invocation_id: config.invocation_id,
         trace_id: config.trace_id,
         span_id: config.span_id,
+        turn_id: config.turn_id,
         ..core::TraceEventContext::default()
     }
 }

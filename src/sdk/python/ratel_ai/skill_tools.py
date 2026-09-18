@@ -36,7 +36,7 @@ def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
         `search_capabilities`.
     """
 
-    async def execute(input: dict[str, Any]) -> dict[str, Any]:
+    async def execute(input: dict[str, Any], turn_id: str | None = None) -> dict[str, Any]:
         skill_id = input.get("skillId")
         if not isinstance(skill_id, str) or not catalog.has(skill_id):
             # Missing/non-string id: structured error, not a KeyError — recoverable
@@ -55,7 +55,7 @@ def get_skill_content_tool(catalog: SkillCatalog) -> ExecutableTool:
                 ),
                 "isError": True,
             }
-        return {"body": catalog.invoke(skill_id)}
+        return {"body": catalog.invoke(skill_id, turn_id)}
 
     return ExecutableTool(
         id=GET_SKILL_CONTENT_ID,

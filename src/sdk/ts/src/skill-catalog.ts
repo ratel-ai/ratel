@@ -288,6 +288,10 @@ export class SkillCatalog {
    * @param origin - Who initiated the call (default `"direct"`); recorded on
    *   the trace event and span, never affects ranking.
    * @param method - Per-call override of the catalog's default retrieval method.
+   * @param turnId - Correlates this search with the invoke(s) that confirm it,
+   *   for adaptive-ranking pairing (ADR-0014). Pass the same id to
+   *   {@link SkillCatalog.invoke} when multiple concurrent sessions share this
+   *   catalog's graph.
    * @returns Up to `topK` BM25 hits, best-first with ties broken by skill id.
    *   Semantic/dense/hybrid methods throw migration guidance; use
    *   {@link SkillCatalog.searchAsync} for those methods.
@@ -297,9 +301,16 @@ export class SkillCatalog {
     topK: number,
     origin: SearchOrigin = "direct",
     method?: SearchMethod,
+    turnId?: string,
   ): SkillHit[] {
-    return traceSearch(SearchTarget.Skill, query, topK, origin, (projection) =>
-      this.registry.searchWithMethod(query, topK, origin, method ?? this.method, projection),
+    return traceSearch(
+      SearchTarget.Skill,
+      query,
+      topK,
+      origin,
+      (projection) =>
+        this.registry.searchWithMethod(query, topK, origin, method ?? this.method, projection),
+      turnId,
     );
   }
 
@@ -309,9 +320,16 @@ export class SkillCatalog {
     topK: number,
     origin: SearchOrigin = "direct",
     method?: SearchMethod,
+    turnId?: string,
   ): Promise<SkillHit[]> {
-    return traceSearchAsync(SearchTarget.Skill, query, topK, origin, (projection) =>
-      this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method, projection),
+    return traceSearchAsync(
+      SearchTarget.Skill,
+      query,
+      topK,
+      origin,
+      (projection) =>
+        this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method, projection),
+      turnId,
     );
   }
 
@@ -444,25 +462,31 @@ export class SkillCatalog {
    * into a structured error for the agent.
    *
    * @param skillId - Id of a registered skill.
+   * @param turnId - Correlates this invoke with the search that armed it — see
+   *   {@link SkillCatalog.search}.
    * @returns The skill's `body` (`""` when it was registered without one).
    */
-  invoke(skillId: string): string {
+  invoke(skillId: string, turnId?: string): string {
     const skill = this.skills.get(skillId);
     if (!skill) {
       throw new Error(`unknown skillId: ${skillId}`);
     }
-    return traceSkillLoad(skillId, (projection) => {
-      const started = Date.now();
-      const body = skill.body ?? "";
-      this.registry.recordEvent(
-        {
-          type: "skill_invoke",
-          skill_id: skillId,
-          took_ms: Date.now() - started,
-        },
-        projection,
-      );
-      return body;
-    });
+    return traceSkillLoad(
+      skillId,
+      (projection) => {
+        const started = Date.now();
+        const body = skill.body ?? "";
+        this.registry.recordEvent(
+          {
+            type: "skill_invoke",
+            skill_id: skillId,
+            took_ms: Date.now() - started,
+          },
+          projection,
+        );
+        return body;
+      },
+      turnId,
+    );
   }
 }

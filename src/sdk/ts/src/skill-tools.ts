@@ -54,7 +54,7 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
         isError: { type: "boolean" },
       },
     },
-    execute: async (input) => {
+    execute: async (input, _context, turnId) => {
       const { skillId } = input as { skillId: string };
       if (!catalog.has(skillId)) {
         catalog.recordEvent({
@@ -67,7 +67,7 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
           isError: true,
         };
       }
-      const body = catalog.invoke(skillId);
+      const body = catalog.invoke(skillId, turnId);
       return { body };
     },
   };

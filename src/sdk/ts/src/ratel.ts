@@ -96,11 +96,13 @@ export interface CatalogRegistration {
    * native replacements and root-level transformations.
    */
   validateInput?: InputValidator;
-  /** Runs the tool through the capability funnel with args and optional opaque
-   * adapter context. An adapter that supports live framework context tags it in
-   * `expose` and validates that private tag here before unwrapping it; a missing
-   * or foreign tag must take the framework's context-free fallback. */
-  execute(input: unknown, context?: unknown): Promise<unknown> | unknown;
+  /** Runs the tool through the capability funnel with args, optional opaque
+   * adapter context, and an optional `turnId` correlating this invoke with the
+   * search that armed it (ADR-0014). An adapter that supports live framework
+   * context tags it in `expose` and validates that private tag here before
+   * unwrapping it; a missing or foreign tag must take the framework's
+   * context-free fallback. */
+  execute(input: unknown, context?: unknown, turnId?: string): Promise<unknown> | unknown;
 }
 
 /** The identity of one synthetic recall call, handed to {@link RatelAdapter.recallMessages}. */
@@ -197,16 +199,25 @@ export interface ToolCollection {
    * is clamped to `[1, 50]` (invalid values fall back to 5), like the capability
    * funnel — drop to {@link catalog} for an unclamped search.
    */
-  search(query: string, topK: number, method?: SearchMethod): SearchHit[];
+  search(query: string, topK: number, method?: SearchMethod, turnId?: string): SearchHit[];
   /**
    * Rank the catalog for `query` with any retrieval method without blocking the
    * event loop (origin `"direct"`, same `topK` clamp as {@link search}). Ranks
    * whatever is embedded now — `await register(...)` first so a dense tool is in
    * the cache.
    */
-  searchAsync(query: string, topK: number, method?: SearchMethod): Promise<SearchHit[]>;
-  /** Execute a registered tool by id with the args object. */
-  invoke(id: string, args: Record<string, unknown>): Promise<unknown>;
+  searchAsync(
+    query: string,
+    topK: number,
+    method?: SearchMethod,
+    turnId?: string,
+  ): Promise<SearchHit[]>;
+  /**
+   * Execute a registered tool by id with the args object. `turnId` correlates
+   * this invoke with the search that armed it (ADR-0014 adaptive-ranking
+   * pairing) — pass the same id given to {@link search}/{@link searchAsync}.
+   */
+  invoke(id: string, args: Record<string, unknown>, turnId?: string): Promise<unknown>;
   /** The shared catalog itself — the unguarded driver-level escape hatch. */
   readonly catalog: ToolCatalog;
 }
@@ -245,15 +256,24 @@ export interface AdaptedToolCollection<TTool> {
    * back to 5); passthroughs are never ranked. Drop to {@link catalog} for an
    * unclamped search.
    */
-  search(query: string, topK: number, method?: SearchMethod): SearchHit[];
+  search(query: string, topK: number, method?: SearchMethod, turnId?: string): SearchHit[];
   /**
    * Rank the shared catalog for `query` with any retrieval method off the event
    * loop (origin `"direct"`). Same `topK` clamp as {@link search}; passthroughs
    * are never ranked. `await register(...)` first so a dense tool is embedded.
    */
-  searchAsync(query: string, topK: number, method?: SearchMethod): Promise<SearchHit[]>;
-  /** Execute a catalog tool by id with the args object (not a passthrough). */
-  invoke(id: string, args: Record<string, unknown>): Promise<unknown>;
+  searchAsync(
+    query: string,
+    topK: number,
+    method?: SearchMethod,
+    turnId?: string,
+  ): Promise<SearchHit[]>;
+  /**
+   * Execute a catalog tool by id with the args object (not a passthrough).
+   * `turnId` correlates this invoke with the search that armed it — see
+   * {@link ToolCollection.invoke}.
+   */
+  invoke(id: string, args: Record<string, unknown>, turnId?: string): Promise<unknown>;
   /** The shared catalog itself — the unguarded driver-level escape hatch. */
   readonly catalog: ToolCatalog;
 }
@@ -287,9 +307,10 @@ export interface AdaptedBase<TTool, TMessage> {
    * Rank `query` and return the synthetic `search_capabilities` message pair in
    * the framework's shape (origin `"direct"`), or `[]` when nothing matched
    * (spending no call id). Pure: it builds fresh messages and never mutates a
-   * host array.
+   * host array. `turnId` correlates the search with the invoke(s) it arms —
+   * see {@link ToolCollection.invoke}.
    */
-  recall(query: string): Promise<TMessage[]>;
+  recall(query: string, turnId?: string): Promise<TMessage[]>;
   /**
    * ⚠️ Experimental (facts, ADR-0017). Decide which facts to (re-)inject given
    * the current transcript — the grounding freshness gate. See
@@ -356,8 +377,10 @@ export interface Ratel {
    * pure query: no call id is minted — ids exist only on the adapted views,
    * whose synthetic message pairs need them. Ranks whatever is registered and
    * (on a dense core) embedded now — `await r.tools.register(...)` first.
+   * `turnId` correlates the search with the invoke(s) it arms — see
+   * {@link ToolCollection.invoke}.
    */
-  recall(query: string): Promise<SearchCapabilitiesResult | null>;
+  recall(query: string, turnId?: string): Promise<SearchCapabilitiesResult | null>;
   /**
    * ⚠️ Experimental (facts, ADR-0017). Decide which facts to (re-)inject given
    * the current transcript — the grounding freshness gate. Considers the
@@ -584,7 +607,12 @@ export function ratel(config: RatelConfig = {}): Ratel {
   // Shared by both handles. Sync `search` is BM25-only — dense methods rank
   // against the prebuilt embedding cache off the event loop, so they route
   // through `searchAsync`.
-  const searchSync = (query: string, topK: number, method?: SearchMethod): SearchHit[] => {
+  const searchSync = (
+    query: string,
+    topK: number,
+    method?: SearchMethod,
+    turnId?: string,
+  ): SearchHit[] => {
     const effective = method ?? catalogMethod;
     if (effective !== "bm25") {
       throw new Error(
@@ -592,10 +620,23 @@ export function ratel(config: RatelConfig = {}): Ratel {
           "prebuilt embeddings — use tools.searchAsync().",
       );
     }
-    return catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", "bm25");
+    return catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", "bm25", turnId);
   };
-  const searchAsync = (query: string, topK: number, method?: SearchMethod): Promise<SearchHit[]> =>
-    catalog.searchAsync(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", method);
+  const searchAsync = (
+    query: string,
+    topK: number,
+    method?: SearchMethod,
+    turnId?: string,
+  ): Promise<SearchHit[]> =>
+    catalog.searchAsync(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", method, turnId);
+  // Shared by `tools.invoke` and `adaptedTools.invoke` so a future turnId-adjacent
+  // change can't drift the two out of sync (search/searchAsync are already shared
+  // closures above).
+  const catalogInvoke = (
+    id: string,
+    args: Record<string, unknown>,
+    turnId?: string,
+  ): Promise<unknown> => catalog.invoke(id, args, undefined, turnId);
 
   const tools: ToolCollection = {
     catalog,
@@ -613,7 +654,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     get: (id) => catalog.get(id),
     search: searchSync,
     searchAsync,
-    invoke: (id, args) => catalog.invoke(id, args),
+    invoke: catalogInvoke,
   };
 
   function modelTools(): Record<string, ExecutableTool> {
@@ -628,11 +669,12 @@ export function ratel(config: RatelConfig = {}): Ratel {
     };
   }
 
-  async function recall(query: string): Promise<SearchCapabilitiesResult | null> {
+  async function recall(query: string, turnId?: string): Promise<SearchCapabilitiesResult | null> {
     const result = await runCapabilitiesSearch(catalog, query, {
       topKTools: config.recallTopK, // capped/validated inside runCapabilitiesSearch
       skillCatalog: skills,
       origin: "direct",
+      turnId,
     });
     return result.tools.groups.length === 0 && result.skills.length === 0 ? null : result;
   }
@@ -660,7 +702,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
       get: (id) => catalog.get(id),
       search: searchSync,
       searchAsync,
-      invoke: (id, args) => catalog.invoke(id, args),
+      invoke: catalogInvoke,
       // Ingest synchronously (validation + adapter codec + passthrough routing),
       // then embed the ingested batch in one pass; the promise rejects on failure.
       // Both the passthroughs and the executables stage into locals and commit
@@ -721,8 +763,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
         }
         return out;
       },
-      async recall(query) {
-        const result = await recall(query);
+      async recall(query, turnId) {
+        const result = await recall(query, turnId);
         if (result === null) return []; // nothing matched: don't spend a call id
         return adapter.recallMessages({ callId: `recall_${recallSeq++}`, query }, result);
       },
