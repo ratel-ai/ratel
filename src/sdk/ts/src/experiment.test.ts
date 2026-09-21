@@ -1243,6 +1243,49 @@ describe("experimentalDefineExperiment", () => {
     ]);
   });
 
+  it("attributes an invocation to the newest selection that offered the tool", async () => {
+    const invocation = vi.fn();
+    const sink: ExperimentEvaluationSink<"legacy"> = { invocation };
+    const experiment = defineExperimentInternal(
+      {
+        id: "search",
+        arms: {
+          legacy: {
+            select: async ({ query }: SearchParams) => ({ ids: [query] }),
+          },
+        },
+        ranking: (result: SearchResult) => result.ids.map((id) => ({ id })),
+        evaluation: {
+          references: [
+            {
+              kind: "invocation",
+              window: { maxAgeMs: 1_000, turns: 5 },
+              attribution: "last-offering-selection",
+            },
+          ],
+        },
+      },
+      sink,
+    );
+
+    const offering = await experiment.select(
+      { query: "search-tasks" },
+      { arm: "legacy", unitId: "unit-a" },
+    );
+    await experiment.select({ query: "update-task" }, { arm: "legacy", unitId: "unit-a" });
+    experiment.reportInvocation({ toolId: "search-tasks", unitId: "unit-a" });
+    experiment.reportInvocation({ toolId: "list-tags", unitId: "unit-a" });
+
+    expect(invocation.mock.calls.map(([record]) => record.attribution)).toEqual([
+      expect.objectContaining({
+        attributed: true,
+        selectionId: offering.selectionId,
+        rank: 0,
+      }),
+      { attributed: false },
+    ]);
+  });
+
   it("drops a consumed fallback shadow while comparing other shadows to it", async () => {
     const comparison = vi.fn();
     const drop = vi.fn();
