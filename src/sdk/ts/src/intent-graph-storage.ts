@@ -98,6 +98,19 @@ function isNotFound(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
+/**
+ * Extract `<Code>`/`<Message>` from an S3 error response body (standard AWS
+ * XML error shape) for a more useful failure message than a bare status code
+ * — e.g. distinguishing `SignatureDoesNotMatch` from `AccessDenied` on a 403.
+ * Returns `undefined` for a body with no `<Code>` (not an AWS-shaped error).
+ */
+function describeS3Error(body: string): string | undefined {
+  const code = /<Code>([^<]*)<\/Code>/.exec(body)?.[1];
+  if (!code) return undefined;
+  const message = /<Message>([^<]*)<\/Message>/.exec(body)?.[1];
+  return message ? `${code}: ${message}` : code;
+}
+
 /** One S3 REST request, as {@link S3Transport} sends it. */
 export interface S3Request {
   /** `"GET"` (read the object) or `"PUT"` (write it). */
@@ -237,8 +250,10 @@ export class ExperimentalS3IntentGraphStorage implements ExperimentalIntentGraph
       return null;
     }
     if (response.status !== 200) {
+      const detail = describeS3Error(response.body);
       throw new Error(
-        `S3 GetObject failed for s3://${this.bucket}/${this.key} with status ${response.status}`,
+        `S3 GetObject failed for s3://${this.bucket}/${this.key} with status ${response.status}` +
+          (detail ? ` (${detail})` : ""),
       );
     }
     const graph = IntentGraph.fromJson(response.body);
@@ -269,8 +284,10 @@ export class ExperimentalS3IntentGraphStorage implements ExperimentalIntentGraph
       );
     }
     if (response.status !== 200) {
+      const detail = describeS3Error(response.body);
       throw new Error(
-        `S3 PutObject failed for s3://${this.bucket}/${this.key} with status ${response.status}`,
+        `S3 PutObject failed for s3://${this.bucket}/${this.key} with status ${response.status}` +
+          (detail ? ` (${detail})` : ""),
       );
     }
     this.lastKnownEtag = response.headers.etag;

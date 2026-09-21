@@ -179,6 +179,22 @@ class _FakeS3Transport:
         return S3Response(status=200, headers={"etag": etag}, body="")
 
 
+class _FixedResponseS3Transport:
+    """Always returns the same canned response(s), regardless of the request."""
+
+    def __init__(
+        self, get_response: S3Response | None = None, put_response: S3Response | None = None
+    ) -> None:
+        # A single positional response applies to both GET and PUT.
+        self._get_response = get_response
+        self._put_response = put_response if put_response is not None else get_response
+
+    async def send(self, request: S3Request) -> S3Response:
+        response = self._get_response if request.method == "GET" else self._put_response
+        assert response is not None
+        return response
+
+
 _CREDENTIALS = ExperimentalS3IntentGraphStorageCredentials(
     access_key_id="AKIA", secret_access_key="secret"
 )
@@ -243,3 +259,62 @@ class TestExperimentalS3IntentGraphStorage:
 
         with pytest.raises(StaleIntentGraphError):
             await writer_b.save(IntentGraph.from_json(_graph_json(2)))
+
+    async def test_load_surfaces_aws_error_code_and_message(self) -> None:
+        transport = _FixedResponseS3Transport(
+            S3Response(
+                status=403,
+                headers={},
+                body=(
+                    '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>SignatureDoesNotMatch'
+                    "</Code><Message>The request signature we calculated does not match the "
+                    "signature you provided.</Message></Error>"
+                ),
+            )
+        )
+        storage = ExperimentalS3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        with pytest.raises(
+            RuntimeError,
+            match=r"status 403 \(SignatureDoesNotMatch: The request signature we calculated "
+            r"does not match the signature you provided\.\)",
+        ):
+            await storage.load()
+
+    async def test_save_surfaces_aws_error_code_and_message(self) -> None:
+        transport = _FixedResponseS3Transport(
+            get_response=S3Response(status=404, headers={}, body=""),
+            put_response=S3Response(
+                status=403,
+                headers={},
+                body=(
+                    '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>AccessDenied</Code>'
+                    "<Message>Access Denied</Message></Error>"
+                ),
+            ),
+        )
+        storage = ExperimentalS3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        with pytest.raises(RuntimeError, match=r"status 403 \(AccessDenied: Access Denied\)"):
+            await storage.save(IntentGraph.from_json(_graph_json(1)))
+
+    async def test_falls_back_to_bare_status_when_body_has_no_aws_code(self) -> None:
+        transport = _FixedResponseS3Transport(
+            S3Response(status=500, headers={}, body="Internal Server Error")
+        )
+        storage = ExperimentalS3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        with pytest.raises(RuntimeError, match=r"status 500$"):
+            await storage.load()

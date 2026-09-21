@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,6 +44,26 @@ __all__ = [
 
 class StaleIntentGraphError(RuntimeError):
     """Another writer saved a newer graph since this storage object's last load()/save()."""
+
+
+_AWS_ERROR_CODE_RE = re.compile(r"<Code>([^<]*)</Code>")
+_AWS_ERROR_MESSAGE_RE = re.compile(r"<Message>([^<]*)</Message>")
+
+
+def _describe_s3_error(body: str) -> str | None:
+    """Extract the AWS error code/message from an S3 error response body.
+
+    Standard AWS XML error shape, for a more useful failure message than a bare
+    status code — e.g. distinguishing ``SignatureDoesNotMatch`` from
+    ``AccessDenied`` on a 403. Returns `None` for a body with no ``<Code>``
+    (not an AWS-shaped error).
+    """
+    code_match = _AWS_ERROR_CODE_RE.search(body)
+    if not code_match:
+        return None
+    code = code_match.group(1)
+    message_match = _AWS_ERROR_MESSAGE_RE.search(body)
+    return f"{code}: {message_match.group(1)}" if message_match else code
 
 
 @runtime_checkable
@@ -263,9 +284,10 @@ class ExperimentalS3IntentGraphStorage:
             self._last_known_rev = None
             return None
         if response.status != 200:
+            detail = _describe_s3_error(response.body)
             raise RuntimeError(
                 f"S3 GetObject failed for s3://{self._bucket}/{self._key} "
-                f"with status {response.status}"
+                f"with status {response.status}" + (f" ({detail})" if detail else "")
             )
         graph = IntentGraph.from_json(response.body)
         self._last_known_etag = response.headers.get("etag")
@@ -297,9 +319,10 @@ class ExperimentalS3IntentGraphStorage:
                 "load() again and reapply your changes before saving"
             )
         if response.status != 200:
+            detail = _describe_s3_error(response.body)
             raise RuntimeError(
                 f"S3 PutObject failed for s3://{self._bucket}/{self._key} "
-                f"with status {response.status}"
+                f"with status {response.status}" + (f" ({detail})" if detail else "")
             )
         self._last_known_etag = response.headers.get("etag")
         self._last_known_rev = graph.rev

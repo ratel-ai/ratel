@@ -270,4 +270,68 @@ describe("ExperimentalS3IntentGraphStorage", () => {
       StaleIntentGraphError,
     );
   });
+
+  it("surfaces the AWS error code and message on a load() failure", async () => {
+    const transport: S3Transport = {
+      send: vi.fn(async () => ({
+        status: 403,
+        headers: {},
+        body:
+          '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>SignatureDoesNotMatch</Code>' +
+          "<Message>The request signature we calculated does not match the signature you provided.</Message>" +
+          "</Error>",
+      })),
+    };
+    const storage = new ExperimentalS3IntentGraphStorage({
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "us-east-1",
+      credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
+      transport,
+    });
+    await expect(storage.load()).rejects.toThrow(
+      /status 403 \(SignatureDoesNotMatch: The request signature we calculated does not match the signature you provided\.\)/,
+    );
+  });
+
+  it("surfaces the AWS error code and message on a save() failure", async () => {
+    const transport: S3Transport = {
+      send: vi.fn(async (request) =>
+        request.method === "GET"
+          ? { status: 404, headers: {}, body: "" }
+          : {
+              status: 403,
+              headers: {},
+              body:
+                '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>AccessDenied</Code>' +
+                "<Message>Access Denied</Message></Error>",
+            },
+      ),
+    };
+    const storage = new ExperimentalS3IntentGraphStorage({
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "us-east-1",
+      credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
+      transport,
+    });
+    const { IntentGraph } = await import("./index.js");
+    await expect(storage.save(IntentGraph.fromJson(graphJson(1)))).rejects.toThrow(
+      /status 403 \(AccessDenied: Access Denied\)/,
+    );
+  });
+
+  it("falls back to a bare status when the error body has no AWS <Code>", async () => {
+    const transport: S3Transport = {
+      send: vi.fn(async () => ({ status: 500, headers: {}, body: "Internal Server Error" })),
+    };
+    const storage = new ExperimentalS3IntentGraphStorage({
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "us-east-1",
+      credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
+      transport,
+    });
+    await expect(storage.load()).rejects.toThrow(/status 500$/);
+  });
 });
