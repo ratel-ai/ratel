@@ -64,6 +64,21 @@ def _next_cursor(result: Any) -> str | None:
     return nc
 
 
+def _tool_schema(tool: Any, camel: str, snake: str) -> Any | None:
+    """Read a tool schema under either spelling, like `_next_cursor`.
+
+    `mcp` 2.0 renamed `Tool.inputSchema` / `outputSchema` to `input_schema` /
+    `output_schema`, keeping the camelCase names as serialization aliases. A
+    pydantic alias is not an attribute, so reading one spelling silently
+    yields `None` on the other side of that boundary. `pyproject.toml` allows
+    `mcp>=1.0`, so both have to be read.
+    """
+    schema = getattr(tool, camel, None)
+    if schema is None:
+        schema = getattr(tool, snake, None)
+    return schema
+
+
 def _paginated_list_params(cursor: str) -> Any:
     for module_name in ("mcp.types", "mcp_types"):
         try:
@@ -125,8 +140,10 @@ def _build_registered_mcp_tools(
                 id=tool_id,
                 name=tool.name,
                 description=getattr(tool, "description", None) or "",
-                input_schema=getattr(tool, "inputSchema", None) or {},
-                output_schema=getattr(tool, "outputSchema", None) or {"type": "object"},
+                input_schema=_tool_schema(tool, "inputSchema", "input_schema") or {},
+                output_schema=(
+                    _tool_schema(tool, "outputSchema", "output_schema") or {"type": "object"}
+                ),
                 execute=_make_executor(catalog, session, name, tool_id, tool.name),
             )
         )
