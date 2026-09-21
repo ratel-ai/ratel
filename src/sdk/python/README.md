@@ -36,6 +36,14 @@ catalog.experimental_enable_adaptive_ranking(graph)
 await storage.save(graph)
 ```
 
+For MinIO or another self-hosted S3-compatible service, pass `endpoint`; `force_path_style` defaults to `True` once `endpoint` is set (what MinIO and most self-hosted services require):
+
+```python
+ExperimentalS3IntentGraphStorage(
+    bucket="my-bucket", key="intent-graph.json", endpoint="http://localhost:9000"
+)
+```
+
 For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole batch and embeds on a worker thread, so model loading, HTTP, and inference never block the asyncio loop or hold the GIL — and embedding errors surface right at `register()`:
 
 ```python

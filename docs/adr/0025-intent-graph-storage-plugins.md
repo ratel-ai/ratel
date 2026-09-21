@@ -78,9 +78,30 @@ deferred — not built in this version.
 **Testability.** Both S3 implementations take an injectable transport
 (`S3Transport` / a `send()`-shaped protocol), so the full test suite —
 including the conditional-write race and the SigV4 signer itself — runs
-without AWS credentials or network access. A real-AWS S3 integration pass is
-the user's own follow-up once credentials are available; this ADR's initial
-landing does not include one.
+without AWS credentials or network access. Verified live against real AWS S3
+and, separately, a self-hosted MinIO instance (see S3-compatible endpoints
+below).
+
+**S3-compatible endpoints (MinIO, etc.).** Driven by a real customer
+requirement (a MinIO/managed-S3 deployment, not AWS), `endpoint` and
+`forcePathStyle`/`force_path_style` options were added to
+`ExperimentalS3IntentGraphStorage`. `endpoint` (e.g.
+`"http://localhost:9000"`) overrides the AWS virtual-hosted host entirely;
+omit it for AWS S3, unchanged. `forcePathStyle` defaults to `true` once
+`endpoint` is set — most self-hosted S3-compatible services need path-style
+addressing (`https://endpoint/bucket/key`) since virtual-hosted style
+(`https://bucket.endpoint/key`) needs a wildcard DNS/TLS setup self-hosted
+deployments rarely have; pass `false` for a custom endpoint that does support
+virtual-hosted style (e.g. Cloudflare R2). The scheme/host/path resolution
+is a pure function (`resolveS3Endpoint` / `resolve_s3_endpoint`) independent
+of the transport, so it's unit-tested directly rather than only through a
+live server — the same pattern that made `awsUriEncode`'s AWS UriEncode
+spec-compliance (`!*'()` percent-encoding) independently testable too. No
+change to the SigV4 signing algorithm
+itself: MinIO (and most S3-compatible services) implement the same SigV4
+scheme AWS does. TLS trust for self-signed certificates and region-string
+validation are both out of scope — pass whatever the host environment
+already trusts / the service is configured with.
 
 ## Consequences
 
@@ -95,6 +116,6 @@ already ruled out putting a backend choice in core, and a hand-rolled SigV4
 client is small and stable relative to the alternative of a heavy, everyone-
 pays SDK dependency.
 
-Follow-ups, explicitly out of scope here: real-AWS integration testing;
-`~/.aws/credentials` / instance-role credential resolution; S3-compatible
-(non-AWS) endpoint support.
+Follow-ups, explicitly out of scope here: `~/.aws/credentials` / instance-role
+credential resolution; TLS trust configuration for self-signed certificates
+on a self-hosted endpoint.

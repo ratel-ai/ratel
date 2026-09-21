@@ -1,6 +1,6 @@
 # `examples/s3-support-adaptive-ranking-python` — live S3 intent graph storage test
 
-The Python mirror of [`examples/s3-support-adaptive-ranking`](../s3-support-adaptive-ranking/README.md): a **live** smoke test of `ExperimentalS3IntentGraphStorage` ([docs/adr/0025](../../docs/adr/0025-intent-graph-storage-plugins.md)) against a real AWS S3 bucket, not a mocked one.
+The Python mirror of [`examples/s3-support-adaptive-ranking`](../s3-support-adaptive-ranking/README.md): a **live** smoke test of `ExperimentalS3IntentGraphStorage` ([docs/adr/0025](../../docs/adr/0025-intent-graph-storage-plugins.md)) against a real S3-compatible bucket — AWS or self-hosted (MinIO, etc.) — not a mocked one.
 
 It never runs in CI (no AWS credentials there) — it's for manual verification.
 
@@ -29,8 +29,24 @@ RATEL_S3_TEST_BUCKET=my-bucket ./test_s3.py
 | `AWS_ACCESS_KEY_ID`      | yes                              | —                                  |
 | `AWS_SECRET_ACCESS_KEY`  | yes                              | —                                  |
 | `AWS_SESSION_TOKEN`      | if using temporary credentials  | —                                  |
-| `RATEL_S3_TEST_KEY`      | no                               | `ratel/intent-graph-s3-test.json` |
+| `RATEL_S3_TEST_KEY`      | no                               | `ratel/intent-graph-s3-test-v1.json` |
 | `RATEL_S3_TEST_REGION`   | no                               | `us-east-1`                       |
+| `RATEL_S3_TEST_ENDPOINT` | no                               | unset (AWS S3)                    |
+| `RATEL_S3_TEST_FORCE_PATH_STYLE` | no                       | `true` if `RATEL_S3_TEST_ENDPOINT` is set, else n/a |
+
+### Against a local MinIO instead of AWS
+
+```bash
+docker run -d -p 9000:9000 -e MINIO_ROOT_USER=ratelminio -e MINIO_ROOT_PASSWORD=ratelminiosecret \
+  quay.io/minio/minio server /data
+# create the bucket once, e.g. with quay.io/minio/mc or the MinIO console at :9001
+
+RATEL_S3_TEST_BUCKET=my-bucket \
+RATEL_S3_TEST_ENDPOINT=http://localhost:9000 \
+AWS_ACCESS_KEY_ID=ratelminio \
+AWS_SECRET_ACCESS_KEY=ratelminiosecret \
+uv run test_s3.py
+```
 
 ## What it checks
 

@@ -9,7 +9,7 @@ import {
   type S3Transport,
   StaleIntentGraphError,
 } from "./intent-graph-storage.js";
-import { awsUriEncode, signS3Request } from "./sigv4.js";
+import { awsUriEncode, resolveS3Endpoint, signS3Request } from "./sigv4.js";
 
 const V1_EMPTY_GRAPH = { v: 1, built_from_ts: 0, rev: 0, intents: [] };
 
@@ -176,6 +176,70 @@ describe("awsUriEncode", () => {
 
   it("percent-encodes a space as %20, not +", () => {
     expect(awsUriEncode("a b")).toBe("a%20b");
+  });
+});
+
+describe("resolveS3Endpoint", () => {
+  it("defaults to AWS virtual-hosted-style when no endpoint is given", () => {
+    const target = resolveS3Endpoint({
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "eu-central-1",
+    });
+    expect(target).toEqual({
+      scheme: "https",
+      host: "my-bucket.s3.eu-central-1.amazonaws.com",
+      path: "/intent-graph.json",
+    });
+  });
+
+  it("defaults to path-style once a custom endpoint is set (MinIO etc.)", () => {
+    const target = resolveS3Endpoint({
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "us-east-1",
+      endpoint: "http://localhost:9000",
+    });
+    expect(target).toEqual({
+      scheme: "http",
+      host: "localhost:9000",
+      path: "/my-bucket/intent-graph.json",
+    });
+  });
+
+  it("honors forcePathStyle: false for a custom endpoint that supports virtual-hosted style", () => {
+    const target = resolveS3Endpoint({
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "auto",
+      endpoint: "https://minio.internal:9000",
+      forcePathStyle: false,
+    });
+    expect(target).toEqual({
+      scheme: "https",
+      host: "my-bucket.minio.internal:9000",
+      path: "/intent-graph.json",
+    });
+  });
+
+  it("preserves a non-default port in the host", () => {
+    const target = resolveS3Endpoint({
+      bucket: "b",
+      key: "k",
+      region: "us-east-1",
+      endpoint: "https://minio.internal:9000",
+    });
+    expect(target.host).toBe("minio.internal:9000");
+  });
+
+  it("percent-encodes special characters in the key under path-style, bucket included", () => {
+    const target = resolveS3Endpoint({
+      bucket: "my-bucket",
+      key: "a!b*c'd(e)f",
+      region: "us-east-1",
+      endpoint: "http://localhost:9000",
+    });
+    expect(target.path).toBe("/my-bucket/a%21b%2Ac%27d%28e%29f");
   });
 });
 

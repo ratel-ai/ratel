@@ -15,10 +15,16 @@ if (!rawBucket) {
 const bucket: string = rawBucket;
 const key = process.env.RATEL_S3_TEST_KEY ?? "ratel/intent-graph-s3-test.json";
 const region = process.env.RATEL_S3_TEST_REGION ?? "us-east-1";
+const endpoint = process.env.RATEL_S3_TEST_ENDPOINT;
+const forcePathStyle =
+  process.env.RATEL_S3_TEST_FORCE_PATH_STYLE === undefined
+    ? undefined
+    : process.env.RATEL_S3_TEST_FORCE_PATH_STYLE !== "false";
 
 const graph = (rev: number) =>
   IntentGraph.fromJson(JSON.stringify({ v: 1, built_from_ts: Date.now(), rev, intents: [] }));
-const storage = () => new ExperimentalS3IntentGraphStorage({ bucket, key, region });
+const storage = () =>
+  new ExperimentalS3IntentGraphStorage({ bucket, key, region, endpoint, forcePathStyle });
 
 async function main() {
   const initial = storage();

@@ -77,6 +77,16 @@ runtime.tools.experimentalEnableAdaptiveRanking(graph);
 await storage.save(graph);
 ```
 
+For MinIO or another self-hosted S3-compatible service, pass `endpoint`; `forcePathStyle` defaults to `true` once `endpoint` is set (what MinIO and most self-hosted services require):
+
+```ts
+new ExperimentalS3IntentGraphStorage({
+  bucket: "my-bucket",
+  key: "intent-graph.json",
+  endpoint: "http://localhost:9000",
+});
+```
+
 For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole array and embeds on a libuv worker, so model loading, HTTP, and inference never block Node's event loop — and embedding errors surface right at `register()`:
 
 ```ts

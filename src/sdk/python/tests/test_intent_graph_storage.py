@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from ratel_ai import IntentGraph
-from ratel_ai._sigv4 import sign_s3_request
+from ratel_ai._sigv4 import resolve_s3_endpoint, sign_s3_request
 from ratel_ai.intent_graph_storage import (
     ExperimentalLocalFileIntentGraphStorage,
     ExperimentalS3IntentGraphStorage,
@@ -139,6 +139,54 @@ class TestSignS3Request:
     def test_hashes_empty_body_to_well_known_sha256_empty_digest(self) -> None:
         signed = sign_s3_request(**self._base_kwargs)
         assert signed.headers["x-amz-content-sha256"] == hashlib.sha256(b"").hexdigest()
+
+
+class TestResolveS3Endpoint:
+    def test_defaults_to_aws_virtual_hosted_style_when_no_endpoint_is_given(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="my-bucket", key="intent-graph.json", region="eu-central-1"
+        )
+        assert target.scheme == "https"
+        assert target.host == "my-bucket.s3.eu-central-1.amazonaws.com"
+        assert target.path == "/intent-graph.json"
+
+    def test_defaults_to_path_style_once_a_custom_endpoint_is_set(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            region="us-east-1",
+            endpoint="http://localhost:9000",
+        )
+        assert target.scheme == "http"
+        assert target.host == "localhost:9000"
+        assert target.path == "/my-bucket/intent-graph.json"
+
+    def test_honors_force_path_style_false_for_virtual_hosted_custom_endpoint(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            region="auto",
+            endpoint="https://minio.internal:9000",
+            force_path_style=False,
+        )
+        assert target.scheme == "https"
+        assert target.host == "my-bucket.minio.internal:9000"
+        assert target.path == "/intent-graph.json"
+
+    def test_preserves_a_non_default_port_in_the_host(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="b", key="k", region="us-east-1", endpoint="https://minio.internal:9000"
+        )
+        assert target.host == "minio.internal:9000"
+
+    def test_percent_encodes_special_characters_in_the_key_under_path_style(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="my-bucket",
+            key="a!b*c'd(e)f",
+            region="us-east-1",
+            endpoint="http://localhost:9000",
+        )
+        assert target.path == "/my-bucket/a%21b%2Ac%27d%28e%29f"
 
 
 @dataclass

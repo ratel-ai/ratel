@@ -1,7 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { IntentGraph } from "./index.js";
-import { awsUriEncode, signS3Request } from "./sigv4.js";
+import { resolveS3Endpoint, signS3Request } from "./sigv4.js";
 
 /**
  * Host-owned persistence for an {@link IntentGraph} (ADR-0025). Core stays
@@ -164,6 +164,20 @@ export interface ExperimentalS3IntentGraphStorageOptions {
   readonly region?: string;
   /** Explicit credentials; falls back to the standard AWS environment variables. */
   readonly credentials?: ExperimentalS3IntentGraphStorageCredentials;
+  /**
+   * Custom S3-compatible endpoint, e.g. `"http://localhost:9000"` or
+   * `"https://minio.internal:9000"`. Omit for AWS S3 (default).
+   */
+  readonly endpoint?: string;
+  /**
+   * Path-style addressing (`https://endpoint/bucket/key`) instead of
+   * virtual-hosted-style. Defaults to `true` whenever `endpoint` is set —
+   * what MinIO and most self-hosted S3-compatible services require. Pass
+   * `false` for a custom endpoint that supports virtual-hosted style (e.g.
+   * Cloudflare R2). No effect without `endpoint` — AWS S3 always uses
+   * virtual-hosted style.
+   */
+  readonly forcePathStyle?: boolean;
   /** Override the transport, e.g. to inject a fake for tests. Defaults to a `fetch`-based signed S3 client. */
   readonly transport?: S3Transport;
 }
@@ -184,12 +198,19 @@ class FetchS3Transport implements S3Transport {
   constructor(
     private readonly region: string,
     private readonly credentials: ExperimentalS3IntentGraphStorageCredentials | undefined,
+    private readonly endpoint: string | undefined,
+    private readonly forcePathStyle: boolean | undefined,
   ) {}
 
   async send(request: S3Request): Promise<S3Response> {
     const creds = this.credentials ?? credentialsFromEnv();
-    const host = `${request.bucket}.s3.${this.region}.amazonaws.com`;
-    const path = `/${request.key.split("/").map(awsUriEncode).join("/")}`;
+    const { scheme, host, path } = resolveS3Endpoint({
+      bucket: request.bucket,
+      key: request.key,
+      region: this.region,
+      endpoint: this.endpoint,
+      forcePathStyle: this.forcePathStyle,
+    });
     const body = request.body ?? "";
     const signed = signS3Request({
       method: request.method,
@@ -202,7 +223,7 @@ class FetchS3Transport implements S3Transport {
       secretAccessKey: creds.secretAccessKey,
       sessionToken: creds.sessionToken,
     });
-    const response = await fetch(`https://${host}${path}`, {
+    const response = await fetch(`${scheme}://${host}${path}`, {
       method: request.method,
       headers: signed.headers,
       body: request.method === "PUT" ? body : undefined,
@@ -234,7 +255,13 @@ export class ExperimentalS3IntentGraphStorage implements ExperimentalIntentGraph
     this.bucket = options.bucket;
     this.key = options.key;
     this.transport =
-      options.transport ?? new FetchS3Transport(options.region ?? "us-east-1", options.credentials);
+      options.transport ??
+      new FetchS3Transport(
+        options.region ?? "us-east-1",
+        options.credentials,
+        options.endpoint,
+        options.forcePathStyle,
+      );
   }
 
   async load(): Promise<IntentGraph | null> {

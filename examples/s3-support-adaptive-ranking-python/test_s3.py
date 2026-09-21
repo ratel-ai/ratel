@@ -18,6 +18,9 @@ if not bucket:
 
 key = os.environ.get("RATEL_S3_TEST_KEY", "ratel/intent-graph-s3-test-v1.json")
 region = os.environ.get("RATEL_S3_TEST_REGION", "us-east-1")
+endpoint = os.environ.get("RATEL_S3_TEST_ENDPOINT")
+_force_path_style_env = os.environ.get("RATEL_S3_TEST_FORCE_PATH_STYLE")
+force_path_style = None if _force_path_style_env is None else _force_path_style_env != "false"
 
 
 def graph(rev: int) -> IntentGraph:
@@ -27,7 +30,13 @@ def graph(rev: int) -> IntentGraph:
 
 
 def storage() -> ExperimentalS3IntentGraphStorage:
-    return ExperimentalS3IntentGraphStorage(bucket=bucket, key=key, region=region)
+    return ExperimentalS3IntentGraphStorage(
+        bucket=bucket,
+        key=key,
+        region=region,
+        endpoint=endpoint,
+        force_path_style=force_path_style,
+    )
 
 
 async def main() -> None:

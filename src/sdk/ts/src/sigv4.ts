@@ -57,6 +57,59 @@ export function awsUriEncode(value: string): string {
   );
 }
 
+/** Where an {@link resolveS3Endpoint} request should go. */
+export interface S3EndpointTarget {
+  readonly scheme: "http" | "https";
+  /** Includes the port when non-default, e.g. `"localhost:9000"`. */
+  readonly host: string;
+  /** Leading slash; key percent-encoded; bucket-prefixed iff path-style. */
+  readonly path: string;
+}
+
+/** Inputs to {@link resolveS3Endpoint}. */
+export interface ResolveS3EndpointOptions {
+  readonly bucket: string;
+  readonly key: string;
+  readonly region: string;
+  /** Custom S3-compatible endpoint, e.g. `"http://localhost:9000"`. Omit for AWS S3. */
+  readonly endpoint?: string;
+  /**
+   * Path-style addressing (`https://endpoint/bucket/key`) instead of
+   * virtual-hosted-style. Defaults to `true` whenever `endpoint` is set —
+   * what MinIO and most self-hosted S3-compatible services require, since
+   * virtual-hosted style needs a wildcard DNS/TLS setup most self-hosted
+   * deployments don't have. Pass `false` for a custom endpoint that does
+   * support virtual-hosted style (e.g. Cloudflare R2). No effect without
+   * `endpoint` — AWS S3 always uses virtual-hosted style.
+   */
+  readonly forcePathStyle?: boolean;
+}
+
+/**
+ * Resolve the scheme/host/path an S3 (or S3-compatible) request targets.
+ * Pure and network-free so endpoint/path-style logic is unit-testable
+ * without a live server.
+ */
+export function resolveS3Endpoint(options: ResolveS3EndpointOptions): S3EndpointTarget {
+  const encodedKey = options.key.split("/").map(awsUriEncode).join("/");
+
+  if (!options.endpoint) {
+    return {
+      scheme: "https",
+      host: `${options.bucket}.s3.${options.region}.amazonaws.com`,
+      path: `/${encodedKey}`,
+    };
+  }
+
+  const endpointUrl = new URL(options.endpoint);
+  const scheme = endpointUrl.protocol === "http:" ? "http" : "https";
+  const pathStyle = options.forcePathStyle ?? true;
+
+  return pathStyle
+    ? { scheme, host: endpointUrl.host, path: `/${options.bucket}/${encodedKey}` }
+    : { scheme, host: `${options.bucket}.${endpointUrl.host}`, path: `/${encodedKey}` };
+}
+
 /** Sign an S3 request per AWS SigV4. Returns the full header set to send. */
 export function signS3Request(options: SignS3RequestOptions): SignedS3Request {
   const date = options.date ?? new Date();

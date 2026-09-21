@@ -24,11 +24,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 from urllib.error import HTTPError
-from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from ._native import IntentGraph
-from ._sigv4 import sign_s3_request
+from ._sigv4 import resolve_s3_endpoint, sign_s3_request
 
 __all__ = [
     "ExperimentalIntentGraphStorage",
@@ -206,22 +205,31 @@ class _UrllibS3Transport:
         self,
         region: str,
         credentials: ExperimentalS3IntentGraphStorageCredentials | None,
+        endpoint: str | None = None,
+        force_path_style: bool | None = None,
     ) -> None:
         self._region = region
         self._credentials = credentials
+        self._endpoint = endpoint
+        self._force_path_style = force_path_style
 
     async def send(self, request: S3Request) -> S3Response:
         return await asyncio.to_thread(self._send_sync, request)
 
     def _send_sync(self, request: S3Request) -> S3Response:
         creds = self._credentials or _credentials_from_env()
-        host = f"{request.bucket}.s3.{self._region}.amazonaws.com"
-        path = "/" + "/".join(quote(part, safe="") for part in request.key.split("/"))
+        target = resolve_s3_endpoint(
+            bucket=request.bucket,
+            key=request.key,
+            region=self._region,
+            endpoint=self._endpoint,
+            force_path_style=self._force_path_style,
+        )
         body = request.body or ""
         signed = sign_s3_request(
             method=request.method,
-            host=host,
-            path=path,
+            host=target.host,
+            path=target.path,
             headers=dict(request.headers),
             body=body,
             region=self._region,
@@ -229,7 +237,7 @@ class _UrllibS3Transport:
             secret_access_key=creds.secret_access_key,
             session_token=creds.session_token,
         )
-        url = f"https://{host}{path}"
+        url = f"{target.scheme}://{target.host}{target.path}"
         data = body.encode("utf-8") if request.method == "PUT" else None
         http_request = Request(url, data=data, headers=signed.headers, method=request.method)
         try:
@@ -260,17 +268,26 @@ class ExperimentalS3IntentGraphStorage:
         key: str,
         region: str = "us-east-1",
         credentials: ExperimentalS3IntentGraphStorageCredentials | None = None,
+        endpoint: str | None = None,
+        force_path_style: bool | None = None,
         transport: S3Transport | None = None,
     ) -> None:
         """Store the graph at `s3://{bucket}/{key}` in `region`.
 
         `credentials` defaults to `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/
-        `AWS_SESSION_TOKEN` if omitted. `transport` overrides how requests are
-        sent — inject a fake for tests.
+        `AWS_SESSION_TOKEN` if omitted. `endpoint` points at a custom
+        S3-compatible service (e.g. `"http://localhost:9000"` for MinIO);
+        omit for AWS S3. `force_path_style` defaults to `True` whenever
+        `endpoint` is set (what MinIO and most self-hosted services
+        require) — pass `False` for a custom endpoint that supports
+        virtual-hosted style. `transport` overrides how requests are sent —
+        inject a fake for tests.
         """
         self._bucket = bucket
         self._key = key
-        self._transport: S3Transport = transport or _UrllibS3Transport(region, credentials)
+        self._transport: S3Transport = transport or _UrllibS3Transport(
+            region, credentials, endpoint, force_path_style
+        )
         self._last_known_etag: str | None = None
         self._last_known_rev: int | None = None
 

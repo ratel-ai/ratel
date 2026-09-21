@@ -10,6 +10,7 @@ import hashlib
 import hmac as hmac_lib
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from urllib.parse import quote, urlparse
 
 
 @dataclass(frozen=True)
@@ -81,3 +82,55 @@ def sign_s3_request(
         f"SignedHeaders={signed_headers}, Signature={signature}"
     )
     return SignedS3Request(headers={**all_headers, "authorization": authorization})
+
+
+@dataclass(frozen=True)
+class S3EndpointTarget:
+    """Where a `resolve_s3_endpoint` request should go."""
+
+    scheme: str  # "http" | "https"
+    #: Includes the port when non-default, e.g. ``"localhost:9000"``.
+    host: str
+    #: Leading slash; key percent-encoded; bucket-prefixed iff path-style.
+    path: str
+
+
+def resolve_s3_endpoint(
+    *,
+    bucket: str,
+    key: str,
+    region: str,
+    endpoint: str | None = None,
+    force_path_style: bool | None = None,
+) -> S3EndpointTarget:
+    """Resolve the scheme/host/path an S3 (or S3-compatible) request targets.
+
+    Pure and network-free so endpoint/path-style logic is unit-testable
+    without a live server. ``force_path_style`` defaults to `True` whenever
+    `endpoint` is set — what MinIO and most self-hosted S3-compatible
+    services require, since virtual-hosted style needs a wildcard DNS/TLS
+    setup most self-hosted deployments don't have. Pass `False` for a
+    custom endpoint that supports virtual-hosted style (e.g. Cloudflare
+    R2). No effect without `endpoint` — AWS S3 always uses virtual-hosted
+    style.
+    """
+    encoded_key = "/".join(quote(part, safe="") for part in key.split("/"))
+
+    if not endpoint:
+        return S3EndpointTarget(
+            scheme="https",
+            host=f"{bucket}.s3.{region}.amazonaws.com",
+            path=f"/{encoded_key}",
+        )
+
+    endpoint_url = urlparse(endpoint)
+    scheme = "http" if endpoint_url.scheme == "http" else "https"
+    path_style = force_path_style if force_path_style is not None else True
+
+    if path_style:
+        return S3EndpointTarget(
+            scheme=scheme, host=endpoint_url.netloc, path=f"/{bucket}/{encoded_key}"
+        )
+    return S3EndpointTarget(
+        scheme=scheme, host=f"{bucket}.{endpoint_url.netloc}", path=f"/{encoded_key}"
+    )
