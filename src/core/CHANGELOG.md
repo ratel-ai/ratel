@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.12.0-rc.5] - 2026-09-21
+
+### Added
+
+- Adaptive ranking and retrieval scoring — cluster admission, negative feedback, and a readable score (#159)
+
+### Fixed
+
+- Key adaptive-ranking pending state by turn_id (#163)
+
 ## [0.12.0-rc.4] - 2026-09-02
 
 ### Changed
