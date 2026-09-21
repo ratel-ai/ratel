@@ -101,6 +101,21 @@ export type {
 // content plus the content-presence re-injection gate. Namespaced so dependence
 // on this unstable surface is explicit: `experimental.FactCatalog`.
 export * as experimental from "./experimental.js";
+export type {
+  ExperimentalIntentGraphStorage,
+  ExperimentalLocalFileIntentGraphStorageOptions,
+  ExperimentalS3IntentGraphStorageCredentials,
+  ExperimentalS3IntentGraphStorageOptions,
+  S3Request,
+  S3Response,
+  S3Transport,
+} from "./intent-graph-storage.js";
+/** Host-owned intent graph persistence: local file and S3 backends (ADR-0025). */
+export {
+  ExperimentalLocalFileIntentGraphStorage,
+  ExperimentalS3IntentGraphStorage,
+  StaleIntentGraphError,
+} from "./intent-graph-storage.js";
 export type { McpServerHandle, McpToolsListErrorCode, RegisterMcpServerOptions } from "./mcp.js";
 export { McpToolsListError, registerMcpServer } from "./mcp.js";
 // The framework-adapter SPI and factory (ADR-0013): `ratel(config).adaptTo(adapter)`.
