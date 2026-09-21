@@ -16,7 +16,7 @@ if not bucket:
     print("set RATEL_S3_TEST_BUCKET (and AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)", file=sys.stderr)
     sys.exit(1)
 
-key = os.environ.get("RATEL_S3_TEST_KEY", "ratel/intent-graph-s3-test.json")
+key = os.environ.get("RATEL_S3_TEST_KEY", "ratel/intent-graph-s3-test-v1.json")
 region = os.environ.get("RATEL_S3_TEST_REGION", "us-east-1")
 
 
