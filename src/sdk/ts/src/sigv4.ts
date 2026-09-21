@@ -43,6 +43,20 @@ function amzDate(date: Date): { full: string; dateOnly: string } {
   return { full: iso, dateOnly: iso.slice(0, 8) };
 }
 
+/**
+ * Percent-encode `value` per AWS's SigV4 UriEncode rules: every byte except
+ * unreserved characters (`A-Za-z0-9-._~`). `encodeURIComponent` alone
+ * under-escapes — it leaves `!*'()` unescaped, which AWS's canonicalization
+ * does not — so those five are escaped on top of it. Matches Python's
+ * `urllib.parse.quote(part, safe="")`, which is already spec-correct.
+ */
+export function awsUriEncode(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!*'()]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
 /** Sign an S3 request per AWS SigV4. Returns the full header set to send. */
 export function signS3Request(options: SignS3RequestOptions): SignedS3Request {
   const date = options.date ?? new Date();

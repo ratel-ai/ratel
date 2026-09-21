@@ -1,7 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { IntentGraph } from "./index.js";
-import { signS3Request } from "./sigv4.js";
+import { awsUriEncode, signS3Request } from "./sigv4.js";
 
 /**
  * Host-owned persistence for an {@link IntentGraph} (ADR-0025). Core stays
@@ -189,7 +189,7 @@ class FetchS3Transport implements S3Transport {
   async send(request: S3Request): Promise<S3Response> {
     const creds = this.credentials ?? credentialsFromEnv();
     const host = `${request.bucket}.s3.${this.region}.amazonaws.com`;
-    const path = `/${request.key.split("/").map(encodeURIComponent).join("/")}`;
+    const path = `/${request.key.split("/").map(awsUriEncode).join("/")}`;
     const body = request.body ?? "";
     const signed = signS3Request({
       method: request.method,

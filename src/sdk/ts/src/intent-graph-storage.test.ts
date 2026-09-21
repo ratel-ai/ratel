@@ -9,7 +9,7 @@ import {
   type S3Transport,
   StaleIntentGraphError,
 } from "./intent-graph-storage.js";
-import { signS3Request } from "./sigv4.js";
+import { awsUriEncode, signS3Request } from "./sigv4.js";
 
 const V1_EMPTY_GRAPH = { v: 1, built_from_ts: 0, rev: 0, intents: [] };
 
@@ -158,6 +158,24 @@ describe("signS3Request (SigV4)", () => {
     expect(signed.headers["x-amz-content-sha256"]).toBe(
       createHash("sha256").update("").digest("hex"),
     );
+  });
+});
+
+describe("awsUriEncode", () => {
+  it("leaves unreserved characters (A-Za-z0-9-._~) unescaped", () => {
+    const unreserved = "AZaz09-._~";
+    expect(awsUriEncode(unreserved)).toBe(unreserved);
+  });
+
+  it("percent-encodes sub-delim characters JS's encodeURIComponent leaves alone", () => {
+    // https://docs.aws.amazon.com/general/latest/gr/create-signed-request.html —
+    // UriEncode escapes every byte except unreserved characters; encodeURIComponent
+    // alone under-escapes !*'() (matches Python's urllib.parse.quote(part, safe="")).
+    expect(awsUriEncode("!*'()")).toBe("%21%2A%27%28%29");
+  });
+
+  it("percent-encodes a space as %20, not +", () => {
+    expect(awsUriEncode("a b")).toBe("a%20b");
   });
 });
 
