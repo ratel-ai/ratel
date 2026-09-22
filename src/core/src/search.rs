@@ -105,7 +105,7 @@ pub(crate) struct Bm25Index {
 /// (normalize, stem, drop stopwords). Rebuilt here rather than borrowed because
 /// the crate keeps its own private; if the two ever diverge, `query_ceiling`
 /// would divide by a ceiling computed over different terms than the score.
-fn tokenizer() -> DefaultTokenizer {
+pub(crate) fn tokenizer() -> DefaultTokenizer {
     DefaultTokenizer::new(Language::English)
 }
 
@@ -116,7 +116,7 @@ fn tokenizer() -> DefaultTokenizer {
 /// a query term, but the ceiling counts each distinct term once, and feeding
 /// both the same term set is what keeps a repeated word from inflating a score
 /// without inflating what it is normalized against.
-fn distinct_terms(query: &str) -> Vec<String> {
+pub(crate) fn distinct_terms(query: &str) -> Vec<String> {
     let mut terms = tokenizer().tokenize(query);
     terms.sort_unstable();
     terms.dedup();
