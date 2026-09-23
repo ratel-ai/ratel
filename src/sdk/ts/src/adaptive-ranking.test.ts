@@ -434,6 +434,167 @@ describe("adaptive usage ranking", () => {
   });
 });
 
+// ---- learn: false, a consumer that ranks without writing ----------------------
+
+/** A lexical (no-centroid) graph with one cluster already fully supported, so
+ * `learn: false` can be proven to rank without needing to grow anything
+ * first. Carries edges for both a tool and a skill id so the same fixture
+ * serves the tool- and skill-catalog tests. */
+function knownClusterGraph(): IntentGraph {
+  return IntentGraph.fromJson(
+    JSON.stringify({
+      v: 1,
+      built_from_ts: 1,
+      intents: [
+        {
+          id: "i0",
+          label: "l",
+          terms: [],
+          members: ["why is the build broken"],
+          support: 9,
+          tools: { gh_run_list: 1.0 },
+          skills: { "ci-triage": 1.0 },
+        },
+      ],
+    }),
+  );
+}
+
+async function buildSkillCatalog(): Promise<SkillCatalog> {
+  const catalog = new SkillCatalog();
+  await catalog.register([
+    {
+      id: "ci-triage",
+      name: "ci-triage",
+      description: "Diagnose why the build failed in CI",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    },
+    {
+      id: "unrelated-skill",
+      name: "unrelated-skill",
+      description: "Read a file from disk",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    },
+  ]);
+  return catalog;
+}
+
+describe("learn: false", () => {
+  it("ranks from a graph it was handed without learning into it", async () => {
+    const catalog = await buildCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const hits = catalog.search("why is the build broken", 5);
+    expect(hits.every((h) => h.fused)).toBe(true);
+    expect(ids(hits).indexOf("gh_run_list")).toBeLessThan(ids(hits).indexOf("docker_build"));
+  });
+
+  it("does not bump rev or change the wire form after a search and an invoke", async () => {
+    const catalog = await buildCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const revBefore = graph.rev;
+    const jsonBefore = graph.toJson();
+
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+
+    expect(graph.rev).toBe(revBefore);
+    expect(graph.toJson()).toBe(jsonBefore);
+  });
+
+  it("keeps learning off after a trace sink is re-installed for an unrelated reason", async () => {
+    const catalog = await buildCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const registry = (catalog as unknown as { registry: ToolRegistry }).registry;
+    registry.setTraceSink({ kind: "memory", sessionId: "s" });
+
+    const revBefore = graph.rev;
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+
+    expect(graph.rev).toBe(revBefore);
+  });
+
+  it("resumes learning after disable and a plain re-enable", async () => {
+    const catalog = await buildCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+    const revAfterConsumerOnly = graph.rev;
+
+    catalog.experimentalDisableAdaptiveRanking();
+    catalog.experimentalEnableAdaptiveRanking(graph);
+    await useIt(catalog, "why is the build broken again", "gh_run_list");
+
+    expect(graph.rev).toBeGreaterThan(revAfterConsumerOnly);
+  });
+
+  it("ranks a skill catalog from a graph without learning into it", async () => {
+    const catalog = await buildSkillCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const hits = catalog.search("why is the build broken", 5);
+    expect(hits.every((h) => h.fused)).toBe(true);
+    expect(hits[0]?.skillId).toBe("ci-triage");
+  });
+
+  it("skill catalog: does not bump rev or change the wire form after search + invoke", async () => {
+    const catalog = await buildSkillCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const revBefore = graph.rev;
+    const jsonBefore = graph.toJson();
+
+    catalog.search("why is the build broken", 5);
+    catalog.invoke("ci-triage");
+
+    expect(graph.rev).toBe(revBefore);
+    expect(graph.toJson()).toBe(jsonBefore);
+  });
+
+  it("skill catalog: keeps learning off after a trace sink is re-installed", async () => {
+    const catalog = await buildSkillCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const registry = (catalog as unknown as { registry: SkillRegistry }).registry;
+    registry.setTraceSink({ kind: "memory", sessionId: "s" });
+
+    const revBefore = graph.rev;
+    catalog.search("why is the build broken", 5);
+    catalog.invoke("ci-triage");
+
+    expect(graph.rev).toBe(revBefore);
+  });
+
+  it("skill catalog: resumes learning after disable and a plain re-enable", async () => {
+    const catalog = await buildSkillCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+    catalog.search("why is the build broken", 5);
+    catalog.invoke("ci-triage");
+    const revAfterConsumerOnly = graph.rev;
+
+    catalog.experimentalDisableAdaptiveRanking();
+    catalog.experimentalEnableAdaptiveRanking(graph);
+    catalog.search("why is the build broken again", 5);
+    catalog.invoke("ci-triage");
+
+    expect(graph.rev).toBeGreaterThan(revAfterConsumerOnly);
+  });
+});
+
 // ---- opt-in auto-rebuild on model change ------------------------------------
 
 /** The pyo3/napi native can't be monkeypatched, so swap the whole native for a

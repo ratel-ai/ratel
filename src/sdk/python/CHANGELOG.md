@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `learn=False` on `experimental_enable_adaptive_ranking` — rank from an intent graph without learning into it, for consuming a graph produced elsewhere (e.g. Ratel Cloud)
+
 ## [0.13.0-rc.5] - 2026-09-21
 
 ### Added

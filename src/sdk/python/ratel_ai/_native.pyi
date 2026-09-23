@@ -291,17 +291,21 @@ class ToolRegistry:
         provenance: str | None = None,
         cluster_similarity: float | None = None,
         cluster_coverage: float | None = None,
+        learn: bool | None = None,
     ) -> None:
         """Turn on adaptive usage ranking against `graph` (ADR-0014).
 
-        Wires both halves: this registry ranks against the graph, and its trace
-        sink is decorated with a learner that grows it from search-then-invoke
-        pairs. Pass the same graph to the other registry so both learn into one
-        set of clusters.
+        Wires both halves by default: this registry ranks against the graph,
+        and its trace sink is decorated with a learner that grows it from
+        search-then-invoke pairs. Pass the same graph to the other registry so
+        both learn into one set of clusters.
 
         Only queries matching a cluster are affected. With a graph attached
         `SearchHit.score` becomes a fusion score rather than a raw BM25 score,
         so use `rank` for ordering and `fused` to detect the scale.
+
+        Pass `learn=False` to rank from `graph` without learning into it. The
+        flag is stored on the registry and survives later sink installs.
         """
 
     def set_experimental_dense_weight(self, weight: float) -> None:
@@ -544,17 +548,21 @@ class SkillRegistry:
         provenance: str | None = None,
         cluster_similarity: float | None = None,
         cluster_coverage: float | None = None,
+        learn: bool | None = None,
     ) -> None:
         """Turn on adaptive usage ranking against `graph` (ADR-0014).
 
-        Wires both halves: this registry ranks against the graph, and its trace
-        sink is decorated with a learner that grows it from search-then-invoke
-        pairs. Pass the same graph to the other registry so both learn into one
-        set of clusters.
+        Wires both halves by default: this registry ranks against the graph,
+        and its trace sink is decorated with a learner that grows it from
+        search-then-invoke pairs. Pass the same graph to the other registry so
+        both learn into one set of clusters.
 
         Only queries matching a cluster are affected. With a graph attached
         `SearchHit.score` becomes a fusion score rather than a raw BM25 score,
         so use `rank` for ordering and `fused` to detect the scale.
+
+        Pass `learn=False` to rank from `graph` without learning into it. The
+        flag is stored on the registry and survives later sink installs.
         """
 
     def set_experimental_dense_weight(self, weight: float) -> None:

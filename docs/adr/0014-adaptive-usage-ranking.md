@@ -44,6 +44,9 @@ supply no `turn_id`. This is what the `CreditSlot` bullet below called "a per-tu
 threaded through the trace events, deferred as not worth the plumbing"; the plumbing has now
 landed. See the `## Rejected` section for the alternative of making `turn_id` mandatory.
 
+Amended 2026-09-23: the enable entry points accept `learn: false` so a registry can rank from
+a graph without learning into it — see [Opt-in, per registry](#opt-in-per-registry).
+
 ## Context
 
 Every ranker in the engine scores **text similarity only** — BM25 over the flattened
@@ -372,6 +375,26 @@ then the prefix is dropped. The marker sits on the *behavior* entry points only.
 and its `to_json` / `from_json` / `rev` keep stable names — it is a `protocol/v1` wire type
 whose versioning already governs its evolution, and the experimental methods are the sole way
 to activate it, so they gate all use on their own.
+
+**Amended 2026-09-23: `learn: false` — ranking without learning.** The enable entry points
+take an optional `learn` flag, default `true` (today's behavior, byte for byte). With
+`learn: false` the registry still ranks against the attached graph but its trace sink is never
+decorated with a learner, so the graph's `rev` and content are exactly what was handed in. This
+is the shape a runtime needs to consume a graph produced elsewhere — Ratel Cloud, the second
+producer named in [What is open source](#what-is-open-source), replaying a project's stored
+runtime events through this same learner and serving one graph per project — without a
+consumer's own traffic silently mutating a document whose revisions the producer, and a
+dashboard built on it, need to stay authoritative.
+
+The flag is stored on the registry, not consumed once at the enable call: every later sink
+install — `setTraceSink` / `set_trace_sink`, `setTraceSinkCallback`, `subscribeTraceEvents` /
+`subscribe_trace_events` — re-derives its sink through the same flag. This is the same hazard
+[Where learning happens](#where-learning-happens) already guards for attaching a *new*
+subscriber; `learn: false` adds the mirror case, where re-installing a sink for an unrelated
+reason (rotating a jsonl file, attaching a fresh runtime-events stream) must not silently
+resume learning that was deliberately turned off. `disable_adaptive_ranking` resets the flag
+to `true` alongside the observation policy, so a plain re-enable afterward reproduces today's
+behavior.
 
 ### Where learning happens
 

@@ -289,6 +289,7 @@ export class ToolRegistry {
     options: {
       warnOnModelMismatch?: boolean;
       rebuildOnModelChange?: boolean;
+      learn?: boolean;
     } & ObservationPolicyOptions = {},
   ): void {
     this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
@@ -296,12 +297,16 @@ export class ToolRegistry {
     this.#adaptiveWarned = false;
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
-    this.native.enableAdaptiveRanking(graph, {
-      origins: options.origins,
-      provenance: options.provenance,
-      clusterSimilarity: options.clusterSimilarity,
-      clusterCoverage: options.clusterCoverage,
-    });
+    this.native.enableAdaptiveRanking(
+      graph,
+      {
+        origins: options.origins,
+        provenance: options.provenance,
+        clusterSimilarity: options.clusterSimilarity,
+        clusterCoverage: options.clusterCoverage,
+      },
+      options.learn,
+    );
     this.#maybeWarnModelMismatch();
   }
 
@@ -668,6 +673,7 @@ export class SkillRegistry {
     options: {
       warnOnModelMismatch?: boolean;
       rebuildOnModelChange?: boolean;
+      learn?: boolean;
     } & ObservationPolicyOptions = {},
   ): void {
     this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
@@ -675,12 +681,16 @@ export class SkillRegistry {
     this.#adaptiveWarned = false;
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
-    this.native.enableAdaptiveRanking(graph, {
-      origins: options.origins,
-      provenance: options.provenance,
-      clusterSimilarity: options.clusterSimilarity,
-      clusterCoverage: options.clusterCoverage,
-    });
+    this.native.enableAdaptiveRanking(
+      graph,
+      {
+        origins: options.origins,
+        provenance: options.provenance,
+        clusterSimilarity: options.clusterSimilarity,
+        clusterCoverage: options.clusterCoverage,
+      },
+      options.learn,
+    );
     this.#maybeWarnModelMismatch();
   }
 

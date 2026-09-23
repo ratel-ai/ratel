@@ -733,12 +733,19 @@ export class ToolCatalog {
    * next dense (semantic/hybrid) search rather than staying paused until you
    * call {@link experimentalRebuildIntentGraph} yourself. Off by default — the rebuild is an
    * embedding pass (cost, possible `EmbedderError`, and it mutates the graph).
+   *
+   * Set `learn: false` to rank from `graph` without learning into it — the
+   * consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+   * The flag is stored on the registry and survives later sink changes
+   * (`setTraceSink`, `subscribeTraceEvents`), so re-installing a sink for an
+   * unrelated reason cannot silently resume learning. Defaults to `true`.
    */
   experimentalEnableAdaptiveRanking(
     graph: IntentGraph,
     options: {
       warnOnModelMismatch?: boolean;
       rebuildOnModelChange?: boolean;
+      learn?: boolean;
     } & ObservationPolicyOptions = {},
   ): void {
     this.registry.experimentalEnableAdaptiveRanking(graph, options);

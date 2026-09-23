@@ -499,18 +499,27 @@ class SkillRegistry:
         provenance: ProvenanceOption | None = None,
         cluster_similarity: float | None = None,
         cluster_coverage: float | None = None,
+        learn: bool = True,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
-        Wires both halves: this registry ranks against what users have actually
-        invoked after similar queries, and keeps learning as it is used. Pass
-        the same :class:`IntentGraph` to the other registry so both learn into one
-        set of clusters.
+        Wires both halves by default: this registry ranks against what users
+        have actually invoked after similar queries, and keeps learning as it
+        is used. Pass the same :class:`IntentGraph` to the other registry so
+        both learn into one set of clusters.
 
         Only queries matching a cluster are affected. With a graph attached the
         hit ``score`` becomes a fusion score rather than a raw BM25 score, so
         use ``rank`` for ordering and ``fused`` to detect the scale, not the
         raw ``score``.
+
+        Pass ``learn=False`` to rank from ``graph`` without learning into it —
+        the consumer form for a graph produced elsewhere (Ratel Cloud, for
+        example). The flag is stored on the registry, not just applied at this
+        call: every later sink install (``set_trace_sink``,
+        ``subscribe_trace_events``) re-derives its sink through the same flag,
+        so re-installing a sink for an unrelated reason cannot silently resume
+        learning.
 
         Set ``rebuild_on_model_change`` to recover automatically instead: the
         next dense (semantic/hybrid) search re-embeds the graph under the current
@@ -530,8 +539,8 @@ class SkillRegistry:
             self._rebuild_on_model_change = rebuild_on_model_change
             self._adaptive_warned = False
             self._native.enable_adaptive_ranking(
-            graph, origins, provenance, cluster_similarity, cluster_coverage
-        )
+                graph, origins, provenance, cluster_similarity, cluster_coverage, learn
+            )
         self._maybe_warn_model_mismatch()
 
     def experimental_disable_adaptive_ranking(self) -> None:
@@ -964,18 +973,23 @@ class SkillCatalog:
         provenance: ProvenanceOption | None = None,
         cluster_similarity: float | None = None,
         cluster_coverage: float | None = None,
+        learn: bool = True,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
-        Wires both halves: this catalog ranks against what users have actually
-        invoked after similar queries, and keeps learning as it is used. Pass
-        the same :class:`IntentGraph` to the other catalog so both learn into one
-        set of clusters.
+        Wires both halves by default: this catalog ranks against what users
+        have actually invoked after similar queries, and keeps learning as it
+        is used. Pass the same :class:`IntentGraph` to the other catalog so
+        both learn into one set of clusters.
 
         Only queries matching a cluster are affected. With a graph attached the
         hit ``score`` becomes a fusion score rather than a raw BM25 score, so
         use ``rank`` for ordering and ``fused`` to detect the scale, not the
         raw ``score``.
+
+        Pass ``learn=False`` to rank from ``graph`` without learning into it —
+        the consumer form for a graph produced elsewhere (Ratel Cloud, for
+        example). See :meth:`SkillRegistry.experimental_enable_adaptive_ranking`.
 
         Set ``rebuild_on_model_change`` to auto-recover a model-mismatched graph
         on the next dense search rather than staying paused until you call
@@ -990,6 +1004,7 @@ class SkillCatalog:
             provenance=provenance,
             cluster_similarity=cluster_similarity,
             cluster_coverage=cluster_coverage,
+            learn=learn,
         )
 
     async def experimental_rebuild_intent_graph(self) -> None:
