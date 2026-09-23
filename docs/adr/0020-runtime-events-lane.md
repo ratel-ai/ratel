@@ -6,6 +6,12 @@ Date: 2026-08-13
 
 Accepted — experimental rollout
 
+Amended 2026-09-23: `turn_id` is declared on the v2 envelope — see [Envelope v2 and
+identity](#envelope-v2-and-identity). It was already flowing (projected by both SDKs, read by
+both native bridges, keyed on by the core learner per ADR-0014) but undeclared, untested for
+truncation survival, and absent from the conformance fixture; this amendment closes that gap
+with no behavior change.
+
 ## Context
 
 Ratel's core trace stream already records the product facts that power inspection, adaptive
@@ -98,6 +104,7 @@ Every event is flattened into this v2 envelope:
 | `environment` | optional deployment environment |
 | `end_user_id` | optional application-provided subject id |
 | `trace_id`, `span_id` | optional active OTel correlation ids |
+| `turn_id` | optional, host-supplied; correlates a search with the invoke(s) of the same agent turn (pairs with the ADR-0014 credit slot) — the key Ratel Cloud uses to pair events when building the intent graph server-side |
 | `type` and payload | flattened event tag and fields |
 
 `event_id` is the canonical deduplication and join key. The same value survives fan-out,

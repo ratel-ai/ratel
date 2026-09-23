@@ -137,6 +137,7 @@ export type {
   RuntimeEventsOptions,
 } from "./runtime-events.js";
 export {
+  OPTIONAL_ENVELOPE_FIELDS,
   RUNTIME_EVENT_MAX_HITS,
   RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
   RUNTIME_EVENT_MAX_QUERY_BYTES,

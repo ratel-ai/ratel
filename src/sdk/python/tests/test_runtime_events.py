@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from ratel_ai import (
+    OPTIONAL_ENVELOPE_FIELDS,
     RUNTIME_EVENT_MAX_HITS,
     RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
     RUNTIME_EVENT_MAX_QUERY_BYTES,
@@ -166,6 +167,7 @@ def test_matches_frozen_cross_language_event_vocabulary() -> None:
             "source_id",
             "type",
         ],
+        "optional_envelope_fields": list(OPTIONAL_ENVELOPE_FIELDS),
         "event_types": list(RUNTIME_EVENT_TYPES),
     }
 
@@ -419,6 +421,96 @@ async def test_bounds_query_hits_and_payload_before_delivery() -> None:
     assert len(str(event["query"]).encode()) <= RUNTIME_EVENT_MAX_QUERY_BYTES
     assert len(event["hits"]) == RUNTIME_EVENT_MAX_HITS  # type: ignore[arg-type]
     assert len(json.dumps(event, separators=(",", ":")).encode()) <= RUNTIME_EVENT_MAX_PAYLOAD_BYTES
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_stamps_matching_turn_id_on_search_invoke_start_and_invoke_end() -> None:
+    tools = ToolCatalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await tools.register(
+        ExecutableTool(id="t", name="t", description="a tool", execute=lambda _args: "ok")
+    )
+    received.clear()  # discard registration churn
+
+    tools.search("do the thing", 5, turn_id="turn-xyz")
+    await tools.invoke("t", {}, turn_id="turn-xyz")
+    await subscription.flush()
+
+    by_type = {event["type"]: event for event in received}
+    assert by_type["search"]["turn_id"] == "turn-xyz"
+    assert by_type["invoke_start"]["turn_id"] == "turn-xyz"
+    assert by_type["invoke_end"]["turn_id"] == "turn-xyz"
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_stamps_matching_turn_id_on_skill_search_and_skill_invoke() -> None:
+    skills = SkillCatalog()
+    events = RuntimeEvents([skills])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await skills.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    received.clear()  # discard registration churn
+
+    skills.search("do the thing", 5, turn_id="turn-xyz")
+    skills.invoke("s", turn_id="turn-xyz")
+    await subscription.flush()
+
+    by_type = {event["type"]: event for event in received}
+    assert by_type["skill_search"]["turn_id"] == "turn-xyz"
+    assert by_type["skill_invoke"]["turn_id"] == "turn-xyz"
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_omits_turn_id_entirely_when_none_is_supplied() -> None:
+    tools = ToolCatalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.search("do the thing", 5)
+    await subscription.flush()
+
+    search = next(event for event in received if event["type"] == "search")
+    assert "turn_id" not in search
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_turn_id_survives_oversize_trimming_of_a_search_event() -> None:
+    tools = ToolCatalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    # 100 hits with long ids push the search event's serialized size well past the
+    # payload cap even after query/hit-count bounding, forcing real trimming.
+    await tools.register(
+        [
+            ExecutableTool(
+                id=f"tool-{index:03d}-" + "x" * 1_500,
+                name=f"tool-{index:03d}",
+                description="padding",
+                execute=lambda _args: "ok",
+            )
+            for index in range(100)
+        ]
+    )
+    received.clear()  # discard registration churn
+
+    tools.search("padding", 100, turn_id="turn-abc")
+    await subscription.flush()
+
+    search = next(event for event in received if event["type"] == "search")
+    assert search["turn_id"] == "turn-abc"
+    assert search.get("payload_truncated") is True
+    encoded = json.dumps(search, separators=(",", ":")).encode()
+    assert len(encoded) <= RUNTIME_EVENT_MAX_PAYLOAD_BYTES
     subscription.unsubscribe()
 
 

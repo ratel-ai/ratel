@@ -92,6 +92,13 @@ async def main():
 asyncio.run(main())
 ```
 
+Pass the same `turn_id` to `search` and the `invoke`(s) it led to — both take it as a keyword
+argument — and adaptive ranking pairs them exactly, whether the graph is learned in-process
+(ADR-0014) or by Ratel Cloud replaying your runtime events. Omit it and pairing degrades to
+session order, which breaks on concurrent turns in one session. The `search_capabilities`
+capability tool's executor takes `turn_id` as a keyword argument, so a framework adapter should
+pass one per model turn.
+
 Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel/tree/main/examples/pydantic-ai).
 
 ## Runtime events and catalog snapshots

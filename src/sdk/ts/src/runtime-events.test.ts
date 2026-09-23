@@ -15,6 +15,7 @@ import { RATEL_EVENT_ID } from "@ratel-ai/telemetry";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   experimentalDefineExperiment,
+  OPTIONAL_ENVELOPE_FIELDS,
   RUNTIME_EVENT_MAX_HITS,
   RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
   RUNTIME_EVENT_MAX_QUERY_BYTES,
@@ -32,6 +33,7 @@ interface RuntimeEventsFixture {
     max_hits: number;
     otel_event_id_attribute: string;
     required_envelope_fields: string[];
+    optional_envelope_fields: string[];
     event_types: string[];
   };
 }
@@ -55,6 +57,7 @@ describe("public runtime events", () => {
       max_hits: RUNTIME_EVENT_MAX_HITS,
       otel_event_id_attribute: RATEL_EVENT_ID,
       required_envelope_fields: ["v", "event_id", "ts", "session_id", "source_id", "type"],
+      optional_envelope_fields: [...OPTIONAL_ENVELOPE_FIELDS],
       event_types: [...RUNTIME_EVENT_TYPES],
     });
   });
@@ -103,6 +106,41 @@ describe("public runtime events", () => {
     expect(atLimitDelivered.payload_truncated).toBeUndefined();
     expect(aboveLimitDelivered.payload_truncated).toBe(true);
     expect(Buffer.byteLength(JSON.stringify(aboveLimitDelivered), "utf8")).toBeLessThanOrEqual(
+      RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
+    );
+  });
+
+  it("keeps turn_id through ordinary oversize trimming", () => {
+    const padding = Object.fromEntries(
+      Array.from({ length: 16 }, (_, index) => [
+        `padding_${index.toString().padStart(2, "0")}`,
+        "x".repeat(4_096),
+      ]),
+    );
+
+    const event = deliverRuntimeEvent(runtimeEvent({ ...padding, turn_id: "turn-abc" }));
+
+    expect(event.turn_id).toBe("turn-abc");
+    expect(event.payload_truncated).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(event), "utf8")).toBeLessThanOrEqual(
+      RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
+    );
+  });
+
+  it("keeps turn_id in the bounded fallback even when other product facts cannot all fit", () => {
+    // Hits alone (100 entries, each capped to 4096 bytes by sanitizeValue) exceed the
+    // payload cap on their own, so `hits` cannot be added back in the bounded fallback —
+    // but turn_id, a correlation field, must still make it through.
+    const event = deliverRuntimeEvent(
+      runtimeEvent({
+        turn_id: "turn-bounded",
+        hits: Array.from({ length: 100 }, (_, rank) => ({ id: "y".repeat(4_096), rank })),
+      }),
+    );
+
+    expect(event.turn_id).toBe("turn-bounded");
+    expect(event.payload_truncated).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(event), "utf8")).toBeLessThanOrEqual(
       RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
     );
   });
@@ -522,6 +560,70 @@ describe("public runtime events", () => {
     });
     expect(JSON.stringify(snapshot)).not.toContain("execute");
     expect(JSON.stringify(snapshot)).not.toContain("private instructions");
+  });
+
+  it("stamps a matching turn_id on search, invoke_start, and invoke_end for a tool turn", async () => {
+    const runtime = ratel();
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    await runtime.tools.register({
+      id: "t",
+      name: "t",
+      description: "a tool",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    received.length = 0; // discard registration churn
+
+    runtime.tools.search("do the thing", 5, undefined, "turn-xyz");
+    await runtime.tools.invoke("t", {}, "turn-xyz");
+    await subscription.flush();
+
+    const byType = Object.fromEntries(received.map((event) => [event.type, event]));
+    expect(byType.search?.turn_id).toBe("turn-xyz");
+    expect(byType.invoke_start?.turn_id).toBe("turn-xyz");
+    expect(byType.invoke_end?.turn_id).toBe("turn-xyz");
+    subscription.unsubscribe();
+  });
+
+  it("stamps a matching turn_id on skill_search and skill_invoke for a skill turn", async () => {
+    const runtime = ratel();
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    await runtime.skills.register({
+      id: "s",
+      name: "s",
+      description: "a skill",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    });
+    received.length = 0; // discard registration churn
+
+    runtime.skills.search("do the thing", 5, "direct", undefined, "turn-xyz");
+    runtime.skills.invoke("s", "turn-xyz");
+    await subscription.flush();
+
+    const byType = Object.fromEntries(received.map((event) => [event.type, event]));
+    expect(byType.skill_search?.turn_id).toBe("turn-xyz");
+    expect(byType.skill_invoke?.turn_id).toBe("turn-xyz");
+    subscription.unsubscribe();
+  });
+
+  it("omits turn_id entirely rather than serializing undefined when none is supplied", async () => {
+    const runtime = ratel();
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+
+    runtime.tools.search("do the thing", 5);
+    await subscription.flush();
+
+    const search = received.find((event) => event.type === "search");
+    expect(search).toBeDefined();
+    expect("turn_id" in (search as object)).toBe(false);
+    subscription.unsubscribe();
   });
 });
 
