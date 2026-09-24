@@ -726,8 +726,9 @@ class ToolRegistry:
             self._learn = learn
             self._graph = graph
             self._graph_key = graph_key
-        self._maybe_warn_model_mismatch()
-        self._emit_ranking_status("enabled")
+        native_status = self._native.adaptive_ranking_status()
+        self._maybe_warn_model_mismatch(native_status)
+        self._emit_ranking_status("enabled", native_status)
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -776,8 +777,9 @@ class ToolRegistry:
         """
         await self._run_dense(self._native._rebuild_intent_graph)
         self._adaptive_warned = False
-        self._maybe_warn_model_mismatch()
-        self._emit_ranking_status("rebuilt")
+        native_status = self._native.adaptive_ranking_status()
+        self._maybe_warn_model_mismatch(native_status)
+        self._emit_ranking_status("rebuilt", native_status)
 
     async def experimental_build_intent_graph(
         self,
@@ -824,10 +826,19 @@ class ToolRegistry:
         status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
         return AdaptiveRankingStatus(status, built, active, dim_mismatch)
 
-    def _maybe_warn_model_mismatch(self) -> None:
+    def _maybe_warn_model_mismatch(
+        self, native_status: tuple[str, str | None, str | None, bool | None] | None = None
+    ) -> None:
+        """Accepts an already-read ``native_status``.
+
+        So a caller that just fetched it (enable, rebuild) does not pay for a
+        second native round-trip.
+        """
         if self._adaptive_warned or not self._warn_on_model_mismatch:
             return
-        status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
+        status, built, active, dim_mismatch = (
+            native_status if native_status is not None else self._native.adaptive_ranking_status()
+        )
         if status == "active: policy drift":
             self._adaptive_warned = True
             warnings.warn(
@@ -853,16 +864,20 @@ class ToolRegistry:
             stacklevel=2,
         )
 
-    def _emit_ranking_status(self, reason: str) -> None:
+    def _emit_ranking_status(
+        self, reason: str, native_status: tuple[str, str | None, str | None, bool | None]
+    ) -> None:
         """Report the current status as a ``usage_ranking_status`` trace event.
 
         ADR-0014/ADR-0020. Emitted by this wrapper, never by core, since core
         cannot know where a graph came from. Collapses the native status
         string to the four-value contract: ``"active"`` covers both ``active``
         and ``active: policy drift``, any ``paused...`` collapses to
-        ``"paused"``.
+        ``"paused"``. Takes the already-read ``native_status`` rather than
+        re-reading it, since the caller (enable, rebuild) just fetched it for
+        ``_maybe_warn_model_mismatch``.
         """
-        raw, _built, _active, _dim = self._native.adaptive_ranking_status()
+        raw, _built, _active, _dim = native_status
         if raw.startswith("paused"):
             status = "paused"
         elif raw in ("active", "active: policy drift"):

@@ -325,8 +325,9 @@ export class ToolRegistry {
     this.#learn = options.learn ?? true;
     this.#graph = graph;
     this.#graphKey = options.graphKey;
-    this.#maybeWarnModelMismatch();
-    this.#emitRankingStatusEvent("enabled");
+    const status = this.native.adaptiveRankingStatus();
+    this.#maybeWarnModelMismatch(status);
+    this.#emitRankingStatusEvent("enabled", status);
   }
 
   /**
@@ -343,8 +344,9 @@ export class ToolRegistry {
       throw mapEmbedderError(error);
     }
     this.#adaptiveWarned = false;
-    this.#maybeWarnModelMismatch();
-    this.#emitRankingStatusEvent("rebuilt");
+    const status = this.native.adaptiveRankingStatus();
+    this.#maybeWarnModelMismatch(status);
+    this.#emitRankingStatusEvent("rebuilt", status);
   }
 
   /**
@@ -394,10 +396,12 @@ export class ToolRegistry {
 
   /** One-time stderr warning when the attached graph's model no longer matches
    * the catalog's. A dev-time config error that otherwise silently pauses
-   * ranking — printed unless `warnOnModelMismatch: false`. */
-  #maybeWarnModelMismatch(): void {
+   * ranking — printed unless `warnOnModelMismatch: false`. Accepts an
+   * already-read `status` so a caller that just fetched it (enable, rebuild)
+   * does not pay for a second native round-trip. */
+  #maybeWarnModelMismatch(status?: AdaptiveRankingStatus): void {
     if (this.#adaptiveWarned || !this.#warnOnModelMismatch) return;
-    const s = this.native.adaptiveRankingStatus();
+    const s = status ?? this.native.adaptiveRankingStatus();
     if (s.status === "active: policy drift") {
       this.#adaptiveWarned = true;
       console.warn(
@@ -435,9 +439,14 @@ export class ToolRegistry {
    * trace event (ADR-0014/ADR-0020) — emitted by this wrapper, never by core,
    * since core cannot know where a graph came from. Collapses the native
    * status string to the four-value contract: `"active"` covers both `active`
-   * and `active: policy drift`, any `paused...` collapses to `"paused"`. */
-  #emitRankingStatusEvent(reason: "enabled" | "rebuilt"): void {
-    const raw = this.native.adaptiveRankingStatus().status;
+   * and `active: policy drift`, any `paused...` collapses to `"paused"`.
+   * Takes the already-read `nativeStatus` rather than re-reading it, since the
+   * caller (enable, rebuild) just fetched it for {@link #maybeWarnModelMismatch}. */
+  #emitRankingStatusEvent(
+    reason: "enabled" | "rebuilt",
+    nativeStatus: AdaptiveRankingStatus,
+  ): void {
+    const raw = nativeStatus.status;
     const status = raw.startsWith("paused")
       ? "paused"
       : raw === "active" || raw === "active: policy drift"
@@ -762,8 +771,9 @@ export class SkillRegistry {
     this.#learn = options.learn ?? true;
     this.#graph = graph;
     this.#graphKey = options.graphKey;
-    this.#maybeWarnModelMismatch();
-    this.#emitRankingStatusEvent("enabled");
+    const status = this.native.adaptiveRankingStatus();
+    this.#maybeWarnModelMismatch(status);
+    this.#emitRankingStatusEvent("enabled", status);
   }
 
   /**
@@ -780,8 +790,9 @@ export class SkillRegistry {
       throw mapEmbedderError(error);
     }
     this.#adaptiveWarned = false;
-    this.#maybeWarnModelMismatch();
-    this.#emitRankingStatusEvent("rebuilt");
+    const status = this.native.adaptiveRankingStatus();
+    this.#maybeWarnModelMismatch(status);
+    this.#emitRankingStatusEvent("rebuilt", status);
   }
 
   /**
@@ -796,10 +807,12 @@ export class SkillRegistry {
 
   /** One-time stderr warning when the attached graph's model no longer matches
    * the catalog's. A dev-time config error that otherwise silently pauses
-   * ranking — printed unless `warnOnModelMismatch: false`. */
-  #maybeWarnModelMismatch(): void {
+   * ranking — printed unless `warnOnModelMismatch: false`. Accepts an
+   * already-read `status` so a caller that just fetched it (enable, rebuild)
+   * does not pay for a second native round-trip. */
+  #maybeWarnModelMismatch(status?: AdaptiveRankingStatus): void {
     if (this.#adaptiveWarned || !this.#warnOnModelMismatch) return;
-    const s = this.native.adaptiveRankingStatus();
+    const s = status ?? this.native.adaptiveRankingStatus();
     if (s.status === "active: policy drift") {
       this.#adaptiveWarned = true;
       console.warn(
@@ -837,9 +850,14 @@ export class SkillRegistry {
    * trace event (ADR-0014/ADR-0020) — emitted by this wrapper, never by core,
    * since core cannot know where a graph came from. Collapses the native
    * status string to the four-value contract: `"active"` covers both `active`
-   * and `active: policy drift`, any `paused...` collapses to `"paused"`. */
-  #emitRankingStatusEvent(reason: "enabled" | "rebuilt"): void {
-    const raw = this.native.adaptiveRankingStatus().status;
+   * and `active: policy drift`, any `paused...` collapses to `"paused"`.
+   * Takes the already-read `nativeStatus` rather than re-reading it, since the
+   * caller (enable, rebuild) just fetched it for {@link #maybeWarnModelMismatch}. */
+  #emitRankingStatusEvent(
+    reason: "enabled" | "rebuilt",
+    nativeStatus: AdaptiveRankingStatus,
+  ): void {
+    const raw = nativeStatus.status;
     const status = raw.startsWith("paused")
       ? "paused"
       : raw === "active" || raw === "active: policy drift"
