@@ -232,6 +232,14 @@ describe("signS3Request (SigV4)", () => {
     );
   });
 
+  it("accepts a mixed-case header key and signs it lowercased", () => {
+    // The canonical form is lowercase; indexing the caller's bag with a
+    // lowercased name used to throw on `.trim()` of undefined.
+    const signed = signS3Request({ ...baseRequest, headers: { "If-Match": '"etag-1"' } });
+    expect(signed.headers.authorization).toContain("SignedHeaders=host;if-match;");
+    expect(signed.headers["if-match"]).toBe('"etag-1"');
+  });
+
   it("hashes an empty body to the well-known SHA-256 empty-string digest", () => {
     const signed = signS3Request(baseRequest);
     expect(signed.headers["x-amz-content-sha256"]).toBe(
@@ -319,6 +327,45 @@ describe("resolveS3Endpoint", () => {
       endpoint: "http://localhost:9000",
     });
     expect(target.path).toBe("/my-bucket/a%21b%2Ac%27d%28e%29f");
+  });
+
+  it("rejects an endpoint that is not an absolute http(s) URL", () => {
+    // `new URL("minio.internal:9000")` reads the host as a scheme and leaves
+    // the host empty, which would send the signed request, credentials and all,
+    // to whatever the bucket name resolves to.
+    for (const endpoint of ["minio.internal:9000", "localhost:9000", "not a url", "ftp://h:21"]) {
+      expect(() =>
+        resolveS3Endpoint({ bucket: "b", key: "k", region: "us-east-1", endpoint }),
+      ).toThrow(/expected an absolute http\(s\) URL/);
+    }
+  });
+
+  it("keeps a path prefix, so a gateway under a mount point is addressed correctly", () => {
+    expect(
+      resolveS3Endpoint({
+        bucket: "b",
+        key: "k",
+        region: "us-east-1",
+        endpoint: "http://minio:9000/s3api",
+      }).path,
+    ).toBe("/s3api/b/k");
+    // a bare endpoint keeps the pathname "/" from turning into a double slash
+    expect(
+      resolveS3Endpoint({
+        bucket: "b",
+        key: "k",
+        region: "us-east-1",
+        endpoint: "http://minio:9000/",
+      }).path,
+    ).toBe("/b/k");
+  });
+
+  it("drops userinfo and a default port from the signed host", () => {
+    const host = (endpoint: string) =>
+      resolveS3Endpoint({ bucket: "b", key: "k", region: "us-east-1", endpoint }).host;
+    expect(host("http://user:pw@minio:9000")).toBe("minio:9000");
+    expect(host("https://minio:443")).toBe("minio");
+    expect(host("http://[::1]:9000")).toBe("[::1]:9000");
   });
 });
 

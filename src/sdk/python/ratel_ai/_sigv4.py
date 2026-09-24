@@ -10,7 +10,7 @@ import hashlib
 import hmac as hmac_lib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from urllib.parse import quote, urlparse
+from urllib.parse import ParseResult, quote, urlparse
 
 
 @dataclass(frozen=True)
@@ -42,21 +42,26 @@ def sign_s3_request(
     date: datetime | None = None,
 ) -> SignedS3Request:
     """Sign an S3 request per AWS SigV4. Returns the full header set to send."""
-    dt = date or datetime.now(timezone.utc)
+    # Converted, not relabelled: strftime on a non-UTC datetime would stamp a
+    # local time with a Z suffix. TS normalizes through Date.toISOString().
+    dt = (date or datetime.now(timezone.utc)).astimezone(timezone.utc)
     amz_date = dt.strftime("%Y%m%dT%H%M%SZ")
     date_only = dt.strftime("%Y%m%d")
     payload_hash = _sha256_hex(body)
 
-    all_headers: dict[str, str] = {
+    # Lowercased on the way in: the canonical form is lowercase, and indexing the
+    # original bag with a lowercased name misses a caller's mixed-case key.
+    supplied = {
         **headers,
         "host": host,
         "x-amz-date": amz_date,
         "x-amz-content-sha256": payload_hash,
     }
     if session_token:
-        all_headers["x-amz-security-token"] = session_token
+        supplied["x-amz-security-token"] = session_token
+    all_headers: dict[str, str] = {name.lower(): value for name, value in supplied.items()}
 
-    signed_header_names = sorted(name.lower() for name in all_headers)
+    signed_header_names = sorted(all_headers)
     canonical_headers = "".join(
         f"{name}:{all_headers[name].strip()}\n" for name in signed_header_names
     )
@@ -123,14 +128,55 @@ def resolve_s3_endpoint(
             path=f"/{encoded_key}",
         )
 
-    endpoint_url = urlparse(endpoint)
-    scheme = "http" if endpoint_url.scheme == "http" else "https"
+    endpoint_url = _parse_endpoint(endpoint)
+    scheme = endpoint_url.scheme
+    host = _endpoint_host(endpoint_url)
+    # A gateway mounted under a prefix keeps it: it is part of the canonical URI,
+    # so dropping it signs one path and addresses another.
+    prefix = endpoint_url.path.rstrip("/")
     path_style = force_path_style if force_path_style is not None else True
 
     if path_style:
         return S3EndpointTarget(
-            scheme=scheme, host=endpoint_url.netloc, path=f"/{bucket}/{encoded_key}"
+            scheme=scheme, host=host, path=f"{prefix}/{bucket}/{encoded_key}"
         )
     return S3EndpointTarget(
-        scheme=scheme, host=f"{bucket}.{endpoint_url.netloc}", path=f"/{encoded_key}"
+        scheme=scheme, host=f"{bucket}.{host}", path=f"{prefix}/{encoded_key}"
     )
+
+
+def _parse_endpoint(endpoint: str) -> ParseResult:
+    """Parse `endpoint`, rejecting anything that is not an absolute http(s) URL.
+
+    ``urlparse("minio.internal:9000")`` does not raise: it reads the host as a
+    scheme and leaves the location empty, which would sign a request against an
+    empty host.
+    """
+    invalid = ValueError(
+        f"invalid endpoint {endpoint!r}: expected an absolute http(s) URL, "
+        'e.g. "http://localhost:9000"'
+    )
+    try:
+        url = urlparse(endpoint)
+        url.port  # noqa: B018 - raises for a non-numeric port
+    except ValueError:
+        raise invalid from None
+    if url.scheme not in ("http", "https") or not url.netloc:
+        raise invalid
+    return url
+
+
+def _endpoint_host(url: ParseResult) -> str:
+    """The `Host` header for `url`, matching what TS's ``URL.host`` produces.
+
+    ``netloc`` would carry any userinfo into the signed header; ``hostname``
+    drops the brackets an IPv6 literal needs; and a port that is the scheme's
+    default is omitted, as the URL standard does.
+    """
+    host = url.hostname or ""
+    if ":" in host:  # IPv6 literal, which urlparse unwraps
+        host = f"[{host}]"
+    port = url.port
+    if port is None or port == (80 if url.scheme == "http" else 443):
+        return host
+    return f"{host}:{port}"

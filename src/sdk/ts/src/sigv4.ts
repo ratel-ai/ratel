@@ -9,7 +9,7 @@ import { createHash, createHmac } from "node:crypto";
 
 /** Inputs to {@link signS3Request}. */
 export interface SignS3RequestOptions {
-  readonly method: "GET" | "PUT" | "HEAD";
+  readonly method: "GET" | "PUT";
   /** Virtual-hosted-style host, e.g. `my-bucket.s3.us-east-1.amazonaws.com`. */
   readonly host: string;
   /** Absolute path, e.g. `/intent-graph.json`. Not URL-encoded beyond RFC 3986 unreserved chars. */
@@ -101,13 +101,40 @@ export function resolveS3Endpoint(options: ResolveS3EndpointOptions): S3Endpoint
     };
   }
 
-  const endpointUrl = new URL(options.endpoint);
+  const endpointUrl = parseEndpoint(options.endpoint);
   const scheme = endpointUrl.protocol === "http:" ? "http" : "https";
+  // A gateway mounted under a prefix keeps it: it is part of the canonical URI,
+  // so dropping it signs one path and addresses another.
+  const prefix = endpointUrl.pathname.replace(/\/+$/, "");
   const pathStyle = options.forcePathStyle ?? true;
 
   return pathStyle
-    ? { scheme, host: endpointUrl.host, path: `/${options.bucket}/${encodedKey}` }
-    : { scheme, host: `${options.bucket}.${endpointUrl.host}`, path: `/${encodedKey}` };
+    ? { scheme, host: endpointUrl.host, path: `${prefix}/${options.bucket}/${encodedKey}` }
+    : { scheme, host: `${options.bucket}.${endpointUrl.host}`, path: `${prefix}/${encodedKey}` };
+}
+
+/**
+ * Parse `endpoint`, rejecting anything that is not an absolute http(s) URL.
+ *
+ * `new URL("minio.internal:9000")` does not throw: it reads the host as a
+ * scheme and leaves the host empty, which would send a fully signed request,
+ * `Authorization` and session token included, to whatever the bucket name
+ * resolves to.
+ */
+function parseEndpoint(endpoint: string): URL {
+  const invalid = () =>
+    new Error(
+      `invalid endpoint ${JSON.stringify(endpoint)}: expected an absolute ` +
+        `http(s) URL, e.g. "http://localhost:9000"`,
+    );
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    throw invalid();
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.host === "") throw invalid();
+  return url;
 }
 
 /** Sign an S3 request per AWS SigV4. Returns the full header set to send. */
@@ -116,17 +143,19 @@ export function signS3Request(options: SignS3RequestOptions): SignedS3Request {
   const { full: amzDateStr, dateOnly } = amzDate(date);
   const payloadHash = sha256Hex(options.body);
 
-  const headers: Record<string, string> = {
-    ...options.headers,
-    host: options.host,
-    "x-amz-date": amzDateStr,
-    "x-amz-content-sha256": payloadHash,
-    ...(options.sessionToken ? { "x-amz-security-token": options.sessionToken } : {}),
-  };
+  // Lowercased on the way in: the canonical form is lowercase, and indexing the
+  // original bag with a lowercased name misses a caller's mixed-case key.
+  const headers: Record<string, string> = Object.fromEntries(
+    Object.entries({
+      ...options.headers,
+      host: options.host,
+      "x-amz-date": amzDateStr,
+      "x-amz-content-sha256": payloadHash,
+      ...(options.sessionToken ? { "x-amz-security-token": options.sessionToken } : {}),
+    }).map(([name, value]) => [name.toLowerCase(), value]),
+  );
 
-  const signedHeaderNames = Object.keys(headers)
-    .map((name) => name.toLowerCase())
-    .sort();
+  const signedHeaderNames = Object.keys(headers).sort();
   const canonicalHeaders = signedHeaderNames
     .map((name) => `${name}:${headers[name].trim()}\n`)
     .join("");

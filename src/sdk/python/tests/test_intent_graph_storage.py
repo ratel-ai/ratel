@@ -11,7 +11,7 @@ import subprocess
 import sys
 import textwrap
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -247,6 +247,22 @@ class TestSignS3Request:
             in signed.headers["authorization"]
         )
 
+    def test_accepts_a_mixed_case_header_key_and_signs_it_lowercased(self) -> None:
+        signed = sign_s3_request(**{**self._base_kwargs, "headers": {"If-Match": '"etag-1"'}})
+        assert "SignedHeaders=host;if-match;" in signed.headers["authorization"]
+        assert signed.headers["if-match"] == '"etag-1"'
+
+    def test_converts_a_non_utc_date_instead_of_relabelling_it(self) -> None:
+        # strftime on a tz-aware non-UTC datetime would stamp a local time with
+        # a Z suffix; the instant is the same, so the stamp must be too.
+        eastern = timezone(timedelta(hours=-5))
+        local = datetime(2013, 5, 23, 19, 0, 0, tzinfo=eastern)  # 20130524T000000Z
+        signed = sign_s3_request(**{**self._base_kwargs, "date": local})
+        assert signed.headers["x-amz-date"] == "20130524T000000Z"
+        assert signed.headers["authorization"] == (
+            sign_s3_request(**self._base_kwargs).headers["authorization"]
+        )
+
     def test_hashes_empty_body_to_well_known_sha256_empty_digest(self) -> None:
         signed = sign_s3_request(**self._base_kwargs)
         assert signed.headers["x-amz-content-sha256"] == hashlib.sha256(b"").hexdigest()
@@ -299,6 +315,37 @@ class TestResolveS3Endpoint:
         )
         assert target.path == "/my-bucket/a%21b%2Ac%27d%28e%29f"
 
+    def test_rejects_an_endpoint_that_is_not_an_absolute_http_url(self) -> None:
+        # urlparse reads "minio.internal:9000" as a scheme with an empty
+        # location, which would sign a request against an empty host.
+        for endpoint in ("minio.internal:9000", "localhost:9000", "not a url", "ftp://h:21"):
+            with pytest.raises(ValueError, match="expected an absolute http"):
+                resolve_s3_endpoint(bucket="b", key="k", region="us-east-1", endpoint=endpoint)
+
+    def test_keeps_a_path_prefix_for_a_gateway_under_a_mount_point(self) -> None:
+        assert (
+            resolve_s3_endpoint(
+                bucket="b", key="k", region="us-east-1", endpoint="http://minio:9000/s3api"
+            ).path
+            == "/s3api/b/k"
+        )
+        assert (
+            resolve_s3_endpoint(
+                bucket="b", key="k", region="us-east-1", endpoint="http://minio:9000/"
+            ).path
+            == "/b/k"
+        )
+
+    def test_drops_userinfo_and_a_default_port_from_the_signed_host(self) -> None:
+        def host(endpoint: str) -> str:
+            return resolve_s3_endpoint(
+                bucket="b", key="k", region="us-east-1", endpoint=endpoint
+            ).host
+
+        # Matches what TS's URL.host produces for the same inputs.
+        assert host("http://user:pw@minio:9000") == "minio:9000"
+        assert host("https://minio:443") == "minio"
+        assert host("http://[::1]:9000") == "[::1]:9000"
 
 @dataclass
 class _StoredObject:
