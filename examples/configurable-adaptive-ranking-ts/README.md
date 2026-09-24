@@ -146,6 +146,14 @@ serving.experimentalEnableAdaptiveRanking(graph);
 
 From here the live learner keeps adding to the same graph. `support` grows while `seeded_support` stays put, so the gap between them tells you how much of each cluster still rests on the baseline versus what live traffic has since confirmed.
 
+**Consumer form.** A runtime that ranks from a graph produced elsewhere — Ratel Cloud, replaying a project's stored events through this same learner — should not write into it. Pass `learn: false` to rank without learning, and `graphKey` to label the graph on the `usage_ranking_status` event this emits, so a dashboard can tell this runtime's own graph apart from one it was served:
+
+```ts
+serving.experimentalEnableAdaptiveRanking(cloudGraph, { learn: false, graphKey: "cloud" });
+```
+
+The graph's `rev` and content stay exactly what was handed in; re-installing a trace sink for an unrelated reason later does not silently resume learning.
+
 ### E. The same capture, distributed
 
 Phases A–D assume one process holds the turn open while it happens. A per-request server does not: the search and the invocation that follows are different requests, on possibly different machines, so there is no `BaselineTurn` to keep alive between them.

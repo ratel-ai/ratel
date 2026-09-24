@@ -12,6 +12,20 @@ const REQUIRED_ENVELOPE_FIELDS = new Set([
   "source_id",
   "type",
 ]);
+/** Optional envelope fields the contract names (ADR-0020), frozen for conformance. */
+export const OPTIONAL_ENVELOPE_FIELDS = [
+  "invocation_id",
+  "catalog_version",
+  "environment",
+  "end_user_id",
+  "trace_id",
+  "span_id",
+  "turn_id",
+] as const;
+/** Correlation ids that must survive truncation intact — dropping one breaks pairing
+ * (ADR-0014's search/invoke and invocation-lifecycle grouping) rather than merely
+ * losing a nice-to-have fact. */
+const CORRELATION_FIELDS = new Set(["invocation_id", "turn_id"]);
 const CATALOG_CRITICAL_FIELDS = ["kind", "id", "name", "content_hash"] as const;
 const CATALOG_SCHEMA_FIELDS = ["input_schema", "output_schema"] as const;
 const CATALOG_DEFINITION_FIELDS = new Set([
@@ -53,6 +67,10 @@ export const RUNTIME_EVENT_TYPES = [
   "experiment_invocation",
   "experiment_outcome",
   "events_dropped",
+  "usage_boost",
+  "usage_model_mismatch",
+  "usage_cluster_policy_changed",
+  "usage_ranking_status",
 ] as const;
 
 /** Maximum serialized size of one public event envelope. */
@@ -88,6 +106,9 @@ export interface RuntimeEvent {
   readonly trace_id?: string;
   /** Active OTel span identity when a recording span exists. */
   readonly span_id?: string;
+  /** Correlates one turn's search with the invoke(s) that confirm it; supplied
+   * by the host, never minted by the SDK. */
+  readonly turn_id?: string;
   readonly [field: string]: unknown;
 }
 
@@ -396,7 +417,11 @@ function normalizeRuntimeEvent(input: Record<string, unknown>): RuntimeEvent {
   }
 
   for (const key of Object.keys(normalized)) {
-    if (!REQUIRED_ENVELOPE_FIELDS.has(key) && !isProductFactField(key)) {
+    if (
+      !REQUIRED_ENVELOPE_FIELDS.has(key) &&
+      !CORRELATION_FIELDS.has(key) &&
+      !isProductFactField(key)
+    ) {
       normalizedSize = sizeAfterDeletingProperty(normalized, key, normalizedSize);
       delete normalized[key];
       normalizedSize = sizeAfterSettingProperty(
@@ -414,12 +439,19 @@ function normalizeRuntimeEvent(input: Record<string, unknown>): RuntimeEvent {
   }
 
   const bounded = Object.fromEntries(
-    Object.entries(normalized).filter(([key]) => REQUIRED_ENVELOPE_FIELDS.has(key)),
+    Object.entries(normalized).filter(
+      ([key]) => REQUIRED_ENVELOPE_FIELDS.has(key) || CORRELATION_FIELDS.has(key),
+    ),
   );
   bounded.payload_truncated = true;
   let boundedSize = serializedSize(bounded);
   for (const [key, value] of prioritizedProductFactEntries(normalized)) {
-    if (REQUIRED_ENVELOPE_FIELDS.has(key) || !isProductFactField(key)) continue;
+    if (
+      REQUIRED_ENVELOPE_FIELDS.has(key) ||
+      CORRELATION_FIELDS.has(key) ||
+      !isProductFactField(key)
+    )
+      continue;
     const boundedValue = sanitizeBoundedValue(value);
     const candidateSize = sizeAfterSettingProperty(bounded, key, boundedValue, boundedSize);
     if (candidateSize > RUNTIME_EVENT_MAX_PAYLOAD_BYTES) continue;
@@ -589,6 +621,23 @@ function isProductFactField(key: string): boolean {
       "rank",
       "turn",
       "action",
+      "intent",
+      "similarity",
+      "support",
+      "promoted",
+      "dropped",
+      "built",
+      "active",
+      "dim_mismatch",
+      "built_similarity",
+      "built_coverage",
+      "active_similarity",
+      "active_coverage",
+      "status",
+      "rev",
+      "graph_key",
+      "learn",
+      "model",
     ].includes(key)
   );
 }

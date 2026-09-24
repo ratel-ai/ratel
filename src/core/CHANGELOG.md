@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.12.0-rc.6] - 2026-09-25
+
+### Added
+
+- **`TraceEvent::UsageRankingStatus` (ADR-0014/ADR-0020).** A data-only variant (`status`, `reason`, `rev`, `graph_key`, `learn`, `model`) reporting adaptive-ranking state — never emitted by core itself, since core has no notion of a caller-supplied `graph_key` or of where a graph came from. Emitted instead by the TS/Python SDK wrappers on enable, disable, and rebuild, so a consumer of a served graph (Ratel Cloud's dashboard) can tell which graph a runtime is running without waiting for a search.
+
 ## [0.12.0-rc.5] - 2026-09-21
 
 ### Added

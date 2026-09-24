@@ -28,6 +28,14 @@ frozen ETag algorithm is out of scope.
 The logical ids in `span` / `set` / `emit_events` are the constant names lowercased; each helper
 keeps a small map from logical id to its own constant, and those maps are the unit under test.
 
+## Runtime events envelope (ADR-0020)
+
+The `runtime_events` block pins the v2 envelope contract: `required_envelope_fields` (present on
+every event) and `optional_envelope_fields` (present when the producer has the fact — e.g.
+`turn_id` when the host supplied one), alongside `event_types`, the payload/query/hit size caps,
+and the OTel event-id attribute name. Both SDKs' `RuntimeEvent`-conformance tests assert this
+block against their own frozen constants.
+
 ## Consumers
 
 - **TS** — `../ts/src/conformance.test.ts`

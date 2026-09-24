@@ -434,6 +434,167 @@ describe("adaptive usage ranking", () => {
   });
 });
 
+// ---- learn: false, a consumer that ranks without writing ----------------------
+
+/** A lexical (no-centroid) graph with one cluster already fully supported, so
+ * `learn: false` can be proven to rank without needing to grow anything
+ * first. Carries edges for both a tool and a skill id so the same fixture
+ * serves the tool- and skill-catalog tests. */
+function knownClusterGraph(): IntentGraph {
+  return IntentGraph.fromJson(
+    JSON.stringify({
+      v: 1,
+      built_from_ts: 1,
+      intents: [
+        {
+          id: "i0",
+          label: "l",
+          terms: [],
+          members: ["why is the build broken"],
+          support: 9,
+          tools: { gh_run_list: 1.0 },
+          skills: { "ci-triage": 1.0 },
+        },
+      ],
+    }),
+  );
+}
+
+async function buildSkillCatalog(): Promise<SkillCatalog> {
+  const catalog = new SkillCatalog();
+  await catalog.register([
+    {
+      id: "ci-triage",
+      name: "ci-triage",
+      description: "Diagnose why the build failed in CI",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    },
+    {
+      id: "unrelated-skill",
+      name: "unrelated-skill",
+      description: "Read a file from disk",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    },
+  ]);
+  return catalog;
+}
+
+describe("learn: false", () => {
+  it("ranks from a graph it was handed without learning into it", async () => {
+    const catalog = await buildCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const hits = catalog.search("why is the build broken", 5);
+    expect(hits.every((h) => h.fused)).toBe(true);
+    expect(ids(hits).indexOf("gh_run_list")).toBeLessThan(ids(hits).indexOf("docker_build"));
+  });
+
+  it("does not bump rev or change the wire form after a search and an invoke", async () => {
+    const catalog = await buildCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const revBefore = graph.rev;
+    const jsonBefore = graph.toJson();
+
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+
+    expect(graph.rev).toBe(revBefore);
+    expect(graph.toJson()).toBe(jsonBefore);
+  });
+
+  it("keeps learning off after a trace sink is re-installed for an unrelated reason", async () => {
+    const catalog = await buildCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const registry = (catalog as unknown as { registry: ToolRegistry }).registry;
+    registry.setTraceSink({ kind: "memory", sessionId: "s" });
+
+    const revBefore = graph.rev;
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+
+    expect(graph.rev).toBe(revBefore);
+  });
+
+  it("resumes learning after disable and a plain re-enable", async () => {
+    const catalog = await buildCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+    const revAfterConsumerOnly = graph.rev;
+
+    catalog.experimentalDisableAdaptiveRanking();
+    catalog.experimentalEnableAdaptiveRanking(graph);
+    await useIt(catalog, "why is the build broken again", "gh_run_list");
+
+    expect(graph.rev).toBeGreaterThan(revAfterConsumerOnly);
+  });
+
+  it("ranks a skill catalog from a graph without learning into it", async () => {
+    const catalog = await buildSkillCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const hits = catalog.search("why is the build broken", 5);
+    expect(hits.every((h) => h.fused)).toBe(true);
+    expect(hits[0]?.skillId).toBe("ci-triage");
+  });
+
+  it("skill catalog: does not bump rev or change the wire form after search + invoke", async () => {
+    const catalog = await buildSkillCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const revBefore = graph.rev;
+    const jsonBefore = graph.toJson();
+
+    catalog.search("why is the build broken", 5);
+    catalog.invoke("ci-triage");
+
+    expect(graph.rev).toBe(revBefore);
+    expect(graph.toJson()).toBe(jsonBefore);
+  });
+
+  it("skill catalog: keeps learning off after a trace sink is re-installed", async () => {
+    const catalog = await buildSkillCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+    const registry = (catalog as unknown as { registry: SkillRegistry }).registry;
+    registry.setTraceSink({ kind: "memory", sessionId: "s" });
+
+    const revBefore = graph.rev;
+    catalog.search("why is the build broken", 5);
+    catalog.invoke("ci-triage");
+
+    expect(graph.rev).toBe(revBefore);
+  });
+
+  it("skill catalog: resumes learning after disable and a plain re-enable", async () => {
+    const catalog = await buildSkillCatalog();
+    const graph = knownClusterGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+    catalog.search("why is the build broken", 5);
+    catalog.invoke("ci-triage");
+    const revAfterConsumerOnly = graph.rev;
+
+    catalog.experimentalDisableAdaptiveRanking();
+    catalog.experimentalEnableAdaptiveRanking(graph);
+    catalog.search("why is the build broken again", 5);
+    catalog.invoke("ci-triage");
+
+    expect(graph.rev).toBeGreaterThan(revAfterConsumerOnly);
+  });
+});
+
 // ---- opt-in auto-rebuild on model change ------------------------------------
 
 /** The pyo3/napi native can't be monkeypatched, so swap the whole native for a
@@ -449,6 +610,8 @@ function fakeNative(state: { status: string }) {
       dimMismatch: false,
     }),
     searchWithMethodAsync: async () => [],
+    recordEvent: () => {},
+    recordEventWithContext: () => {},
   };
 }
 
@@ -599,6 +762,31 @@ function staleModelGraph(): IntentGraph {
   );
 }
 
+/** A graph whose centroid width does not match any real model's output — the
+ * cross-model-family scenario `dim_mismatch` flags (a fine-tune swap, the
+ * `staleModelGraph` above, only differs by identity, not width). */
+function wrongWidthGraph(): IntentGraph {
+  return IntentGraph.fromJson(
+    JSON.stringify({
+      v: 1,
+      built_from_ts: 1,
+      model: "some-other-model",
+      intents: [
+        {
+          id: "intent_0",
+          label: "l",
+          terms: [],
+          members: ["why is the build broken"],
+          centroid: [1.0, 0.0, 0.0],
+          support: 9,
+          tools: { gh_run_list: 1.0 },
+          skills: {},
+        },
+      ],
+    }),
+  );
+}
+
 describe.skipIf(!hasModel)("adaptive ranking model-change detection", () => {
   it("pauses and warns on a model mismatch, and rebuild restores it", async () => {
     const catalog = await semanticCatalog();
@@ -640,6 +828,72 @@ describe.skipIf(!hasModel)("adaptive ranking model-change detection", () => {
 
     await catalog.searchAsync("why is the build broken", 5, "direct", "semantic");
     expect(catalog.experimentalAdaptiveRankingStatus.status).toBe("active");
+  });
+
+  it("delivers usage_model_mismatch with dim_mismatch true for a wrong-width centroid", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      trace: { kind: "memory", sessionId: "s" },
+    });
+    await catalog.register([
+      {
+        id: "gh_run_list",
+        name: "gh_run_list",
+        description: "list CI runs",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      },
+    ]);
+    catalog.drainTraceEvents(); // discard registration churn
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(wrongWidthGraph(), {
+        warnOnModelMismatch: false,
+      });
+
+      await catalog.searchAsync("why is the build broken", 5, "direct", "semantic");
+
+      const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+      const mismatch = events.find((e) => e.type === "usage_model_mismatch");
+      expect(mismatch?.dim_mismatch).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("delivers usage_ranking_status paused on enable, then active with reason rebuilt after a rebuild", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      trace: { kind: "memory", sessionId: "s" },
+    });
+    await catalog.register([
+      {
+        id: "gh_run_list",
+        name: "gh_run_list",
+        description: "list CI runs",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      },
+    ]);
+    catalog.drainTraceEvents(); // discard registration churn
+
+    catalog.experimentalEnableAdaptiveRanking(wrongWidthGraph(), {
+      warnOnModelMismatch: false,
+    });
+
+    const enabledEvents = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const enabled = enabledEvents.find((e) => e.type === "usage_ranking_status");
+    expect(enabled?.status).toBe("paused");
+    expect(enabled?.reason).toBe("enabled");
+
+    await catalog.experimentalRebuildIntentGraph();
+
+    const rebuiltEvents = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const rebuilt = rebuiltEvents.find((e) => e.type === "usage_ranking_status");
+    expect(rebuilt?.status).toBe("active");
+    expect(rebuilt?.reason).toBe("rebuilt");
   });
 });
 
@@ -868,6 +1122,33 @@ describe("policy on the live path", () => {
     ).toThrow(/unknown origins/);
   });
 
+  it("does not corrupt the attached graph's bookkeeping when a later enable call is rejected", async () => {
+    // Regression: enable used to write #graph/#graphKey/#learn before calling
+    // native, so a rejected call (bad origins here) left them pointing at the
+    // graph/key that never actually attached — corrupting what a later
+    // rebuild's usage_ranking_status event reports.
+    const catalog = await buildCatalog({ kind: "memory", sessionId: "s" });
+    const graphA = new IntentGraph();
+    catalog.experimentalEnableAdaptiveRanking(graphA, { learn: false, graphKey: "own" });
+
+    expect(() =>
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        // @ts-expect-error the runtime guard still has to hold for untyped callers
+        origins: "nope",
+        graphKey: "cloud",
+      }),
+    ).toThrow(/unknown origins/);
+
+    catalog.drainTraceEvents(); // discard churn from the two enable attempts
+    await catalog.experimentalRebuildIntentGraph();
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const status = events.find((e) => e.type === "usage_ranking_status");
+    expect(status?.reason).toBe("rebuilt");
+    expect(status?.graph_key).toBe("own");
+    expect(status?.learn).toBe(false);
+  });
+
   it("keeps the policy when the trace sink changes", async () => {
     // Changing the sink rebuilds the learner that decorates it. Rebuilding at
     // the default would silently drop a configured policy.
@@ -887,6 +1168,137 @@ describe("policy on the live path", () => {
     registry.search("why is the build broken", 5); // "direct" — filtered out
     registry.recordEvent({ type: "invoke_start", tool_id: "gh_run_list", args_size_bytes: 0 });
     expect(graph.clusterCount).toBe(0);
+  });
+});
+
+describe("configuration guardrails", () => {
+  it("warns when learn is off but rebuildOnModelChange is on", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        learn: false,
+        rebuildOnModelChange: true,
+      });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("rebuildOnModelChange");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("stays silent about learn/rebuildOnModelChange when warnOnModelMismatch is false", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        learn: false,
+        rebuildOnModelChange: true,
+        warnOnModelMismatch: false,
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('warns when origins is "baseline" on a live catalog', async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), { origins: "baseline" });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain('origins "baseline"');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('stays silent about origins "baseline" when warnOnModelMismatch is false', async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        origins: "baseline",
+        warnOnModelMismatch: false,
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("warns when graphKey is set but learn is not false", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), { graphKey: "cloud" });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain('graphKey "cloud"');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("stays silent about graphKey when warnOnModelMismatch is false", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        graphKey: "cloud",
+        warnOnModelMismatch: false,
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not warn on a well-formed consumer enable (learn: false plus graphKey)", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        learn: false,
+        graphKey: "cloud",
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("warns exactly once when one graph is enabled with different learn values on the tool and skill catalogs", async () => {
+    const tools = await buildCatalog();
+    const skills = new SkillCatalog();
+    await skills.register({
+      id: "ci-triage",
+      name: "ci-triage",
+      description: "Diagnose why the build failed in CI",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    });
+    const graph = new IntentGraph();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      tools.experimentalEnableAdaptiveRanking(graph, { learn: false });
+      expect(warn).not.toHaveBeenCalled();
+
+      skills.experimentalEnableAdaptiveRanking(graph); // default learn: true
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("learn: true on one catalog");
+
+      warn.mockClear();
+      tools.experimentalDisableAdaptiveRanking();
+      skills.experimentalDisableAdaptiveRanking();
+      tools.experimentalEnableAdaptiveRanking(graph, { learn: false });
+      skills.experimentalEnableAdaptiveRanking(graph, { learn: false });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

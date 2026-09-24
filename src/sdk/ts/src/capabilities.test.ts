@@ -168,6 +168,37 @@ describe("searchCapabilitiesTool", () => {
     expect(gw?.origin).toBe("agent"); // searchCapabilitiesTool drives runCapabilitiesSearch as origin "agent"
   });
 
+  it("stamps gateway_search with the given turn_id, shared with the inner search", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    await tools.register(readFile);
+    tools.drainTraceEvents();
+    const tool = searchCapabilitiesTool(tools);
+
+    await tool.execute({ query: "read a file", topKTools: 3 }, undefined, "turn-gw");
+
+    const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
+    const search = events.find((e) => e.type === "search");
+    const gw = events.find((e) => e.type === "gateway_search");
+    expect(gw?.turn_id).toBe("turn-gw");
+    expect(search?.turn_id).toBe("turn-gw");
+    expect(gw?.hits).toBe(1); // still a plain count, not the inner search's hit array
+  });
+
+  it("omits turn_id from gateway_search entirely when none is supplied", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    await tools.register(readFile);
+    tools.drainTraceEvents();
+    const tool = searchCapabilitiesTool(tools);
+
+    await tool.execute({ query: "read a file", topKTools: 3 });
+
+    const gw = (tools.drainTraceEvents() as Array<Record<string, unknown>>).find(
+      (e) => e.type === "gateway_search",
+    );
+    expect(gw).toBeDefined();
+    expect("turn_id" in (gw as object)).toBe(false);
+  });
+
   it("clamps a non-positive / non-integer topK back to the default", async () => {
     const tools = new ToolCatalog();
     await tools.register(readFile);
@@ -237,6 +268,23 @@ describe("runCapabilitiesSearch", () => {
     expect(ev?.top_k).toBe(3);
     expect(ev?.query).toBe("read a file");
     expect(ev?.hits).toBe(1); // only readFile is registered and it matches
+  });
+
+  it("stamps gateway_search with turnId when given one", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    tools.register(readFile);
+    tools.drainTraceEvents();
+
+    await runCapabilitiesSearch(tools, "read a file", {
+      topKTools: 3,
+      origin: "direct",
+      turnId: "turn-gw",
+    });
+
+    const ev = (tools.drainTraceEvents() as Array<Record<string, unknown>>).find(
+      (e) => e.type === "gateway_search",
+    );
+    expect(ev?.turn_id).toBe("turn-gw");
   });
 
   it("produces the same shape searchCapabilitiesTool returns (single source of truth)", async () => {

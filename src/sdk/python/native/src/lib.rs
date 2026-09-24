@@ -739,10 +739,11 @@ fn wrap_learner(
     sink: Arc<dyn core::TraceSink>,
     graph: Option<&Arc<RwLock<core::IntentGraph>>>,
     policy: core::ObservationPolicy,
+    learn: bool,
 ) -> Arc<dyn core::TraceSink> {
     match graph {
-        Some(graph) => Arc::new(UsageLearner::with_policy(graph.clone(), sink, policy)),
-        None => sink,
+        Some(graph) if learn => Arc::new(UsageLearner::with_policy(graph.clone(), sink, policy)),
+        _ => sink,
     }
 }
 
@@ -758,6 +759,7 @@ fn active_trace_sink(
     graph: Option<&Arc<RwLock<core::IntentGraph>>>,
     event_stream: &Option<EventStream>,
     policy: core::ObservationPolicy,
+    learn: bool,
 ) -> Arc<dyn core::TraceSink> {
     let sink: Arc<dyn core::TraceSink> = match event_stream {
         Some(stream) => Arc::new(RuntimeEventSink {
@@ -766,7 +768,7 @@ fn active_trace_sink(
         }),
         None => base_sink.clone(),
     };
-    wrap_learner(sink, graph, policy)
+    wrap_learner(sink, graph, policy, learn)
 }
 
 /// A shared usage-ranking intent graph (ADR-0014): clusters of past queries,
@@ -776,7 +778,10 @@ fn active_trace_sink(
 /// carries both a tool and a skill edge map, so sharing gives one set of
 /// clusters with all the evidence behind it; separate graphs duplicate every
 /// cluster and split the evidence.
-#[pyclass]
+// `weakref`: lets the SDK wrapper key a `weakref.WeakKeyDictionary` on a graph
+// instance (per-graph state, e.g. detecting mismatched `learn` values across
+// the tool and skill registries sharing one graph) without pinning it alive.
+#[pyclass(weakref)]
 #[derive(Clone)]
 pub struct IntentGraph {
     inner: Arc<RwLock<core::IntentGraph>>,
@@ -849,6 +854,17 @@ impl IntentGraph {
             .map_err(|_| PyValueError::new_err("intent graph lock poisoned"))?;
         Ok(guard.rev())
     }
+
+    /// The embedding model the graph's centroids were built with, or `None` for
+    /// a lexically-grown graph that has none.
+    #[getter]
+    fn model(&self) -> PyResult<Option<String>> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| PyValueError::new_err("intent graph lock poisoned"))?;
+        Ok(guard.model.clone())
+    }
 }
 
 /// Metadata registry over `ratel-ai-core`. BM25 is exposed synchronously;
@@ -869,6 +885,12 @@ pub struct ToolRegistry {
     /// the same reason: a sink change re-wraps the learner, and rebuilding it at
     /// the default would silently drop a configured policy.
     usage_policy: core::ObservationPolicy,
+    /// Whether an attached graph should be learned into, not just ranked from.
+    /// Retained beside `graph` for the same reason as `usage_policy`: every
+    /// sink install goes through `active_trace_sink`, and rebuilding it
+    /// without this flag would silently resume learning on a consumer-only
+    /// registry.
+    learn: bool,
     event_stream: Option<EventStream>,
 }
 
@@ -917,6 +939,7 @@ impl ToolRegistry {
             base_sink: Arc::new(NoopSink),
             graph: None,
             usage_policy: core::ObservationPolicy::default(),
+            learn: true,
             event_stream: None,
         })
     }
@@ -1207,6 +1230,7 @@ impl ToolRegistry {
             self.graph.as_ref(),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         self.inner.set_trace_sink(sink);
         Ok(subscription)
@@ -1233,6 +1257,7 @@ impl ToolRegistry {
                     self.graph.as_ref(),
                     &self.event_stream,
                     self.usage_policy,
+                    self.learn,
                 );
                 self.inner.set_trace_sink(sink);
             }
@@ -1247,6 +1272,7 @@ impl ToolRegistry {
                     self.graph.as_ref(),
                     &self.event_stream,
                     self.usage_policy,
+                    self.learn,
                 );
                 self.inner.set_trace_sink(sink);
             }
@@ -1263,6 +1289,7 @@ impl ToolRegistry {
                     self.graph.as_ref(),
                     &self.event_stream,
                     self.usage_policy,
+                    self.learn,
                 );
                 self.inner.set_trace_sink(sink);
             }
@@ -1287,10 +1314,19 @@ impl ToolRegistry {
     /// pairs. Pass the same graph to the other registry so both learn into one
     /// set of clusters.
     ///
+    /// Pass `learn=False` to rank from `graph` without learning into it — the
+    /// consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+    /// The flag is stored on the registry, not just applied at this call: every
+    /// later sink install (`set_trace_sink`, `subscribe_trace_events`)
+    /// re-derives its sink through the same flag, so re-installing a sink for
+    /// an unrelated reason cannot silently resume learning. Defaults to
+    /// `True`, reproducing today's behavior.
+    ///
     /// Only queries matching a cluster are affected. With a graph attached
     /// `SearchHit.score` becomes a fusion score rather than a raw BM25 score, so
     /// compare ordering rather than magnitudes.
-    #[pyo3(signature = (graph, origins=None, provenance=None, cluster_similarity=None, cluster_coverage=None))]
+    #[pyo3(signature = (graph, origins=None, provenance=None, cluster_similarity=None, cluster_coverage=None, learn=None))]
+    #[allow(clippy::too_many_arguments)]
     fn enable_adaptive_ranking(
         &mut self,
         graph: &IntentGraph,
@@ -1298,6 +1334,7 @@ impl ToolRegistry {
         provenance: Option<&str>,
         cluster_similarity: Option<f64>,
         cluster_coverage: Option<f64>,
+        learn: Option<bool>,
     ) -> PyResult<()> {
         let cluster_policy = parse_cluster_policy(cluster_similarity, cluster_coverage)?;
         self.usage_policy = parse_policy(
@@ -1306,6 +1343,7 @@ impl ToolRegistry {
             core::OriginFilter::Any,
             core::Provenance::Live,
         )?;
+        self.learn = learn.unwrap_or(true);
         let handle = graph.inner.clone();
         // Sets what FUTURE admissions are measured against. Existing boundaries
         // stay as they are — nothing can redraw them in place — and the graph
@@ -1320,6 +1358,7 @@ impl ToolRegistry {
             Some(&handle),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         self.inner.set_trace_sink(sink);
         self.inner.set_intent_graph(Some(handle.clone()));
@@ -1361,10 +1400,18 @@ impl ToolRegistry {
     /// Turn adaptive usage ranking off: ranking returns to the base engine and
     /// the graph stops growing. The graph keeps what it learned.
     fn disable_adaptive_ranking(&mut self) {
-        let sink = active_trace_sink(&self.base_sink, None, &self.event_stream, self.usage_policy);
+        let sink = active_trace_sink(
+            &self.base_sink,
+            None,
+            &self.event_stream,
+            self.usage_policy,
+            true,
+        );
         self.inner.set_trace_sink(sink);
         self.inner.set_intent_graph(None);
         self.graph = None;
+        self.usage_policy = core::ObservationPolicy::default();
+        self.learn = true;
     }
 
     /// Drain captured envelopes from the active sink. Returns `[]` unless the
@@ -1400,6 +1447,9 @@ pub struct SkillRegistry {
     /// the same reason: a sink change re-wraps the learner, and rebuilding it at
     /// the default would silently drop a configured policy.
     usage_policy: core::ObservationPolicy,
+    /// Whether an attached graph should be learned into, not just ranked from.
+    /// See `ToolRegistry::learn`.
+    learn: bool,
     event_stream: Option<EventStream>,
 }
 
@@ -1445,6 +1495,7 @@ impl SkillRegistry {
             base_sink: Arc::new(NoopSink),
             graph: None,
             usage_policy: core::ObservationPolicy::default(),
+            learn: true,
             event_stream: None,
         })
     }
@@ -1728,6 +1779,7 @@ impl SkillRegistry {
             self.graph.as_ref(),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         self.inner.set_trace_sink(sink);
         Ok(subscription)
@@ -1751,6 +1803,7 @@ impl SkillRegistry {
                     self.graph.as_ref(),
                     &self.event_stream,
                     self.usage_policy,
+                    self.learn,
                 );
                 self.inner.set_trace_sink(sink);
             }
@@ -1765,6 +1818,7 @@ impl SkillRegistry {
                     self.graph.as_ref(),
                     &self.event_stream,
                     self.usage_policy,
+                    self.learn,
                 );
                 self.inner.set_trace_sink(sink);
             }
@@ -1781,6 +1835,7 @@ impl SkillRegistry {
                     self.graph.as_ref(),
                     &self.event_stream,
                     self.usage_policy,
+                    self.learn,
                 );
                 self.inner.set_trace_sink(sink);
             }
@@ -1805,10 +1860,19 @@ impl SkillRegistry {
     /// pairs. Pass the same graph to the other registry so both learn into one
     /// set of clusters.
     ///
+    /// Pass `learn=False` to rank from `graph` without learning into it — the
+    /// consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+    /// The flag is stored on the registry, not just applied at this call: every
+    /// later sink install (`set_trace_sink`, `subscribe_trace_events`)
+    /// re-derives its sink through the same flag, so re-installing a sink for
+    /// an unrelated reason cannot silently resume learning. Defaults to
+    /// `True`, reproducing today's behavior.
+    ///
     /// Only queries matching a cluster are affected. With a graph attached
     /// `SearchHit.score` becomes a fusion score rather than a raw BM25 score, so
     /// compare ordering rather than magnitudes.
-    #[pyo3(signature = (graph, origins=None, provenance=None, cluster_similarity=None, cluster_coverage=None))]
+    #[pyo3(signature = (graph, origins=None, provenance=None, cluster_similarity=None, cluster_coverage=None, learn=None))]
+    #[allow(clippy::too_many_arguments)]
     fn enable_adaptive_ranking(
         &mut self,
         graph: &IntentGraph,
@@ -1816,6 +1880,7 @@ impl SkillRegistry {
         provenance: Option<&str>,
         cluster_similarity: Option<f64>,
         cluster_coverage: Option<f64>,
+        learn: Option<bool>,
     ) -> PyResult<()> {
         let cluster_policy = parse_cluster_policy(cluster_similarity, cluster_coverage)?;
         self.usage_policy = parse_policy(
@@ -1824,6 +1889,7 @@ impl SkillRegistry {
             core::OriginFilter::Any,
             core::Provenance::Live,
         )?;
+        self.learn = learn.unwrap_or(true);
         let handle = graph.inner.clone();
         // Sets what FUTURE admissions are measured against. Existing boundaries
         // stay as they are — nothing can redraw them in place — and the graph
@@ -1838,6 +1904,7 @@ impl SkillRegistry {
             Some(&handle),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         self.inner.set_trace_sink(sink);
         self.inner.set_intent_graph(Some(handle.clone()));
@@ -1879,10 +1946,18 @@ impl SkillRegistry {
     /// Turn adaptive usage ranking off: ranking returns to the base engine and
     /// the graph stops growing. The graph keeps what it learned.
     fn disable_adaptive_ranking(&mut self) {
-        let sink = active_trace_sink(&self.base_sink, None, &self.event_stream, self.usage_policy);
+        let sink = active_trace_sink(
+            &self.base_sink,
+            None,
+            &self.event_stream,
+            self.usage_policy,
+            true,
+        );
         self.inner.set_trace_sink(sink);
         self.inner.set_intent_graph(None);
         self.graph = None;
+        self.usage_policy = core::ObservationPolicy::default();
+        self.learn = true;
     }
 
     /// Drain captured envelopes from the active sink — see

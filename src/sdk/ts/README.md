@@ -148,6 +148,13 @@ const [hit] = catalog.search("What is the weather in Rome?", 1);
 console.log(await catalog.invoke(hit.toolId, { city: "Rome" }));
 ```
 
+Pass the same `turnId` to a `search` and the `invoke`(s) it led to — both take it as a trailing
+argument — and adaptive ranking pairs them exactly, whether the graph is learned in-process
+(ADR-0014) or by Ratel Cloud replaying your runtime events. Omit it and pairing degrades to
+session order, which breaks on concurrent turns in one session. The `search_capabilities`
+capability tool forwards its executor's third argument as the turn id, so a framework adapter
+should pass one per model turn.
+
 ## Framework adapters
 
 To work in a host framework's native tool and message shapes, adapt the core with a

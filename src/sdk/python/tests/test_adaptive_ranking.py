@@ -217,6 +217,24 @@ async def test_rev_tracks_writes_and_survives_the_wire_form() -> None:
     assert IntentGraph.from_json(graph.to_json()).rev == graph.rev
 
 
+def test_model_reflects_the_graphs_embedding_model_or_none_for_a_lexical_graph() -> None:
+    assert IntentGraph().model is None
+
+    stamped = IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "model": "bge-small",
+                "intents": [],
+            }
+        )
+    )
+    assert stamped.model == "bge-small"
+    # Carried across a save/restore.
+    assert IntentGraph.from_json(stamped.to_json()).model == "bge-small"
+
+
 def test_a_future_schema_version_is_rejected() -> None:
     future = json.dumps({"v": 2, "built_from_ts": 1, "intents": []})
     with pytest.raises(ValueError, match="version"):
@@ -236,6 +254,174 @@ async def test_disabling_stops_ranking_but_keeps_what_was_learned() -> None:
     assert ids(catalog.search("why is the build broken", 5))[0] == "docker_build"
     assert graph.cluster_count == 1
     assert "gh_run_list" in graph.to_json()
+
+
+def known_cluster_graph() -> IntentGraph:
+    """A lexical (no-centroid) graph with one cluster already fully supported,
+    so `learn=False` can be proven to rank without needing to grow anything
+    first. Carries edges for both a tool and a skill id so the same fixture
+    serves the tool- and skill-catalog tests.
+    """
+    return IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "intents": [
+                    {
+                        "id": "i0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {"ci-triage": 1.0},
+                    }
+                ],
+            }
+        )
+    )
+
+
+async def build_skill_catalog() -> SkillCatalog:
+    catalog = SkillCatalog()
+    await catalog.register(
+        [
+            Skill(
+                id="ci-triage",
+                name="ci-triage",
+                description="Diagnose why the build failed in CI",
+                tags=[],
+                tools=[],
+                metadata={},
+                body="# steps",
+            ),
+            Skill(
+                id="unrelated-skill",
+                name="unrelated-skill",
+                description="Read a file from disk",
+                tags=[],
+                tools=[],
+                metadata={},
+                body="# steps",
+            ),
+        ]
+    )
+    return catalog
+
+
+@pytest.mark.asyncio
+async def test_learn_false_ranks_from_a_graph_without_learning_into_it() -> None:
+    catalog = await build_catalog()
+    graph = known_cluster_graph()
+    catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+
+    hits = catalog.search("why is the build broken", 5)
+    assert all(h.fused for h in hits)
+    assert ids(hits).index("gh_run_list") < ids(hits).index("docker_build")
+
+
+@pytest.mark.asyncio
+async def test_learn_false_does_not_bump_rev_or_change_the_wire_form() -> None:
+    catalog = await build_catalog()
+    graph = known_cluster_graph()
+    catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+
+    rev_before = graph.rev
+    json_before = graph.to_json()
+
+    await use_it(catalog, "why is the build broken", "gh_run_list")
+
+    assert graph.rev == rev_before
+    assert graph.to_json() == json_before
+
+
+@pytest.mark.asyncio
+async def test_learn_false_survives_a_trace_sink_reinstall() -> None:
+    catalog = await build_catalog()
+    graph = known_cluster_graph()
+    catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+
+    catalog._registry.set_trace_sink("memory", session_id="s")
+
+    rev_before = graph.rev
+    await use_it(catalog, "why is the build broken", "gh_run_list")
+
+    assert graph.rev == rev_before
+
+
+@pytest.mark.asyncio
+async def test_learn_false_resumes_learning_after_disable_and_plain_reenable() -> None:
+    catalog = await build_catalog()
+    graph = known_cluster_graph()
+    catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+    await use_it(catalog, "why is the build broken", "gh_run_list")
+    rev_after_consumer_only = graph.rev
+
+    catalog.experimental_disable_adaptive_ranking()
+    catalog.experimental_enable_adaptive_ranking(graph)
+    await use_it(catalog, "why is the build broken again", "gh_run_list")
+
+    assert graph.rev > rev_after_consumer_only
+
+
+@pytest.mark.asyncio
+async def test_learn_false_skill_catalog_ranks_without_learning_into_it() -> None:
+    catalog = await build_skill_catalog()
+    graph = known_cluster_graph()
+    catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+
+    hits = catalog.search("why is the build broken", 5)
+    assert all(h.fused for h in hits)
+    assert hits[0].skill_id == "ci-triage"
+
+
+@pytest.mark.asyncio
+async def test_learn_false_skill_catalog_does_not_bump_rev_or_change_wire_form() -> None:
+    catalog = await build_skill_catalog()
+    graph = known_cluster_graph()
+    catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+
+    rev_before = graph.rev
+    json_before = graph.to_json()
+
+    catalog.search("why is the build broken", 5)
+    catalog.invoke("ci-triage")
+
+    assert graph.rev == rev_before
+    assert graph.to_json() == json_before
+
+
+@pytest.mark.asyncio
+async def test_learn_false_skill_catalog_survives_a_trace_sink_reinstall() -> None:
+    catalog = await build_skill_catalog()
+    graph = known_cluster_graph()
+    catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+
+    catalog._registry.set_trace_sink("memory", session_id="s")
+
+    rev_before = graph.rev
+    catalog.search("why is the build broken", 5)
+    catalog.invoke("ci-triage")
+
+    assert graph.rev == rev_before
+
+
+@pytest.mark.asyncio
+async def test_learn_false_skill_catalog_resumes_learning_after_disable_and_reenable() -> None:
+    catalog = await build_skill_catalog()
+    graph = known_cluster_graph()
+    catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+    catalog.search("why is the build broken", 5)
+    catalog.invoke("ci-triage")
+    rev_after_consumer_only = graph.rev
+
+    catalog.experimental_disable_adaptive_ranking()
+    catalog.experimental_enable_adaptive_ranking(graph)
+    catalog.search("why is the build broken again", 5)
+    catalog.invoke("ci-triage")
+
+    assert graph.rev > rev_after_consumer_only
 
 
 async def _jsonl_catalog(path: Path) -> ToolCatalog:
@@ -612,6 +798,94 @@ async def test_rebuild_on_model_change_recovers_without_a_manual_rebuild() -> No
     assert catalog.experimental_adaptive_ranking_status == "active"
 
 
+def _wrong_width_graph() -> IntentGraph:
+    """A graph whose centroid width does not match any real model's output —
+    the cross-model-family scenario `dim_mismatch` flags (`_stale_graph` above
+    only differs by identity, not width)."""
+    return IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "model": "some-other-model",
+                "intents": [
+                    {
+                        "id": "intent_0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "centroid": [1.0, 0.0, 0.0],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+
+
+@pytest.mark.skipif(not _has_model, reason="bge-small not cached")
+@pytest.mark.asyncio
+async def test_usage_model_mismatch_event_reports_dim_mismatch_true() -> None:
+    catalog = ToolCatalog(
+        method="semantic", trace=TraceSinkConfig(kind="memory", session_id="s")
+    )
+    await catalog.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="list CI runs",
+            execute=lambda _a: "ok",
+        )
+    )
+    catalog.drain_trace_events()  # discard registration churn
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        catalog.experimental_enable_adaptive_ranking(
+            _wrong_width_graph(), warn_on_model_mismatch=False
+        )
+
+        await catalog.search_async("why is the build broken", 5, method="semantic")
+
+    events = catalog.drain_trace_events()
+    mismatch = next(e for e in events if e["type"] == "usage_model_mismatch")
+    assert mismatch["dim_mismatch"] is True
+
+
+@pytest.mark.skipif(not _has_model, reason="bge-small not cached")
+@pytest.mark.asyncio
+async def test_usage_ranking_status_paused_on_enable_then_active_with_reason_rebuilt() -> None:
+    catalog = ToolCatalog(
+        method="semantic", trace=TraceSinkConfig(kind="memory", session_id="s")
+    )
+    await catalog.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="list CI runs",
+            execute=lambda _a: "ok",
+        )
+    )
+    catalog.drain_trace_events()  # discard registration churn
+
+    catalog.experimental_enable_adaptive_ranking(
+        _wrong_width_graph(), warn_on_model_mismatch=False
+    )
+
+    enabled_events = catalog.drain_trace_events()
+    enabled = next(e for e in enabled_events if e["type"] == "usage_ranking_status")
+    assert enabled["status"] == "paused"
+    assert enabled["reason"] == "enabled"
+
+    await catalog.experimental_rebuild_intent_graph()
+
+    rebuilt_events = catalog.drain_trace_events()
+    rebuilt = next(e for e in rebuilt_events if e["type"] == "usage_ranking_status")
+    assert rebuilt["status"] == "active"
+    assert rebuilt["reason"] == "rebuilt"
+
+
 # ---- baseline seeding ------------------------------------------------------
 
 
@@ -912,6 +1186,30 @@ async def test_an_unknown_policy_value_is_rejected_when_enabling() -> None:
         catalog.experimental_enable_adaptive_ranking(IntentGraph(), origins="direct")  # type: ignore[arg-type]
 
 
+async def test_a_rejected_enable_call_does_not_corrupt_the_attached_graphs_bookkeeping() -> None:
+    # Regression: enable used to write _graph/_graph_key/_learn before calling
+    # native, so a rejected call (bad origins here) left them pointing at the
+    # graph/key that never actually attached -- corrupting what a later
+    # rebuild's usage_ranking_status event reports.
+    catalog = await build_catalog(TraceSinkConfig(kind="memory", session_id="s"))
+    graph_a = IntentGraph()
+    catalog.experimental_enable_adaptive_ranking(graph_a, learn=False, graph_key="own")
+
+    with pytest.raises(ValueError, match="unknown origins"):
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), origins="nope", graph_key="cloud"  # type: ignore[arg-type]
+        )
+
+    catalog.drain_trace_events()  # discard churn from the two enable attempts
+    await catalog.experimental_rebuild_intent_graph()
+
+    events = catalog.drain_trace_events()
+    status = next(e for e in events if e["type"] == "usage_ranking_status")
+    assert status["reason"] == "rebuilt"
+    assert status["graph_key"] == "own"
+    assert status["learn"] is False
+
+
 async def test_policy_values_are_a_closed_set() -> None:
     # The three policy keywords are `Literal`s, so mypy rejects a typo in user
     # code before it runs. This file is outside mypy's scope (it checks
@@ -933,6 +1231,105 @@ async def test_valid_policy_values_are_accepted() -> None:
         IntentGraph(), origins="baseline", provenance="seeded"
     )
     assert catalog.experimental_adaptive_ranking_status == "active"
+
+
+async def test_read_only_graph_with_rebuild_on_model_change_warns() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), learn=False, rebuild_on_model_change=True
+        )
+        assert any("rebuild_on_model_change" in str(w.message) for w in caught)
+
+
+async def test_read_only_graph_with_rebuild_on_model_change_warning_can_be_suppressed() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(),
+            learn=False,
+            rebuild_on_model_change=True,
+            warn_on_model_mismatch=False,
+        )
+        assert not caught
+
+
+async def test_baseline_origins_on_a_live_catalog_warns() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(IntentGraph(), origins="baseline")
+        assert any('origins "baseline"' in str(w.message) for w in caught)
+
+
+async def test_baseline_origins_warning_can_be_suppressed() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), origins="baseline", warn_on_model_mismatch=False
+        )
+        assert not caught
+
+
+async def test_graph_key_with_learning_on_warns() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(IntentGraph(), graph_key="cloud")
+        assert any('graph_key "cloud"' in str(w.message) for w in caught)
+
+
+async def test_graph_key_with_learning_on_warning_can_be_suppressed() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), graph_key="cloud", warn_on_model_mismatch=False
+        )
+        assert not caught
+
+
+async def test_a_well_formed_consumer_enable_does_not_warn() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), learn=False, graph_key="cloud"
+        )
+        assert not caught
+
+
+async def test_one_graph_with_mismatched_learn_across_catalogs_warns() -> None:
+    tool_catalog = await build_catalog()
+    skill_catalog = SkillCatalog()
+    await skill_catalog.register(
+        Skill(id="s1", name="s1", description="a skill", body="content")
+    )
+    graph = IntentGraph()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+        assert not caught  # first enable of this graph, nothing to compare against yet
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        skill_catalog.experimental_enable_adaptive_ranking(graph)
+        matches = [w for w in caught if "learn=True on one catalog" in str(w.message)]
+        assert len(matches) == 1
+
+    # Disabling both and re-enabling with matching learn values raises no
+    # further warning: the mismatch was resolved, not merely silenced.
+    tool_catalog.experimental_disable_adaptive_ranking()
+    skill_catalog.experimental_disable_adaptive_ranking()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+        skill_catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+        assert not caught
 
 
 async def test_build_defaults_to_baseline_and_enable_defaults_to_any(tmp_path: Path) -> None:

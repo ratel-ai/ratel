@@ -8,6 +8,15 @@
     "max_hits": 100,
     "otel_event_id_attribute": "ratel.event.id",
     "required_envelope_fields": ["v", "event_id", "ts", "session_id", "source_id", "type"],
+    "optional_envelope_fields": [
+      "invocation_id",
+      "catalog_version",
+      "environment",
+      "end_user_id",
+      "trace_id",
+      "span_id",
+      "turn_id"
+    ],
     "event_types": [
       "catalog_definition",
       "search",
@@ -36,7 +45,11 @@
       "experiment_drop",
       "experiment_invocation",
       "experiment_outcome",
-      "events_dropped"
+      "events_dropped",
+      "usage_boost",
+      "usage_model_mismatch",
+      "usage_cluster_policy_changed",
+      "usage_ranking_status"
     ]
   },
   "catalog_definition_canonicalization": {

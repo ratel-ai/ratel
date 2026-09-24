@@ -29,6 +29,12 @@ import { type RuntimeEventProjection, recordCatalogDefinitions } from "./telemet
 
 export { IntentGraph };
 
+/** Last `learn` value each `IntentGraph` was enabled with, across whichever
+ * registries share it (ADR-0014's "same graph on the tool and skill catalog"
+ * pattern). Weakly keyed so an unreferenced graph is never pinned alive by
+ * this bookkeeping; written on every enable, cleared on disable. */
+const graphLearnByObject = new WeakMap<IntentGraph, boolean>();
+
 /** Normalize the public string|object form into the native config the binding
  * expects (a string is the local-path `spec`, validated in core). */
 function toNativeEmbedding(
@@ -50,6 +56,9 @@ export class ToolRegistry {
   #warnOnModelMismatch = true;
   #adaptiveWarned = false;
   #rebuildOnModelChange = false;
+  #learn = true;
+  #graph?: IntentGraph;
+  #graphKey?: string;
   private readonly eager: boolean;
   private readonly emittedDefinitionHashes = new Map<string, string>();
   private useDefinitionOverrides = false;
@@ -283,26 +292,95 @@ export class ToolRegistry {
    * as it would have. With a graph attached, `SearchHit.score` becomes a fusion
    * score rather than a raw BM25 score, so use `rank` for ordering and
    * `fused` to detect the scale, not the raw `score`.
+   *
+   * `graphKey` is a caller-supplied label carried on the `usage_ranking_status`
+   * event this emits — it never reaches native. It's how a downstream consumer
+   * (Ratel Cloud's dashboard) tells the runtime's own graph apart from one it
+   * served, e.g. `graphKey: "cloud"`.
+   *
+   * Four configuration mistakes warn once here (suppressed by the same
+   * `warnOnModelMismatch: false`, since that option already means "I gate on
+   * status, not stderr"): `learn: false` with `rebuildOnModelChange: true`
+   * (a rebuild still re-embeds and bumps `rev` regardless of `learn`);
+   * `origins: "baseline"` on a live catalog (the live search path never
+   * produces that origin, so nothing would ever be learned); `graphKey` set
+   * while `learn` is not `false` (a "consumed" graph that is also being
+   * written into); and enabling the same graph with a different `learn`
+   * value than the other registry it's already attached to.
    */
   experimentalEnableAdaptiveRanking(
     graph: IntentGraph,
     options: {
       warnOnModelMismatch?: boolean;
       rebuildOnModelChange?: boolean;
+      learn?: boolean;
+      graphKey?: string;
     } & ObservationPolicyOptions = {},
   ): void {
-    this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
-    this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
-    this.#adaptiveWarned = false;
+    const warnOnModelMismatch = options.warnOnModelMismatch ?? true;
+    const rebuildOnModelChange = options.rebuildOnModelChange ?? false;
+    const learn = options.learn ?? true;
+    if (warnOnModelMismatch) {
+      if (learn === false && rebuildOnModelChange) {
+        console.warn(
+          "ratel: learn is off but rebuildOnModelChange is on; a rebuild will still " +
+            "re-embed this graph and bump its rev. Call experimentalRebuildIntentGraph() " +
+            "yourself if you want that, or drop rebuildOnModelChange.",
+        );
+      }
+      if (options.origins === "baseline") {
+        console.warn(
+          'ratel: origins "baseline" only accepts captured baseline turns; live searches ' +
+            "never carry that origin, so this graph will not learn from this catalog. Use " +
+            '"any" or "agent" here.',
+        );
+      }
+      if (options.graphKey !== undefined && learn) {
+        console.warn(
+          `ratel: graphKey "${options.graphKey}" marks this graph as produced elsewhere, ` +
+            "but learn is on; local turns will fork it and be overwritten on the next " +
+            "adoption. Pass learn: false to consume it.",
+        );
+      }
+    }
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
-    this.native.enableAdaptiveRanking(graph, {
-      origins: options.origins,
-      provenance: options.provenance,
-      clusterSimilarity: options.clusterSimilarity,
-      clusterCoverage: options.clusterCoverage,
-    });
-    this.#maybeWarnModelMismatch();
+    this.native.enableAdaptiveRanking(
+      graph,
+      {
+        origins: options.origins,
+        provenance: options.provenance,
+        clusterSimilarity: options.clusterSimilarity,
+        clusterCoverage: options.clusterCoverage,
+      },
+      options.learn,
+    );
+    // Only recorded once native accepts the call: a rejected call (bad
+    // origins/provenance/cluster policy) leaves native's own state untouched,
+    // so it must leave this wrapper's bookkeeping untouched too — otherwise a
+    // later usage_ranking_status event (e.g. on rebuild) would report the
+    // graph/key/learn value from the failed attempt instead of what is
+    // actually attached.
+    this.#warnOnModelMismatch = warnOnModelMismatch;
+    this.#rebuildOnModelChange = rebuildOnModelChange;
+    this.#adaptiveWarned = false;
+    this.#learn = learn;
+    this.#graph = graph;
+    this.#graphKey = options.graphKey;
+    const status = this.native.adaptiveRankingStatus();
+    this.#maybeWarnModelMismatch(status);
+    this.#emitRankingStatusEvent("enabled", status);
+    if (warnOnModelMismatch) {
+      const previousLearn = graphLearnByObject.get(graph);
+      if (previousLearn !== undefined && previousLearn !== learn) {
+        console.warn(
+          "ratel: this intent graph is enabled with learn: true on one catalog and " +
+            "learn: false on the other; it will still change. Use the same learn value " +
+            "on both catalogs.",
+        );
+      }
+    }
+    graphLearnByObject.set(graph, learn);
   }
 
   /**
@@ -319,7 +397,9 @@ export class ToolRegistry {
       throw mapEmbedderError(error);
     }
     this.#adaptiveWarned = false;
-    this.#maybeWarnModelMismatch();
+    const status = this.native.adaptiveRankingStatus();
+    this.#maybeWarnModelMismatch(status);
+    this.#emitRankingStatusEvent("rebuilt", status);
   }
 
   /**
@@ -369,10 +449,12 @@ export class ToolRegistry {
 
   /** One-time stderr warning when the attached graph's model no longer matches
    * the catalog's. A dev-time config error that otherwise silently pauses
-   * ranking — printed unless `warnOnModelMismatch: false`. */
-  #maybeWarnModelMismatch(): void {
+   * ranking — printed unless `warnOnModelMismatch: false`. Accepts an
+   * already-read `status` so a caller that just fetched it (enable, rebuild)
+   * does not pay for a second native round-trip. */
+  #maybeWarnModelMismatch(status?: AdaptiveRankingStatus): void {
     if (this.#adaptiveWarned || !this.#warnOnModelMismatch) return;
-    const s = this.native.adaptiveRankingStatus();
+    const s = status ?? this.native.adaptiveRankingStatus();
     if (s.status === "active: policy drift") {
       this.#adaptiveWarned = true;
       console.warn(
@@ -406,6 +488,36 @@ export class ToolRegistry {
     }
   }
 
+  /** Report the current adaptive-ranking status as a `usage_ranking_status`
+   * trace event (ADR-0014/ADR-0020) — emitted by this wrapper, never by core,
+   * since core cannot know where a graph came from. Collapses the native
+   * status string to the four-value contract: `"active"` covers both `active`
+   * and `active: policy drift`, any `paused...` collapses to `"paused"`.
+   * Takes the already-read `nativeStatus` rather than re-reading it, since the
+   * caller (enable, rebuild) just fetched it for {@link #maybeWarnModelMismatch}. */
+  #emitRankingStatusEvent(
+    reason: "enabled" | "rebuilt",
+    nativeStatus: AdaptiveRankingStatus,
+  ): void {
+    const raw = nativeStatus.status;
+    const status = raw.startsWith("paused")
+      ? "paused"
+      : raw === "active" || raw === "active: policy drift"
+        ? "active"
+        : raw === "unknown"
+          ? "unknown"
+          : "inactive";
+    this.recordEvent({
+      type: "usage_ranking_status",
+      status,
+      reason,
+      ...(this.#graph ? { rev: this.#graph.rev } : {}),
+      ...(this.#graphKey === undefined ? {} : { graph_key: this.#graphKey }),
+      learn: this.#learn,
+      ...(this.#graph?.model != null ? { model: this.#graph.model } : {}),
+    });
+  }
+
   /**
    * Turn adaptive usage ranking off: ranking returns to the base engine and the
    * graph stops growing. The graph keeps what it learned, so re-enabling
@@ -414,6 +526,15 @@ export class ToolRegistry {
   experimentalDisableAdaptiveRanking(): void {
     this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
+    this.recordEvent({
+      type: "usage_ranking_status",
+      status: "inactive",
+      reason: "disabled",
+      learn: true,
+    });
+    if (this.#graph) graphLearnByObject.delete(this.#graph);
+    this.#graph = undefined;
+    this.#graphKey = undefined;
   }
 
   /** Drain captured envelopes from a `"memory"` sink; `[]` otherwise. */
@@ -432,6 +553,9 @@ export class SkillRegistry {
   #warnOnModelMismatch = true;
   #adaptiveWarned = false;
   #rebuildOnModelChange = false;
+  #learn = true;
+  #graph?: IntentGraph;
+  #graphKey?: string;
   private readonly eager: boolean;
   private readonly emittedDefinitionHashes = new Map<string, string>();
   private useDefinitionOverrides = false;
@@ -662,26 +786,95 @@ export class SkillRegistry {
    * as it would have. With a graph attached, `SearchHit.score` becomes a fusion
    * score rather than a raw BM25 score, so use `rank` for ordering and
    * `fused` to detect the scale, not the raw `score`.
+   *
+   * `graphKey` is a caller-supplied label carried on the `usage_ranking_status`
+   * event this emits — it never reaches native. It's how a downstream consumer
+   * (Ratel Cloud's dashboard) tells the runtime's own graph apart from one it
+   * served, e.g. `graphKey: "cloud"`.
+   *
+   * Four configuration mistakes warn once here (suppressed by the same
+   * `warnOnModelMismatch: false`, since that option already means "I gate on
+   * status, not stderr"): `learn: false` with `rebuildOnModelChange: true`
+   * (a rebuild still re-embeds and bumps `rev` regardless of `learn`);
+   * `origins: "baseline"` on a live catalog (the live search path never
+   * produces that origin, so nothing would ever be learned); `graphKey` set
+   * while `learn` is not `false` (a "consumed" graph that is also being
+   * written into); and enabling the same graph with a different `learn`
+   * value than the other registry it's already attached to.
    */
   experimentalEnableAdaptiveRanking(
     graph: IntentGraph,
     options: {
       warnOnModelMismatch?: boolean;
       rebuildOnModelChange?: boolean;
+      learn?: boolean;
+      graphKey?: string;
     } & ObservationPolicyOptions = {},
   ): void {
-    this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
-    this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
-    this.#adaptiveWarned = false;
+    const warnOnModelMismatch = options.warnOnModelMismatch ?? true;
+    const rebuildOnModelChange = options.rebuildOnModelChange ?? false;
+    const learn = options.learn ?? true;
+    if (warnOnModelMismatch) {
+      if (learn === false && rebuildOnModelChange) {
+        console.warn(
+          "ratel: learn is off but rebuildOnModelChange is on; a rebuild will still " +
+            "re-embed this graph and bump its rev. Call experimentalRebuildIntentGraph() " +
+            "yourself if you want that, or drop rebuildOnModelChange.",
+        );
+      }
+      if (options.origins === "baseline") {
+        console.warn(
+          'ratel: origins "baseline" only accepts captured baseline turns; live searches ' +
+            "never carry that origin, so this graph will not learn from this catalog. Use " +
+            '"any" or "agent" here.',
+        );
+      }
+      if (options.graphKey !== undefined && learn) {
+        console.warn(
+          `ratel: graphKey "${options.graphKey}" marks this graph as produced elsewhere, ` +
+            "but learn is on; local turns will fork it and be overwritten on the next " +
+            "adoption. Pass learn: false to consume it.",
+        );
+      }
+    }
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
-    this.native.enableAdaptiveRanking(graph, {
-      origins: options.origins,
-      provenance: options.provenance,
-      clusterSimilarity: options.clusterSimilarity,
-      clusterCoverage: options.clusterCoverage,
-    });
-    this.#maybeWarnModelMismatch();
+    this.native.enableAdaptiveRanking(
+      graph,
+      {
+        origins: options.origins,
+        provenance: options.provenance,
+        clusterSimilarity: options.clusterSimilarity,
+        clusterCoverage: options.clusterCoverage,
+      },
+      options.learn,
+    );
+    // Only recorded once native accepts the call: a rejected call (bad
+    // origins/provenance/cluster policy) leaves native's own state untouched,
+    // so it must leave this wrapper's bookkeeping untouched too — otherwise a
+    // later usage_ranking_status event (e.g. on rebuild) would report the
+    // graph/key/learn value from the failed attempt instead of what is
+    // actually attached.
+    this.#warnOnModelMismatch = warnOnModelMismatch;
+    this.#rebuildOnModelChange = rebuildOnModelChange;
+    this.#adaptiveWarned = false;
+    this.#learn = learn;
+    this.#graph = graph;
+    this.#graphKey = options.graphKey;
+    const status = this.native.adaptiveRankingStatus();
+    this.#maybeWarnModelMismatch(status);
+    this.#emitRankingStatusEvent("enabled", status);
+    if (warnOnModelMismatch) {
+      const previousLearn = graphLearnByObject.get(graph);
+      if (previousLearn !== undefined && previousLearn !== learn) {
+        console.warn(
+          "ratel: this intent graph is enabled with learn: true on one catalog and " +
+            "learn: false on the other; it will still change. Use the same learn value " +
+            "on both catalogs.",
+        );
+      }
+    }
+    graphLearnByObject.set(graph, learn);
   }
 
   /**
@@ -698,7 +891,9 @@ export class SkillRegistry {
       throw mapEmbedderError(error);
     }
     this.#adaptiveWarned = false;
-    this.#maybeWarnModelMismatch();
+    const status = this.native.adaptiveRankingStatus();
+    this.#maybeWarnModelMismatch(status);
+    this.#emitRankingStatusEvent("rebuilt", status);
   }
 
   /**
@@ -713,10 +908,12 @@ export class SkillRegistry {
 
   /** One-time stderr warning when the attached graph's model no longer matches
    * the catalog's. A dev-time config error that otherwise silently pauses
-   * ranking — printed unless `warnOnModelMismatch: false`. */
-  #maybeWarnModelMismatch(): void {
+   * ranking — printed unless `warnOnModelMismatch: false`. Accepts an
+   * already-read `status` so a caller that just fetched it (enable, rebuild)
+   * does not pay for a second native round-trip. */
+  #maybeWarnModelMismatch(status?: AdaptiveRankingStatus): void {
     if (this.#adaptiveWarned || !this.#warnOnModelMismatch) return;
-    const s = this.native.adaptiveRankingStatus();
+    const s = status ?? this.native.adaptiveRankingStatus();
     if (s.status === "active: policy drift") {
       this.#adaptiveWarned = true;
       console.warn(
@@ -750,6 +947,36 @@ export class SkillRegistry {
     }
   }
 
+  /** Report the current adaptive-ranking status as a `usage_ranking_status`
+   * trace event (ADR-0014/ADR-0020) — emitted by this wrapper, never by core,
+   * since core cannot know where a graph came from. Collapses the native
+   * status string to the four-value contract: `"active"` covers both `active`
+   * and `active: policy drift`, any `paused...` collapses to `"paused"`.
+   * Takes the already-read `nativeStatus` rather than re-reading it, since the
+   * caller (enable, rebuild) just fetched it for {@link #maybeWarnModelMismatch}. */
+  #emitRankingStatusEvent(
+    reason: "enabled" | "rebuilt",
+    nativeStatus: AdaptiveRankingStatus,
+  ): void {
+    const raw = nativeStatus.status;
+    const status = raw.startsWith("paused")
+      ? "paused"
+      : raw === "active" || raw === "active: policy drift"
+        ? "active"
+        : raw === "unknown"
+          ? "unknown"
+          : "inactive";
+    this.recordEvent({
+      type: "usage_ranking_status",
+      status,
+      reason,
+      ...(this.#graph ? { rev: this.#graph.rev } : {}),
+      ...(this.#graphKey === undefined ? {} : { graph_key: this.#graphKey }),
+      learn: this.#learn,
+      ...(this.#graph?.model != null ? { model: this.#graph.model } : {}),
+    });
+  }
+
   /**
    * Turn adaptive usage ranking off: ranking returns to the base engine and the
    * graph stops growing. The graph keeps what it learned, so re-enabling
@@ -758,6 +985,15 @@ export class SkillRegistry {
   experimentalDisableAdaptiveRanking(): void {
     this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
+    this.recordEvent({
+      type: "usage_ranking_status",
+      status: "inactive",
+      reason: "disabled",
+      learn: true,
+    });
+    if (this.#graph) graphLearnByObject.delete(this.#graph);
+    this.#graph = undefined;
+    this.#graphKey = undefined;
   }
 
   /** Drain captured envelopes from a `"memory"` sink; `[]` otherwise. */

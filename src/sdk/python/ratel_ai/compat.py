@@ -20,6 +20,7 @@ from typing import Any
 
 from .capabilities import UpstreamServerInfo, format_upstream_line
 from .catalog import ExecutableTool, ToolCatalog
+from .telemetry import _event_projection
 
 SEARCH_TOOLS_ID = "search_tools"
 """Id (and name) of the deprecated pre-0.2.0 discovery tool built by
@@ -74,12 +75,12 @@ def search_tools_tool(
     upstreams = list(upstream_servers or [])
     upstream_by_name = {u.name: u for u in upstreams}
 
-    async def execute(input: dict[str, Any]) -> dict[str, Any]:
+    async def execute(input: dict[str, Any], turn_id: str | None = None) -> dict[str, Any]:
         query = input["query"]
         top_k = input.get("topK")
         k = top_k if isinstance(top_k, int) and not isinstance(top_k, bool) and top_k > 0 else 5
         started_at = time.monotonic()
-        hits = await catalog.search_async(query, k, "agent")
+        hits = await catalog.search_async(query, k, "agent", turn_id=turn_id)
         catalog.record_event(
             {
                 "type": "gateway_search",
@@ -88,7 +89,8 @@ def search_tools_tool(
                 "top_k": k,
                 "hits": len(hits),
                 "took_ms": int((time.monotonic() - started_at) * 1000),
-            }
+            },
+            _event_projection(turn_id=turn_id),
         )
         order: list[str] = []
         groups: dict[str, dict[str, Any]] = {}
