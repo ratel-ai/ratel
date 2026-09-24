@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.6] - 2026-09-25
+
 ### Added
 
 - `learn: false` on `experimentalEnableAdaptiveRanking` — rank from an intent graph without learning into it, for consuming a graph produced elsewhere (e.g. Ratel Cloud)
@@ -17,6 +19,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `turn_id` is now a declared, tested field of the runtime-events envelope contract (no behavior change)
 - `gateway_search` now carries `turn_id` when the caller supplies one (`search_capabilities` and the legacy `search_tools` shim)
 - `usage_boost`, `usage_model_mismatch`, and `usage_cluster_policy_changed` (ADR-0014) are now part of the remotely publishable event set
+
+### Fixed
+
+- A rejected `experimentalEnableAdaptiveRanking` call (invalid `origins`/`provenance`/cluster policy) no longer corrupts the registry's tracked graph/`graphKey`/`learn`, which could otherwise leak into a later rebuild's `usage_ranking_status` event
 
 ## [0.13.0-rc.5] - 2026-09-21
 
