@@ -17,6 +17,7 @@ from ratel_ai import (
     RUNTIME_EVENT_MAX_QUERY_BYTES,
     RUNTIME_EVENT_TYPES,
     ExecutableTool,
+    IntentGraph,
     RuntimeCatalog,
     RuntimeEvents,
     Skill,
@@ -581,4 +582,128 @@ async def test_marshals_handlers_that_return_an_awaitable_to_the_event_loop() ->
 
     assert [event["type"] for event in received] == ["search"]
     assert handler_threads == [event_loop_thread]
+    subscription.unsubscribe()
+
+
+def _known_cluster_graph() -> IntentGraph:
+    """A lexical (no-centroid) graph with one cluster already fully supported,
+    so adaptive ranking boosts on the first search without needing to learn
+    first."""
+    return IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "intents": [
+                    {
+                        "id": "i0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+
+
+async def _gh_run_list_catalog() -> ToolCatalog:
+    catalog = ToolCatalog()
+    await catalog.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="List CI workflow runs and whether the build passed",
+            execute=lambda _a: "ok",
+        )
+    )
+    return catalog
+
+
+@pytest.mark.asyncio
+async def test_usage_boost_reports_the_matched_cluster_and_promoted_count_on_a_hit() -> None:
+    tools = await _gh_run_list_catalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+
+    tools.search("why is the build broken", 5)
+    await subscription.flush()
+
+    boost = next(e for e in received if e["type"] == "usage_boost")
+    assert boost["intent"] == "i0"
+    assert boost["promoted"] == 1
+    assert boost["dropped"] == 0
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_boost_reports_a_null_intent_and_no_promotion_on_a_miss() -> None:
+    tools = await _gh_run_list_catalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+
+    tools.search("read a file from disk", 5)
+    await subscription.flush()
+
+    boost = next(e for e in received if e["type"] == "usage_boost")
+    assert boost["intent"] is None
+    assert boost["promoted"] == 0
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_no_usage_boost_is_delivered_without_a_graph_attached() -> None:
+    tools = await _gh_run_list_catalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.search("why is the build broken", 5)
+    await subscription.flush()
+
+    assert not any(e["type"] == "usage_boost" for e in received)
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_cluster_policy_changed_reports_built_vs_active_similarity() -> None:
+    tools = await _gh_run_list_catalog()
+    graph = IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "cluster_policy": {"similarity": 0.7, "coverage": 0.5},
+                "intents": [
+                    {
+                        "id": "i0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    tools.experimental_enable_adaptive_ranking(graph, learn=False, cluster_similarity=0.9)
+
+    tools.search("anything", 5)
+    await subscription.flush()
+
+    drift = next(e for e in received if e["type"] == "usage_cluster_policy_changed")
+    assert drift["built_similarity"] == pytest.approx(0.7)
+    assert drift["active_similarity"] == pytest.approx(0.9)
     subscription.unsubscribe()

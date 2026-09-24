@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - `turn_id` is now a declared, tested field of the runtime-events envelope contract (no behavior change)
 - `gateway_search` now carries `turn_id` when the caller supplies one (`search_capabilities` and the legacy `search_tools` shim)
+- `usage_boost`, `usage_model_mismatch`, and `usage_cluster_policy_changed` (ADR-0014) are now part of the remotely publishable event set
 
 ## [0.13.0-rc.5] - 2026-09-21
 

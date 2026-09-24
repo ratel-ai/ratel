@@ -135,6 +135,11 @@ outranks one only history supports. The arm still promotes a low-ranked capabili
 BM25's rank-0 (it contributes from both arms), but it cannot conjure one the base ranker
 did not retrieve at all.
 
+Every search reports this outcome as `TraceEvent::UsageBoost` — matched cluster or none,
+similarity, support, and promoted/dropped counts — and it is remotely publishable per the
+2026-09-24 amendment to ADR-0020, so a consumer of a served graph can observe whether it is
+doing anything.
+
 ### Which capability the arm promotes first
 
 An edge weight is a count of confirmed invocations, but serving that order raw lets a capability
@@ -243,7 +248,10 @@ them. The mechanical reason matters more than the principle. Both SDKs auto-reco
 beginning `paused`, and the remedy they reach for is `rebuild_intent_graph` — which cannot
 revisit cluster boundaries, for the reason given above. Routing a policy change through that
 string would fire an embedding pass incapable of fixing what it fired for, so the new status
-begins `active` and the notice is raised deliberately instead.
+begins `active` and the notice is raised deliberately instead. The notice is also a trace
+event, `TraceEvent::UsageClusterPolicyChanged` (built vs. active similarity and coverage),
+raised on every search while the drift persists, and remotely publishable per the 2026-09-24
+amendment to ADR-0020.
 
 Changing the policy therefore **does not re-cluster**. Raising the threshold on a graph that
 already over-merged leaves those clusters exactly as they are; only later admissions are
@@ -312,8 +320,9 @@ corpus cache, which hard-errors: the corpus cannot produce dense results without
 embeddings, but the usage arm has a valid fall-through (no boost), so breaking search over a
 stale *enhancement* would be worse than the problem.
 
-The mismatch is surfaced three ways: a `TraceEvent::UsageModelMismatch` (structured, always),
-a one-time SDK stderr warning (default on, `warnOnModelMismatch: false` to suppress), and an
+The mismatch is surfaced three ways: a `TraceEvent::UsageModelMismatch` (structured, always,
+remotely publishable per the 2026-09-24 amendment to ADR-0020), a one-time SDK stderr warning
+(default on, `warnOnModelMismatch: false` to suppress), and an
 `experimentalAdaptiveRankingStatus` the app can gate on. `experimentalRebuildIntentGraph()` re-embeds the graph's
 members under the current model and restamps — members, support, and edges are
 model-independent, so all learning survives; only the centroids move.

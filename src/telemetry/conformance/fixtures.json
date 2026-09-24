@@ -45,7 +45,10 @@
       "experiment_drop",
       "experiment_invocation",
       "experiment_outcome",
-      "events_dropped"
+      "events_dropped",
+      "usage_boost",
+      "usage_model_mismatch",
+      "usage_cluster_policy_changed"
     ]
   },
   "catalog_definition_canonicalization": {

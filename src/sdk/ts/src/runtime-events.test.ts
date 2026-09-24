@@ -15,6 +15,7 @@ import { RATEL_EVENT_ID } from "@ratel-ai/telemetry";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   experimentalDefineExperiment,
+  IntentGraph,
   OPTIONAL_ENVELOPE_FIELDS,
   RUNTIME_EVENT_MAX_HITS,
   RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
@@ -625,6 +626,121 @@ describe("public runtime events", () => {
     expect("turn_id" in (search as object)).toBe(false);
     subscription.unsubscribe();
   });
+
+  it("delivers usage_boost with the matched cluster id and promoted count on a hit", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
+      learn: false,
+    });
+
+    runtime.tools.search("why is the build broken", 5);
+    await subscription.flush();
+
+    const boost = received.find((e) => e.type === "usage_boost");
+    expect(boost?.intent).toBe("i0");
+    expect(boost?.promoted).toBe(1);
+    expect(boost?.dropped).toBe(0);
+    subscription.unsubscribe();
+  });
+
+  it("delivers usage_boost with a null intent and no promotion on a miss", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
+      learn: false,
+    });
+
+    runtime.tools.search("read a file from disk", 5);
+    await subscription.flush();
+
+    const boost = received.find((e) => e.type === "usage_boost");
+    expect(boost?.intent).toBeNull();
+    expect(boost?.promoted).toBe(0);
+    subscription.unsubscribe();
+  });
+
+  it("delivers no usage_boost when no graph is attached", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+
+    runtime.tools.search("why is the build broken", 5);
+    await subscription.flush();
+
+    expect(received.some((e) => e.type === "usage_boost")).toBe(false);
+    subscription.unsubscribe();
+  });
+
+  it("delivers usage_cluster_policy_changed when the active policy drifts from the built one", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const graph = IntentGraph.fromJson(
+      JSON.stringify({
+        v: 1,
+        built_from_ts: 1,
+        cluster_policy: { similarity: 0.7, coverage: 0.5 },
+        intents: [
+          {
+            id: "i0",
+            label: "l",
+            terms: [],
+            members: ["why is the build broken"],
+            support: 9,
+            tools: { gh_run_list: 1.0 },
+            skills: {},
+          },
+        ],
+      }),
+    );
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph, {
+      learn: false,
+      clusterSimilarity: 0.9,
+    });
+
+    runtime.tools.search("anything", 5);
+    await subscription.flush();
+
+    const drift = received.find((e) => e.type === "usage_cluster_policy_changed");
+    expect(drift?.built_similarity as number).toBeCloseTo(0.7);
+    expect(drift?.active_similarity as number).toBeCloseTo(0.9);
+    subscription.unsubscribe();
+  });
 });
 
 function runtimeEvent(fields: Record<string, unknown> = {}): RuntimeEvent {
@@ -637,6 +753,28 @@ function runtimeEvent(fields: Record<string, unknown> = {}): RuntimeEvent {
     type: "search",
     ...fields,
   };
+}
+
+/** A lexical (no-centroid) graph with one cluster already fully supported, so
+ * adaptive ranking boosts on the first search without needing to learn first. */
+function knownClusterGraph(): IntentGraph {
+  return IntentGraph.fromJson(
+    JSON.stringify({
+      v: 1,
+      built_from_ts: 1,
+      intents: [
+        {
+          id: "i0",
+          label: "l",
+          terms: [],
+          members: ["why is the build broken"],
+          support: 9,
+          tools: { gh_run_list: 1.0 },
+          skills: {},
+        },
+      ],
+    }),
+  );
 }
 
 function deliverRuntimeEvent(input: RuntimeEvent): RuntimeEvent {

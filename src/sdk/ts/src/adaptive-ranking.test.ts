@@ -760,6 +760,31 @@ function staleModelGraph(): IntentGraph {
   );
 }
 
+/** A graph whose centroid width does not match any real model's output — the
+ * cross-model-family scenario `dim_mismatch` flags (a fine-tune swap, the
+ * `staleModelGraph` above, only differs by identity, not width). */
+function wrongWidthGraph(): IntentGraph {
+  return IntentGraph.fromJson(
+    JSON.stringify({
+      v: 1,
+      built_from_ts: 1,
+      model: "some-other-model",
+      intents: [
+        {
+          id: "intent_0",
+          label: "l",
+          terms: [],
+          members: ["why is the build broken"],
+          centroid: [1.0, 0.0, 0.0],
+          support: 9,
+          tools: { gh_run_list: 1.0 },
+          skills: {},
+        },
+      ],
+    }),
+  );
+}
+
 describe.skipIf(!hasModel)("adaptive ranking model-change detection", () => {
   it("pauses and warns on a model mismatch, and rebuild restores it", async () => {
     const catalog = await semanticCatalog();
@@ -801,6 +826,38 @@ describe.skipIf(!hasModel)("adaptive ranking model-change detection", () => {
 
     await catalog.searchAsync("why is the build broken", 5, "direct", "semantic");
     expect(catalog.experimentalAdaptiveRankingStatus.status).toBe("active");
+  });
+
+  it("delivers usage_model_mismatch with dim_mismatch true for a wrong-width centroid", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      trace: { kind: "memory", sessionId: "s" },
+    });
+    await catalog.register([
+      {
+        id: "gh_run_list",
+        name: "gh_run_list",
+        description: "list CI runs",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      },
+    ]);
+    catalog.drainTraceEvents(); // discard registration churn
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(wrongWidthGraph(), {
+        warnOnModelMismatch: false,
+      });
+
+      await catalog.searchAsync("why is the build broken", 5, "direct", "semantic");
+
+      const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+      const mismatch = events.find((e) => e.type === "usage_model_mismatch");
+      expect(mismatch?.dim_mismatch).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

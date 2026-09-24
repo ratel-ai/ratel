@@ -12,6 +12,13 @@ both native bridges, keyed on by the core learner per ADR-0014) but undeclared, 
 truncation survival, and absent from the conformance fixture; this amendment closes that gap
 with no behavior change.
 
+Amended 2026-09-24: `usage_boost`, `usage_model_mismatch`, and `usage_cluster_policy_changed`
+(ADR-0014) join the remotely publishable set — see the new Adaptive ranking row below. Core
+already emits all three on every search a graph is attached to; they were withheld only by
+omission from this table. Ratel Cloud needs them to observe a served graph's health once it is
+serving rather than learning (`learn: false`). No field carries user content — cluster ids,
+similarities, counts, and model fingerprints only.
+
 ## Context
 
 Ratel's core trace stream already records the product facts that power inspection, adaptive
@@ -53,6 +60,7 @@ The remotely publishable v1 event set is:
 | Auth | `auth_refresh`, `auth_needs`, `auth_flow_start`, `auth_flow_end` | upstream id and outcome; never credentials |
 | Experiments | `experiment_selection`, `experiment_results`, `experiment_comparison`, `experiment_skip`, `experiment_fallback`, `experiment_drop`, `experiment_invocation`, `experiment_outcome` | `selection_id`; served/shadow arm data; agreement metrics; result ids/scores; attribution, drop/fallback reason, and labelled outcome as applicable |
 | Delivery | `events_dropped` | dropped count, reason, and observation window |
+| Adaptive ranking | `usage_boost`, `usage_model_mismatch`, `usage_cluster_policy_changed` | matched cluster id or none, similarity, support, promoted and dropped counts; built vs active model fingerprint and dimension flag; built vs active cluster policy |
 
 For search events, the envelope `event_id` identifies the search. A hit's zero-based rank is its
 position in the ordered `hits[]` array rather than a repeated field on each hit.

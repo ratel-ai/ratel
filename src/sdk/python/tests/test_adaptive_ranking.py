@@ -780,6 +780,61 @@ async def test_rebuild_on_model_change_recovers_without_a_manual_rebuild() -> No
     assert catalog.experimental_adaptive_ranking_status == "active"
 
 
+def _wrong_width_graph() -> IntentGraph:
+    """A graph whose centroid width does not match any real model's output —
+    the cross-model-family scenario `dim_mismatch` flags (`_stale_graph` above
+    only differs by identity, not width)."""
+    return IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "model": "some-other-model",
+                "intents": [
+                    {
+                        "id": "intent_0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "centroid": [1.0, 0.0, 0.0],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+
+
+@pytest.mark.skipif(not _has_model, reason="bge-small not cached")
+@pytest.mark.asyncio
+async def test_usage_model_mismatch_event_reports_dim_mismatch_true() -> None:
+    catalog = ToolCatalog(
+        method="semantic", trace=TraceSinkConfig(kind="memory", session_id="s")
+    )
+    await catalog.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="list CI runs",
+            execute=lambda _a: "ok",
+        )
+    )
+    catalog.drain_trace_events()  # discard registration churn
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        catalog.experimental_enable_adaptive_ranking(
+            _wrong_width_graph(), warn_on_model_mismatch=False
+        )
+
+        await catalog.search_async("why is the build broken", 5, method="semantic")
+
+    events = catalog.drain_trace_events()
+    mismatch = next(e for e in events if e["type"] == "usage_model_mismatch")
+    assert mismatch["dim_mismatch"] is True
+
+
 # ---- baseline seeding ------------------------------------------------------
 
 

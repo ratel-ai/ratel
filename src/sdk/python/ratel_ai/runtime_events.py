@@ -55,6 +55,9 @@ RUNTIME_EVENT_TYPES = (
     "experiment_invocation",
     "experiment_outcome",
     "events_dropped",
+    "usage_boost",
+    "usage_model_mismatch",
+    "usage_cluster_policy_changed",
 )
 RUNTIME_EVENT_MAX_PAYLOAD_BYTES = 64 * 1_024
 RUNTIME_EVENT_MAX_QUERY_BYTES = 4 * 1_024
@@ -479,6 +482,18 @@ def _is_product_fact_field(key: str) -> bool:
         "rank",
         "turn",
         "action",
+        "intent",
+        "similarity",
+        "support",
+        "promoted",
+        "dropped",
+        "built",
+        "active",
+        "dim_mismatch",
+        "built_similarity",
+        "built_coverage",
+        "active_similarity",
+        "active_coverage",
     }
 
 

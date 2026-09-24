@@ -2831,6 +2831,70 @@ mod tests {
         }
     }
 
+    fn cluster_policy_changed_events(sink: &MemorySink) -> Vec<(f64, f64, f64, f64)> {
+        sink.drain()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                TraceEvent::UsageClusterPolicyChanged {
+                    built_similarity,
+                    built_coverage,
+                    active_similarity,
+                    active_coverage,
+                } => Some((
+                    built_similarity,
+                    built_coverage,
+                    active_similarity,
+                    active_coverage,
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_policy_drift_is_recorded_as_a_trace_event_on_search() {
+        use crate::usage::ClusterPolicy;
+
+        // `policy_drift_is_reported_as_active_not_paused` above proves the status
+        // read; this proves the notice actually reaches the sink as a trace
+        // event, remotely publishable per the 2026-09-24 ADR-0020 amendment.
+        // Purely lexical — the drift check runs independent of any embedder.
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = ToolRegistry::new();
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+
+        let graph = Arc::new(RwLock::new(
+            IntentGraph::from_json(
+                r#"{"v":1,"built_from_ts":1,
+                    "intents":[{"id":"i0","label":"l","terms":[],
+                    "members":["read a file"],"support":9,
+                    "tools":{"read_file":1.0},"skills":{}}]}"#,
+            )
+            .expect("valid"),
+        ));
+        graph
+            .write()
+            .unwrap()
+            .set_cluster_policy(ClusterPolicy::default().with_similarity(0.9));
+        reg.set_intent_graph(Some(graph));
+
+        reg.search("read a file", 5);
+
+        let events = cluster_policy_changed_events(&sink);
+        assert_eq!(events.len(), 1);
+        assert!(
+            (events[0].0 - 0.70).abs() < 1e-6,
+            "built: the graph's own default, got {}",
+            events[0].0
+        );
+        assert!(
+            (events[0].2 - 0.9).abs() < 1e-6,
+            "active: what was just set, got {}",
+            events[0].2
+        );
+    }
+
     #[test]
     fn rebuild_intent_graph_restores_the_arm_after_a_model_change() {
         let sink = Arc::new(MemorySink::new("s"));
