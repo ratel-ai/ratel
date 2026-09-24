@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.7] - 2026-09-24
+
 ### Added
 
 - `experimentalEnableAdaptiveRanking` now warns once, unless `warnOnModelMismatch: false`, on four silently-wrong configurations: `learn: false` with `rebuildOnModelChange: true` (a rebuild still re-embeds and bumps `rev`); `origins: "baseline"` on a live catalog (it will never learn); `graphKey` set while `learn` is not `false` (a consumed graph that is also being written into); and one `IntentGraph` enabled with a different `learn` value on the tool vs. skill catalog
