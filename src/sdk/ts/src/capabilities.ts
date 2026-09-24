@@ -6,6 +6,7 @@ import type {
   ToolCatalog,
 } from "./catalog.js";
 import { compactDescription } from "./compact.js";
+import { newRuntimeEventId } from "./runtime-events.js";
 import type { SkillCatalog } from "./skill-catalog.js";
 import { recordAuthNeeded, upstreamFromToolId } from "./telemetry.js";
 
@@ -362,14 +363,17 @@ export async function runCapabilitiesSearch(
   const startedAt = Date.now();
 
   const toolHits = await toolCatalog.searchAsync(query, kTools, origin, undefined, turnId);
-  toolCatalog.recordEvent({
-    type: "gateway_search",
-    query,
-    origin,
-    top_k: kTools,
-    hits: toolHits.length,
-    took_ms: Date.now() - startedAt,
-  });
+  toolCatalog.recordEvent(
+    {
+      type: "gateway_search",
+      query,
+      origin,
+      top_k: kTools,
+      hits: toolHits.length,
+      took_ms: Date.now() - startedAt,
+    },
+    { eventId: newRuntimeEventId(), ...(turnId === undefined ? {} : { turnId }) },
+  );
 
   const order: string[] = [];
   const groups = new Map<string, CapabilityToolGroup>();

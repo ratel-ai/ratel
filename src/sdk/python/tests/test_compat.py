@@ -5,7 +5,7 @@ keeps its `search_tools` id and tools-only ``{groups}`` result so code written
 against `ratel-ai==0.1.x` keeps working after upgrading to 0.2.0.
 """
 
-from ratel_ai import SEARCH_TOOLS_ID, ToolCatalog, search_tools_tool
+from ratel_ai import SEARCH_TOOLS_ID, ToolCatalog, TraceSinkConfig, search_tools_tool
 from ratel_ai.catalog import ExecutableTool
 
 
@@ -42,3 +42,18 @@ async def test_search_tools_respects_top_k() -> None:
     result = await tool.execute({"query": "deploy", "topK": 2})
     n = sum(len(g["hits"]) for g in result["groups"])
     assert n <= 2
+
+
+async def test_search_tools_stamps_gateway_search_and_inner_search_with_turn_id() -> None:
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
+    await catalog.register(_tool("ci__deploy", "Deploy the project to production."))
+    catalog.drain_trace_events()
+    tool = search_tools_tool(catalog)
+
+    await tool.execute({"query": "deploy to production"}, turn_id="turn-gw")
+
+    events = catalog.drain_trace_events()
+    inner_search = next(e for e in events if e["type"] == "search")
+    gateway_search = next(e for e in events if e["type"] == "gateway_search")
+    assert inner_search["turn_id"] == "turn-gw"
+    assert gateway_search["turn_id"] == "turn-gw"
