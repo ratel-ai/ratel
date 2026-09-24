@@ -66,6 +66,9 @@ export class ExperimentalLocalFileIntentGraphStorage implements ExperimentalInte
   async save(graph: IntentGraph): Promise<void> {
     if (this.lastKnownRev === graph.rev) return;
 
+    const body = graph.toJson();
+    const rev = revOf(body);
+
     const diskRev = await this.readDiskRev();
     if (diskRev !== this.lastKnownRev) {
       throw new StaleIntentGraphError(
@@ -78,9 +81,9 @@ export class ExperimentalLocalFileIntentGraphStorage implements ExperimentalInte
       dirname(this.path),
       `.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
-    await writeFile(tmpPath, graph.toJson(), "utf8");
+    await writeFile(tmpPath, body, "utf8");
     await rename(tmpPath, this.path);
-    this.lastKnownRev = graph.rev;
+    this.lastKnownRev = rev;
   }
 
   private async readDiskRev(): Promise<number | undefined> {
@@ -96,6 +99,20 @@ export class ExperimentalLocalFileIntentGraphStorage implements ExperimentalInte
 
 function isNotFound(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+/**
+ * The `rev` carried inside a serialized graph.
+ *
+ * `save()` records this rather than re-reading `graph.rev`, because the graph
+ * keeps mutating while a save is in flight: `observe()` on every confirmed
+ * invoke, and a centroid rebuild that runs on a worker thread, so `rev` can
+ * move between two native calls with no `await` between them. `toJson()`
+ * serializes under one read lock, so the `rev` in those bytes is by
+ * construction the `rev` of the content being persisted.
+ */
+function revOf(serialized: string): number {
+  return (JSON.parse(serialized) as { rev?: number }).rev ?? 0;
 }
 
 /**
@@ -296,12 +313,15 @@ export class ExperimentalS3IntentGraphStorage implements ExperimentalIntentGraph
       ? { "if-match": this.lastKnownEtag }
       : { "if-none-match": "*" };
 
+    const body = graph.toJson();
+    const rev = revOf(body);
+
     const response = await this.transport.send({
       method: "PUT",
       bucket: this.bucket,
       key: this.key,
       headers,
-      body: graph.toJson(),
+      body,
     });
 
     if (response.status === 412) {
@@ -318,6 +338,6 @@ export class ExperimentalS3IntentGraphStorage implements ExperimentalIntentGraph
       );
     }
     this.lastKnownEtag = response.headers.etag;
-    this.lastKnownRev = graph.rev;
+    this.lastKnownRev = rev;
   }
 }

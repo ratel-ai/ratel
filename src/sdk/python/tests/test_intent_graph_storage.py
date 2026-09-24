@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from ratel_ai import IntentGraph
+from ratel_ai import ExecutableTool, IntentGraph, ToolCatalog
 from ratel_ai._sigv4 import resolve_s3_endpoint, sign_s3_request
 from ratel_ai.intent_graph_storage import (
     ExperimentalLocalFileIntentGraphStorage,
@@ -24,6 +25,34 @@ from ratel_ai.intent_graph_storage import (
 
 def _graph_json(rev: int) -> str:
     return json.dumps({"v": 1, "built_from_ts": 0, "rev": rev, "intents": []})
+
+
+async def _learning_catalog() -> ToolCatalog:
+    """A catalog that learns, so `rev` moves through the real observation path."""
+    catalog = ToolCatalog()
+    await catalog.register(
+        [
+            ExecutableTool(
+                id="gh_run_list",
+                name="gh_run_list",
+                description="List CI workflow runs and whether the build passed",
+                execute=lambda _args: "listed",
+            ),
+            ExecutableTool(
+                id="docker_build",
+                name="docker_build",
+                description="Build a Docker image from a Dockerfile",
+                execute=lambda _args: "built",
+            ),
+        ]
+    )
+    return catalog
+
+
+async def _use_it(catalog: ToolCatalog, query: str, chosen: str) -> None:
+    """One confirmed observation: search, then invoke what you wanted. Bumps `rev`."""
+    catalog.search(query, 5)
+    await catalog.invoke(chosen, {})
 
 
 class TestExperimentalLocalFileIntentGraphStorage:
@@ -307,6 +336,58 @@ class TestExperimentalS3IntentGraphStorage:
 
         with pytest.raises(StaleIntentGraphError):
             await writer_b.save(IntentGraph.from_json(_graph_json(2)))
+
+    async def test_persists_a_turn_that_lands_while_a_save_is_in_flight(self) -> None:
+        # `rev` must be read out of the bytes being written, not from the graph
+        # after the await: the graph keeps learning during the save, and
+        # recording the newer rev against older content makes the next save skip
+        # that turn for good (save-when-changed sees no change).
+        catalog = await _learning_catalog()
+        graph = IntentGraph()
+        catalog.experimental_enable_adaptive_ranking(graph)
+
+        state: dict[str, object] = {"stored": "", "etag": 0, "hold": False}
+        held = asyncio.Event()
+
+        class _GatedTransport:
+            async def send(self, request: S3Request) -> S3Response:
+                if request.method == "GET":
+                    stored = str(state["stored"])
+                    if not stored:
+                        return S3Response(status=404, headers={}, body="")
+                    return S3Response(
+                        status=200, headers={"etag": f'"etag-{state["etag"]}"'}, body=stored
+                    )
+                if state["hold"]:
+                    await held.wait()
+                state["stored"] = request.body or ""
+                state["etag"] = int(state["etag"]) + 1  # type: ignore[call-overload]
+                return S3Response(
+                    status=200, headers={"etag": f'"etag-{state["etag"]}"'}, body=""
+                )
+
+        storage = ExperimentalS3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=_GatedTransport(),
+        )
+
+        await _use_it(catalog, "why is the build broken", "gh_run_list")
+        await storage.save(graph)
+
+        await _use_it(catalog, "is the build broken again", "gh_run_list")
+        state["hold"] = True
+        in_flight = asyncio.create_task(storage.save(graph))
+        await asyncio.sleep(0)  # let the save reach the gate
+        await _use_it(catalog, "build broken on main", "gh_run_list")  # lands mid-save
+        held.set()
+        await in_flight
+
+        state["hold"] = False
+        await storage.save(graph)
+
+        assert json.loads(str(state["stored"]))["rev"] == graph.rev
 
     async def test_load_surfaces_aws_error_code_and_message(self) -> None:
         transport = _FixedResponseS3Transport(

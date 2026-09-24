@@ -49,6 +49,19 @@ _AWS_ERROR_CODE_RE = re.compile(r"<Code>([^<]*)</Code>")
 _AWS_ERROR_MESSAGE_RE = re.compile(r"<Message>([^<]*)</Message>")
 
 
+def _rev_of(serialized: str) -> int:
+    """The ``rev`` carried inside a serialized graph.
+
+    ``save()`` records this rather than re-reading ``graph.rev``, because the
+    graph keeps mutating while a save is in flight: ``observe()`` on every
+    confirmed invoke, and a centroid rebuild that runs with the GIL released,
+    so ``rev`` can move between two native calls. ``to_json()`` serializes
+    under one read lock, so the ``rev`` in those bytes is by construction the
+    ``rev`` of the content being persisted.
+    """
+    return int(json.loads(serialized).get("rev", 0))
+
+
 def _describe_s3_error(body: str) -> str | None:
     """Extract the AWS error code/message from an S3 error response body.
 
@@ -106,6 +119,9 @@ class ExperimentalLocalFileIntentGraphStorage:
         if self._last_known_rev == graph.rev:
             return
 
+        body = graph.to_json()
+        rev = _rev_of(body)
+
         disk_rev = await asyncio.to_thread(self._read_disk_rev)
         if disk_rev != self._last_known_rev:
             expected = self._last_known_rev if self._last_known_rev is not None else "none"
@@ -115,8 +131,8 @@ class ExperimentalLocalFileIntentGraphStorage:
                 f"expected {expected}); load() again and reapply your changes before saving"
             )
 
-        await asyncio.to_thread(self._write_atomic, graph.to_json())
-        self._last_known_rev = graph.rev
+        await asyncio.to_thread(self._write_atomic, body)
+        self._last_known_rev = rev
 
     def _read_disk_rev(self) -> int | None:
         try:
@@ -321,13 +337,16 @@ class ExperimentalS3IntentGraphStorage:
             if self._last_known_etag is not None
             else {"if-none-match": "*"}
         )
+        body = graph.to_json()
+        rev = _rev_of(body)
+
         response = await self._transport.send(
             S3Request(
                 method="PUT",
                 bucket=self._bucket,
                 key=self._key,
                 headers=headers,
-                body=graph.to_json(),
+                body=body,
             )
         )
         if response.status == 412:
@@ -342,4 +361,4 @@ class ExperimentalS3IntentGraphStorage:
                 f"with status {response.status}" + (f" ({detail})" if detail else "")
             )
         self._last_known_etag = response.headers.get("etag")
-        self._last_known_rev = graph.rev
+        self._last_known_rev = rev

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { IntentGraph, ToolCatalog } from "./index.js";
 import {
   ExperimentalLocalFileIntentGraphStorage,
   ExperimentalS3IntentGraphStorage,
@@ -15,6 +16,36 @@ const V1_EMPTY_GRAPH = { v: 1, built_from_ts: 0, rev: 0, intents: [] };
 
 function graphJson(rev: number): string {
   return JSON.stringify({ ...V1_EMPTY_GRAPH, rev });
+}
+
+/** A catalog that learns, so `rev` moves through the real observation path. */
+async function learningCatalog(): Promise<ToolCatalog> {
+  const catalog = new ToolCatalog({});
+  await catalog.register([
+    {
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "listed",
+    },
+    {
+      id: "docker_build",
+      name: "docker_build",
+      description: "Build a Docker image from a Dockerfile",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "built",
+    },
+  ]);
+  return catalog;
+}
+
+/** One confirmed observation: search, then invoke what you wanted. Bumps `rev`. */
+async function useIt(catalog: ToolCatalog, query: string, chosen: string): Promise<void> {
+  catalog.search(query, 5);
+  await catalog.invoke(chosen, {});
 }
 
 describe("ExperimentalLocalFileIntentGraphStorage", () => {
@@ -328,6 +359,61 @@ describe("ExperimentalS3IntentGraphStorage", () => {
     expect((transport.send as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
       callsAfterFirstSave,
     );
+  });
+
+  it("persists a turn that lands while a save is in flight", async () => {
+    // `rev` must be read out of the bytes being written, not from the graph
+    // after the await: the graph keeps learning during the save, and recording
+    // the newer rev against older content makes the next save skip that turn
+    // for good (save-when-changed sees no change). Same shape guards the local
+    // file backend and both Python mirrors.
+    const catalog = await learningCatalog();
+    const graph = new IntentGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph);
+
+    let stored = "";
+    let etagCounter = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holdPut = false;
+
+    const transport: S3Transport = {
+      async send(request) {
+        if (request.method === "GET") {
+          return stored
+            ? { status: 200, headers: { etag: `"etag-${etagCounter}"` }, body: stored }
+            : { status: 404, headers: {}, body: "" };
+        }
+        if (holdPut) await held;
+        stored = request.body ?? "";
+        etagCounter += 1;
+        return { status: 200, headers: { etag: `"etag-${etagCounter}"` }, body: "" };
+      },
+    };
+    const storage = new ExperimentalS3IntentGraphStorage({
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "us-east-1",
+      credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
+      transport,
+    });
+
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+    await storage.save(graph);
+
+    await useIt(catalog, "is the build broken again", "gh_run_list");
+    holdPut = true;
+    const inFlight = storage.save(graph);
+    await useIt(catalog, "build broken on main", "gh_run_list"); // lands mid-save
+    release();
+    await inFlight;
+
+    holdPut = false;
+    await storage.save(graph);
+
+    expect(JSON.parse(stored).rev).toBe(graph.rev);
   });
 
   it("raises StaleIntentGraphError on a conditional-write 412 (concurrent save)", async () => {
