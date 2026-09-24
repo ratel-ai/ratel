@@ -1233,6 +1233,105 @@ async def test_valid_policy_values_are_accepted() -> None:
     assert catalog.experimental_adaptive_ranking_status == "active"
 
 
+async def test_read_only_graph_with_rebuild_on_model_change_warns() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), learn=False, rebuild_on_model_change=True
+        )
+        assert any("rebuild_on_model_change" in str(w.message) for w in caught)
+
+
+async def test_read_only_graph_with_rebuild_on_model_change_warning_can_be_suppressed() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(),
+            learn=False,
+            rebuild_on_model_change=True,
+            warn_on_model_mismatch=False,
+        )
+        assert not caught
+
+
+async def test_baseline_origins_on_a_live_catalog_warns() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(IntentGraph(), origins="baseline")
+        assert any('origins "baseline"' in str(w.message) for w in caught)
+
+
+async def test_baseline_origins_warning_can_be_suppressed() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), origins="baseline", warn_on_model_mismatch=False
+        )
+        assert not caught
+
+
+async def test_graph_key_with_learning_on_warns() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(IntentGraph(), graph_key="cloud")
+        assert any('graph_key "cloud"' in str(w.message) for w in caught)
+
+
+async def test_graph_key_with_learning_on_warning_can_be_suppressed() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), graph_key="cloud", warn_on_model_mismatch=False
+        )
+        assert not caught
+
+
+async def test_a_well_formed_consumer_enable_does_not_warn() -> None:
+    catalog = await build_catalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), learn=False, graph_key="cloud"
+        )
+        assert not caught
+
+
+async def test_one_graph_with_mismatched_learn_across_catalogs_warns() -> None:
+    tool_catalog = await build_catalog()
+    skill_catalog = SkillCatalog()
+    await skill_catalog.register(
+        Skill(id="s1", name="s1", description="a skill", body="content")
+    )
+    graph = IntentGraph()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+        assert not caught  # first enable of this graph, nothing to compare against yet
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        skill_catalog.experimental_enable_adaptive_ranking(graph)
+        matches = [w for w in caught if "learn=True on one catalog" in str(w.message)]
+        assert len(matches) == 1
+
+    # Disabling both and re-enabling with matching learn values raises no
+    # further warning: the mismatch was resolved, not merely silenced.
+    tool_catalog.experimental_disable_adaptive_ranking()
+    skill_catalog.experimental_disable_adaptive_ranking()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+        skill_catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+        assert not caught
+
+
 async def test_build_defaults_to_baseline_and_enable_defaults_to_any(tmp_path: Path) -> None:
     # Asymmetric on purpose: building from a log means seeding, so it defaults
     # to the origin a capture produces. Enabling keeps "any", which is what live

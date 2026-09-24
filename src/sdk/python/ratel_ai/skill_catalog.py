@@ -29,6 +29,7 @@ from .catalog import (
     SearchMethod,
     SearchOrigin,
     TraceSinkConfig,
+    _graph_learn,
     _registry_embedding_kwargs,
 )
 from .embedding_artifact import (
@@ -537,6 +538,17 @@ class SkillRegistry:
         this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="cloud"`` — so a
         consumer can tell this runtime's own graph apart from one served by
         Ratel Cloud.
+
+        Four configuration mistakes warn once here (suppressed by the same
+        ``warn_on_model_mismatch=False``, since that option already means "I
+        gate on status, not stderr"): ``learn=False`` with
+        ``rebuild_on_model_change=True`` (a rebuild still re-embeds and bumps
+        ``rev`` regardless of ``learn``); ``origins="baseline"`` on a live
+        catalog (the live search path never produces that origin, so nothing
+        would ever be learned); ``graph_key`` set while ``learn`` is not
+        ``False`` (a "consumed" graph that is also being written into); and
+        enabling the same graph with a different ``learn`` value than the
+        other registry it's already attached to.
         """
         # `experimental_enable_adaptive_ranking` takes `&mut self` natively, so it must not run
         # while an in-flight dense build holds the registry — guard it like
@@ -544,6 +556,29 @@ class SkillRegistry:
         # pyo3 "Already borrowed".
         with self._dense_state:
             self._raise_if_busy()
+            if warn_on_model_mismatch:
+                if learn is False and rebuild_on_model_change:
+                    warnings.warn(
+                        "ratel: learn is off but rebuild_on_model_change is on; a rebuild "
+                        "will still re-embed this graph and bump its rev. Call "
+                        "experimental_rebuild_intent_graph() yourself if you want that, or "
+                        "drop rebuild_on_model_change.",
+                        stacklevel=2,
+                    )
+                if origins == "baseline":
+                    warnings.warn(
+                        'ratel: origins "baseline" only accepts captured baseline turns; '
+                        "live searches never carry that origin, so this graph will not "
+                        'learn from this catalog. Use "any" or "agent" here.',
+                        stacklevel=2,
+                    )
+                if graph_key is not None and learn:
+                    warnings.warn(
+                        f'ratel: graph_key "{graph_key}" marks this graph as produced '
+                        "elsewhere, but learn is on; local turns will fork it and be "
+                        "overwritten on the next adoption. Pass learn=False to consume it.",
+                        stacklevel=2,
+                    )
             self._native.enable_adaptive_ranking(
                 graph, origins, provenance, cluster_similarity, cluster_coverage, learn
             )
@@ -562,6 +597,16 @@ class SkillRegistry:
         native_status = self._native.adaptive_ranking_status()
         self._maybe_warn_model_mismatch(native_status)
         self._emit_ranking_status("enabled", native_status)
+        if warn_on_model_mismatch:
+            previous_learn = _graph_learn.get(graph)
+            if previous_learn is not None and previous_learn != learn:
+                warnings.warn(
+                    "ratel: this intent graph is enabled with learn=True on one catalog "
+                    "and learn=False on the other; it will still change. Use the same "
+                    "learn value on both catalogs.",
+                    stacklevel=2,
+                )
+        _graph_learn[graph] = learn
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -569,6 +614,8 @@ class SkillRegistry:
             self._raise_if_busy()
             self._rebuild_on_model_change = False
             self._native.disable_adaptive_ranking()
+        if self._graph is not None:
+            _graph_learn.pop(self._graph, None)
         self.record_event(
             {
                 "type": "usage_ranking_status",

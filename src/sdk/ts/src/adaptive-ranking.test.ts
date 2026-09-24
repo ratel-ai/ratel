@@ -1171,6 +1171,137 @@ describe("policy on the live path", () => {
   });
 });
 
+describe("configuration guardrails", () => {
+  it("warns when learn is off but rebuildOnModelChange is on", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        learn: false,
+        rebuildOnModelChange: true,
+      });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("rebuildOnModelChange");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("stays silent about learn/rebuildOnModelChange when warnOnModelMismatch is false", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        learn: false,
+        rebuildOnModelChange: true,
+        warnOnModelMismatch: false,
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('warns when origins is "baseline" on a live catalog', async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), { origins: "baseline" });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain('origins "baseline"');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('stays silent about origins "baseline" when warnOnModelMismatch is false', async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        origins: "baseline",
+        warnOnModelMismatch: false,
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("warns when graphKey is set but learn is not false", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), { graphKey: "cloud" });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain('graphKey "cloud"');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("stays silent about graphKey when warnOnModelMismatch is false", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        graphKey: "cloud",
+        warnOnModelMismatch: false,
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not warn on a well-formed consumer enable (learn: false plus graphKey)", async () => {
+    const catalog = await buildCatalog();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        learn: false,
+        graphKey: "cloud",
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("warns exactly once when one graph is enabled with different learn values on the tool and skill catalogs", async () => {
+    const tools = await buildCatalog();
+    const skills = new SkillCatalog();
+    await skills.register({
+      id: "ci-triage",
+      name: "ci-triage",
+      description: "Diagnose why the build failed in CI",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    });
+    const graph = new IntentGraph();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      tools.experimentalEnableAdaptiveRanking(graph, { learn: false });
+      expect(warn).not.toHaveBeenCalled();
+
+      skills.experimentalEnableAdaptiveRanking(graph); // default learn: true
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("learn: true on one catalog");
+
+      warn.mockClear();
+      tools.experimentalDisableAdaptiveRanking();
+      skills.experimentalDisableAdaptiveRanking();
+      tools.experimentalEnableAdaptiveRanking(graph, { learn: false });
+      skills.experimentalEnableAdaptiveRanking(graph, { learn: false });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe("distributed capture", () => {
   /** The two tools `buildCatalog` registers, for a catalog with a callback sink. */
   async function callbackCatalog(

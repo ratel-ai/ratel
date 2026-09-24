@@ -778,7 +778,10 @@ fn active_trace_sink(
 /// carries both a tool and a skill edge map, so sharing gives one set of
 /// clusters with all the evidence behind it; separate graphs duplicate every
 /// cluster and split the evidence.
-#[pyclass]
+// `weakref`: lets the SDK wrapper key a `weakref.WeakKeyDictionary` on a graph
+// instance (per-graph state, e.g. detecting mismatched `learn` values across
+// the tool and skill registries sharing one graph) without pinning it alive.
+#[pyclass(weakref)]
 #[derive(Clone)]
 pub struct IntentGraph {
     inner: Arc<RwLock<core::IntentGraph>>,
