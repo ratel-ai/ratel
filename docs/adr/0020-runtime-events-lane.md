@@ -19,6 +19,14 @@ omission from this table. Ratel Cloud needs them to observe a served graph's hea
 serving rather than learning (`learn: false`). No field carries user content — cluster ids,
 similarities, counts, and model fingerprints only.
 
+Amended 2026-09-25: `usage_ranking_status` joins the same row — see [ADR-0014's "Opt-in, per
+registry"](0014-adaptive-usage-ranking.md#opt-in-per-registry) for why it is emitted by the SDK
+wrappers, not core. It reports whether adaptive ranking is on, off, unknown, or paused, which
+graph revision is attached, an optional caller-supplied `graph_key` label, whether the registry
+is learning or only ranking (`learn`), and the graph's embedding model. Ratel Cloud's dashboard
+needs this to tell a runtime's own graph apart from one it served, and to show ranking state
+without waiting for a search.
+
 ## Context
 
 Ratel's core trace stream already records the product facts that power inspection, adaptive
@@ -60,7 +68,7 @@ The remotely publishable v1 event set is:
 | Auth | `auth_refresh`, `auth_needs`, `auth_flow_start`, `auth_flow_end` | upstream id and outcome; never credentials |
 | Experiments | `experiment_selection`, `experiment_results`, `experiment_comparison`, `experiment_skip`, `experiment_fallback`, `experiment_drop`, `experiment_invocation`, `experiment_outcome` | `selection_id`; served/shadow arm data; agreement metrics; result ids/scores; attribution, drop/fallback reason, and labelled outcome as applicable |
 | Delivery | `events_dropped` | dropped count, reason, and observation window |
-| Adaptive ranking | `usage_boost`, `usage_model_mismatch`, `usage_cluster_policy_changed` | matched cluster id or none, similarity, support, promoted and dropped counts; built vs active model fingerprint and dimension flag; built vs active cluster policy |
+| Adaptive ranking | `usage_boost`, `usage_model_mismatch`, `usage_cluster_policy_changed`, `usage_ranking_status` | matched cluster id or none, similarity, support, promoted and dropped counts; built vs active model fingerprint and dimension flag; built vs active cluster policy; SDK-reported status/reason/rev/graph_key/learn/model |
 
 For search events, the envelope `event_id` identifies the search. A hit's zero-based rank is its
 position in the ordered `hits[]` array rather than a repeated field on each hit.

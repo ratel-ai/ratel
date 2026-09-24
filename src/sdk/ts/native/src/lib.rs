@@ -1324,6 +1324,17 @@ impl IntentGraph {
             .map_err(|_| napi::Error::from_reason("intent graph lock poisoned"))?;
         Ok(guard.rev() as f64)
     }
+
+    /// The embedding model the graph's centroids were built with, or `null` for
+    /// a lexically-grown graph that has none.
+    #[napi(getter)]
+    pub fn model(&self) -> napi::Result<Option<String>> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("intent graph lock poisoned"))?;
+        Ok(guard.model.clone())
+    }
 }
 
 /// Node binding over the `ratel-ai-core` tool registry: an in-process index

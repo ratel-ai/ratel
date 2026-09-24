@@ -9,6 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - `learn: false` on `experimentalEnableAdaptiveRanking` — rank from an intent graph without learning into it, for consuming a graph produced elsewhere (e.g. Ratel Cloud)
+- `usage_ranking_status` — a `graphKey`-labeled event emitted on enable, disable, and rebuild reporting adaptive-ranking status, reason, graph revision, `learn`, and model fingerprint (ADR-0014/ADR-0020)
+- `IntentGraph.model` — the embedding model the graph's centroids were built with, or `null` for a lexical graph
 
 ### Changed
 

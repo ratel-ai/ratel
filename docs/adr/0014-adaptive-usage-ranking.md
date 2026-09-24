@@ -405,6 +405,29 @@ resume learning that was deliberately turned off. `disable_adaptive_ranking` res
 to `true` alongside the observation policy, so a plain re-enable afterward reproduces today's
 behavior.
 
+**Amended 2026-09-25: `usage_ranking_status`, an SDK-emitted status event.** Once a runtime can
+consume a graph it did not learn, "is a graph attached" (what `usage_boost`'s presence proves)
+stops being enough — Ratel Cloud's dashboard needs to know whether ranking is on, off, unknown,
+or paused *before* any search happens, and which graph revision a runtime is running: its own,
+or one served by cloud. The enable, disable, and rebuild entry points therefore emit a
+`usage_ranking_status` trace event (`status`, `reason`, `rev`, an optional caller-supplied
+`graph_key` label, `learn`, and the graph's `model`) — see
+[ADR-0020](0020-runtime-events-lane.md).
+
+This is emitted by the **SDK wrappers**, not core: core has no notion of `graph_key` or of
+where a graph came from, so it could not produce this event even if it wanted to. The wrapper
+already owns the enable/disable/rebuild calls and the `learn` flag (the amendment above), so it
+is the only layer that can attach a caller's label to a status report. Core's only change is a
+data-only `TraceEvent` variant so the event can deserialize and travel the trace stream like
+any other.
+
+Pause is deliberately **not** a separate emission from the status event. The search path
+already emits `TraceEvent::UsageModelMismatch` when the arm pauses on a model mismatch, and
+that event has been remotely publishable since the 2026-09-24 amendment above. A consumer
+derives "paused" from the latest `usage_ranking_status` plus any `usage_model_mismatch` after
+it; adding a second pause hook to the search path would duplicate that signal for no new
+information.
+
 ### Where learning happens
 
 The learner consumes `Search` and `InvokeStart` through the core fan-out specified by

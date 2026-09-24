@@ -418,6 +418,9 @@ class ToolRegistry:
         self._warn_on_model_mismatch = True
         self._adaptive_warned = False
         self._rebuild_on_model_change = False
+        self._learn = True
+        self._graph: IntentGraph | None = None
+        self._graph_key: str | None = None
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
@@ -664,6 +667,7 @@ class ToolRegistry:
         cluster_similarity: float | None = None,
         cluster_coverage: float | None = None,
         learn: bool = True,
+        graph_key: str | None = None,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
@@ -695,6 +699,11 @@ class ToolRegistry:
         expensive, able to raise :class:`EmbedderError`, and it mutates the graph
         (new centroids, bumped ``rev``). Recovery is lazy: status stays
         ``paused`` until that first dense search.
+
+        ``graph_key`` labels the graph on the ``usage_ranking_status`` event
+        this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="cloud"`` — so a
+        consumer can tell this runtime's own graph apart from one served by
+        Ratel Cloud.
         """
         # `experimental_enable_adaptive_ranking` takes `&mut self` natively, so it must not run
         # while an in-flight dense build holds the registry — guard it like
@@ -705,10 +714,14 @@ class ToolRegistry:
             self._warn_on_model_mismatch = warn_on_model_mismatch
             self._rebuild_on_model_change = rebuild_on_model_change
             self._adaptive_warned = False
+            self._learn = learn
+            self._graph = graph
+            self._graph_key = graph_key
             self._native.enable_adaptive_ranking(
                 graph, origins, provenance, cluster_similarity, cluster_coverage, learn
             )
         self._maybe_warn_model_mismatch()
+        self._emit_ranking_status("enabled")
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -716,6 +729,16 @@ class ToolRegistry:
             self._raise_if_busy()
             self._rebuild_on_model_change = False
             self._native.disable_adaptive_ranking()
+        self.record_event(
+            {
+                "type": "usage_ranking_status",
+                "status": "inactive",
+                "reason": "disabled",
+                "learn": True,
+            }
+        )
+        self._graph = None
+        self._graph_key = None
 
     async def _maybe_rebuild_on_model_change(self) -> None:
         """Auto-recover a model-mismatched graph before a dense search, opt-in.
@@ -748,6 +771,7 @@ class ToolRegistry:
         await self._run_dense(self._native._rebuild_intent_graph)
         self._adaptive_warned = False
         self._maybe_warn_model_mismatch()
+        self._emit_ranking_status("rebuilt")
 
     async def experimental_build_intent_graph(
         self,
@@ -822,6 +846,38 @@ class ToolRegistry:
             "call experimental_rebuild_intent_graph() to rebuild it with the current model.",
             stacklevel=2,
         )
+
+    def _emit_ranking_status(self, reason: str) -> None:
+        """Report the current status as a ``usage_ranking_status`` trace event.
+
+        ADR-0014/ADR-0020. Emitted by this wrapper, never by core, since core
+        cannot know where a graph came from. Collapses the native status
+        string to the four-value contract: ``"active"`` covers both ``active``
+        and ``active: policy drift``, any ``paused...`` collapses to
+        ``"paused"``.
+        """
+        raw, _built, _active, _dim = self._native.adaptive_ranking_status()
+        if raw.startswith("paused"):
+            status = "paused"
+        elif raw in ("active", "active: policy drift"):
+            status = "active"
+        elif raw == "unknown":
+            status = "unknown"
+        else:
+            status = "inactive"
+        event: dict[str, Any] = {
+            "type": "usage_ranking_status",
+            "status": status,
+            "reason": reason,
+            "learn": self._learn,
+        }
+        if self._graph is not None:
+            event["rev"] = self._graph.rev
+            if self._graph.model is not None:
+                event["model"] = self._graph.model
+        if self._graph_key is not None:
+            event["graph_key"] = self._graph_key
+        self.record_event(event)
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
         """Drain captured native trace events."""
@@ -1250,6 +1306,7 @@ class ToolCatalog:
         cluster_similarity: float | None = None,
         cluster_coverage: float | None = None,
         learn: bool = True,
+        graph_key: str | None = None,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
@@ -1271,6 +1328,11 @@ class ToolCatalog:
         on the next dense search rather than staying paused until you call
         :meth:`experimental_rebuild_intent_graph` yourself. Off by default — the rebuild is an
         embedding pass (cost, possible :class:`EmbedderError`, mutates the graph).
+
+        ``graph_key`` labels the graph on the ``usage_ranking_status`` event
+        this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="cloud"`` — so a
+        consumer can tell this runtime's own graph apart from one served by
+        Ratel Cloud.
         """
         self._registry.experimental_enable_adaptive_ranking(
             graph,
@@ -1281,6 +1343,7 @@ class ToolCatalog:
             cluster_similarity=cluster_similarity,
             cluster_coverage=cluster_coverage,
             learn=learn,
+            graph_key=graph_key,
         )
 
     async def experimental_rebuild_intent_graph(self) -> None:

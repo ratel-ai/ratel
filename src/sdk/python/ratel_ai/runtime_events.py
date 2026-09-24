@@ -58,6 +58,7 @@ RUNTIME_EVENT_TYPES = (
     "usage_boost",
     "usage_model_mismatch",
     "usage_cluster_policy_changed",
+    "usage_ranking_status",
 )
 RUNTIME_EVENT_MAX_PAYLOAD_BYTES = 64 * 1_024
 RUNTIME_EVENT_MAX_QUERY_BYTES = 4 * 1_024
@@ -494,6 +495,11 @@ def _is_product_fact_field(key: str) -> bool:
         "built_coverage",
         "active_similarity",
         "active_coverage",
+        "status",
+        "rev",
+        "graph_key",
+        "learn",
+        "model",
     }
 
 

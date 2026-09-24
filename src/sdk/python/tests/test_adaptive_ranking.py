@@ -217,6 +217,24 @@ async def test_rev_tracks_writes_and_survives_the_wire_form() -> None:
     assert IntentGraph.from_json(graph.to_json()).rev == graph.rev
 
 
+def test_model_reflects_the_graphs_embedding_model_or_none_for_a_lexical_graph() -> None:
+    assert IntentGraph().model is None
+
+    stamped = IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "model": "bge-small",
+                "intents": [],
+            }
+        )
+    )
+    assert stamped.model == "bge-small"
+    # Carried across a save/restore.
+    assert IntentGraph.from_json(stamped.to_json()).model == "bge-small"
+
+
 def test_a_future_schema_version_is_rejected() -> None:
     future = json.dumps({"v": 2, "built_from_ts": 1, "intents": []})
     with pytest.raises(ValueError, match="version"):
@@ -833,6 +851,39 @@ async def test_usage_model_mismatch_event_reports_dim_mismatch_true() -> None:
     events = catalog.drain_trace_events()
     mismatch = next(e for e in events if e["type"] == "usage_model_mismatch")
     assert mismatch["dim_mismatch"] is True
+
+
+@pytest.mark.skipif(not _has_model, reason="bge-small not cached")
+@pytest.mark.asyncio
+async def test_usage_ranking_status_paused_on_enable_then_active_with_reason_rebuilt() -> None:
+    catalog = ToolCatalog(
+        method="semantic", trace=TraceSinkConfig(kind="memory", session_id="s")
+    )
+    await catalog.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="list CI runs",
+            execute=lambda _a: "ok",
+        )
+    )
+    catalog.drain_trace_events()  # discard registration churn
+
+    catalog.experimental_enable_adaptive_ranking(
+        _wrong_width_graph(), warn_on_model_mismatch=False
+    )
+
+    enabled_events = catalog.drain_trace_events()
+    enabled = next(e for e in enabled_events if e["type"] == "usage_ranking_status")
+    assert enabled["status"] == "paused"
+    assert enabled["reason"] == "enabled"
+
+    await catalog.experimental_rebuild_intent_graph()
+
+    rebuilt_events = catalog.drain_trace_events()
+    rebuilt = next(e for e in rebuilt_events if e["type"] == "usage_ranking_status")
+    assert rebuilt["status"] == "active"
+    assert rebuilt["reason"] == "rebuilt"
 
 
 # ---- baseline seeding ------------------------------------------------------

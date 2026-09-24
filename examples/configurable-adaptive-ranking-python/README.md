@@ -144,10 +144,10 @@ serving.experimental_enable_adaptive_ranking(graph)
 
 From here the live learner keeps adding to the same graph. `support` grows while `seeded_support` stays put, so the gap between them tells you how much of each cluster still rests on the baseline versus what live traffic has since confirmed.
 
-**Consumer form.** A runtime that ranks from a graph produced elsewhere — Ratel Cloud, replaying a project's stored events through this same learner — should not write into it. Pass `learn=False` to rank without learning:
+**Consumer form.** A runtime that ranks from a graph produced elsewhere — Ratel Cloud, replaying a project's stored events through this same learner — should not write into it. Pass `learn=False` to rank without learning, and `graph_key` to label the graph on the `usage_ranking_status` event this emits, so a dashboard can tell this runtime's own graph apart from one it was served:
 
 ```python
-serving.experimental_enable_adaptive_ranking(cloud_graph, learn=False)
+serving.experimental_enable_adaptive_ranking(cloud_graph, learn=False, graph_key="cloud")
 ```
 
 The graph's `rev` and content stay exactly what was handed in; re-installing a trace sink for an unrelated reason later does not silently resume learning.

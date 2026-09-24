@@ -48,7 +48,8 @@
       "events_dropped",
       "usage_boost",
       "usage_model_mismatch",
-      "usage_cluster_policy_changed"
+      "usage_cluster_policy_changed",
+      "usage_ranking_status"
     ]
   },
   "catalog_definition_canonicalization": {

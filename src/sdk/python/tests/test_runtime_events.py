@@ -707,3 +707,126 @@ async def test_usage_cluster_policy_changed_reports_built_vs_active_similarity()
     assert drift["built_similarity"] == pytest.approx(0.7)
     assert drift["active_similarity"] == pytest.approx(0.9)
     subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_on_enable_carries_rev_and_graph_key() -> None:
+    tools = await _gh_run_list_catalog()
+    graph = _known_cluster_graph()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    await subscription.flush()
+
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert status["status"] == "active"
+    assert status["reason"] == "enabled"
+    assert status["rev"] == graph.rev
+    assert status["graph_key"] == "cloud"
+    assert status["learn"] is False
+    assert "model" not in status
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_omits_graph_key_and_defaults_learn_true() -> None:
+    tools = await _gh_run_list_catalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph())
+    await subscription.flush()
+
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert "graph_key" not in status
+    assert status["learn"] is True
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_inactive_on_disable_has_no_rev_or_graph_key() -> None:
+    tools = await _gh_run_list_catalog()
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), graph_key="cloud")
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.experimental_disable_adaptive_ranking()
+    await subscription.flush()
+
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert status["status"] == "inactive"
+    assert status["reason"] == "disabled"
+    assert "rev" not in status
+    assert "graph_key" not in status
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_carries_the_graphs_model_when_present() -> None:
+    tools = await _gh_run_list_catalog()
+    graph = IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "model": "bge-small",
+                "intents": [
+                    {
+                        "id": "i0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "centroid": [1.0, 0.0, 0.0],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.experimental_enable_adaptive_ranking(graph, learn=False)
+    await subscription.flush()
+
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert status["model"] == "bge-small"
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_on_skill_catalog_for_enable_and_disable() -> None:
+    skills = SkillCatalog()
+    await skills.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    graph = _known_cluster_graph()
+    events = RuntimeEvents([skills])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    skills.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    await subscription.flush()
+    enabled = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert enabled["status"] == "active"
+    assert enabled["reason"] == "enabled"
+    assert enabled["rev"] == graph.rev
+    assert enabled["graph_key"] == "cloud"
+    assert enabled["learn"] is False
+    received.clear()
+
+    skills.experimental_disable_adaptive_ranking()
+    await subscription.flush()
+    disabled = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert disabled["status"] == "inactive"
+    assert disabled["reason"] == "disabled"
+    assert "rev" not in disabled
+    assert "graph_key" not in disabled
+    subscription.unsubscribe()

@@ -739,6 +739,10 @@ export class ToolCatalog {
    * The flag is stored on the registry and survives later sink changes
    * (`setTraceSink`, `subscribeTraceEvents`), so re-installing a sink for an
    * unrelated reason cannot silently resume learning. Defaults to `true`.
+   *
+   * `graphKey` labels the graph on the `usage_ranking_status` event this emits
+   * (ADR-0014/ADR-0020) — e.g. `graphKey: "cloud"` — so a consumer can tell
+   * this runtime's own graph apart from one served by Ratel Cloud.
    */
   experimentalEnableAdaptiveRanking(
     graph: IntentGraph,
@@ -746,6 +750,7 @@ export class ToolCatalog {
       warnOnModelMismatch?: boolean;
       rebuildOnModelChange?: boolean;
       learn?: boolean;
+      graphKey?: string;
     } & ObservationPolicyOptions = {},
   ): void {
     this.registry.experimentalEnableAdaptiveRanking(graph, options);

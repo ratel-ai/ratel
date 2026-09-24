@@ -50,6 +50,9 @@ export class ToolRegistry {
   #warnOnModelMismatch = true;
   #adaptiveWarned = false;
   #rebuildOnModelChange = false;
+  #learn = true;
+  #graph?: IntentGraph;
+  #graphKey?: string;
   private readonly eager: boolean;
   private readonly emittedDefinitionHashes = new Map<string, string>();
   private useDefinitionOverrides = false;
@@ -283,6 +286,11 @@ export class ToolRegistry {
    * as it would have. With a graph attached, `SearchHit.score` becomes a fusion
    * score rather than a raw BM25 score, so use `rank` for ordering and
    * `fused` to detect the scale, not the raw `score`.
+   *
+   * `graphKey` is a caller-supplied label carried on the `usage_ranking_status`
+   * event this emits — it never reaches native. It's how a downstream consumer
+   * (Ratel Cloud's dashboard) tells the runtime's own graph apart from one it
+   * served, e.g. `graphKey: "cloud"`.
    */
   experimentalEnableAdaptiveRanking(
     graph: IntentGraph,
@@ -290,11 +298,15 @@ export class ToolRegistry {
       warnOnModelMismatch?: boolean;
       rebuildOnModelChange?: boolean;
       learn?: boolean;
+      graphKey?: string;
     } & ObservationPolicyOptions = {},
   ): void {
     this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
     this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
     this.#adaptiveWarned = false;
+    this.#learn = options.learn ?? true;
+    this.#graph = graph;
+    this.#graphKey = options.graphKey;
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
     this.native.enableAdaptiveRanking(
@@ -308,6 +320,7 @@ export class ToolRegistry {
       options.learn,
     );
     this.#maybeWarnModelMismatch();
+    this.#emitRankingStatusEvent("enabled");
   }
 
   /**
@@ -325,6 +338,7 @@ export class ToolRegistry {
     }
     this.#adaptiveWarned = false;
     this.#maybeWarnModelMismatch();
+    this.#emitRankingStatusEvent("rebuilt");
   }
 
   /**
@@ -411,6 +425,31 @@ export class ToolRegistry {
     }
   }
 
+  /** Report the current adaptive-ranking status as a `usage_ranking_status`
+   * trace event (ADR-0014/ADR-0020) — emitted by this wrapper, never by core,
+   * since core cannot know where a graph came from. Collapses the native
+   * status string to the four-value contract: `"active"` covers both `active`
+   * and `active: policy drift`, any `paused...` collapses to `"paused"`. */
+  #emitRankingStatusEvent(reason: "enabled" | "rebuilt"): void {
+    const raw = this.native.adaptiveRankingStatus().status;
+    const status = raw.startsWith("paused")
+      ? "paused"
+      : raw === "active" || raw === "active: policy drift"
+        ? "active"
+        : raw === "unknown"
+          ? "unknown"
+          : "inactive";
+    this.recordEvent({
+      type: "usage_ranking_status",
+      status,
+      reason,
+      ...(this.#graph ? { rev: this.#graph.rev } : {}),
+      ...(this.#graphKey === undefined ? {} : { graph_key: this.#graphKey }),
+      learn: this.#learn,
+      ...(this.#graph?.model != null ? { model: this.#graph.model } : {}),
+    });
+  }
+
   /**
    * Turn adaptive usage ranking off: ranking returns to the base engine and the
    * graph stops growing. The graph keeps what it learned, so re-enabling
@@ -419,6 +458,14 @@ export class ToolRegistry {
   experimentalDisableAdaptiveRanking(): void {
     this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
+    this.recordEvent({
+      type: "usage_ranking_status",
+      status: "inactive",
+      reason: "disabled",
+      learn: true,
+    });
+    this.#graph = undefined;
+    this.#graphKey = undefined;
   }
 
   /** Drain captured envelopes from a `"memory"` sink; `[]` otherwise. */
@@ -437,6 +484,9 @@ export class SkillRegistry {
   #warnOnModelMismatch = true;
   #adaptiveWarned = false;
   #rebuildOnModelChange = false;
+  #learn = true;
+  #graph?: IntentGraph;
+  #graphKey?: string;
   private readonly eager: boolean;
   private readonly emittedDefinitionHashes = new Map<string, string>();
   private useDefinitionOverrides = false;
@@ -667,6 +717,11 @@ export class SkillRegistry {
    * as it would have. With a graph attached, `SearchHit.score` becomes a fusion
    * score rather than a raw BM25 score, so use `rank` for ordering and
    * `fused` to detect the scale, not the raw `score`.
+   *
+   * `graphKey` is a caller-supplied label carried on the `usage_ranking_status`
+   * event this emits — it never reaches native. It's how a downstream consumer
+   * (Ratel Cloud's dashboard) tells the runtime's own graph apart from one it
+   * served, e.g. `graphKey: "cloud"`.
    */
   experimentalEnableAdaptiveRanking(
     graph: IntentGraph,
@@ -674,11 +729,15 @@ export class SkillRegistry {
       warnOnModelMismatch?: boolean;
       rebuildOnModelChange?: boolean;
       learn?: boolean;
+      graphKey?: string;
     } & ObservationPolicyOptions = {},
   ): void {
     this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
     this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
     this.#adaptiveWarned = false;
+    this.#learn = options.learn ?? true;
+    this.#graph = graph;
+    this.#graphKey = options.graphKey;
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
     this.native.enableAdaptiveRanking(
@@ -692,6 +751,7 @@ export class SkillRegistry {
       options.learn,
     );
     this.#maybeWarnModelMismatch();
+    this.#emitRankingStatusEvent("enabled");
   }
 
   /**
@@ -709,6 +769,7 @@ export class SkillRegistry {
     }
     this.#adaptiveWarned = false;
     this.#maybeWarnModelMismatch();
+    this.#emitRankingStatusEvent("rebuilt");
   }
 
   /**
@@ -760,6 +821,31 @@ export class SkillRegistry {
     }
   }
 
+  /** Report the current adaptive-ranking status as a `usage_ranking_status`
+   * trace event (ADR-0014/ADR-0020) — emitted by this wrapper, never by core,
+   * since core cannot know where a graph came from. Collapses the native
+   * status string to the four-value contract: `"active"` covers both `active`
+   * and `active: policy drift`, any `paused...` collapses to `"paused"`. */
+  #emitRankingStatusEvent(reason: "enabled" | "rebuilt"): void {
+    const raw = this.native.adaptiveRankingStatus().status;
+    const status = raw.startsWith("paused")
+      ? "paused"
+      : raw === "active" || raw === "active: policy drift"
+        ? "active"
+        : raw === "unknown"
+          ? "unknown"
+          : "inactive";
+    this.recordEvent({
+      type: "usage_ranking_status",
+      status,
+      reason,
+      ...(this.#graph ? { rev: this.#graph.rev } : {}),
+      ...(this.#graphKey === undefined ? {} : { graph_key: this.#graphKey }),
+      learn: this.#learn,
+      ...(this.#graph?.model != null ? { model: this.#graph.model } : {}),
+    });
+  }
+
   /**
    * Turn adaptive usage ranking off: ranking returns to the base engine and the
    * graph stops growing. The graph keeps what it learned, so re-enabling
@@ -768,6 +854,14 @@ export class SkillRegistry {
   experimentalDisableAdaptiveRanking(): void {
     this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
+    this.recordEvent({
+      type: "usage_ranking_status",
+      status: "inactive",
+      reason: "disabled",
+      learn: true,
+    });
+    this.#graph = undefined;
+    this.#graphKey = undefined;
   }
 
   /** Drain captured envelopes from a `"memory"` sink; `[]` otherwise. */

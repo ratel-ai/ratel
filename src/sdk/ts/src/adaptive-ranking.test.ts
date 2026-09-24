@@ -610,6 +610,8 @@ function fakeNative(state: { status: string }) {
       dimMismatch: false,
     }),
     searchWithMethodAsync: async () => [],
+    recordEvent: () => {},
+    recordEventWithContext: () => {},
   };
 }
 
@@ -858,6 +860,40 @@ describe.skipIf(!hasModel)("adaptive ranking model-change detection", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it("delivers usage_ranking_status paused on enable, then active with reason rebuilt after a rebuild", async () => {
+    const catalog = new ToolCatalog({
+      method: "semantic",
+      trace: { kind: "memory", sessionId: "s" },
+    });
+    await catalog.register([
+      {
+        id: "gh_run_list",
+        name: "gh_run_list",
+        description: "list CI runs",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      },
+    ]);
+    catalog.drainTraceEvents(); // discard registration churn
+
+    catalog.experimentalEnableAdaptiveRanking(wrongWidthGraph(), {
+      warnOnModelMismatch: false,
+    });
+
+    const enabledEvents = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const enabled = enabledEvents.find((e) => e.type === "usage_ranking_status");
+    expect(enabled?.status).toBe("paused");
+    expect(enabled?.reason).toBe("enabled");
+
+    await catalog.experimentalRebuildIntentGraph();
+
+    const rebuiltEvents = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const rebuilt = rebuiltEvents.find((e) => e.type === "usage_ranking_status");
+    expect(rebuilt?.status).toBe("active");
+    expect(rebuilt?.reason).toBe("rebuilt");
   });
 });
 

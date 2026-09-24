@@ -851,6 +851,17 @@ impl IntentGraph {
             .map_err(|_| PyValueError::new_err("intent graph lock poisoned"))?;
         Ok(guard.rev())
     }
+
+    /// The embedding model the graph's centroids were built with, or `None` for
+    /// a lexically-grown graph that has none.
+    #[getter]
+    fn model(&self) -> PyResult<Option<String>> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| PyValueError::new_err("intent graph lock poisoned"))?;
+        Ok(guard.model.clone())
+    }
 }
 
 /// Metadata registry over `ratel-ai-core`. BM25 is exposed synchronously;

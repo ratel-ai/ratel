@@ -741,6 +741,163 @@ describe("public runtime events", () => {
     expect(drift?.active_similarity as number).toBeCloseTo(0.9);
     subscription.unsubscribe();
   });
+
+  it("delivers usage_ranking_status on enable with the graph's rev and the caller's graphKey", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const graph = knownClusterGraph();
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph, {
+      learn: false,
+      graphKey: "cloud",
+    });
+    await subscription.flush();
+
+    const status = received.find((e) => e.type === "usage_ranking_status");
+    expect(status?.status).toBe("active");
+    expect(status?.reason).toBe("enabled");
+    expect(status?.rev).toBe(graph.rev);
+    expect(status?.graph_key).toBe("cloud");
+    expect(status?.learn).toBe(false);
+    expect("model" in (status as object)).toBe(false);
+    subscription.unsubscribe();
+  });
+
+  it("delivers usage_ranking_status with no graph_key and learn true when neither is supplied", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph());
+    await subscription.flush();
+
+    const status = received.find((e) => e.type === "usage_ranking_status");
+    expect("graph_key" in (status as object)).toBe(false);
+    expect(status?.learn).toBe(true);
+    subscription.unsubscribe();
+  });
+
+  it("delivers usage_ranking_status inactive with no rev or graph_key on disable", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
+      graphKey: "cloud",
+    });
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+
+    runtime.tools.catalog.experimentalDisableAdaptiveRanking();
+    await subscription.flush();
+
+    const status = received.find((e) => e.type === "usage_ranking_status");
+    expect(status?.status).toBe("inactive");
+    expect(status?.reason).toBe("disabled");
+    expect("rev" in (status as object)).toBe(false);
+    expect("graph_key" in (status as object)).toBe(false);
+    subscription.unsubscribe();
+  });
+
+  it("delivers usage_ranking_status with the graph's model when it carries one", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const graph = IntentGraph.fromJson(
+      JSON.stringify({
+        v: 1,
+        built_from_ts: 1,
+        model: "bge-small",
+        intents: [
+          {
+            id: "i0",
+            label: "l",
+            terms: [],
+            members: ["why is the build broken"],
+            centroid: [1.0, 0.0, 0.0],
+            support: 9,
+            tools: { gh_run_list: 1.0 },
+            skills: {},
+          },
+        ],
+      }),
+    );
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
+    await subscription.flush();
+
+    const status = received.find((e) => e.type === "usage_ranking_status");
+    expect(status?.model).toBe("bge-small");
+    subscription.unsubscribe();
+  });
+
+  it("delivers usage_ranking_status on the skill catalog for enable, defaults, and disable", async () => {
+    const runtime = ratel();
+    await runtime.skills.register({
+      id: "s",
+      name: "s",
+      description: "a skill",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    });
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    const graph = knownClusterGraph();
+
+    runtime.skills.experimentalEnableAdaptiveRanking(graph, {
+      learn: false,
+      graphKey: "cloud",
+    });
+    await subscription.flush();
+    const enabled = received.find((e) => e.type === "usage_ranking_status");
+    expect(enabled?.status).toBe("active");
+    expect(enabled?.reason).toBe("enabled");
+    expect(enabled?.rev).toBe(graph.rev);
+    expect(enabled?.graph_key).toBe("cloud");
+    expect(enabled?.learn).toBe(false);
+    received.length = 0;
+
+    runtime.skills.experimentalDisableAdaptiveRanking();
+    await subscription.flush();
+    const disabled = received.find((e) => e.type === "usage_ranking_status");
+    expect(disabled?.status).toBe("inactive");
+    expect(disabled?.reason).toBe("disabled");
+    expect("rev" in (disabled as object)).toBe(false);
+    expect("graph_key" in (disabled as object)).toBe(false);
+    subscription.unsubscribe();
+  });
 });
 
 function runtimeEvent(fields: Record<string, unknown> = {}): RuntimeEvent {

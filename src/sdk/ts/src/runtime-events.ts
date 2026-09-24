@@ -70,6 +70,7 @@ export const RUNTIME_EVENT_TYPES = [
   "usage_boost",
   "usage_model_mismatch",
   "usage_cluster_policy_changed",
+  "usage_ranking_status",
 ] as const;
 
 /** Maximum serialized size of one public event envelope. */
@@ -632,6 +633,11 @@ function isProductFactField(key: string): boolean {
       "built_coverage",
       "active_similarity",
       "active_coverage",
+      "status",
+      "rev",
+      "graph_key",
+      "learn",
+      "model",
     ].includes(key)
   );
 }

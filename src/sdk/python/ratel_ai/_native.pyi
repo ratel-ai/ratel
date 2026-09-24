@@ -116,6 +116,13 @@ class IntentGraph:
         written by another process (stale-base detection).
         """
 
+    @property
+    def model(self) -> str | None:
+        """The embedding model the graph's centroids were built with.
+
+        ``None`` for a lexically-grown graph that has none.
+        """
+
 class NativeEventSubscription:
     """Private handle for one native runtime-event callback subscription."""
 
