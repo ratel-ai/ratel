@@ -711,15 +711,21 @@ class ToolRegistry:
         # pyo3 "Already borrowed".
         with self._dense_state:
             self._raise_if_busy()
+            self._native.enable_adaptive_ranking(
+                graph, origins, provenance, cluster_similarity, cluster_coverage, learn
+            )
+            # Only recorded once native accepts the call: a rejected call (bad
+            # origins/provenance/cluster policy) leaves native's own state
+            # untouched, so it must leave this wrapper's bookkeeping untouched
+            # too -- otherwise a later usage_ranking_status event (e.g. on
+            # rebuild) would report the graph/key/learn value from the failed
+            # attempt instead of what is actually attached.
             self._warn_on_model_mismatch = warn_on_model_mismatch
             self._rebuild_on_model_change = rebuild_on_model_change
             self._adaptive_warned = False
             self._learn = learn
             self._graph = graph
             self._graph_key = graph_key
-            self._native.enable_adaptive_ranking(
-                graph, origins, provenance, cluster_similarity, cluster_coverage, learn
-            )
         self._maybe_warn_model_mismatch()
         self._emit_ranking_status("enabled")
 

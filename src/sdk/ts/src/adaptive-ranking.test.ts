@@ -1122,6 +1122,33 @@ describe("policy on the live path", () => {
     ).toThrow(/unknown origins/);
   });
 
+  it("does not corrupt the attached graph's bookkeeping when a later enable call is rejected", async () => {
+    // Regression: enable used to write #graph/#graphKey/#learn before calling
+    // native, so a rejected call (bad origins here) left them pointing at the
+    // graph/key that never actually attached — corrupting what a later
+    // rebuild's usage_ranking_status event reports.
+    const catalog = await buildCatalog({ kind: "memory", sessionId: "s" });
+    const graphA = new IntentGraph();
+    catalog.experimentalEnableAdaptiveRanking(graphA, { learn: false, graphKey: "own" });
+
+    expect(() =>
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
+        // @ts-expect-error the runtime guard still has to hold for untyped callers
+        origins: "nope",
+        graphKey: "cloud",
+      }),
+    ).toThrow(/unknown origins/);
+
+    catalog.drainTraceEvents(); // discard churn from the two enable attempts
+    await catalog.experimentalRebuildIntentGraph();
+
+    const events = catalog.drainTraceEvents() as Array<Record<string, unknown>>;
+    const status = events.find((e) => e.type === "usage_ranking_status");
+    expect(status?.reason).toBe("rebuilt");
+    expect(status?.graph_key).toBe("own");
+    expect(status?.learn).toBe(false);
+  });
+
   it("keeps the policy when the trace sink changes", async () => {
     // Changing the sink rebuilds the learner that decorates it. Rebuilding at
     // the default would silently drop a configured policy.

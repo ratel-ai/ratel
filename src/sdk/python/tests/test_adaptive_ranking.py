@@ -1186,6 +1186,30 @@ async def test_an_unknown_policy_value_is_rejected_when_enabling() -> None:
         catalog.experimental_enable_adaptive_ranking(IntentGraph(), origins="direct")  # type: ignore[arg-type]
 
 
+async def test_a_rejected_enable_call_does_not_corrupt_the_attached_graphs_bookkeeping() -> None:
+    # Regression: enable used to write _graph/_graph_key/_learn before calling
+    # native, so a rejected call (bad origins here) left them pointing at the
+    # graph/key that never actually attached -- corrupting what a later
+    # rebuild's usage_ranking_status event reports.
+    catalog = await build_catalog(TraceSinkConfig(kind="memory", session_id="s"))
+    graph_a = IntentGraph()
+    catalog.experimental_enable_adaptive_ranking(graph_a, learn=False, graph_key="own")
+
+    with pytest.raises(ValueError, match="unknown origins"):
+        catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), origins="nope", graph_key="cloud"  # type: ignore[arg-type]
+        )
+
+    catalog.drain_trace_events()  # discard churn from the two enable attempts
+    await catalog.experimental_rebuild_intent_graph()
+
+    events = catalog.drain_trace_events()
+    status = next(e for e in events if e["type"] == "usage_ranking_status")
+    assert status["reason"] == "rebuilt"
+    assert status["graph_key"] == "own"
+    assert status["learn"] is False
+
+
 async def test_policy_values_are_a_closed_set() -> None:
     # The three policy keywords are `Literal`s, so mypy rejects a typo in user
     # code before it runs. This file is outside mypy's scope (it checks

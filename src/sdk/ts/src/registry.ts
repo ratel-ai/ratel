@@ -301,12 +301,6 @@ export class ToolRegistry {
       graphKey?: string;
     } & ObservationPolicyOptions = {},
   ): void {
-    this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
-    this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
-    this.#adaptiveWarned = false;
-    this.#learn = options.learn ?? true;
-    this.#graph = graph;
-    this.#graphKey = options.graphKey;
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
     this.native.enableAdaptiveRanking(
@@ -319,6 +313,18 @@ export class ToolRegistry {
       },
       options.learn,
     );
+    // Only recorded once native accepts the call: a rejected call (bad
+    // origins/provenance/cluster policy) leaves native's own state untouched,
+    // so it must leave this wrapper's bookkeeping untouched too — otherwise a
+    // later usage_ranking_status event (e.g. on rebuild) would report the
+    // graph/key/learn value from the failed attempt instead of what is
+    // actually attached.
+    this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
+    this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
+    this.#adaptiveWarned = false;
+    this.#learn = options.learn ?? true;
+    this.#graph = graph;
+    this.#graphKey = options.graphKey;
     this.#maybeWarnModelMismatch();
     this.#emitRankingStatusEvent("enabled");
   }
@@ -732,12 +738,6 @@ export class SkillRegistry {
       graphKey?: string;
     } & ObservationPolicyOptions = {},
   ): void {
-    this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
-    this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
-    this.#adaptiveWarned = false;
-    this.#learn = options.learn ?? true;
-    this.#graph = graph;
-    this.#graphKey = options.graphKey;
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
     this.native.enableAdaptiveRanking(
@@ -750,6 +750,18 @@ export class SkillRegistry {
       },
       options.learn,
     );
+    // Only recorded once native accepts the call: a rejected call (bad
+    // origins/provenance/cluster policy) leaves native's own state untouched,
+    // so it must leave this wrapper's bookkeeping untouched too — otherwise a
+    // later usage_ranking_status event (e.g. on rebuild) would report the
+    // graph/key/learn value from the failed attempt instead of what is
+    // actually attached.
+    this.#warnOnModelMismatch = options.warnOnModelMismatch ?? true;
+    this.#rebuildOnModelChange = options.rebuildOnModelChange ?? false;
+    this.#adaptiveWarned = false;
+    this.#learn = options.learn ?? true;
+    this.#graph = graph;
+    this.#graphKey = options.graphKey;
     this.#maybeWarnModelMismatch();
     this.#emitRankingStatusEvent("enabled");
   }
