@@ -106,7 +106,7 @@ class ExperimentalLocalFileIntentGraphStorage:
     async def load(self) -> IntentGraph | None:
         """Load the stored graph, or `None` if nothing has been saved yet."""
         try:
-            text = await asyncio.to_thread(self._path.read_text)
+            text = await asyncio.to_thread(self._path.read_text, encoding="utf-8")
         except FileNotFoundError:
             self._last_known_rev = None
             return None
@@ -136,7 +136,7 @@ class ExperimentalLocalFileIntentGraphStorage:
 
     def _read_disk_rev(self) -> int | None:
         try:
-            text = self._path.read_text()
+            text = self._path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return None
         rev = json.loads(text).get("rev", 0)
@@ -145,7 +145,7 @@ class ExperimentalLocalFileIntentGraphStorage:
     def _write_atomic(self, contents: str) -> None:
         fd, tmp_path = tempfile.mkstemp(dir=self._path.parent, prefix=".tmp-")
         try:
-            with os.fdopen(fd, "w") as f:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(contents)
             os.replace(tmp_path, self._path)
         except BaseException:
@@ -332,11 +332,17 @@ class ExperimentalS3IntentGraphStorage:
         if self._last_known_rev == graph.rev:
             return
 
-        headers = (
-            {"if-match": self._last_known_etag}
-            if self._last_known_etag is not None
-            else {"if-none-match": "*"}
-        )
+        # ``content-type`` goes in the signed bag, not on the bare request: AWS's
+        # canonical-request rules require a Content-Type that is present to be
+        # signed. Without it urllib labels the object x-www-form-urlencoded.
+        headers = {
+            "content-type": "application/json",
+            **(
+                {"if-match": self._last_known_etag}
+                if self._last_known_etag is not None
+                else {"if-none-match": "*"}
+            ),
+        }
         body = graph.to_json()
         rev = _rev_of(body)
 

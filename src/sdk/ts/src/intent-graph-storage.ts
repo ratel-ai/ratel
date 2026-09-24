@@ -1,4 +1,4 @@
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { IntentGraph } from "./index.js";
 import { resolveS3Endpoint, signS3Request } from "./sigv4.js";
@@ -81,8 +81,16 @@ export class ExperimentalLocalFileIntentGraphStorage implements ExperimentalInte
       dirname(this.path),
       `.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
-    await writeFile(tmpPath, body, "utf8");
-    await rename(tmpPath, this.path);
+    // 0600: the graph carries the raw text of past user queries (see
+    // `IntentGraph.toJson`). The mode lands on the temp file, so the rename
+    // also tightens a target that an older build left world-readable.
+    try {
+      await writeFile(tmpPath, body, { encoding: "utf8", mode: 0o600 });
+      await rename(tmpPath, this.path);
+    } catch (error) {
+      await rm(tmpPath, { force: true });
+      throw error;
+    }
     this.lastKnownRev = rev;
   }
 
@@ -309,9 +317,13 @@ export class ExperimentalS3IntentGraphStorage implements ExperimentalIntentGraph
   async save(graph: IntentGraph): Promise<void> {
     if (this.lastKnownRev === graph.rev) return;
 
-    const headers: Record<string, string> = this.lastKnownEtag
-      ? { "if-match": this.lastKnownEtag }
-      : { "if-none-match": "*" };
+    // `content-type` goes in the signed bag, not on the bare request: AWS's
+    // canonical-request rules require a Content-Type that is present to be
+    // signed. Without it the object is stored as whatever `fetch` guesses.
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      ...(this.lastKnownEtag ? { "if-match": this.lastKnownEtag } : { "if-none-match": "*" }),
+    };
 
     const body = graph.toJson();
     const rev = revOf(body);

@@ -1,8 +1,24 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { renameControl } = vi.hoisted(() => ({ renameControl: { failNext: false } }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    rename: async (from: string, to: string) => {
+      if (renameControl.failNext) {
+        renameControl.failNext = false;
+        throw new Error("injected rename failure");
+      }
+      return actual.rename(from, to);
+    },
+  };
+});
+
 import { IntentGraph, ToolCatalog } from "./index.js";
 import {
   ExperimentalLocalFileIntentGraphStorage,
@@ -104,6 +120,38 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
     await storage.save(graph);
     const secondMtime = (await import("node:fs/promises").then((m) => m.stat(path))).mtimeMs;
     expect(secondMtime).toBe(firstMtime);
+  });
+
+  it("writes the graph 0600, and tightens a file an older build left readable", async () => {
+    // The graph carries raw user query text, so the file is not world-readable.
+    const path = await tempPath();
+    const { IntentGraph } = await import("./index.js");
+
+    const storage = new ExperimentalLocalFileIntentGraphStorage({ path });
+    await storage.save(IntentGraph.fromJson(graphJson(1)));
+    expect(stat(path).then((s) => s.mode & 0o777)).resolves.toBe(0o600);
+
+    // A file an older build wrote 0644 is tightened by the next save, because
+    // the mode lands on the temp file that the rename puts in its place.
+    await chmod(path, 0o644);
+    await storage.load();
+    await storage.save(IntentGraph.fromJson(graphJson(2)));
+    expect(stat(path).then((s) => s.mode & 0o777)).resolves.toBe(0o600);
+  });
+
+  it("removes the temp file when the rename fails", async () => {
+    // Nothing in the fs API fails a rename while letting the write succeed, so
+    // the failure is injected: what matters is that the temp file the write
+    // already created does not survive the throw.
+    const path = await tempPath();
+    const { IntentGraph } = await import("./index.js");
+    const storage = new ExperimentalLocalFileIntentGraphStorage({ path });
+
+    renameControl.failNext = true;
+    await expect(storage.save(IntentGraph.fromJson(graphJson(1)))).rejects.toThrow("injected");
+
+    const entries = await readdir(join(path, ".."));
+    expect(entries.filter((entry) => entry.startsWith(".tmp-"))).toEqual([]);
   });
 
   it("raises StaleIntentGraphError when the on-disk rev moved since load()", async () => {
@@ -437,6 +485,37 @@ describe("ExperimentalS3IntentGraphStorage", () => {
     await expect(writerB.save(IntentGraph.fromJson(graphJson(2)))).rejects.toThrow(
       StaleIntentGraphError,
     );
+  });
+
+  it("labels the stored object application/json, and signs that header", async () => {
+    const transport = fakeTransport();
+    const storage = new ExperimentalS3IntentGraphStorage({
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "us-east-1",
+      credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
+      transport,
+    });
+    const { IntentGraph } = await import("./index.js");
+    await storage.save(IntentGraph.fromJson(graphJson(1)));
+
+    const put = (transport.send as ReturnType<typeof vi.fn>).mock.calls
+      .map(([request]) => request as { method: string; headers: Record<string, string> })
+      .find((request) => request.method === "PUT");
+    expect(put?.headers["content-type"]).toBe("application/json");
+    // AWS requires a Content-Type that is present to be part of the signature.
+    expect(
+      signS3Request({
+        method: "PUT",
+        host: "my-bucket.s3.us-east-1.amazonaws.com",
+        path: "/intent-graph.json",
+        headers: put?.headers ?? {},
+        body: "{}",
+        region: "us-east-1",
+        accessKeyId: "AKIA",
+        secretAccessKey: "secret",
+      }).headers.authorization,
+    ).toContain("SignedHeaders=content-type;");
   });
 
   it("surfaces the AWS error code and message on a load() failure", async () => {

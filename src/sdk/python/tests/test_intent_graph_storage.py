@@ -5,6 +5,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
+import stat
+import subprocess
+import sys
+import textwrap
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,6 +92,83 @@ class TestExperimentalLocalFileIntentGraphStorage:
 
         await storage.save(graph)
         assert path.stat().st_mtime_ns == first_mtime
+
+
+    def test_round_trips_non_ascii_on_a_non_utf8_host(self, tmp_path: Path) -> None:
+        # Cluster members are raw user query text. Reading and writing in the
+        # locale encoding breaks wherever that is not UTF-8 (the Windows wheels
+        # default to cp1252), so both directions pin utf-8. CI is UTF-8, so the
+        # host has to be forced: only a subprocess can change the interpreter's
+        # default encoding.
+        query = "créer un contact pour le café 日本語"
+        graph_json = json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 0,
+                "rev": 1,
+                "intents": [
+                    {
+                        "id": "intent_0",
+                        "label": query,
+                        "terms": ["café"],
+                        "members": [query],
+                        "support": 1,
+                        "tools": {},
+                        "skills": {},
+                        "last_ts": 0,
+                    }
+                ],
+            }
+        )
+        path = tmp_path / "intent-graph.json"
+        # json.dumps escapes non-ASCII, so argv stays ASCII-safe under LC_ALL=C;
+        # the comparison happens in-process and only "OK" crosses stdout, which
+        # is itself locale-encoded.
+        script = textwrap.dedent(
+            """
+            import asyncio, json, sys
+            from ratel_ai import IntentGraph
+            from ratel_ai.intent_graph_storage import ExperimentalLocalFileIntentGraphStorage
+
+            path, graph_json = sys.argv[1], sys.argv[2]
+            expected = json.loads(graph_json)["intents"][0]["members"]
+
+            async def main() -> None:
+                await ExperimentalLocalFileIntentGraphStorage(path).save(
+                    IntentGraph.from_json(graph_json)
+                )
+                reloaded = await ExperimentalLocalFileIntentGraphStorage(path).load()
+                assert reloaded is not None
+                members = json.loads(reloaded.to_json())["intents"][0]["members"]
+                assert members == expected, "round trip lost the query text"
+                print("OK")
+
+            asyncio.run(main())
+            """
+        )
+        env = {
+            **os.environ,
+            "PYTHONUTF8": "0",
+            "PYTHONCOERCECLOCALE": "0",
+            "LC_ALL": "C",
+            "LANG": "C",
+        }
+        done = subprocess.run(  # noqa: S603
+            [sys.executable, "-c", script, str(path), graph_json],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+        )
+        assert done.returncode == 0, done.stderr
+        assert done.stdout.strip() == "OK"
+        assert json.loads(path.read_bytes().decode("utf-8"))["intents"][0]["members"] == [query]
+
+    async def test_writes_the_graph_0600(self, tmp_path: Path) -> None:
+        path = tmp_path / "intent-graph.json"
+        storage = ExperimentalLocalFileIntentGraphStorage(path)
+        await storage.save(IntentGraph.from_json(_graph_json(1)))
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
     async def test_raises_stale_error_when_on_disk_rev_moved_since_load(
         self, tmp_path: Path
@@ -388,6 +470,31 @@ class TestExperimentalS3IntentGraphStorage:
         await storage.save(graph)
 
         assert json.loads(str(state["stored"]))["rev"] == graph.rev
+
+    async def test_labels_the_stored_object_application_json(self) -> None:
+        transport = _FakeS3Transport()
+        storage = ExperimentalS3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        await storage.save(IntentGraph.from_json(_graph_json(1)))
+
+        put = next(call for call in transport.calls if call.method == "PUT")
+        assert put.headers["content-type"] == "application/json"
+        # AWS requires a Content-Type that is present to be part of the signature.
+        signed = sign_s3_request(
+            method="PUT",
+            host="my-bucket.s3.us-east-1.amazonaws.com",
+            path="/intent-graph.json",
+            headers=dict(put.headers),
+            body="{}",
+            region="us-east-1",
+            access_key_id="AKIA",
+            secret_access_key="secret",
+        )
+        assert "SignedHeaders=content-type;" in signed.headers["authorization"]
 
     async def test_load_surfaces_aws_error_code_and_message(self) -> None:
         transport = _FixedResponseS3Transport(
