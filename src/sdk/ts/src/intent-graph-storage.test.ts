@@ -94,6 +94,27 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
     expect(loaded?.rev).toBe(3);
   });
 
+  it("round-trips the learned clusters, not just the rev", async () => {
+    // Every other fixture here is an empty graph, so a save() that kept only
+    // the rev counter and discarded every cluster would pass the whole suite.
+    const catalog = await learningCatalog();
+    const graph = new IntentGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph);
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+    await useIt(catalog, "is the build broken again", "gh_run_list");
+
+    const before = JSON.parse(graph.toJson());
+    expect(before.intents.length).toBeGreaterThan(0);
+    expect(before.intents[0].members.length).toBeGreaterThan(0);
+    expect(Object.keys(before.intents[0].tools).length).toBeGreaterThan(0);
+
+    const path = await tempPath();
+    await new ExperimentalLocalFileIntentGraphStorage({ path }).save(graph);
+    const reloaded = await new ExperimentalLocalFileIntentGraphStorage({ path }).load();
+    expect(reloaded).not.toBeNull();
+    expect(JSON.parse(reloaded?.toJson() ?? "{}")).toEqual(before);
+  });
+
   it("writes atomically via a temp file + rename", async () => {
     const path = await tempPath();
     const storage = new ExperimentalLocalFileIntentGraphStorage({ path });
@@ -201,6 +222,17 @@ describe("signS3Request (SigV4)", () => {
     secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     date: new Date("2013-05-24T00:00:00Z"),
   };
+
+  it("matches the signature AWS publishes for this request", () => {
+    // The fixture above is AWS's `GET Object` example verbatim. Independently
+    // confirmed against botocore 1.43.101, AWS's own implementation, signing
+    // the same request at the same timestamp. Without this the suite passes
+    // with a broken canonical request: dropping the empty query-string line,
+    // swapping path and method, or hashing with SHA-1 all stay green.
+    expect(signS3Request(baseRequest).headers.authorization).toContain(
+      "Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41",
+    );
+  });
 
   it("is deterministic for identical inputs", () => {
     expect(signS3Request(baseRequest).headers.authorization).toBe(
@@ -434,6 +466,46 @@ describe("ExperimentalS3IntentGraphStorage", () => {
     });
     const loaded = await other.load();
     expect(loaded?.rev).toBe(7);
+  });
+
+  it("round-trips the learned clusters through S3, not just the rev", async () => {
+    const catalog = await learningCatalog();
+    const graph = new IntentGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph);
+    await useIt(catalog, "why is the build broken", "gh_run_list");
+    const before = JSON.parse(graph.toJson());
+    expect(before.intents[0].members.length).toBeGreaterThan(0);
+
+    const transport = fakeTransport();
+    const options = {
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "us-east-1",
+      credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
+      transport,
+    };
+    await new ExperimentalS3IntentGraphStorage(options).save(graph);
+    const reloaded = await new ExperimentalS3IntentGraphStorage(options).load();
+    expect(JSON.parse(reloaded?.toJson() ?? "{}")).toEqual(before);
+  });
+
+  it("refuses a blind first save over an object that already exists", async () => {
+    // ADR-0025 promises this guard for S3, and the local backend has it tested.
+    // Without a test no PUT ever carries `if-none-match: *` against a populated
+    // store, so the branch never executes.
+    const transport = fakeTransport();
+    const options = {
+      bucket: "my-bucket",
+      key: "intent-graph.json",
+      region: "us-east-1",
+      credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
+      transport,
+    };
+    const { IntentGraph: IG } = await import("./index.js");
+    await new ExperimentalS3IntentGraphStorage(options).save(IG.fromJson(graphJson(1)));
+
+    const blind = new ExperimentalS3IntentGraphStorage(options); // never load()ed
+    await expect(blind.save(IG.fromJson(graphJson(2)))).rejects.toThrow(StaleIntentGraphError);
   });
 
   it("skips the PUT when rev is unchanged since the last save", async () => {

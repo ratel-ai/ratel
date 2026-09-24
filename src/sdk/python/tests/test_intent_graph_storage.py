@@ -94,6 +94,28 @@ class TestExperimentalLocalFileIntentGraphStorage:
         assert path.stat().st_mtime_ns == first_mtime
 
 
+    async def test_round_trips_the_learned_clusters_not_just_the_rev(
+        self, tmp_path: Path
+    ) -> None:
+        # Every other fixture here is an empty graph, so a save() that kept only
+        # the rev counter and discarded every cluster would pass the whole suite.
+        catalog = await _learning_catalog()
+        graph = IntentGraph()
+        catalog.experimental_enable_adaptive_ranking(graph)
+        await _use_it(catalog, "why is the build broken", "gh_run_list")
+        await _use_it(catalog, "is the build broken again", "gh_run_list")
+
+        before = json.loads(graph.to_json())
+        assert before["intents"]
+        assert before["intents"][0]["members"]
+        assert before["intents"][0]["tools"]
+
+        path = tmp_path / "intent-graph.json"
+        await ExperimentalLocalFileIntentGraphStorage(path).save(graph)
+        reloaded = await ExperimentalLocalFileIntentGraphStorage(path).load()
+        assert reloaded is not None
+        assert json.loads(reloaded.to_json()) == before
+
     def test_round_trips_non_ascii_on_a_non_utf8_host(self, tmp_path: Path) -> None:
         # Cluster members are raw user query text. Reading and writing in the
         # locale encoding breaks wherever that is not UTF-8 (the Windows wheels
@@ -216,6 +238,17 @@ class TestSignS3Request:
         "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         "date": datetime(2013, 5, 24, tzinfo=timezone.utc),
     }
+
+    def test_matches_the_signature_aws_publishes_for_this_request(self) -> None:
+        # The fixture is AWS's `GET Object` example verbatim. Independently
+        # confirmed against botocore 1.43.101, AWS's own implementation, signing
+        # the same request at the same timestamp. Without this the suite passes
+        # with a broken canonical request.
+        signed = sign_s3_request(**self._base_kwargs)
+        assert (
+            "Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41"
+            in signed.headers["authorization"]
+        )
 
     def test_is_deterministic_for_identical_inputs(self) -> None:
         a = sign_s3_request(**self._base_kwargs).headers["authorization"]
@@ -436,6 +469,35 @@ class TestExperimentalS3IntentGraphStorage:
         loaded = await other.load()
         assert loaded is not None
         assert loaded.rev == 7
+
+    async def test_round_trips_the_learned_clusters_through_s3(self) -> None:
+        catalog = await _learning_catalog()
+        graph = IntentGraph()
+        catalog.experimental_enable_adaptive_ranking(graph)
+        await _use_it(catalog, "why is the build broken", "gh_run_list")
+        before = json.loads(graph.to_json())
+        assert before["intents"][0]["members"]
+
+        transport = _FakeS3Transport()
+        options = dict(bucket="my-bucket", key="intent-graph.json", credentials=_CREDENTIALS)
+        await ExperimentalS3IntentGraphStorage(**options, transport=transport).save(graph)
+        reloaded = await ExperimentalS3IntentGraphStorage(**options, transport=transport).load()
+        assert reloaded is not None
+        assert json.loads(reloaded.to_json()) == before
+
+    async def test_refuses_a_blind_first_save_over_an_object_that_already_exists(self) -> None:
+        # ADR-0025 promises this guard for S3, and the local backend has it
+        # tested. Without a test no PUT ever carries `if-none-match: *` against
+        # a populated store, so the branch never executes.
+        transport = _FakeS3Transport()
+        options = dict(bucket="my-bucket", key="intent-graph.json", credentials=_CREDENTIALS)
+        await ExperimentalS3IntentGraphStorage(**options, transport=transport).save(
+            IntentGraph.from_json(_graph_json(1))
+        )
+
+        blind = ExperimentalS3IntentGraphStorage(**options, transport=transport)
+        with pytest.raises(StaleIntentGraphError):
+            await blind.save(IntentGraph.from_json(_graph_json(2)))
 
     async def test_skips_put_when_rev_unchanged_since_last_save(self) -> None:
         transport = _FakeS3Transport()
