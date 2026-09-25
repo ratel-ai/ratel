@@ -67,12 +67,12 @@ async def main() -> None:
     final = await storage().load()
     assert final is not None and final.rev == rev + 1, "stale writer's save must not have landed"
 
-    print(f"PASS (s3-support-adaptive-ranking): s3://{bucket}/{key}, rev={final.rev}")
+    print(f"PASS (s3-support-adaptive-ranking-python): s3://{bucket}/{key}, rev={final.rev}")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as err:  # noqa: BLE001
-        print(f"FAIL (s3-support-adaptive-ranking): {err}", file=sys.stderr)
+        print(f"FAIL (s3-support-adaptive-ranking-python): {err}", file=sys.stderr)
         sys.exit(1)

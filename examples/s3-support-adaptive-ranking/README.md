@@ -33,14 +33,15 @@ RATEL_S3_TEST_BUCKET=my-bucket ./src/test-s3.ts
 | `RATEL_S3_TEST_ENDPOINT`   | no       | unset (AWS S3)                        |
 | `RATEL_S3_TEST_FORCE_PATH_STYLE` | no | `true` if `RATEL_S3_TEST_ENDPOINT` is set, else n/a |
 
-The IAM identity needs `s3:GetObject` and `s3:PutObject` on the target key. No special bucket configuration is required — S3 conditional writes (`If-Match`/`If-None-Match`, used for stale-write detection) have been GA since August 2024 and don't need bucket versioning enabled.
+The IAM identity needs `s3:GetObject` and `s3:PutObject` on the target key, plus `s3:ListBucket` on the bucket. `ListBucket` is what makes S3 answer a missing key with `404`; without it a missing key comes back `403`, and the first `load()` on a fresh key raises instead of returning `null`. No special bucket configuration is required — the conditional writes used for stale-write detection (`If-Match`/`If-None-Match`) need no bucket versioning.
 
 ### Against a local MinIO instead of AWS
 
 ```bash
-docker run -d -p 9000:9000 -e MINIO_ROOT_USER=ratelminio -e MINIO_ROOT_PASSWORD=ratelminiosecret \
-  quay.io/minio/minio server /data
-# create the bucket once, e.g. with quay.io/minio/mc or the MinIO console at :9001
+docker run -d -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=ratelminio -e MINIO_ROOT_PASSWORD=ratelminiosecret \
+  quay.io/minio/minio server /data --console-address ":9001"
+# create the bucket once, with quay.io/minio/mc or the MinIO console on :9001
 
 RATEL_S3_TEST_BUCKET=my-bucket \
 RATEL_S3_TEST_ENDPOINT=http://localhost:9000 \
@@ -59,7 +60,7 @@ pnpm -F @ratel-ai/example-s3-support-adaptive-ranking start
 4. Saving the same `rev` again is a no-op (save-when-changed).
 5. Two storage instances both `load()` the same base, one `save()`s first, and the second's `save()` is expected to raise `StaleIntentGraphError` from a real `412 Precondition Failed` — confirms conditional-write staleness detection isn't just a unit-test fiction.
 
-The script prints `PASS`/`FAIL` per check and exits non-zero if anything failed. It leaves the last-written object behind, so a re-run also exercises the "object already exists" path.
+The checks are bare `node:assert` calls, so the first failure throws and the script exits non-zero; a clean run prints a single `PASS` line. It leaves the last-written object behind, so a re-run also exercises the "object already exists" path.
 
 ## Layout
 

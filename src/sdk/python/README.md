@@ -44,6 +44,8 @@ ExperimentalS3IntentGraphStorage(
 )
 ```
 
+**A stored graph carries the raw text of past user queries** (the cluster `members`), so treat it like a query or telemetry log: the file backend writes `0600` and the file belongs outside version control and images, while an S3 bucket holding one wants private access and encryption at rest. Neither backend encrypts the payload; the graph is stored as plain JSON.
+
 For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole batch and embeds on a worker thread, so model loading, HTTP, and inference never block the asyncio loop or hold the GIL — and embedding errors surface right at `register()`:
 
 ```python

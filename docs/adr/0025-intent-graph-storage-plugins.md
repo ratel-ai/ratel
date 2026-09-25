@@ -21,9 +21,10 @@ disk had to write that loop themselves.
 
 Adding S3 support was requested with two hard constraints: it must not change
 adaptive-ranking behavior (core stays untouched), and it must not add an
-install step — no `boto3`, no `@aws-sdk/client-s3`. Real-AWS validation is a
-follow-up once credentials are available; initial development needed to be
-testable offline.
+install step — no `boto3`, no `@aws-sdk/client-s3`. Development had to be
+possible offline, so the whole suite runs without credentials or network; the
+live validation against real AWS S3 and a self-hosted MinIO was completed
+before merge, not deferred.
 
 ## Decision
 
@@ -40,8 +41,12 @@ lifecycle, not a free function plus a strategy argument — matches the existing
 **Two implementations:**
 
 - `ExperimentalLocalFileIntentGraphStorage` — the previously-missing default.
-  Atomic write (temp file + rename / `os.replace`), so a crash mid-write
-  cannot leave a truncated file.
+  Written to a temp file and renamed into place, so a process that dies
+  mid-write leaves the previous graph intact rather than a truncated one. The
+  rename is atomic; the bytes are not fsynced, so a machine-level crash can
+  still lose the most recent save. The temp file is created `0600` and the
+  rename carries that mode onto the target: the graph holds raw user query
+  text (see `IntentGraph.toJson`).
 - `ExperimentalS3IntentGraphStorage` — new. Talks to the S3 REST API directly:
   a minimal, dependency-free AWS SigV4 signer (`sigv4.ts` / `ratel_ai/_sigv4.py`,
   stdlib-only: `node:crypto`/native `fetch`, `hashlib`/`hmac`/`urllib`) plus
@@ -115,6 +120,17 @@ classes) rather than one core implementation — accepted because ADR-0014
 already ruled out putting a backend choice in core, and a hand-rolled SigV4
 client is small and stable relative to the alternative of a heavy, everyone-
 pays SDK dependency.
+
+**What these backends persist.** Until now the warning on `IntentGraph.toJson`
+sat on an API most callers never reached, because there was no backend. These
+are the first two, so it belongs here: a serialized graph contains the **raw
+text of past user queries** (the cluster `members`). Treat a stored graph like
+a query or telemetry log. Locally that means the `0600` the file backend now
+writes, and keeping it out of version control and out of images. In S3 it
+means the bucket is a place that data is allowed to live: private access
+block, encryption at rest, and a lifecycle that matches whatever retention the
+query text is subject to. Neither backend encrypts the payload itself; the
+graph is stored as plain JSON.
 
 Follow-ups, explicitly out of scope here: `~/.aws/credentials` / instance-role
 credential resolution; TLS trust configuration for self-signed certificates

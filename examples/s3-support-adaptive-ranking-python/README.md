@@ -37,9 +37,10 @@ RATEL_S3_TEST_BUCKET=my-bucket ./test_s3.py
 ### Against a local MinIO instead of AWS
 
 ```bash
-docker run -d -p 9000:9000 -e MINIO_ROOT_USER=ratelminio -e MINIO_ROOT_PASSWORD=ratelminiosecret \
-  quay.io/minio/minio server /data
-# create the bucket once, e.g. with quay.io/minio/mc or the MinIO console at :9001
+docker run -d -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=ratelminio -e MINIO_ROOT_PASSWORD=ratelminiosecret \
+  quay.io/minio/minio server /data --console-address ":9001"
+# create the bucket once, with quay.io/minio/mc or the MinIO console on :9001
 
 RATEL_S3_TEST_BUCKET=my-bucket \
 RATEL_S3_TEST_ENDPOINT=http://localhost:9000 \

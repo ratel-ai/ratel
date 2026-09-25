@@ -72,7 +72,7 @@ Adaptive ranking's `IntentGraph` ([ADR 0014](../../../docs/adr/0014-adaptive-usa
 const runtime = ratel();
 const storage = new ExperimentalS3IntentGraphStorage({ bucket: "my-bucket", key: "intent-graph.json" });
 const graph = (await storage.load()) ?? new IntentGraph();
-runtime.tools.experimentalEnableAdaptiveRanking(graph);
+runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph);
 // ...later, e.g. on an interval...
 await storage.save(graph);
 ```
@@ -86,6 +86,8 @@ new ExperimentalS3IntentGraphStorage({
   endpoint: "http://localhost:9000",
 });
 ```
+
+**A stored graph carries the raw text of past user queries** (the cluster `members`), so treat it like a query or telemetry log: the file backend writes `0600` and the file belongs outside version control and images, while an S3 bucket holding one wants private access and encryption at rest. Neither backend encrypts the payload; the graph is stored as plain JSON.
 
 For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole array and embeds on a libuv worker, so model loading, HTTP, and inference never block Node's event loop — and embedding errors surface right at `register()`:
 
