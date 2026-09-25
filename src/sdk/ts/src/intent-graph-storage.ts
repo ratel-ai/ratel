@@ -13,7 +13,7 @@ import { resolveS3Endpoint, signS3Request } from "./sigv4.js";
  * detection** (raise {@link StaleIntentGraphError} instead of clobbering a
  * concurrent writer — single-writer model, detect don't merge).
  */
-export interface ExperimentalIntentGraphStorage {
+export interface IntentGraphStorage {
   /** Load the stored graph, or `null` if nothing has been saved yet. */
   load(): Promise<IntentGraph | null>;
   /** Save `graph`, or skip if unchanged since the last save/load `rev`. */
@@ -28,8 +28,8 @@ export class StaleIntentGraphError extends Error {
   }
 }
 
-/** Options for {@link ExperimentalLocalFileIntentGraphStorage}. */
-export interface ExperimentalLocalFileIntentGraphStorageOptions {
+/** Options for {@link LocalFileIntentGraphStorage}. */
+export interface LocalFileIntentGraphStorageOptions {
   /** Path to the JSON file. Parent directory must already exist. */
   readonly path: string;
 }
@@ -39,11 +39,11 @@ export interface ExperimentalLocalFileIntentGraphStorageOptions {
  * Writes atomically (temp file + rename) so a crash mid-write cannot leave a
  * truncated file.
  */
-export class ExperimentalLocalFileIntentGraphStorage implements ExperimentalIntentGraphStorage {
+export class LocalFileIntentGraphStorage implements IntentGraphStorage {
   private readonly path: string;
   private lastKnownRev: number | undefined;
 
-  constructor(options: ExperimentalLocalFileIntentGraphStorageOptions) {
+  constructor(options: LocalFileIntentGraphStorageOptions) {
     this.path = options.path;
   }
 
@@ -170,7 +170,7 @@ export interface S3Transport {
 }
 
 /** Explicit AWS credentials. Falls back to `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` if omitted. */
-export interface ExperimentalS3IntentGraphStorageCredentials {
+export interface S3IntentGraphStorageCredentials {
   /** AWS access key id. */
   readonly accessKeyId: string;
   /** AWS secret access key. */
@@ -179,8 +179,8 @@ export interface ExperimentalS3IntentGraphStorageCredentials {
   readonly sessionToken?: string;
 }
 
-/** Options for {@link ExperimentalS3IntentGraphStorage}. */
-export interface ExperimentalS3IntentGraphStorageOptions {
+/** Options for {@link S3IntentGraphStorage}. */
+export interface S3IntentGraphStorageOptions {
   /** S3 bucket to store the graph in. */
   readonly bucket: string;
   /** S3 object key, e.g. `"intent-graph.json"`. */
@@ -188,7 +188,7 @@ export interface ExperimentalS3IntentGraphStorageOptions {
   /** @default "us-east-1" */
   readonly region?: string;
   /** Explicit credentials; falls back to the standard AWS environment variables. */
-  readonly credentials?: ExperimentalS3IntentGraphStorageCredentials;
+  readonly credentials?: S3IntentGraphStorageCredentials;
   /**
    * Custom S3-compatible endpoint, e.g. `"http://localhost:9000"` or
    * `"https://minio.internal:9000"`. Omit for AWS S3 (default).
@@ -207,12 +207,12 @@ export interface ExperimentalS3IntentGraphStorageOptions {
   readonly transport?: S3Transport;
 }
 
-function credentialsFromEnv(): ExperimentalS3IntentGraphStorageCredentials {
+function credentialsFromEnv(): S3IntentGraphStorageCredentials {
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
   if (!accessKeyId || !secretAccessKey) {
     throw new Error(
-      "AWS credentials not found: pass `credentials` to ExperimentalS3IntentGraphStorage, or " +
+      "AWS credentials not found: pass `credentials` to S3IntentGraphStorage, or " +
         "set AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (and AWS_SESSION_TOKEN for temporary credentials).",
     );
   }
@@ -222,7 +222,7 @@ function credentialsFromEnv(): ExperimentalS3IntentGraphStorageCredentials {
 class FetchS3Transport implements S3Transport {
   constructor(
     private readonly region: string,
-    private readonly credentials: ExperimentalS3IntentGraphStorageCredentials | undefined,
+    private readonly credentials: S3IntentGraphStorageCredentials | undefined,
     private readonly endpoint: string | undefined,
     private readonly forcePathStyle: boolean | undefined,
   ) {}
@@ -269,14 +269,14 @@ class FetchS3Transport implements S3Transport {
  * (`If-Match`/`If-None-Match` on the object's ETag) for stale-base detection;
  * no bucket versioning required.
  */
-export class ExperimentalS3IntentGraphStorage implements ExperimentalIntentGraphStorage {
+export class S3IntentGraphStorage implements IntentGraphStorage {
   private readonly bucket: string;
   private readonly key: string;
   private readonly transport: S3Transport;
   private lastKnownEtag: string | undefined;
   private lastKnownRev: number | undefined;
 
-  constructor(options: ExperimentalS3IntentGraphStorageOptions) {
+  constructor(options: S3IntentGraphStorageOptions) {
     this.bucket = options.bucket;
     this.key = options.key;
     this.transport =

@@ -2,7 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 
 /**
  * Minimal AWS Signature Version 4 signer for S3 REST requests. Exists so
- * {@link ExperimentalS3IntentGraphStorage} needs no `@aws-sdk/client-s3`
+ * {@link S3IntentGraphStorage} needs no `@aws-sdk/client-s3`
  * dependency — everything here is Node built-ins (`node:crypto`, native
  * `fetch`). See ADR-0025.
  */

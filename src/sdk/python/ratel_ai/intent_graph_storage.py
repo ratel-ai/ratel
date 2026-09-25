@@ -8,7 +8,7 @@ write if `rev` hasn't moved since the last save) and **stale-base detection**
 (raise `StaleIntentGraphError` instead of clobbering a concurrent writer —
 single-writer model, detect don't merge).
 
-`ExperimentalS3IntentGraphStorage` has no dependency on `boto3` — it signs
+`S3IntentGraphStorage` has no dependency on `boto3` — it signs
 requests with a built-in minimal SigV4 implementation (`ratel_ai._sigv4`) and
 sends them with `urllib`.
 """
@@ -30,10 +30,10 @@ from ._native import IntentGraph
 from ._sigv4 import resolve_s3_endpoint, sign_s3_request
 
 __all__ = [
-    "ExperimentalIntentGraphStorage",
-    "ExperimentalLocalFileIntentGraphStorage",
-    "ExperimentalS3IntentGraphStorage",
-    "ExperimentalS3IntentGraphStorageCredentials",
+    "IntentGraphStorage",
+    "LocalFileIntentGraphStorage",
+    "S3IntentGraphStorage",
+    "S3IntentGraphStorageCredentials",
     "S3Request",
     "S3Response",
     "S3Transport",
@@ -79,7 +79,7 @@ def _describe_s3_error(body: str) -> str | None:
 
 
 @runtime_checkable
-class ExperimentalIntentGraphStorage(Protocol):
+class IntentGraphStorage(Protocol):
     """Host-owned persistence for an `IntentGraph`."""
 
     async def load(self) -> IntentGraph | None:
@@ -91,7 +91,7 @@ class ExperimentalIntentGraphStorage(Protocol):
         ...
 
 
-class ExperimentalLocalFileIntentGraphStorage:
+class LocalFileIntentGraphStorage:
     """Local JSON file storage for an `IntentGraph` — the default backend.
 
     Writes atomically (temp file + `os.replace`) so a crash mid-write cannot
@@ -188,7 +188,7 @@ class S3Transport(Protocol):
 
 
 @dataclass(frozen=True)
-class ExperimentalS3IntentGraphStorageCredentials:
+class S3IntentGraphStorageCredentials:
     """Explicit AWS credentials.
 
     Falls back to ``AWS_ACCESS_KEY_ID``/``AWS_SECRET_ACCESS_KEY``/``AWS_SESSION_TOKEN``
@@ -200,16 +200,16 @@ class ExperimentalS3IntentGraphStorageCredentials:
     session_token: str | None = None
 
 
-def _credentials_from_env() -> ExperimentalS3IntentGraphStorageCredentials:
+def _credentials_from_env() -> S3IntentGraphStorageCredentials:
     access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
     secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
     if not access_key_id or not secret_access_key:
         raise RuntimeError(
             "AWS credentials not found: pass `credentials` to "
-            "ExperimentalS3IntentGraphStorage, or set AWS_ACCESS_KEY_ID / "
+            "S3IntentGraphStorage, or set AWS_ACCESS_KEY_ID / "
             "AWS_SECRET_ACCESS_KEY (and AWS_SESSION_TOKEN for temporary credentials)."
         )
-    return ExperimentalS3IntentGraphStorageCredentials(
+    return S3IntentGraphStorageCredentials(
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
         session_token=os.environ.get("AWS_SESSION_TOKEN"),
@@ -220,7 +220,7 @@ class _UrllibS3Transport:
     def __init__(
         self,
         region: str,
-        credentials: ExperimentalS3IntentGraphStorageCredentials | None,
+        credentials: S3IntentGraphStorageCredentials | None,
         endpoint: str | None = None,
         force_path_style: bool | None = None,
     ) -> None:
@@ -267,7 +267,7 @@ class _UrllibS3Transport:
             return S3Response(status=error.code, headers=headers, body=response_body)
 
 
-class ExperimentalS3IntentGraphStorage:
+class S3IntentGraphStorage:
     """S3-backed storage for an `IntentGraph`.
 
     No SDK dependency — signs requests with a built-in minimal SigV4
@@ -283,7 +283,7 @@ class ExperimentalS3IntentGraphStorage:
         bucket: str,
         key: str,
         region: str = "us-east-1",
-        credentials: ExperimentalS3IntentGraphStorageCredentials | None = None,
+        credentials: S3IntentGraphStorageCredentials | None = None,
         endpoint: str | None = None,
         force_path_style: bool | None = None,
         transport: S3Transport | None = None,

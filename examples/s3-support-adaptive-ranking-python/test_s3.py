@@ -9,7 +9,7 @@ import os
 import sys
 import time
 
-from ratel_ai import ExperimentalS3IntentGraphStorage, IntentGraph, StaleIntentGraphError
+from ratel_ai import S3IntentGraphStorage, IntentGraph, StaleIntentGraphError
 
 bucket = os.environ.get("RATEL_S3_TEST_BUCKET")
 if not bucket:
@@ -29,8 +29,8 @@ def graph(rev: int) -> IntentGraph:
     )
 
 
-def storage() -> ExperimentalS3IntentGraphStorage:
-    return ExperimentalS3IntentGraphStorage(
+def storage() -> S3IntentGraphStorage:
+    return S3IntentGraphStorage(
         bucket=bucket,
         key=key,
         region=region,

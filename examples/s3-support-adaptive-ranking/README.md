@@ -1,6 +1,6 @@
 # `examples/s3-support-adaptive-ranking` — live S3 intent graph storage test
 
-A **live** smoke test of `ExperimentalS3IntentGraphStorage` ([docs/adr/0025](../../docs/adr/0025-intent-graph-storage-plugins.md)) against a real S3-compatible bucket — AWS or self-hosted (MinIO, etc.) — not the fake-transport unit tests in `src/sdk/ts/src/intent-graph-storage.test.ts`. It exists to answer one question: **can the hand-rolled SigV4 client actually store and retrieve an intent graph in S3?** The Python mirror is [`examples/s3-support-adaptive-ranking-python`](../s3-support-adaptive-ranking-python/README.md).
+A **live** smoke test of `S3IntentGraphStorage` ([docs/adr/0025](../../docs/adr/0025-intent-graph-storage-plugins.md)) against a real S3-compatible bucket — AWS or self-hosted (MinIO, etc.) — not the fake-transport unit tests in `src/sdk/ts/src/intent-graph-storage.test.ts`. It exists to answer one question: **can the hand-rolled SigV4 client actually store and retrieve an intent graph in S3?** The Python mirror is [`examples/s3-support-adaptive-ranking-python`](../s3-support-adaptive-ranking-python/README.md).
 
 It never runs in CI (no AWS credentials there) — it's for manual verification.
 

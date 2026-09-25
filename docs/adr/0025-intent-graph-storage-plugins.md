@@ -28,10 +28,18 @@ before merge, not deferred.
 
 ## Decision
 
-Add an SDK-layer-only storage plugin pair to both SDKs, under `experimental*`
-naming (CONTRIBUTING.md's additive-surface convention). `ratel-ai-core`
+Add an SDK-layer-only storage plugin pair to both SDKs. `ratel-ai-core`
 (`usage.rs`, `usage_learner.rs`) is not touched — everything here is a thin
 adapter over the existing `toJson`/`fromJson`/`rev` contract.
+
+**Naming.** These ship without the `experimental*` prefix CONTRIBUTING asks of
+new surfaces, which is a deliberate departure. The prefix exists to let a
+surface change without a major bump; here the entire API is two methods
+(`load`/`save`) over a wire format ADR-0014 already froze, so there is little
+for it to buy. It was also cheaper to decide before the first release than
+after: renaming later costs a deprecation cycle. `StaleIntentGraphError` and
+the `S3Request`/`S3Response`/`S3Transport` seam are unprefixed for the same
+reason.
 
 **Interface** (per SDK): `{ load(): Promise<IntentGraph | null>; save(graph): Promise<void> }`
 in TS, an `async` `Protocol` with the same two methods in Python. Object-owns-
@@ -40,14 +48,14 @@ lifecycle, not a free function plus a strategy argument — matches the existing
 
 **Two implementations:**
 
-- `ExperimentalLocalFileIntentGraphStorage` — the previously-missing default.
+- `LocalFileIntentGraphStorage` — the previously-missing default.
   Written to a temp file and renamed into place, so a process that dies
   mid-write leaves the previous graph intact rather than a truncated one. The
   rename is atomic; the bytes are not fsynced, so a machine-level crash can
   still lose the most recent save. The temp file is created `0600` and the
   rename carries that mode onto the target: the graph holds raw user query
   text (see `IntentGraph.toJson`).
-- `ExperimentalS3IntentGraphStorage` — new. Talks to the S3 REST API directly:
+- `S3IntentGraphStorage` — new. Talks to the S3 REST API directly:
   a minimal, dependency-free AWS SigV4 signer (`sigv4.ts` / `ratel_ai/_sigv4.py`,
   stdlib-only: `node:crypto`/native `fetch`, `hashlib`/`hmac`/`urllib`) plus
   `GetObject`/`PutObject`. No `boto3`/`@aws-sdk/client-s3` dependency — the
@@ -75,7 +83,7 @@ on S3; an equivalent disk check locally) and raises `StaleIntentGraphError`
 if it does.
 
 **Credentials.** Explicit `{accessKeyId, secretAccessKey, sessionToken?}` /
-`ExperimentalS3IntentGraphStorageCredentials`, falling back to
+`S3IntentGraphStorageCredentials`, falling back to
 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` env vars.
 `~/.aws/credentials` file parsing and instance-role resolution are explicitly
 deferred — not built in this version.
@@ -90,7 +98,7 @@ below).
 **S3-compatible endpoints (MinIO, etc.).** Driven by a real customer
 requirement (a MinIO/managed-S3 deployment, not AWS), `endpoint` and
 `forcePathStyle`/`force_path_style` options were added to
-`ExperimentalS3IntentGraphStorage`. `endpoint` (e.g.
+`S3IntentGraphStorage`. `endpoint` (e.g.
 `"http://localhost:9000"`) overrides the AWS virtual-hosted host entirely;
 omit it for AWS S3, unchanged. `forcePathStyle` defaults to `true` once
 `endpoint` is set — most self-hosted S3-compatible services need path-style

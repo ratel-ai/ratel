@@ -1,6 +1,6 @@
 # `examples/s3-support-adaptive-ranking-python` — live S3 intent graph storage test
 
-The Python mirror of [`examples/s3-support-adaptive-ranking`](../s3-support-adaptive-ranking/README.md): a **live** smoke test of `ExperimentalS3IntentGraphStorage` ([docs/adr/0025](../../docs/adr/0025-intent-graph-storage-plugins.md)) against a real S3-compatible bucket — AWS or self-hosted (MinIO, etc.) — not a mocked one.
+The Python mirror of [`examples/s3-support-adaptive-ranking`](../s3-support-adaptive-ranking/README.md): a **live** smoke test of `S3IntentGraphStorage` ([docs/adr/0025](../../docs/adr/0025-intent-graph-storage-plugins.md)) against a real S3-compatible bucket — AWS or self-hosted (MinIO, etc.) — not a mocked one.
 
 It never runs in CI (no AWS credentials there) — it's for manual verification.
 

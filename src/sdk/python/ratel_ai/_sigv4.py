@@ -1,6 +1,6 @@
 """Minimal AWS Signature Version 4 signer for S3 REST requests.
 
-Exists so `ExperimentalS3IntentGraphStorage` needs no `boto3` dependency —
+Exists so `S3IntentGraphStorage` needs no `boto3` dependency —
 everything here is stdlib (`hashlib`, `hmac`, `urllib`). See ADR-0025.
 """
 

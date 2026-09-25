@@ -21,8 +21,8 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 import { IntentGraph, ToolCatalog } from "./index.js";
 import {
-  ExperimentalLocalFileIntentGraphStorage,
-  ExperimentalS3IntentGraphStorage,
+  LocalFileIntentGraphStorage,
+  S3IntentGraphStorage,
   type S3Transport,
   StaleIntentGraphError,
 } from "./intent-graph-storage.js";
@@ -64,7 +64,7 @@ async function useIt(catalog: ToolCatalog, query: string, chosen: string): Promi
   await catalog.invoke(chosen, {});
 }
 
-describe("ExperimentalLocalFileIntentGraphStorage", () => {
+describe("LocalFileIntentGraphStorage", () => {
   const dirs: string[] = [];
 
   afterEach(async () => {
@@ -78,17 +78,17 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
   }
 
   it("returns null on load() when the file does not exist", async () => {
-    const storage = new ExperimentalLocalFileIntentGraphStorage({ path: await tempPath() });
+    const storage = new LocalFileIntentGraphStorage({ path: await tempPath() });
     await expect(storage.load()).resolves.toBeNull();
   });
 
   it("round-trips a saved graph, preserving rev", async () => {
     const path = await tempPath();
-    const storage = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const storage = new LocalFileIntentGraphStorage({ path });
     const graph = (await import("./index.js")).IntentGraph.fromJson(graphJson(3));
     await storage.save(graph);
 
-    const other = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const other = new LocalFileIntentGraphStorage({ path });
     const loaded = await other.load();
     expect(loaded).not.toBeNull();
     expect(loaded?.rev).toBe(3);
@@ -109,15 +109,15 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
     expect(Object.keys(before.intents[0].tools).length).toBeGreaterThan(0);
 
     const path = await tempPath();
-    await new ExperimentalLocalFileIntentGraphStorage({ path }).save(graph);
-    const reloaded = await new ExperimentalLocalFileIntentGraphStorage({ path }).load();
+    await new LocalFileIntentGraphStorage({ path }).save(graph);
+    const reloaded = await new LocalFileIntentGraphStorage({ path }).load();
     expect(reloaded).not.toBeNull();
     expect(JSON.parse(reloaded?.toJson() ?? "{}")).toEqual(before);
   });
 
   it("writes atomically via a temp file + rename", async () => {
     const path = await tempPath();
-    const storage = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const storage = new LocalFileIntentGraphStorage({ path });
     const { IntentGraph } = await import("./index.js");
     await storage.save(IntentGraph.fromJson(graphJson(1)));
 
@@ -131,7 +131,7 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
 
   it("skips the write when rev is unchanged since the last save", async () => {
     const path = await tempPath();
-    const storage = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const storage = new LocalFileIntentGraphStorage({ path });
     const { IntentGraph } = await import("./index.js");
     const graph = IntentGraph.fromJson(graphJson(5));
     await storage.save(graph);
@@ -148,7 +148,7 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
     const path = await tempPath();
     const { IntentGraph } = await import("./index.js");
 
-    const storage = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const storage = new LocalFileIntentGraphStorage({ path });
     await storage.save(IntentGraph.fromJson(graphJson(1)));
     expect(stat(path).then((s) => s.mode & 0o777)).resolves.toBe(0o600);
 
@@ -166,7 +166,7 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
     // already created does not survive the throw.
     const path = await tempPath();
     const { IntentGraph } = await import("./index.js");
-    const storage = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const storage = new LocalFileIntentGraphStorage({ path });
 
     renameControl.failNext = true;
     await expect(storage.save(IntentGraph.fromJson(graphJson(1)))).rejects.toThrow("injected");
@@ -178,15 +178,15 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
   it("raises StaleIntentGraphError when the on-disk rev moved since load()", async () => {
     const path = await tempPath();
     const { IntentGraph } = await import("./index.js");
-    const writer1 = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const writer1 = new LocalFileIntentGraphStorage({ path });
     await writer1.save(IntentGraph.fromJson(graphJson(1)));
 
-    const reader = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const reader = new LocalFileIntentGraphStorage({ path });
     const loaded = await reader.load();
     expect(loaded?.rev).toBe(1);
 
     // Someone else loads the current graph and advances it on disk.
-    const writer2 = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const writer2 = new LocalFileIntentGraphStorage({ path });
     await writer2.load();
     await writer2.save(IntentGraph.fromJson(graphJson(2)));
 
@@ -200,10 +200,10 @@ describe("ExperimentalLocalFileIntentGraphStorage", () => {
   it("raises StaleIntentGraphError on first save if the file already exists and was never loaded", async () => {
     const path = await tempPath();
     const { IntentGraph } = await import("./index.js");
-    const writer1 = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const writer1 = new LocalFileIntentGraphStorage({ path });
     await writer1.save(IntentGraph.fromJson(graphJson(1)));
 
-    const blindWriter = new ExperimentalLocalFileIntentGraphStorage({ path });
+    const blindWriter = new LocalFileIntentGraphStorage({ path });
     await expect(blindWriter.save(IntentGraph.fromJson(graphJson(1)))).rejects.toThrow(
       StaleIntentGraphError,
     );
@@ -401,7 +401,7 @@ describe("resolveS3Endpoint", () => {
   });
 });
 
-describe("ExperimentalS3IntentGraphStorage", () => {
+describe("S3IntentGraphStorage", () => {
   function fakeTransport(): S3Transport & { store: Map<string, { body: string; etag: string }> } {
     const store = new Map<string, { body: string; etag: string }>();
     let etagCounter = 0;
@@ -435,7 +435,7 @@ describe("ExperimentalS3IntentGraphStorage", () => {
 
   it("returns null on load() when the object does not exist", async () => {
     const transport = fakeTransport();
-    const storage = new ExperimentalS3IntentGraphStorage({
+    const storage = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",
@@ -447,7 +447,7 @@ describe("ExperimentalS3IntentGraphStorage", () => {
 
   it("round-trips a saved graph through the fake transport", async () => {
     const transport = fakeTransport();
-    const storage = new ExperimentalS3IntentGraphStorage({
+    const storage = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",
@@ -457,7 +457,7 @@ describe("ExperimentalS3IntentGraphStorage", () => {
     const { IntentGraph } = await import("./index.js");
     await storage.save(IntentGraph.fromJson(graphJson(7)));
 
-    const other = new ExperimentalS3IntentGraphStorage({
+    const other = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",
@@ -484,8 +484,8 @@ describe("ExperimentalS3IntentGraphStorage", () => {
       credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
       transport,
     };
-    await new ExperimentalS3IntentGraphStorage(options).save(graph);
-    const reloaded = await new ExperimentalS3IntentGraphStorage(options).load();
+    await new S3IntentGraphStorage(options).save(graph);
+    const reloaded = await new S3IntentGraphStorage(options).load();
     expect(JSON.parse(reloaded?.toJson() ?? "{}")).toEqual(before);
   });
 
@@ -502,15 +502,15 @@ describe("ExperimentalS3IntentGraphStorage", () => {
       transport,
     };
     const { IntentGraph: IG } = await import("./index.js");
-    await new ExperimentalS3IntentGraphStorage(options).save(IG.fromJson(graphJson(1)));
+    await new S3IntentGraphStorage(options).save(IG.fromJson(graphJson(1)));
 
-    const blind = new ExperimentalS3IntentGraphStorage(options); // never load()ed
+    const blind = new S3IntentGraphStorage(options); // never load()ed
     await expect(blind.save(IG.fromJson(graphJson(2)))).rejects.toThrow(StaleIntentGraphError);
   });
 
   it("skips the PUT when rev is unchanged since the last save", async () => {
     const transport = fakeTransport();
-    const storage = new ExperimentalS3IntentGraphStorage({
+    const storage = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",
@@ -559,7 +559,7 @@ describe("ExperimentalS3IntentGraphStorage", () => {
         return { status: 200, headers: { etag: `"etag-${etagCounter}"` }, body: "" };
       },
     };
-    const storage = new ExperimentalS3IntentGraphStorage({
+    const storage = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",
@@ -593,8 +593,8 @@ describe("ExperimentalS3IntentGraphStorage", () => {
       transport,
     };
     const { IntentGraph } = await import("./index.js");
-    const writerA = new ExperimentalS3IntentGraphStorage(options);
-    const writerB = new ExperimentalS3IntentGraphStorage(options);
+    const writerA = new S3IntentGraphStorage(options);
+    const writerB = new S3IntentGraphStorage(options);
 
     await writerA.save(IntentGraph.fromJson(graphJson(1)));
     await writerB.load(); // B observes rev 1 / the current etag
@@ -608,7 +608,7 @@ describe("ExperimentalS3IntentGraphStorage", () => {
 
   it("labels the stored object application/json, and signs that header", async () => {
     const transport = fakeTransport();
-    const storage = new ExperimentalS3IntentGraphStorage({
+    const storage = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",
@@ -648,7 +648,7 @@ describe("ExperimentalS3IntentGraphStorage", () => {
           "</Error>",
       })),
     };
-    const storage = new ExperimentalS3IntentGraphStorage({
+    const storage = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",
@@ -674,7 +674,7 @@ describe("ExperimentalS3IntentGraphStorage", () => {
             },
       ),
     };
-    const storage = new ExperimentalS3IntentGraphStorage({
+    const storage = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",
@@ -691,7 +691,7 @@ describe("ExperimentalS3IntentGraphStorage", () => {
     const transport: S3Transport = {
       send: vi.fn(async () => ({ status: 500, headers: {}, body: "Internal Server Error" })),
     };
-    const storage = new ExperimentalS3IntentGraphStorage({
+    const storage = new S3IntentGraphStorage({
       bucket: "my-bucket",
       key: "intent-graph.json",
       region: "us-east-1",

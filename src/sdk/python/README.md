@@ -25,11 +25,11 @@ Semantic and hybrid retrieval use a configurable embedding model ([ADR 0012](../
 
 Hybrid fuses the two arms on normalised scores ([ADR 0024](../../../docs/adr/0024-hybrid-fuses-on-scores.md)). `experimental_dense_weight` (default `0.7`) sets how much of that score the semantic arm carries, with BM25 taking the remainder — `0` is pure lexical, `1` pure dense, and anything outside `[0, 1]` raises rather than being clamped. The default was measured on catalogs of natural-language descriptions; a catalog keyed on exact identifiers, error codes, or internal jargon gives BM25 purchase those corpora do not have and will want a lower value. It is read by `"hybrid"` only and does not scale the adaptive-ranking arm.
 
-Adaptive ranking's `IntentGraph` ([ADR 0014](../../../docs/adr/0014-adaptive-usage-ranking.md)) is host-persisted: core only offers `to_json()`/`from_json()`/`rev`. `ExperimentalLocalFileIntentGraphStorage` and `ExperimentalS3IntentGraphStorage` ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)) are the two ready-made backends — both implement `async load() -> IntentGraph | None` / `async save(graph) -> None`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` instead of clobbering a concurrent writer. The S3 backend needs no `boto3` dependency; it signs requests with a built-in SigV4 client:
+Adaptive ranking's `IntentGraph` ([ADR 0014](../../../docs/adr/0014-adaptive-usage-ranking.md)) is host-persisted: core only offers `to_json()`/`from_json()`/`rev`. `LocalFileIntentGraphStorage` and `S3IntentGraphStorage` ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)) are the two ready-made backends — both implement `async load() -> IntentGraph | None` / `async save(graph) -> None`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` instead of clobbering a concurrent writer. The S3 backend needs no `boto3` dependency; it signs requests with a built-in SigV4 client:
 
 ```python
 catalog = ToolCatalog()
-storage = ExperimentalS3IntentGraphStorage(bucket="my-bucket", key="intent-graph.json")
+storage = S3IntentGraphStorage(bucket="my-bucket", key="intent-graph.json")
 graph = await storage.load() or IntentGraph()
 catalog.experimental_enable_adaptive_ranking(graph)
 # ...later, e.g. on an interval...
@@ -39,7 +39,7 @@ await storage.save(graph)
 For MinIO or another self-hosted S3-compatible service, pass `endpoint`; `force_path_style` defaults to `True` once `endpoint` is set (what MinIO and most self-hosted services require):
 
 ```python
-ExperimentalS3IntentGraphStorage(
+S3IntentGraphStorage(
     bucket="my-bucket", key="intent-graph.json", endpoint="http://localhost:9000"
 )
 ```

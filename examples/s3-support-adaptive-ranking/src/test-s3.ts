@@ -2,7 +2,7 @@
 // Run: RATEL_S3_TEST_BUCKET=my-bucket ./src/test-s3.ts
 import assert from "node:assert/strict";
 import {
-  ExperimentalS3IntentGraphStorage,
+  S3IntentGraphStorage,
   IntentGraph,
   StaleIntentGraphError,
 } from "@ratel-ai/sdk";
@@ -24,7 +24,7 @@ const forcePathStyle =
 const graph = (rev: number) =>
   IntentGraph.fromJson(JSON.stringify({ v: 1, built_from_ts: Date.now(), rev, intents: [] }));
 const storage = () =>
-  new ExperimentalS3IntentGraphStorage({ bucket, key, region, endpoint, forcePathStyle });
+  new S3IntentGraphStorage({ bucket, key, region, endpoint, forcePathStyle });
 
 async function main() {
   const initial = storage();

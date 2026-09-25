@@ -19,9 +19,9 @@ import pytest
 from ratel_ai import ExecutableTool, IntentGraph, ToolCatalog
 from ratel_ai._sigv4 import resolve_s3_endpoint, sign_s3_request
 from ratel_ai.intent_graph_storage import (
-    ExperimentalLocalFileIntentGraphStorage,
-    ExperimentalS3IntentGraphStorage,
-    ExperimentalS3IntentGraphStorageCredentials,
+    LocalFileIntentGraphStorage,
+    S3IntentGraphStorage,
+    S3IntentGraphStorageCredentials,
     S3Request,
     S3Response,
     StaleIntentGraphError,
@@ -60,24 +60,24 @@ async def _use_it(catalog: ToolCatalog, query: str, chosen: str) -> None:
     await catalog.invoke(chosen, {})
 
 
-class TestExperimentalLocalFileIntentGraphStorage:
+class TestLocalFileIntentGraphStorage:
     async def test_load_returns_none_when_file_does_not_exist(self, tmp_path: Path) -> None:
-        storage = ExperimentalLocalFileIntentGraphStorage(tmp_path / "intent-graph.json")
+        storage = LocalFileIntentGraphStorage(tmp_path / "intent-graph.json")
         assert await storage.load() is None
 
     async def test_round_trips_a_saved_graph_preserving_rev(self, tmp_path: Path) -> None:
         path = tmp_path / "intent-graph.json"
-        storage = ExperimentalLocalFileIntentGraphStorage(path)
+        storage = LocalFileIntentGraphStorage(path)
         await storage.save(IntentGraph.from_json(_graph_json(3)))
 
-        other = ExperimentalLocalFileIntentGraphStorage(path)
+        other = LocalFileIntentGraphStorage(path)
         loaded = await other.load()
         assert loaded is not None
         assert loaded.rev == 3
 
     async def test_writes_atomically_leaving_no_temp_file_behind(self, tmp_path: Path) -> None:
         path = tmp_path / "intent-graph.json"
-        storage = ExperimentalLocalFileIntentGraphStorage(path)
+        storage = LocalFileIntentGraphStorage(path)
         await storage.save(IntentGraph.from_json(_graph_json(1)))
 
         assert json.loads(path.read_text())["rev"] == 1
@@ -85,7 +85,7 @@ class TestExperimentalLocalFileIntentGraphStorage:
 
     async def test_skips_write_when_rev_unchanged_since_last_save(self, tmp_path: Path) -> None:
         path = tmp_path / "intent-graph.json"
-        storage = ExperimentalLocalFileIntentGraphStorage(path)
+        storage = LocalFileIntentGraphStorage(path)
         graph = IntentGraph.from_json(_graph_json(5))
         await storage.save(graph)
         first_mtime = path.stat().st_mtime_ns
@@ -111,8 +111,8 @@ class TestExperimentalLocalFileIntentGraphStorage:
         assert before["intents"][0]["tools"]
 
         path = tmp_path / "intent-graph.json"
-        await ExperimentalLocalFileIntentGraphStorage(path).save(graph)
-        reloaded = await ExperimentalLocalFileIntentGraphStorage(path).load()
+        await LocalFileIntentGraphStorage(path).save(graph)
+        reloaded = await LocalFileIntentGraphStorage(path).load()
         assert reloaded is not None
         assert json.loads(reloaded.to_json()) == before
 
@@ -150,16 +150,16 @@ class TestExperimentalLocalFileIntentGraphStorage:
             """
             import asyncio, json, sys
             from ratel_ai import IntentGraph
-            from ratel_ai.intent_graph_storage import ExperimentalLocalFileIntentGraphStorage
+            from ratel_ai.intent_graph_storage import LocalFileIntentGraphStorage
 
             path, graph_json = sys.argv[1], sys.argv[2]
             expected = json.loads(graph_json)["intents"][0]["members"]
 
             async def main() -> None:
-                await ExperimentalLocalFileIntentGraphStorage(path).save(
+                await LocalFileIntentGraphStorage(path).save(
                     IntentGraph.from_json(graph_json)
                 )
-                reloaded = await ExperimentalLocalFileIntentGraphStorage(path).load()
+                reloaded = await LocalFileIntentGraphStorage(path).load()
                 assert reloaded is not None
                 members = json.loads(reloaded.to_json())["intents"][0]["members"]
                 assert members == expected, "round trip lost the query text"
@@ -188,7 +188,7 @@ class TestExperimentalLocalFileIntentGraphStorage:
 
     async def test_writes_the_graph_0600(self, tmp_path: Path) -> None:
         path = tmp_path / "intent-graph.json"
-        storage = ExperimentalLocalFileIntentGraphStorage(path)
+        storage = LocalFileIntentGraphStorage(path)
         await storage.save(IntentGraph.from_json(_graph_json(1)))
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
@@ -196,16 +196,16 @@ class TestExperimentalLocalFileIntentGraphStorage:
         self, tmp_path: Path
     ) -> None:
         path = tmp_path / "intent-graph.json"
-        writer1 = ExperimentalLocalFileIntentGraphStorage(path)
+        writer1 = LocalFileIntentGraphStorage(path)
         await writer1.save(IntentGraph.from_json(_graph_json(1)))
 
-        reader = ExperimentalLocalFileIntentGraphStorage(path)
+        reader = LocalFileIntentGraphStorage(path)
         loaded = await reader.load()
         assert loaded is not None
         assert loaded.rev == 1
 
         # Someone else loads the current graph and advances it on disk.
-        writer2 = ExperimentalLocalFileIntentGraphStorage(path)
+        writer2 = LocalFileIntentGraphStorage(path)
         await writer2.load()
         await writer2.save(IntentGraph.from_json(_graph_json(2)))
 
@@ -218,10 +218,10 @@ class TestExperimentalLocalFileIntentGraphStorage:
         self, tmp_path: Path
     ) -> None:
         path = tmp_path / "intent-graph.json"
-        writer1 = ExperimentalLocalFileIntentGraphStorage(path)
+        writer1 = LocalFileIntentGraphStorage(path)
         await writer1.save(IntentGraph.from_json(_graph_json(1)))
 
-        blind_writer = ExperimentalLocalFileIntentGraphStorage(path)
+        blind_writer = LocalFileIntentGraphStorage(path)
         with pytest.raises(StaleIntentGraphError):
             await blind_writer.save(IntentGraph.from_json(_graph_json(1)))
 
@@ -434,15 +434,15 @@ class _FixedResponseS3Transport:
         return response
 
 
-_CREDENTIALS = ExperimentalS3IntentGraphStorageCredentials(
+_CREDENTIALS = S3IntentGraphStorageCredentials(
     access_key_id="AKIA", secret_access_key="secret"
 )
 
 
-class TestExperimentalS3IntentGraphStorage:
+class TestS3IntentGraphStorage:
     async def test_load_returns_none_when_object_does_not_exist(self) -> None:
         transport = _FakeS3Transport()
-        storage = ExperimentalS3IntentGraphStorage(
+        storage = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
@@ -452,7 +452,7 @@ class TestExperimentalS3IntentGraphStorage:
 
     async def test_round_trips_a_saved_graph_through_the_fake_transport(self) -> None:
         transport = _FakeS3Transport()
-        storage = ExperimentalS3IntentGraphStorage(
+        storage = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
@@ -460,7 +460,7 @@ class TestExperimentalS3IntentGraphStorage:
         )
         await storage.save(IntentGraph.from_json(_graph_json(7)))
 
-        other = ExperimentalS3IntentGraphStorage(
+        other = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
@@ -480,8 +480,8 @@ class TestExperimentalS3IntentGraphStorage:
 
         transport = _FakeS3Transport()
         options = dict(bucket="my-bucket", key="intent-graph.json", credentials=_CREDENTIALS)
-        await ExperimentalS3IntentGraphStorage(**options, transport=transport).save(graph)
-        reloaded = await ExperimentalS3IntentGraphStorage(**options, transport=transport).load()
+        await S3IntentGraphStorage(**options, transport=transport).save(graph)
+        reloaded = await S3IntentGraphStorage(**options, transport=transport).load()
         assert reloaded is not None
         assert json.loads(reloaded.to_json()) == before
 
@@ -491,17 +491,17 @@ class TestExperimentalS3IntentGraphStorage:
         # a populated store, so the branch never executes.
         transport = _FakeS3Transport()
         options = dict(bucket="my-bucket", key="intent-graph.json", credentials=_CREDENTIALS)
-        await ExperimentalS3IntentGraphStorage(**options, transport=transport).save(
+        await S3IntentGraphStorage(**options, transport=transport).save(
             IntentGraph.from_json(_graph_json(1))
         )
 
-        blind = ExperimentalS3IntentGraphStorage(**options, transport=transport)
+        blind = S3IntentGraphStorage(**options, transport=transport)
         with pytest.raises(StaleIntentGraphError):
             await blind.save(IntentGraph.from_json(_graph_json(2)))
 
     async def test_skips_put_when_rev_unchanged_since_last_save(self) -> None:
         transport = _FakeS3Transport()
-        storage = ExperimentalS3IntentGraphStorage(
+        storage = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
@@ -517,8 +517,8 @@ class TestExperimentalS3IntentGraphStorage:
     async def test_raises_stale_error_on_conditional_write_412(self) -> None:
         transport = _FakeS3Transport()
         options = dict(bucket="my-bucket", key="intent-graph.json", credentials=_CREDENTIALS)
-        writer_a = ExperimentalS3IntentGraphStorage(**options, transport=transport)
-        writer_b = ExperimentalS3IntentGraphStorage(**options, transport=transport)
+        writer_a = S3IntentGraphStorage(**options, transport=transport)
+        writer_b = S3IntentGraphStorage(**options, transport=transport)
 
         await writer_a.save(IntentGraph.from_json(_graph_json(1)))
         await writer_b.load()  # B observes rev 1 / the current etag
@@ -557,7 +557,7 @@ class TestExperimentalS3IntentGraphStorage:
                     status=200, headers={"etag": f'"etag-{state["etag"]}"'}, body=""
                 )
 
-        storage = ExperimentalS3IntentGraphStorage(
+        storage = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
@@ -582,7 +582,7 @@ class TestExperimentalS3IntentGraphStorage:
 
     async def test_labels_the_stored_object_application_json(self) -> None:
         transport = _FakeS3Transport()
-        storage = ExperimentalS3IntentGraphStorage(
+        storage = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
@@ -617,7 +617,7 @@ class TestExperimentalS3IntentGraphStorage:
                 ),
             )
         )
-        storage = ExperimentalS3IntentGraphStorage(
+        storage = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
@@ -642,7 +642,7 @@ class TestExperimentalS3IntentGraphStorage:
                 ),
             ),
         )
-        storage = ExperimentalS3IntentGraphStorage(
+        storage = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
@@ -655,7 +655,7 @@ class TestExperimentalS3IntentGraphStorage:
         transport = _FixedResponseS3Transport(
             S3Response(status=500, headers={}, body="Internal Server Error")
         )
-        storage = ExperimentalS3IntentGraphStorage(
+        storage = S3IntentGraphStorage(
             bucket="my-bucket",
             key="intent-graph.json",
             credentials=_CREDENTIALS,
