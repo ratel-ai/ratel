@@ -148,6 +148,27 @@ const [hit] = catalog.search("What is the weather in Rome?", 1);
 console.log(await catalog.invoke(hit.toolId, { city: "Rome" }));
 ```
 
+### `turnId`
+
+`search` and `invoke` both take a trailing `turnId`. Mint **one per user message** and reuse it
+for every search and invoke that message produces — including a turn that searches several times
+for several subtasks. The `search_capabilities` capability tool forwards its executor's third
+argument as the turn id, so a framework adapter passes one per model turn.
+
+It scopes, it does not attribute: within a turn, an invoke is paired with the search that actually
+returned that capability, so several searches before any invoke each keep their own evidence
+(ADR-0014). What the id buys is separation — two conversations sharing one catalog must not pair
+each other's searches and invokes. Omit it and every caller shares a single scope, which is fine
+for one conversation at a time and wrong for concurrent ones.
+
+```ts
+const turnId = crypto.randomUUID();
+catalog.search("read issues on github", 5, "agent", undefined, turnId);
+catalog.search("create linear task", 5, "agent", undefined, turnId);
+await catalog.invoke("read_github_issues", {}, undefined, turnId); // pairs with the first
+await catalog.invoke("create_linear_task", {}, undefined, turnId); // pairs with the second
+```
+
 ## Framework adapters
 
 To work in a host framework's native tool and message shapes, adapt the core with a

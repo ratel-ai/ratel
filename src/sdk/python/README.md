@@ -92,6 +92,26 @@ async def main():
 asyncio.run(main())
 ```
 
+### `turn_id`
+
+`search` / `search_async` and `invoke` all take a trailing `turn_id`. Mint **one per user
+message** and reuse it for every search and invoke that message produces — including a turn that
+searches several times for several subtasks.
+
+It scopes, it does not attribute: within a turn, an invoke is paired with the search that actually
+returned that capability, so several searches before any invoke each keep their own evidence
+(ADR-0014). What the id buys is separation — two conversations sharing one catalog must not pair
+each other's searches and invokes. Omit it and every caller shares a single scope, which is fine
+for one conversation at a time and wrong for concurrent ones.
+
+```python
+turn_id = str(uuid.uuid4())
+await catalog.search_async("read issues on github", 5, "agent", turn_id=turn_id)
+await catalog.search_async("create linear task", 5, "agent", turn_id=turn_id)
+await catalog.invoke("read_github_issues", {}, turn_id)  # pairs with the first
+await catalog.invoke("create_linear_task", {}, turn_id)  # pairs with the second
+```
+
 Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel/tree/main/examples/pydantic-ai).
 
 ## Runtime events and catalog snapshots

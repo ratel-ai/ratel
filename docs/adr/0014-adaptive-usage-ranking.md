@@ -34,6 +34,15 @@ Amended 2026-08-27: a cluster **records what its searches surfaced** — see [Im
 recorded, not consumed](#impressions-are-recorded-not-consumed). Edges still come from
 invocations only; the decision below is unchanged and nothing reads the new map.
 
+Amended 2026-09-25: **the attribution unit is the search, not the turn.** `turn_id` bounds which
+searches an invoke may attribute to; *which* one it attributes to is decided by what each search
+returned. A turn keeps every search it made, and an invoke pairs with the newest one that offered
+the invoked capability — see [The pairing rule exists once](#where-learning-happens). Three
+consequences: an invoke no search in the turn offered records nothing; a search that ranked nothing
+(a baseline capture) can still be credited, because coverage unknown is not coverage empty; and two
+searches in one turn that are both acted on are two observations, where a single slot made them one
+and discarded the first query entirely.
+
 Amended 2026-09-07: the `CreditSlot`/`PendingQuery` single-slot posture accepted below for
 concurrent same-text sessions is closed for callers who opt in. `TraceEventContext` and
 `TraceEnvelope` gained an optional `turn_id`, distinct from the trace-*stream* `session_id` fixed
@@ -274,9 +283,15 @@ and none of that is expressible in `tools`. It is also the evidence the misranki
 investigation's row #6 asks for, and the loop it names (search → nothing → create, which teaches
 `create_task` and unteaches nothing) is invisible without it.
 
-**Nothing consumes it.** The arm's order is still `tools` scaled by inverse cluster frequency.
-An id in `surfaced` with no entry in `tools` has no edge, contributes nothing, and cannot be
-promoted — pinned by a test, beside the one pinning that retrieval never becomes an edge.
+**Nothing consumed it when this was written; ranking does now** (amended 2026-09-25). The arm's
+order is `tools` scaled by inverse cluster frequency **and by a passed-over factor**,
+`(invoked + 3) / (surfaced + 3)` clamped at 1 — so an impression can only ever damp, never
+promote, and a cluster with no impressions reads exactly 1 and is unchanged. An id in `surfaced`
+with no entry in `tools` still has no edge, contributes nothing, and cannot be promoted — pinned
+by a test, beside the one pinning that retrieval never becomes an edge. The two open questions
+below were answered by the shipped design: position bias is handled by counting only the ids
+ranked **at or above** the invoked one, and the smoothing prior is what stops a single refusal
+from halving an edge.
 
 **This does not reverse "edges come from invocations, never from retrievals."** That decision
 rejects promoting a retrieved id to evidence, and it still holds: recording how often an
@@ -285,16 +300,19 @@ The distinction is load-bearing, because the objection to the rejected design �
 memorizes the ranker's own output and reinforces it — inverts here: an impression can only ever
 count *against* a tool the ranker surfaced.
 
-Ranking on it is a separate decision, deliberately not taken, and two things must be answered
-first. **Position bias**: a tool ranked first is invoked more for being first, so the ratio
-partly measures where we ranked it, and feeding that back is circular; the standard mitigation
-counts only impressions above the invoked item's rank, which is untried here. And **it may not
-address the failure it was proposed for**: where a tool is genuinely dominant its ratio stays
-high, so this guards against riding on volume, not against a real majority.
+Ranking on it was a separate decision, taken later and shipped, once the two open questions had
+answers. **Position bias**: a tool ranked first is invoked more for being first, so a raw ratio
+partly measures where we ranked it, and feeding that back is circular; the mitigation named here
+as untried is the one that shipped — only the ids at or above the invoked one count as
+considered, so a result nobody read is never counted as refused. And **it may not address the
+failure it was proposed for**: still true, and accepted — where a tool is genuinely dominant its
+ratio stays high, so this guards against riding on volume, not against a real majority.
 
 Recorded with the same wire treatment as `seeded_support` — optional, absent means none, no
-version bump — and marked PROVENANCE ONLY in `protocol/v1`, so a consumer that does not
-understand it ignores it and one that does may not rank on it.
+version bump. [`protocol/v1`](../../protocol/v1/README.md)'s rule is unchanged and still holds
+under damping: an id present in an impression map and absent from the matching edge map has no
+edge and a consumer MUST NOT promote it. Damping only ever moves a capability down, so reading
+these to rank does not reach for that rule.
 
 ### Embedding-model changes
 
@@ -416,9 +434,27 @@ inspect it, and only then enable ranking.**
   members apart again. Boundaries and edges are untouched, and a cluster that over-merged then
   covers any specific query poorly, so it stops boosting broadly. Re-clustering outright means
   replaying the trace log through `build_intent_graph`, or dropping the graph and relearning.
-- **The pairing rule exists once.** The live learner and the offline replay share one
-  `classify` step. They differ only in which id keys the pending-state map: the live path
-  keys by `turn_id` (2026-09-07 amendment), a replay keys by `session_id` — because a log
+- **A turn is a scope; a search is the unit** (2026-09-25 amendment). The graph clusters
+  *queries* into intents, so the thing an invoke is evidence about is a search, not a turn — and
+  one user message routinely contains several searches for several subtasks. A turn therefore
+  keeps every search it made, newest last and capped, and an invoke attributes to the **newest
+  window that offered the invoked capability**. Failing that, to the newest that ranked nothing
+  for that capability kind: a baseline capture serves no retrieval (`top_k: 0, hits: []`), and a
+  kind nobody searched is equally unranked, so neither can rule the invoke out on content.
+  Failing both, **nothing is recorded** — the agent reached past everything retrieval offered, so
+  there is no query this is evidence about, which is what "an invoke with no search before it
+  proves nothing" already said for the empty case. Emptiness is judged per kind, never per
+  window, or a tool invoke in a skill-only turn would stop pairing.
+
+  What the single slot did instead was not merely misfile: the earlier search was *discarded*, so
+  its query never became a member and no later search of that wording could match it. The
+  per-turn `PendingQuery` and `CreditSlot` had the same shape and the same fault, both silent —
+  the first dropped the earlier query's vector (lexical clustering on the dense tier), the second
+  disarmed its credit (the edge landed, the support bump did not, invisible while support was 0).
+- **The pairing rule exists twice, and must move together.** The live learner and the offline
+  replay share one `classify` step but hold their own pending state, so this rule is written in
+  both and nothing but a test keeps them in step. They differ in which id keys that state: the
+  live path keys by `turn_id` (2026-09-07 amendment), a replay keys by `session_id` — because a log
   interleaves sessions by construction and a single key would cross-pair them, while the
   live path has a session id available only after envelope-wrapping, downstream of where the
   learner runs. Replay walks the log in **its own order, never re-sorted**: file order is
