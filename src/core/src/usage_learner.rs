@@ -11,10 +11,14 @@
 //! learner needs no new plumbing — it decorates whatever sink is already
 //! installed and forwards every event untouched.
 //!
-//! **Pairing is keyed by `turn_id`.** [`crate::trace::TraceEventContext::turn_id`]
-//! is a caller-supplied id correlating one logical turn's search with the
-//! invoke(s) that confirm it — distinct from the trace-*stream* `session_id`
-//! fixed at sink construction. A learner shared by multiple concurrent
+//! **`turn_id` is the scope; the search is the unit.**
+//! [`crate::trace::TraceEventContext::turn_id`] is a caller-supplied id naming
+//! one logical turn — distinct from the trace-*stream* `session_id` fixed at
+//! sink construction. It bounds *which* searches an invoke may attribute to;
+//! **which one it actually attributes to is decided by what each search
+//! returned**, not by which arrived last. One message routinely contains
+//! several searches for several subtasks, and the tool the agent calls belongs
+//! to whichever of them offered it. A learner shared by multiple concurrent
 //! sessions stays correct as long as each supplies its own `turn_id`. A
 //! caller that never supplies one shares the one `None` slot, reproducing the
 //! original single-slot behavior — including its cross-session collisions —
@@ -26,18 +30,31 @@
 //! # What counts as evidence
 //!
 //! ```text
-//! Search{query}      → remembered as this session's pending query
-//! InvokeStart{tool}  → paired with it → one confirmed observation
+//! Search{query, hits}  → opens a window in this turn
+//! InvokeStart{tool}    → the newest window that OFFERED that tool
+//!                        → one confirmed observation
 //! ```
 //!
 //! Only **invocations** become edges. What retrieval *returned* is the ranker's
 //! own guess; recording it would teach the graph what it already believes and
 //! reinforce its mistakes. A search nobody acts on teaches nothing and is
-//! dropped.
+//! dropped. So are the hits — except as the denominator that decides *which*
+//! search an invoke belongs to, and as impressions once it does.
 //!
-//! A pending query survives until the next search replaces it, so an agent that
-//! searches once and invokes three tools records three observations — that is
-//! genuinely what happened.
+//! A window stays open after it is used, so an agent that searches once and
+//! invokes three tools records three observations — that is genuinely what
+//! happened. Windows are never replaced, only retired past a cap: an earlier
+//! search whose tool is used later must still be there to receive the credit,
+//! or its query is lost and no future search of that wording can match it.
+//!
+//! An invoke that **no** window offered records nothing. The agent reached past
+//! everything retrieval put in front of it, so there is no query this is
+//! evidence about — the same reasoning as an invoke with no search before it.
+//! A search that ranked nothing is the exception: a baseline capture serves no
+//! retrieval (`top_k: 0, hits: []`), and coverage unknown is not coverage
+//! empty, so it cannot rule an invoke out. Emptiness is judged per capability
+//! kind — a skill search leaves the tool slot unranked, and a tool invoke in
+//! that turn must still pair.
 //!
 //! # How far a cluster reaches
 //!
@@ -98,7 +115,25 @@ impl Pending {
             Capability::Skill => &mut self.skills,
         }
     }
+
+    /// [`Self::slot`] for the attribution scan, which only reads.
+    fn slot_ref(&self, kind: Capability) -> &Surfaced {
+        match kind {
+            Capability::Tool => &self.tools,
+            Capability::Skill => &self.skills,
+        }
+    }
 }
+
+/// Distinct searches kept per turn, newest last. Past this the oldest is
+/// dropped and an invoke it would have owned records nothing rather than
+/// landing on a survivor — a turn that issues more than this many distinct
+/// queries before invoking anything has attribution we cannot recover anyway.
+///
+/// Small on purpose: [`UsageLearner::confirm`] scans these under a `Mutex` on
+/// the invoke path, and each window holds up to `top_k` ids per capability
+/// kind.
+const WINDOW_CAP: usize = 4;
 
 /// The ids a caller plausibly *considered*, given which one they took: every id
 /// ranked at or above it, inclusive.
@@ -295,8 +330,7 @@ pub(crate) fn replay_log_into(
     embeddings: &HashMap<String, Vec<f32>>,
     fingerprint: Option<&str>,
 ) {
-    // (session id, turn key) -> (the query its next invoke attributes to,
-    // already credited).
+    // (session id, turn key) -> the turn's open search windows, newest last.
     //
     // The credit is tracked HERE rather than through [`IntentGraph::arm_credit`]
     // / [`claim_credit`]. That slot is global and keyed by query text, which is
@@ -324,7 +358,19 @@ pub(crate) fn replay_log_into(
         skills: (Vec<&'a str>, bool),
     }
 
-    let mut pending: HashMap<(&str, Option<&str>), Window<'_>> = HashMap::new();
+    /// The `Pending::slot_ref` of the replay path's own window type.
+    fn slot_of<'w, 'a>(window: &'w Window<'a>, kind: Capability) -> &'w (Vec<&'a str>, bool) {
+        match kind {
+            Capability::Tool => &window.tools,
+            Capability::Skill => &window.skills,
+        }
+    }
+
+    // A list per key, newest last, for the same reason the live path keeps one:
+    // an invoke attributes to the search that OFFERED it, which is not always
+    // the latest. Capped like the live path so a turn that never invokes cannot
+    // grow without bound.
+    let mut pending: HashMap<(&str, Option<&str>), Vec<Window<'_>>> = HashMap::new();
 
     for env in envelopes {
         let session = env.session_id.as_str();
@@ -345,13 +391,19 @@ pub(crate) fn replay_log_into(
                 // credits once. Each fills its OWN slot — one slot would let the
                 // skill search's ids overwrite the tool search's and land in the
                 // wrong map.
-                let entry = pending.entry(key).or_default();
-                if entry.query != query {
-                    *entry = Window {
+                let windows = pending.entry(key).or_default();
+                if windows.last().is_none_or(|w| w.query != query) {
+                    windows.push(Window {
                         query,
                         ..Window::default()
-                    };
+                    });
+                    if windows.len() > WINDOW_CAP {
+                        windows.remove(0);
+                    }
                 }
+                let Some(entry) = windows.last_mut() else {
+                    continue;
+                };
                 entry.credited = false;
                 match kind {
                     Capability::Tool => entry.tools = (surfaced, false),
@@ -363,9 +415,21 @@ pub(crate) fn replay_log_into(
             Step::Ignore => continue,
         };
 
-        let Some(entry) = pending.get_mut(&key) else {
+        let Some(windows) = pending.get_mut(&key) else {
             continue; // an invoke with no accepted search before it proves nothing
         };
+        // Same two-pass rule as the live path: the newest window that offered
+        // this id, else the newest that ranked nothing for this kind (a baseline
+        // capture serves no retrieval, so it cannot rule the invoke out), else
+        // nothing at all.
+        let picked = windows
+            .iter()
+            .rposition(|w| slot_of(w, kind).0.contains(&capability_id))
+            .or_else(|| windows.iter().rposition(|w| slot_of(w, kind).0.is_empty()));
+        let Some(picked) = picked else {
+            continue; // no search in this turn offered it
+        };
+        let entry = &mut windows[picked];
         if entry.query.is_empty() {
             continue; // a slot created by `or_default` that no search ever filled
         }
@@ -473,10 +537,12 @@ fn accepts(policy: ObservationPolicy, origin: Origin) -> bool {
 pub struct UsageLearner {
     inner: Arc<dyn TraceSink>,
     graph: Arc<RwLock<IntentGraph>>,
-    /// The most recent search per pending turn, awaiting an invoke to confirm
-    /// it. Keyed by `turn_id` (see the module doc); callers that never supply
-    /// one share the one `None` slot.
-    pending: Mutex<BoundedMap<Pending>>,
+    /// The turn's searches, newest last, awaiting invokes to confirm them.
+    /// Keyed by `turn_id` (see the module doc); callers that never supply one
+    /// share the one `None` slot. A list rather than a slot because an invoke
+    /// attributes to the search that *offered* it, which is not always the
+    /// latest — see [`Self::confirm`].
+    pending: Mutex<BoundedMap<Vec<Pending>>>,
     policy: ObservationPolicy,
 }
 
@@ -534,22 +600,31 @@ impl UsageLearner {
             // A capability search reaches this learner twice — once as a
             // `Search` and once as a `SkillSearch`, same text — so the second
             // must fill its own slot rather than replace the window.
-            let same_question = pending.get(turn_key).is_some_and(|p| p.query == query);
-            if !same_question {
-                pending.insert(
-                    turn_key,
-                    Pending {
+            //
+            // Insert only when the key is absent: `BoundedMap::insert` does not
+            // refresh FIFO order for a key it already holds, so writing a fresh
+            // `Vec` over a live turn would wipe its windows.
+            if pending.get(turn_key).is_none() {
+                pending.insert(turn_key, Vec::new());
+            }
+            if let Some(windows) = pending.get_mut(turn_key) {
+                let same_question = windows.last().is_some_and(|p| p.query == query);
+                if !same_question {
+                    windows.push(Pending {
                         query: query.to_string(),
                         tools: Surfaced::default(),
                         skills: Surfaced::default(),
-                    },
-                );
-            }
-            if let Some(p) = pending.get_mut(turn_key) {
-                *p.slot(kind) = Surfaced {
-                    ids: surfaced.iter().map(|id| (*id).to_string()).collect(),
-                    counted: false,
-                };
+                    });
+                    if windows.len() > WINDOW_CAP {
+                        windows.remove(0);
+                    }
+                }
+                if let Some(p) = windows.last_mut() {
+                    *p.slot(kind) = Surfaced {
+                        ids: surfaced.iter().map(|id| (*id).to_string()).collect(),
+                        counted: false,
+                    };
+                }
             }
         }
         if let Ok(graph) = self.graph.read() {
@@ -557,7 +632,20 @@ impl UsageLearner {
         }
     }
 
-    /// Pair `capability_id` with the query pending under `turn_key`, if any.
+    /// Pair `capability_id` with the search in `turn_key` that **offered** it.
+    ///
+    /// Newest first, take the window whose hits for this capability kind contain
+    /// the invoked id. Failing that, the newest window that recorded no hits for
+    /// this kind: a baseline capture serves no retrieval and so ranks nothing
+    /// (`top_k: 0, hits: []`), and a kind nobody searched is equally unranked —
+    /// neither can rule the invoke out on content, so neither may be skipped.
+    /// Failing both, nothing is recorded: the agent reached past everything we
+    /// put in front of it, which is not evidence about any query we have. That
+    /// generalises "an invoke with no search before it proves nothing" from
+    /// "no search" to "no search that offered it".
+    ///
+    /// Emptiness is per **kind**, never per window — a skill search leaves the
+    /// tool slot unranked, and a tool invoke in that turn must still pair.
     ///
     /// Best-effort throughout: trace events are observations, so a poisoned lock
     /// or a missing pending query drops the evidence rather than disturbing the
@@ -566,9 +654,21 @@ impl UsageLearner {
         let Ok(mut pending) = self.pending.lock() else {
             return;
         };
-        let Some(entry) = pending.get_mut(turn_key) else {
+        let Some(windows) = pending.get_mut(turn_key) else {
             return; // an invoke with no search before it proves nothing
         };
+        let picked = windows
+            .iter()
+            .rposition(|w| w.slot_ref(kind).ids.iter().any(|id| id == capability_id))
+            .or_else(|| {
+                windows
+                    .iter()
+                    .rposition(|w| w.slot_ref(kind).ids.is_empty())
+            });
+        let Some(picked) = picked else {
+            return; // no search in this turn offered it
+        };
+        let entry = &mut windows[picked];
         let query = entry.query.clone();
         // Impressions belong to the search, not to each invoke that follows it
         // (one search and three invokes is three edges but one impression each),
@@ -735,26 +835,25 @@ mod tests {
     #[test]
     fn what_retrieval_returned_never_becomes_an_edge() {
         // The central rule (ADR-0014): only invocations are evidence. This search
-        // reports `docker_build` as its top hit and the user invokes something
-        // else — the graph must learn the invoke, not the hit.
+        // reports `docker_build` at the top and `gh_run_list` below it, and the
+        // agent takes the lower one — the graph must learn the invoke, not the
+        // hit. `docker_build` is surfaced, so it is a denominator, never an edge.
+        //
+        // The invoked id has to be IN the hit list for this to be a statement
+        // about edges at all: an invoke no window offered records nothing, which
+        // `an_invoke_no_search_in_the_turn_offered_records_nothing` covers.
         let (l, graph) = learner();
-        l.record(TraceEvent::Search {
-            query: "why is the build broken".into(),
-            origin: Origin::Agent,
-            top_k: 5,
-            hits: vec![crate::trace::SearchHitTrace {
-                tool_id: "docker_build".into(),
-                score: 9.9,
-            }],
-            stages: Vec::new(),
-            took_ms: 0,
-        });
+        l.record(search_showing(
+            "why is the build broken",
+            &["docker_build", "gh_run_list"],
+        ));
         l.record(invoke("gh_run_list"));
 
         let g = graph.read().unwrap();
         assert_eq!(
             g.intents[0].tools.keys().collect::<Vec<_>>(),
-            vec!["gh_run_list"]
+            vec!["gh_run_list"],
+            "the top hit was surfaced, not invoked, so it has no edge"
         );
     }
 
@@ -836,10 +935,13 @@ mod tests {
     /// edge-only assertion once passed while a count silently tripled.
     #[test]
     fn one_search_and_three_invokes_count_one_impression_each() {
+        // All three invoked ids are in the hit list: this test is about the
+        // impression/edge split, not about attribution, and an invoke outside
+        // every window now records nothing.
         let (l, graph) = learner();
         l.record(search_showing(
             "why is the build broken",
-            &["a", "b", "gh_run_list"],
+            &["a", "b", "gh_run_list", "gh_run_view", "read_file"],
         ));
         l.record(invoke("gh_run_list"));
         l.record(invoke("gh_run_view"));
@@ -910,9 +1012,10 @@ mod tests {
     }
 
     /// An invoke of something the search never returned proves nothing about
-    /// what it did return, so the window stays open for one that did.
+    /// what it did return — and, since no window offered it, nothing at all.
+    /// The window stays open for an invoke that did come from the list.
     #[test]
-    fn an_invoke_outside_the_surfaced_list_counts_no_impressions() {
+    fn an_invoke_outside_the_surfaced_list_leaves_the_window_open() {
         let (l, graph) = learner();
         l.record(search_showing(
             "why is the build broken",
@@ -922,10 +1025,9 @@ mod tests {
         {
             let g = graph.read().unwrap();
             assert!(
-                g.intents[0].surfaced_tools.is_empty(),
-                "nothing was passed over"
+                g.is_empty(),
+                "the search did not offer it, so there is nothing to attribute"
             );
-            assert!(g.intents[0].tools.contains_key("something_else"));
         }
         l.record(invoke("gh_run_list"));
         let g = graph.read().unwrap();
@@ -1148,6 +1250,205 @@ mod tests {
             offline.intents[0].support,
             live.read().unwrap().intents[0].support,
             "replay must credit the same number of observations as live learning"
+        );
+    }
+
+    // ---- attribution: which search in the turn an invoke belongs to ---------
+
+    #[test]
+    fn an_invoke_is_credited_to_the_search_that_offered_it_not_the_latest() {
+        // The bug this rule exists for. An agent answering one message searches
+        // twice before acting — two subtasks, not a reformulation — and then
+        // invokes a tool the FIRST search found. Crediting the pending query
+        // would teach "create linear task -> read_github_issues" and lose
+        // "read issues on github" entirely: it never becomes a member, so no
+        // future search of that wording can match it.
+        let (l, graph) = learner();
+        l.record(search_showing(
+            "read issues on github",
+            &["read_github_issues", "github_search"],
+        ));
+        l.record(search_showing(
+            "create linear task",
+            &["create_linear_task", "linear_list_teams"],
+        ));
+        l.record(invoke("read_github_issues"));
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.len(), 1, "one invoke, one observation");
+        assert!(
+            g.intents[0]
+                .members
+                .contains(&"read issues on github".to_string()),
+            "the search that surfaced the tool is the one that earned the member"
+        );
+        assert_eq!(
+            g.intents[0].tools.keys().collect::<Vec<_>>(),
+            vec!["read_github_issues"]
+        );
+    }
+
+    #[test]
+    fn an_invoke_no_search_in_the_turn_offered_records_nothing() {
+        // Every window surfaced something, and none of it was this. The agent
+        // reached past what retrieval put in front of it — from memory, or from
+        // a turn we have already evicted — so there is no query to attribute to.
+        // Generalises `an_invoke_with_no_preceding_search_teaches_nothing`.
+        let (l, graph) = learner();
+        l.record(search_showing(
+            "read issues on github",
+            &["read_github_issues"],
+        ));
+        l.record(search_showing(
+            "create linear task",
+            &["create_linear_task"],
+        ));
+        l.record(invoke("something_else_entirely"));
+
+        assert_eq!(
+            graph.read().unwrap().rev(),
+            0,
+            "an invoke outside every window is not evidence"
+        );
+    }
+
+    #[test]
+    fn the_newest_window_wins_when_several_offered_the_same_tool() {
+        // Both searches really did surface it, so either is defensible; take the
+        // most recent, which is the one the agent had just read.
+        let (l, graph) = learner();
+        l.record(search_showing(
+            "list github issues",
+            &["read_github_issues"],
+        ));
+        l.record(search_showing(
+            "read issues on github",
+            &["read_github_issues"],
+        ));
+        l.record(invoke("read_github_issues"));
+
+        let g = graph.read().unwrap();
+        assert!(
+            g.intents[0]
+                .members
+                .contains(&"read issues on github".to_string()),
+            "the newest search that offered it"
+        );
+    }
+
+    #[test]
+    fn a_search_that_recorded_no_hits_can_still_be_credited() {
+        // Coverage unknown, not coverage empty. A baseline capture emits
+        // `top_k: 0, hits: []` because Ratel served no retrieval for that turn,
+        // so nothing about it can exclude the invoked tool. Without this the
+        // whole seeding path (ADR-0014) silently learns nothing.
+        let (l, graph) = learner();
+        l.record(search_showing("why is the build broken", &[]));
+        l.record(invoke("gh_run_list"));
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.len(), 1, "an unranked search still pairs");
+        assert_eq!(g.intents[0].tools.get("gh_run_list"), Some(&1.0));
+    }
+
+    #[test]
+    fn a_window_with_hits_does_not_shadow_an_earlier_unranked_one() {
+        // Mixed turn: a baseline-style search with no ranking, then a real one
+        // that surfaced something else. The invoke belongs to neither by
+        // content, but the unranked window cannot rule itself out, so it takes
+        // it rather than the turn teaching nothing.
+        let (l, graph) = learner();
+        l.record(search_showing("why is the build broken", &[]));
+        l.record(search_showing("read a file", &["read_file"]));
+        l.record(invoke("gh_run_list"));
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.len(), 1);
+        assert!(
+            g.intents[0]
+                .members
+                .contains(&"why is the build broken".to_string())
+        );
+    }
+
+    #[test]
+    fn crediting_an_earlier_window_still_earns_its_support_bump() {
+        // The credit slot is armed per search, and a second search must not
+        // disarm the first. Attributing to the earlier window and then failing
+        // to claim its credit would add the edge and skip the support bump —
+        // invisible on a fresh cluster, because `observe` bumps anyway while
+        // support is 0. So the cluster has to exist first: this replays the
+        // same question once to seed it, then buries it behind a later search.
+        let (l, graph) = learner();
+        l.record(search_showing(
+            "read issues on github",
+            &["read_github_issues"],
+        ));
+        l.record(invoke("read_github_issues"));
+        assert_eq!(graph.read().unwrap().intents[0].support, 1, "seeded");
+
+        l.record(search_showing(
+            "read issues on github",
+            &["read_github_issues"],
+        ));
+        l.record(search_showing(
+            "create linear task",
+            &["create_linear_task"],
+        ));
+        l.record(invoke("read_github_issues"));
+
+        let g = graph.read().unwrap();
+        assert_eq!(
+            g.intents[0].support, 2,
+            "a second real search of the same question counts twice"
+        );
+    }
+
+    #[test]
+    fn an_earlier_windows_impressions_are_counted_when_it_is_credited() {
+        // Impressions follow the window that was credited, not the newest one.
+        // `Intent`'s equality ignores `surfaced`, so the live/replay parity
+        // tests cannot see this — assert it directly.
+        let (l, graph) = learner();
+        l.record(search_showing(
+            "read issues on github",
+            &["github_search", "read_github_issues"],
+        ));
+        l.record(search_showing(
+            "create linear task",
+            &["create_linear_task"],
+        ));
+        l.record(invoke("read_github_issues"));
+
+        let g = graph.read().unwrap();
+        let it = &g.intents[0];
+        assert_eq!(
+            it.surfaced_tools.get("github_search"),
+            Some(&1),
+            "ranked above the invoked id in the window that earned the credit"
+        );
+        assert_eq!(it.surfaced_tools.get("create_linear_task"), None);
+    }
+
+    #[test]
+    fn a_turn_keeps_only_the_most_recent_windows() {
+        // Past the cap the oldest window is dropped. An invoke it would have
+        // owned then falls through to "record nothing" rather than landing on
+        // whichever window happens to still be there.
+        let (l, graph) = learner();
+        l.record(search_showing("first question", &["first_tool"]));
+        for i in 0..WINDOW_CAP {
+            l.record(search_showing(
+                &format!("question {i}"),
+                &[&format!("tool_{i}")],
+            ));
+        }
+        l.record(invoke("first_tool"));
+
+        assert_eq!(
+            graph.read().unwrap().rev(),
+            0,
+            "the evicted window must not be replaced by a guess"
         );
     }
 

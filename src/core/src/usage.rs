@@ -572,8 +572,12 @@ const GRAPH_VERSION: u32 = 1;
 /// here are the same graph. It lives on [`IntentGraph`] because the search path
 /// and the learner share nothing else, and it is a `Mutex` so the search path
 /// can write it while holding only a read lock.
+/// One stashed query vector: the query it belongs to, the vector, and the
+/// fingerprint of the model that produced it.
+type StashedVector = (String, Vec<f32>, String);
+
 #[derive(Debug, Default)]
-struct PendingQuery(Mutex<BoundedMap<(String, Vec<f32>, String)>>);
+struct PendingQuery(Mutex<BoundedMap<Vec<StashedVector>>>);
 
 impl Clone for PendingQuery {
     /// A clone starts empty: a half-finished search is not worth copying.
@@ -588,13 +592,35 @@ impl PartialEq for PendingQuery {
     }
 }
 
+/// Query vectors kept per turn, newest last. Smaller than
+/// [`crate::usage_learner::WINDOW_CAP`] on purpose: an embedding is 1.5–4 KB
+/// against a window's handful of ids, and a missing vector only drops one
+/// observation to lexical clustering — it never corrupts anything.
+const VECTOR_CAP: usize = 2;
+
 impl PendingQuery {
     fn set(&self, turn_key: Option<&str>, query: &str, vector: &[f32], fingerprint: &str) {
         if let Ok(mut slots) = self.0.lock() {
-            slots.insert(
-                turn_key,
-                (query.to_string(), vector.to_vec(), fingerprint.to_string()),
-            );
+            // Insert only when absent: `BoundedMap::insert` does not refresh
+            // FIFO order for a key it already holds, so a fresh `Vec` here
+            // would drop the turn's other vectors.
+            if slots.get(turn_key).is_none() {
+                slots.insert(turn_key, Vec::new());
+            }
+            let Some(entries) = slots.get_mut(turn_key) else {
+                return;
+            };
+            // Replace in place for text already stashed: one fanned-out question
+            // reaches the tool and skill registries separately with the same
+            // query, and two copies of a vector is pure waste.
+            if let Some(slot) = entries.iter_mut().find(|(q, _, _)| q == query) {
+                *slot = (query.to_string(), vector.to_vec(), fingerprint.to_string());
+                return;
+            }
+            entries.push((query.to_string(), vector.to_vec(), fingerprint.to_string()));
+            if entries.len() > VECTOR_CAP {
+                entries.remove(0);
+            }
         }
     }
 
@@ -603,16 +629,20 @@ impl PendingQuery {
     /// may follow one search, and each needs to see it.
     ///
     /// Keyed by `turn_key` first, so concurrent turns with distinct keys never
-    /// clobber each other. Callers that share `None` (never opted in) keep the
-    /// pre-`turn_id` behavior: a concurrent search can overwrite that one slot,
-    /// and the query-text check below degrades the clobbered read to lexical
-    /// clustering rather than attaching another turn's embedding.
+    /// clobber each other, then matched on the query text — a turn holds one
+    /// entry per recent query, because an invoke attributes to the search that
+    /// offered it, which is not always the latest. Callers that share `None`
+    /// (never opted in) keep the pre-`turn_id` behavior: a concurrent search
+    /// from another turn lands in the same list, and the text match below
+    /// declines it rather than attaching that turn's embedding.
     fn vector_for(&self, turn_key: Option<&str>, query: &str) -> Option<(Vec<f32>, String)> {
         let slots = self.0.lock().ok()?;
-        match slots.get(turn_key) {
-            Some((q, v, fp)) if q == query => Some((v.clone(), fp.clone())),
-            _ => None,
-        }
+        slots
+            .get(turn_key)?
+            .iter()
+            .rev()
+            .find(|(q, _, _)| q == query)
+            .map(|(_, v, fp)| (v.clone(), fp.clone()))
     }
 }
 
@@ -632,7 +662,12 @@ impl PendingQuery {
 /// that from two concurrent same-text sessions — which then share the slot
 /// and credit once, an accepted under-count for opting out.
 #[derive(Debug, Default)]
-struct CreditSlot(Mutex<BoundedMap<(String, bool)>>);
+struct CreditSlot(Mutex<BoundedMap<Vec<(String, bool)>>>);
+
+/// Questions kept armed per turn, newest last. Matches
+/// [`crate::usage_learner::WINDOW_CAP`]: a question whose window is gone can no
+/// longer be attributed to, so its credit is dead weight.
+const CREDIT_CAP: usize = 4;
 
 impl Clone for CreditSlot {
     fn clone(&self) -> Self {
@@ -651,23 +686,48 @@ impl CreditSlot {
     /// search; re-arming the same key with the same text before any invoke is
     /// idempotent, so a fanned-out capability search still yields a single
     /// credit.
+    ///
+    /// A turn holds one entry per recent query rather than one slot, because an
+    /// invoke attributes to the search that offered it — which is not always the
+    /// latest. A single slot let a second search disarm the first, so an invoke
+    /// correctly attributed to the earlier query then failed to claim it and the
+    /// cluster took the edge without the support bump.
     fn arm(&self, turn_key: Option<&str>, query: &str) {
         if let Ok(mut slots) = self.0.lock() {
-            slots.insert(turn_key, (query.to_string(), false));
+            // Insert only when absent — see `PendingQuery::set`.
+            if slots.get(turn_key).is_none() {
+                slots.insert(turn_key, Vec::new());
+            }
+            let Some(entries) = slots.get_mut(turn_key) else {
+                return;
+            };
+            // Re-arming the same text resets its credit, as the single-slot
+            // insert did: two real searches of one question should count twice.
+            if let Some(entry) = entries.iter_mut().find(|(q, _)| q == query) {
+                entry.1 = false;
+                return;
+            }
+            entries.push((query.to_string(), false));
+            if entries.len() > CREDIT_CAP {
+                entries.remove(0);
+            }
         }
     }
 
     /// `true` for the first invoke of an armed `(turn_key, query)` — and marks
     /// it claimed so later invokes of the same question (a tool *and* a skill)
-    /// do not re-credit. A slot clobbered by another turn sharing `turn_key`
-    /// (only possible under `None`) reads as "not first" rather than crediting
-    /// the wrong question.
+    /// do not re-credit. A question armed by another turn sharing `turn_key`
+    /// (only possible under `None`) does not match on text, so it reads as
+    /// "not first" rather than crediting the wrong question.
     fn claim(&self, turn_key: Option<&str>, query: &str) -> bool {
         let Ok(mut slots) = self.0.lock() else {
             return false;
         };
-        match slots.get_mut(turn_key) {
-            Some((q, credited)) if q == query && !*credited => {
+        let Some(entries) = slots.get_mut(turn_key) else {
+            return false;
+        };
+        match entries.iter_mut().rev().find(|(q, _)| q == query) {
+            Some((_, credited)) if !*credited => {
                 *credited = true;
                 true
             }
@@ -3738,6 +3798,37 @@ mod tests {
             .is_some(),
             "a reloaded graph must still match"
         );
+    }
+
+    #[test]
+    fn a_turn_keeps_a_vector_per_query_not_just_the_latest() {
+        // A turn may hold several open searches, and an invoke attributes to
+        // whichever one offered the tool — not always the newest. With one
+        // vector per turn the older query's embedding was already gone by then,
+        // `vector_for`'s text check declined the newer one, and the observation
+        // silently dropped to lexical clustering: no centroid, on the very path
+        // adaptive ranking exists to serve.
+        let v1 = [1.0f32, 0.0, 0.0];
+        let v2 = [0.0f32, 1.0, 0.0];
+        let mut g = IntentGraph::empty();
+        g.note_query_vector(Some("turn-1"), "read issues on github", &v1, "m");
+        g.note_query_vector(Some("turn-1"), "create linear task", &v2, "m");
+        g.observe(Observation {
+            turn_key: Some("turn-1"),
+            query: "read issues on github",
+            kind: Capability::Tool,
+            capability_id: "read_github_issues",
+            ts_ms: T0,
+            first_confirmation: true,
+            seeded: false,
+            surfaced: &[],
+        });
+
+        assert!(
+            g.intents[0].centroid.is_some(),
+            "the earlier query's vector must survive a later search in its turn"
+        );
+        assert_eq!(g.model.as_deref(), Some("m"));
     }
 
     #[test]
