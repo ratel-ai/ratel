@@ -37,11 +37,14 @@ invocations only; the decision below is unchanged and nothing reads the new map.
 Amended 2026-09-25: **the attribution unit is the search, not the turn.** `turn_id` bounds which
 searches an invoke may attribute to; *which* one it attributes to is decided by what each search
 returned. A turn keeps every search it made, and an invoke pairs with the newest one that offered
-the invoked capability — see [The pairing rule exists once](#where-learning-happens). Three
-consequences: an invoke no search in the turn offered records nothing; a search that ranked nothing
-(a baseline capture) can still be credited, because coverage unknown is not coverage empty; and two
-searches in one turn that are both acted on are two observations, where a single slot made them one
-and discarded the first query entirely.
+the invoked capability — see [A turn is a scope; a search is the unit](#where-learning-happens).
+Three consequences: a search that ranked nothing (a baseline capture) can still be credited,
+because coverage unknown is not coverage empty; an invoke that *no* search offered still credits
+the newest query, because "retrieval missed and the agent went elsewhere" is the observation that
+repairs a miss, not noise to discard; and two searches in one turn that are both acted on are two
+observations, where a single slot made them one and discarded the first query entirely.
+Multi-window attribution is what supplying a `turn_id` buys: without one there is no turn
+boundary, so that scope keeps a single window and is unchanged.
 
 Amended 2026-09-07: the `CreditSlot`/`PendingQuery` single-slot posture accepted below for
 concurrent same-text sessions is closed for callers who opt in. `TraceEventContext` and
@@ -441,10 +444,22 @@ inspect it, and only then enable ranking.**
   window that offered the invoked capability**. Failing that, to the newest that ranked nothing
   for that capability kind: a baseline capture serves no retrieval (`top_k: 0, hits: []`), and a
   kind nobody searched is equally unranked, so neither can rule the invoke out on content.
-  Failing both, **nothing is recorded** — the agent reached past everything retrieval offered, so
-  there is no query this is evidence about, which is what "an invoke with no search before it
-  proves nothing" already said for the empty case. Emptiness is judged per kind, never per
-  window, or a tool invoke in a skill-only turn would stop pairing.
+  Failing both, to the newest window. Emptiness is judged per kind, never per window, or a tool
+  invoke in a skill-only turn would stop pairing.
+
+  **Dropping the unoffered invoke was tried and rejected on evidence.** It reads as the tidy rule —
+  the agent reached past everything retrieval offered, so attribute nothing — but it discards the
+  single most valuable observation the arm can get: retrieval missed, and *this* is what the query
+  wanted. That edge is how a miss gets repaired; without it the arm can only reinforce what
+  retrieval already surfaces, which inverts why this ADR exists. Measured on Kestral's 400
+  calibration turns, where 10% invoke a tool BM25 did not return, dropping cost 4.6% relative
+  nDCG@5 (0.592 → 0.565) and cut improved turns from 54 to 36. The fallback is a guess only when a
+  turn has several windows and none offered the id; with one window it is not a guess at all.
+
+  **A turn id is what buys multi-window attribution.** A caller that supplies none has no turn
+  boundary — every search the process makes shares the single `None` scope — so that scope keeps
+  one window and behaves exactly as it did before, rather than letting an invoke reach back into
+  an unrelated earlier turn. Same opt-in shape `turn_id` already had for cross-session pairing.
 
   What the single slot did instead was not merely misfile: the earlier search was *discarded*, so
   its query never became a member and no later search of that wording could match it. The

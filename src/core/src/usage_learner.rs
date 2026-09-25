@@ -47,14 +47,20 @@
 //! search whose tool is used later must still be there to receive the credit,
 //! or its query is lost and no future search of that wording can match it.
 //!
-//! An invoke that **no** window offered records nothing. The agent reached past
-//! everything retrieval put in front of it, so there is no query this is
-//! evidence about — the same reasoning as an invoke with no search before it.
-//! A search that ranked nothing is the exception: a baseline capture serves no
-//! retrieval (`top_k: 0, hits: []`), and coverage unknown is not coverage
-//! empty, so it cannot rule an invoke out. Emptiness is judged per capability
-//! kind — a skill search leaves the tool slot unranked, and a tool invoke in
-//! that turn must still pair.
+//! A search that ranked nothing cannot rule an invoke out: a baseline capture
+//! serves no retrieval (`top_k: 0, hits: []`), and coverage unknown is not
+//! coverage empty. Emptiness is judged per capability kind — a skill search
+//! leaves the tool slot unranked, and a tool invoke in that turn must still
+//! pair. And an invoke **no** window offered still attributes, to the newest:
+//! it says retrieval missed, which is the observation that repairs a miss.
+//! Dropping it would leave the usage arm able only to reinforce what retrieval
+//! already surfaces.
+//!
+//! **Multi-window attribution is what supplying a `turn_id` buys.** Without one
+//! there is no turn boundary — every search a process makes shares the single
+//! `None` scope — so that scope keeps one window and behaves exactly as it did
+//! before windows existed, rather than letting an invoke reach back into an
+//! unrelated earlier turn.
 //!
 //! # How far a cluster reaches
 //!
@@ -397,7 +403,12 @@ pub(crate) fn replay_log_into(
                         query,
                         ..Window::default()
                     });
-                    if windows.len() > WINDOW_CAP {
+                    // One window when the log carries no turn id, matching the
+                    // live path: without a turn boundary every search in the
+                    // session shares one scope, and a list there would let an
+                    // invoke reach back into an unrelated earlier turn.
+                    let cap = if turn_key.is_some() { WINDOW_CAP } else { 1 };
+                    while windows.len() > cap {
                         windows.remove(0);
                     }
                 }
@@ -418,16 +429,19 @@ pub(crate) fn replay_log_into(
         let Some(windows) = pending.get_mut(&key) else {
             continue; // an invoke with no accepted search before it proves nothing
         };
-        // Same two-pass rule as the live path: the newest window that offered
-        // this id, else the newest that ranked nothing for this kind (a baseline
-        // capture serves no retrieval, so it cannot rule the invoke out), else
-        // nothing at all.
+        // The same rule as the live path, and it must stay the same: the newest
+        // window that offered this id, else the newest that ranked nothing for
+        // this kind (a baseline capture serves no retrieval, so it cannot rule
+        // the invoke out), else the newest window — an invoke of something no
+        // search returned says retrieval missed, which is the observation that
+        // repairs the miss.
         let picked = windows
             .iter()
             .rposition(|w| slot_of(w, kind).0.contains(&capability_id))
-            .or_else(|| windows.iter().rposition(|w| slot_of(w, kind).0.is_empty()));
+            .or_else(|| windows.iter().rposition(|w| slot_of(w, kind).0.is_empty()))
+            .or(windows.len().checked_sub(1));
         let Some(picked) = picked else {
-            continue; // no search in this turn offered it
+            continue; // no search in this turn at all
         };
         let entry = &mut windows[picked];
         if entry.query.is_empty() {
@@ -607,6 +621,13 @@ impl UsageLearner {
             if pending.get(turn_key).is_none() {
                 pending.insert(turn_key, Vec::new());
             }
+            // A caller that supplies no `turn_id` has no turn boundary to hold
+            // windows within: every search it ever makes shares the one `None`
+            // scope, so a list there would let an invoke reach back into an
+            // unrelated earlier turn. One window keeps that caller on exactly
+            // the pre-existing behavior — the same opt-in shape `turn_id`
+            // already has for cross-session pairing.
+            let cap = if turn_key.is_some() { WINDOW_CAP } else { 1 };
             if let Some(windows) = pending.get_mut(turn_key) {
                 let same_question = windows.last().is_some_and(|p| p.query == query);
                 if !same_question {
@@ -615,7 +636,7 @@ impl UsageLearner {
                         tools: Surfaced::default(),
                         skills: Surfaced::default(),
                     });
-                    if windows.len() > WINDOW_CAP {
+                    while windows.len() > cap {
                         windows.remove(0);
                     }
                 }
@@ -639,10 +660,17 @@ impl UsageLearner {
     /// this kind: a baseline capture serves no retrieval and so ranks nothing
     /// (`top_k: 0, hits: []`), and a kind nobody searched is equally unranked —
     /// neither can rule the invoke out on content, so neither may be skipped.
-    /// Failing both, nothing is recorded: the agent reached past everything we
-    /// put in front of it, which is not evidence about any query we have. That
-    /// generalises "an invoke with no search before it proves nothing" from
-    /// "no search" to "no search that offered it".
+    /// Failing both, the newest window — because an invoke of something no
+    /// search returned is the **most** valuable observation available, not the
+    /// least: it says retrieval missed, and teaching that query→capability edge
+    /// is how the usage arm repairs a miss. Dropping it would leave adaptive
+    /// ranking able only to reinforce what retrieval already surfaces, which is
+    /// the opposite of why it exists. Measured on Kestral's 400 calibration
+    /// turns, dropping cost 4.6% relative nDCG@5 — 10% of those turns invoke a
+    /// tool BM25 did not return.
+    ///
+    /// The fallback is a guess only when a turn has several windows and none
+    /// offered the id; with one window it is not a guess at all.
     ///
     /// Emptiness is per **kind**, never per window — a skill search leaves the
     /// tool slot unranked, and a tool invoke in that turn must still pair.
@@ -664,9 +692,10 @@ impl UsageLearner {
                 windows
                     .iter()
                     .rposition(|w| w.slot_ref(kind).ids.is_empty())
-            });
+            })
+            .or(windows.len().checked_sub(1));
         let Some(picked) = picked else {
-            return; // no search in this turn offered it
+            return; // no search in this turn at all
         };
         let entry = &mut windows[picked];
         let query = entry.query.clone();
@@ -1025,8 +1054,12 @@ mod tests {
         {
             let g = graph.read().unwrap();
             assert!(
-                g.is_empty(),
-                "the search did not offer it, so there is nothing to attribute"
+                g.intents[0].surfaced_tools.is_empty(),
+                "nothing was passed over: it was never in the list to refuse"
+            );
+            assert!(
+                g.intents[0].tools.contains_key("something_else"),
+                "retrieval missed, and the edge that says so is the point"
             );
         }
         l.record(invoke("gh_run_list"));
@@ -1255,6 +1288,29 @@ mod tests {
 
     // ---- attribution: which search in the turn an invoke belongs to ---------
 
+    /// A turn-scoped search reporting its hits. Multi-window attribution needs a
+    /// real turn id: without one there is no turn boundary, and that scope
+    /// deliberately keeps a single window.
+    fn turn_search(l: &UsageLearner, turn: &str, query: &str, hits: &[&str]) {
+        l.record_with_context(
+            search_showing(query, hits),
+            TraceEventContext {
+                turn_id: Some(turn.into()),
+                ..TraceEventContext::default()
+            },
+        );
+    }
+
+    fn turn_invoke(l: &UsageLearner, turn: &str, tool_id: &str) {
+        l.record_with_context(
+            invoke(tool_id),
+            TraceEventContext {
+                turn_id: Some(turn.into()),
+                ..TraceEventContext::default()
+            },
+        );
+    }
+
     #[test]
     fn an_invoke_is_credited_to_the_search_that_offered_it_not_the_latest() {
         // The bug this rule exists for. An agent answering one message searches
@@ -1264,15 +1320,19 @@ mod tests {
         // "read issues on github" entirely: it never becomes a member, so no
         // future search of that wording can match it.
         let (l, graph) = learner();
-        l.record(search_showing(
+        turn_search(
+            &l,
+            "t1",
             "read issues on github",
             &["read_github_issues", "github_search"],
-        ));
-        l.record(search_showing(
+        );
+        turn_search(
+            &l,
+            "t1",
             "create linear task",
             &["create_linear_task", "linear_list_teams"],
-        ));
-        l.record(invoke("read_github_issues"));
+        );
+        turn_invoke(&l, "t1", "read_github_issues");
 
         let g = graph.read().unwrap();
         assert_eq!(g.len(), 1, "one invoke, one observation");
@@ -1289,11 +1349,35 @@ mod tests {
     }
 
     #[test]
-    fn an_invoke_no_search_in_the_turn_offered_records_nothing() {
-        // Every window surfaced something, and none of it was this. The agent
-        // reached past what retrieval put in front of it — from memory, or from
-        // a turn we have already evicted — so there is no query to attribute to.
-        // Generalises `an_invoke_with_no_preceding_search_teaches_nothing`.
+    fn an_invoke_no_search_offered_still_teaches_the_newest_query() {
+        // Retrieval missed, and the agent reached past everything it returned.
+        // That is the one observation able to REPAIR a miss — teaching this
+        // query -> capability edge is why ranking on usage exists at all — so it
+        // attributes to the newest window rather than being dropped. Dropping it
+        // cost 4.6% relative nDCG@5 on Kestral's 400 calibration turns, 10% of
+        // which invoke a tool BM25 never returned.
+        let (l, graph) = learner();
+        turn_search(&l, "t1", "read issues on github", &["read_github_issues"]);
+        turn_search(&l, "t1", "create linear task", &["create_linear_task"]);
+        turn_invoke(&l, "t1", "something_else_entirely");
+
+        let g = graph.read().unwrap();
+        assert!(
+            g.intents[0]
+                .members
+                .contains(&"create linear task".to_string()),
+            "no window offered it, so the newest query takes it"
+        );
+        assert!(g.intents[0].tools.contains_key("something_else_entirely"));
+    }
+
+    #[test]
+    fn a_caller_with_no_turn_id_keeps_one_window() {
+        // Without a turn id there is no turn boundary: every search a process
+        // makes shares the one `None` scope. A list there would let an invoke
+        // reach back into an unrelated earlier turn, so that scope holds a
+        // single window and behaves exactly as it did before windows existed.
+        // Multi-search attribution is what supplying a turn id buys.
         let (l, graph) = learner();
         l.record(search_showing(
             "read issues on github",
@@ -1303,12 +1387,14 @@ mod tests {
             "create linear task",
             &["create_linear_task"],
         ));
-        l.record(invoke("something_else_entirely"));
+        l.record(invoke("read_github_issues"));
 
-        assert_eq!(
-            graph.read().unwrap().rev(),
-            0,
-            "an invoke outside every window is not evidence"
+        let g = graph.read().unwrap();
+        assert!(
+            g.intents[0]
+                .members
+                .contains(&"create linear task".to_string()),
+            "the earlier window is gone, as it always was for this caller"
         );
     }
 
@@ -1317,15 +1403,9 @@ mod tests {
         // Both searches really did surface it, so either is defensible; take the
         // most recent, which is the one the agent had just read.
         let (l, graph) = learner();
-        l.record(search_showing(
-            "list github issues",
-            &["read_github_issues"],
-        ));
-        l.record(search_showing(
-            "read issues on github",
-            &["read_github_issues"],
-        ));
-        l.record(invoke("read_github_issues"));
+        turn_search(&l, "t1", "list github issues", &["read_github_issues"]);
+        turn_search(&l, "t1", "read issues on github", &["read_github_issues"]);
+        turn_invoke(&l, "t1", "read_github_issues");
 
         let g = graph.read().unwrap();
         assert!(
@@ -1358,9 +1438,9 @@ mod tests {
         // content, but the unranked window cannot rule itself out, so it takes
         // it rather than the turn teaching nothing.
         let (l, graph) = learner();
-        l.record(search_showing("why is the build broken", &[]));
-        l.record(search_showing("read a file", &["read_file"]));
-        l.record(invoke("gh_run_list"));
+        turn_search(&l, "t1", "why is the build broken", &[]);
+        turn_search(&l, "t1", "read a file", &["read_file"]);
+        turn_invoke(&l, "t1", "gh_run_list");
 
         let g = graph.read().unwrap();
         assert_eq!(g.len(), 1);
@@ -1380,22 +1460,13 @@ mod tests {
         // support is 0. So the cluster has to exist first: this replays the
         // same question once to seed it, then buries it behind a later search.
         let (l, graph) = learner();
-        l.record(search_showing(
-            "read issues on github",
-            &["read_github_issues"],
-        ));
-        l.record(invoke("read_github_issues"));
+        turn_search(&l, "t1", "read issues on github", &["read_github_issues"]);
+        turn_invoke(&l, "t1", "read_github_issues");
         assert_eq!(graph.read().unwrap().intents[0].support, 1, "seeded");
 
-        l.record(search_showing(
-            "read issues on github",
-            &["read_github_issues"],
-        ));
-        l.record(search_showing(
-            "create linear task",
-            &["create_linear_task"],
-        ));
-        l.record(invoke("read_github_issues"));
+        turn_search(&l, "t2", "read issues on github", &["read_github_issues"]);
+        turn_search(&l, "t2", "create linear task", &["create_linear_task"]);
+        turn_invoke(&l, "t2", "read_github_issues");
 
         let g = graph.read().unwrap();
         assert_eq!(
@@ -1410,15 +1481,14 @@ mod tests {
         // `Intent`'s equality ignores `surfaced`, so the live/replay parity
         // tests cannot see this — assert it directly.
         let (l, graph) = learner();
-        l.record(search_showing(
+        turn_search(
+            &l,
+            "t1",
             "read issues on github",
             &["github_search", "read_github_issues"],
-        ));
-        l.record(search_showing(
-            "create linear task",
-            &["create_linear_task"],
-        ));
-        l.record(invoke("read_github_issues"));
+        );
+        turn_search(&l, "t1", "create linear task", &["create_linear_task"]);
+        turn_invoke(&l, "t1", "read_github_issues");
 
         let g = graph.read().unwrap();
         let it = &g.intents[0];
@@ -1432,23 +1502,28 @@ mod tests {
 
     #[test]
     fn a_turn_keeps_only_the_most_recent_windows() {
-        // Past the cap the oldest window is dropped. An invoke it would have
-        // owned then falls through to "record nothing" rather than landing on
-        // whichever window happens to still be there.
+        // Past the cap the oldest window is dropped, so the query that really
+        // offered the tool is no longer there to receive the credit — the
+        // invoke falls back to the newest window like any other unoffered one.
+        // A turn issuing this many distinct queries before invoking anything has
+        // attribution we cannot recover; the cap bounds the memory instead.
         let (l, graph) = learner();
-        l.record(search_showing("first question", &["first_tool"]));
+        turn_search(&l, "t1", "first question", &["first_tool"]);
         for i in 0..WINDOW_CAP {
-            l.record(search_showing(
-                &format!("question {i}"),
-                &[&format!("tool_{i}")],
-            ));
+            turn_search(&l, "t1", &format!("question {i}"), &[&format!("tool_{i}")]);
         }
-        l.record(invoke("first_tool"));
+        turn_invoke(&l, "t1", "first_tool");
 
-        assert_eq!(
-            graph.read().unwrap().rev(),
-            0,
-            "the evicted window must not be replaced by a guess"
+        let g = graph.read().unwrap();
+        assert!(
+            !g.intents[0].members.contains(&"first question".to_string()),
+            "the evicted window is gone"
+        );
+        assert!(
+            g.intents[0]
+                .members
+                .contains(&format!("question {}", WINDOW_CAP - 1)),
+            "the newest surviving window takes it"
         );
     }
 
