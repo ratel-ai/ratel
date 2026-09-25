@@ -116,6 +116,27 @@ scheme AWS does. TLS trust for self-signed certificates and region-string
 validation are both out of scope — pass whatever the host environment
 already trusts / the service is configured with.
 
+**Timeouts.** Both transports bound a request with an **idle clock**, default
+60s, exposed as `idleTimeoutMs` / `idle_timeout_s`. It measures time with no
+data moving, not total elapsed time, so a slow but living transfer finishes
+while a wedged endpoint is cut loose. That is botocore's `read_timeout`
+semantic and its default, reached in Python for free (`urlopen(timeout=)` is a
+socket timeout) and hand-rolled in TS, where `AbortSignal.timeout` would have
+imposed a total deadline and aborted healthy transfers. The consequence, which
+botocore shares: an endpoint that dribbles a byte inside every window is never
+cut off.
+
+Without it the failure was worse in Python than a hang: `asyncio.to_thread` is
+not cancellable, so a caller's own `asyncio.wait_for` returns while the worker
+stays blocked in `urlopen`, and `asyncio.run` then waits forever on executor
+shutdown. The process needed SIGKILL.
+
+**No retries**, deliberately, against what the AWS SDKs do. `save()` is a
+conditional write: a `PUT` that lands but whose response is lost leaves the
+retry's `If-Match` stale, so the retry raises `StaleIntentGraphError` naming a
+concurrent writer that does not exist. Since `save()` is a no-op when `rev`
+has not moved, the caller's next scheduled save is the retry.
+
 ## Consequences
 
 Non-breaking and additive: `IntentGraph`, `toJson`/`fromJson`/`rev` are

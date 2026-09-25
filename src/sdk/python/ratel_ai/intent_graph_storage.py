@@ -19,17 +19,19 @@ import asyncio
 import json
 import os
 import re
+import socket
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from ._native import IntentGraph
 from ._sigv4 import resolve_s3_endpoint, sign_s3_request
 
 __all__ = [
+    "DEFAULT_IDLE_TIMEOUT_S",
     "IntentGraphStorage",
     "LocalFileIntentGraphStorage",
     "S3IntentGraphStorage",
@@ -47,6 +49,10 @@ class StaleIntentGraphError(RuntimeError):
 
 _AWS_ERROR_CODE_RE = re.compile(r"<Code>([^<]*)</Code>")
 _AWS_ERROR_MESSAGE_RE = re.compile(r"<Message>([^<]*)</Message>")
+
+
+#: Default idle timeout, matching botocore's ``connect_timeout``/``read_timeout``.
+DEFAULT_IDLE_TIMEOUT_S = 60.0
 
 
 def _rev_of(serialized: str) -> int:
@@ -216,6 +222,10 @@ def _credentials_from_env() -> S3IntentGraphStorageCredentials:
     )
 
 
+def _idle_timeout(target: str, idle_timeout_s: float) -> TimeoutError:
+    return TimeoutError(f"S3 request to {target} timed out: no data for {idle_timeout_s}s")
+
+
 class _UrllibS3Transport:
     def __init__(
         self,
@@ -223,11 +233,13 @@ class _UrllibS3Transport:
         credentials: S3IntentGraphStorageCredentials | None,
         endpoint: str | None = None,
         force_path_style: bool | None = None,
+        idle_timeout_s: float = DEFAULT_IDLE_TIMEOUT_S,
     ) -> None:
         self._region = region
         self._credentials = credentials
         self._endpoint = endpoint
         self._force_path_style = force_path_style
+        self._idle_timeout_s = idle_timeout_s
 
     async def send(self, request: S3Request) -> S3Response:
         return await asyncio.to_thread(self._send_sync, request)
@@ -256,8 +268,17 @@ class _UrllibS3Transport:
         url = f"{target.scheme}://{target.host}{target.path}"
         data = body.encode("utf-8") if request.method == "PUT" else None
         http_request = Request(url, data=data, headers=signed.headers, method=request.method)
+        # `timeout` here is a socket timeout, so it bounds each read rather than
+        # the whole response: a slow but living transfer finishes, a wedged
+        # endpoint does not. Same clock botocore gets through urllib3, and the
+        # reason a caller's own asyncio timeout is not enough — `to_thread` is
+        # not cancellable, so a blocked `urlopen` outlives it and wedges
+        # interpreter shutdown.
+        s3_uri = f"s3://{request.bucket}/{request.key}"
         try:
-            with urlopen(http_request) as response:  # noqa: S310 - S3 REST API, https only
+            with urlopen(  # noqa: S310 - signed S3 REST call, scheme validated in _parse_endpoint
+                http_request, timeout=self._idle_timeout_s
+            ) as response:
                 response_body = response.read().decode("utf-8")
                 headers = {k.lower(): v for k, v in response.headers.items()}
                 return S3Response(status=response.status, headers=headers, body=response_body)
@@ -265,6 +286,12 @@ class _UrllibS3Transport:
             response_body = error.read().decode("utf-8")
             headers = {k.lower(): v for k, v in error.headers.items()} if error.headers else {}
             return S3Response(status=error.code, headers=headers, body=response_body)
+        except (TimeoutError, socket.timeout) as error:
+            raise _idle_timeout(s3_uri, self._idle_timeout_s) from error
+        except URLError as error:
+            if isinstance(error.reason, (TimeoutError, socket.timeout)):
+                raise _idle_timeout(s3_uri, self._idle_timeout_s) from error
+            raise
 
 
 class S3IntentGraphStorage:
@@ -286,6 +313,7 @@ class S3IntentGraphStorage:
         credentials: S3IntentGraphStorageCredentials | None = None,
         endpoint: str | None = None,
         force_path_style: bool | None = None,
+        idle_timeout_s: float = DEFAULT_IDLE_TIMEOUT_S,
         transport: S3Transport | None = None,
     ) -> None:
         """Store the graph at `s3://{bucket}/{key}` in `region`.
@@ -302,7 +330,7 @@ class S3IntentGraphStorage:
         self._bucket = bucket
         self._key = key
         self._transport: S3Transport = transport or _UrllibS3Transport(
-            region, credentials, endpoint, force_path_style
+            region, credentials, endpoint, force_path_style, idle_timeout_s
         )
         self._last_known_etag: str | None = None
         self._last_known_rev: int | None = None

@@ -203,6 +203,15 @@ export interface S3IntentGraphStorageOptions {
    * virtual-hosted style.
    */
   readonly forcePathStyle?: boolean;
+  /**
+   * Abort a request that goes this long with **no data moving** — an idle
+   * clock, not a total deadline, so a slow but living transfer still
+   * finishes. Covers the connect phase and every read, the way botocore's
+   * `connect_timeout`/`read_timeout` pair does.
+   *
+   * @default 60_000
+   */
+  readonly idleTimeoutMs?: number;
   /** Override the transport, e.g. to inject a fake for tests. Defaults to a `fetch`-based signed S3 client. */
   readonly transport?: S3Transport;
 }
@@ -219,12 +228,22 @@ function credentialsFromEnv(): S3IntentGraphStorageCredentials {
   return { accessKeyId, secretAccessKey, sessionToken: process.env.AWS_SESSION_TOKEN };
 }
 
+/** Default idle timeout, matching botocore's `connect_timeout`/`read_timeout`. */
+export const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
+
+function idleTimeoutError(target: string, idleTimeoutMs: number): Error {
+  const error = new Error(`S3 request to ${target} timed out: no data for ${idleTimeoutMs}ms`);
+  error.name = "TimeoutError";
+  return error;
+}
+
 class FetchS3Transport implements S3Transport {
   constructor(
     private readonly region: string,
     private readonly credentials: S3IntentGraphStorageCredentials | undefined,
     private readonly endpoint: string | undefined,
     private readonly forcePathStyle: boolean | undefined,
+    private readonly idleTimeoutMs: number,
   ) {}
 
   async send(request: S3Request): Promise<S3Response> {
@@ -248,18 +267,56 @@ class FetchS3Transport implements S3Transport {
       secretAccessKey: creds.secretAccessKey,
       sessionToken: creds.sessionToken,
     });
-    const response = await fetch(`${scheme}://${host}${path}`, {
-      method: request.method,
-      headers: signed.headers,
-      body: request.method === "PUT" ? body : undefined,
-    });
-    const responseBody = await response.text();
-    const headers: Record<string, string> = {};
-    response.headers.forEach((value, name) => {
-      headers[name.toLowerCase()] = value;
-    });
-    return { status: response.status, headers, body: responseBody };
+
+    // An idle clock, not a deadline: it is rearmed whenever bytes arrive, so a
+    // slow but living transfer finishes while a wedged endpoint is cut loose.
+    // That is what `read_timeout` means in botocore, and what a plain
+    // `AbortSignal.timeout` would not give us.
+    const target = `s3://${request.bucket}/${request.key}`;
+    const controller = new AbortController();
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const rearm = () => {
+      clearTimeout(idle);
+      idle = setTimeout(
+        () => controller.abort(idleTimeoutError(target, this.idleTimeoutMs)),
+        this.idleTimeoutMs,
+      );
+    };
+
+    try {
+      rearm();
+      const response = await fetch(`${scheme}://${host}${path}`, {
+        method: request.method,
+        headers: signed.headers,
+        body: request.method === "PUT" ? body : undefined,
+        signal: controller.signal,
+      });
+      rearm();
+      const responseBody = await readBody(response, rearm);
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, name) => {
+        headers[name.toLowerCase()] = value;
+      });
+      return { status: response.status, headers, body: responseBody };
+    } finally {
+      clearTimeout(idle);
+    }
   }
+}
+
+/** Drain the response, rearming the idle clock on every chunk that arrives. */
+async function readBody(response: Response, rearm: () => void): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let out = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    out += decoder.decode(value, { stream: true });
+    rearm();
+  }
+  return out + decoder.decode();
 }
 
 /**
@@ -286,6 +343,7 @@ export class S3IntentGraphStorage implements IntentGraphStorage {
         options.credentials,
         options.endpoint,
         options.forcePathStyle,
+        options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       );
   }
 

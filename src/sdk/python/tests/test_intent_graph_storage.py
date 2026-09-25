@@ -6,10 +6,14 @@ import asyncio
 import hashlib
 import json
 import os
+import socket
 import stat
 import subprocess
 import sys
 import textwrap
+import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,6 +23,7 @@ import pytest
 from ratel_ai import ExecutableTool, IntentGraph, ToolCatalog
 from ratel_ai._sigv4 import resolve_s3_endpoint, sign_s3_request
 from ratel_ai.intent_graph_storage import (
+    DEFAULT_IDLE_TIMEOUT_S,
     LocalFileIntentGraphStorage,
     S3IntentGraphStorage,
     S3IntentGraphStorageCredentials,
@@ -663,3 +668,71 @@ class TestS3IntentGraphStorage:
         )
         with pytest.raises(RuntimeError, match=r"status 500$"):
             await storage.load()
+
+class TestS3IntentGraphStorageIdleTimeout:
+    @staticmethod
+    def _serve(handle: Callable[[socket.socket], None]) -> tuple[str, socket.socket]:
+        """Listen on a loopback port, handing each accepted socket to `handle`."""
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+
+        def run() -> None:
+            try:
+                conn, _ = listener.accept()
+                with conn:
+                    handle(conn)
+            except OSError:
+                pass
+
+        threading.Thread(target=run, daemon=True).start()
+        return f"http://127.0.0.1:{listener.getsockname()[1]}", listener
+
+    @staticmethod
+    def _storage(endpoint: str, idle_timeout_s: float) -> S3IntentGraphStorage:
+        return S3IntentGraphStorage(
+            bucket="b",
+            key="k",
+            credentials=_CREDENTIALS,
+            endpoint=endpoint,
+            idle_timeout_s=idle_timeout_s,
+        )
+
+    async def test_gives_up_on_an_endpoint_that_accepts_and_says_nothing(self) -> None:
+        endpoint, listener = self._serve(lambda conn: time.sleep(30))
+        try:
+            started = time.monotonic()
+            with pytest.raises(TimeoutError, match="no data for"):
+                await self._storage(endpoint, 0.3).load()
+            assert time.monotonic() - started < 5
+        finally:
+            listener.close()
+
+    async def test_lets_a_slow_but_steady_response_finish_past_the_timeout(self) -> None:
+        # The distinguishing case: the whole response takes far longer than the
+        # timeout, but no single gap does. A total deadline would kill this.
+        graph = json.dumps({"v": 1, "built_from_ts": 0, "rev": 7, "intents": []})
+
+        def dribble(conn: socket.socket) -> None:
+            conn.recv(65536)
+            conn.sendall(
+                b"HTTP/1.1 200 OK\r\nETag: \"e1\"\r\n"
+                b"Content-Length: %d\r\nConnection: close\r\n\r\n" % len(graph)
+            )
+            for i in range(0, len(graph), 4):
+                conn.sendall(graph[i : i + 4].encode())
+                time.sleep(0.03)
+
+        endpoint, listener = self._serve(dribble)
+        try:
+            started = time.monotonic()
+            loaded = await self._storage(endpoint, 0.3).load()
+            elapsed = time.monotonic() - started
+            assert loaded is not None
+            assert loaded.rev == 7
+            assert elapsed > 0.3  # outlived the timeout while streaming
+        finally:
+            listener.close()
+
+    def test_defaults_to_botocores_60s(self) -> None:
+        assert DEFAULT_IDLE_TIMEOUT_S == 60.0

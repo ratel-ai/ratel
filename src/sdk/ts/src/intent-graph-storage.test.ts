@@ -21,6 +21,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 import { IntentGraph, ToolCatalog } from "./index.js";
 import {
+  DEFAULT_IDLE_TIMEOUT_MS,
   LocalFileIntentGraphStorage,
   S3IntentGraphStorage,
   type S3Transport,
@@ -699,5 +700,76 @@ describe("S3IntentGraphStorage", () => {
       transport,
     });
     await expect(storage.load()).rejects.toThrow(/status 500$/);
+  });
+});
+
+describe("S3IntentGraphStorage idle timeout", () => {
+  const servers: import("node:net").Server[] = [];
+
+  afterEach(() => {
+    for (const server of servers.splice(0)) server.close();
+  });
+
+  /** Listen on a loopback port, handing each raw socket to `onConnection`. */
+  async function serve(onConnection: (socket: import("node:net").Socket) => void): Promise<string> {
+    const { createServer } = await import("node:net");
+    const server = createServer(onConnection);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("no port");
+    return `http://127.0.0.1:${address.port}`;
+  }
+
+  const storageAt = (endpoint: string, idleTimeoutMs: number) =>
+    new S3IntentGraphStorage({
+      bucket: "b",
+      key: "k",
+      region: "us-east-1",
+      credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
+      endpoint,
+      idleTimeoutMs,
+    });
+
+  it("gives up on an endpoint that accepts and then says nothing", async () => {
+    const endpoint = await serve(() => {
+      /* accept, never reply */
+    });
+    const started = Date.now();
+    await expect(storageAt(endpoint, 200).load()).rejects.toThrow(/no data for 200ms/);
+    expect(Date.now() - started).toBeLessThan(3_000);
+  });
+
+  it("lets a slow but steady response finish, past the timeout", async () => {
+    // The distinguishing case: total time far exceeds the timeout, but no
+    // single gap does. A deadline (AbortSignal.timeout) would kill this; an
+    // idle clock must not.
+    const graph = JSON.stringify({ v: 1, built_from_ts: 0, rev: 7, intents: [] });
+    const endpoint = await serve((socket) => {
+      socket.write(
+        `HTTP/1.1 200 OK\r\nETag: "e1"\r\nContent-Length: ${graph.length}\r\n` +
+          `Connection: close\r\n\r\n`,
+      );
+      let sent = 0;
+      const dribble = setInterval(() => {
+        if (sent >= graph.length) {
+          clearInterval(dribble);
+          socket.end();
+          return;
+        }
+        socket.write(graph.slice(sent, sent + 4));
+        sent += 4;
+      }, 25);
+    });
+
+    const started = Date.now();
+    const loaded = await storageAt(endpoint, 200).load();
+    const elapsed = Date.now() - started;
+    expect(loaded?.rev).toBe(7);
+    expect(elapsed).toBeGreaterThan(200); // outlived the timeout while streaming
+  });
+
+  it("defaults to botocore's 60s", () => {
+    expect(DEFAULT_IDLE_TIMEOUT_MS).toBe(60_000);
   });
 });
