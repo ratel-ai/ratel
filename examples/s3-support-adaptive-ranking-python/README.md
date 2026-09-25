@@ -33,6 +33,7 @@ RATEL_S3_TEST_BUCKET=my-bucket ./test_s3.py
 | `RATEL_S3_TEST_REGION`   | no                               | `us-east-1`                       |
 | `RATEL_S3_TEST_ENDPOINT` | no                               | unset (AWS S3)                    |
 | `RATEL_S3_TEST_FORCE_PATH_STYLE` | no                       | `true` if `RATEL_S3_TEST_ENDPOINT` is set, else n/a |
+| `RATEL_S3_TEST_IDLE_TIMEOUT_S` | no                         | `60` (abort after this long with no data moving) |
 
 ### Against a local MinIO instead of AWS
 

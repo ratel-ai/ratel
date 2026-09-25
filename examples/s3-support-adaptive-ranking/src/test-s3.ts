@@ -1,11 +1,7 @@
 #!/usr/bin/env -S npx tsx
 // Run: RATEL_S3_TEST_BUCKET=my-bucket ./src/test-s3.ts
 import assert from "node:assert/strict";
-import {
-  S3IntentGraphStorage,
-  IntentGraph,
-  StaleIntentGraphError,
-} from "@ratel-ai/sdk";
+import { IntentGraph, S3IntentGraphStorage, StaleIntentGraphError } from "@ratel-ai/sdk";
 
 const rawBucket = process.env.RATEL_S3_TEST_BUCKET;
 if (!rawBucket) {
@@ -20,11 +16,14 @@ const forcePathStyle =
   process.env.RATEL_S3_TEST_FORCE_PATH_STYLE === undefined
     ? undefined
     : process.env.RATEL_S3_TEST_FORCE_PATH_STYLE !== "false";
+const idleTimeoutMs = process.env.RATEL_S3_TEST_IDLE_TIMEOUT_MS
+  ? Number(process.env.RATEL_S3_TEST_IDLE_TIMEOUT_MS)
+  : undefined;
 
 const graph = (rev: number) =>
   IntentGraph.fromJson(JSON.stringify({ v: 1, built_from_ts: Date.now(), rev, intents: [] }));
 const storage = () =>
-  new S3IntentGraphStorage({ bucket, key, region, endpoint, forcePathStyle });
+  new S3IntentGraphStorage({ bucket, key, region, endpoint, forcePathStyle, idleTimeoutMs });
 
 async function main() {
   const initial = storage();

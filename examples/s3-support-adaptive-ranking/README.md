@@ -32,6 +32,7 @@ RATEL_S3_TEST_BUCKET=my-bucket ./src/test-s3.ts
 | `RATEL_S3_TEST_REGION`     | no       | `us-east-1`                           |
 | `RATEL_S3_TEST_ENDPOINT`   | no       | unset (AWS S3)                        |
 | `RATEL_S3_TEST_FORCE_PATH_STYLE` | no | `true` if `RATEL_S3_TEST_ENDPOINT` is set, else n/a |
+| `RATEL_S3_TEST_IDLE_TIMEOUT_MS` | no | `60000` (abort after this long with no data moving) |
 
 The IAM identity needs `s3:GetObject` and `s3:PutObject` on the target key, plus `s3:ListBucket` on the bucket. `ListBucket` is what makes S3 answer a missing key with `404`; without it a missing key comes back `403`, and the first `load()` on a fresh key raises instead of returning `null`. No special bucket configuration is required — the conditional writes used for stale-write detection (`If-Match`/`If-None-Match`) need no bucket versioning.
 

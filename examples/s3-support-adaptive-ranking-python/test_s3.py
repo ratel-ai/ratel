@@ -9,7 +9,7 @@ import os
 import sys
 import time
 
-from ratel_ai import S3IntentGraphStorage, IntentGraph, StaleIntentGraphError
+from ratel_ai import IntentGraph, S3IntentGraphStorage, StaleIntentGraphError
 
 bucket = os.environ.get("RATEL_S3_TEST_BUCKET")
 if not bucket:
@@ -21,6 +21,8 @@ region = os.environ.get("RATEL_S3_TEST_REGION", "us-east-1")
 endpoint = os.environ.get("RATEL_S3_TEST_ENDPOINT")
 _force_path_style_env = os.environ.get("RATEL_S3_TEST_FORCE_PATH_STYLE")
 force_path_style = None if _force_path_style_env is None else _force_path_style_env != "false"
+_idle_timeout_env = os.environ.get("RATEL_S3_TEST_IDLE_TIMEOUT_S")
+idle_timeout_s = float(_idle_timeout_env) if _idle_timeout_env else None
 
 
 def graph(rev: int) -> IntentGraph:
@@ -36,6 +38,7 @@ def storage() -> S3IntentGraphStorage:
         region=region,
         endpoint=endpoint,
         force_path_style=force_path_style,
+        idle_timeout_s=idle_timeout_s,
     )
 
 
