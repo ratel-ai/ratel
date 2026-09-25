@@ -1,0 +1,56 @@
+version = 1
+revision = 3
+requires-python = ">=3.10"
+
+[[package]]
+name = "ratel-ai"
+version = "0.13.0rc5"
+source = { directory = "../../src/sdk/python" }
+dependencies = [
+    { name = "ratel-ai-telemetry" },
+    { name = "rfc8785" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.7,<2.0" },
+    { name = "mcp", marker = "python_full_version >= '3.10' and extra == 'dev'", specifier = ">=1.0" },
+    { name = "mcp", marker = "python_full_version >= '3.10' and extra == 'mcp'", specifier = ">=1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "ratel-ai-telemetry", specifier = ">=0.1.3" },
+    { name = "ratel-ai-telemetry", extras = ["otlp"], marker = "extra == 'otlp'", specifier = ">=0.1.3" },
+    { name = "rfc8785", specifier = ">=0.1.4,<0.2" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+]
+provides-extras = ["mcp", "otlp", "dev"]
+
+[[package]]
+name = "ratel-ai-telemetry"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/9d/73cbdc2d864a10abfa3e91e2fd1f63ec15f0ff87baad0827de8edf74b730/ratel_ai_telemetry-0.5.0.tar.gz", hash = "sha256:225ae9ceb02d0542c1022f33b8e75c0e43a7c90d17815170c38e4fe03d1d107e", size = 32739, upload-time = "2026-08-20T23:04:21.792Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/91/7ba390958d256eb861857df3ee44b3bd18b1179890d1f71f26d4c1c80a01/ratel_ai_telemetry-0.5.0-py3-none-any.whl", hash = "sha256:a1a538f49e28c5b79d9c8035f0a1c7103f43521e7fcf66d36dca0dddba6980a0", size = 20255, upload-time = "2026-08-20T23:04:20.378Z" },
+]
+
+[[package]]
+name = "ratel-example-s3-support-adaptive-ranking"
+version = "0.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "ratel-ai" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "ratel-ai", directory = "../../src/sdk/python" }]
+
+[[package]]
+name = "rfc8785"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/2f/fa1d2e740c490191b572d33dbca5daa180cb423c24396b856f5886371d8b/rfc8785-0.1.4.tar.gz", hash = "sha256:e545841329fe0eee4f6a3b44e7034343100c12b4ec566dc06ca9735681deb4da", size = 14321, upload-time = "2024-09-27T16:33:31.206Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4d/78/119878110660b2ad709888c8a1614fce7e2fab39080ab960656dc8605bf6/rfc8785-0.1.4-py3-none-any.whl", hash = "sha256:520d690b448ecf0703691c76e1a34a24ddcd4fc5bc41d589cb7c58ec651bcd48", size = 9240, upload-time = "2024-09-27T16:33:29.683Z" },
+]

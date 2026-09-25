@@ -66,6 +66,31 @@ Semantic and hybrid retrieval use a configurable embedding model ([ADR 0012](../
 
 Hybrid fuses the two arms on normalised scores ([ADR 0024](../../../docs/adr/0024-hybrid-fuses-on-scores.md)). `experimentalDenseWeight` (default `0.7`) sets how much of that score the semantic arm carries, with BM25 taking the remainder — `0` is pure lexical, `1` pure dense, and anything outside `[0, 1]` throws rather than being clamped. The default was measured on catalogs of natural-language descriptions; a catalog keyed on exact identifiers, error codes, or internal jargon gives BM25 purchase those corpora do not have and will want a lower value. It is read by `"hybrid"` only and does not scale the adaptive-ranking arm.
 
+Adaptive ranking's `IntentGraph` ([ADR 0014](../../../docs/adr/0014-adaptive-usage-ranking.md)) is host-persisted: core only offers `toJson()`/`fromJson()`/`rev`. `LocalFileIntentGraphStorage` and `S3IntentGraphStorage` ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)) are the two ready-made backends — both implement `{ load(): Promise<IntentGraph | null>; save(graph): Promise<void> }`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` instead of clobbering a concurrent writer. The S3 backend needs no `@aws-sdk/client-s3` dependency; it signs requests with a built-in SigV4 client:
+
+```ts
+const runtime = ratel();
+const storage = new S3IntentGraphStorage({ bucket: "my-bucket", key: "intent-graph.json" });
+const graph = (await storage.load()) ?? new IntentGraph();
+runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph);
+// ...later, e.g. on an interval...
+await storage.save(graph);
+```
+
+For MinIO or another self-hosted S3-compatible service, pass `endpoint`; `forcePathStyle` defaults to `true` once `endpoint` is set (what MinIO and most self-hosted services require):
+
+```ts
+new S3IntentGraphStorage({
+  bucket: "my-bucket",
+  key: "intent-graph.json",
+  endpoint: "http://localhost:9000",
+});
+```
+
+Both S3 calls are bounded by an idle timeout (`idleTimeoutMs`, default 60s): it measures time with **no data moving** rather than total elapsed time, so a slow transfer still completes but a wedged endpoint fails instead of hanging.
+
+**A stored graph carries the raw text of past user queries** (the cluster `members`), so treat it like a query or telemetry log: the file backend writes `0600` and the file belongs outside version control and images, while an S3 bucket holding one wants private access and encryption at rest. Neither backend encrypts the payload; the graph is stored as plain JSON.
+
 For semantic or hybrid retrieval, `register()` folds embedding in: it accepts one tool or a whole array and embeds on a libuv worker, so model loading, HTTP, and inference never block Node's event loop — and embedding errors surface right at `register()`:
 
 ```ts
