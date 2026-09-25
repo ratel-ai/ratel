@@ -30,6 +30,7 @@ from ratel_ai.intent_graph_storage import (
     S3Request,
     S3Response,
     StaleIntentGraphError,
+    _UrllibS3Transport,
 )
 
 
@@ -736,3 +737,13 @@ class TestS3IntentGraphStorageIdleTimeout:
 
     def test_defaults_to_botocores_60s(self) -> None:
         assert DEFAULT_IDLE_TIMEOUT_S == 60.0
+
+    async def test_none_means_the_default_like_every_other_optional(self) -> None:
+        # Mirrors TS `idleTimeoutMs?: number`, so a caller forwarding an unset
+        # config value need not branch on it.
+        storage = S3IntentGraphStorage(
+            bucket="b", key="k", credentials=_CREDENTIALS, idle_timeout_s=None
+        )
+        transport = storage._transport
+        assert isinstance(transport, _UrllibS3Transport)
+        assert transport._idle_timeout_s == DEFAULT_IDLE_TIMEOUT_S

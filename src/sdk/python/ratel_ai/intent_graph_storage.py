@@ -233,13 +233,15 @@ class _UrllibS3Transport:
         credentials: S3IntentGraphStorageCredentials | None,
         endpoint: str | None = None,
         force_path_style: bool | None = None,
-        idle_timeout_s: float = DEFAULT_IDLE_TIMEOUT_S,
+        idle_timeout_s: float | None = None,
     ) -> None:
         self._region = region
         self._credentials = credentials
         self._endpoint = endpoint
         self._force_path_style = force_path_style
-        self._idle_timeout_s = idle_timeout_s
+        self._idle_timeout_s = (
+            DEFAULT_IDLE_TIMEOUT_S if idle_timeout_s is None else idle_timeout_s
+        )
 
     async def send(self, request: S3Request) -> S3Response:
         return await asyncio.to_thread(self._send_sync, request)
@@ -313,7 +315,7 @@ class S3IntentGraphStorage:
         credentials: S3IntentGraphStorageCredentials | None = None,
         endpoint: str | None = None,
         force_path_style: bool | None = None,
-        idle_timeout_s: float = DEFAULT_IDLE_TIMEOUT_S,
+        idle_timeout_s: float | None = None,
         transport: S3Transport | None = None,
     ) -> None:
         """Store the graph at `s3://{bucket}/{key}` in `region`.
@@ -324,7 +326,9 @@ class S3IntentGraphStorage:
         omit for AWS S3. `force_path_style` defaults to `True` whenever
         `endpoint` is set (what MinIO and most self-hosted services
         require) — pass `False` for a custom endpoint that supports
-        virtual-hosted style. `transport` overrides how requests are sent —
+        virtual-hosted style. `idle_timeout_s` bounds time with no data
+        moving, not total elapsed time; `None` means the
+        60s default. `transport` overrides how requests are sent —
         inject a fake for tests.
         """
         self._bucket = bucket
