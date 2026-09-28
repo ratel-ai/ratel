@@ -1891,6 +1891,104 @@ mod tests {
     }
 
     #[test]
+    fn replay_credits_the_search_that_offered_the_tool() {
+        // The replay twin of
+        // `an_invoke_is_credited_to_the_search_that_offered_it_not_the_latest`.
+        // The rule is written twice, live and replay, and nothing but this
+        // keeps them in step: the replay path holds its own pending state, so
+        // it can regress to "credit the newest window" while every live-path
+        // test stays green. Ratel Cloud's server-side fold runs this path.
+        let mut graph = IntentGraph::empty();
+        let log = vec![
+            envelope(
+                1,
+                "s1",
+                Some("turn-a"),
+                search_showing(
+                    "read issues on github",
+                    &["read_github_issues", "github_search"],
+                ),
+            ),
+            envelope(
+                2,
+                "s1",
+                Some("turn-a"),
+                search_showing("create linear task", &["create_linear_task"]),
+            ),
+            envelope(3, "s1", Some("turn-a"), invoke("read_github_issues")),
+        ];
+
+        replay_log_into(
+            &mut graph,
+            &log,
+            ObservationPolicy::default(),
+            &HashMap::new(),
+            None,
+        );
+
+        assert_eq!(graph.len(), 1, "one invoke, one observation");
+        assert!(
+            graph.intents[0]
+                .members
+                .contains(&"read issues on github".to_string()),
+            "the earlier search surfaced the tool, so it earns the member; \
+             crediting the newest window would teach `create linear task` \
+             instead and lose this query entirely"
+        );
+        assert_eq!(
+            graph.intents[0].tools.keys().collect::<Vec<_>>(),
+            vec!["read_github_issues"]
+        );
+    }
+
+    #[test]
+    fn replay_does_not_let_a_ranked_window_shadow_an_earlier_unranked_one() {
+        // The replay twin of
+        // `a_window_with_hits_does_not_shadow_an_earlier_unranked_one`, pinning
+        // the second clause of the rule, which the test above never reaches.
+        // A baseline capture serves no retrieval (`top_k: 0, hits: []`), so it
+        // cannot rule the invoke out on content; the later search ranked
+        // something else and can. Without this clause the whole seeding path
+        // (ADR-0014) silently learns nothing on replay.
+        let mut graph = IntentGraph::empty();
+        let log = vec![
+            envelope(
+                1,
+                "s1",
+                Some("turn-a"),
+                search_showing("why is the build broken", &[]),
+            ),
+            envelope(
+                2,
+                "s1",
+                Some("turn-a"),
+                search_showing("read a file", &["read_file"]),
+            ),
+            envelope(3, "s1", Some("turn-a"), invoke("gh_run_list")),
+        ];
+
+        replay_log_into(
+            &mut graph,
+            &log,
+            ObservationPolicy::default(),
+            &HashMap::new(),
+            None,
+        );
+
+        assert_eq!(graph.len(), 1);
+        assert!(
+            graph.intents[0]
+                .members
+                .contains(&"why is the build broken".to_string()),
+            "the unranked window cannot exclude the invoke, so it takes it"
+        );
+        assert_eq!(
+            graph.intents[0].tools.keys().collect::<Vec<_>>(),
+            vec!["gh_run_list"]
+        );
+    }
+
+    #[test]
     fn pending_map_evicts_oldest_past_pending_cap() {
         let (l, graph) = learner();
         for i in 0..PENDING_CAP + 10 {
