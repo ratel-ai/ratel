@@ -592,11 +592,15 @@ impl PartialEq for PendingQuery {
     }
 }
 
-/// Query vectors kept per turn, newest last. Smaller than
-/// [`crate::usage_learner::WINDOW_CAP`] on purpose: an embedding is 1.5–4 KB
-/// against a window's handful of ids, and a missing vector only drops one
-/// observation to lexical clustering — it never corrupts anything.
-const VECTOR_CAP: usize = 2;
+/// Query vectors kept per turn, newest last. Tied to
+/// [`crate::usage_learner::WINDOW_CAP`] rather than set independently: a vector
+/// is only ever wanted by the window that holds the same query, so one that
+/// outlives its window is waste and one that dies first is a silent loss — the
+/// observation drops to lexical clustering on the dense tier, which is the
+/// failure `a_turn_keeps_a_vector_per_query_not_just_the_latest` exists to
+/// catch. An embedding is 1.5–4 KB against a window's handful of ids, so the
+/// whole turn costs at most a few tens of KB.
+const VECTOR_CAP: usize = crate::usage_learner::WINDOW_CAP;
 
 impl PendingQuery {
     fn set(&self, turn_key: Option<&str>, query: &str, vector: &[f32], fingerprint: &str) {
@@ -664,10 +668,12 @@ impl PendingQuery {
 #[derive(Debug, Default)]
 struct CreditSlot(Mutex<BoundedMap<Vec<(String, bool)>>>);
 
-/// Questions kept armed per turn, newest last. Matches
-/// [`crate::usage_learner::WINDOW_CAP`]: a question whose window is gone can no
-/// longer be attributed to, so its credit is dead weight.
-const CREDIT_CAP: usize = 4;
+/// Questions kept armed per turn, newest last. Tied to
+/// [`crate::usage_learner::WINDOW_CAP`] for the same reason as [`VECTOR_CAP`]:
+/// a question whose window is gone can no longer be attributed to, so its
+/// credit is dead weight, and one that expires first loses the support bump
+/// while the edge still lands.
+const CREDIT_CAP: usize = crate::usage_learner::WINDOW_CAP;
 
 impl Clone for CreditSlot {
     fn clone(&self) -> Self {
@@ -3829,6 +3835,41 @@ mod tests {
             "the earlier query's vector must survive a later search in its turn"
         );
         assert_eq!(g.model.as_deref(), Some("m"));
+    }
+
+    #[test]
+    fn a_vector_survives_as_long_as_the_window_that_can_claim_it() {
+        // The same failure as the test above, one window deeper. A turn holds
+        // up to `usage_learner::WINDOW_CAP` searches and an invoke can
+        // attribute to the oldest of them, so a vector must outlive exactly as
+        // many searches as a window does. Capping vectors lower left the
+        // earliest still-attributable query with no embedding, and the
+        // observation dropped silently to lexical clustering on the dense tier
+        // — no centroid, on the very path adaptive ranking exists to serve.
+        let mut g = IntentGraph::empty();
+        let first = [1.0f32, 0.0, 0.0];
+        g.note_query_vector(Some("turn-1"), "read issues on github", &first, "m");
+        // One short of the window cap, so the first query's window is still
+        // the oldest survivor and can still be credited.
+        for i in 0..crate::usage_learner::WINDOW_CAP - 1 {
+            let v = [0.0f32, 1.0, i as f32];
+            g.note_query_vector(Some("turn-1"), &format!("question {i}"), &v, "m");
+        }
+        g.observe(Observation {
+            turn_key: Some("turn-1"),
+            query: "read issues on github",
+            kind: Capability::Tool,
+            capability_id: "read_github_issues",
+            ts_ms: T0,
+            first_confirmation: true,
+            seeded: false,
+            surfaced: &[],
+        });
+
+        assert!(
+            g.intents[0].centroid.is_some(),
+            "a window that can still be credited must still have its vector"
+        );
     }
 
     #[test]

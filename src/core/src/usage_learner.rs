@@ -141,7 +141,7 @@ impl Pending {
 /// Small on purpose: [`UsageLearner::confirm`] scans these under a `Mutex` on
 /// the invoke path, and each window holds up to `top_k` ids per capability
 /// kind.
-const WINDOW_CAP: usize = 4;
+pub(crate) const WINDOW_CAP: usize = 4;
 
 /// The ids a caller plausibly *considered*, given which one they took: every id
 /// ranked at or above it, inclusive.
