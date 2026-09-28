@@ -400,18 +400,28 @@ pub(crate) fn replay_log_into(
                 // skill search's ids overwrite the tool search's and land in the
                 // wrong map.
                 let windows = pending.entry(key).or_default();
-                if windows.last().is_none_or(|w| w.query != query) {
-                    windows.push(Window {
-                        query,
-                        ..Window::default()
-                    });
-                    // One window when the log carries no turn id, matching the
-                    // live path: without a turn boundary every search in the
-                    // session shares one scope, and a list there would let an
-                    // invoke reach back into an unrelated earlier turn.
-                    let cap = if turn_key.is_some() { WINDOW_CAP } else { 1 };
-                    while windows.len() > cap {
-                        windows.remove(0);
+                // Matched across the whole turn and moved to the end, as the
+                // live path does and for the same reason: interleaved fan-out
+                // halves belong to one window, not two.
+                match windows.iter().position(|w| w.query == query) {
+                    Some(i) => {
+                        let found = windows.remove(i);
+                        windows.push(found);
+                    }
+                    None => {
+                        windows.push(Window {
+                            query,
+                            ..Window::default()
+                        });
+                        // One window when the log carries no turn id, matching
+                        // the live path: without a turn boundary every search in
+                        // the session shares one scope, and a list there would
+                        // let an invoke reach back into an unrelated earlier
+                        // turn.
+                        let cap = if turn_key.is_some() { WINDOW_CAP } else { 1 };
+                        while windows.len() > cap {
+                            windows.remove(0);
+                        }
                     }
                 }
                 let Some(entry) = windows.last_mut() else {
@@ -631,15 +641,30 @@ impl UsageLearner {
             // already has for cross-session pairing.
             let cap = if turn_key.is_some() { WINDOW_CAP } else { 1 };
             if let Some(windows) = pending.get_mut(turn_key) {
-                let same_question = windows.last().is_some_and(|p| p.query == query);
-                if !same_question {
-                    windows.push(Pending {
-                        query: query.to_string(),
-                        tools: Surfaced::default(),
-                        skills: Surfaced::default(),
-                    });
-                    while windows.len() > cap {
-                        windows.remove(0);
+                // Match the text across the WHOLE turn, not just the newest
+                // window: two capability searches running concurrently
+                // interleave their halves — S(A), S(B), SS(A), SS(B) — and
+                // matching only the newest would give each half a window of
+                // its own, so two questions fill all four slots and the tool
+                // half of the first is evicted before its invoke arrives.
+                // `PendingQuery` and `CreditSlot` already key by text.
+                //
+                // A match moves to the end, because this search IS the turn's
+                // most recent and the list is newest-last everywhere else.
+                match windows.iter().position(|p| p.query == query) {
+                    Some(i) => {
+                        let found = windows.remove(i);
+                        windows.push(found);
+                    }
+                    None => {
+                        windows.push(Pending {
+                            query: query.to_string(),
+                            tools: Surfaced::default(),
+                            skills: Surfaced::default(),
+                        });
+                        while windows.len() > cap {
+                            windows.remove(0);
+                        }
                     }
                 }
                 if let Some(p) = windows.last_mut() {
@@ -1502,6 +1527,107 @@ mod tests {
             "ranked above the invoked id in the window that earned the credit"
         );
         assert_eq!(it.surfaced_tools.get("create_linear_task"), None);
+    }
+
+    #[test]
+    fn interleaved_fanout_halves_of_one_question_share_its_window() {
+        // One capability search reaches the learner twice, as a `Search` and a
+        // `SkillSearch` with the same text. Two of them running concurrently
+        // interleave — S(A), S(B), SS(A), SS(B) — which is the shape the
+        // parallel tool calls this rule exists for actually produce. Matching
+        // only the newest window puts each half in a window of its own, so two
+        // questions burn all four slots, the tool half of the first is evicted
+        // by anything that follows, and its invoke lands on a later query: the
+        // bug this branch fixes, reintroduced through the fan-out path.
+        //
+        // `PendingQuery::set` and `CreditSlot::arm` already match on text
+        // across the whole turn; this is the third structure of the three.
+        let (l, graph) = learner();
+        turn_search(&l, "t1", "read issues on github", &["read_github_issues"]);
+        turn_search(&l, "t1", "create linear task", &["create_linear_task"]);
+        l.record_with_context(
+            skill_search_showing("read issues on github", &["gh_skill"]),
+            TraceEventContext {
+                turn_id: Some("t1".into()),
+                ..TraceEventContext::default()
+            },
+        );
+        l.record_with_context(
+            skill_search_showing("create linear task", &["linear_skill"]),
+            TraceEventContext {
+                turn_id: Some("t1".into()),
+                ..TraceEventContext::default()
+            },
+        );
+        // Two questions, so two windows — leaving room for a third search
+        // without evicting either.
+        turn_search(&l, "t1", "third question", &["third_tool"]);
+        turn_invoke(&l, "t1", "read_github_issues");
+
+        let g = graph.read().unwrap();
+        assert!(
+            g.intents[0]
+                .members
+                .contains(&"read issues on github".to_string()),
+            "the fan-out halves must share one window, or the question that \
+             offered the tool is evicted before its invoke arrives"
+        );
+    }
+
+    #[test]
+    fn replay_interleaved_fanout_halves_of_one_question_share_its_window() {
+        // The replay twin: the rule is written twice and must move together.
+        let mut graph = IntentGraph::empty();
+        let log = vec![
+            envelope(
+                1,
+                "s1",
+                Some("turn-a"),
+                search_showing("read issues on github", &["read_github_issues"]),
+            ),
+            envelope(
+                2,
+                "s1",
+                Some("turn-a"),
+                search_showing("create linear task", &["create_linear_task"]),
+            ),
+            envelope(
+                3,
+                "s1",
+                Some("turn-a"),
+                skill_search_showing("read issues on github", &["gh_skill"]),
+            ),
+            envelope(
+                4,
+                "s1",
+                Some("turn-a"),
+                skill_search_showing("create linear task", &["linear_skill"]),
+            ),
+            envelope(
+                5,
+                "s1",
+                Some("turn-a"),
+                search_showing("third question", &["third_tool"]),
+            ),
+            envelope(6, "s1", Some("turn-a"), invoke("read_github_issues")),
+        ];
+
+        replay_log_into(
+            &mut graph,
+            &log,
+            ObservationPolicy::default(),
+            &HashMap::new(),
+            None,
+        );
+
+        assert!(
+            graph
+                .intents
+                .iter()
+                .any(|i| i.members.contains(&"read issues on github".to_string())
+                    && i.tools.contains_key("read_github_issues")),
+            "replay must share the window across fan-out halves too"
+        );
     }
 
     #[test]
