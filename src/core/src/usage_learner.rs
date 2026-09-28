@@ -132,9 +132,11 @@ impl Pending {
 }
 
 /// Distinct searches kept per turn, newest last. Past this the oldest is
-/// dropped and an invoke it would have owned records nothing rather than
-/// landing on a survivor — a turn that issues more than this many distinct
-/// queries before invoking anything has attribution we cannot recover anyway.
+/// dropped, and an invoke it would have owned falls back like any other the
+/// turn's windows do not account for: to the newest window. A turn that issues
+/// more than this many distinct queries before invoking anything has
+/// attribution we cannot recover anyway, so the cap bounds the memory and the
+/// fallback absorbs the loss.
 ///
 /// Small on purpose: [`UsageLearner::confirm`] scans these under a `Mutex` on
 /// the invoke path, and each window holds up to `top_k` ids per capability
@@ -869,8 +871,9 @@ mod tests {
         // hit. `docker_build` is surfaced, so it is a denominator, never an edge.
         //
         // The invoked id has to be IN the hit list for this to be a statement
-        // about edges at all: an invoke no window offered records nothing, which
-        // `an_invoke_no_search_in_the_turn_offered_records_nothing` covers.
+        // about edges rather than about attribution: an invoke no window offered
+        // attributes to the newest window, which
+        // `an_invoke_no_search_offered_still_teaches_the_newest_query` covers.
         let (l, graph) = learner();
         l.record(search_showing(
             "why is the build broken",
@@ -964,9 +967,10 @@ mod tests {
     /// edge-only assertion once passed while a count silently tripled.
     #[test]
     fn one_search_and_three_invokes_count_one_impression_each() {
-        // All three invoked ids are in the hit list: this test is about the
-        // impression/edge split, not about attribution, and an invoke outside
-        // every window now records nothing.
+        // All three invoked ids are in the hit list, so attribution is not in
+        // play and this stays a test about the impression/edge split: an invoke
+        // outside the list would still land here, on the turn's only window, but
+        // as a retrieval miss rather than as one of its impressions.
         let (l, graph) = learner();
         l.record(search_showing(
             "why is the build broken",
