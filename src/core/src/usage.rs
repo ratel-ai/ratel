@@ -614,12 +614,14 @@ impl PendingQuery {
             let Some(entries) = slots.get_mut(turn_key) else {
                 return;
             };
-            // Replace in place for text already stashed: one fanned-out question
-            // reaches the tool and skill registries separately with the same
-            // query, and two copies of a vector is pure waste.
-            if let Some(slot) = entries.iter_mut().find(|(q, _, _)| q == query) {
-                *slot = (query.to_string(), vector.to_vec(), fingerprint.to_string());
-                return;
+            // Move text already stashed to the end rather than copying it: one
+            // fanned-out question reaches the tool and skill registries
+            // separately with the same query, and two copies of a vector is
+            // pure waste. Moving, not replacing in place, keeps eviction in step
+            // with the windows, which move a re-searched query to newest —
+            // left oldest, its vector would be evicted while its window lives.
+            if let Some(i) = entries.iter().position(|(q, _, _)| q == query) {
+                entries.remove(i);
             }
             entries.push((query.to_string(), vector.to_vec(), fingerprint.to_string()));
             if entries.len() > VECTOR_CAP {
@@ -709,9 +711,10 @@ impl CreditSlot {
             };
             // Re-arming the same text resets its credit, as the single-slot
             // insert did: two real searches of one question should count twice.
-            if let Some(entry) = entries.iter_mut().find(|(q, _)| q == query) {
-                entry.1 = false;
-                return;
+            // It also moves to the end, for the same reason as in
+            // `PendingQuery::set`: eviction must track the windows.
+            if let Some(i) = entries.iter().position(|(q, _)| q == query) {
+                entries.remove(i);
             }
             entries.push((query.to_string(), false));
             if entries.len() > CREDIT_CAP {
@@ -3869,6 +3872,34 @@ mod tests {
         assert!(
             g.intents[0].centroid.is_some(),
             "a window that can still be credited must still have its vector"
+        );
+    }
+
+    #[test]
+    fn a_repeated_query_is_evicted_in_step_with_its_window() {
+        // Re-searching a query moves its window to the newest end, so the
+        // vector and credit stores must move it too. Updating it in place left
+        // it oldest: after A, B, C, D, A, E the window for A survived while its
+        // vector and credit were evicted, and an invoke attributed to A lost
+        // both dense clustering and its support bump.
+        let g = IntentGraph::empty();
+        let turn = Some("turn-1");
+        for q in ["A", "B", "C", "D", "A", "E"] {
+            g.note_query_vector(turn, q, &[1.0, 0.0, 0.0], "m");
+            g.arm_credit(turn, q);
+        }
+
+        assert!(
+            g.pending.vector_for(turn, "A").is_some(),
+            "a re-searched query must keep its vector while its window lives"
+        );
+        assert!(
+            g.claim_credit(turn, "A"),
+            "a re-searched query must keep its credit while its window lives"
+        );
+        assert!(
+            g.pending.vector_for(turn, "B").is_none(),
+            "the oldest query is the one evicted"
         );
     }
 
