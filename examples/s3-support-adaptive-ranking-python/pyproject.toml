@@ -1,0 +1,12 @@
+[project]
+name = "ratel-example-s3-support-adaptive-ranking"
+version = "0.0.0"
+description = "Live S3 intent graph storage smoke test (real AWS, manual-only)"
+requires-python = ">=3.10"
+dependencies = [
+    "ratel-ai",
+]
+
+[tool.uv.sources]
+# Use the local SDK from this monorepo rather than PyPI.
+ratel-ai = { path = "../../src/sdk/python" }
