@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Intent graph storage plugins ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)): `LocalFileIntentGraphStorage` and `S3IntentGraphStorage`, the two ready-made backends for persisting adaptive ranking's `IntentGraph`. Both expose `load()`/`save()`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` rather than clobber a concurrent writer. The local backend writes atomically via temp file + rename at `0600`; the S3 backend uses conditional writes (`If-Match`/`If-None-Match`) and needs no `@aws-sdk/client-s3` — it signs with a built-in SigV4 client (#168)
 - `endpoint` and `forcePathStyle` on `S3IntentGraphStorage` for MinIO and other S3-compatible services; `forcePathStyle` defaults to `true` once `endpoint` is set (#168)
 - `idleTimeoutMs` (default 60s) bounds both S3 calls on an idle clock — time with no data moving, not total elapsed — so a slow transfer completes but a wedged endpoint fails instead of hanging (#168)
+- `search` / `skill_search` runtime events carry `base_hits` (the top-k without the usage arm) when an intent graph matched; it survives oversize trimming and is capped like `hits`
 
 ### Fixed
 

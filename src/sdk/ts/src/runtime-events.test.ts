@@ -111,6 +111,27 @@ describe("public runtime events", () => {
     );
   });
 
+  it("keeps base_hits through oversize trimming, capped like hits", () => {
+    const padding = Object.fromEntries(
+      Array.from({ length: 16 }, (_, index) => [
+        `padding_${index.toString().padStart(2, "0")}`,
+        "x".repeat(4_096),
+      ]),
+    );
+    const ranked = (length: number) =>
+      Array.from({ length }, (_, rank) => ({ tool_id: `tool-${rank}`, score: 1 }));
+
+    const event = deliverRuntimeEvent(
+      // base_hits precedes the padding, so it is trimmed first unless allow-listed.
+      runtimeEvent({ hits: ranked(120), base_hits: ranked(120), ...padding }),
+    );
+
+    expect(event.payload_truncated).toBe(true);
+    expect(event.padding_00).toBeUndefined();
+    expect(event.base_hits).toHaveLength(RUNTIME_EVENT_MAX_HITS);
+    expect(event.hits).toHaveLength(RUNTIME_EVENT_MAX_HITS);
+  });
+
   it("keeps turn_id through ordinary oversize trimming", () => {
     const padding = Object.fromEntries(
       Array.from({ length: 16 }, (_, index) => [
@@ -650,6 +671,9 @@ describe("public runtime events", () => {
     expect(boost?.intent).toBe("i0");
     expect(boost?.promoted).toBe(1);
     expect(boost?.dropped).toBe(0);
+    // A matched graph also ships the ranking it would have returned without the arm.
+    const search = received.find((e) => e.type === "search");
+    expect(search?.base_hits).toEqual([expect.objectContaining({ tool_id: "gh_run_list" })]);
     subscription.unsubscribe();
   });
 
@@ -675,6 +699,8 @@ describe("public runtime events", () => {
     const boost = received.find((e) => e.type === "usage_boost");
     expect(boost?.intent).toBeNull();
     expect(boost?.promoted).toBe(0);
+    const search = received.find((e) => e.type === "search");
+    expect(search).not.toHaveProperty("base_hits");
     subscription.unsubscribe();
   });
 

@@ -822,6 +822,7 @@ impl SkillRegistry {
                 origin,
                 top_k,
                 &hits,
+                &[],
                 vec![SearchStage {
                     name: "bm25".into(),
                     took_ms,
@@ -835,12 +836,21 @@ impl SkillRegistry {
 
         let depth = RETRIEVE_DEPTH.max(top_k);
         let t = Instant::now();
-        let bm25_ranked = self.bm25_index().search(query, depth);
+        let index = self.bm25_index();
+        let bm25_ranked = index.search(query, depth);
         let bm25_stage = SearchStage {
             name: "bm25".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
+        // What the no-arm path would have returned: `search` ranks the full
+        // corpus before truncating, so this prefix is `search(query, top_k)`.
+        let base_hits = to_skill_hits(
+            bm25_ranked.iter().take(top_k).cloned().collect(),
+            Scale::Bm25 {
+                ceiling: index.query_ceiling(query),
+            },
+        );
         let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
 
         let (hits, rrf_stage) =
@@ -851,6 +861,7 @@ impl SkillRegistry {
             origin,
             top_k,
             &hits,
+            &base_hits,
             vec![bm25_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
             context,
@@ -867,7 +878,7 @@ impl SkillRegistry {
     ) -> Result<Vec<SkillHit>, EmbedderError> {
         let started = Instant::now();
         if self.skills.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            self.record_search(query, origin, top_k, &[], &[], Vec::new(), 0, context);
             return Ok(Vec::new());
         }
         // Retrieve deeper only when a graph is attached; without one the depth,
@@ -906,6 +917,7 @@ impl SkillRegistry {
                 origin,
                 top_k,
                 &hits,
+                &[],
                 vec![SearchStage {
                     name: "dense".into(),
                     took_ms: stage_ms,
@@ -922,6 +934,8 @@ impl SkillRegistry {
             took_ms: stage_ms,
             top_score: ranked.first().map(|(_, s)| *s as f64),
         };
+        // What the no-arm path would have returned (raw cosine, top_k).
+        let base_hits = to_skill_hits(ranked.iter().take(top_k).cloned().collect(), Scale::Cosine);
         let dense_ids: Vec<String> = ranked.into_iter().map(|(id, _)| id).collect();
         let (hits, rrf_stage) =
             Self::fuse_arms(&[(&dense_ids, 1.0), (&arm.ids, arm.weight())], top_k);
@@ -931,6 +945,7 @@ impl SkillRegistry {
             origin,
             top_k,
             &hits,
+            &base_hits,
             vec![dense_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
             context,
@@ -947,7 +962,7 @@ impl SkillRegistry {
     ) -> Result<Vec<SkillHit>, EmbedderError> {
         let started = Instant::now();
         if self.skills.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            self.record_search(query, origin, top_k, &[], &[], Vec::new(), 0, context);
             return Ok(Vec::new());
         }
         let depth = RETRIEVE_DEPTH.max(top_k);
@@ -984,9 +999,10 @@ impl SkillRegistry {
         // arms are normalised onto one absolute scale and added rather than
         // fused on rank position.
         let t = Instant::now();
+        let ceiling = index.query_ceiling(query);
         let fused = score_fuse(
             &bm25_ranked,
-            index.query_ceiling(query),
+            ceiling,
             &dense_ranked,
             arm.as_ref().map(|a| (a.ids.as_slice(), a.weight())),
             self.dense_weight,
@@ -999,6 +1015,21 @@ impl SkillRegistry {
         let mut hits = to_skill_hits(fused, Scale::Fused);
         hits.truncate(top_k);
 
+        // What the no-arm path would have returned: the same fusion, without
+        // the usage arm. Computed only when the arm fired.
+        let mut base_hits = Vec::new();
+        if arm.is_some() {
+            let unboosted = score_fuse(
+                &bm25_ranked,
+                ceiling,
+                &dense_ranked,
+                None,
+                self.dense_weight,
+            );
+            base_hits = to_skill_hits(unboosted, Scale::Fused);
+            base_hits.truncate(top_k);
+        }
+
         let mut stages = vec![bm25_stage, dense_stage];
         if let Some(arm) = &arm {
             stages.push(Self::usage_stage(arm, usage_ms));
@@ -1006,7 +1037,9 @@ impl SkillRegistry {
         stages.push(fusion_stage);
 
         let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        self.record_search(
+            query, origin, top_k, &hits, &base_hits, stages, took_ms, context,
+        );
         Ok(hits)
     }
 
@@ -1017,24 +1050,28 @@ impl SkillRegistry {
         origin: Origin,
         top_k: usize,
         hits: &[SkillHit],
+        base_hits: &[SkillHit],
         stages: Vec<SearchStage>,
         took_ms: u64,
         context: TraceEventContext,
     ) {
+        let traces = |hits: &[SkillHit]| -> Vec<SkillHitTrace> {
+            hits.iter()
+                .map(|h| SkillHitTrace {
+                    skill_id: h.skill_id.clone(),
+                    score: h.score as f64,
+                })
+                .collect()
+        };
         self.sink.record_with_context(
             TraceEvent::SkillSearch {
                 query: query.to_string(),
                 origin,
                 top_k: top_k as u32,
-                hits: hits
-                    .iter()
-                    .map(|h| SkillHitTrace {
-                        skill_id: h.skill_id.clone(),
-                        score: h.score as f64,
-                    })
-                    .collect(),
+                hits: traces(hits),
                 stages,
                 took_ms,
+                base_hits: traces(base_hits),
             },
             context,
         );
@@ -1946,6 +1983,100 @@ mod tests {
         reg.register(skill("frontend", "frontend", "frontend slides", &[]));
         reg.build_embeddings().unwrap();
         reg
+    }
+
+    // ---- base_hits: the ranking without the usage arm ----------------------
+
+    /// Like `graph_with_model`, but unstamped, so the arm fires on any model.
+    fn api_graph(skill_id: &str) -> Arc<RwLock<IntentGraph>> {
+        let json = format!(
+            r#"{{"v":1,"built_from_ts":1,
+                 "intents":[{{"id":"i0","label":"l","terms":[],
+                 "members":["rest api design"],"centroid":[1.0,0.0,0.0],
+                 "support":9,"tools":{{}},"skills":{{"{skill_id}":1.0}}}}]}}"#
+        );
+        Arc::new(RwLock::new(IntentGraph::from_json(&json).expect("valid")))
+    }
+
+    /// One search on a fresh registry: its `SkillSearch` event's
+    /// `(hits, stage names, base_hits, JSON)`.
+    fn skill_search_event(
+        method: SearchMethod,
+        query: &str,
+        graph: Option<Arc<RwLock<IntentGraph>>>,
+    ) -> (Vec<SkillHitTrace>, Vec<String>, Vec<SkillHitTrace>, String) {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = mismatch_registry(sink.clone());
+        reg.register(skill("api-docs", "api-docs", "rest api docs", &[]));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(graph);
+        reg.search_with_method(query, 2, Origin::Direct, method)
+            .unwrap();
+        sink.drain()
+            .into_iter()
+            .find_map(|e| match e.event {
+                ref ev @ TraceEvent::SkillSearch {
+                    ref hits,
+                    ref stages,
+                    ref base_hits,
+                    ..
+                } => Some((
+                    hits.clone(),
+                    stages.iter().map(|s| s.name.clone()).collect(),
+                    base_hits.clone(),
+                    serde_json::to_string(ev).unwrap(),
+                )),
+                _ => None,
+            })
+            .expect("a skill search event")
+    }
+
+    #[test]
+    fn skill_base_hits_equal_the_no_graph_ranking_when_the_arm_fires() {
+        for method in [
+            SearchMethod::Bm25,
+            SearchMethod::Semantic,
+            SearchMethod::Hybrid,
+        ] {
+            let (baseline, _, _, _) = skill_search_event(method, "rest api design", None);
+            let (hits, stages, base_hits, _) =
+                skill_search_event(method, "rest api design", Some(api_graph("frontend")));
+            assert!(
+                stages.contains(&"usage".to_string()),
+                "{method:?}: arm must fire"
+            );
+            assert!(!base_hits.is_empty(), "{method:?}");
+            // See the tool-side twin: hybrid's score fusion may not reorder.
+            if method != SearchMethod::Hybrid {
+                assert_ne!(hits, base_hits, "{method:?}: the arm should reorder");
+            }
+            assert_eq!(
+                serde_json::to_string(&base_hits).unwrap(),
+                serde_json::to_string(&baseline).unwrap(),
+                "{method:?}: base_hits must match a no-graph search byte for byte"
+            );
+        }
+    }
+
+    #[test]
+    fn skill_base_hits_are_absent_without_a_match() {
+        for method in [
+            SearchMethod::Bm25,
+            SearchMethod::Semantic,
+            SearchMethod::Hybrid,
+        ] {
+            let (_, _, base_hits, json) = skill_search_event(method, "rest api design", None);
+            assert!(base_hits.is_empty());
+            assert!(!json.contains("base_hits"), "{method:?}: {json}");
+
+            let (_, stages, _, json) =
+                skill_search_event(method, "frontend", Some(api_graph("api-design")));
+            assert!(
+                !stages.contains(&"usage".to_string()),
+                "{method:?}: arm must miss"
+            );
+            assert!(!json.contains("base_hits"), "{method:?}: {json}");
+        }
     }
 
     #[test]

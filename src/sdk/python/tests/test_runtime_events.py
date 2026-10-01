@@ -24,6 +24,7 @@ from ratel_ai import (
     SkillCatalog,
     ToolCatalog,
 )
+from ratel_ai.runtime_events import _normalize_runtime_event
 
 
 @pytest.mark.asyncio
@@ -483,6 +484,29 @@ async def test_omits_turn_id_entirely_when_none_is_supplied() -> None:
     subscription.unsubscribe()
 
 
+def test_base_hits_survive_oversize_trimming_capped_like_hits() -> None:
+    ranked = [{"tool_id": f"tool-{rank}", "score": 1.0} for rank in range(120)]
+    event: dict[str, object] = {
+        "v": 2,
+        "event_id": "01K2KB4QN2A9XJY5VKQCN8ZM1P",
+        "ts": 1_755_000_000_000,
+        "session_id": "session-test",
+        "source_id": "source-test",
+        "type": "search",
+        # base_hits precedes the padding, so it is trimmed first unless allow-listed.
+        "hits": ranked,
+        "base_hits": ranked,
+        **{f"padding_{index:02d}": "x" * 4_096 for index in range(16)},
+    }
+
+    trimmed = _normalize_runtime_event(event)  # type: ignore[arg-type]
+
+    assert trimmed.get("payload_truncated") is True
+    assert "padding_00" not in trimmed
+    assert len(trimmed["base_hits"]) == RUNTIME_EVENT_MAX_HITS  # type: ignore[arg-type]
+    assert len(trimmed["hits"]) == RUNTIME_EVENT_MAX_HITS  # type: ignore[arg-type]
+
+
 @pytest.mark.asyncio
 async def test_turn_id_survives_oversize_trimming_of_a_search_event() -> None:
     tools = ToolCatalog()
@@ -638,6 +662,11 @@ async def test_usage_boost_reports_the_matched_cluster_and_promoted_count_on_a_h
     assert boost["intent"] == "i0"
     assert boost["promoted"] == 1
     assert boost["dropped"] == 0
+    # A matched graph also ships the ranking it would have returned without the arm.
+    search = next(e for e in received if e["type"] == "search")
+    base_hits = search["base_hits"]
+    assert isinstance(base_hits, list)
+    assert [hit["tool_id"] for hit in base_hits] == ["gh_run_list"]
     subscription.unsubscribe()
 
 
@@ -655,6 +684,8 @@ async def test_usage_boost_reports_a_null_intent_and_no_promotion_on_a_miss() ->
     boost = next(e for e in received if e["type"] == "usage_boost")
     assert boost["intent"] is None
     assert boost["promoted"] == 0
+    search = next(e for e in received if e["type"] == "search")
+    assert "base_hits" not in search
     subscription.unsubscribe()
 
 

@@ -607,6 +607,7 @@ function isProductFactField(key: string): boolean {
       "origin",
       "top_k",
       "hits",
+      "base_hits",
       "outcome",
       "error",
       "error_class",

@@ -469,6 +469,7 @@ def _is_product_fact_field(key: str) -> bool:
         "origin",
         "top_k",
         "hits",
+        "base_hits",
         "outcome",
         "error",
         "error_class",

@@ -59,7 +59,7 @@ The remotely publishable v1 event set is:
 
 | Family | Event types | Required product facts |
 |---|---|---|
-| Search | `search`, `skill_search`, `gateway_search` | query, target/origin, `top_k`, duration, and ordered `hits[]` of target id and score |
+| Search | `search`, `skill_search`, `gateway_search` | query, target/origin, `top_k`, duration, and ordered `hits[]` of target id and score; when an intent graph matched, `base_hits[]` of the same shape — the ranking without the usage arm |
 | Tool invocation | `invoke_start`, `invoke_end`, `invoke_error`, `gateway_invoke`, `gateway_error` | tool id, `invocation_id`, outcome/error class, and duration where known |
 | Skill use | `skill_invoke` | skill id, outcome, and duration |
 | Catalog churn | `index_churn`, `skill_churn` | add/remove, target id, and catalog version where known |
@@ -78,7 +78,7 @@ the unknown envelope rather than rejecting the batch. Core diagnostic variants t
 the table remain local until deliberately added to the remotely publishable set.
 
 Search query text, hit ids/scores, and catalog-definition fields are part of the facts contract.
-A query is at most 4 KiB and `hits[]` at most 100 entries. Enabling the experimental
+A query is at most 4 KiB and `hits[]` (and `base_hits[]`) at most 100 entries. Enabling the experimental
 catalog-definition option is explicit consent to publish those definition fields. This lane is independent
 of `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`; that setting governs only the OTel
 projection. Inference messages, tool arguments/results, executors, tokens, cost, model details,
