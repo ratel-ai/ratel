@@ -77,6 +77,7 @@ from .intent_graph_storage import (
 )
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
 from .runtime_events import (
+    OPTIONAL_ENVELOPE_FIELDS,
     RUNTIME_EVENT_MAX_HITS,
     RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
     RUNTIME_EVENT_MAX_QUERY_BYTES,
@@ -131,6 +132,7 @@ __all__ = [
     "RuntimeEventHandler",
     "RuntimeEventSubscription",
     "RuntimeEvents",
+    "OPTIONAL_ENVELOPE_FIELDS",
     "RUNTIME_EVENT_MAX_HITS",
     "RUNTIME_EVENT_MAX_PAYLOAD_BYTES",
     "RUNTIME_EVENT_MAX_QUERY_BYTES",

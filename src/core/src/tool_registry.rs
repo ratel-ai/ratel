@@ -974,6 +974,7 @@ impl ToolRegistry {
                 origin,
                 top_k,
                 &hits,
+                &[],
                 vec![SearchStage {
                     name: "bm25".into(),
                     took_ms,
@@ -990,12 +991,21 @@ impl ToolRegistry {
         // scores — the opt-in cost documented on `set_intent_graph`.
         let depth = RETRIEVE_DEPTH.max(top_k);
         let t = Instant::now();
-        let bm25_ranked = self.bm25_index().search(query, depth);
+        let index = self.bm25_index();
+        let bm25_ranked = index.search(query, depth);
         let bm25_stage = SearchStage {
             name: "bm25".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
+        // What the no-arm path would have returned: `search` ranks the full
+        // corpus before truncating, so this prefix is `search(query, top_k)`.
+        let base_hits = to_search_hits(
+            bm25_ranked.iter().take(top_k).cloned().collect(),
+            Scale::Bm25 {
+                ceiling: index.query_ceiling(query),
+            },
+        );
         let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
 
         let (hits, rrf_stage) =
@@ -1006,6 +1016,7 @@ impl ToolRegistry {
             origin,
             top_k,
             &hits,
+            &base_hits,
             vec![bm25_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
             context,
@@ -1022,7 +1033,7 @@ impl ToolRegistry {
     ) -> Result<Vec<SearchHit>, EmbedderError> {
         let started = Instant::now();
         if self.tools.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            self.record_search(query, origin, top_k, &[], &[], Vec::new(), 0, context);
             return Ok(Vec::new());
         }
         // Retrieve deeper than `top_k` only when a graph is attached; without
@@ -1061,6 +1072,7 @@ impl ToolRegistry {
                 origin,
                 top_k,
                 &hits,
+                &[],
                 vec![SearchStage {
                     name: "dense".into(),
                     took_ms: stage_ms,
@@ -1077,6 +1089,8 @@ impl ToolRegistry {
             took_ms: stage_ms,
             top_score: ranked.first().map(|(_, s)| *s as f64),
         };
+        // What the no-arm path would have returned (raw cosine, top_k).
+        let base_hits = to_search_hits(ranked.iter().take(top_k).cloned().collect(), Scale::Cosine);
         let dense_ids: Vec<String> = ranked.into_iter().map(|(id, _)| id).collect();
         let (hits, rrf_stage) =
             Self::fuse_arms(&[(&dense_ids, 1.0), (&arm.ids, arm.weight())], top_k);
@@ -1086,6 +1100,7 @@ impl ToolRegistry {
             origin,
             top_k,
             &hits,
+            &base_hits,
             vec![dense_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
             context,
@@ -1105,7 +1120,7 @@ impl ToolRegistry {
     ) -> Result<Vec<SearchHit>, EmbedderError> {
         let started = Instant::now();
         if self.tools.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            self.record_search(query, origin, top_k, &[], &[], Vec::new(), 0, context);
             return Ok(Vec::new());
         }
         // Retrieve deeper than `top_k` so a tool ranked low by one arm but high
@@ -1146,9 +1161,10 @@ impl ToolRegistry {
         // 4. Score fusion → final top_k. The arms are normalised onto one
         //    absolute scale and added, rather than fused on rank position.
         let t = Instant::now();
+        let ceiling = index.query_ceiling(query);
         let fused = score_fuse(
             &bm25_ranked,
-            index.query_ceiling(query),
+            ceiling,
             &dense_ranked,
             arm.as_ref().map(|a| (a.ids.as_slice(), a.weight())),
             self.dense_weight,
@@ -1161,6 +1177,21 @@ impl ToolRegistry {
         let mut hits = to_search_hits(fused, Scale::Fused);
         hits.truncate(top_k);
 
+        // What the no-arm path would have returned: the same fusion, without
+        // the usage arm. Computed only when the arm fired.
+        let mut base_hits = Vec::new();
+        if arm.is_some() {
+            let unboosted = score_fuse(
+                &bm25_ranked,
+                ceiling,
+                &dense_ranked,
+                None,
+                self.dense_weight,
+            );
+            base_hits = to_search_hits(unboosted, Scale::Fused);
+            base_hits.truncate(top_k);
+        }
+
         let mut stages = vec![bm25_stage, dense_stage];
         if let Some(arm) = &arm {
             stages.push(Self::usage_stage(arm, usage_ms));
@@ -1168,7 +1199,9 @@ impl ToolRegistry {
         stages.push(fusion_stage);
 
         let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        self.record_search(
+            query, origin, top_k, &hits, &base_hits, stages, took_ms, context,
+        );
         Ok(hits)
     }
 
@@ -1179,24 +1212,28 @@ impl ToolRegistry {
         origin: Origin,
         top_k: usize,
         hits: &[SearchHit],
+        base_hits: &[SearchHit],
         stages: Vec<SearchStage>,
         took_ms: u64,
         context: TraceEventContext,
     ) {
+        let traces = |hits: &[SearchHit]| -> Vec<SearchHitTrace> {
+            hits.iter()
+                .map(|h| SearchHitTrace {
+                    tool_id: h.tool_id.clone(),
+                    score: h.score as f64,
+                })
+                .collect()
+        };
         self.sink.record_with_context(
             TraceEvent::Search {
                 query: query.to_string(),
                 origin,
                 top_k: top_k as u32,
-                hits: hits
-                    .iter()
-                    .map(|h| SearchHitTrace {
-                        tool_id: h.tool_id.clone(),
-                        score: h.score as f64,
-                    })
-                    .collect(),
+                hits: traces(hits),
                 stages,
                 took_ms,
+                base_hits: traces(base_hits),
             },
             context,
         );
@@ -2100,6 +2137,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
+            base_hits: Vec::new(),
         }
     }
 
@@ -2196,6 +2234,7 @@ mod tests {
                     hits: Vec::new(),
                     stages: Vec::new(),
                     took_ms: 0,
+                    base_hits: Vec::new(),
                 },
             ),
             env(3, "s1", started("read_file")),
@@ -2376,6 +2415,7 @@ mod tests {
                     hits: Vec::new(),
                     stages: Vec::new(),
                     took_ms: 0,
+                    base_hits: Vec::new(),
                 },
             ),
             env(3, "A", started("read_file")),
@@ -2831,6 +2871,70 @@ mod tests {
         }
     }
 
+    fn cluster_policy_changed_events(sink: &MemorySink) -> Vec<(f64, f64, f64, f64)> {
+        sink.drain()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                TraceEvent::UsageClusterPolicyChanged {
+                    built_similarity,
+                    built_coverage,
+                    active_similarity,
+                    active_coverage,
+                } => Some((
+                    built_similarity,
+                    built_coverage,
+                    active_similarity,
+                    active_coverage,
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_policy_drift_is_recorded_as_a_trace_event_on_search() {
+        use crate::usage::ClusterPolicy;
+
+        // `policy_drift_is_reported_as_active_not_paused` above proves the status
+        // read; this proves the notice actually reaches the sink as a trace
+        // event, remotely publishable per ADR-0020.
+        // Purely lexical — the drift check runs independent of any embedder.
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = ToolRegistry::new();
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+
+        let graph = Arc::new(RwLock::new(
+            IntentGraph::from_json(
+                r#"{"v":1,"built_from_ts":1,
+                    "intents":[{"id":"i0","label":"l","terms":[],
+                    "members":["read a file"],"support":9,
+                    "tools":{"read_file":1.0},"skills":{}}]}"#,
+            )
+            .expect("valid"),
+        ));
+        graph
+            .write()
+            .unwrap()
+            .set_cluster_policy(ClusterPolicy::default().with_similarity(0.9));
+        reg.set_intent_graph(Some(graph));
+
+        reg.search("read a file", 5);
+
+        let events = cluster_policy_changed_events(&sink);
+        assert_eq!(events.len(), 1);
+        assert!(
+            (events[0].0 - 0.70).abs() < 1e-6,
+            "built: the graph's own default, got {}",
+            events[0].0
+        );
+        assert!(
+            (events[0].2 - 0.9).abs() < 1e-6,
+            "active: what was just set, got {}",
+            events[0].2
+        );
+    }
+
     #[test]
     fn rebuild_intent_graph_restores_the_arm_after_a_model_change() {
         let sink = Arc::new(MemorySink::new("s"));
@@ -2907,6 +3011,31 @@ mod tests {
         );
     }
 
+    /// Regression: the query was stemmed twice, so a word whose stem is not
+    /// stable under a second pass ("codebase", "database") never matched. In
+    /// hybrid the stub embeds both tools alike, so only BM25 can lift the
+    /// target above `a_mail`, which wins the id tiebreak otherwise.
+    #[test]
+    fn a_stem_unstable_word_matches_in_bm25_and_hybrid() {
+        for word in ["codebase", "database"] {
+            let mut reg = with_embedder(Arc::new(StubEmbedder));
+            reg.register(tool("a_mail", "send an email"));
+            reg.register(tool("z_target", &format!("{word} {word} {word}")));
+            reg.build_embeddings().unwrap();
+            for method in [SearchMethod::Bm25, SearchMethod::Hybrid] {
+                let hits = reg
+                    .search_with_method(word, 5, Origin::Direct, method)
+                    .unwrap();
+                assert_eq!(
+                    hits.first().map(|h| h.tool_id.as_str()),
+                    Some("z_target"),
+                    "{word:?} via {method:?}: {:?}",
+                    hits.iter().map(|h| &h.tool_id).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
     #[test]
     fn hybrid_scores_are_always_flagged_fused() {
         // Hybrid is RRF-scale with or without a graph, so `fused` is always true
@@ -2972,6 +3101,99 @@ mod tests {
             .map(|s| s.name)
             .collect();
         assert_eq!(stages, vec!["bm25", "dense", "fusion"]);
+    }
+
+    // ---- base_hits: the ranking without the usage arm ----------------------
+
+    /// Run one search on a fresh registry and return its `Search` event's
+    /// `(hits, stages, base_hits)` plus the event's JSON.
+    fn search_event(
+        method: SearchMethod,
+        query: &str,
+        graph: Option<Arc<RwLock<IntentGraph>>>,
+    ) -> (
+        Vec<SearchHitTrace>,
+        Vec<String>,
+        Vec<SearchHitTrace>,
+        String,
+    ) {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a path"));
+        reg.register(tool("read_dir", "read a directory listing"));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(graph);
+        reg.search_with_method(query, 2, Origin::Direct, method)
+            .unwrap();
+        sink.drain()
+            .into_iter()
+            .find_map(|e| match e.event {
+                ref ev @ TraceEvent::Search {
+                    ref hits,
+                    ref stages,
+                    ref base_hits,
+                    ..
+                } => Some((
+                    hits.clone(),
+                    stages.iter().map(|s| s.name.clone()).collect(),
+                    base_hits.clone(),
+                    serde_json::to_string(ev).unwrap(),
+                )),
+                _ => None,
+            })
+            .expect("a search event")
+    }
+
+    #[test]
+    fn base_hits_equal_the_no_graph_ranking_when_the_arm_fires() {
+        for method in [
+            SearchMethod::Bm25,
+            SearchMethod::Semantic,
+            SearchMethod::Hybrid,
+        ] {
+            let (baseline, _, _, _) = search_event(method, "read a file", None);
+            let (hits, stages, base_hits, _) =
+                search_event(method, "read a file", Some(read_graph("delete_file", 9)));
+            assert!(
+                stages.contains(&"usage".to_string()),
+                "{method:?}: arm must fire"
+            );
+            assert!(!base_hits.is_empty(), "{method:?}");
+            // Rank fusion lets the arm's tool climb into this top-2; hybrid's
+            // score fusion weights it too lightly to, so only the equality
+            // below is checked there.
+            if method != SearchMethod::Hybrid {
+                assert_ne!(hits, base_hits, "{method:?}: the arm should reorder");
+            }
+            assert_eq!(
+                serde_json::to_string(&base_hits).unwrap(),
+                serde_json::to_string(&baseline).unwrap(),
+                "{method:?}: base_hits must match a no-graph search byte for byte"
+            );
+        }
+    }
+
+    #[test]
+    fn base_hits_are_absent_without_a_match() {
+        for method in [
+            SearchMethod::Bm25,
+            SearchMethod::Semantic,
+            SearchMethod::Hybrid,
+        ] {
+            let (_, _, base_hits, json) = search_event(method, "read a file", None);
+            assert!(base_hits.is_empty());
+            assert!(!json.contains("base_hits"), "{method:?}: {json}");
+
+            let (_, stages, _, json) =
+                search_event(method, "delete", Some(read_graph("read_file", 9)));
+            assert!(
+                !stages.contains(&"usage".to_string()),
+                "{method:?}: arm must miss"
+            );
+            assert!(!json.contains("base_hits"), "{method:?}: {json}");
+        }
     }
 
     #[test]

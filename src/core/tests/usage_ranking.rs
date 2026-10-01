@@ -804,6 +804,7 @@ fn a_graph_seeded_from_a_baseline_log_ranks_better_once_attached() {
                 hits: Vec::new(),
                 stages: Vec::new(),
                 took_ms: 0,
+                base_hits: Vec::new(),
             });
             capture.record_event(TraceEvent::InvokeStart {
                 tool_id: "gh_run_list".into(),

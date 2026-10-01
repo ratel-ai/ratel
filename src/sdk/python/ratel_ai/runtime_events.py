@@ -55,12 +55,30 @@ RUNTIME_EVENT_TYPES = (
     "experiment_invocation",
     "experiment_outcome",
     "events_dropped",
+    "usage_boost",
+    "usage_model_mismatch",
+    "usage_cluster_policy_changed",
+    "usage_ranking_status",
 )
 RUNTIME_EVENT_MAX_PAYLOAD_BYTES = 64 * 1_024
 RUNTIME_EVENT_MAX_QUERY_BYTES = 4 * 1_024
 RUNTIME_EVENT_MAX_HITS = 100
 
 _REQUIRED_ENVELOPE_FIELDS = {"v", "event_id", "ts", "session_id", "source_id", "type"}
+# Optional envelope fields the contract names (ADR-0020), frozen for conformance.
+OPTIONAL_ENVELOPE_FIELDS = (
+    "invocation_id",
+    "catalog_version",
+    "environment",
+    "end_user_id",
+    "trace_id",
+    "span_id",
+    "turn_id",
+)
+# Correlation ids that must survive truncation intact — dropping one breaks pairing
+# (ADR-0014's search/invoke and invocation-lifecycle grouping) rather than merely
+# losing a nice-to-have fact.
+_CORRELATION_FIELDS = frozenset({"invocation_id", "turn_id"})
 _CATALOG_CRITICAL_FIELDS = ("kind", "id", "name", "content_hash")
 _CATALOG_SCHEMA_FIELDS = ("input_schema", "output_schema")
 _CATALOG_DEFINITION_FIELDS = {
@@ -350,16 +368,28 @@ def _normalize_runtime_event(event: RuntimeEvent) -> RuntimeEvent:
         return normalized
 
     for key in tuple(normalized):
-        if key not in _REQUIRED_ENVELOPE_FIELDS and not _is_product_fact_field(key):
+        if (
+            key not in _REQUIRED_ENVELOPE_FIELDS
+            and key not in _CORRELATION_FIELDS
+            and not _is_product_fact_field(key)
+        ):
             del normalized[key]
             normalized["payload_truncated"] = True
             if _serialized_size(normalized) <= RUNTIME_EVENT_MAX_PAYLOAD_BYTES:
                 return normalized
 
-    bounded = {key: normalized[key] for key in normalized if key in _REQUIRED_ENVELOPE_FIELDS}
+    bounded = {
+        key: normalized[key]
+        for key in normalized
+        if key in _REQUIRED_ENVELOPE_FIELDS or key in _CORRELATION_FIELDS
+    }
     bounded["payload_truncated"] = True
     for key, value in _prioritized_product_fact_items(normalized):
-        if key in _REQUIRED_ENVELOPE_FIELDS or not _is_product_fact_field(key):
+        if (
+            key in _REQUIRED_ENVELOPE_FIELDS
+            or key in _CORRELATION_FIELDS
+            or not _is_product_fact_field(key)
+        ):
             continue
         bounded[key] = _sanitize_bounded_value(value)
         if _serialized_size(bounded) > RUNTIME_EVENT_MAX_PAYLOAD_BYTES:
@@ -431,29 +461,60 @@ def _serialized_size(value: Any) -> int:
     return len(json.dumps(value, separators=(",", ":")).encode())
 
 
+# Named payload fields kept when an oversized event is trimmed, beside the
+# envelope and correlation fields. Pinned in the conformance fixture so the
+# Python and TS lists cannot drift.
+_PRODUCT_FACT_FIELDS = (
+    "query",
+    "target",
+    "origin",
+    "top_k",
+    "hits",
+    "base_hits",
+    "outcome",
+    "error",
+    "error_class",
+    "transport",
+    "role",
+    "cold",
+    "agreement",
+    "reason",
+    "label",
+    "score",
+    "attributed",
+    "rank",
+    "turn",
+    "action",
+    "intent",
+    "similarity",
+    "support",
+    "promoted",
+    "dropped",
+    "built",
+    "active",
+    "dim_mismatch",
+    "built_similarity",
+    "built_coverage",
+    "active_similarity",
+    "active_coverage",
+    "status",
+    "rev",
+    "graph_key",
+    "learn",
+    "model",
+)
+# Field-name suffixes that also mark a kept payload field (ids, timings,
+# counts, scores). Pinned in the conformance fixture with _PRODUCT_FACT_FIELDS.
+_PRODUCT_FACT_SUFFIXES = ("_id", "_ids", "_ms", "_count", "_score", "_scores")
+_PRODUCT_FACT_FIELD_SET = frozenset(_PRODUCT_FACT_FIELDS)
+
+
 def _is_product_fact_field(key: str) -> bool:
-    return key.endswith(("_id", "_ids", "_ms", "_count", "_score", "_scores")) or key in {
-        *_CATALOG_DEFINITION_FIELDS,
-        "query",
-        "target",
-        "origin",
-        "top_k",
-        "hits",
-        "outcome",
-        "error",
-        "error_class",
-        "transport",
-        "role",
-        "cold",
-        "agreement",
-        "reason",
-        "label",
-        "score",
-        "attributed",
-        "rank",
-        "turn",
-        "action",
-    }
+    return (
+        key.endswith(_PRODUCT_FACT_SUFFIXES)
+        or key in _CATALOG_DEFINITION_FIELDS
+        or key in _PRODUCT_FACT_FIELD_SET
+    )
 
 
 class RuntimeCatalog:

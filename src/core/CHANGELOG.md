@@ -6,9 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `TraceEvent::Search` / `TraceEvent::SkillSearch` carry `base_hits`: the top-k the search would have returned without the usage arm, same shape as `hits`. Present only when an intent graph matched the query; absent from the JSON otherwise. Ranking is unchanged (ADR-0014)
+
+### Changed
+
+- `TraceEvent::UsageRankingStatus`'s `status` and `reason` are typed enums, `UsageRankingState` (`active`/`inactive`/`unknown`/`paused`) and `UsageRankingReason` (`enabled`/`disabled`/`rebuilt`), instead of free strings. The wire values are unchanged; a value outside the contract no longer deserializes. Rust code constructing the variant must use the enums
+
 ### Fixed
 
+- Fix: queries were stemmed twice since 0.12.0-rc.5, so words whose stem is not stable under a second pass (codebase, database) never matched.
 - **An invoke is credited to the search that offered the tool, not to whichever search came last.** A turn kept one pending search, so two searches before any invoke — batched or parallel tool calls, the default shape now — learned the wrong thing three ways: the earlier query was discarded rather than misfiled, so no later search of that wording could match it; the newer query took an edge to a capability it never returned; and passed-over damping fired inside a cluster that should not exist. A turn now keeps every search it made, newest last and capped, and an invoke pairs with the newest window that offered the invoked id. Failing that, with the newest that ranked nothing for that capability kind — a baseline capture serves no retrieval, and coverage unknown is not coverage empty — and failing both, with the newest window, because an invoke of something no search returned says retrieval missed, which is the observation that repairs a miss rather than noise to discard. Emptiness is judged per kind, so a tool invoke in a skill-only turn still pairs. Multi-window attribution is what supplying a `turn_id` buys: without one there is no turn boundary, so that scope keeps a single window and is unchanged. `IntentGraph`'s `PendingQuery` and `CreditSlot` had the same one-per-turn shape and the same fault, both silent: the first dropped the earlier query's vector so crediting it clustered lexically on the dense tier, the second disarmed its credit so the edge landed without the support bump. The rule is written twice, live and replay, and both moved together. Clustering, admission, ICF, damping, fusion and serving are untouched — the 47-query harness report is byte-identical.
+
+## [0.12.0-rc.6] - 2026-09-25
+
+### Added
+
+- **`TraceEvent::UsageRankingStatus` (ADR-0014/ADR-0020).** A data-only variant (`status`, `reason`, `rev`, `graph_key`, `learn`, `model`) reporting adaptive-ranking state — never emitted by core itself, since core has no notion of a caller-supplied `graph_key` or of where a graph came from. Emitted instead by the TS/Python SDK wrappers on enable, disable, and rebuild, so a consumer of a served graph (Ratel Cloud's dashboard) can tell which graph a runtime is running without waiting for a search.
 
 ## [0.12.0-rc.5] - 2026-09-21
 

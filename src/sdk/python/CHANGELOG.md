@@ -6,15 +6,49 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.9] - 2026-10-01
+
+### Fixed
+
+- **BM25 matches words like `codebase` and `database` again** (core fix, surfaced through this SDK). Since 0.13.0-rc.5 a query was stemmed twice, so a word whose stem changes on a second pass never matched any tool or skill; 0.12.0 was unaffected.
+
+## [0.13.0-rc.8] - 2026-10-01
+
 ### Added
 
 - Intent graph storage plugins ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)): `LocalFileIntentGraphStorage` and `S3IntentGraphStorage`, the two ready-made backends for persisting adaptive ranking's `IntentGraph`. Both expose `load()`/`save()`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` rather than clobber a concurrent writer. The local backend writes atomically via temp file + rename at `0600`; the S3 backend uses conditional writes (`If-Match`/`If-None-Match`) and needs no `boto3` — it signs with a built-in SigV4 client (#168)
 - `endpoint` and `force_path_style` on `S3IntentGraphStorage` for MinIO and other S3-compatible services; `force_path_style` defaults to `True` once `endpoint` is set (#168)
 - `idle_timeout_s` (default 60s) bounds both S3 calls on an idle clock — time with no data moving, not total elapsed — so a slow transfer completes but a wedged endpoint fails instead of hanging. `None` means the default (#168)
+- `search` / `skill_search` runtime events carry `base_hits` (the top-k without the usage arm) when an intent graph matched; it survives oversize trimming and is capped like `hits`
 
 ### Fixed
 
+- The mismatched-`learn` warning on `experimental_enable_adaptive_ranking` no longer fires when one catalog re-enables its own graph with a different `learn`, and still fires after another catalog sharing the graph disables; the bookkeeping is now kept per catalog. Disable also resets the reported `learn` to `True`, so a later `usage_ranking_status` no longer carries the stale value
 - **Adaptive ranking pairs an invoke with the search that offered the tool** (core fix, surfaced through this SDK). A turn that searched twice before invoking anything credited both invokes to the later query and discarded the earlier one; now each search keeps the evidence for the capability it returned. No API change — `turn_id` still means one per user message, and the README now says so.
+
+## [0.13.0-rc.7] - 2026-09-24
+
+### Added
+
+- `experimental_enable_adaptive_ranking` now warns once, unless `warn_on_model_mismatch=False`, on four silently-wrong configurations: `learn=False` with `rebuild_on_model_change=True` (a rebuild still re-embeds and bumps `rev`); `origins="baseline"` on a live catalog (it will never learn); `graph_key` set while `learn` is not `False` (a consumed graph that is also being written into); and one `IntentGraph` enabled with a different `learn` value on the tool vs. skill catalog
+
+## [0.13.0-rc.6] - 2026-09-25
+
+### Added
+
+- `learn=False` on `experimental_enable_adaptive_ranking` — rank from an intent graph without learning into it, for consuming a graph produced elsewhere (e.g. Ratel Cloud)
+- `usage_ranking_status` — a `graph_key`-labeled event emitted on enable, disable, and rebuild reporting adaptive-ranking status, reason, graph revision, `learn`, and model fingerprint (ADR-0014/ADR-0020)
+- `IntentGraph.model` — the embedding model the graph's centroids were built with, or `None` for a lexical graph
+
+### Changed
+
+- `turn_id` is now a declared, tested field of the runtime-events envelope contract (no behavior change)
+- `gateway_search` now carries `turn_id` when the caller supplies one (`search_capabilities` and the legacy `search_tools` shim)
+- `usage_boost`, `usage_model_mismatch`, and `usage_cluster_policy_changed` (ADR-0014) are now part of the remotely publishable event set
+
+### Fixed
+
+- A rejected `experimental_enable_adaptive_ranking` call (invalid `origins`/`provenance`/cluster policy) no longer corrupts the registry's tracked graph/`graph_key`/`learn`, which could otherwise leak into a later rebuild's `usage_ranking_status` event
 
 ## [0.13.0-rc.5] - 2026-09-21
 

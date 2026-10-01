@@ -14,6 +14,7 @@
 
 import { formatUpstreamLine, type UpstreamServerInfo } from "./capabilities.js";
 import type { ExecutableTool, ToolCatalog } from "./catalog.js";
+import { newRuntimeEventId } from "./runtime-events.js";
 
 /** @deprecated Use `SEARCH_CAPABILITIES_ID` (`"search_capabilities"`). */
 export const SEARCH_TOOLS_ID = "search_tools" as const;
@@ -140,19 +141,22 @@ export function searchToolsTool(
       },
       required: ["groups"],
     },
-    execute: async (input) => {
+    execute: async (input, _context, turnId) => {
       const { query, topK } = input as { query: string; topK?: number };
       const k = typeof topK === "number" && Number.isInteger(topK) && topK >= 1 ? topK : 5;
       const startedAt = Date.now();
-      const hits = await catalog.searchAsync(query, k, "agent");
-      catalog.recordEvent({
-        type: "gateway_search",
-        query,
-        origin: "agent",
-        top_k: k,
-        hits: hits.length,
-        took_ms: Date.now() - startedAt,
-      });
+      const hits = await catalog.searchAsync(query, k, "agent", undefined, turnId);
+      catalog.recordEvent(
+        {
+          type: "gateway_search",
+          query,
+          origin: "agent",
+          top_k: k,
+          hits: hits.length,
+          took_ms: Date.now() - startedAt,
+        },
+        { eventId: newRuntimeEventId(), ...(turnId === undefined ? {} : { turnId }) },
+      );
       const order: string[] = [];
       const groups = new Map<string, SearchToolsGroup>();
       for (const h of hits) {

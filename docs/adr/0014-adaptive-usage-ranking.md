@@ -144,6 +144,13 @@ outranks one only history supports. The arm still promotes a low-ranked capabili
 BM25's rank-0 (it contributes from both arms), but it cannot conjure one the base ranker
 did not retrieve at all.
 
+Every search reports this outcome as `TraceEvent::UsageBoost` — matched cluster or none,
+similarity, support, and promoted/dropped counts — and it is remotely publishable per
+ADR-0020, so a consumer of a served graph can observe whether it is doing anything. When a
+cluster matched, the `Search` / `SkillSearch` event also carries `base_hits`: the top-k the
+search would have returned without the usage arm, so a consumer can compare boosted and
+unboosted rankings on real traffic rather than replaying it.
+
 ### Which capability the arm promotes first
 
 An edge weight is a count of confirmed invocations, but serving that order raw lets a capability
@@ -252,7 +259,9 @@ them. The mechanical reason matters more than the principle. Both SDKs auto-reco
 beginning `paused`, and the remedy they reach for is `rebuild_intent_graph` — which cannot
 revisit cluster boundaries, for the reason given above. Routing a policy change through that
 string would fire an embedding pass incapable of fixing what it fired for, so the new status
-begins `active` and the notice is raised deliberately instead.
+begins `active` and the notice is raised deliberately instead. The notice is also a trace
+event, `TraceEvent::UsageClusterPolicyChanged` (built vs. active similarity and coverage),
+raised on every search while the drift persists, and remotely publishable per ADR-0020.
 
 Changing the policy therefore **does not re-cluster**. Raising the threshold on a graph that
 already over-merged leaves those clusters exactly as they are; only later admissions are
@@ -330,8 +339,9 @@ corpus cache, which hard-errors: the corpus cannot produce dense results without
 embeddings, but the usage arm has a valid fall-through (no boost), so breaking search over a
 stale *enhancement* would be worse than the problem.
 
-The mismatch is surfaced three ways: a `TraceEvent::UsageModelMismatch` (structured, always),
-a one-time SDK stderr warning (default on, `warnOnModelMismatch: false` to suppress), and an
+The mismatch is surfaced three ways: a `TraceEvent::UsageModelMismatch` (structured, always,
+remotely publishable per ADR-0020), a one-time SDK stderr warning
+(default on, `warnOnModelMismatch: false` to suppress), and an
 `experimentalAdaptiveRankingStatus` the app can gate on. `experimentalRebuildIntentGraph()` re-embeds the graph's
 members under the current model and restamps — members, support, and edges are
 model-independent, so all learning survives; only the centroids move.
@@ -393,6 +403,50 @@ then the prefix is dropped. The marker sits on the *behavior* entry points only.
 and its `to_json` / `from_json` / `rev` keep stable names — it is a `protocol/v1` wire type
 whose versioning already governs its evolution, and the experimental methods are the sole way
 to activate it, so they gate all use on their own.
+
+**Ranking without learning (`learn: false`).** The enable entry points take an optional `learn`
+flag, default `true` (rank and learn). With
+`learn: false` the registry still ranks against the attached graph but its trace sink is never
+decorated with a learner, so the graph's `rev` and content are exactly what was handed in. This
+is the shape a runtime needs to consume a graph produced elsewhere — Ratel Cloud, the second
+producer named in [What is open source](#what-is-open-source), replaying a project's stored
+runtime events through this same learner and serving one graph per project — without a
+consumer's own traffic silently mutating a document whose revisions the producer, and a
+dashboard built on it, need to stay authoritative.
+
+The flag is stored on the registry, not consumed once at the enable call: every later sink
+install — `setTraceSink` / `set_trace_sink`, `setTraceSinkCallback`, `subscribeTraceEvents` /
+`subscribe_trace_events` — re-derives its sink through the same flag. This is the same hazard
+[Where learning happens](#where-learning-happens) already guards for attaching a *new*
+subscriber; `learn: false` adds the mirror case, where re-installing a sink for an unrelated
+reason (rotating a jsonl file, attaching a fresh runtime-events stream) must not silently
+resume learning that was deliberately turned off. `disable_adaptive_ranking` resets the flag
+to `true` alongside the observation policy, so a plain re-enable afterward reproduces the
+default.
+
+**`usage_ranking_status`, an SDK-emitted status event.** Once a runtime can
+consume a graph it did not learn, "is a graph attached" (what `usage_boost`'s presence proves)
+stops being enough — Ratel Cloud's dashboard needs to know whether ranking is on, off, unknown,
+or paused *before* any search happens, and which graph revision a runtime is running: its own,
+or one served by cloud. The enable, disable, and rebuild entry points therefore emit a
+`usage_ranking_status` trace event (`status`, `reason`, `rev`, an optional caller-supplied
+`graph_key` label, `learn`, and the graph's `model`) — see
+[ADR-0020](0020-runtime-events-lane.md).
+
+This is emitted by the **SDK wrappers**, not core: core has no notion of `graph_key` or of
+where a graph came from, so it could not produce this event even if it wanted to. The wrapper
+already owns the enable/disable/rebuild calls and the `learn` flag (above), so it is the only
+layer that can attach a caller's label to a status report. Core carries it as a data-only
+`TraceEvent::UsageRankingStatus` variant, with `status` and `reason` typed as the closed
+`UsageRankingState` and `UsageRankingReason` enums, so the event can deserialize and travel the
+trace stream like any other.
+
+Pause is deliberately **not** a separate emission from the status event. The search path
+already emits `TraceEvent::UsageModelMismatch` when the arm pauses on a model mismatch, and
+that event is remotely publishable (ADR-0020). A consumer
+derives "paused" from the latest `usage_ranking_status` plus any `usage_model_mismatch` after
+it; adding a second pause hook to the search path would duplicate that signal for no new
+information.
 
 ### Where learning happens
 

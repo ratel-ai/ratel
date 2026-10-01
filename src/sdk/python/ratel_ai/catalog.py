@@ -14,6 +14,7 @@ import json
 import threading
 import time
 import warnings
+import weakref
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from types import TracebackType
@@ -142,6 +143,128 @@ EmbeddingSpec = Union[str, EmbeddingModelConfig]
 """Embedding selection; a bare string is a local model directory path."""
 
 _DenseResult = TypeVar("_DenseResult")
+
+# The `learn` value each registry enabled an `IntentGraph` with, per graph
+# (ADR-0014's "same graph on the tool and skill catalog" pattern). Keyed by
+# registry so re-enabling one registry is never compared against itself, and
+# one registry's disable never forgets another's entry. Weakly keyed on both
+# levels so neither a graph nor a registry is pinned alive by it. Shared
+# with `skill_catalog.py`.
+_graph_learn: weakref.WeakKeyDictionary[IntentGraph, weakref.WeakKeyDictionary[Any, bool]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _note_graph_learn(graph: IntentGraph, registry: object, learn: bool, warn: bool) -> None:
+    """Record ``registry`` enabling ``graph`` with ``learn``.
+
+    When ``warn`` is set, warns if another registry sharing ``graph`` was
+    enabled with a different value.
+    """
+    by_registry = _graph_learn.setdefault(graph, weakref.WeakKeyDictionary())
+    by_registry.pop(registry, None)
+    mismatch = any(other != learn for other in by_registry.values())
+    by_registry[registry] = learn
+    if warn and mismatch:
+        # stacklevel 3: past this helper and the registry method, to its caller.
+        warnings.warn(
+            "ratel: this intent graph is enabled with learn=True on one catalog "
+            "and learn=False on the other; it will still change. Use the same "
+            "learn value on both catalogs.",
+            stacklevel=3,
+        )
+
+
+def _forget_graph_learn(graph: IntentGraph, registry: object) -> None:
+    """Drop ``registry``'s entry for ``graph``, leaving other registries' intact."""
+    by_registry = _graph_learn.get(graph)
+    if by_registry is not None:
+        by_registry.pop(registry, None)
+
+
+def _warn_on_adaptive_misconfiguration(
+    learn: bool,
+    rebuild_on_model_change: bool,
+    origins: OriginFilterOption | None,
+    graph_key: str | None,
+) -> None:
+    """The enable-time misconfiguration warnings that depend only on the options.
+
+    See either registry's ``experimental_enable_adaptive_ranking``. Uses
+    ``stacklevel=3``: past this helper and the registry method, to its caller.
+    """
+    if learn is False and rebuild_on_model_change:
+        warnings.warn(
+            "ratel: learn is off but rebuild_on_model_change is on; a rebuild "
+            "will still re-embed this graph and bump its rev. Call "
+            "experimental_rebuild_intent_graph() yourself if you want that, or "
+            "drop rebuild_on_model_change.",
+            stacklevel=3,
+        )
+    if origins == "baseline":
+        warnings.warn(
+            'ratel: origins "baseline" only accepts captured baseline turns; '
+            "live searches never carry that origin, so this graph will not "
+            'learn from this catalog. Use "any" or "agent" here.',
+            stacklevel=3,
+        )
+    if graph_key is not None and learn:
+        warnings.warn(
+            f'ratel: graph_key "{graph_key}" marks this graph as produced '
+            "elsewhere, but learn is on; local turns will fork it and be "
+            "overwritten on the next adoption. Pass learn=False to consume it.",
+            stacklevel=3,
+        )
+
+
+def _ranking_status_event(
+    reason: str,
+    native_status: tuple[str, str | None, str | None, bool | None],
+    graph: IntentGraph | None,
+    graph_key: str | None,
+    learn: bool,
+) -> dict[str, Any]:
+    """A ``usage_ranking_status`` trace event for what a registry has attached.
+
+    ADR-0014/ADR-0020. Emitted by the wrappers, never by core, since core
+    cannot know where a graph came from. Collapses the native status string
+    to the four-value contract: ``"active"`` covers both ``active`` and
+    ``active: policy drift``, any ``paused...`` collapses to ``"paused"``.
+    """
+    raw, _built, _active, _dim = native_status
+    if raw.startswith("paused"):
+        status = "paused"
+    elif raw in ("active", "active: policy drift"):
+        status = "active"
+    elif raw == "unknown":
+        status = "unknown"
+    else:
+        status = "inactive"
+    event: dict[str, Any] = {
+        "type": "usage_ranking_status",
+        "status": status,
+        "reason": reason,
+        "learn": learn,
+    }
+    if graph is not None:
+        event["rev"] = graph.rev
+        if graph.model is not None:
+            event["model"] = graph.model
+    if graph_key is not None:
+        event["graph_key"] = graph_key
+    return event
+
+
+# The ``usage_ranking_status`` event a disable reports: nothing attached, and
+# ``learn`` back at its default. Copied per use, since events are dicts.
+_DISABLED_RANKING_STATUS: dict[str, Any] = {
+    "type": "usage_ranking_status",
+    "status": "inactive",
+    "reason": "disabled",
+    "learn": True,
+}
+
+
 _REGISTRY_BUSY = "registry busy; await the active operation"
 _UNAWAITED_REGISTER = (
     "a register() call was not awaited; dense preparation did not complete — "
@@ -418,6 +541,9 @@ class ToolRegistry:
         self._warn_on_model_mismatch = True
         self._adaptive_warned = False
         self._rebuild_on_model_change = False
+        self._learn = True
+        self._graph: IntentGraph | None = None
+        self._graph_key: str | None = None
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
@@ -663,18 +789,28 @@ class ToolRegistry:
         provenance: ProvenanceOption | None = None,
         cluster_similarity: float | None = None,
         cluster_coverage: float | None = None,
+        learn: bool = True,
+        graph_key: str | None = None,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
-        Wires both halves: this registry ranks against what users have actually
-        invoked after similar queries, and keeps learning as it is used. Pass
-        the same :class:`IntentGraph` to the other registry so both learn into one
-        set of clusters.
+        Wires both halves by default: this registry ranks against what users
+        have actually invoked after similar queries, and keeps learning as it
+        is used. Pass the same :class:`IntentGraph` to the other registry so
+        both learn into one set of clusters.
 
         Only queries matching a cluster are affected. With a graph attached the
         hit ``score`` becomes a fusion score rather than a raw BM25 score, so
         use ``rank`` for ordering and ``fused`` to detect the scale, not the
         raw ``score``.
+
+        Pass ``learn=False`` to rank from ``graph`` without learning into it —
+        the consumer form for a graph produced elsewhere (Ratel Cloud, for
+        example). The flag is stored on the registry, not just applied at this
+        call: every later sink install (``set_trace_sink``,
+        ``subscribe_trace_events``) re-derives its sink through the same flag,
+        so re-installing a sink for an unrelated reason cannot silently resume
+        learning.
 
         On a model change the arm pauses and a one-time warning is issued unless
         ``warn_on_model_mismatch`` is False; call :meth:`experimental_rebuild_intent_graph`.
@@ -686,6 +822,22 @@ class ToolRegistry:
         expensive, able to raise :class:`EmbedderError`, and it mutates the graph
         (new centroids, bumped ``rev``). Recovery is lazy: status stays
         ``paused`` until that first dense search.
+
+        ``graph_key`` labels the graph on the ``usage_ranking_status`` event
+        this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="cloud"`` — so a
+        consumer can tell this runtime's own graph apart from one served by
+        Ratel Cloud.
+
+        Four configuration mistakes warn once here (suppressed by the same
+        ``warn_on_model_mismatch=False``, since that option already means "I
+        gate on status, not stderr"): ``learn=False`` with
+        ``rebuild_on_model_change=True`` (a rebuild still re-embeds and bumps
+        ``rev`` regardless of ``learn``); ``origins="baseline"`` on a live
+        catalog (the live search path never produces that origin, so nothing
+        would ever be learned); ``graph_key`` set while ``learn`` is not
+        ``False`` (a "consumed" graph that is also being written into); and
+        enabling the same graph with a different ``learn`` value than the
+        other registry it's already attached to.
         """
         # `experimental_enable_adaptive_ranking` takes `&mut self` natively, so it must not run
         # while an in-flight dense build holds the registry — guard it like
@@ -693,13 +845,32 @@ class ToolRegistry:
         # pyo3 "Already borrowed".
         with self._dense_state:
             self._raise_if_busy()
+            if warn_on_model_mismatch:
+                _warn_on_adaptive_misconfiguration(
+                    learn, rebuild_on_model_change, origins, graph_key
+                )
+            self._native.enable_adaptive_ranking(
+                graph, origins, provenance, cluster_similarity, cluster_coverage, learn
+            )
+            # Only recorded once native accepts the call: a rejected call (bad
+            # origins/provenance/cluster policy) leaves native's own state
+            # untouched, so it must leave this wrapper's bookkeeping untouched
+            # too -- otherwise a later usage_ranking_status event (e.g. on
+            # rebuild) would report the graph/key/learn value from the failed
+            # attempt instead of what is actually attached.
             self._warn_on_model_mismatch = warn_on_model_mismatch
             self._rebuild_on_model_change = rebuild_on_model_change
             self._adaptive_warned = False
-            self._native.enable_adaptive_ranking(
-            graph, origins, provenance, cluster_similarity, cluster_coverage
-        )
-        self._maybe_warn_model_mismatch()
+            previous_graph = self._graph
+            if previous_graph is not None and previous_graph is not graph:
+                _forget_graph_learn(previous_graph, self)
+            self._learn = learn
+            self._graph = graph
+            self._graph_key = graph_key
+        native_status = self._native.adaptive_ranking_status()
+        self._maybe_warn_model_mismatch(native_status)
+        self._emit_ranking_status("enabled", native_status)
+        _note_graph_learn(graph, self, learn, warn_on_model_mismatch)
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -707,6 +878,12 @@ class ToolRegistry:
             self._raise_if_busy()
             self._rebuild_on_model_change = False
             self._native.disable_adaptive_ranking()
+        if self._graph is not None:
+            _forget_graph_learn(self._graph, self)
+        self.record_event(dict(_DISABLED_RANKING_STATUS))
+        self._learn = True
+        self._graph = None
+        self._graph_key = None
 
     async def _maybe_rebuild_on_model_change(self) -> None:
         """Auto-recover a model-mismatched graph before a dense search, opt-in.
@@ -738,7 +915,9 @@ class ToolRegistry:
         """
         await self._run_dense(self._native._rebuild_intent_graph)
         self._adaptive_warned = False
-        self._maybe_warn_model_mismatch()
+        native_status = self._native.adaptive_ranking_status()
+        self._maybe_warn_model_mismatch(native_status)
+        self._emit_ranking_status("rebuilt", native_status)
 
     async def experimental_build_intent_graph(
         self,
@@ -785,10 +964,19 @@ class ToolRegistry:
         status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
         return AdaptiveRankingStatus(status, built, active, dim_mismatch)
 
-    def _maybe_warn_model_mismatch(self) -> None:
+    def _maybe_warn_model_mismatch(
+        self, native_status: tuple[str, str | None, str | None, bool | None] | None = None
+    ) -> None:
+        """Accepts an already-read ``native_status``.
+
+        So a caller that just fetched it (enable, rebuild) does not pay for a
+        second native round-trip.
+        """
         if self._adaptive_warned or not self._warn_on_model_mismatch:
             return
-        status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
+        status, built, active, dim_mismatch = (
+            native_status if native_status is not None else self._native.adaptive_ranking_status()
+        )
         if status == "active: policy drift":
             self._adaptive_warned = True
             warnings.warn(
@@ -812,6 +1000,19 @@ class ToolRegistry:
             f"ratel: intent graph was {how}. Adaptive usage ranking is PAUSED — "
             "call experimental_rebuild_intent_graph() to rebuild it with the current model.",
             stacklevel=2,
+        )
+
+    def _emit_ranking_status(
+        self, reason: str, native_status: tuple[str, str | None, str | None, bool | None]
+    ) -> None:
+        """Report the current status (see ``_ranking_status_event``).
+
+        Takes the already-read ``native_status`` rather than re-reading it,
+        since the caller (enable, rebuild) just fetched it for
+        ``_maybe_warn_model_mismatch``.
+        """
+        self.record_event(
+            _ranking_status_event(reason, native_status, self._graph, self._graph_key, self._learn)
         )
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
@@ -1240,23 +1441,34 @@ class ToolCatalog:
         provenance: ProvenanceOption | None = None,
         cluster_similarity: float | None = None,
         cluster_coverage: float | None = None,
+        learn: bool = True,
+        graph_key: str | None = None,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
-        Wires both halves: this catalog ranks against what users have actually
-        invoked after similar queries, and keeps learning as it is used. Pass
-        the same :class:`IntentGraph` to the other catalog so both learn into one
-        set of clusters.
+        Wires both halves by default: this catalog ranks against what users
+        have actually invoked after similar queries, and keeps learning as it
+        is used. Pass the same :class:`IntentGraph` to the other catalog so
+        both learn into one set of clusters.
 
         Only queries matching a cluster are affected. With a graph attached the
         hit ``score`` becomes a fusion score rather than a raw BM25 score, so
         use ``rank`` for ordering and ``fused`` to detect the scale, not the
         raw ``score``.
 
+        Pass ``learn=False`` to rank from ``graph`` without learning into it —
+        the consumer form for a graph produced elsewhere (Ratel Cloud, for
+        example). See :meth:`ToolRegistry.experimental_enable_adaptive_ranking`.
+
         Set ``rebuild_on_model_change`` to auto-recover a model-mismatched graph
         on the next dense search rather than staying paused until you call
         :meth:`experimental_rebuild_intent_graph` yourself. Off by default — the rebuild is an
         embedding pass (cost, possible :class:`EmbedderError`, mutates the graph).
+
+        ``graph_key`` labels the graph on the ``usage_ranking_status`` event
+        this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="cloud"`` — so a
+        consumer can tell this runtime's own graph apart from one served by
+        Ratel Cloud.
         """
         self._registry.experimental_enable_adaptive_ranking(
             graph,
@@ -1266,6 +1478,8 @@ class ToolCatalog:
             provenance=provenance,
             cluster_similarity=cluster_similarity,
             cluster_coverage=cluster_coverage,
+            learn=learn,
+            graph_key=graph_key,
         )
 
     async def experimental_rebuild_intent_graph(self) -> None:

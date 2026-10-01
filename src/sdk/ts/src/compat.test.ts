@@ -50,4 +50,19 @@ describe("searchToolsTool (deprecated 0.1.x compatibility shim)", () => {
     const n = result.groups.reduce((a, g) => a + g.hits.length, 0);
     expect(n).toBeLessThanOrEqual(2);
   });
+
+  it("stamps gateway_search and the inner search with the given turn_id", async () => {
+    const tools = new ToolCatalog({ trace: { kind: "memory", sessionId: "t" } });
+    await tools.register(deployTool);
+    tools.drainTraceEvents();
+    const tool = searchToolsTool(tools);
+
+    await tool.execute({ query: "deploy to production" }, undefined, "turn-gw");
+
+    const events = tools.drainTraceEvents() as Array<Record<string, unknown>>;
+    const search = events.find((e) => e.type === "search");
+    const gw = events.find((e) => e.type === "gateway_search");
+    expect(search?.turn_id).toBe("turn-gw");
+    expect(gw?.turn_id).toBe("turn-gw");
+  });
 });

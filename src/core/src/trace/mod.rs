@@ -9,6 +9,7 @@ mod sink;
 pub use event::{
     CatalogKind, ChurnKind, EmbedderLoadStatus, FactHitTrace, FactInjectReason, Origin,
     SearchHitTrace, SearchStage, SkillHitTrace, TraceEnvelope, TraceEvent, TraceEventContext,
+    UsageRankingReason, UsageRankingState,
 };
 pub use sink::{
     FanoutSink, FanoutSubscription, FnSink, JsonlSink, MemorySink, NoopSink, TraceSink,
