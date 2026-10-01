@@ -26,10 +26,12 @@ pnpm -r typecheck
 pnpm -r lint
 pnpm -r test
 
-# Python (from src/sdk/python/; needs uv)
+# Python (from src/sdk/python/; needs uv). Same install as CI: mypy and pytest need the
+# telemetry extras, and maturin refuses to run with both VIRTUAL_ENV and CONDA_PREFIX set.
 uv venv --python 3.11 .venv
-uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy
-.venv/bin/maturin develop
+uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy \
+  mcp opentelemetry-sdk -e ../../telemetry/python
+unset CONDA_PREFIX && VIRTUAL_ENV=$PWD/.venv .venv/bin/maturin develop
 .venv/bin/ruff check . && .venv/bin/mypy ratel_ai && .venv/bin/pytest
 ```
 

@@ -2897,7 +2897,7 @@ mod tests {
 
         // `policy_drift_is_reported_as_active_not_paused` above proves the status
         // read; this proves the notice actually reaches the sink as a trace
-        // event, remotely publishable per the 2026-09-24 ADR-0020 amendment.
+        // event, remotely publishable per ADR-0020.
         // Purely lexical — the drift check runs independent of any embedder.
         let sink = Arc::new(MemorySink::new("s"));
         let mut reg = ToolRegistry::new();

@@ -6,27 +6,6 @@ Date: 2026-08-13
 
 Accepted — experimental rollout
 
-Amended 2026-09-23: `turn_id` is declared on the v2 envelope — see [Envelope v2 and
-identity](#envelope-v2-and-identity). It was already flowing (projected by both SDKs, read by
-both native bridges, keyed on by the core learner per ADR-0014) but undeclared, untested for
-truncation survival, and absent from the conformance fixture; this amendment closes that gap
-with no behavior change.
-
-Amended 2026-09-24: `usage_boost`, `usage_model_mismatch`, and `usage_cluster_policy_changed`
-(ADR-0014) join the remotely publishable set — see the new Adaptive ranking row below. Core
-already emits all three on every search a graph is attached to; they were withheld only by
-omission from this table. Ratel Cloud needs them to observe a served graph's health once it is
-serving rather than learning (`learn: false`). No field carries user content — cluster ids,
-similarities, counts, and model fingerprints only.
-
-Amended 2026-09-25: `usage_ranking_status` joins the same row — see [ADR-0014's "Opt-in, per
-registry"](0014-adaptive-usage-ranking.md#opt-in-per-registry) for why it is emitted by the SDK
-wrappers, not core. It reports whether adaptive ranking is on, off, unknown, or paused, which
-graph revision is attached, an optional caller-supplied `graph_key` label, whether the registry
-is learning or only ranking (`learn`), and the graph's embedding model. Ratel Cloud's dashboard
-needs this to tell a runtime's own graph apart from one it served, and to show ranking state
-without waiting for a search.
-
 ## Context
 
 Ratel's core trace stream already records the product facts that power inspection, adaptive
@@ -73,12 +52,24 @@ The remotely publishable v1 event set is:
 For search events, the envelope `event_id` identifies the search. A hit's zero-based rank is its
 position in the ordered `hits[]` array rather than a repeated field on each hit.
 
+The adaptive-ranking events (ADR-0014) let a consumer of a served graph, such as Ratel Cloud
+ranking a runtime with `learn: false`, observe its health and state without waiting for a
+search. They carry no user content: cluster ids, similarities, counts, model fingerprints, and
+the status report. `usage_ranking_status` is emitted by the SDK wrappers, not core, on enable,
+disable, and rebuild; it reports whether ranking is on, off, unknown, or paused, the attached
+graph's revision and model, whether the registry learns or only ranks, and an optional
+caller-supplied `graph_key` that tells a runtime's own graph apart from one it was served (see
+[ADR-0014's "Opt-in, per registry"](0014-adaptive-usage-ranking.md#opt-in-per-registry)).
+
 Newer SDKs may emit additive types before every receiver understands them; the receiver stores
 the unknown envelope rather than rejecting the batch. Core diagnostic variants that are not in
 the table remain local until deliberately added to the remotely publishable set.
 
 Search query text, hit ids/scores, and catalog-definition fields are part of the facts contract.
-A query is at most 4 KiB and `hits[]` (and `base_hits[]`) at most 100 entries. Enabling the experimental
+A query is at most 4 KiB and `hits[]` (and `base_hits[]`) at most 100 entries. An event over the
+64 KiB payload cap is trimmed and marked `payload_truncated`: other fields go first, then any
+product fact (pinned in `src/telemetry/conformance/fixtures.json`) that still does not fit. The
+envelope and the correlation ids (`invocation_id`, `turn_id`) always survive. Enabling the experimental
 catalog-definition option is explicit consent to publish those definition fields. This lane is independent
 of `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`; that setting governs only the OTel
 projection. Inference messages, tool arguments/results, executors, tokens, cost, model details,
