@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/sdk-linux-arm64-gnu",
-  "version": "0.13.0-rc.8",
+  "version": "0.13.0-rc.9",
   "cpu": [
     "arm64"
   ],
