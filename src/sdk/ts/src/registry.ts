@@ -29,11 +29,31 @@ import { type RuntimeEventProjection, recordCatalogDefinitions } from "./telemet
 
 export { IntentGraph };
 
-/** Last `learn` value each `IntentGraph` was enabled with, across whichever
- * registries share it (ADR-0014's "same graph on the tool and skill catalog"
- * pattern). Weakly keyed so an unreferenced graph is never pinned alive by
- * this bookkeeping; written on every enable, cleared on disable. */
-const graphLearnByObject = new WeakMap<IntentGraph, boolean>();
+/** The `learn` value each registry enabled an `IntentGraph` with, per graph
+ * (ADR-0014's "same graph on the tool and skill catalog" pattern). Keyed by
+ * registry so re-enabling one registry is never compared against itself, and
+ * one registry's disable never forgets another's entry. Weakly keyed by graph
+ * so an unreferenced graph is never pinned alive by this bookkeeping. */
+const graphLearnByRegistry = new WeakMap<IntentGraph, Map<object, boolean>>();
+
+/** Record `registry` enabling `graph` with `learn`. Returns whether another
+ * registry sharing `graph` was enabled with a different value. */
+function noteGraphLearn(graph: IntentGraph, registry: object, learn: boolean): boolean {
+  let byRegistry = graphLearnByRegistry.get(graph);
+  if (!byRegistry) {
+    byRegistry = new Map();
+    graphLearnByRegistry.set(graph, byRegistry);
+  }
+  byRegistry.delete(registry);
+  const mismatch = [...byRegistry.values()].some((other) => other !== learn);
+  byRegistry.set(registry, learn);
+  return mismatch;
+}
+
+/** Drop `registry`'s entry for `graph`, leaving other registries' intact. */
+function forgetGraphLearn(graph: IntentGraph, registry: object): void {
+  graphLearnByRegistry.get(graph)?.delete(registry);
+}
 
 /** Normalize the public string|object form into the native config the binding
  * expects (a string is the local-path `spec`, validated in core). */
@@ -364,23 +384,22 @@ export class ToolRegistry {
     this.#warnOnModelMismatch = warnOnModelMismatch;
     this.#rebuildOnModelChange = rebuildOnModelChange;
     this.#adaptiveWarned = false;
+    const previousGraph = this.#graph;
+    if (previousGraph && previousGraph !== graph) forgetGraphLearn(previousGraph, this);
     this.#learn = learn;
     this.#graph = graph;
     this.#graphKey = options.graphKey;
     const status = this.native.adaptiveRankingStatus();
     this.#maybeWarnModelMismatch(status);
     this.#emitRankingStatusEvent("enabled", status);
-    if (warnOnModelMismatch) {
-      const previousLearn = graphLearnByObject.get(graph);
-      if (previousLearn !== undefined && previousLearn !== learn) {
-        console.warn(
-          "ratel: this intent graph is enabled with learn: true on one catalog and " +
-            "learn: false on the other; it will still change. Use the same learn value " +
-            "on both catalogs.",
-        );
-      }
+    const learnMismatch = noteGraphLearn(graph, this, learn);
+    if (warnOnModelMismatch && learnMismatch) {
+      console.warn(
+        "ratel: this intent graph is enabled with learn: true on one catalog and " +
+          "learn: false on the other; it will still change. Use the same learn value " +
+          "on both catalogs.",
+      );
     }
-    graphLearnByObject.set(graph, learn);
   }
 
   /**
@@ -532,7 +551,8 @@ export class ToolRegistry {
       reason: "disabled",
       learn: true,
     });
-    if (this.#graph) graphLearnByObject.delete(this.#graph);
+    if (this.#graph) forgetGraphLearn(this.#graph, this);
+    this.#learn = true;
     this.#graph = undefined;
     this.#graphKey = undefined;
   }
@@ -858,23 +878,22 @@ export class SkillRegistry {
     this.#warnOnModelMismatch = warnOnModelMismatch;
     this.#rebuildOnModelChange = rebuildOnModelChange;
     this.#adaptiveWarned = false;
+    const previousGraph = this.#graph;
+    if (previousGraph && previousGraph !== graph) forgetGraphLearn(previousGraph, this);
     this.#learn = learn;
     this.#graph = graph;
     this.#graphKey = options.graphKey;
     const status = this.native.adaptiveRankingStatus();
     this.#maybeWarnModelMismatch(status);
     this.#emitRankingStatusEvent("enabled", status);
-    if (warnOnModelMismatch) {
-      const previousLearn = graphLearnByObject.get(graph);
-      if (previousLearn !== undefined && previousLearn !== learn) {
-        console.warn(
-          "ratel: this intent graph is enabled with learn: true on one catalog and " +
-            "learn: false on the other; it will still change. Use the same learn value " +
-            "on both catalogs.",
-        );
-      }
+    const learnMismatch = noteGraphLearn(graph, this, learn);
+    if (warnOnModelMismatch && learnMismatch) {
+      console.warn(
+        "ratel: this intent graph is enabled with learn: true on one catalog and " +
+          "learn: false on the other; it will still change. Use the same learn value " +
+          "on both catalogs.",
+      );
     }
-    graphLearnByObject.set(graph, learn);
   }
 
   /**
@@ -991,7 +1010,8 @@ export class SkillRegistry {
       reason: "disabled",
       learn: true,
     });
-    if (this.#graph) graphLearnByObject.delete(this.#graph);
+    if (this.#graph) forgetGraphLearn(this.#graph, this);
+    this.#learn = true;
     this.#graph = undefined;
     this.#graphKey = undefined;
   }

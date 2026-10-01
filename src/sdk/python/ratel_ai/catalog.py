@@ -144,12 +144,36 @@ EmbeddingSpec = Union[str, EmbeddingModelConfig]
 
 _DenseResult = TypeVar("_DenseResult")
 
-# Last `learn` value each `IntentGraph` was enabled with, across whichever
-# registries share it (ADR-0014's "same graph on the tool and skill catalog"
-# pattern). Weakly keyed so an unreferenced graph is never pinned alive by
-# this bookkeeping; written on every enable, cleared on disable. Shared with
-# `skill_catalog.py`.
-_graph_learn: weakref.WeakKeyDictionary[IntentGraph, bool] = weakref.WeakKeyDictionary()
+# The `learn` value each registry enabled an `IntentGraph` with, per graph
+# (ADR-0014's "same graph on the tool and skill catalog" pattern). Keyed by
+# registry so re-enabling one registry is never compared against itself, and
+# one registry's disable never forgets another's entry. Weakly keyed on both
+# levels so neither a graph nor a registry is pinned alive by it. Shared
+# with `skill_catalog.py`.
+_graph_learn: weakref.WeakKeyDictionary[IntentGraph, weakref.WeakKeyDictionary[Any, bool]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _note_graph_learn(graph: IntentGraph, registry: object, learn: bool) -> bool:
+    """Record ``registry`` enabling ``graph`` with ``learn``.
+
+    Returns whether another registry sharing ``graph`` was enabled with a
+    different value.
+    """
+    by_registry = _graph_learn.setdefault(graph, weakref.WeakKeyDictionary())
+    by_registry.pop(registry, None)
+    mismatch = any(other != learn for other in by_registry.values())
+    by_registry[registry] = learn
+    return mismatch
+
+
+def _forget_graph_learn(graph: IntentGraph, registry: object) -> None:
+    """Drop ``registry``'s entry for ``graph``, leaving other registries' intact."""
+    by_registry = _graph_learn.get(graph)
+    if by_registry is not None:
+        by_registry.pop(registry, None)
+
 
 _REGISTRY_BUSY = "registry busy; await the active operation"
 _UNAWAITED_REGISTER = (
@@ -766,22 +790,23 @@ class ToolRegistry:
             self._warn_on_model_mismatch = warn_on_model_mismatch
             self._rebuild_on_model_change = rebuild_on_model_change
             self._adaptive_warned = False
+            previous_graph = self._graph
+            if previous_graph is not None and previous_graph is not graph:
+                _forget_graph_learn(previous_graph, self)
             self._learn = learn
             self._graph = graph
             self._graph_key = graph_key
         native_status = self._native.adaptive_ranking_status()
         self._maybe_warn_model_mismatch(native_status)
         self._emit_ranking_status("enabled", native_status)
-        if warn_on_model_mismatch:
-            previous_learn = _graph_learn.get(graph)
-            if previous_learn is not None and previous_learn != learn:
-                warnings.warn(
-                    "ratel: this intent graph is enabled with learn=True on one catalog "
-                    "and learn=False on the other; it will still change. Use the same "
-                    "learn value on both catalogs.",
-                    stacklevel=2,
-                )
-        _graph_learn[graph] = learn
+        learn_mismatch = _note_graph_learn(graph, self, learn)
+        if warn_on_model_mismatch and learn_mismatch:
+            warnings.warn(
+                "ratel: this intent graph is enabled with learn=True on one catalog "
+                "and learn=False on the other; it will still change. Use the same "
+                "learn value on both catalogs.",
+                stacklevel=2,
+            )
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -790,7 +815,7 @@ class ToolRegistry:
             self._rebuild_on_model_change = False
             self._native.disable_adaptive_ranking()
         if self._graph is not None:
-            _graph_learn.pop(self._graph, None)
+            _forget_graph_learn(self._graph, self)
         self.record_event(
             {
                 "type": "usage_ranking_status",
@@ -799,6 +824,7 @@ class ToolRegistry:
                 "learn": True,
             }
         )
+        self._learn = True
         self._graph = None
         self._graph_key = None
 

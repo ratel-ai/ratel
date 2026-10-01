@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- The mismatched-`learn` warning on `experimental_enable_adaptive_ranking` no longer fires when one catalog re-enables its own graph with a different `learn`, and still fires after another catalog sharing the graph disables; the bookkeeping is now kept per catalog. Disable also resets the reported `learn` to `True`, so a later `usage_ranking_status` no longer carries the stale value
 - **Adaptive ranking pairs an invoke with the search that offered the tool** (core fix, surfaced through this SDK). A turn that searched twice before invoking anything credited both invokes to the later query and discarded the earlier one; now each search keeps the evidence for the capability it returned. No API change — `turn_id` still means one per user message, and the README now says so.
 
 ## [0.13.0-rc.7] - 2026-09-24

@@ -847,6 +847,34 @@ describe("public runtime events", () => {
     subscription.unsubscribe();
   });
 
+  it("reports learn true on a rebuild after disabling a consumer-only graph", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
+      learn: false,
+    });
+    runtime.tools.catalog.experimentalDisableAdaptiveRanking();
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+
+    // No graph attached: the rebuild is a no-op, but it still reports status.
+    await runtime.tools.catalog.experimentalRebuildIntentGraph();
+    await subscription.flush();
+
+    const status = received.find((e) => e.type === "usage_ranking_status");
+    expect(status?.reason).toBe("rebuilt");
+    expect(status?.status).toBe("inactive");
+    expect(status?.learn).toBe(true);
+    subscription.unsubscribe();
+  });
+
   it("delivers usage_ranking_status with the graph's model when it carries one", async () => {
     const runtime = ratel();
     await runtime.tools.register({

@@ -1332,6 +1332,36 @@ async def test_one_graph_with_mismatched_learn_across_catalogs_warns() -> None:
         assert not caught
 
 
+async def test_one_catalog_re_enabling_its_graph_with_a_different_learn_does_not_warn() -> None:
+    tool_catalog = await build_catalog()
+    graph = IntentGraph()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tool_catalog.experimental_enable_adaptive_ranking(graph, learn=True)
+        tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+        assert not caught
+
+
+async def test_learn_mismatch_still_warns_after_a_sharing_catalog_disables_and_re_enables() -> None:
+    tool_catalog = await build_catalog()
+    skill_catalog = SkillCatalog()
+    graph = IntentGraph()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tool_catalog.experimental_enable_adaptive_ranking(graph)
+        skill_catalog.experimental_enable_adaptive_ranking(graph)
+        tool_catalog.experimental_disable_adaptive_ranking()
+        assert not caught
+
+        # The skill catalog still learns into `graph`, so a consumer-only
+        # re-enable is a mismatch.
+        tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False)
+        matches = [w for w in caught if "learn=True on one catalog" in str(w.message)]
+        assert len(matches) == 1
+
+
 async def test_build_defaults_to_baseline_and_enable_defaults_to_any(tmp_path: Path) -> None:
     # Asymmetric on purpose: building from a log means seeding, so it defaults
     # to the origin a capture produces. Enabling keeps "any", which is what live

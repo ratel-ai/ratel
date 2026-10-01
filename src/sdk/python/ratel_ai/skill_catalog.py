@@ -29,7 +29,8 @@ from .catalog import (
     SearchMethod,
     SearchOrigin,
     TraceSinkConfig,
-    _graph_learn,
+    _forget_graph_learn,
+    _note_graph_learn,
     _registry_embedding_kwargs,
 )
 from .embedding_artifact import (
@@ -591,22 +592,23 @@ class SkillRegistry:
             self._warn_on_model_mismatch = warn_on_model_mismatch
             self._rebuild_on_model_change = rebuild_on_model_change
             self._adaptive_warned = False
+            previous_graph = self._graph
+            if previous_graph is not None and previous_graph is not graph:
+                _forget_graph_learn(previous_graph, self)
             self._learn = learn
             self._graph = graph
             self._graph_key = graph_key
         native_status = self._native.adaptive_ranking_status()
         self._maybe_warn_model_mismatch(native_status)
         self._emit_ranking_status("enabled", native_status)
-        if warn_on_model_mismatch:
-            previous_learn = _graph_learn.get(graph)
-            if previous_learn is not None and previous_learn != learn:
-                warnings.warn(
-                    "ratel: this intent graph is enabled with learn=True on one catalog "
-                    "and learn=False on the other; it will still change. Use the same "
-                    "learn value on both catalogs.",
-                    stacklevel=2,
-                )
-        _graph_learn[graph] = learn
+        learn_mismatch = _note_graph_learn(graph, self, learn)
+        if warn_on_model_mismatch and learn_mismatch:
+            warnings.warn(
+                "ratel: this intent graph is enabled with learn=True on one catalog "
+                "and learn=False on the other; it will still change. Use the same "
+                "learn value on both catalogs.",
+                stacklevel=2,
+            )
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -615,7 +617,7 @@ class SkillRegistry:
             self._rebuild_on_model_change = False
             self._native.disable_adaptive_ranking()
         if self._graph is not None:
-            _graph_learn.pop(self._graph, None)
+            _forget_graph_learn(self._graph, self)
         self.record_event(
             {
                 "type": "usage_ranking_status",
@@ -624,6 +626,7 @@ class SkillRegistry:
                 "learn": True,
             }
         )
+        self._learn = True
         self._graph = None
         self._graph_key = None
 

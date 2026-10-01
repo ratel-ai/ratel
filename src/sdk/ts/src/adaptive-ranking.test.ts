@@ -1325,6 +1325,39 @@ describe("configuration guardrails", () => {
       warn.mockRestore();
     }
   });
+
+  it("does not warn when one catalog re-enables its own graph with a different learn value", async () => {
+    const tools = await buildCatalog();
+    const graph = new IntentGraph();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      tools.experimentalEnableAdaptiveRanking(graph, { learn: true });
+      tools.experimentalEnableAdaptiveRanking(graph, { learn: false });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("still warns about a learn mismatch after the other catalog sharing the graph disabled and re-enabled", async () => {
+    const tools = await buildCatalog();
+    const skills = new SkillCatalog();
+    const graph = new IntentGraph();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      tools.experimentalEnableAdaptiveRanking(graph);
+      skills.experimentalEnableAdaptiveRanking(graph);
+      tools.experimentalDisableAdaptiveRanking();
+      expect(warn).not.toHaveBeenCalled();
+
+      // skills still learns into `graph`, so a consumer-only re-enable is a mismatch.
+      tools.experimentalEnableAdaptiveRanking(graph, { learn: false });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("learn: true on one catalog");
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("distributed capture", () => {
