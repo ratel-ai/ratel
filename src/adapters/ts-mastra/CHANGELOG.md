@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Each Mastra generation is one Ratel turn ([ADR 0026](../../../docs/adr/0026-turn-scope.md)) with no wiring beyond `recallProcessor()`: it opens the turn, or joins the host's own `r.turn(...)`, and the generation's searches and tool calls carry its `turn_id`. Tools the Agent holds beside Ratel's are recorded as external tool calls as they complete.
+- `mastra({ captureUserMessage: true })` sends the user's last message on `turn_start`. Off by default.
+- Needs `@ratel-ai/sdk` with the turn scope; against an older SDK the adapter behaves as before.
+
 ## [0.4.0] - 2026-08-21
 
 ### Added

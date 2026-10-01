@@ -81,13 +81,16 @@ describe("Agent integration (the real Mastra loop)", () => {
     expect(recallIdOccurrences(prompts[1], "recall_1")).toBe(2);
   });
 
-  it("recalls via processInput, not processInputStep (no re-injection during the tool loop)", () => {
+  it("recalls via processInput; processInputStep only observes (no re-injection during the tool loop)", async () => {
     const processor = viewWithDeployTool().recallProcessor() as {
       processInput?: unknown;
-      processInputStep?: unknown;
+      processInputStep?: (args: unknown) => unknown;
     };
     expect(typeof processor.processInput).toBe("function");
-    expect(processor.processInputStep).toBeUndefined();
+    const messages = [{ id: "u", role: "user", content: { format: 2, parts: [] } }];
+    expect(
+      await processor.processInputStep?.({ messages, stepNumber: 1, state: {} }),
+    ).toBeUndefined();
   });
 });
 
