@@ -1,22 +1,46 @@
 use crate::tool::Tool;
 
-pub(crate) fn searchable_text(tool: &Tool) -> String {
-    let mut tokens: Vec<String> = Vec::new();
+/// A tool's ranking text, split by field. Joining the non-empty fields in
+/// this order is exactly [`searchable_text`], so the flattened projection
+/// (ADR-0004) and the field-weighted one (ADR-0025) cannot drift apart.
+pub(crate) struct ToolFields {
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) schema: String,
+}
+
+pub(crate) fn searchable_fields(tool: &Tool) -> ToolFields {
+    let mut name: Vec<String> = Vec::new();
     if !tool.name.is_empty() {
-        push_identifier(&tool.name, &mut tokens);
+        push_identifier(&tool.name, &mut name);
     }
-    if let Some(description) = &tool.experimental_searchable_description {
-        if !description.is_empty() {
-            tokens.push(description.clone());
+    let mut description: Vec<String> = Vec::new();
+    let mut schema: Vec<String> = Vec::new();
+    if let Some(searchable) = &tool.experimental_searchable_description {
+        if !searchable.is_empty() {
+            description.push(searchable.clone());
         }
     } else {
         if !tool.description.is_empty() {
-            tokens.push(tool.description.clone());
+            description.push(tool.description.clone());
         }
-        flatten(&tool.input_schema, &mut tokens);
-        flatten(&tool.output_schema, &mut tokens);
+        flatten(&tool.input_schema, &mut schema);
+        flatten(&tool.output_schema, &mut schema);
     }
-    tokens.join(" ")
+    ToolFields {
+        name: name.join(" "),
+        description: description.join(" "),
+        schema: schema.join(" "),
+    }
+}
+
+pub(crate) fn searchable_text(tool: &Tool) -> String {
+    let fields = searchable_fields(tool);
+    [fields.name, fields.description, fields.schema]
+        .into_iter()
+        .filter(|field| !field.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn flatten(value: &serde_json::Value, tokens: &mut Vec<String>) {
