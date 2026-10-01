@@ -234,6 +234,17 @@ codes, SKUs, or internal jargon gives BM25 purchase those corpora do not have an
 lower value. If exact-name queries are missing their obvious match, lower it; if paraphrases are
 missing, raise it.
 
+**Experimental: two-stage ranking and `systemOne`.** A catalog's `reranker` option re-scores the
+first stage's top candidates (default 50) with a different method — any of `"bm25"`,
+`"semantic"`, `"hybrid"`, or `"systemOne"` — and never adds a tool the first stage missed.
+`"systemOne"` is also a standalone `method`: a hosted system-one model (Jev today) picks from the
+candidates via Ratel Cloud (`https://app.ratel.sh/v1/systemone`, key in `RATEL_API_KEY`). Unlike
+the other methods it **sends the query and the candidates' text off-process**, so do not
+recommend it to a user whose tool descriptions cannot leave their network. Rerankers and
+`"systemOne"` need the async search; a failed `"systemOne"` reranker falls back to the first
+stage's order
+([ADR-0026](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0026-system-one-ranking-and-reranker.md)).
+
 ### `replace` vs `suggest` mode
 
 Tool injection runs in two modes ([ADR-0004](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md)):
@@ -249,6 +260,7 @@ If you're not sure which one your user wants, default to `replace` — it's the 
 - [ADR-0004 — Retrieval and tool selection](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md): Retrieval over semantic tokens (names, descriptions, parameter names, enum values; JSON Schema structure stripped); replace by default, suggest opt-in.
 - [ADR-0006 — Native FFI bindings](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-native-ffi-bindings.md): Why the SDKs ship pre-built natives (NAPI-RS / PyO3).
 - [ADR-0011 — Selectable retrieval methods](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0011-selectable-retrieval-methods.md): BM25 (default), semantic, and hybrid ranking, chosen per catalog or per call.
+- [ADR-0026 — System-one ranking and a two-stage reranker](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0026-system-one-ranking-and-reranker.md): An optional reranker over any method, and a `systemOne` method backed by Ratel Cloud (experimental, proposed).
 - [ADR-0012 — Configurable embedding models](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models.md): Dense embeddings use a configurable in-process HuggingFace/local model, Ollama, or OpenAI-compatible endpoint.
 - [ADR-0014 — Adaptive usage ranking](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0014-adaptive-usage-ranking.md): A third RRF arm learned online from search-then-invoke pairs, plus the offline path that seeds it from a captured baseline before ranking is switched on.
 - [ADR-0019 — Retrieval experiments](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0019-retrieval-experiments.md): The TypeScript-only experimental surface for deterministic assignment, bounded shadow evaluation, lifecycle, comparison, and OpenTelemetry semantics.
