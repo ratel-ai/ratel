@@ -24,7 +24,11 @@ from ratel_ai import (
     SkillCatalog,
     ToolCatalog,
 )
-from ratel_ai.runtime_events import _normalize_runtime_event
+from ratel_ai.runtime_events import (
+    _PRODUCT_FACT_FIELDS,
+    _PRODUCT_FACT_SUFFIXES,
+    _normalize_runtime_event,
+)
 
 
 @pytest.mark.asyncio
@@ -171,6 +175,8 @@ def test_matches_frozen_cross_language_event_vocabulary() -> None:
         ],
         "optional_envelope_fields": list(OPTIONAL_ENVELOPE_FIELDS),
         "event_types": list(RUNTIME_EVENT_TYPES),
+        "product_fact_fields": list(_PRODUCT_FACT_FIELDS),
+        "product_fact_suffixes": list(_PRODUCT_FACT_SUFFIXES),
     }
 
 

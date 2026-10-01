@@ -25,6 +25,7 @@ import {
   RuntimeEvents,
   ratel,
 } from "./index.js";
+import { PRODUCT_FACT_FIELDS, PRODUCT_FACT_SUFFIXES } from "./runtime-events.js";
 
 interface RuntimeEventsFixture {
   runtime_events: {
@@ -36,6 +37,8 @@ interface RuntimeEventsFixture {
     required_envelope_fields: string[];
     optional_envelope_fields: string[];
     event_types: string[];
+    product_fact_fields: string[];
+    product_fact_suffixes: string[];
   };
 }
 
@@ -60,6 +63,8 @@ describe("public runtime events", () => {
       required_envelope_fields: ["v", "event_id", "ts", "session_id", "source_id", "type"],
       optional_envelope_fields: [...OPTIONAL_ENVELOPE_FIELDS],
       event_types: [...RUNTIME_EVENT_TYPES],
+      product_fact_fields: [...PRODUCT_FACT_FIELDS],
+      product_fact_suffixes: [...PRODUCT_FACT_SUFFIXES],
     });
   });
 

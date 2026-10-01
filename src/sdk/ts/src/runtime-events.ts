@@ -592,53 +592,60 @@ function serializedPropertySize(key: string, value: unknown): number {
   return serializedSize({ [key]: value }) - 2;
 }
 
+/** Named payload fields kept when an oversized event is trimmed, beside the
+ * envelope and correlation fields. Pinned in the conformance fixture so the
+ * TS and Python lists cannot drift. */
+export const PRODUCT_FACT_FIELDS = [
+  "query",
+  "target",
+  "origin",
+  "top_k",
+  "hits",
+  "base_hits",
+  "outcome",
+  "error",
+  "error_class",
+  "transport",
+  "role",
+  "cold",
+  "agreement",
+  "reason",
+  "label",
+  "score",
+  "attributed",
+  "rank",
+  "turn",
+  "action",
+  "intent",
+  "similarity",
+  "support",
+  "promoted",
+  "dropped",
+  "built",
+  "active",
+  "dim_mismatch",
+  "built_similarity",
+  "built_coverage",
+  "active_similarity",
+  "active_coverage",
+  "status",
+  "rev",
+  "graph_key",
+  "learn",
+  "model",
+] as const;
+
+/** Field-name suffixes that also mark a kept payload field (ids, timings,
+ * counts, scores). Pinned in the conformance fixture with
+ * {@link PRODUCT_FACT_FIELDS}. */
+export const PRODUCT_FACT_SUFFIXES = ["_id", "_ids", "_ms", "_count", "_score", "_scores"] as const;
+
+const PRODUCT_FACT_FIELD_SET: ReadonlySet<string> = new Set(PRODUCT_FACT_FIELDS);
+
 function isProductFactField(key: string): boolean {
   return (
     CATALOG_DEFINITION_FIELDS.has(key) ||
-    key.endsWith("_id") ||
-    key.endsWith("_ids") ||
-    key.endsWith("_ms") ||
-    key.endsWith("_count") ||
-    key.endsWith("_score") ||
-    key.endsWith("_scores") ||
-    [
-      "query",
-      "target",
-      "origin",
-      "top_k",
-      "hits",
-      "base_hits",
-      "outcome",
-      "error",
-      "error_class",
-      "transport",
-      "role",
-      "cold",
-      "agreement",
-      "reason",
-      "label",
-      "score",
-      "attributed",
-      "rank",
-      "turn",
-      "action",
-      "intent",
-      "similarity",
-      "support",
-      "promoted",
-      "dropped",
-      "built",
-      "active",
-      "dim_mismatch",
-      "built_similarity",
-      "built_coverage",
-      "active_similarity",
-      "active_coverage",
-      "status",
-      "rev",
-      "graph_key",
-      "learn",
-      "model",
-    ].includes(key)
+    PRODUCT_FACT_SUFFIXES.some((suffix) => key.endsWith(suffix)) ||
+    PRODUCT_FACT_FIELD_SET.has(key)
   );
 }

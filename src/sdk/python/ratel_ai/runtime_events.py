@@ -461,47 +461,60 @@ def _serialized_size(value: Any) -> int:
     return len(json.dumps(value, separators=(",", ":")).encode())
 
 
+# Named payload fields kept when an oversized event is trimmed, beside the
+# envelope and correlation fields. Pinned in the conformance fixture so the
+# Python and TS lists cannot drift.
+_PRODUCT_FACT_FIELDS = (
+    "query",
+    "target",
+    "origin",
+    "top_k",
+    "hits",
+    "base_hits",
+    "outcome",
+    "error",
+    "error_class",
+    "transport",
+    "role",
+    "cold",
+    "agreement",
+    "reason",
+    "label",
+    "score",
+    "attributed",
+    "rank",
+    "turn",
+    "action",
+    "intent",
+    "similarity",
+    "support",
+    "promoted",
+    "dropped",
+    "built",
+    "active",
+    "dim_mismatch",
+    "built_similarity",
+    "built_coverage",
+    "active_similarity",
+    "active_coverage",
+    "status",
+    "rev",
+    "graph_key",
+    "learn",
+    "model",
+)
+# Field-name suffixes that also mark a kept payload field (ids, timings,
+# counts, scores). Pinned in the conformance fixture with _PRODUCT_FACT_FIELDS.
+_PRODUCT_FACT_SUFFIXES = ("_id", "_ids", "_ms", "_count", "_score", "_scores")
+_PRODUCT_FACT_FIELD_SET = frozenset(_PRODUCT_FACT_FIELDS)
+
+
 def _is_product_fact_field(key: str) -> bool:
-    return key.endswith(("_id", "_ids", "_ms", "_count", "_score", "_scores")) or key in {
-        *_CATALOG_DEFINITION_FIELDS,
-        "query",
-        "target",
-        "origin",
-        "top_k",
-        "hits",
-        "base_hits",
-        "outcome",
-        "error",
-        "error_class",
-        "transport",
-        "role",
-        "cold",
-        "agreement",
-        "reason",
-        "label",
-        "score",
-        "attributed",
-        "rank",
-        "turn",
-        "action",
-        "intent",
-        "similarity",
-        "support",
-        "promoted",
-        "dropped",
-        "built",
-        "active",
-        "dim_mismatch",
-        "built_similarity",
-        "built_coverage",
-        "active_similarity",
-        "active_coverage",
-        "status",
-        "rev",
-        "graph_key",
-        "learn",
-        "model",
-    }
+    return (
+        key.endswith(_PRODUCT_FACT_SUFFIXES)
+        or key in _CATALOG_DEFINITION_FIELDS
+        or key in _PRODUCT_FACT_FIELD_SET
+    )
 
 
 class RuntimeCatalog:
