@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.10] - 2026-10-01
+
 ### Added
 
 - Turn scope ([ADR 0026](../../../docs/adr/0026-turn-scope.md)): `r.turn(fn, { id?, userMessage?, endUserId? })` marks one user request. Every search, skill load, and tool call inside it, across `await`, carries the turn's `turn_id` (and `end_user_id`), and one `turn_start` event opens it, with `user_message` only when you pass it (capped at 4 KiB). An explicit `turnId` argument still wins; nested turns win over outer ones. Also on `ToolCatalog` and every adapted view, with `currentTurnId()`.
