@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.8] - 2026-10-01
+
 ### Added
 
 - Intent graph storage plugins ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)): `LocalFileIntentGraphStorage` and `S3IntentGraphStorage`, the two ready-made backends for persisting adaptive ranking's `IntentGraph`. Both expose `load()`/`save()`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` rather than clobber a concurrent writer. The local backend writes atomically via temp file + rename at `0600`; the S3 backend uses conditional writes (`If-Match`/`If-None-Match`) and needs no `@aws-sdk/client-s3` — it signs with a built-in SigV4 client (#168)
