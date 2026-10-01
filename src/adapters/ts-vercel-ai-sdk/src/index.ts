@@ -12,4 +12,4 @@
  * @packageDocumentation
  */
 
-export { type AiSdkExt, aiSdk } from "./aisdk.js";
+export { type AiSdkExt, type AiSdkOptions, aiSdk } from "./aisdk.js";

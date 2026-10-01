@@ -13,6 +13,7 @@ import {
   SEARCH_CAPABILITIES_ID,
 } from "@ratel-ai/sdk";
 import { asSchema, jsonSchema, type ModelMessage, type Tool, tool } from "ai";
+import { AiSdkTurns, recallCallId, type TurnCapableBase } from "./turns.js";
 
 type SchemaField = "inputSchema" | "outputSchema";
 
@@ -73,6 +74,16 @@ export interface AiSdkExt {
   }): Promise<{ messages: ModelMessage[] } | undefined>;
 }
 
+/** Options for {@link aiSdk}. */
+export interface AiSdkOptions {
+  /**
+   * Send the user's last message as `user_message` on each turn's `turn_start`
+   * event. Off by default: turning it on is your consent to record what users
+   * ask. Capped at 4 KiB.
+   */
+  captureUserMessage?: boolean;
+}
+
 /**
  * The Vercel AI SDK adapter: `ratel(config).adaptTo(aiSdk())` gives the
  * framework-neutral core the AI SDK's native {@link Tool} and
@@ -81,9 +92,18 @@ export interface AiSdkExt {
  * required codecs — `ingest` / `expose` / `recallMessages` — the experimental
  * passthrough exposure hook, plus the {@link AiSdkExt} recall helpers.
  *
+ * Each agent call is one Ratel turn, with no wiring: `appendRecall` or step 0
+ * of `prepareStep` opens it (or joins the host's own `r.turn(...)`), and the
+ * run's searches and tool calls carry its id. Tools the model runs outside
+ * Ratel's capability tools are recorded from the next step's `prepareStep`.
+ * Needs an `@ratel-ai/sdk` with the turn scope; on an older one the adapter
+ * behaves exactly as before.
+ *
+ * @param options - Opt-ins; see {@link AiSdkOptions}.
  * @returns A {@link RatelAdapter} over the AI SDK's tool and message types.
  */
-export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
+export function aiSdk(options: AiSdkOptions = {}): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
+  const turns = new AiSdkTurns(options.captureUserMessage === true);
   return {
     name: "ai-sdk",
 
@@ -144,15 +164,17 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
         // Carry the framework's complete live execution options through the
         // catalog as an opaque, adapter-tagged value (ADR-0013). The core never
         // reads it; only this adapter's ingest unwraps the tag.
-        execute: (args, options) => {
-          const result = t.execute(args, { [AI_SDK_CONTEXT_KEY]: options });
-          return t.id === INVOKE_TOOL_ID ? rethrowTargetFailure(result) : result;
-        },
+        execute: (args, options) =>
+          turns.run(promptOf(options), () => {
+            const result = t.execute(args, { [AI_SDK_CONTEXT_KEY]: options });
+            return t.id === INVOKE_TOOL_ID ? rethrowTargetFailure(result) : result;
+          }),
       });
     },
 
     experimentalExposePassthrough(t, exposure) {
-      return wrapPassthrough(t, exposure);
+      if (typeof t.execute === "function") turns.recordedPassthroughIds.add(exposure.id);
+      return wrapPassthrough(t, exposure, turns);
     },
 
     recallMessages(ref: RecallRef, recall: SearchCapabilitiesResult): ModelMessage[] {
@@ -184,18 +206,22 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
 
     extend(base) {
       const recallRuns = new WeakMap<readonly unknown[], RecallRunState>();
+      const turnBase = base as typeof base & TurnCapableBase;
       return {
         async appendRecall(messages) {
           const query = lastUserText(messages);
           if (!query) return messages;
           // base.recall mints the id and returns [] on no hits (spending none).
-          messages.push(...(await base.recall(query)));
+          messages.push(
+            ...(await turns.recall(turnBase, messages, query, () => base.recall(query))),
+          );
           return messages;
         },
 
         async prepareStep({ stepNumber, messages, steps }) {
           if (stepNumber !== 0) {
             if (!steps) return undefined;
+            turns.observeStep(turnBase, steps, steps.at(-1));
             const state = recallRuns.get(steps);
             if (!state) return undefined;
             if (hasRecallPair(messages, state.callId)) return undefined;
@@ -209,7 +235,13 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
           }
           const query = lastUserText(messages);
           if (!query) return undefined;
-          const pair = await base.recall(query);
+          const pair = await turns.recall(
+            turnBase,
+            messages,
+            query,
+            () => base.recall(query),
+            steps,
+          );
           if (pair.length === 0) return undefined;
           const callId = recallCallId(pair);
           if (steps && callId) {
@@ -224,7 +256,11 @@ export function aiSdk(): RatelAdapter<Tool, ModelMessage, AiSdkExt> {
   };
 }
 
-function wrapPassthrough(t: Tool, exposure: ExperimentalPassthroughToolExposure): Tool {
+function wrapPassthrough(
+  t: Tool,
+  exposure: ExperimentalPassthroughToolExposure,
+  turns: AiSdkTurns,
+): Tool {
   const execute = t.execute;
   if (typeof execute !== "function") {
     return t;
@@ -241,7 +277,9 @@ function wrapPassthrough(t: Tool, exposure: ExperimentalPassthroughToolExposure)
         : true,
     value: function (this: unknown, input: unknown, options: unknown) {
       const receiver = this === exposed ? t : this;
-      return exposure.invoke(input, () => Reflect.apply(execute, receiver, [input, options]));
+      return turns.run(promptOf(options), () =>
+        exposure.invoke(input, () => Reflect.apply(execute, receiver, [input, options])),
+      );
     },
   };
   // The clone shares t's prototype but not its private-field brand, so any
@@ -289,6 +327,14 @@ function redirectInheritedMembers(
     }
     proto = Object.getPrototypeOf(proto);
   }
+}
+
+// The prompt messages the AI SDK hands each tool execution: the key that finds
+// the run's turn again (see `turns.ts`).
+function promptOf(options: unknown): unknown {
+  return options !== null && typeof options === "object"
+    ? (options as { messages?: unknown }).messages
+    : undefined;
 }
 
 function rethrowTargetFailure(result: unknown): unknown {
@@ -412,22 +458,6 @@ function requiresNativeLifecycle(t: Tool): boolean {
     "inputExamples",
     "title",
   ].some((field) => toolWithLifecycle[field] !== undefined);
-}
-
-function recallCallId(messages: ModelMessage[]): string | undefined {
-  for (const message of messages) {
-    if (!Array.isArray(message.content)) continue;
-    for (const part of message.content) {
-      if (
-        part.type === "tool-call" &&
-        part.toolName === SEARCH_CAPABILITIES_ID &&
-        typeof part.toolCallId === "string"
-      ) {
-        return part.toolCallId;
-      }
-    }
-  }
-  return undefined;
 }
 
 function hasRecallPair(messages: ModelMessage[], callId: string): boolean {
