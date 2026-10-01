@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.6.0-rc.1] - 2026-10-01
+
 ### Added
 
 - Each AI SDK call is one Ratel turn ([ADR 0026](../../../docs/adr/0026-turn-scope.md)) with no wiring: `appendRecall` or step 0 of `prepareStep` opens it, or joins the host's own `r.turn(...)`, and the call's searches and tool calls carry its `turn_id`. Tools the model runs outside Ratel's capability tools are recorded as external tool calls from the next step's `prepareStep`.
