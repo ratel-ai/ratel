@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use bm25::{DefaultTokenizer, Document, Language, SearchEngine, SearchEngineBuilder, Tokenizer};
@@ -123,6 +123,56 @@ fn distinct_terms(query: &str) -> Vec<String> {
     terms
 }
 
+/// What [`Bm25Index::search`] hands the engine: `query`'s surface words, one
+/// per distinct stem, in first-seen order.
+///
+/// Surface words, not stems, because the engine tokenizes and stems whatever
+/// it is given. Stems would be stemmed a second time, and a stem that is not a
+/// fixed point of the stemmer changes ("codebase" -> "codebas" -> "codeba")
+/// and matches nothing, since documents are stemmed exactly once. One word per
+/// stem, because the engine scores every occurrence while
+/// [`Bm25Index::query_ceiling`] counts each distinct term once (see
+/// [`distinct_terms`]): the result tokenizes to exactly `distinct_terms(query)`.
+///
+/// A whitespace piece is kept whole when all of its stems are new. One that
+/// repeats a stem already seen ("deploy deploy-service") falls back to its
+/// alphanumeric sub-words, so only the new ones are kept.
+fn engine_query(query: &str) -> String {
+    /// Keep `piece` when every stem it yields is distinct and unseen; report
+    /// whether it was kept, so a mixed piece can be retried word by word.
+    fn keep_if_new<'q>(
+        tk: &DefaultTokenizer,
+        seen: &mut HashSet<String>,
+        kept: &mut Vec<&'q str>,
+        piece: &'q str,
+    ) -> bool {
+        let stems = tk.tokenize(piece);
+        if stems.is_empty() {
+            // A stopword or punctuation: the engine would drop it anyway.
+            return true;
+        }
+        let unique: HashSet<&String> = stems.iter().collect();
+        if unique.len() != stems.len() || stems.iter().any(|stem| seen.contains(stem)) {
+            return false;
+        }
+        seen.extend(stems);
+        kept.push(piece);
+        true
+    }
+
+    let tk = tokenizer();
+    let mut seen = HashSet::new();
+    let mut kept = Vec::new();
+    for piece in query.split_whitespace() {
+        if !keep_if_new(&tk, &mut seen, &mut kept, piece) {
+            for word in piece.split(|c: char| !c.is_alphanumeric()) {
+                keep_if_new(&tk, &mut seen, &mut kept, word);
+            }
+        }
+    }
+    kept.join(" ")
+}
+
 impl Bm25Index {
     /// [`Self::build_with`] at the shipped [`Bm25Params::default`]. Production
     /// always goes through [`Bm25Cache`], which reads the registry's current
@@ -220,14 +270,15 @@ impl Bm25Index {
         let Some(engine) = &self.engine else {
             return Vec::new();
         };
-        // Deduped before it reaches the engine: the engine scores every
+        // Deduped before it reaches the engine, as surface words so the engine
+        // stems them exactly once (see `engine_query`): the engine scores every
         // occurrence of a repeated term, but `query_ceiling` (above) counts
         // each distinct term once — feeding it the same term set the ceiling
         // uses is what keeps a repeated word from inflating the score without
         // inflating what it is normalized against. Word order does not affect
         // BM25 (`Scorer::score_` just accumulates per-term contributions), so
         // this changes nothing for a query with no repeats.
-        let deduped_query = distinct_terms(query).join(" ");
+        let deduped_query = engine_query(query);
         // Rank against the full corpus, then truncate — never let the engine
         // cut to `top_k` itself. The bm25 crate sorts by score alone and
         // collects candidates through a HashSet, so equal scores fall back to
@@ -404,22 +455,91 @@ mod tests {
         );
     }
 
-    /// Pins the assumption the query-side dedup relies on: joining an
-    /// already-tokenized/stemmed term list back into a string and tokenizing
-    /// it again reproduces the same terms. If a future tokenizer/stemmer
-    /// change breaks this, it must fail here rather than silently corrupt
-    /// scores.
+    /// The regression this guards against: the query was stemmed, joined, and
+    /// handed to the engine, which stems again. A stem that is not a fixed
+    /// point of the stemmer then changes ("codebase" -> "codebas" -> "codeba")
+    /// and matches nothing, since documents are stemmed exactly once.
     #[test]
-    fn re_tokenizing_already_stemmed_terms_is_a_no_op() {
-        for q in [
-            "build build the app",
-            "send a notification message",
-            "read a file",
-        ] {
-            let once = tokenizer().tokenize(q);
-            let twice = tokenizer().tokenize(&once.join(" "));
-            assert_eq!(once, twice, "stemming is not idempotent for {q:?}");
+    fn a_word_whose_stem_is_unstable_under_restemming_still_matches() {
+        for word in ["codebase", "database"] {
+            let docs = vec![
+                ("hit".to_string(), format!("{word} {word} {word}")),
+                ("other".to_string(), "send an email".to_string()),
+            ];
+            let hits = Bm25Index::build(docs).search(word, 5);
+            assert_eq!(
+                hits.first().map(|(id, _)| id.as_str()),
+                Some("hit"),
+                "{word:?} must match a document containing it, got {hits:?}"
+            );
         }
+    }
+
+    /// The engine stems whatever it is handed, so the query must reach it as
+    /// surface words, one per distinct stem: then it is stemmed exactly once,
+    /// like a document, and carries the same term set `query_ceiling` counts.
+    #[test]
+    fn the_engine_query_tokenizes_to_exactly_the_distinct_query_terms() {
+        for q in [
+            "codebase",
+            "database migrations",
+            "the codebase codebase changes",
+            "build build the app",
+            "deploy deploy-service",
+            "read_file read a file",
+            "",
+            "the a an",
+        ] {
+            let mut sent = tokenizer().tokenize(&engine_query(q));
+            sent.sort_unstable();
+            assert_eq!(sent, distinct_terms(q), "for {q:?}");
+        }
+    }
+
+    #[test]
+    fn a_word_repeated_three_times_scores_exactly_as_once() {
+        let docs = vec![
+            ("a".to_string(), "deploy to prod".to_string()),
+            ("b".to_string(), "build the app".to_string()),
+        ];
+        let index = Bm25Index::build(docs);
+        assert_eq!(
+            index.search("deploy deploy deploy", 5),
+            index.search("deploy", 5)
+        );
+    }
+
+    #[test]
+    fn a_stopword_a_repeat_and_an_unstable_stem_together_still_match() {
+        let docs = vec![
+            ("hit".to_string(), "codebase changes".to_string()),
+            ("other".to_string(), "send an email".to_string()),
+        ];
+        let index = Bm25Index::build(docs);
+        let hits = index.search("the codebase codebase changes", 5);
+        assert_eq!(hits.first().map(|(id, _)| id.as_str()), Some("hit"));
+        assert_eq!(hits, index.search("codebase changes", 5));
+        // "changes" alone also finds the document; "codebase" must add to it.
+        let changes_only = index.search("changes", 5)[0].1;
+        assert!(
+            hits[0].1 > changes_only,
+            "codebase contributed nothing: {hits:?}"
+        );
+    }
+
+    /// A whitespace piece can hold several words ("deploy-service"); when one
+    /// of them repeats an earlier word, only the new one may reach the engine.
+    #[test]
+    fn a_compound_piece_repeating_an_earlier_word_does_not_inflate_the_score() {
+        let docs = vec![
+            ("a".to_string(), "deploy the service".to_string()),
+            ("b".to_string(), "build the app".to_string()),
+        ];
+        let index = Bm25Index::build(docs);
+        assert_eq!(
+            index.search("deploy deploy-service", 5),
+            index.search("deploy service", 5)
+        );
     }
 
     #[test]

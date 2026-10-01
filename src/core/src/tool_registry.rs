@@ -3011,6 +3011,31 @@ mod tests {
         );
     }
 
+    /// Regression: the query was stemmed twice, so a word whose stem is not
+    /// stable under a second pass ("codebase", "database") never matched. In
+    /// hybrid the stub embeds both tools alike, so only BM25 can lift the
+    /// target above `a_mail`, which wins the id tiebreak otherwise.
+    #[test]
+    fn a_stem_unstable_word_matches_in_bm25_and_hybrid() {
+        for word in ["codebase", "database"] {
+            let mut reg = with_embedder(Arc::new(StubEmbedder));
+            reg.register(tool("a_mail", "send an email"));
+            reg.register(tool("z_target", &format!("{word} {word} {word}")));
+            reg.build_embeddings().unwrap();
+            for method in [SearchMethod::Bm25, SearchMethod::Hybrid] {
+                let hits = reg
+                    .search_with_method(word, 5, Origin::Direct, method)
+                    .unwrap();
+                assert_eq!(
+                    hits.first().map(|h| h.tool_id.as_str()),
+                    Some("z_target"),
+                    "{word:?} via {method:?}: {:?}",
+                    hits.iter().map(|h| &h.tool_id).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
     #[test]
     fn hybrid_scores_are_always_flagged_fused() {
         // Hybrid is RRF-scale with or without a graph, so `fused` is always true
