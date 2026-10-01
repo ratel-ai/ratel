@@ -10,6 +10,7 @@
     "required_envelope_fields": ["v", "event_id", "ts", "session_id", "source_id", "type"],
     "event_types": [
       "catalog_definition",
+      "turn_start",
       "search",
       "skill_search",
       "gateway_search",
