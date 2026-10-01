@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.0-rc.1] - 2026-10-01
+
 ### Added
 
 - Each Mastra generation is one Ratel turn ([ADR 0026](../../../docs/adr/0026-turn-scope.md)) with no wiring beyond `recallProcessor()`: it opens the turn, or joins the host's own `r.turn(...)`, and the generation's searches and tool calls carry its `turn_id`. Tools the Agent holds beside Ratel's are recorded as external tool calls as they complete.
