@@ -89,6 +89,38 @@ pub enum EmbedderLoadStatus {
     Failed,
 }
 
+/// Adaptive-ranking state reported by [`TraceEvent::UsageRankingStatus`]: the
+/// four-value contract the SDKs collapse [`crate::AdaptiveRankingStatus`] to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageRankingState {
+    /// A graph is attached and ranking from it, policy drift included. Wire
+    /// value `active`.
+    Active,
+    /// No graph is attached. Wire value `inactive`.
+    Inactive,
+    /// A graph is attached but the active model is not known yet (embeddings
+    /// not built), so a model mismatch cannot be ruled out. Wire value
+    /// `unknown`.
+    Unknown,
+    /// A graph is attached but the usage arm is paused, e.g. on an embedding
+    /// model mismatch. Wire value `paused`.
+    Paused,
+}
+
+/// What triggered a [`TraceEvent::UsageRankingStatus`] report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageRankingReason {
+    /// Adaptive ranking was enabled. Wire value `enabled`.
+    Enabled,
+    /// Adaptive ranking was disabled. Wire value `disabled`.
+    Disabled,
+    /// The intent graph was rebuilt under the current model. Wire value
+    /// `rebuilt`.
+    Rebuilt,
+}
+
 /// One ranked tool hit inside a [`TraceEvent::Search`] event.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchHitTrace {
@@ -584,10 +616,10 @@ pub enum TraceEvent {
     /// (ADR-0014). Emitted by the SDK wrappers on enable, disable and rebuild,
     /// never by the core itself; the core cannot know where a graph came from.
     UsageRankingStatus {
-        /// `"active"`, `"inactive"`, `"unknown"`, or `"paused"`.
-        status: String,
-        /// What triggered the report: `"enabled"`, `"disabled"`, `"rebuilt"`.
-        reason: String,
+        /// Whether ranking is on, off, unknown, or paused.
+        status: UsageRankingState,
+        /// What triggered the report.
+        reason: UsageRankingReason,
         /// The attached graph's revision; absent when `status` is `inactive`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rev: Option<u64>,
@@ -823,8 +855,8 @@ mod tests {
     #[test]
     fn usage_ranking_status_serializes_with_the_wire_tag_and_omits_absent_optionals() {
         let event = TraceEvent::UsageRankingStatus {
-            status: "active".to_string(),
-            reason: "enabled".to_string(),
+            status: UsageRankingState::Active,
+            reason: UsageRankingReason::Enabled,
             rev: None,
             graph_key: None,
             learn: true,
@@ -871,14 +903,49 @@ mod tests {
         assert_eq!(
             event,
             TraceEvent::UsageRankingStatus {
-                status: "paused".to_string(),
-                reason: "rebuilt".to_string(),
+                status: UsageRankingState::Paused,
+                reason: UsageRankingReason::Rebuilt,
                 rev: Some(3),
                 graph_key: Some("cloud".to_string()),
                 learn: false,
                 model: Some("bge-small".to_string()),
             }
         );
+    }
+
+    #[test]
+    fn usage_ranking_status_rejects_a_status_or_reason_outside_the_contract() {
+        for (status, reason) in [("activ", "enabled"), ("active", "toggled")] {
+            let json = serde_json::json!({
+                "type": "usage_ranking_status",
+                "status": status,
+                "reason": reason,
+            })
+            .to_string();
+            assert!(
+                serde_json::from_str::<TraceEvent>(&json).is_err(),
+                "{status}/{reason} must not deserialize"
+            );
+        }
+    }
+
+    #[test]
+    fn usage_ranking_state_and_reason_use_snake_case_wire_values() {
+        for (state, value) in [
+            (UsageRankingState::Active, "active"),
+            (UsageRankingState::Inactive, "inactive"),
+            (UsageRankingState::Unknown, "unknown"),
+            (UsageRankingState::Paused, "paused"),
+        ] {
+            assert_eq!(serde_json::to_value(state).unwrap(), value);
+        }
+        for (reason, value) in [
+            (UsageRankingReason::Enabled, "enabled"),
+            (UsageRankingReason::Disabled, "disabled"),
+            (UsageRankingReason::Rebuilt, "rebuilt"),
+        ] {
+            assert_eq!(serde_json::to_value(reason).unwrap(), value);
+        }
     }
 
     #[test]

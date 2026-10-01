@@ -126,6 +126,7 @@ pub use trace::{
     CatalogKind, ChurnKind, EmbedderLoadStatus, FactHitTrace, FactInjectReason, FanoutSink,
     FanoutSubscription, FnSink, JsonlSink, MemorySink, NoopSink, Origin, SearchHitTrace,
     SearchStage, SkillHitTrace, TraceEnvelope, TraceEvent, TraceEventContext, TraceSink,
+    UsageRankingReason, UsageRankingState,
 };
 pub use usage::{ClusterPolicy, Intent, IntentGraph, IntentGraphError};
 pub use usage_learner::{ObservationPolicy, OriginFilter, Provenance, UsageLearner};
