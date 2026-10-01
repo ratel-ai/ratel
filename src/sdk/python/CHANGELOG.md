@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.10] - 2026-10-01
+
 ### Added
 
 - Turn scope ([ADR 0026](../../../docs/adr/0026-turn-scope.md)): `with catalog.turn(id=None, *, user_message=None, end_user_id=None):` (or `async with`) marks one user request. Every search, skill load, and tool call inside it, across `await` and the tasks it starts, carries the turn's `turn_id` (and `end_user_id`), and one `turn_start` event opens it, with `user_message` only when you pass it (capped at 4 KiB). An explicit `turn_id` argument still wins; nested turns win over outer ones. `ratel_ai.current_turn_id()` reads the active id.
