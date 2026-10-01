@@ -115,8 +115,36 @@ async def main():
 asyncio.run(main())
 ```
 
+### Mark each request as one turn
+
+Wrap the work for one user request in `catalog.turn(...)`. Every search, skill load, and tool
+call inside it, across `await` and the tasks it starts, carries the same `turn_id`, and one
+`turn_start` event opens the turn. Concurrent requests keep their own turns.
+
+```python
+async def handle(request):
+    async with catalog.turn(
+        id=request.id,  # optional; a fresh id is minted when omitted
+        end_user_id=request.user_id,  # optional; stamped on every event in the turn
+        user_message=request.text,  # optional; sent only because you pass it
+    ):
+        return await run_agent(request.text)
+```
+
+A plain `with catalog.turn():` works in sync code. If your framework runs a tool itself instead
+of through `catalog.invoke`, record it so the turn still shows the call (`origin: "external"`):
+
+```python
+catalog.record_tool_call("web_search", took_ms=120)
+catalog.record_tool_call("web_search", error=exc)  # a failed call
+```
+
+`ratel_ai.current_turn_id()` returns the active id. See
+[ADR 0026](../../../docs/adr/0026-turn-scope.md).
+
 ### `turn_id`
 
+An explicit `turn_id` argument still works, and wins over the turn scope.
 `search` / `search_async` and `invoke` all take a trailing `turn_id`. Mint **one per user
 message** and reuse it for every search and invoke that message produces — including a turn that
 searches several times for several subtasks.

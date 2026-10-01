@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Turn scope ([ADR 0026](../../../docs/adr/0026-turn-scope.md)): `with catalog.turn(id=None, *, user_message=None, end_user_id=None):` (or `async with`) marks one user request. Every search, skill load, and tool call inside it, across `await` and the tasks it starts, carries the turn's `turn_id` (and `end_user_id`), and one `turn_start` event opens it, with `user_message` only when you pass it (capped at 4 KiB). An explicit `turn_id` argument still wins; nested turns win over outer ones. `ratel_ai.current_turn_id()` reads the active id.
+- `ToolCatalog.record_tool_call(tool_id, *, took_ms=None, error=None, turn_id=None)` records a tool your framework ran itself as `invoke_start` plus `invoke_end`/`invoke_error`, marked `origin: "external"` on the runtime-event stream. Adaptive ranking learns from it like an invoke.
+- `turn_start` joins `RUNTIME_EVENT_TYPES`.
 - Intent graph storage plugins ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)): `LocalFileIntentGraphStorage` and `S3IntentGraphStorage`, the two ready-made backends for persisting adaptive ranking's `IntentGraph`. Both expose `load()`/`save()`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` rather than clobber a concurrent writer. The local backend writes atomically via temp file + rename at `0600`; the S3 backend uses conditional writes (`If-Match`/`If-None-Match`) and needs no `boto3` — it signs with a built-in SigV4 client (#168)
 - `endpoint` and `force_path_style` on `S3IntentGraphStorage` for MinIO and other S3-compatible services; `force_path_style` defaults to `True` once `endpoint` is set (#168)
 - `idle_timeout_s` (default 60s) bounds both S3 calls on an idle clock — time with no data moving, not total elapsed — so a slow transfer completes but a wedged endpoint fails instead of hanging. `None` means the default (#168)

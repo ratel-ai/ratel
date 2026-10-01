@@ -44,6 +44,7 @@ from .telemetry import (
     trace_search_async,
     trace_skill_load,
 )
+from .turns import with_turn_context
 
 __all__ = [
     "PendingReplace",
@@ -335,7 +336,9 @@ class SkillRegistry:
         projection: RuntimeEventProjection | None = None,
     ) -> list[SkillHit]:
         """Run BM25 retrieval with an explicit trace origin."""
-        return self._native.search_with_origin(query, top_k, origin, projection)
+        return self._native.search_with_origin(
+            query, top_k, origin, with_turn_context(projection)
+        )
 
     def search_with_method(
         self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
@@ -440,8 +443,11 @@ class SkillRegistry:
         if self._undriven_builds > 0:
             raise RuntimeError(_UNAWAITED_REGISTER)
         await self._maybe_rebuild_on_model_change()
+        ambient = with_turn_context(projection)
         return await self._run_dense(
-            lambda: self._native._search_with_method(query, top_k, origin, method, projection)
+            lambda: self._native._search_with_method(
+                query, top_k, origin, method, ambient
+            )
         )
 
     def record_event(
@@ -450,6 +456,7 @@ class SkillRegistry:
         projection: RuntimeEventProjection | None = None,
     ) -> None:
         """Record an SDK-layer trace event."""
+        projection = with_turn_context(projection)
         if projection is None:
             self._native.record_event(event)
         else:

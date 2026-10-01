@@ -37,6 +37,7 @@ from .telemetry import (
     trace_search,
     trace_search_async,
 )
+from .turns import Turn, record_external_tool_call, with_turn_context
 
 Executor = Callable[..., Union[Awaitable[Any], Any]]
 """A tool handler: takes the tool's arguments dict, returns the result.
@@ -494,7 +495,9 @@ class ToolRegistry:
         projection: RuntimeEventProjection | None = None,
     ) -> list[SearchHit]:
         """Run BM25 retrieval with an explicit trace origin."""
-        return self._native.search_with_origin(query, top_k, origin, projection)
+        return self._native.search_with_origin(
+            query, top_k, origin, with_turn_context(projection)
+        )
 
     def search_with_method(
         self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
@@ -604,8 +607,11 @@ class ToolRegistry:
         if self._undriven_builds > 0:
             raise RuntimeError(_UNAWAITED_REGISTER)
         await self._maybe_rebuild_on_model_change()
+        ambient = with_turn_context(projection)
         return await self._run_dense(
-            lambda: self._native._search_with_method(query, top_k, origin, method, projection)
+            lambda: self._native._search_with_method(
+                query, top_k, origin, method, ambient
+            )
         )
 
     def record_event(
@@ -614,6 +620,7 @@ class ToolRegistry:
         projection: RuntimeEventProjection | None = None,
     ) -> None:
         """Record an SDK-layer trace event."""
+        projection = with_turn_context(projection)
         if projection is None:
             self._native.record_event(event)
         else:
@@ -1207,6 +1214,58 @@ class ToolCatalog:
             ValueError: if the dict doesn't match any known event shape.
         """
         self._registry.record_event(event, projection)
+
+    def turn(
+        self,
+        id: str | None = None,
+        *,
+        user_message: str | None = None,
+        end_user_id: str | None = None,
+    ) -> Turn:
+        """Mark one user request as one turn: ``with catalog.turn(...):`` or ``async with``.
+
+        Every search, skill load, and tool call made inside it, across ``await``
+        and the tasks it starts, carries the turn's ``turn_id`` (and
+        ``end_user_id`` when given), and a ``turn_start`` event opens it once.
+        An explicit ``turn_id`` argument on a call still wins, and a nested turn
+        wins over its outer one.
+
+        Args:
+            id: your request or message id; a fresh ULID when omitted. Reusing
+                an id that already started joins that turn without a second
+                ``turn_start``.
+            user_message: what the end user asked, sent on ``turn_start`` only
+                when you pass it (passing it is the consent). Capped at 4 KiB.
+            end_user_id: your pseudonymous id for the end user, stamped on
+                every event in the turn.
+        """
+        return Turn(self, id=id, user_message=user_message, end_user_id=end_user_id)
+
+    def record_tool_call(
+        self,
+        tool_id: str,
+        *,
+        took_ms: float | None = None,
+        error: object = None,
+        turn_id: str | None = None,
+    ) -> None:
+        """Record a tool call your framework ran itself (not through :meth:`invoke`).
+
+        Emits ``invoke_start`` plus ``invoke_end``, or ``invoke_error`` when
+        ``error`` is set (an exception or a message), in the current turn,
+        marked ``origin: "external"`` on the runtime-event stream. Adaptive
+        ranking learns from it like an invoke. No OTel span is opened: the
+        framework owns that.
+
+        Args:
+            tool_id: id (name) of the tool that ran.
+            took_ms: wall time in milliseconds; ``0`` when omitted.
+            error: set when the call failed.
+            turn_id: turn to record it in; defaults to the current turn scope.
+        """
+        record_external_tool_call(
+            self, tool_id, took_ms=took_ms, error=error, turn_id=turn_id
+        )
 
     def subscribe_events(
         self,

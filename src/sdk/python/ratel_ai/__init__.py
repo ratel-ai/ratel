@@ -9,6 +9,8 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `search_capabilities_tool` / `invoke_tool_tool` / `get_skill_content_tool` —
   framework-neutral capability tools.
 - `register_mcp_server` — ingest an upstream MCP server's tools (extra: mcp).
+- `ToolCatalog.turn` / `current_turn_id`: mark one user request as one turn
+  so everything inside carries its `turn_id` (ADR-0026).
 - `RuntimeEvents` / `RuntimeCatalog` — subscribe to runtime facts and snapshot
   executor-free tool/skill state (ADR-0020; no Python Cloud transport).
 
@@ -95,6 +97,7 @@ from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 # configure_telemetry is optional sugar that installs a Ratel-owned OTLP exporter
 # (needs the [otlp] extra).
 from .telemetry import configure_telemetry
+from .turns import TURN_USER_MESSAGE_MAX_BYTES, Turn, current_turn_id
 
 __all__ = [
     "AdaptiveRankingStatus",
@@ -153,8 +156,11 @@ __all__ = [
     "ToolCatalog",
     "ToolRegistry",
     "TraceSinkConfig",
+    "Turn",
+    "TURN_USER_MESSAGE_MAX_BYTES",
     "UpstreamServerInfo",
     "configure_telemetry",
+    "current_turn_id",
     "experimental_build_embedding_artifact",
     "format_upstream_line",
     "get_skill_content_tool",
