@@ -20,6 +20,7 @@ from ._native import IntentGraph as IntentGraph  # re-exported for `ratel_ai.Int
 from ._native import NativeEventSubscription, SkillHit
 from ._native import SkillRegistry as _NativeSkillRegistry
 from .catalog import (
+    _DISABLED_RANKING_STATUS,
     _REGISTRY_BUSY,
     _UNAWAITED_REGISTER,
     AdaptiveRankingStatus,
@@ -31,7 +32,9 @@ from .catalog import (
     TraceSinkConfig,
     _forget_graph_learn,
     _note_graph_learn,
+    _ranking_status_event,
     _registry_embedding_kwargs,
+    _warn_on_adaptive_misconfiguration,
 )
 from .embedding_artifact import (
     ExperimentalEmbeddingArtifact,
@@ -558,28 +561,9 @@ class SkillRegistry:
         with self._dense_state:
             self._raise_if_busy()
             if warn_on_model_mismatch:
-                if learn is False and rebuild_on_model_change:
-                    warnings.warn(
-                        "ratel: learn is off but rebuild_on_model_change is on; a rebuild "
-                        "will still re-embed this graph and bump its rev. Call "
-                        "experimental_rebuild_intent_graph() yourself if you want that, or "
-                        "drop rebuild_on_model_change.",
-                        stacklevel=2,
-                    )
-                if origins == "baseline":
-                    warnings.warn(
-                        'ratel: origins "baseline" only accepts captured baseline turns; '
-                        "live searches never carry that origin, so this graph will not "
-                        'learn from this catalog. Use "any" or "agent" here.',
-                        stacklevel=2,
-                    )
-                if graph_key is not None and learn:
-                    warnings.warn(
-                        f'ratel: graph_key "{graph_key}" marks this graph as produced '
-                        "elsewhere, but learn is on; local turns will fork it and be "
-                        "overwritten on the next adoption. Pass learn=False to consume it.",
-                        stacklevel=2,
-                    )
+                _warn_on_adaptive_misconfiguration(
+                    learn, rebuild_on_model_change, origins, graph_key
+                )
             self._native.enable_adaptive_ranking(
                 graph, origins, provenance, cluster_similarity, cluster_coverage, learn
             )
@@ -601,14 +585,7 @@ class SkillRegistry:
         native_status = self._native.adaptive_ranking_status()
         self._maybe_warn_model_mismatch(native_status)
         self._emit_ranking_status("enabled", native_status)
-        learn_mismatch = _note_graph_learn(graph, self, learn)
-        if warn_on_model_mismatch and learn_mismatch:
-            warnings.warn(
-                "ratel: this intent graph is enabled with learn=True on one catalog "
-                "and learn=False on the other; it will still change. Use the same "
-                "learn value on both catalogs.",
-                stacklevel=2,
-            )
+        _note_graph_learn(graph, self, learn, warn_on_model_mismatch)
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -618,14 +595,7 @@ class SkillRegistry:
             self._native.disable_adaptive_ranking()
         if self._graph is not None:
             _forget_graph_learn(self._graph, self)
-        self.record_event(
-            {
-                "type": "usage_ranking_status",
-                "status": "inactive",
-                "reason": "disabled",
-                "learn": True,
-            }
-        )
+        self.record_event(dict(_DISABLED_RANKING_STATUS))
         self._learn = True
         self._graph = None
         self._graph_key = None
@@ -699,38 +669,15 @@ class SkillRegistry:
     def _emit_ranking_status(
         self, reason: str, native_status: tuple[str, str | None, str | None, bool | None]
     ) -> None:
-        """Report the current status as a ``usage_ranking_status`` trace event.
+        """Report the current status (see ``_ranking_status_event``).
 
-        ADR-0014/ADR-0020. Emitted by this wrapper, never by core, since core
-        cannot know where a graph came from. Collapses the native status
-        string to the four-value contract: ``"active"`` covers both ``active``
-        and ``active: policy drift``, any ``paused...`` collapses to
-        ``"paused"``. Takes the already-read ``native_status`` rather than
-        re-reading it, since the caller (enable, rebuild) just fetched it for
+        Takes the already-read ``native_status`` rather than re-reading it,
+        since the caller (enable, rebuild) just fetched it for
         ``_maybe_warn_model_mismatch``.
         """
-        raw, _built, _active, _dim = native_status
-        if raw.startswith("paused"):
-            status = "paused"
-        elif raw in ("active", "active: policy drift"):
-            status = "active"
-        elif raw == "unknown":
-            status = "unknown"
-        else:
-            status = "inactive"
-        event: dict[str, Any] = {
-            "type": "usage_ranking_status",
-            "status": status,
-            "reason": reason,
-            "learn": self._learn,
-        }
-        if self._graph is not None:
-            event["rev"] = self._graph.rev
-            if self._graph.model is not None:
-                event["model"] = self._graph.model
-        if self._graph_key is not None:
-            event["graph_key"] = self._graph_key
-        self.record_event(event)
+        self.record_event(
+            _ranking_status_event(reason, native_status, self._graph, self._graph_key, self._learn)
+        )
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
         """Drain captured native trace events."""

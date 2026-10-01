@@ -36,9 +36,10 @@ export { IntentGraph };
  * so an unreferenced graph is never pinned alive by this bookkeeping. */
 const graphLearnByRegistry = new WeakMap<IntentGraph, Map<object, boolean>>();
 
-/** Record `registry` enabling `graph` with `learn`. Returns whether another
- * registry sharing `graph` was enabled with a different value. */
-function noteGraphLearn(graph: IntentGraph, registry: object, learn: boolean): boolean {
+/** Record `registry` enabling `graph` with `learn`, and when `warn` is set,
+ * warn once if another registry sharing `graph` was enabled with a different
+ * value. */
+function noteGraphLearn(graph: IntentGraph, registry: object, learn: boolean, warn: boolean): void {
   let byRegistry = graphLearnByRegistry.get(graph);
   if (!byRegistry) {
     byRegistry = new Map();
@@ -47,13 +48,90 @@ function noteGraphLearn(graph: IntentGraph, registry: object, learn: boolean): b
   byRegistry.delete(registry);
   const mismatch = [...byRegistry.values()].some((other) => other !== learn);
   byRegistry.set(registry, learn);
-  return mismatch;
+  if (warn && mismatch) {
+    console.warn(
+      "ratel: this intent graph is enabled with learn: true on one catalog and " +
+        "learn: false on the other; it will still change. Use the same learn value " +
+        "on both catalogs.",
+    );
+  }
 }
 
 /** Drop `registry`'s entry for `graph`, leaving other registries' intact. */
 function forgetGraphLearn(graph: IntentGraph, registry: object): void {
   graphLearnByRegistry.get(graph)?.delete(registry);
 }
+
+/** The enable-time misconfiguration warnings that depend only on the options
+ * (see either registry's `experimentalEnableAdaptiveRanking`). */
+function warnOnAdaptiveMisconfiguration(
+  learn: boolean,
+  rebuildOnModelChange: boolean,
+  origins: ObservationPolicyOptions["origins"],
+  graphKey: string | undefined,
+): void {
+  if (learn === false && rebuildOnModelChange) {
+    console.warn(
+      "ratel: learn is off but rebuildOnModelChange is on; a rebuild will still " +
+        "re-embed this graph and bump its rev. Call experimentalRebuildIntentGraph() " +
+        "yourself if you want that, or drop rebuildOnModelChange.",
+    );
+  }
+  if (origins === "baseline") {
+    console.warn(
+      'ratel: origins "baseline" only accepts captured baseline turns; live searches ' +
+        "never carry that origin, so this graph will not learn from this catalog. Use " +
+        '"any" or "agent" here.',
+    );
+  }
+  if (graphKey !== undefined && learn) {
+    console.warn(
+      `ratel: graphKey "${graphKey}" marks this graph as produced elsewhere, ` +
+        "but learn is on; local turns will fork it and be overwritten on the next " +
+        "adoption. Pass learn: false to consume it.",
+    );
+  }
+}
+
+/** A `usage_ranking_status` trace event (ADR-0014/ADR-0020) for what a
+ * registry has attached. Emitted by the wrappers, never by core, since core
+ * cannot know where a graph came from. Collapses the native status string to
+ * the four-value contract: `"active"` covers both `active` and
+ * `active: policy drift`, any `paused...` collapses to `"paused"`. */
+function rankingStatusEvent(
+  reason: "enabled" | "rebuilt",
+  nativeStatus: AdaptiveRankingStatus,
+  graph: IntentGraph | undefined,
+  graphKey: string | undefined,
+  learn: boolean,
+): object {
+  const raw = nativeStatus.status;
+  const status = raw.startsWith("paused")
+    ? "paused"
+    : raw === "active" || raw === "active: policy drift"
+      ? "active"
+      : raw === "unknown"
+        ? "unknown"
+        : "inactive";
+  return {
+    type: "usage_ranking_status",
+    status,
+    reason,
+    ...(graph ? { rev: graph.rev } : {}),
+    ...(graphKey === undefined ? {} : { graph_key: graphKey }),
+    learn,
+    ...(graph?.model != null ? { model: graph.model } : {}),
+  };
+}
+
+/** The `usage_ranking_status` event a disable reports: nothing attached, and
+ * `learn` back at its default. */
+const DISABLED_RANKING_STATUS = {
+  type: "usage_ranking_status",
+  status: "inactive",
+  reason: "disabled",
+  learn: true,
+} as const;
 
 /** Normalize the public string|object form into the native config the binding
  * expects (a string is the local-path `spec`, validated in core). */
@@ -341,27 +419,12 @@ export class ToolRegistry {
     const rebuildOnModelChange = options.rebuildOnModelChange ?? false;
     const learn = options.learn ?? true;
     if (warnOnModelMismatch) {
-      if (learn === false && rebuildOnModelChange) {
-        console.warn(
-          "ratel: learn is off but rebuildOnModelChange is on; a rebuild will still " +
-            "re-embed this graph and bump its rev. Call experimentalRebuildIntentGraph() " +
-            "yourself if you want that, or drop rebuildOnModelChange.",
-        );
-      }
-      if (options.origins === "baseline") {
-        console.warn(
-          'ratel: origins "baseline" only accepts captured baseline turns; live searches ' +
-            "never carry that origin, so this graph will not learn from this catalog. Use " +
-            '"any" or "agent" here.',
-        );
-      }
-      if (options.graphKey !== undefined && learn) {
-        console.warn(
-          `ratel: graphKey "${options.graphKey}" marks this graph as produced elsewhere, ` +
-            "but learn is on; local turns will fork it and be overwritten on the next " +
-            "adoption. Pass learn: false to consume it.",
-        );
-      }
+      warnOnAdaptiveMisconfiguration(
+        learn,
+        rebuildOnModelChange,
+        options.origins,
+        options.graphKey,
+      );
     }
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
@@ -392,14 +455,7 @@ export class ToolRegistry {
     const status = this.native.adaptiveRankingStatus();
     this.#maybeWarnModelMismatch(status);
     this.#emitRankingStatusEvent("enabled", status);
-    const learnMismatch = noteGraphLearn(graph, this, learn);
-    if (warnOnModelMismatch && learnMismatch) {
-      console.warn(
-        "ratel: this intent graph is enabled with learn: true on one catalog and " +
-          "learn: false on the other; it will still change. Use the same learn value " +
-          "on both catalogs.",
-      );
-    }
+    noteGraphLearn(graph, this, learn, warnOnModelMismatch);
   }
 
   /**
@@ -507,34 +563,16 @@ export class ToolRegistry {
     }
   }
 
-  /** Report the current adaptive-ranking status as a `usage_ranking_status`
-   * trace event (ADR-0014/ADR-0020) — emitted by this wrapper, never by core,
-   * since core cannot know where a graph came from. Collapses the native
-   * status string to the four-value contract: `"active"` covers both `active`
-   * and `active: policy drift`, any `paused...` collapses to `"paused"`.
+  /** Report the current adaptive-ranking status (see {@link rankingStatusEvent}).
    * Takes the already-read `nativeStatus` rather than re-reading it, since the
    * caller (enable, rebuild) just fetched it for {@link #maybeWarnModelMismatch}. */
   #emitRankingStatusEvent(
     reason: "enabled" | "rebuilt",
     nativeStatus: AdaptiveRankingStatus,
   ): void {
-    const raw = nativeStatus.status;
-    const status = raw.startsWith("paused")
-      ? "paused"
-      : raw === "active" || raw === "active: policy drift"
-        ? "active"
-        : raw === "unknown"
-          ? "unknown"
-          : "inactive";
-    this.recordEvent({
-      type: "usage_ranking_status",
-      status,
-      reason,
-      ...(this.#graph ? { rev: this.#graph.rev } : {}),
-      ...(this.#graphKey === undefined ? {} : { graph_key: this.#graphKey }),
-      learn: this.#learn,
-      ...(this.#graph?.model != null ? { model: this.#graph.model } : {}),
-    });
+    this.recordEvent(
+      rankingStatusEvent(reason, nativeStatus, this.#graph, this.#graphKey, this.#learn),
+    );
   }
 
   /**
@@ -545,12 +583,7 @@ export class ToolRegistry {
   experimentalDisableAdaptiveRanking(): void {
     this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
-    this.recordEvent({
-      type: "usage_ranking_status",
-      status: "inactive",
-      reason: "disabled",
-      learn: true,
-    });
+    this.recordEvent(DISABLED_RANKING_STATUS);
     if (this.#graph) forgetGraphLearn(this.#graph, this);
     this.#learn = true;
     this.#graph = undefined;
@@ -835,27 +868,12 @@ export class SkillRegistry {
     const rebuildOnModelChange = options.rebuildOnModelChange ?? false;
     const learn = options.learn ?? true;
     if (warnOnModelMismatch) {
-      if (learn === false && rebuildOnModelChange) {
-        console.warn(
-          "ratel: learn is off but rebuildOnModelChange is on; a rebuild will still " +
-            "re-embed this graph and bump its rev. Call experimentalRebuildIntentGraph() " +
-            "yourself if you want that, or drop rebuildOnModelChange.",
-        );
-      }
-      if (options.origins === "baseline") {
-        console.warn(
-          'ratel: origins "baseline" only accepts captured baseline turns; live searches ' +
-            "never carry that origin, so this graph will not learn from this catalog. Use " +
-            '"any" or "agent" here.',
-        );
-      }
-      if (options.graphKey !== undefined && learn) {
-        console.warn(
-          `ratel: graphKey "${options.graphKey}" marks this graph as produced elsewhere, ` +
-            "but learn is on; local turns will fork it and be overwritten on the next " +
-            "adoption. Pass learn: false to consume it.",
-        );
-      }
+      warnOnAdaptiveMisconfiguration(
+        learn,
+        rebuildOnModelChange,
+        options.origins,
+        options.graphKey,
+      );
     }
     // The same three knobs `experimentalBuildIntentGraph` takes, so what
     // counts as evidence does not depend on which path produced the graph.
@@ -886,14 +904,7 @@ export class SkillRegistry {
     const status = this.native.adaptiveRankingStatus();
     this.#maybeWarnModelMismatch(status);
     this.#emitRankingStatusEvent("enabled", status);
-    const learnMismatch = noteGraphLearn(graph, this, learn);
-    if (warnOnModelMismatch && learnMismatch) {
-      console.warn(
-        "ratel: this intent graph is enabled with learn: true on one catalog and " +
-          "learn: false on the other; it will still change. Use the same learn value " +
-          "on both catalogs.",
-      );
-    }
+    noteGraphLearn(graph, this, learn, warnOnModelMismatch);
   }
 
   /**
@@ -966,34 +977,16 @@ export class SkillRegistry {
     }
   }
 
-  /** Report the current adaptive-ranking status as a `usage_ranking_status`
-   * trace event (ADR-0014/ADR-0020) — emitted by this wrapper, never by core,
-   * since core cannot know where a graph came from. Collapses the native
-   * status string to the four-value contract: `"active"` covers both `active`
-   * and `active: policy drift`, any `paused...` collapses to `"paused"`.
+  /** Report the current adaptive-ranking status (see {@link rankingStatusEvent}).
    * Takes the already-read `nativeStatus` rather than re-reading it, since the
    * caller (enable, rebuild) just fetched it for {@link #maybeWarnModelMismatch}. */
   #emitRankingStatusEvent(
     reason: "enabled" | "rebuilt",
     nativeStatus: AdaptiveRankingStatus,
   ): void {
-    const raw = nativeStatus.status;
-    const status = raw.startsWith("paused")
-      ? "paused"
-      : raw === "active" || raw === "active: policy drift"
-        ? "active"
-        : raw === "unknown"
-          ? "unknown"
-          : "inactive";
-    this.recordEvent({
-      type: "usage_ranking_status",
-      status,
-      reason,
-      ...(this.#graph ? { rev: this.#graph.rev } : {}),
-      ...(this.#graphKey === undefined ? {} : { graph_key: this.#graphKey }),
-      learn: this.#learn,
-      ...(this.#graph?.model != null ? { model: this.#graph.model } : {}),
-    });
+    this.recordEvent(
+      rankingStatusEvent(reason, nativeStatus, this.#graph, this.#graphKey, this.#learn),
+    );
   }
 
   /**
@@ -1004,12 +997,7 @@ export class SkillRegistry {
   experimentalDisableAdaptiveRanking(): void {
     this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
-    this.recordEvent({
-      type: "usage_ranking_status",
-      status: "inactive",
-      reason: "disabled",
-      learn: true,
-    });
+    this.recordEvent(DISABLED_RANKING_STATUS);
     if (this.#graph) forgetGraphLearn(this.#graph, this);
     this.#learn = true;
     this.#graph = undefined;

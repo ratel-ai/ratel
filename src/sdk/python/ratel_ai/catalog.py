@@ -155,17 +155,24 @@ _graph_learn: weakref.WeakKeyDictionary[IntentGraph, weakref.WeakKeyDictionary[A
 )
 
 
-def _note_graph_learn(graph: IntentGraph, registry: object, learn: bool) -> bool:
+def _note_graph_learn(graph: IntentGraph, registry: object, learn: bool, warn: bool) -> None:
     """Record ``registry`` enabling ``graph`` with ``learn``.
 
-    Returns whether another registry sharing ``graph`` was enabled with a
-    different value.
+    When ``warn`` is set, warns if another registry sharing ``graph`` was
+    enabled with a different value.
     """
     by_registry = _graph_learn.setdefault(graph, weakref.WeakKeyDictionary())
     by_registry.pop(registry, None)
     mismatch = any(other != learn for other in by_registry.values())
     by_registry[registry] = learn
-    return mismatch
+    if warn and mismatch:
+        # stacklevel 3: past this helper and the registry method, to its caller.
+        warnings.warn(
+            "ratel: this intent graph is enabled with learn=True on one catalog "
+            "and learn=False on the other; it will still change. Use the same "
+            "learn value on both catalogs.",
+            stacklevel=3,
+        )
 
 
 def _forget_graph_learn(graph: IntentGraph, registry: object) -> None:
@@ -173,6 +180,89 @@ def _forget_graph_learn(graph: IntentGraph, registry: object) -> None:
     by_registry = _graph_learn.get(graph)
     if by_registry is not None:
         by_registry.pop(registry, None)
+
+
+def _warn_on_adaptive_misconfiguration(
+    learn: bool,
+    rebuild_on_model_change: bool,
+    origins: OriginFilterOption | None,
+    graph_key: str | None,
+) -> None:
+    """The enable-time misconfiguration warnings that depend only on the options.
+
+    See either registry's ``experimental_enable_adaptive_ranking``. Uses
+    ``stacklevel=3``: past this helper and the registry method, to its caller.
+    """
+    if learn is False and rebuild_on_model_change:
+        warnings.warn(
+            "ratel: learn is off but rebuild_on_model_change is on; a rebuild "
+            "will still re-embed this graph and bump its rev. Call "
+            "experimental_rebuild_intent_graph() yourself if you want that, or "
+            "drop rebuild_on_model_change.",
+            stacklevel=3,
+        )
+    if origins == "baseline":
+        warnings.warn(
+            'ratel: origins "baseline" only accepts captured baseline turns; '
+            "live searches never carry that origin, so this graph will not "
+            'learn from this catalog. Use "any" or "agent" here.',
+            stacklevel=3,
+        )
+    if graph_key is not None and learn:
+        warnings.warn(
+            f'ratel: graph_key "{graph_key}" marks this graph as produced '
+            "elsewhere, but learn is on; local turns will fork it and be "
+            "overwritten on the next adoption. Pass learn=False to consume it.",
+            stacklevel=3,
+        )
+
+
+def _ranking_status_event(
+    reason: str,
+    native_status: tuple[str, str | None, str | None, bool | None],
+    graph: IntentGraph | None,
+    graph_key: str | None,
+    learn: bool,
+) -> dict[str, Any]:
+    """A ``usage_ranking_status`` trace event for what a registry has attached.
+
+    ADR-0014/ADR-0020. Emitted by the wrappers, never by core, since core
+    cannot know where a graph came from. Collapses the native status string
+    to the four-value contract: ``"active"`` covers both ``active`` and
+    ``active: policy drift``, any ``paused...`` collapses to ``"paused"``.
+    """
+    raw, _built, _active, _dim = native_status
+    if raw.startswith("paused"):
+        status = "paused"
+    elif raw in ("active", "active: policy drift"):
+        status = "active"
+    elif raw == "unknown":
+        status = "unknown"
+    else:
+        status = "inactive"
+    event: dict[str, Any] = {
+        "type": "usage_ranking_status",
+        "status": status,
+        "reason": reason,
+        "learn": learn,
+    }
+    if graph is not None:
+        event["rev"] = graph.rev
+        if graph.model is not None:
+            event["model"] = graph.model
+    if graph_key is not None:
+        event["graph_key"] = graph_key
+    return event
+
+
+# The ``usage_ranking_status`` event a disable reports: nothing attached, and
+# ``learn`` back at its default. Copied per use, since events are dicts.
+_DISABLED_RANKING_STATUS: dict[str, Any] = {
+    "type": "usage_ranking_status",
+    "status": "inactive",
+    "reason": "disabled",
+    "learn": True,
+}
 
 
 _REGISTRY_BUSY = "registry busy; await the active operation"
@@ -756,28 +846,9 @@ class ToolRegistry:
         with self._dense_state:
             self._raise_if_busy()
             if warn_on_model_mismatch:
-                if learn is False and rebuild_on_model_change:
-                    warnings.warn(
-                        "ratel: learn is off but rebuild_on_model_change is on; a rebuild "
-                        "will still re-embed this graph and bump its rev. Call "
-                        "experimental_rebuild_intent_graph() yourself if you want that, or "
-                        "drop rebuild_on_model_change.",
-                        stacklevel=2,
-                    )
-                if origins == "baseline":
-                    warnings.warn(
-                        'ratel: origins "baseline" only accepts captured baseline turns; '
-                        "live searches never carry that origin, so this graph will not "
-                        'learn from this catalog. Use "any" or "agent" here.',
-                        stacklevel=2,
-                    )
-                if graph_key is not None and learn:
-                    warnings.warn(
-                        f'ratel: graph_key "{graph_key}" marks this graph as produced '
-                        "elsewhere, but learn is on; local turns will fork it and be "
-                        "overwritten on the next adoption. Pass learn=False to consume it.",
-                        stacklevel=2,
-                    )
+                _warn_on_adaptive_misconfiguration(
+                    learn, rebuild_on_model_change, origins, graph_key
+                )
             self._native.enable_adaptive_ranking(
                 graph, origins, provenance, cluster_similarity, cluster_coverage, learn
             )
@@ -799,14 +870,7 @@ class ToolRegistry:
         native_status = self._native.adaptive_ranking_status()
         self._maybe_warn_model_mismatch(native_status)
         self._emit_ranking_status("enabled", native_status)
-        learn_mismatch = _note_graph_learn(graph, self, learn)
-        if warn_on_model_mismatch and learn_mismatch:
-            warnings.warn(
-                "ratel: this intent graph is enabled with learn=True on one catalog "
-                "and learn=False on the other; it will still change. Use the same "
-                "learn value on both catalogs.",
-                stacklevel=2,
-            )
+        _note_graph_learn(graph, self, learn, warn_on_model_mismatch)
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -816,14 +880,7 @@ class ToolRegistry:
             self._native.disable_adaptive_ranking()
         if self._graph is not None:
             _forget_graph_learn(self._graph, self)
-        self.record_event(
-            {
-                "type": "usage_ranking_status",
-                "status": "inactive",
-                "reason": "disabled",
-                "learn": True,
-            }
-        )
+        self.record_event(dict(_DISABLED_RANKING_STATUS))
         self._learn = True
         self._graph = None
         self._graph_key = None
@@ -948,38 +1005,15 @@ class ToolRegistry:
     def _emit_ranking_status(
         self, reason: str, native_status: tuple[str, str | None, str | None, bool | None]
     ) -> None:
-        """Report the current status as a ``usage_ranking_status`` trace event.
+        """Report the current status (see ``_ranking_status_event``).
 
-        ADR-0014/ADR-0020. Emitted by this wrapper, never by core, since core
-        cannot know where a graph came from. Collapses the native status
-        string to the four-value contract: ``"active"`` covers both ``active``
-        and ``active: policy drift``, any ``paused...`` collapses to
-        ``"paused"``. Takes the already-read ``native_status`` rather than
-        re-reading it, since the caller (enable, rebuild) just fetched it for
+        Takes the already-read ``native_status`` rather than re-reading it,
+        since the caller (enable, rebuild) just fetched it for
         ``_maybe_warn_model_mismatch``.
         """
-        raw, _built, _active, _dim = native_status
-        if raw.startswith("paused"):
-            status = "paused"
-        elif raw in ("active", "active: policy drift"):
-            status = "active"
-        elif raw == "unknown":
-            status = "unknown"
-        else:
-            status = "inactive"
-        event: dict[str, Any] = {
-            "type": "usage_ranking_status",
-            "status": status,
-            "reason": reason,
-            "learn": self._learn,
-        }
-        if self._graph is not None:
-            event["rev"] = self._graph.rev
-            if self._graph.model is not None:
-                event["model"] = self._graph.model
-        if self._graph_key is not None:
-            event["graph_key"] = self._graph_key
-        self.record_event(event)
+        self.record_event(
+            _ranking_status_event(reason, native_status, self._graph, self._graph_key, self._learn)
+        )
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
         """Drain captured native trace events."""
