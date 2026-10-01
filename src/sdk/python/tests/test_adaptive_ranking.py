@@ -295,6 +295,18 @@ class _FakeNative:
     ) -> list:
         return []
 
+    def _search_with_options(
+        self,
+        query: str,
+        top_k: int,
+        origin: str,
+        method: str,
+        reranker_method: str | None = None,
+        reranker_depth: int | None = None,
+        context: object | None = None,
+    ) -> list:
+        return []
+
 
 async def _semantic_with_fake(status: str, *, flag: bool):
     """A semantic tool catalog whose native layer is faked and whose rebuild is

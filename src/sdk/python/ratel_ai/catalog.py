@@ -58,7 +58,9 @@ unaffected.
 
 SearchMethod = str
 """Retrieval engine: ``"bm25"`` (lexical, model-free, the default),
-``"semantic"`` (dense embeddings) or ``"hybrid"`` (both, fused).
+``"semantic"`` (dense embeddings), ``"hybrid"`` (both, fused), or
+``"systemOne"`` (a hosted system-one model picks — sends the query and
+candidate text to Ratel Cloud; see ADR-0026).
 """
 
 OriginFilterOption = Literal["any", "agent", "baseline"]
@@ -140,6 +142,78 @@ EmbeddingModelConfig = Union[
 
 EmbeddingSpec = Union[str, EmbeddingModelConfig]
 """Embedding selection; a bare string is a local model directory path."""
+
+class _RerankerOptions(TypedDict, total=False):
+    depth: int
+
+
+class RerankerConfig(_RerankerOptions):
+    """A second stage over the first stage's candidates (ADR-0026).
+
+    ``method`` re-scores the top ``depth`` (default 50, raised to ``top_k`` when
+    lower) hits of the catalog's ``method`` and never adds a tool the first
+    stage did not return. Any method may rerank any other, but not itself. A
+    ``"systemOne"`` reranker that fails returns the first stage's order instead
+    of raising. **Experimental** — may change without a major version bump.
+    """
+
+    method: str
+
+
+class SystemOneConfig(TypedDict, total=False):
+    """Where ``"systemOne"`` sends rankings.
+
+    Defaults to Ratel Cloud: ``https://app.ratel.sh/v1/systemone`` with the key
+    in ``RATEL_API_KEY`` (read at search time). **Experimental.**
+    """
+
+    url: str
+    api_key_env: str
+
+
+_METHODS = ("bm25", "semantic", "hybrid", "systemOne")
+_DENSE_METHODS = ("semantic", "hybrid")
+_RERANKER_NEEDS_ASYNC = (
+    "this catalog has a reranker, which runs off the event loop; "
+    "use `await catalog.search_async(...)`"
+)
+
+
+def _validate_method(method: str) -> None:
+    if method not in _METHODS:
+        raise ValueError(f"unknown search method: {method}")
+
+
+def _uses_dense(method: str, reranker: RerankerConfig | None) -> bool:
+    """Whether either stage ranks against embeddings, so registration must embed."""
+    return method in _DENSE_METHODS or (
+        reranker is not None and reranker["method"] in _DENSE_METHODS
+    )
+
+
+def _validate_reranker(method: str, reranker: RerankerConfig | None) -> None:
+    """Reject a reranker the core would refuse, before the first search."""
+    if reranker is None:
+        return
+    _validate_method(reranker["method"])
+    if reranker["method"] == method:
+        raise ValueError(
+            f'reranker method "{method}" is the same as the first-stage method; '
+            "a reranker must use a different method"
+        )
+    depth = reranker.get("depth")
+    if depth is not None and (isinstance(depth, bool) or not isinstance(depth, int) or depth < 1):
+        raise ValueError(f"reranker depth must be a positive integer, got {depth!r}")
+
+
+def _resolve_reranker(
+    override: RerankerConfig | Literal[False] | None, default: RerankerConfig | None
+) -> RerankerConfig | None:
+    """A per-call ``reranker``: ``None`` inherits the catalog's, ``False`` turns it off."""
+    if override is False:
+        return None
+    return default if override is None else override
+
 
 _DenseResult = TypeVar("_DenseResult")
 _REGISTRY_BUSY = "registry busy; await the active operation"
@@ -305,6 +379,8 @@ class ToolRegistry:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
     ) -> None: ...
 
     @overload
@@ -373,6 +449,8 @@ class ToolRegistry:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
         spec: str | None = None,
         huggingface: str | None = None,
         local: str | None = None,
@@ -413,7 +491,9 @@ class ToolRegistry:
             self._native.set_experimental_dense_weight(experimental_dense_weight)
         if experimental_bm25_k1 is not None or experimental_bm25_b is not None:
             self._native.set_experimental_bm25_params(experimental_bm25_k1, experimental_bm25_b)
-        self._eager = method in ("semantic", "hybrid")
+        if system_one is not None:
+            self._native.set_system_one(system_one.get("url"), system_one.get("api_key_env"))
+        self._eager = _uses_dense(method, reranker)
         self._embedding_artifact = experimental_embedding_artifact
         self._warn_on_model_mismatch = True
         self._adaptive_warned = False
@@ -499,9 +579,8 @@ class ToolRegistry:
     def search_with_method(
         self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
     ) -> list[SearchHit]:
-        """Run BM25 synchronously; dense retrieval is async-only."""
-        if method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {method}")
+        """Run BM25 synchronously; dense and system-one retrieval are async-only."""
+        _validate_method(method)
         if method != "bm25":
             raise RuntimeError(
                 f"{method} search is asynchronous; use `await registry.search_async(..., "
@@ -595,17 +674,28 @@ class ToolRegistry:
         origin: SearchOrigin = "direct",
         method: SearchMethod = "bm25",
         projection: RuntimeEventProjection | None = None,
+        *,
+        reranker: RerankerConfig | None = None,
     ) -> list[SearchHit]:
-        """Search immediately with BM25 or run dense retrieval on a worker thread."""
-        if method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {method}")
-        if method == "bm25":
+        """Search immediately with plain BM25; run anything else on a worker thread.
+
+        ``reranker`` re-scores the first stage's candidates (ADR-0026). A
+        standalone ``"systemOne"`` failure raises `SystemOneError`.
+        """
+        _validate_method(method)
+        _validate_reranker(method, reranker)
+        if method == "bm25" and reranker is None:
             return self.search_with_origin(query, top_k, origin, projection)
-        if self._undriven_builds > 0:
-            raise RuntimeError(_UNAWAITED_REGISTER)
-        await self._maybe_rebuild_on_model_change()
+        if _uses_dense(method, reranker):
+            if self._undriven_builds > 0:
+                raise RuntimeError(_UNAWAITED_REGISTER)
+            await self._maybe_rebuild_on_model_change()
+        reranker_method = reranker["method"] if reranker is not None else None
+        reranker_depth = reranker.get("depth") if reranker is not None else None
         return await self._run_dense(
-            lambda: self._native._search_with_method(query, top_k, origin, method, projection)
+            lambda: self._native._search_with_options(
+                query, top_k, origin, method, reranker_method, reranker_depth, projection
+            )
         )
 
     def record_event(
@@ -969,6 +1059,8 @@ class ToolCatalog:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
     ) -> None:
         """Create an empty catalog.
 
@@ -1021,10 +1113,21 @@ class ToolCatalog:
                 is a mixed artifact built via
                 ``experimental_build_embedding_artifact``; the runtime remedy
                 for uncovered current-kind entries is ``on_miss="embed"``.
+            reranker: re-score the first stage's top candidates with another
+                method — see `RerankerConfig`. Applies to `search_async` (and
+                the capability tools, which use it); a synchronous `search` on a
+                catalog with a reranker raises. **Experimental.**
+            system_one: where ``"systemOne"`` (as method or reranker) sends
+                rankings — see `SystemOneConfig`. ``"systemOne"`` sends the
+                query and each candidate's searchable text to that endpoint,
+                which forwards them to the model provider. **Experimental.**
         """
+        _validate_method(method)
+        _validate_reranker(method, reranker)
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
         self._method: SearchMethod = method
+        self._reranker = reranker
         self._registry = ToolRegistry(
             embedding,
             method=method,
@@ -1032,6 +1135,8 @@ class ToolCatalog:
             experimental_bm25_k1=experimental_bm25_k1,
             experimental_bm25_b=experimental_bm25_b,
             experimental_embedding_artifact=experimental_embedding_artifact,
+            reranker=reranker,
+            system_one=system_one,
         )
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
@@ -1109,13 +1214,14 @@ class ToolCatalog:
             Up to `top_k` `SearchHit`s, best first.
 
         Raises:
-            ValueError: if `method` is not "bm25", "semantic" or "hybrid".
-            RuntimeError: if the resolved method is semantic/hybrid; use
-                `search_async` for dense retrieval.
+            ValueError: if `method` is not a known method.
+            RuntimeError: if the resolved method is not "bm25", or the catalog
+                has a reranker; use `search_async` for those.
         """
         resolved_method = method or self._method
-        if resolved_method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {resolved_method}")
+        _validate_method(resolved_method)
+        if self._reranker is not None:
+            raise RuntimeError(_RERANKER_NEEDS_ASYNC)
         if resolved_method != "bm25":
             raise RuntimeError(
                 f"{resolved_method} search is asynchronous; use `await catalog.search_async(..., "
@@ -1137,20 +1243,36 @@ class ToolCatalog:
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
         turn_id: str | None = None,
+        reranker: RerankerConfig | Literal[False] | None = None,
     ) -> list[SearchHit]:
-        """Rank tools asynchronously with BM25, semantic, or hybrid retrieval.
+        """Rank tools asynchronously with any method and the catalog's reranker.
 
         Dense methods require the corpus to have been embedded by `register` on a
         semantic/hybrid catalog; searching never embeds missing corpus vectors.
+
+        Args:
+            query: what the caller wants to do.
+            top_k: max hits to return.
+            origin: who initiated the search — labels the trace event only.
+            method: per-call override of the catalog's default method.
+            turn_id: correlates this search with the invoke(s) that follow it
+                (ADR-0014) — see `search`.
+            reranker: per-call reranker; ``None`` (default) uses the catalog's,
+                ``False`` turns it off for this call.
+
+        Raises:
+            SystemOneError: a standalone ``"systemOne"`` search failed.
         """
         resolved_method = method or self._method
+        resolved_reranker = _resolve_reranker(reranker, self._reranker)
+        _validate_reranker(resolved_method, resolved_reranker)
         return await trace_search_async(
             SEARCH_TARGET_TOOL,
             query,
             top_k,
             origin,
             lambda projection: self._registry.search_async(
-                query, top_k, origin, resolved_method, projection
+                query, top_k, origin, resolved_method, projection, reranker=resolved_reranker
             ),
             turn_id,
         )

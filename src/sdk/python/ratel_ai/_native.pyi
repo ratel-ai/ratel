@@ -193,6 +193,21 @@ class ToolRegistry:
         identical to `search`.
         """
 
+    def _search_with_options(
+        self,
+        query: str,
+        top_k: int,
+        origin: str,
+        method: str,
+        reranker_method: str | None = ...,
+        reranker_depth: int | None = ...,
+        context: object | None = ...,
+    ) -> list[SearchHit]:
+        """Private worker-thread two-stage search primitive (ADR-0026)."""
+
+    def set_system_one(self, url: str | None = ..., api_key_env: str | None = ...) -> None:
+        """Point "systemOne" searches and rerankers at another endpoint or key."""
+
     def _search_with_method(
         self,
         query: str,
@@ -347,6 +362,18 @@ class ArtifactError(RuntimeError):
 class IncompatibleMergeError(ArtifactError):
     """Valid RAT1 parts that cannot be merged."""
 
+class SystemOneError(RuntimeError):
+    """A "systemOne" search failed (ADR-0026).
+
+    Attributes:
+        code: ``"Config"`` | ``"Unauthorized"`` | ``"RateLimited"`` | ``"Http"`` |
+            ``"Unreachable"`` | ``"Malformed"`` | ``"Unknown"``.
+        status: the HTTP status for ``"Unauthorized"`` / ``"Http"``, else ``None``.
+    """
+
+    code: str
+    status: int | None
+
 class ArtifactWarmError(RuntimeError):
     """Warming the dense cache from an embedding artifact failed.
 
@@ -479,6 +506,21 @@ class SkillRegistry:
         context: object | None = ...,
     ) -> list[SkillHit]:
         """BM25 search tagged with who initiated it — see `ToolRegistry.search_with_origin`."""
+
+    def _search_with_options(
+        self,
+        query: str,
+        top_k: int,
+        origin: str,
+        method: str,
+        reranker_method: str | None = ...,
+        reranker_depth: int | None = ...,
+        context: object | None = ...,
+    ) -> list[SkillHit]:
+        """Private worker-thread two-stage search primitive (ADR-0026)."""
+
+    def set_system_one(self, url: str | None = ..., api_key_env: str | None = ...) -> None:
+        """Point "systemOne" searches and rerankers at another endpoint or key."""
 
     def _search_with_method(
         self,

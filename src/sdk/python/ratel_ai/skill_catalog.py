@@ -21,15 +21,22 @@ from ._native import NativeEventSubscription, SkillHit
 from ._native import SkillRegistry as _NativeSkillRegistry
 from .catalog import (
     _REGISTRY_BUSY,
+    _RERANKER_NEEDS_ASYNC,
     _UNAWAITED_REGISTER,
     AdaptiveRankingStatus,
     EmbeddingSpec,
     OriginFilterOption,
     ProvenanceOption,
+    RerankerConfig,
     SearchMethod,
     SearchOrigin,
+    SystemOneConfig,
     TraceSinkConfig,
     _registry_embedding_kwargs,
+    _resolve_reranker,
+    _uses_dense,
+    _validate_method,
+    _validate_reranker,
 )
 from .embedding_artifact import (
     ExperimentalEmbeddingArtifact,
@@ -133,6 +140,8 @@ class SkillRegistry:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
     ) -> None: ...
 
     @overload
@@ -201,6 +210,8 @@ class SkillRegistry:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
         spec: str | None = None,
         huggingface: str | None = None,
         local: str | None = None,
@@ -240,7 +251,9 @@ class SkillRegistry:
             self._native.set_experimental_dense_weight(experimental_dense_weight)
         if experimental_bm25_k1 is not None or experimental_bm25_b is not None:
             self._native.set_experimental_bm25_params(experimental_bm25_k1, experimental_bm25_b)
-        self._eager = method in ("semantic", "hybrid")
+        if system_one is not None:
+            self._native.set_system_one(system_one.get("url"), system_one.get("api_key_env"))
+        self._eager = _uses_dense(method, reranker)
         self._embedding_artifact = experimental_embedding_artifact
         self._warn_on_model_mismatch = True
         self._adaptive_warned = False
@@ -340,9 +353,8 @@ class SkillRegistry:
     def search_with_method(
         self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
     ) -> list[SkillHit]:
-        """Run BM25 synchronously; dense retrieval is async-only."""
-        if method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {method}")
+        """Run BM25 synchronously; dense and system-one retrieval are async-only."""
+        _validate_method(method)
         if method != "bm25":
             raise RuntimeError(
                 f"{method} search is asynchronous; use `await registry.search_async(..., "
@@ -431,17 +443,27 @@ class SkillRegistry:
         origin: SearchOrigin = "direct",
         method: SearchMethod = "bm25",
         projection: RuntimeEventProjection | None = None,
+        *,
+        reranker: RerankerConfig | None = None,
     ) -> list[SkillHit]:
-        """Search immediately with BM25 or run dense retrieval on a worker thread."""
-        if method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {method}")
-        if method == "bm25":
+        """Search immediately with plain BM25; run anything else on a worker thread.
+
+        See `ToolRegistry.search_async`.
+        """
+        _validate_method(method)
+        _validate_reranker(method, reranker)
+        if method == "bm25" and reranker is None:
             return self.search_with_origin(query, top_k, origin, projection)
-        if self._undriven_builds > 0:
-            raise RuntimeError(_UNAWAITED_REGISTER)
-        await self._maybe_rebuild_on_model_change()
+        if _uses_dense(method, reranker):
+            if self._undriven_builds > 0:
+                raise RuntimeError(_UNAWAITED_REGISTER)
+            await self._maybe_rebuild_on_model_change()
+        reranker_method = reranker["method"] if reranker is not None else None
+        reranker_depth = reranker.get("depth") if reranker is not None else None
         return await self._run_dense(
-            lambda: self._native._search_with_method(query, top_k, origin, method, projection)
+            lambda: self._native._search_with_options(
+                query, top_k, origin, method, reranker_method, reranker_depth, projection
+            )
         )
 
     def record_event(
@@ -717,6 +739,8 @@ class SkillCatalog:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
     ) -> None:
         """Create an empty skill catalog.
 
@@ -748,9 +772,16 @@ class SkillCatalog:
                 is a mixed artifact built via
                 ``experimental_build_embedding_artifact``; the runtime remedy
                 for uncovered current-kind entries is ``on_miss="embed"``.
+            reranker: second-stage reranker — see `ToolCatalog.__init__`.
+                **Experimental.**
+            system_one: system-one endpoint override — see
+                `ToolCatalog.__init__`. **Experimental.**
         """
+        _validate_method(method)
+        _validate_reranker(method, reranker)
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
+        self._reranker = reranker
         self._registry = SkillRegistry(
             embedding,
             method=method,
@@ -758,6 +789,8 @@ class SkillCatalog:
             experimental_bm25_k1=experimental_bm25_k1,
             experimental_bm25_b=experimental_bm25_b,
             experimental_embedding_artifact=experimental_embedding_artifact,
+            reranker=reranker,
+            system_one=system_one,
         )
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
@@ -855,8 +888,9 @@ class SkillCatalog:
             Up to `top_k` `SkillHit`s, best first.
         """
         resolved_method = method or self._method
-        if resolved_method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {resolved_method}")
+        _validate_method(resolved_method)
+        if self._reranker is not None:
+            raise RuntimeError(_RERANKER_NEEDS_ASYNC)
         if resolved_method != "bm25":
             raise RuntimeError(
                 f"{resolved_method} search is asynchronous; use `await catalog.search_async(..., "
@@ -878,19 +912,24 @@ class SkillCatalog:
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
         turn_id: str | None = None,
+        reranker: RerankerConfig | Literal[False] | None = None,
     ) -> list[SkillHit]:
-        """Rank skills asynchronously with BM25, semantic, or hybrid retrieval.
+        """Rank skills asynchronously with any method and the catalog's reranker.
 
         Dense methods require a complete cache built explicitly beforehand.
+        ``reranker`` overrides the catalog's for this call (``False`` turns it
+        off) — see `ToolCatalog.search_async`.
         """
         resolved_method = method or self._method
+        resolved_reranker = _resolve_reranker(reranker, self._reranker)
+        _validate_reranker(resolved_method, resolved_reranker)
         return await trace_search_async(
             SEARCH_TARGET_SKILL,
             query,
             top_k,
             origin,
             lambda projection: self._registry.search_async(
-                query, top_k, origin, resolved_method, projection
+                query, top_k, origin, resolved_method, projection, reranker=resolved_reranker
             ),
             turn_id,
         )

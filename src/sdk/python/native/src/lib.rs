@@ -430,6 +430,85 @@ create_exception!(
     PyRuntimeError,
     "Warming the dense cache from an embedding artifact failed (subclass of RuntimeError)."
 );
+create_exception!(
+    _native,
+    SystemOneError,
+    PyRuntimeError,
+    "A systemOne search failed: endpoint unreachable, key rejected, rate limited, or a malformed ranking (subclass of RuntimeError)."
+);
+
+fn system_one_pyerr(e: core::SystemOneError) -> PyErr {
+    let code = match &e {
+        core::SystemOneError::Config { .. } => "Config",
+        core::SystemOneError::Unauthorized { .. } => "Unauthorized",
+        core::SystemOneError::RateLimited => "RateLimited",
+        core::SystemOneError::Http { .. } => "Http",
+        core::SystemOneError::Unreachable { .. } => "Unreachable",
+        core::SystemOneError::Malformed { .. } => "Malformed",
+        _ => "Unknown",
+    };
+    let status = match &e {
+        core::SystemOneError::Unauthorized { status } | core::SystemOneError::Http { status } => {
+            Some(*status)
+        }
+        _ => None,
+    };
+    Python::with_gil(|py| {
+        let err = SystemOneError::new_err(e.to_string());
+        let value = err.value(py);
+        if let Err(attr_err) = value.setattr("code", code) {
+            return attr_err;
+        }
+        if let Err(attr_err) = value.setattr("status", status) {
+            return attr_err;
+        }
+        err
+    })
+}
+
+/// Map a two-stage search failure: embedder errors keep their typed classes,
+/// system-one failures raise `SystemOneError`, bad options `ValueError`.
+fn map_search_err(e: core::SearchError) -> PyErr {
+    match e {
+        core::SearchError::Embedder(inner) => map_embedder_err(inner),
+        core::SearchError::SystemOne(inner) => system_one_pyerr(inner),
+        core::SearchError::InvalidOptions { message } => PyValueError::new_err(message),
+        other => PyRuntimeError::new_err(other.to_string()),
+    }
+}
+
+fn search_options(
+    method: &str,
+    reranker_method: Option<&str>,
+    reranker_depth: Option<u32>,
+) -> PyResult<core::SearchOptions> {
+    let parse = |m: &str| {
+        m.parse::<core::SearchMethod>()
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    };
+    let mut options = core::SearchOptions::new(parse(method)?);
+    if let Some(reranker_method) = reranker_method {
+        let mut reranker = core::Reranker::new(parse(reranker_method)?);
+        if let Some(depth) = reranker_depth {
+            reranker = reranker
+                .with_depth(depth as usize)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        }
+        options = options.with_reranker(reranker);
+    }
+    Ok(options)
+}
+
+fn system_one_config(url: Option<String>, api_key_env: Option<String>) -> core::SystemOneConfig {
+    let mut config = core::SystemOneConfig::default();
+    if let Some(url) = url {
+        config = config.with_url(url);
+    }
+    if let Some(name) = api_key_env {
+        config = config.with_api_key_env(name);
+    }
+    config
+}
 
 /// Map a core embedding error to a typed Python exception (base `EmbedderError`,
 /// with `DimensionMismatchError` for the dimension case), keeping `RuntimeError`
@@ -1034,6 +1113,51 @@ impl ToolRegistry {
             .collect())
     }
 
+    /// Private GIL-releasing two-stage search (ADR-0026): `method`, then an
+    /// optional `reranker_method` over its top `reranker_depth` candidates.
+    /// Supports `"systemOne"`; its failures raise `SystemOneError`.
+    #[pyo3(signature = (query, top_k, origin, method, reranker_method=None, reranker_depth=None, context=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn _search_with_options(
+        &self,
+        py: Python<'_>,
+        query: String,
+        top_k: u32,
+        origin: String,
+        method: String,
+        reranker_method: Option<String>,
+        reranker_depth: Option<u32>,
+        context: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Vec<SearchHit>> {
+        let parsed_origin = parse_origin(origin.as_str());
+        let options = search_options(&method, reranker_method.as_deref(), reranker_depth)?
+            .with_context(trace_event_context(context)?);
+        let hits = py
+            .allow_threads(|| {
+                self.inner
+                    .search_with_options(&query, top_k as usize, parsed_origin, options)
+            })
+            .map_err(map_search_err)?;
+        Ok(hits
+            .into_iter()
+            .map(|hit| SearchHit {
+                tool_id: hit.tool_id,
+                score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
+                relevance: f64::from(hit.relevance),
+            })
+            .collect())
+    }
+
+    /// Point `"systemOne"` searches and rerankers at another endpoint or key;
+    /// unset fields keep Ratel Cloud's defaults.
+    #[pyo3(signature = (url=None, api_key_env=None))]
+    fn set_system_one(&mut self, url: Option<String>, api_key_env: Option<String>) {
+        self.inner
+            .set_system_one(system_one_config(url, api_key_env));
+    }
+
     /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
     /// `bm25` is infallible; `semantic`/`hybrid` rank against the prebuilt embedding
     /// cache and raise `RuntimeError` (`EmbeddingsNotBuilt`) if it isn't built — the
@@ -1591,6 +1715,51 @@ impl SkillRegistry {
                 relevance: f64::from(hit.relevance),
             })
             .collect())
+    }
+
+    /// Private GIL-releasing two-stage search (ADR-0026): `method`, then an
+    /// optional `reranker_method` over its top `reranker_depth` candidates.
+    /// Supports `"systemOne"`; its failures raise `SystemOneError`.
+    #[pyo3(signature = (query, top_k, origin, method, reranker_method=None, reranker_depth=None, context=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn _search_with_options(
+        &self,
+        py: Python<'_>,
+        query: String,
+        top_k: u32,
+        origin: String,
+        method: String,
+        reranker_method: Option<String>,
+        reranker_depth: Option<u32>,
+        context: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Vec<SkillHit>> {
+        let parsed_origin = parse_origin(origin.as_str());
+        let options = search_options(&method, reranker_method.as_deref(), reranker_depth)?
+            .with_context(trace_event_context(context)?);
+        let hits = py
+            .allow_threads(|| {
+                self.inner
+                    .search_with_options(&query, top_k as usize, parsed_origin, options)
+            })
+            .map_err(map_search_err)?;
+        Ok(hits
+            .into_iter()
+            .map(|hit| SkillHit {
+                skill_id: hit.skill_id,
+                score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
+                relevance: f64::from(hit.relevance),
+            })
+            .collect())
+    }
+
+    /// Point `"systemOne"` searches and rerankers at another endpoint or key;
+    /// unset fields keep Ratel Cloud's defaults.
+    #[pyo3(signature = (url=None, api_key_env=None))]
+    fn set_system_one(&mut self, url: Option<String>, api_key_env: Option<String>) {
+        self.inner
+            .set_system_one(system_one_config(url, api_key_env));
     }
 
     /// Private GIL-releasing method search — see [`ToolRegistry::_search_with_method`].
@@ -2187,5 +2356,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.py().get_type::<IncompatibleMergeError>(),
     )?;
     m.add("ArtifactWarmError", m.py().get_type::<ArtifactWarmError>())?;
+    m.add("SystemOneError", m.py().get_type::<SystemOneError>())?;
     Ok(())
 }

@@ -137,6 +137,26 @@ await catalog.invoke("create_linear_task", {}, turn_id)  # pairs with the second
 
 Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel/tree/main/examples/pydantic-ai).
 
+## Reranking and system-one (experimental)
+
+A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates; `reranker["method"]` re-scores the top `depth` of them (default 50) and never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"`, or `"systemOne"`, but not the same method twice:
+
+```python
+catalog = ToolCatalog(method="bm25", reranker={"method": "systemOne", "depth": 50})
+await catalog.register(tools)
+hits = await catalog.search_async("refund the last order", 5)
+```
+
+`"systemOne"` asks a hosted system-one model (Jev today) to pick from the candidates. It can also be the only stage: `ToolCatalog(method="systemOne")` ranks the whole catalog. It calls Ratel Cloud at `https://app.ratel.sh/v1/systemone` with the key in `RATEL_API_KEY`; `system_one={"url": ..., "api_key_env": ...}` points it elsewhere.
+
+**`"systemOne"` sends the query and every candidate's searchable text (name, description, schema terms) to that endpoint, which forwards them to the model provider.** The other methods never leave the process.
+
+- A reranker runs off the event loop: use `search_async`. Synchronous `search` raises on a catalog with a reranker, and on `"systemOne"`.
+- `search_async(..., reranker=...)` overrides the catalog's reranker for one call; `reranker=False` turns it off.
+- A failed standalone `"systemOne"` search raises `SystemOneError` (a `RuntimeError`) with `.code` (`"Unauthorized"`, `"RateLimited"`, `"Http"`, `"Unreachable"`, `"Malformed"`, `"Config"`) and `.status`. A failed `"systemOne"` **reranker** returns the first stage's order instead and records a `rerank_fallback` trace stage.
+- A semantic or hybrid reranker makes `register()` build embeddings, as a semantic `method` does.
+- `SkillCatalog` takes the same `reranker` and `system_one` arguments. Facts do not support `"systemOne"`.
+
 ## Runtime events and catalog snapshots
 
 `RuntimeEvents` merges tool and skill facts into one bounded push stream. Give the paired
