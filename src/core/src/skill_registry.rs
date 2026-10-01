@@ -13,6 +13,7 @@ use crate::fusion::{
     score_fuse,
 };
 use crate::method::SearchMethod;
+use crate::rerank::{SearchError, SearchOptions, order_by_rescore};
 use crate::search::{Bm25Cache, Bm25Params};
 use crate::skill::Skill;
 use crate::skill_indexing::searchable_text;
@@ -694,6 +695,118 @@ impl SkillRegistry {
         }
     }
 
+    /// Search with a first-stage method and an optional [`Reranker`] — the
+    /// skill twin of [`crate::ToolRegistry::search_with_options`], with the
+    /// same semantics and errors (ADR-0026).
+    ///
+    /// # Errors
+    /// The same [`SearchError`] cases as
+    /// [`crate::ToolRegistry::search_with_options`].
+    ///
+    /// [`Reranker`]: crate::Reranker
+    pub fn search_with_options(
+        &self,
+        query: &str,
+        top_k: usize,
+        origin: Origin,
+        options: SearchOptions,
+    ) -> Result<Vec<SkillHit>, SearchError> {
+        let SearchOptions {
+            method,
+            reranker,
+            context,
+            ..
+        } = options;
+        let Some(reranker) = reranker else {
+            return Ok(self.search_with_method_and_context(query, top_k, origin, method, context)?);
+        };
+        if reranker.method() == method {
+            return Err(SearchError::InvalidOptions {
+                message: format!(
+                    "reranker method \"{method}\" is the same as the first-stage method"
+                ),
+            });
+        }
+
+        let started = Instant::now();
+        if self.skills.is_empty() || top_k == 0 {
+            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            return Ok(Vec::new());
+        }
+        let depth = reranker.depth().max(top_k);
+        let turn_key = context.turn_id.as_deref();
+        let (candidates, mut stages) = match method {
+            SearchMethod::Bm25 => self.bm25_ranked(query, depth, turn_key),
+            SearchMethod::Semantic => self.semantic_ranked(query, depth, turn_key)?,
+            SearchMethod::Hybrid => self.hybrid_ranked(query, depth, turn_key)?,
+        };
+        let candidate_ids: Vec<String> = candidates.into_iter().map(|h| h.skill_id).collect();
+
+        let t = Instant::now();
+        let (mut rescored, scale) =
+            self.rank_candidates(query, &candidate_ids, reranker.method())?;
+        order_by_rescore(&mut rescored, &candidate_ids);
+        let mut hits = to_skill_hits(rescored, scale);
+        hits.truncate(top_k);
+        stages.push(SearchStage {
+            name: "rerank".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: hits.first().map(|h| h.score as f64),
+        });
+
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        Ok(hits)
+    }
+
+    /// Re-score stage-1 candidates — the skill twin of the tool registry's
+    /// `rank_candidates`: every candidate is returned (unmatched scores `0`),
+    /// BM25 keeps corpus-wide IDF, and no usage arm runs.
+    fn rank_candidates(
+        &self,
+        query: &str,
+        ids: &[String],
+        method: SearchMethod,
+    ) -> Result<(Vec<(String, f32)>, Scale), EmbedderError> {
+        let bm25_scores = || {
+            let index = self.bm25_index();
+            let scores: std::collections::HashMap<String, f32> =
+                index.search(query, self.skills.len()).into_iter().collect();
+            let ceiling = index.query_ceiling(query);
+            let ranked: Vec<(String, f32)> = ids
+                .iter()
+                .map(|id| (id.clone(), scores.get(id).copied().unwrap_or(0.0)))
+                .collect();
+            (ranked, ceiling)
+        };
+        let dense_scores = || -> Result<Vec<(String, f32)>, EmbedderError> {
+            // The guard compares counts, so check the whole corpus rather than
+            // the candidates: a subset always looks "built".
+            self.dense.require_built(self.skills.len())?;
+            let candidates = ids.iter().filter_map(|id| self.skills.get(id));
+            let (ranked, _) = self.dense.search_returning_query_vec(
+                candidates,
+                query,
+                ids.len(),
+                self.sink.as_ref(),
+            )?;
+            Ok(ranked)
+        };
+        Ok(match method {
+            SearchMethod::Bm25 => {
+                let (ranked, ceiling) = bm25_scores();
+                (ranked, Scale::Bm25 { ceiling })
+            }
+            SearchMethod::Semantic => (dense_scores()?, Scale::Cosine),
+            SearchMethod::Hybrid => {
+                let dense = dense_scores()?;
+                let (bm25, ceiling) = bm25_scores();
+                let fused = score_fuse(&bm25, ceiling, &dense, None, self.dense_weight);
+                (fused, Scale::Fused)
+            }
+        })
+    }
+
     /// Pre-compute embeddings for not-yet-embedded skills — see
     /// [`crate::ToolRegistry::build_embeddings`].
     ///
@@ -797,7 +910,20 @@ impl SkillRegistry {
         context: TraceEventContext,
     ) -> Vec<SkillHit> {
         let started = Instant::now();
-        let turn_key = context.turn_id.as_deref();
+        let (hits, stages) = self.bm25_ranked(query, top_k, context.turn_id.as_deref());
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        hits
+    }
+
+    /// The BM25 ranking and its stages, without recording the search.
+    fn bm25_ranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        turn_key: Option<&str>,
+    ) -> (Vec<SkillHit>, Vec<SearchStage>) {
+        let started = Instant::now();
         let t = Instant::now();
         let arm = self.usage_arm(turn_key, query, None);
         let usage_ms = t.elapsed().as_millis() as u64;
@@ -815,22 +941,13 @@ impl SkillRegistry {
                     },
                 )
             };
-            let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
-            self.record_search(
-                query,
-                origin,
-                top_k,
-                &hits,
-                vec![SearchStage {
-                    name: "bm25".into(),
-                    took_ms,
-                    top_score,
-                }],
-                took_ms,
-                context,
-            );
-            return hits;
+            let stage = SearchStage {
+                name: "bm25".into(),
+                took_ms: started.elapsed().as_millis() as u64,
+                top_score,
+            };
+            return (hits, vec![stage]);
         };
 
         let depth = RETRIEVE_DEPTH.max(top_k);
@@ -845,17 +962,10 @@ impl SkillRegistry {
 
         let (hits, rrf_stage) =
             Self::fuse_arms(&[(&bm25_ids, 1.0), (&arm.ids, arm.weight())], top_k);
-        let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(
-            query,
-            origin,
-            top_k,
-            &hits,
+        (
+            hits,
             vec![bm25_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
-            took_ms,
-            context,
-        );
-        hits
+        )
     }
 
     fn semantic_search_traced(
@@ -870,6 +980,20 @@ impl SkillRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
             return Ok(Vec::new());
         }
+        let (hits, stages) = self.semantic_ranked(query, top_k, context.turn_id.as_deref())?;
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        Ok(hits)
+    }
+
+    /// The semantic ranking and its stages, without recording the search.
+    /// Callers handle the empty-corpus / `top_k == 0` short-circuit.
+    fn semantic_ranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        turn_key: Option<&str>,
+    ) -> Result<(Vec<SkillHit>, Vec<SearchStage>), EmbedderError> {
         // Retrieve deeper only when a graph is attached; without one the depth,
         // scores, and stages stay exactly as they were.
         let depth = if self.graph.is_some() {
@@ -888,7 +1012,6 @@ impl SkillRegistry {
 
         // Reuses the vector the dense arm just embedded — no second inference.
         let t = Instant::now();
-        let turn_key = context.turn_id.as_deref();
         let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
@@ -899,22 +1022,13 @@ impl SkillRegistry {
             // `fuse_arms`).
             let mut hits = to_skill_hits(ranked, Scale::Cosine);
             hits.truncate(top_k);
-            let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
-            self.record_search(
-                query,
-                origin,
-                top_k,
-                &hits,
-                vec![SearchStage {
-                    name: "dense".into(),
-                    took_ms: stage_ms,
-                    top_score,
-                }],
-                took_ms,
-                context,
-            );
-            return Ok(hits);
+            let stage = SearchStage {
+                name: "dense".into(),
+                took_ms: stage_ms,
+                top_score,
+            };
+            return Ok((hits, vec![stage]));
         };
 
         let dense_stage = SearchStage {
@@ -925,17 +1039,10 @@ impl SkillRegistry {
         let dense_ids: Vec<String> = ranked.into_iter().map(|(id, _)| id).collect();
         let (hits, rrf_stage) =
             Self::fuse_arms(&[(&dense_ids, 1.0), (&arm.ids, arm.weight())], top_k);
-        let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(
-            query,
-            origin,
-            top_k,
-            &hits,
+        Ok((
+            hits,
             vec![dense_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
-            took_ms,
-            context,
-        );
-        Ok(hits)
+        ))
     }
 
     fn hybrid_search_traced(
@@ -950,6 +1057,20 @@ impl SkillRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
             return Ok(Vec::new());
         }
+        let (hits, stages) = self.hybrid_ranked(query, top_k, context.turn_id.as_deref())?;
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        Ok(hits)
+    }
+
+    /// The hybrid ranking and its stages, without recording the search.
+    /// Callers handle the empty-corpus / `top_k == 0` short-circuit.
+    fn hybrid_ranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        turn_key: Option<&str>,
+    ) -> Result<(Vec<SkillHit>, Vec<SearchStage>), EmbedderError> {
         let depth = RETRIEVE_DEPTH.max(top_k);
 
         let t = Instant::now();
@@ -976,7 +1097,6 @@ impl SkillRegistry {
 
         // Usage arm, matched on the vector the dense arm already embedded.
         let t = Instant::now();
-        let turn_key = context.turn_id.as_deref();
         let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
@@ -1004,10 +1124,7 @@ impl SkillRegistry {
             stages.push(Self::usage_stage(arm, usage_ms));
         }
         stages.push(fusion_stage);
-
-        let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
-        Ok(hits)
+        Ok((hits, stages))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2335,5 +2452,110 @@ mod tests {
                 h.relevance
             );
         }
+    }
+
+    // ---- Two-stage reranking (ADR-0026), the skill twin ----
+
+    use crate::rerank::{Reranker, SearchError, SearchOptions};
+
+    /// `openapi_spec` is a perfect semantic match for the query but shares no
+    /// term with it, so BM25 never retrieves it — the reranker must not either.
+    fn rerank_catalog() -> SkillRegistry {
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(skill(
+            "deploy_service",
+            "deploy_service",
+            "deploy a service",
+            &[],
+        ));
+        reg.register(skill(
+            "api_design",
+            "api_design",
+            "design rest endpoints",
+            &[],
+        ));
+        reg.register(skill(
+            "slides_design",
+            "slides_design",
+            "design slides",
+            &[],
+        ));
+        reg.register(skill("openapi_spec", "openapi_spec", "api schemas", &[]));
+        reg.build_embeddings().unwrap();
+        reg
+    }
+
+    fn skill_ids(hits: &[SkillHit]) -> Vec<&str> {
+        hits.iter().map(|h| h.skill_id.as_str()).collect()
+    }
+
+    #[test]
+    fn skill_rerank_reorders_only_stage_one_candidates() {
+        let reg = rerank_catalog();
+        let query = "design the rest service";
+        let stage_one = reg.search(query, 5);
+        assert!(!skill_ids(&stage_one).contains(&"openapi_spec"), "fixture");
+
+        let hits = reg
+            .search_with_options(
+                query,
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::Semantic)),
+            )
+            .unwrap();
+        let mut got = skill_ids(&hits);
+        let mut want = skill_ids(&stage_one);
+        got.sort_unstable();
+        want.sort_unstable();
+        assert_eq!(got, want);
+        assert_eq!(hits[0].skill_id, "api_design");
+        assert!(hits.iter().all(|h| !h.fused));
+    }
+
+    #[test]
+    fn skill_rerank_with_the_stage_one_method_is_rejected() {
+        let reg = rerank_catalog();
+        let err = reg
+            .search_with_options(
+                "design",
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Hybrid)
+                    .with_reranker(Reranker::new(SearchMethod::Hybrid)),
+            )
+            .err()
+            .expect("same method twice is an error");
+        assert!(matches!(err, SearchError::InvalidOptions { .. }));
+    }
+
+    #[test]
+    fn skill_rerank_records_one_search_with_a_rerank_stage() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = rerank_catalog();
+        reg.set_trace_sink(sink.clone());
+        reg.search_with_options(
+            "design the rest service",
+            5,
+            Origin::Direct,
+            SearchOptions::new(SearchMethod::Semantic)
+                .with_reranker(Reranker::new(SearchMethod::Hybrid)),
+        )
+        .unwrap();
+        let stages: Vec<Vec<String>> = sink
+            .drain()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                TraceEvent::SkillSearch { stages, .. } => {
+                    Some(stages.into_iter().map(|s| s.name).collect())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            stages,
+            vec![vec!["dense".to_string(), "rerank".to_string()]]
+        );
     }
 }

@@ -1,10 +1,11 @@
-//! Rank fusion and the shared deterministic ordering used across rankers.
+//! Score and rank fusion, and the shared deterministic ordering used across
+//! rankers.
 //!
-//! Reciprocal Rank Fusion (RRF) combines the BM25 and dense rankings into one
-//! candidate list for the hybrid pipeline (see [`crate::tool_registry`] and
-//! ADR-0011). It fuses on *rank position*, not raw scores, so it is immune to
-//! the incomparable scales of BM25 (unbounded) and cosine ([-1, 1]). Pure Rust,
-//! no heavy deps — its tests run on every build without a model download.
+//! Hybrid fuses the BM25 and dense arms on normalised scores ([`score_fuse`],
+//! ADR-0024). Reciprocal Rank Fusion remains for folding the usage arm
+//! (ADR-0014) into a single-arm BM25 or semantic search, where it fuses on
+//! *rank position*. Pure Rust, no heavy deps — its tests run on every build
+//! without a model download.
 
 /// RRF damping constant. 60 is the Cormack et al. (2009) default and the field
 /// standard; large enough that the reciprocal curve is gentle past the head of

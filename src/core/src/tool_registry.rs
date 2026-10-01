@@ -15,6 +15,7 @@ use crate::fusion::{
 };
 use crate::indexing::searchable_text;
 use crate::method::SearchMethod;
+use crate::rerank::{SearchError, SearchOptions, order_by_rescore};
 use crate::search::{Bm25Cache, Bm25Params};
 use crate::tool::Tool;
 use crate::trace::{
@@ -798,6 +799,129 @@ impl ToolRegistry {
         }
     }
 
+    /// Search with a first-stage method and an optional [`Reranker`]
+    /// (ADR-0026).
+    ///
+    /// Without a reranker this is [`Self::search_with_method_and_context`]. With
+    /// one, the first stage retrieves `max(depth, top_k)` candidates and the
+    /// reranker re-scores only those: it never adds a tool stage 1 did not
+    /// return. The reranker's score replaces stage 1's, ties keep stage 1's
+    /// order, and the usage arm (ADR-0014) contributes to stage 1 only. One
+    /// search event is recorded, carrying stage 1's stages plus a `rerank`
+    /// stage.
+    ///
+    /// # Errors
+    /// [`SearchError::InvalidOptions`] when the reranker uses the first stage's
+    /// method; [`SearchError::Embedder`] when either stage is semantic or
+    /// hybrid and the embeddings are not built or the embedder fails.
+    pub fn search_with_options(
+        &self,
+        query: &str,
+        top_k: usize,
+        origin: Origin,
+        options: SearchOptions,
+    ) -> Result<Vec<SearchHit>, SearchError> {
+        let SearchOptions {
+            method,
+            reranker,
+            context,
+            ..
+        } = options;
+        let Some(reranker) = reranker else {
+            return Ok(self.search_with_method_and_context(query, top_k, origin, method, context)?);
+        };
+        if reranker.method() == method {
+            return Err(SearchError::InvalidOptions {
+                message: format!(
+                    "reranker method \"{method}\" is the same as the first-stage method"
+                ),
+            });
+        }
+
+        let started = Instant::now();
+        if self.tools.is_empty() || top_k == 0 {
+            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            return Ok(Vec::new());
+        }
+        let depth = reranker.depth().max(top_k);
+        let turn_key = context.turn_id.as_deref();
+        let (candidates, mut stages) = match method {
+            SearchMethod::Bm25 => self.bm25_ranked(query, depth, turn_key),
+            SearchMethod::Semantic => self.semantic_ranked(query, depth, turn_key)?,
+            SearchMethod::Hybrid => self.hybrid_ranked(query, depth, turn_key)?,
+        };
+        let candidate_ids: Vec<String> = candidates.into_iter().map(|h| h.tool_id).collect();
+
+        let t = Instant::now();
+        let (mut rescored, scale) =
+            self.rank_candidates(query, &candidate_ids, reranker.method())?;
+        order_by_rescore(&mut rescored, &candidate_ids);
+        let mut hits = to_search_hits(rescored, scale);
+        hits.truncate(top_k);
+        stages.push(SearchStage {
+            name: "rerank".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: hits.first().map(|h| h.score as f64),
+        });
+
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        Ok(hits)
+    }
+
+    /// Re-score `ids` (stage-1 candidates) with `method`, returning every
+    /// candidate — a candidate the method cannot match scores `0` rather than
+    /// dropping out — and the scale the scores are on. Unordered; the caller
+    /// orders with [`order_by_rescore`].
+    ///
+    /// BM25 keeps corpus-wide IDF: it ranks the whole corpus and keeps the
+    /// candidates' scores, because IDF recomputed over a handful of candidates
+    /// would score a different question. No usage arm here (stage 1 only).
+    fn rank_candidates(
+        &self,
+        query: &str,
+        ids: &[String],
+        method: SearchMethod,
+    ) -> Result<(Vec<(String, f32)>, Scale), EmbedderError> {
+        let bm25_scores = || {
+            let index = self.bm25_index();
+            let scores: HashMap<String, f32> =
+                index.search(query, self.tools.len()).into_iter().collect();
+            let ceiling = index.query_ceiling(query);
+            let ranked: Vec<(String, f32)> = ids
+                .iter()
+                .map(|id| (id.clone(), scores.get(id).copied().unwrap_or(0.0)))
+                .collect();
+            (ranked, ceiling)
+        };
+        let dense_scores = || -> Result<Vec<(String, f32)>, EmbedderError> {
+            // The guard compares counts, so check the whole corpus rather than
+            // the candidates: a subset always looks "built".
+            self.dense.require_built(self.tools.len())?;
+            let candidates = ids.iter().filter_map(|id| self.tools.get(id));
+            let (ranked, _) = self.dense.search_returning_query_vec(
+                candidates,
+                query,
+                ids.len(),
+                self.sink.as_ref(),
+            )?;
+            Ok(ranked)
+        };
+        Ok(match method {
+            SearchMethod::Bm25 => {
+                let (ranked, ceiling) = bm25_scores();
+                (ranked, Scale::Bm25 { ceiling })
+            }
+            SearchMethod::Semantic => (dense_scores()?, Scale::Cosine),
+            SearchMethod::Hybrid => {
+                let dense = dense_scores()?;
+                let (bm25, ceiling) = bm25_scores();
+                let fused = score_fuse(&bm25, ceiling, &dense, None, self.dense_weight);
+                (fused, Scale::Fused)
+            }
+        })
+    }
+
     /// Pre-compute embeddings for any not-yet-embedded tools so a later
     /// semantic/hybrid search only has to embed the query (never the corpus).
     /// Incremental — embeds only tools registered since the last call. Callers
@@ -951,7 +1075,21 @@ impl ToolRegistry {
         context: TraceEventContext,
     ) -> Vec<SearchHit> {
         let started = Instant::now();
-        let turn_key = context.turn_id.as_deref();
+        let (hits, stages) = self.bm25_ranked(query, top_k, context.turn_id.as_deref());
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        hits
+    }
+
+    /// The BM25 ranking and its stages, without recording the search — the
+    /// traced wrapper and the reranker's first stage both build on it.
+    fn bm25_ranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        turn_key: Option<&str>,
+    ) -> (Vec<SearchHit>, Vec<SearchStage>) {
+        let started = Instant::now();
         let t = Instant::now();
         let arm = self.usage_arm(turn_key, query, None);
         let usage_ms = t.elapsed().as_millis() as u64;
@@ -967,22 +1105,13 @@ impl ToolRegistry {
                     ceiling: index.query_ceiling(query),
                 },
             );
-            let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
-            self.record_search(
-                query,
-                origin,
-                top_k,
-                &hits,
-                vec![SearchStage {
-                    name: "bm25".into(),
-                    took_ms,
-                    top_score,
-                }],
-                took_ms,
-                context,
-            );
-            return hits;
+            let stage = SearchStage {
+                name: "bm25".into(),
+                took_ms: started.elapsed().as_millis() as u64,
+                top_score,
+            };
+            return (hits, vec![stage]);
         };
 
         // Matched: retrieve deeper than `top_k` so a tool the usage arm favors
@@ -1000,17 +1129,10 @@ impl ToolRegistry {
 
         let (hits, rrf_stage) =
             Self::fuse_arms(&[(&bm25_ids, 1.0), (&arm.ids, arm.weight())], top_k);
-        let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(
-            query,
-            origin,
-            top_k,
-            &hits,
+        (
+            hits,
             vec![bm25_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
-            took_ms,
-            context,
-        );
-        hits
+        )
     }
 
     fn semantic_search_traced(
@@ -1025,6 +1147,20 @@ impl ToolRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
             return Ok(Vec::new());
         }
+        let (hits, stages) = self.semantic_ranked(query, top_k, context.turn_id.as_deref())?;
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        Ok(hits)
+    }
+
+    /// The semantic ranking and its stages, without recording the search.
+    /// Callers handle the empty-corpus / `top_k == 0` short-circuit.
+    fn semantic_ranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        turn_key: Option<&str>,
+    ) -> Result<(Vec<SearchHit>, Vec<SearchStage>), EmbedderError> {
         // Retrieve deeper than `top_k` only when a graph is attached; without
         // one the depth, scores, and stages stay exactly as they were.
         let depth = if self.graph.is_some() {
@@ -1043,7 +1179,6 @@ impl ToolRegistry {
 
         // Reuses the vector the dense arm just embedded — no second inference.
         let t = Instant::now();
-        let turn_key = context.turn_id.as_deref();
         let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
@@ -1054,22 +1189,13 @@ impl ToolRegistry {
             // `fuse_arms`).
             let mut hits = to_search_hits(ranked, Scale::Cosine);
             hits.truncate(top_k);
-            let took_ms = started.elapsed().as_millis() as u64;
             let top_score = hits.first().map(|h| h.score as f64);
-            self.record_search(
-                query,
-                origin,
-                top_k,
-                &hits,
-                vec![SearchStage {
-                    name: "dense".into(),
-                    took_ms: stage_ms,
-                    top_score,
-                }],
-                took_ms,
-                context,
-            );
-            return Ok(hits);
+            let stage = SearchStage {
+                name: "dense".into(),
+                took_ms: stage_ms,
+                top_score,
+            };
+            return Ok((hits, vec![stage]));
         };
 
         let dense_stage = SearchStage {
@@ -1080,22 +1206,15 @@ impl ToolRegistry {
         let dense_ids: Vec<String> = ranked.into_iter().map(|(id, _)| id).collect();
         let (hits, rrf_stage) =
             Self::fuse_arms(&[(&dense_ids, 1.0), (&arm.ids, arm.weight())], top_k);
-        let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(
-            query,
-            origin,
-            top_k,
-            &hits,
+        Ok((
+            hits,
             vec![dense_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
-            took_ms,
-            context,
-        );
-        Ok(hits)
+        ))
     }
 
-    /// Hybrid retrieval (ADR-0011): BM25 and dense each rank the corpus deeper
-    /// than `top_k`, then Reciprocal Rank Fusion combines the two rankings into
-    /// the final order (no reranker). Emits `bm25`, `dense`, and `rrf` stages.
+    /// Hybrid retrieval (ADR-0011, ADR-0024): BM25 and dense each rank the
+    /// corpus deeper than `top_k`, then their normalised scores are fused into
+    /// the final order. Emits `bm25`, `dense`, (`usage`,) and `fusion` stages.
     fn hybrid_search_traced(
         &self,
         query: &str,
@@ -1108,6 +1227,20 @@ impl ToolRegistry {
             self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
             return Ok(Vec::new());
         }
+        let (hits, stages) = self.hybrid_ranked(query, top_k, context.turn_id.as_deref())?;
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        Ok(hits)
+    }
+
+    /// The hybrid ranking and its stages, without recording the search.
+    /// Callers handle the empty-corpus / `top_k == 0` short-circuit.
+    fn hybrid_ranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        turn_key: Option<&str>,
+    ) -> Result<(Vec<SearchHit>, Vec<SearchStage>), EmbedderError> {
         // Retrieve deeper than `top_k` so a tool ranked low by one arm but high
         // by the other still has rank signal to fuse.
         let depth = RETRIEVE_DEPTH.max(top_k);
@@ -1139,7 +1272,6 @@ impl ToolRegistry {
         // 3. Usage (ADR-0014), matched on the vector the dense arm already
         //    embedded. Absent unless a graph is attached and the query matches.
         let t = Instant::now();
-        let turn_key = context.turn_id.as_deref();
         let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
@@ -1166,10 +1298,7 @@ impl ToolRegistry {
             stages.push(Self::usage_stage(arm, usage_ms));
         }
         stages.push(fusion_stage);
-
-        let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
-        Ok(hits)
+        Ok((hits, stages))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3391,5 +3520,224 @@ mod tests {
             shallow.last().is_some_and(|h| h.relevance > 0.0),
             "something ranked below it, so it is not the minimum"
         );
+    }
+
+    // ---- Two-stage reranking (ADR-0026) ----
+
+    use crate::rerank::Reranker;
+
+    /// `erase_disk` is a perfect semantic match for "remove the file" but shares
+    /// no term with it, so BM25 never retrieves it — the reranker must not
+    /// either.
+    fn rerank_catalog() -> ToolRegistry {
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a file"));
+        reg.register(tool("purge_cache", "remove cache entries"));
+        reg.register(tool("erase_disk", "delete everything on disk"));
+        reg.build_embeddings().unwrap();
+        reg
+    }
+
+    fn ids_of(hits: &[SearchHit]) -> Vec<&str> {
+        hits.iter().map(|h| h.tool_id.as_str()).collect()
+    }
+
+    #[test]
+    fn rerank_reorders_only_stage_one_candidates() {
+        let reg = rerank_catalog();
+        let query = "remove the file";
+        let stage_one = reg.search(query, 5);
+        assert!(
+            !ids_of(&stage_one).contains(&"erase_disk"),
+            "fixture: BM25 must not retrieve erase_disk"
+        );
+
+        let hits = reg
+            .search_with_options(
+                query,
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::Semantic)),
+            )
+            .unwrap();
+
+        let mut got: Vec<&str> = ids_of(&hits);
+        let mut want: Vec<&str> = ids_of(&stage_one);
+        got.sort_unstable();
+        want.sort_unstable();
+        assert_eq!(got, want, "the reranker neither adds nor drops candidates");
+        assert_eq!(
+            hits.last().unwrap().tool_id,
+            "read_file",
+            "cosine 0 sinks last"
+        );
+        assert!(
+            hits.iter().all(|h| !h.fused),
+            "a cosine rerank is a raw score"
+        );
+        for h in &hits {
+            assert!((h.relevance - (h.score + 1.0) / 2.0).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn rerank_with_the_stage_one_method_is_rejected() {
+        let reg = rerank_catalog();
+        let err = reg
+            .search_with_options(
+                "remove the file",
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Semantic)
+                    .with_reranker(Reranker::new(SearchMethod::Semantic)),
+            )
+            .err()
+            .expect("same method twice is an error");
+        assert!(matches!(err, SearchError::InvalidOptions { .. }));
+    }
+
+    #[test]
+    fn rerank_depth_below_top_k_is_raised_to_top_k() {
+        let reg = rerank_catalog();
+        let plain = reg.search("remove the file", 3);
+        let hits = reg
+            .search_with_options(
+                "remove the file",
+                3,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::Semantic).with_depth(1).unwrap()),
+            )
+            .unwrap();
+        assert_eq!(hits.len(), plain.len());
+    }
+
+    #[test]
+    fn bm25_rerank_keeps_corpus_wide_idf() {
+        let reg = rerank_catalog();
+        let query = "delete the file";
+        let full: HashMap<String, f32> = reg
+            .search(query, 10)
+            .into_iter()
+            .map(|h| (h.tool_id, h.score))
+            .collect();
+        let hits = reg
+            .search_with_options(
+                query,
+                2,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Semantic)
+                    .with_reranker(Reranker::new(SearchMethod::Bm25)),
+            )
+            .unwrap();
+        assert!(!hits.is_empty());
+        for h in &hits {
+            let expected = full.get(&h.tool_id).copied().unwrap_or(0.0);
+            assert!(
+                (h.score - expected).abs() < 1e-6,
+                "{}: reranked {} vs corpus-wide {}",
+                h.tool_id,
+                h.score,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn hybrid_rerank_is_a_fused_score() {
+        let reg = rerank_catalog();
+        let hits = reg
+            .search_with_options(
+                "remove the file",
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::Hybrid)),
+            )
+            .unwrap();
+        assert!(!hits.is_empty());
+        assert!(hits.iter().all(|h| h.fused));
+        assert!(!ids_of(&hits).contains(&"erase_disk"));
+    }
+
+    #[test]
+    fn rerank_records_one_search_with_a_rerank_stage() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = rerank_catalog();
+        reg.set_trace_sink(sink.clone());
+        let hits = reg
+            .search_with_options(
+                "remove the file",
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::Semantic)),
+            )
+            .unwrap();
+        let searches: Vec<_> = sink
+            .drain()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                TraceEvent::Search { stages, hits, .. } => Some((stages, hits)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(searches.len(), 1, "one search event, not one per stage");
+        let (stages, traced) = &searches[0];
+        let names: Vec<&str> = stages.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["bm25", "rerank"]);
+        let traced_ids: Vec<&str> = traced.iter().map(|h| h.tool_id.as_str()).collect();
+        assert_eq!(
+            traced_ids,
+            ids_of(&hits),
+            "the trace carries the reranked order"
+        );
+    }
+
+    #[test]
+    fn the_usage_arm_runs_in_stage_one_only() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = rerank_catalog();
+        reg.set_trace_sink(sink.clone());
+        reg.set_intent_graph(Some(read_graph("read_file", 9)));
+        reg.search_with_options(
+            "read a file",
+            5,
+            Origin::Direct,
+            SearchOptions::new(SearchMethod::Semantic)
+                .with_reranker(Reranker::new(SearchMethod::Bm25)),
+        )
+        .unwrap();
+        let boosts = sink
+            .drain()
+            .into_iter()
+            .filter(|e| matches!(e.event, TraceEvent::UsageBoost { .. }))
+            .count();
+        assert_eq!(boosts, 1);
+    }
+
+    #[test]
+    fn without_a_reranker_options_search_matches_search_with_method() {
+        let reg = rerank_catalog();
+        for method in [
+            SearchMethod::Bm25,
+            SearchMethod::Semantic,
+            SearchMethod::Hybrid,
+        ] {
+            let a = reg
+                .search_with_method("remove the file", 3, Origin::Direct, method)
+                .unwrap();
+            let b = reg
+                .search_with_options(
+                    "remove the file",
+                    3,
+                    Origin::Direct,
+                    SearchOptions::new(method),
+                )
+                .unwrap();
+            assert_eq!(ids_of(&a), ids_of(&b));
+        }
     }
 }

@@ -277,8 +277,8 @@ export interface BaselineTurn {
  *
  * - `"bm25"` — lexical ranking; model-free and infallible (the default).
  * - `"semantic"` — cosine similarity over prebuilt embeddings.
- * - `"hybrid"` — BM25 and semantic rankings fused with Reciprocal Rank Fusion
- *   (ADR-0011).
+ * - `"hybrid"` — BM25 and semantic scores normalised and fused (ADR-0011,
+ *   ADR-0024).
  *
  * `"semantic"`/`"hybrid"` need a prepared dense cache: registration builds it
  * (or warms a configured embedding artifact). Dense ranking uses
