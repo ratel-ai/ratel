@@ -9,6 +9,8 @@ adaptive-ranking-ts/     Ratel adaptive usage ranking — learn from invocations
 adaptive-ranking-python/ Ratel adaptive usage ranking — the Python mirror, plus model-swap recovery
 configurable-adaptive-ranking-ts/ Seed an intent graph from a baseline capture, then switch ranking on (TS)
 configurable-adaptive-ranking-python/ Seeding — the Python mirror
+system-one-reranking-ts/ System-one ranking + two-stage reranker against a local /v1/systemone stand-in (TS)
+system-one-reranking-python/ System-one ranking + reranker — the Python mirror
 s3-support-adaptive-ranking/ Live S3 intent graph storage smoke test (real AWS, manual-only) (TS)
 s3-support-adaptive-ranking-python/ Live S3 intent graph storage smoke test — the Python mirror
 ai-sdk/           Ratel + Vercel AI SDK — top-K filtering + capability tools in ToolLoopAgent.generate
