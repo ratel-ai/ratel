@@ -215,6 +215,18 @@ pub enum TraceEvent {
         /// Lowercase SHA-256 of the definition fields above.
         content_hash: String,
     },
+    /// The application opened one turn: one user request that the searches,
+    /// skill loads, and tool calls carrying the same envelope `turn_id` belong
+    /// to. Emitted once per turn by the SDKs' turn scope, before anything the
+    /// turn does. The usage learner ignores it: pairing is keyed by `turn_id`
+    /// on the events themselves, so this marker adds no evidence.
+    TurnStart {
+        /// What the end user asked, only when the application passed it
+        /// explicitly (passing it is the consent). The SDKs cap it at 4 KiB of
+        /// UTF-8, like a search query.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        user_message: Option<String>,
+    },
     /// A [`crate::ToolRegistry`] search completed (any [`crate::SearchMethod`]).
     /// Carries the query, the requested `top_k`, the ranked `hits` with
     /// scores, the per-engine `stages` timings, and the total wall time.
