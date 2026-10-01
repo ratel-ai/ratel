@@ -26,6 +26,7 @@ import { mapArtifactBuildError, mapArtifactWarmError, mapEmbedderError } from ".
 import { assertValidFact, type Fact } from "./grounding.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
 import { type RuntimeEventProjection, recordCatalogDefinitions } from "./telemetry.js";
+import { withTurnContext } from "./turn.js";
 
 export { IntentGraph };
 
@@ -206,7 +207,7 @@ export class ToolRegistry {
     method: SearchMethod,
     projection?: RuntimeEventProjection,
   ): SearchHit[] {
-    return this.native.searchWithMethod(query, topK, origin, method, projection);
+    return this.native.searchWithMethod(query, topK, origin, method, withTurnContext(projection));
   }
 
   /** Search on a libuv worker; supports `"bm25"`, `"semantic"`, and `"hybrid"`. */
@@ -224,7 +225,13 @@ export class ToolRegistry {
       if (method !== "bm25" && this.#rebuildOnModelChange) {
         await this.#maybeRebuildOnModelChange();
       }
-      return await this.native.searchWithMethodAsync(query, topK, origin, method, projection);
+      return await this.native.searchWithMethodAsync(
+        query,
+        topK,
+        origin,
+        method,
+        withTurnContext(projection),
+      );
     } catch (error) {
       throw mapEmbedderError(error);
     }
@@ -234,7 +241,8 @@ export class ToolRegistry {
    * Record a custom event on the local trace stream (ADR-0007). Throws on an
    * object that doesn't parse as a known trace event.
    */
-  recordEvent(event: object, projection?: RuntimeEventProjection): void {
+  recordEvent(event: object, explicit?: RuntimeEventProjection): void {
+    const projection = withTurnContext(explicit);
     if (projection) {
       this.native.recordEventWithContext(event, projection);
     } else {
@@ -588,7 +596,7 @@ export class SkillRegistry {
     method: SearchMethod,
     projection?: RuntimeEventProjection,
   ): SkillHit[] {
-    return this.native.searchWithMethod(query, topK, origin, method, projection);
+    return this.native.searchWithMethod(query, topK, origin, method, withTurnContext(projection));
   }
 
   /** Search on a libuv worker — see `ToolRegistry.searchWithMethodAsync`. */
@@ -606,14 +614,21 @@ export class SkillRegistry {
       if (method !== "bm25" && this.#rebuildOnModelChange) {
         await this.#maybeRebuildOnModelChange();
       }
-      return await this.native.searchWithMethodAsync(query, topK, origin, method, projection);
+      return await this.native.searchWithMethodAsync(
+        query,
+        topK,
+        origin,
+        method,
+        withTurnContext(projection),
+      );
     } catch (error) {
       throw mapEmbedderError(error);
     }
   }
 
   /** Record a custom event on the local trace stream (ADR-0007). */
-  recordEvent(event: object, projection?: RuntimeEventProjection): void {
+  recordEvent(event: object, explicit?: RuntimeEventProjection): void {
+    const projection = withTurnContext(explicit);
     if (projection) {
       this.native.recordEventWithContext(event, projection);
     } else {

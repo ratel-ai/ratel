@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Turn scope ([ADR 0026](../../../docs/adr/0026-turn-scope.md)): `r.turn(fn, { id?, userMessage?, endUserId? })` marks one user request. Every search, skill load, and tool call inside it, across `await`, carries the turn's `turn_id` (and `end_user_id`), and one `turn_start` event opens it, with `user_message` only when you pass it (capped at 4 KiB). An explicit `turnId` argument still wins; nested turns win over outer ones. Also on `ToolCatalog` and every adapted view, with `currentTurnId()`.
+- `r.recordToolCall({ toolId, tookMs?, error?, turnId? })` records a tool your framework ran itself as `invoke_start` plus `invoke_end`/`invoke_error`, marked `origin: "external"` on the runtime-event stream. Adaptive ranking learns from it like an invoke.
+- `turn_start` joins `RUNTIME_EVENT_TYPES`.
 - Intent graph storage plugins ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)): `LocalFileIntentGraphStorage` and `S3IntentGraphStorage`, the two ready-made backends for persisting adaptive ranking's `IntentGraph`. Both expose `load()`/`save()`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` rather than clobber a concurrent writer. The local backend writes atomically via temp file + rename at `0600`; the S3 backend uses conditional writes (`If-Match`/`If-None-Match`) and needs no `@aws-sdk/client-s3` — it signs with a built-in SigV4 client (#168)
 - `endpoint` and `forcePathStyle` on `S3IntentGraphStorage` for MinIO and other S3-compatible services; `forcePathStyle` defaults to `true` once `endpoint` is set (#168)
 - `idleTimeoutMs` (default 60s) bounds both S3 calls on an idle clock — time with no data moving, not total elapsed — so a slow transfer completes but a wedged endpoint fails instead of hanging (#168)

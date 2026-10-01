@@ -23,6 +23,8 @@ import {
   traceSearch,
   traceSearchAsync,
 } from "./telemetry.js";
+import type { ExternalToolCall, TurnOptions } from "./turn.js";
+import { recordExternalToolCall, runTurn } from "./turn-recording.js";
 
 /**
  * The function that runs a tool. Receives the arguments object and an optional
@@ -719,6 +721,28 @@ export class ToolCatalog {
    */
   recordEvent(event: object, projection?: RuntimeEventProjection): void {
     this.registry.recordEvent(event, projection);
+  }
+
+  /**
+   * Run `fn` as one turn: one user request. Every search, skill load, and tool
+   * call made inside it, across awaits, carries the turn's `turn_id` (and
+   * `end_user_id` when given), and a `turn_start` event opens it once. Returns
+   * whatever `fn` returns. An explicit `turnId` argument on a call still wins,
+   * and a nested turn wins over its outer one. See {@link TurnOptions}.
+   */
+  turn<T>(fn: () => T, options?: TurnOptions): T {
+    return runTurn(this, fn, options);
+  }
+
+  /**
+   * Record a tool call your framework ran itself (not through
+   * {@link ToolCatalog.invoke}): an `invoke_start` plus an `invoke_end`, or an
+   * `invoke_error` when `error` is set, in the current turn, marked
+   * `origin: "external"` on the runtime-event stream. Adaptive ranking learns
+   * from it like an invoke. No OTel span is opened: the framework owns that.
+   */
+  recordToolCall(call: ExternalToolCall): void {
+    recordExternalToolCall(this, call);
   }
 
   /**

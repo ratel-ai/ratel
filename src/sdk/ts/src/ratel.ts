@@ -36,6 +36,7 @@ import {
 } from "./runtime-events.js";
 import { SkillCatalog } from "./skill-catalog.js";
 import { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";
+import { currentTurnId, type ExternalToolCall, type TurnOptions } from "./turn.js";
 
 /** Construction options for {@link ratel}. Shared by every adapter view of the core. */
 export interface RatelConfig {
@@ -328,6 +329,22 @@ export interface AdaptedBase<TTool, TMessage> {
    * nothing persisted. See `experimental.FactCatalog.groundSnapshot`.
    */
   groundSnapshot(query: string, opts?: GroundOptions): Promise<GroundingSnapshotItem[]>;
+  /**
+   * Run `fn` as one turn (one user request): every search, skill load, and tool
+   * call inside it carries the turn's `turn_id`, across awaits, and a
+   * `turn_start` event opens it once. Returns `fn`'s result. Pass `userMessage`
+   * only if you want what the user asked sent with `turn_start`, and
+   * `endUserId` to stamp your user id on every event in the turn.
+   */
+  turn<T>(fn: () => T, options?: TurnOptions): T;
+  /**
+   * Record a tool call your framework ran itself, in the current turn
+   * (`invoke_start` plus `invoke_end`, or `invoke_error` when `error` is set,
+   * marked `origin: "external"`).
+   */
+  recordToolCall(call: ExternalToolCall): void;
+  /** The id of the turn the caller is running inside, or `undefined`. */
+  currentTurnId(): string | undefined;
 }
 
 /**
@@ -414,6 +431,22 @@ export interface Ratel {
    * Render into a per-call message override (e.g. a `prepareStep`) and discard.
    */
   groundSnapshot(query: string, opts?: GroundOptions): Promise<GroundingSnapshotItem[]>;
+  /**
+   * Run `fn` as one turn (one user request): every search, skill load, and tool
+   * call inside it carries the turn's `turn_id`, across awaits, and a
+   * `turn_start` event opens it once. Returns `fn`'s result. Pass `userMessage`
+   * only if you want what the user asked sent with `turn_start`, and
+   * `endUserId` to stamp your user id on every event in the turn.
+   */
+  turn<T>(fn: () => T, options?: TurnOptions): T;
+  /**
+   * Record a tool call your framework ran itself, in the current turn
+   * (`invoke_start` plus `invoke_end`, or `invoke_error` when `error` is set,
+   * marked `origin: "external"`).
+   */
+  recordToolCall(call: ExternalToolCall): void;
+  /** The id of the turn the caller is running inside, or `undefined`. */
+  currentTurnId(): string | undefined;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
   adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A>;
 }
@@ -679,6 +712,11 @@ export function ratel(config: RatelConfig = {}): Ratel {
     return result.tools.groups.length === 0 && result.skills.length === 0 ? null : result;
   }
 
+  // One turn scope and one external-call recorder for every view of this core:
+  // both record on the shared tool catalog, so a view's turn is the core's turn.
+  const turn = <T>(fn: () => T, options?: TurnOptions): T => catalog.turn(fn, options);
+  const recordToolCall = (call: ExternalToolCall): void => catalog.recordToolCall(call);
+
   // Grounding lives on the fact catalog (it owns the fact state); the core just
   // forwards to it, so `r.ground`/`r.groundSnapshot` and the catalog methods
   // are one path.
@@ -749,6 +787,9 @@ export function ratel(config: RatelConfig = {}): Ratel {
       catalog: runtimeCatalog,
       ground,
       groundSnapshot,
+      turn,
+      recordToolCall,
+      currentTurnId,
       modelTools() {
         const out: Record<string, unknown> = {};
         for (const [id, tool] of passthrough) {
@@ -787,6 +828,9 @@ export function ratel(config: RatelConfig = {}): Ratel {
     recall,
     ground,
     groundSnapshot,
+    turn,
+    recordToolCall,
+    currentTurnId,
     adaptTo,
   });
 }
