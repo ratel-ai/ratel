@@ -170,6 +170,15 @@ retrieval (`experimentalBaselineTurn` / `experimental_baseline_turn`, or the who
 log offline (`experimentalBuildIntentGraph` / `experimental_build_intent_graph`), inspect it, then
 enable ranking. Every entry point carries the `experimental` prefix — there is no stable alias.
 
+**Pairing, and what `turnId` is for.** `search` and `invoke` take a trailing `turnId` /
+`turn_id`: mint **one per user message** and reuse it for every search and invoke that message
+produces. It is a *scope*, not an attribution key — within a turn an invoke pairs with the search
+that actually returned that capability, so a turn that searches several times for several
+subtasks keeps each search's evidence separate. What the id buys is keeping concurrent
+conversations that share one catalog from pairing each other's events; omit it and they share one
+scope. Do not mint one per search, and do not mint one per agent step — a search and the invoke it
+leads to are always different steps, so a per-step id pairs nothing.
+
 Two things not to invent:
 
 - **The `"callback"` trace sink is TypeScript-only.** `{ kind: "callback", sessionId, onEvent }`

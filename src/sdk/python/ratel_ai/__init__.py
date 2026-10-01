@@ -65,6 +65,16 @@ from .exceptions import (
     EmbedderError,
     IncompatibleMergeError,
 )
+from .intent_graph_storage import (
+    IntentGraphStorage,
+    LocalFileIntentGraphStorage,
+    S3IntentGraphStorage,
+    S3IntentGraphStorageCredentials,
+    S3Request,
+    S3Response,
+    S3Transport,
+    StaleIntentGraphError,
+)
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
 from .runtime_events import (
     OPTIONAL_ENVELOPE_FIELDS,
@@ -105,6 +115,10 @@ __all__ = [
     "EndpointEmbeddingConfig",
     "ExecutableTool",
     "Executor",
+    "IntentGraphStorage",
+    "LocalFileIntentGraphStorage",
+    "S3IntentGraphStorage",
+    "S3IntentGraphStorageCredentials",
     "HuggingFaceEmbeddingConfig",
     "LocalEmbeddingConfig",
     "McpServerHandle",
@@ -123,6 +137,9 @@ __all__ = [
     "RUNTIME_EVENT_MAX_PAYLOAD_BYTES",
     "RUNTIME_EVENT_MAX_QUERY_BYTES",
     "RUNTIME_EVENT_TYPES",
+    "S3Request",
+    "S3Response",
+    "S3Transport",
     "SearchHit",
     "OriginFilterOption",
     "ProvenanceOption",
@@ -132,6 +149,7 @@ __all__ = [
     "SkillCatalog",
     "SkillHit",
     "SkillRegistry",
+    "StaleIntentGraphError",
     "Tool",
     "BaselineTurn",
     "ToolCatalog",

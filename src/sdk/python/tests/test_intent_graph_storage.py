@@ -1,0 +1,749 @@
+"""Host-owned intent graph persistence: local file and S3 backends (ADR-0025)."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import os
+import socket
+import stat
+import subprocess
+import sys
+import textwrap
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+
+from ratel_ai import ExecutableTool, IntentGraph, ToolCatalog
+from ratel_ai._sigv4 import resolve_s3_endpoint, sign_s3_request
+from ratel_ai.intent_graph_storage import (
+    DEFAULT_IDLE_TIMEOUT_S,
+    LocalFileIntentGraphStorage,
+    S3IntentGraphStorage,
+    S3IntentGraphStorageCredentials,
+    S3Request,
+    S3Response,
+    StaleIntentGraphError,
+    _UrllibS3Transport,
+)
+
+
+def _graph_json(rev: int) -> str:
+    return json.dumps({"v": 1, "built_from_ts": 0, "rev": rev, "intents": []})
+
+
+async def _learning_catalog() -> ToolCatalog:
+    """A catalog that learns, so `rev` moves through the real observation path."""
+    catalog = ToolCatalog()
+    await catalog.register(
+        [
+            ExecutableTool(
+                id="gh_run_list",
+                name="gh_run_list",
+                description="List CI workflow runs and whether the build passed",
+                execute=lambda _args: "listed",
+            ),
+            ExecutableTool(
+                id="docker_build",
+                name="docker_build",
+                description="Build a Docker image from a Dockerfile",
+                execute=lambda _args: "built",
+            ),
+        ]
+    )
+    return catalog
+
+
+async def _use_it(catalog: ToolCatalog, query: str, chosen: str) -> None:
+    """One confirmed observation: search, then invoke what you wanted. Bumps `rev`."""
+    catalog.search(query, 5)
+    await catalog.invoke(chosen, {})
+
+
+class TestLocalFileIntentGraphStorage:
+    async def test_load_returns_none_when_file_does_not_exist(self, tmp_path: Path) -> None:
+        storage = LocalFileIntentGraphStorage(tmp_path / "intent-graph.json")
+        assert await storage.load() is None
+
+    async def test_round_trips_a_saved_graph_preserving_rev(self, tmp_path: Path) -> None:
+        path = tmp_path / "intent-graph.json"
+        storage = LocalFileIntentGraphStorage(path)
+        await storage.save(IntentGraph.from_json(_graph_json(3)))
+
+        other = LocalFileIntentGraphStorage(path)
+        loaded = await other.load()
+        assert loaded is not None
+        assert loaded.rev == 3
+
+    async def test_writes_atomically_leaving_no_temp_file_behind(self, tmp_path: Path) -> None:
+        path = tmp_path / "intent-graph.json"
+        storage = LocalFileIntentGraphStorage(path)
+        await storage.save(IntentGraph.from_json(_graph_json(1)))
+
+        assert json.loads(path.read_text())["rev"] == 1
+        assert all(not p.name.startswith(".tmp-") for p in tmp_path.iterdir())
+
+    async def test_skips_write_when_rev_unchanged_since_last_save(self, tmp_path: Path) -> None:
+        path = tmp_path / "intent-graph.json"
+        storage = LocalFileIntentGraphStorage(path)
+        graph = IntentGraph.from_json(_graph_json(5))
+        await storage.save(graph)
+        first_mtime = path.stat().st_mtime_ns
+
+        await storage.save(graph)
+        assert path.stat().st_mtime_ns == first_mtime
+
+
+    async def test_round_trips_the_learned_clusters_not_just_the_rev(
+        self, tmp_path: Path
+    ) -> None:
+        # Every other fixture here is an empty graph, so a save() that kept only
+        # the rev counter and discarded every cluster would pass the whole suite.
+        catalog = await _learning_catalog()
+        graph = IntentGraph()
+        catalog.experimental_enable_adaptive_ranking(graph)
+        await _use_it(catalog, "why is the build broken", "gh_run_list")
+        await _use_it(catalog, "is the build broken again", "gh_run_list")
+
+        before = json.loads(graph.to_json())
+        assert before["intents"]
+        assert before["intents"][0]["members"]
+        assert before["intents"][0]["tools"]
+
+        path = tmp_path / "intent-graph.json"
+        await LocalFileIntentGraphStorage(path).save(graph)
+        reloaded = await LocalFileIntentGraphStorage(path).load()
+        assert reloaded is not None
+        assert json.loads(reloaded.to_json()) == before
+
+    def test_round_trips_non_ascii_on_a_non_utf8_host(self, tmp_path: Path) -> None:
+        # Cluster members are raw user query text. Reading and writing in the
+        # locale encoding breaks wherever that is not UTF-8 (the Windows wheels
+        # default to cp1252), so both directions pin utf-8. CI is UTF-8, so the
+        # host has to be forced: only a subprocess can change the interpreter's
+        # default encoding.
+        query = "créer un contact pour le café 日本語"
+        graph_json = json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 0,
+                "rev": 1,
+                "intents": [
+                    {
+                        "id": "intent_0",
+                        "label": query,
+                        "terms": ["café"],
+                        "members": [query],
+                        "support": 1,
+                        "tools": {},
+                        "skills": {},
+                        "last_ts": 0,
+                    }
+                ],
+            }
+        )
+        path = tmp_path / "intent-graph.json"
+        # json.dumps escapes non-ASCII, so argv stays ASCII-safe under LC_ALL=C;
+        # the comparison happens in-process and only "OK" crosses stdout, which
+        # is itself locale-encoded.
+        script = textwrap.dedent(
+            """
+            import asyncio, json, sys
+            from ratel_ai import IntentGraph
+            from ratel_ai.intent_graph_storage import LocalFileIntentGraphStorage
+
+            path, graph_json = sys.argv[1], sys.argv[2]
+            expected = json.loads(graph_json)["intents"][0]["members"]
+
+            async def main() -> None:
+                await LocalFileIntentGraphStorage(path).save(
+                    IntentGraph.from_json(graph_json)
+                )
+                reloaded = await LocalFileIntentGraphStorage(path).load()
+                assert reloaded is not None
+                members = json.loads(reloaded.to_json())["intents"][0]["members"]
+                assert members == expected, "round trip lost the query text"
+                print("OK")
+
+            asyncio.run(main())
+            """
+        )
+        env = {
+            **os.environ,
+            "PYTHONUTF8": "0",
+            "PYTHONCOERCECLOCALE": "0",
+            "LC_ALL": "C",
+            "LANG": "C",
+        }
+        done = subprocess.run(  # noqa: S603
+            [sys.executable, "-c", script, str(path), graph_json],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+        )
+        assert done.returncode == 0, done.stderr
+        assert done.stdout.strip() == "OK"
+        assert json.loads(path.read_bytes().decode("utf-8"))["intents"][0]["members"] == [query]
+
+    async def test_writes_the_graph_0600(self, tmp_path: Path) -> None:
+        path = tmp_path / "intent-graph.json"
+        storage = LocalFileIntentGraphStorage(path)
+        await storage.save(IntentGraph.from_json(_graph_json(1)))
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    async def test_raises_stale_error_when_on_disk_rev_moved_since_load(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "intent-graph.json"
+        writer1 = LocalFileIntentGraphStorage(path)
+        await writer1.save(IntentGraph.from_json(_graph_json(1)))
+
+        reader = LocalFileIntentGraphStorage(path)
+        loaded = await reader.load()
+        assert loaded is not None
+        assert loaded.rev == 1
+
+        # Someone else loads the current graph and advances it on disk.
+        writer2 = LocalFileIntentGraphStorage(path)
+        await writer2.load()
+        await writer2.save(IntentGraph.from_json(_graph_json(2)))
+
+        # reader now has its own local change (rev 3); saving it should detect the
+        # clobber, since reader's base (rev 1) no longer matches what's on disk (rev 2).
+        with pytest.raises(StaleIntentGraphError):
+            await reader.save(IntentGraph.from_json(_graph_json(3)))
+
+    async def test_raises_stale_error_on_first_save_if_file_exists_and_never_loaded(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "intent-graph.json"
+        writer1 = LocalFileIntentGraphStorage(path)
+        await writer1.save(IntentGraph.from_json(_graph_json(1)))
+
+        blind_writer = LocalFileIntentGraphStorage(path)
+        with pytest.raises(StaleIntentGraphError):
+            await blind_writer.save(IntentGraph.from_json(_graph_json(1)))
+
+
+class TestSignS3Request:
+    _base_kwargs = {
+        "method": "GET",
+        "host": "examplebucket.s3.amazonaws.com",
+        "path": "/test.txt",
+        "headers": {"range": "bytes=0-9"},
+        "body": "",
+        "region": "us-east-1",
+        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        "date": datetime(2013, 5, 24, tzinfo=timezone.utc),
+    }
+
+    def test_matches_the_signature_aws_publishes_for_this_request(self) -> None:
+        # The fixture is AWS's `GET Object` example verbatim. Independently
+        # confirmed against botocore 1.43.101, AWS's own implementation, signing
+        # the same request at the same timestamp. Without this the suite passes
+        # with a broken canonical request.
+        signed = sign_s3_request(**self._base_kwargs)
+        assert (
+            "Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41"
+            in signed.headers["authorization"]
+        )
+
+    def test_is_deterministic_for_identical_inputs(self) -> None:
+        a = sign_s3_request(**self._base_kwargs).headers["authorization"]
+        b = sign_s3_request(**self._base_kwargs).headers["authorization"]
+        assert a == b
+
+    def test_changes_signature_when_secret_key_changes(self) -> None:
+        a = sign_s3_request(**self._base_kwargs).headers["authorization"]
+        b = sign_s3_request(**{**self._base_kwargs, "secret_access_key": "different"}).headers[
+            "authorization"
+        ]
+        assert a != b
+
+    def test_changes_signature_when_body_changes(self) -> None:
+        a = sign_s3_request(**self._base_kwargs).headers["authorization"]
+        b = sign_s3_request(**{**self._base_kwargs, "body": "some content"}).headers[
+            "authorization"
+        ]
+        assert a != b
+
+    def test_builds_canonical_signed_headers_per_sigv4_spec(self) -> None:
+        # https://docs.aws.amazon.com/general/latest/gr/create-signed-request.html
+        signed = sign_s3_request(**self._base_kwargs)
+        assert "SignedHeaders=host;range;x-amz-content-sha256;x-amz-date" in signed.headers[
+            "authorization"
+        ]
+        assert (
+            "Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"
+            in signed.headers["authorization"]
+        )
+
+    def test_accepts_a_mixed_case_header_key_and_signs_it_lowercased(self) -> None:
+        signed = sign_s3_request(**{**self._base_kwargs, "headers": {"If-Match": '"etag-1"'}})
+        assert "SignedHeaders=host;if-match;" in signed.headers["authorization"]
+        assert signed.headers["if-match"] == '"etag-1"'
+
+    def test_converts_a_non_utc_date_instead_of_relabelling_it(self) -> None:
+        # strftime on a tz-aware non-UTC datetime would stamp a local time with
+        # a Z suffix; the instant is the same, so the stamp must be too.
+        eastern = timezone(timedelta(hours=-5))
+        local = datetime(2013, 5, 23, 19, 0, 0, tzinfo=eastern)  # 20130524T000000Z
+        signed = sign_s3_request(**{**self._base_kwargs, "date": local})
+        assert signed.headers["x-amz-date"] == "20130524T000000Z"
+        assert signed.headers["authorization"] == (
+            sign_s3_request(**self._base_kwargs).headers["authorization"]
+        )
+
+    def test_hashes_empty_body_to_well_known_sha256_empty_digest(self) -> None:
+        signed = sign_s3_request(**self._base_kwargs)
+        assert signed.headers["x-amz-content-sha256"] == hashlib.sha256(b"").hexdigest()
+
+
+class TestResolveS3Endpoint:
+    def test_defaults_to_aws_virtual_hosted_style_when_no_endpoint_is_given(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="my-bucket", key="intent-graph.json", region="eu-central-1"
+        )
+        assert target.scheme == "https"
+        assert target.host == "my-bucket.s3.eu-central-1.amazonaws.com"
+        assert target.path == "/intent-graph.json"
+
+    def test_defaults_to_path_style_once_a_custom_endpoint_is_set(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            region="us-east-1",
+            endpoint="http://localhost:9000",
+        )
+        assert target.scheme == "http"
+        assert target.host == "localhost:9000"
+        assert target.path == "/my-bucket/intent-graph.json"
+
+    def test_honors_force_path_style_false_for_virtual_hosted_custom_endpoint(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            region="auto",
+            endpoint="https://minio.internal:9000",
+            force_path_style=False,
+        )
+        assert target.scheme == "https"
+        assert target.host == "my-bucket.minio.internal:9000"
+        assert target.path == "/intent-graph.json"
+
+    def test_preserves_a_non_default_port_in_the_host(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="b", key="k", region="us-east-1", endpoint="https://minio.internal:9000"
+        )
+        assert target.host == "minio.internal:9000"
+
+    def test_percent_encodes_special_characters_in_the_key_under_path_style(self) -> None:
+        target = resolve_s3_endpoint(
+            bucket="my-bucket",
+            key="a!b*c'd(e)f",
+            region="us-east-1",
+            endpoint="http://localhost:9000",
+        )
+        assert target.path == "/my-bucket/a%21b%2Ac%27d%28e%29f"
+
+    def test_rejects_an_endpoint_that_is_not_an_absolute_http_url(self) -> None:
+        # urlparse reads "minio.internal:9000" as a scheme with an empty
+        # location, which would sign a request against an empty host.
+        for endpoint in ("minio.internal:9000", "localhost:9000", "not a url", "ftp://h:21"):
+            with pytest.raises(ValueError, match="expected an absolute http"):
+                resolve_s3_endpoint(bucket="b", key="k", region="us-east-1", endpoint=endpoint)
+
+    def test_keeps_a_path_prefix_for_a_gateway_under_a_mount_point(self) -> None:
+        assert (
+            resolve_s3_endpoint(
+                bucket="b", key="k", region="us-east-1", endpoint="http://minio:9000/s3api"
+            ).path
+            == "/s3api/b/k"
+        )
+        assert (
+            resolve_s3_endpoint(
+                bucket="b", key="k", region="us-east-1", endpoint="http://minio:9000/"
+            ).path
+            == "/b/k"
+        )
+
+    def test_drops_userinfo_and_a_default_port_from_the_signed_host(self) -> None:
+        def host(endpoint: str) -> str:
+            return resolve_s3_endpoint(
+                bucket="b", key="k", region="us-east-1", endpoint=endpoint
+            ).host
+
+        # Matches what TS's URL.host produces for the same inputs.
+        assert host("http://user:pw@minio:9000") == "minio:9000"
+        assert host("https://minio:443") == "minio"
+        assert host("http://[::1]:9000") == "[::1]:9000"
+
+@dataclass
+class _StoredObject:
+    body: str
+    etag: str
+
+
+class _FakeS3Transport:
+    """In-memory S3 stand-in: enough conditional-write semantics to test against."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, _StoredObject] = {}
+        self._etag_counter = 0
+        self.calls: list[S3Request] = []
+
+    async def send(self, request: S3Request) -> S3Response:
+        self.calls.append(request)
+        key = f"{request.bucket}/{request.key}"
+        if request.method == "GET":
+            entry = self.store.get(key)
+            if entry is None:
+                return S3Response(status=404, headers={}, body="")
+            return S3Response(status=200, headers={"etag": entry.etag}, body=entry.body)
+
+        # PUT
+        existing = self.store.get(key)
+        if_match = request.headers.get("if-match")
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match == "*" and existing is not None:
+            return S3Response(status=412, headers={}, body="")
+        if if_match is not None and (existing is None or existing.etag != if_match):
+            return S3Response(status=412, headers={}, body="")
+
+        self._etag_counter += 1
+        etag = f'"etag-{self._etag_counter}"'
+        self.store[key] = _StoredObject(body=request.body or "", etag=etag)
+        return S3Response(status=200, headers={"etag": etag}, body="")
+
+
+class _FixedResponseS3Transport:
+    """Always returns the same canned response(s), regardless of the request."""
+
+    def __init__(
+        self, get_response: S3Response | None = None, put_response: S3Response | None = None
+    ) -> None:
+        # A single positional response applies to both GET and PUT.
+        self._get_response = get_response
+        self._put_response = put_response if put_response is not None else get_response
+
+    async def send(self, request: S3Request) -> S3Response:
+        response = self._get_response if request.method == "GET" else self._put_response
+        assert response is not None
+        return response
+
+
+_CREDENTIALS = S3IntentGraphStorageCredentials(
+    access_key_id="AKIA", secret_access_key="secret"
+)
+
+
+class TestS3IntentGraphStorage:
+    async def test_load_returns_none_when_object_does_not_exist(self) -> None:
+        transport = _FakeS3Transport()
+        storage = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        assert await storage.load() is None
+
+    async def test_round_trips_a_saved_graph_through_the_fake_transport(self) -> None:
+        transport = _FakeS3Transport()
+        storage = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        await storage.save(IntentGraph.from_json(_graph_json(7)))
+
+        other = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        loaded = await other.load()
+        assert loaded is not None
+        assert loaded.rev == 7
+
+    async def test_round_trips_the_learned_clusters_through_s3(self) -> None:
+        catalog = await _learning_catalog()
+        graph = IntentGraph()
+        catalog.experimental_enable_adaptive_ranking(graph)
+        await _use_it(catalog, "why is the build broken", "gh_run_list")
+        before = json.loads(graph.to_json())
+        assert before["intents"][0]["members"]
+
+        transport = _FakeS3Transport()
+        options = dict(bucket="my-bucket", key="intent-graph.json", credentials=_CREDENTIALS)
+        await S3IntentGraphStorage(**options, transport=transport).save(graph)
+        reloaded = await S3IntentGraphStorage(**options, transport=transport).load()
+        assert reloaded is not None
+        assert json.loads(reloaded.to_json()) == before
+
+    async def test_refuses_a_blind_first_save_over_an_object_that_already_exists(self) -> None:
+        # ADR-0025 promises this guard for S3, and the local backend has it
+        # tested. Without a test no PUT ever carries `if-none-match: *` against
+        # a populated store, so the branch never executes.
+        transport = _FakeS3Transport()
+        options = dict(bucket="my-bucket", key="intent-graph.json", credentials=_CREDENTIALS)
+        await S3IntentGraphStorage(**options, transport=transport).save(
+            IntentGraph.from_json(_graph_json(1))
+        )
+
+        blind = S3IntentGraphStorage(**options, transport=transport)
+        with pytest.raises(StaleIntentGraphError):
+            await blind.save(IntentGraph.from_json(_graph_json(2)))
+
+    async def test_skips_put_when_rev_unchanged_since_last_save(self) -> None:
+        transport = _FakeS3Transport()
+        storage = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        graph = IntentGraph.from_json(_graph_json(2))
+        await storage.save(graph)
+        calls_after_first_save = len(transport.calls)
+
+        await storage.save(graph)
+        assert len(transport.calls) == calls_after_first_save
+
+    async def test_raises_stale_error_on_conditional_write_412(self) -> None:
+        transport = _FakeS3Transport()
+        options = dict(bucket="my-bucket", key="intent-graph.json", credentials=_CREDENTIALS)
+        writer_a = S3IntentGraphStorage(**options, transport=transport)
+        writer_b = S3IntentGraphStorage(**options, transport=transport)
+
+        await writer_a.save(IntentGraph.from_json(_graph_json(1)))
+        await writer_b.load()  # B observes rev 1 / the current etag
+
+        await writer_a.save(IntentGraph.from_json(_graph_json(2)))  # A advances it first
+
+        with pytest.raises(StaleIntentGraphError):
+            await writer_b.save(IntentGraph.from_json(_graph_json(2)))
+
+    async def test_persists_a_turn_that_lands_while_a_save_is_in_flight(self) -> None:
+        # `rev` must be read out of the bytes being written, not from the graph
+        # after the await: the graph keeps learning during the save, and
+        # recording the newer rev against older content makes the next save skip
+        # that turn for good (save-when-changed sees no change).
+        catalog = await _learning_catalog()
+        graph = IntentGraph()
+        catalog.experimental_enable_adaptive_ranking(graph)
+
+        state: dict[str, object] = {"stored": "", "etag": 0, "hold": False}
+        held = asyncio.Event()
+
+        class _GatedTransport:
+            async def send(self, request: S3Request) -> S3Response:
+                if request.method == "GET":
+                    stored = str(state["stored"])
+                    if not stored:
+                        return S3Response(status=404, headers={}, body="")
+                    return S3Response(
+                        status=200, headers={"etag": f'"etag-{state["etag"]}"'}, body=stored
+                    )
+                if state["hold"]:
+                    await held.wait()
+                state["stored"] = request.body or ""
+                state["etag"] = int(state["etag"]) + 1  # type: ignore[call-overload]
+                return S3Response(
+                    status=200, headers={"etag": f'"etag-{state["etag"]}"'}, body=""
+                )
+
+        storage = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=_GatedTransport(),
+        )
+
+        await _use_it(catalog, "why is the build broken", "gh_run_list")
+        await storage.save(graph)
+
+        await _use_it(catalog, "is the build broken again", "gh_run_list")
+        state["hold"] = True
+        in_flight = asyncio.create_task(storage.save(graph))
+        await asyncio.sleep(0)  # let the save reach the gate
+        await _use_it(catalog, "build broken on main", "gh_run_list")  # lands mid-save
+        held.set()
+        await in_flight
+
+        state["hold"] = False
+        await storage.save(graph)
+
+        assert json.loads(str(state["stored"]))["rev"] == graph.rev
+
+    async def test_labels_the_stored_object_application_json(self) -> None:
+        transport = _FakeS3Transport()
+        storage = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        await storage.save(IntentGraph.from_json(_graph_json(1)))
+
+        put = next(call for call in transport.calls if call.method == "PUT")
+        assert put.headers["content-type"] == "application/json"
+        # AWS requires a Content-Type that is present to be part of the signature.
+        signed = sign_s3_request(
+            method="PUT",
+            host="my-bucket.s3.us-east-1.amazonaws.com",
+            path="/intent-graph.json",
+            headers=dict(put.headers),
+            body="{}",
+            region="us-east-1",
+            access_key_id="AKIA",
+            secret_access_key="secret",
+        )
+        assert "SignedHeaders=content-type;" in signed.headers["authorization"]
+
+    async def test_load_surfaces_aws_error_code_and_message(self) -> None:
+        transport = _FixedResponseS3Transport(
+            S3Response(
+                status=403,
+                headers={},
+                body=(
+                    '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>SignatureDoesNotMatch'
+                    "</Code><Message>The request signature we calculated does not match the "
+                    "signature you provided.</Message></Error>"
+                ),
+            )
+        )
+        storage = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        with pytest.raises(
+            RuntimeError,
+            match=r"status 403 \(SignatureDoesNotMatch: The request signature we calculated "
+            r"does not match the signature you provided\.\)",
+        ):
+            await storage.load()
+
+    async def test_save_surfaces_aws_error_code_and_message(self) -> None:
+        transport = _FixedResponseS3Transport(
+            get_response=S3Response(status=404, headers={}, body=""),
+            put_response=S3Response(
+                status=403,
+                headers={},
+                body=(
+                    '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>AccessDenied</Code>'
+                    "<Message>Access Denied</Message></Error>"
+                ),
+            ),
+        )
+        storage = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        with pytest.raises(RuntimeError, match=r"status 403 \(AccessDenied: Access Denied\)"):
+            await storage.save(IntentGraph.from_json(_graph_json(1)))
+
+    async def test_falls_back_to_bare_status_when_body_has_no_aws_code(self) -> None:
+        transport = _FixedResponseS3Transport(
+            S3Response(status=500, headers={}, body="Internal Server Error")
+        )
+        storage = S3IntentGraphStorage(
+            bucket="my-bucket",
+            key="intent-graph.json",
+            credentials=_CREDENTIALS,
+            transport=transport,
+        )
+        with pytest.raises(RuntimeError, match=r"status 500$"):
+            await storage.load()
+
+class TestS3IntentGraphStorageIdleTimeout:
+    @staticmethod
+    def _serve(handle: Callable[[socket.socket], None]) -> tuple[str, socket.socket]:
+        """Listen on a loopback port, handing each accepted socket to `handle`."""
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+
+        def run() -> None:
+            try:
+                conn, _ = listener.accept()
+                with conn:
+                    handle(conn)
+            except OSError:
+                pass
+
+        threading.Thread(target=run, daemon=True).start()
+        return f"http://127.0.0.1:{listener.getsockname()[1]}", listener
+
+    @staticmethod
+    def _storage(endpoint: str, idle_timeout_s: float) -> S3IntentGraphStorage:
+        return S3IntentGraphStorage(
+            bucket="b",
+            key="k",
+            credentials=_CREDENTIALS,
+            endpoint=endpoint,
+            idle_timeout_s=idle_timeout_s,
+        )
+
+    async def test_gives_up_on_an_endpoint_that_accepts_and_says_nothing(self) -> None:
+        endpoint, listener = self._serve(lambda conn: time.sleep(30))
+        try:
+            started = time.monotonic()
+            with pytest.raises(TimeoutError, match="no data for"):
+                await self._storage(endpoint, 0.3).load()
+            assert time.monotonic() - started < 5
+        finally:
+            listener.close()
+
+    async def test_lets_a_slow_but_steady_response_finish_past_the_timeout(self) -> None:
+        # The distinguishing case: the whole response takes far longer than the
+        # timeout, but no single gap does. A total deadline would kill this.
+        graph = json.dumps({"v": 1, "built_from_ts": 0, "rev": 7, "intents": []})
+
+        def dribble(conn: socket.socket) -> None:
+            conn.recv(65536)
+            conn.sendall(
+                b"HTTP/1.1 200 OK\r\nETag: \"e1\"\r\n"
+                b"Content-Length: %d\r\nConnection: close\r\n\r\n" % len(graph)
+            )
+            for i in range(0, len(graph), 4):
+                conn.sendall(graph[i : i + 4].encode())
+                time.sleep(0.03)
+
+        endpoint, listener = self._serve(dribble)
+        try:
+            started = time.monotonic()
+            loaded = await self._storage(endpoint, 0.3).load()
+            elapsed = time.monotonic() - started
+            assert loaded is not None
+            assert loaded.rev == 7
+            assert elapsed > 0.3  # outlived the timeout while streaming
+        finally:
+            listener.close()
+
+    def test_defaults_to_botocores_60s(self) -> None:
+        assert DEFAULT_IDLE_TIMEOUT_S == 60.0
+
+    async def test_none_means_the_default_like_every_other_optional(self) -> None:
+        # Mirrors TS `idleTimeoutMs?: number`, so a caller forwarding an unset
+        # config value need not branch on it.
+        storage = S3IntentGraphStorage(
+            bucket="b", key="k", credentials=_CREDENTIALS, idle_timeout_s=None
+        )
+        transport = storage._transport
+        assert isinstance(transport, _UrllibS3Transport)
+        assert transport._idle_timeout_s == DEFAULT_IDLE_TIMEOUT_S

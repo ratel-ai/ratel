@@ -1,0 +1,413 @@
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { IntentGraph } from "./index.js";
+import { resolveS3Endpoint, signS3Request } from "./sigv4.js";
+
+/**
+ * Host-owned persistence for an {@link IntentGraph} (ADR-0025). Core stays
+ * bytes-in/bytes-out (ADR-0014) — these are thin adapters over
+ * `IntentGraph.toJson()`/`fromJson()`/`rev` that live entirely in the SDK.
+ *
+ * Both implementations use `rev` for two things: **save-when-changed** (skip
+ * the write if `rev` hasn't moved since the last save) and **stale-base
+ * detection** (raise {@link StaleIntentGraphError} instead of clobbering a
+ * concurrent writer — single-writer model, detect don't merge).
+ */
+export interface IntentGraphStorage {
+  /** Load the stored graph, or `null` if nothing has been saved yet. */
+  load(): Promise<IntentGraph | null>;
+  /** Save `graph`, or skip if unchanged since the last save/load `rev`. */
+  save(graph: IntentGraph): Promise<void>;
+}
+
+/** Another writer saved a newer graph since this storage object's last `load()`/`save()`. */
+export class StaleIntentGraphError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StaleIntentGraphError";
+  }
+}
+
+/** Options for {@link LocalFileIntentGraphStorage}. */
+export interface LocalFileIntentGraphStorageOptions {
+  /** Path to the JSON file. Parent directory must already exist. */
+  readonly path: string;
+}
+
+/**
+ * Local JSON file storage for an {@link IntentGraph} — the default backend.
+ * Writes atomically (temp file + rename) so a crash mid-write cannot leave a
+ * truncated file.
+ */
+export class LocalFileIntentGraphStorage implements IntentGraphStorage {
+  private readonly path: string;
+  private lastKnownRev: number | undefined;
+
+  constructor(options: LocalFileIntentGraphStorageOptions) {
+    this.path = options.path;
+  }
+
+  async load(): Promise<IntentGraph | null> {
+    let text: string;
+    try {
+      text = await readFile(this.path, "utf8");
+    } catch (error) {
+      if (isNotFound(error)) {
+        this.lastKnownRev = undefined;
+        return null;
+      }
+      throw error;
+    }
+    const graph = IntentGraph.fromJson(text);
+    this.lastKnownRev = graph.rev;
+    return graph;
+  }
+
+  async save(graph: IntentGraph): Promise<void> {
+    if (this.lastKnownRev === graph.rev) return;
+
+    const body = graph.toJson();
+    const rev = revOf(body);
+
+    const diskRev = await this.readDiskRev();
+    if (diskRev !== this.lastKnownRev) {
+      throw new StaleIntentGraphError(
+        `intent graph at ${this.path} changed since load() (on-disk rev ${diskRev ?? "none"}, ` +
+          `expected ${this.lastKnownRev ?? "none"}); load() again and reapply your changes before saving`,
+      );
+    }
+
+    const tmpPath = join(
+      dirname(this.path),
+      `.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    // 0600: the graph carries the raw text of past user queries (see
+    // `IntentGraph.toJson`). The mode lands on the temp file, so the rename
+    // also tightens a target that an older build left world-readable.
+    try {
+      await writeFile(tmpPath, body, { encoding: "utf8", mode: 0o600 });
+      await rename(tmpPath, this.path);
+    } catch (error) {
+      await rm(tmpPath, { force: true });
+      throw error;
+    }
+    this.lastKnownRev = rev;
+  }
+
+  private async readDiskRev(): Promise<number | undefined> {
+    try {
+      const text = await readFile(this.path, "utf8");
+      return (JSON.parse(text) as { rev?: number }).rev ?? 0;
+    } catch (error) {
+      if (isNotFound(error)) return undefined;
+      throw error;
+    }
+  }
+}
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+/**
+ * The `rev` carried inside a serialized graph.
+ *
+ * `save()` records this rather than re-reading `graph.rev`, because the graph
+ * keeps mutating while a save is in flight: `observe()` on every confirmed
+ * invoke, and a centroid rebuild that runs on a worker thread, so `rev` can
+ * move between two native calls with no `await` between them. `toJson()`
+ * serializes under one read lock, so the `rev` in those bytes is by
+ * construction the `rev` of the content being persisted.
+ */
+function revOf(serialized: string): number {
+  return (JSON.parse(serialized) as { rev?: number }).rev ?? 0;
+}
+
+/**
+ * Extract `<Code>`/`<Message>` from an S3 error response body (standard AWS
+ * XML error shape) for a more useful failure message than a bare status code
+ * — e.g. distinguishing `SignatureDoesNotMatch` from `AccessDenied` on a 403.
+ * Returns `undefined` for a body with no `<Code>` (not an AWS-shaped error).
+ */
+function describeS3Error(body: string): string | undefined {
+  const code = /<Code>([^<]*)<\/Code>/.exec(body)?.[1];
+  if (!code) return undefined;
+  const message = /<Message>([^<]*)<\/Message>/.exec(body)?.[1];
+  return message ? `${code}: ${message}` : code;
+}
+
+/** One S3 REST request, as {@link S3Transport} sends it. */
+export interface S3Request {
+  /** `"GET"` (read the object) or `"PUT"` (write it). */
+  readonly method: "GET" | "PUT";
+  /** S3 bucket name. */
+  readonly bucket: string;
+  /** S3 object key. */
+  readonly key: string;
+  /** Lowercase header names, e.g. `if-match`, `if-none-match`. */
+  readonly headers: Readonly<Record<string, string>>;
+  /** Request body for a `PUT`; omitted for a `GET`. */
+  readonly body?: string;
+}
+
+/** Response from an {@link S3Transport} call. */
+export interface S3Response {
+  /** HTTP status code, e.g. `200`, `404`, `412`. */
+  readonly status: number;
+  /** Lowercase header names. */
+  readonly headers: Readonly<Record<string, string>>;
+  /** Response body (the object contents for a successful `GET`). */
+  readonly body: string;
+}
+
+/**
+ * Sends one signed S3 request. The default transport talks to real S3 over
+ * `fetch`; tests inject a fake to stay credential-free and offline.
+ */
+export interface S3Transport {
+  /** Send `request` and resolve with the S3 response. */
+  send(request: S3Request): Promise<S3Response>;
+}
+
+/** Explicit AWS credentials. Falls back to `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` if omitted. */
+export interface S3IntentGraphStorageCredentials {
+  /** AWS access key id. */
+  readonly accessKeyId: string;
+  /** AWS secret access key. */
+  readonly secretAccessKey: string;
+  /** Session token for temporary (STS) credentials. */
+  readonly sessionToken?: string;
+}
+
+/** Options for {@link S3IntentGraphStorage}. */
+export interface S3IntentGraphStorageOptions {
+  /** S3 bucket to store the graph in. */
+  readonly bucket: string;
+  /** S3 object key, e.g. `"intent-graph.json"`. */
+  readonly key: string;
+  /** @default "us-east-1" */
+  readonly region?: string;
+  /** Explicit credentials; falls back to the standard AWS environment variables. */
+  readonly credentials?: S3IntentGraphStorageCredentials;
+  /**
+   * Custom S3-compatible endpoint, e.g. `"http://localhost:9000"` or
+   * `"https://minio.internal:9000"`. Omit for AWS S3 (default).
+   */
+  readonly endpoint?: string;
+  /**
+   * Path-style addressing (`https://endpoint/bucket/key`) instead of
+   * virtual-hosted-style. Defaults to `true` whenever `endpoint` is set —
+   * what MinIO and most self-hosted S3-compatible services require. Pass
+   * `false` for a custom endpoint that supports virtual-hosted style (e.g.
+   * Cloudflare R2). No effect without `endpoint` — AWS S3 always uses
+   * virtual-hosted style.
+   */
+  readonly forcePathStyle?: boolean;
+  /**
+   * Abort a request that goes this long with **no data moving** — an idle
+   * clock, not a total deadline, so a slow but living transfer still
+   * finishes. Covers the connect phase and every read, the way botocore's
+   * `connect_timeout`/`read_timeout` pair does.
+   *
+   * @default 60_000
+   */
+  readonly idleTimeoutMs?: number;
+  /** Override the transport, e.g. to inject a fake for tests. Defaults to a `fetch`-based signed S3 client. */
+  readonly transport?: S3Transport;
+}
+
+function credentialsFromEnv(): S3IntentGraphStorageCredentials {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error(
+      "AWS credentials not found: pass `credentials` to S3IntentGraphStorage, or " +
+        "set AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (and AWS_SESSION_TOKEN for temporary credentials).",
+    );
+  }
+  return { accessKeyId, secretAccessKey, sessionToken: process.env.AWS_SESSION_TOKEN };
+}
+
+/** Default idle timeout, matching botocore's `connect_timeout`/`read_timeout`. */
+export const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
+
+function idleTimeoutError(target: string, idleTimeoutMs: number): Error {
+  const error = new Error(`S3 request to ${target} timed out: no data for ${idleTimeoutMs}ms`);
+  error.name = "TimeoutError";
+  return error;
+}
+
+class FetchS3Transport implements S3Transport {
+  constructor(
+    private readonly region: string,
+    private readonly credentials: S3IntentGraphStorageCredentials | undefined,
+    private readonly endpoint: string | undefined,
+    private readonly forcePathStyle: boolean | undefined,
+    private readonly idleTimeoutMs: number,
+  ) {}
+
+  async send(request: S3Request): Promise<S3Response> {
+    const creds = this.credentials ?? credentialsFromEnv();
+    const { scheme, host, path } = resolveS3Endpoint({
+      bucket: request.bucket,
+      key: request.key,
+      region: this.region,
+      endpoint: this.endpoint,
+      forcePathStyle: this.forcePathStyle,
+    });
+    const body = request.body ?? "";
+    const signed = signS3Request({
+      method: request.method,
+      host,
+      path,
+      headers: request.headers,
+      body,
+      region: this.region,
+      accessKeyId: creds.accessKeyId,
+      secretAccessKey: creds.secretAccessKey,
+      sessionToken: creds.sessionToken,
+    });
+
+    // An idle clock, not a deadline: it is rearmed whenever bytes arrive, so a
+    // slow but living transfer finishes while a wedged endpoint is cut loose.
+    // That is what `read_timeout` means in botocore, and what a plain
+    // `AbortSignal.timeout` would not give us.
+    const target = `s3://${request.bucket}/${request.key}`;
+    const controller = new AbortController();
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const rearm = () => {
+      clearTimeout(idle);
+      idle = setTimeout(
+        () => controller.abort(idleTimeoutError(target, this.idleTimeoutMs)),
+        this.idleTimeoutMs,
+      );
+    };
+
+    try {
+      rearm();
+      const response = await fetch(`${scheme}://${host}${path}`, {
+        method: request.method,
+        headers: signed.headers,
+        body: request.method === "PUT" ? body : undefined,
+        signal: controller.signal,
+      });
+      rearm();
+      const responseBody = await readBody(response, rearm);
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, name) => {
+        headers[name.toLowerCase()] = value;
+      });
+      return { status: response.status, headers, body: responseBody };
+    } finally {
+      clearTimeout(idle);
+    }
+  }
+}
+
+/** Drain the response, rearming the idle clock on every chunk that arrives. */
+async function readBody(response: Response, rearm: () => void): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let out = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    out += decoder.decode(value, { stream: true });
+    rearm();
+  }
+  return out + decoder.decode();
+}
+
+/**
+ * S3-backed storage for an {@link IntentGraph}. No SDK dependency — signs
+ * requests with a built-in minimal SigV4 implementation (`signS3Request`)
+ * and sends them with native `fetch` (ADR-0025). Uses S3 conditional writes
+ * (`If-Match`/`If-None-Match` on the object's ETag) for stale-base detection;
+ * no bucket versioning required.
+ */
+export class S3IntentGraphStorage implements IntentGraphStorage {
+  private readonly bucket: string;
+  private readonly key: string;
+  private readonly transport: S3Transport;
+  private lastKnownEtag: string | undefined;
+  private lastKnownRev: number | undefined;
+
+  constructor(options: S3IntentGraphStorageOptions) {
+    this.bucket = options.bucket;
+    this.key = options.key;
+    this.transport =
+      options.transport ??
+      new FetchS3Transport(
+        options.region ?? "us-east-1",
+        options.credentials,
+        options.endpoint,
+        options.forcePathStyle,
+        options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
+      );
+  }
+
+  async load(): Promise<IntentGraph | null> {
+    const response = await this.transport.send({
+      method: "GET",
+      bucket: this.bucket,
+      key: this.key,
+      headers: {},
+    });
+    if (response.status === 404) {
+      this.lastKnownEtag = undefined;
+      this.lastKnownRev = undefined;
+      return null;
+    }
+    if (response.status !== 200) {
+      const detail = describeS3Error(response.body);
+      throw new Error(
+        `S3 GetObject failed for s3://${this.bucket}/${this.key} with status ${response.status}` +
+          (detail ? ` (${detail})` : ""),
+      );
+    }
+    const graph = IntentGraph.fromJson(response.body);
+    this.lastKnownEtag = response.headers.etag;
+    this.lastKnownRev = graph.rev;
+    return graph;
+  }
+
+  async save(graph: IntentGraph): Promise<void> {
+    if (this.lastKnownRev === graph.rev) return;
+
+    // `content-type` goes in the signed bag, not on the bare request: AWS's
+    // canonical-request rules require a Content-Type that is present to be
+    // signed. Without it the object is stored as whatever `fetch` guesses.
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      ...(this.lastKnownEtag ? { "if-match": this.lastKnownEtag } : { "if-none-match": "*" }),
+    };
+
+    const body = graph.toJson();
+    const rev = revOf(body);
+
+    const response = await this.transport.send({
+      method: "PUT",
+      bucket: this.bucket,
+      key: this.key,
+      headers,
+      body,
+    });
+
+    if (response.status === 412) {
+      throw new StaleIntentGraphError(
+        `intent graph at s3://${this.bucket}/${this.key} changed since load(); ` +
+          `load() again and reapply your changes before saving`,
+      );
+    }
+    if (response.status !== 200) {
+      const detail = describeS3Error(response.body);
+      throw new Error(
+        `S3 PutObject failed for s3://${this.bucket}/${this.key} with status ${response.status}` +
+          (detail ? ` (${detail})` : ""),
+      );
+    }
+    this.lastKnownEtag = response.headers.etag;
+    this.lastKnownRev = rev;
+  }
+}

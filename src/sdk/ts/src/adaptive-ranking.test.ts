@@ -107,6 +107,31 @@ describe("adaptive usage ranking", () => {
     expect(order.indexOf("gh_run_list")).toBeLessThan(order.indexOf("docker_build"));
   });
 
+  it("credits each search in one turn with the tool it offered", async () => {
+    // One user message, two subtasks: the agent searches twice before acting,
+    // which is what parallel tool calls produce. Both invokes share the turn,
+    // so the turn cannot say which search each belongs to — the hits can.
+    // Crediting the pending query would teach "read a file from disk" ->
+    // gh_run_list and lose "why is the build broken" entirely.
+    const catalog = await buildCatalog();
+    const graph = new IntentGraph();
+    catalog.experimentalEnableAdaptiveRanking(graph);
+
+    catalog.search("why is the build broken", 5, "agent", undefined, "turn-1");
+    catalog.search("read a file from disk", 5, "agent", undefined, "turn-1");
+    await catalog.invoke("gh_run_list", {}, undefined, "turn-1");
+    await catalog.invoke("read_file", {}, undefined, "turn-1");
+
+    const wire = JSON.parse(graph.toJson()) as {
+      intents: { members: string[]; tools: Record<string, number> }[];
+    };
+    expect(wire.intents).toHaveLength(2);
+    const build = wire.intents.find((i) => i.members.includes("why is the build broken"));
+    const read = wire.intents.find((i) => i.members.includes("read a file from disk"));
+    expect(Object.keys(build?.tools ?? {})).toEqual(["gh_run_list"]);
+    expect(Object.keys(read?.tools ?? {})).toEqual(["read_file"]);
+  });
+
   it("does not cross-pair two concurrent sessions sharing one catalog when turnId is supplied", async () => {
     // The multi-session bug this fixes end to end: session A searches, then
     // session B's search would clobber a single unkeyed pending slot, then A
