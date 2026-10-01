@@ -1,13 +1,19 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
 import type { NativeEventSubscription, ReplaceOutcome, Skill, SkillHit } from "../native/index.cjs";
 import { warmFromEmbeddingArtifactSource } from "./artifact-source-warm.js";
-import type {
-  EmbeddingSpec,
-  ExperimentalBm25Params,
-  ObservationPolicyOptions,
-  SearchMethod,
-  SearchOrigin,
-  TraceSinkConfig,
+import {
+  assertValidReranker,
+  type EmbeddingSpec,
+  type ExperimentalBm25Params,
+  type ObservationPolicyOptions,
+  RERANKER_NEEDS_ASYNC,
+  type RerankerConfig,
+  resolveSearchAsyncArgs,
+  type SearchAsyncOptions,
+  type SearchMethod,
+  type SearchOrigin,
+  type SystemOneConfig,
+  type TraceSinkConfig,
 } from "./catalog.js";
 import {
   type DefinitionOverrideApplyOptions,
@@ -94,6 +100,12 @@ export interface SkillCatalogOptions {
    * artifact is missing one or more ids from the catalog's current corpus.
    */
   experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
+  /** Re-score the first stage's top candidates with another method — see
+   * {@link ToolCatalogOptions.reranker}. **Experimental.** */
+  reranker?: RerankerConfig;
+  /** Override where `"systemOne"` sends rankings — see
+   * {@link ToolCatalogOptions.systemOne}. **Experimental.** */
+  systemOne?: SystemOneConfig;
 }
 
 /**
@@ -109,6 +121,7 @@ export class SkillCatalog {
   private overrideSearchableDescriptions = new Map<string, string>();
   private readonly warnedShadowIds = new Set<string>();
   private readonly method: SearchMethod;
+  private readonly reranker: RerankerConfig | undefined;
   private readonly embeddingArtifact: ExperimentalEmbeddingArtifact | undefined;
 
   /**
@@ -119,11 +132,14 @@ export class SkillCatalog {
    */
   constructor(options: SkillCatalogOptions = {}) {
     this.method = options.method ?? "bm25";
+    assertValidReranker(this.method, options.reranker);
+    this.reranker = options.reranker;
     this.registry = new SkillRegistry(
       options.embedding,
       this.method,
       options.experimentalDenseWeight,
       options.experimentalBm25,
+      { reranker: options.reranker, systemOne: options.systemOne },
     );
     this.embeddingArtifact = options.experimentalEmbeddingArtifact;
     if (options.trace) {
@@ -303,6 +319,7 @@ export class SkillCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): SkillHit[] {
+    if (this.reranker) throw new Error(RERANKER_NEEDS_ASYNC);
     return traceSearch(
       SearchTarget.Skill,
       query,
@@ -314,22 +331,51 @@ export class SkillCatalog {
     );
   }
 
-  /** Search with any retrieval method without blocking the Node.js event loop. */
+  /**
+   * Search with any retrieval method — and the catalog's reranker, if any —
+   * without blocking the Node.js event loop. Takes positional `(origin,
+   * method, turnId)` or one {@link SearchAsyncOptions} object — see
+   * {@link ToolCatalog.searchAsync}.
+   */
+  searchAsync(query: string, topK: number, options: SearchAsyncOptions): Promise<SkillHit[]>;
   searchAsync(
     query: string,
     topK: number,
-    origin: SearchOrigin = "direct",
+    origin?: SearchOrigin,
+    method?: SearchMethod,
+    turnId?: string,
+  ): Promise<SkillHit[]>;
+  searchAsync(
+    query: string,
+    topK: number,
+    originOrOptions?: SearchOrigin | SearchAsyncOptions,
     method?: SearchMethod,
     turnId?: string,
   ): Promise<SkillHit[]> {
+    let args: ReturnType<typeof resolveSearchAsyncArgs>;
+    try {
+      args = resolveSearchAsyncArgs(originOrOptions, method, turnId, {
+        method: this.method,
+        reranker: this.reranker,
+      });
+    } catch (error) {
+      return Promise.reject(error);
+    }
     return traceSearchAsync(
       SearchTarget.Skill,
       query,
       topK,
-      origin,
+      args.origin,
       (projection) =>
-        this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method, projection),
-      turnId,
+        this.registry.searchWithOptionsAsync(
+          query,
+          topK,
+          args.origin,
+          args.method,
+          args.reranker,
+          projection,
+        ),
+      args.turnId,
     );
   }
 

@@ -284,7 +284,112 @@ export interface BaselineTurn {
  * (or warms a configured embedding artifact). Dense ranking uses
  * `searchAsync()`.
  */
-export type SearchMethod = "bm25" | "semantic" | "hybrid";
+export type SearchMethod = "bm25" | "semantic" | "hybrid" | "systemOne";
+
+/**
+ * A second stage over the first stage's candidates (ADR-0026): `method`
+ * re-scores the top `depth` (default 50) hits of the catalog's `method`. It
+ * never adds a tool the first stage did not return.
+ *
+ * Any method may rerank any other, but not itself. A `"systemOne"` reranker
+ * that fails (endpoint down, rate limited) returns the first stage's order
+ * rather than throwing.
+ *
+ * **Experimental** — may change without a major version bump.
+ */
+export interface RerankerConfig {
+  /** The method that re-scores the candidates. */
+  method: SearchMethod;
+  /** How many first-stage candidates to re-score (default 50; raised to `topK` when lower). */
+  depth?: number;
+}
+
+/**
+ * Where `"systemOne"` sends its rankings. Both fields default to Ratel Cloud:
+ * `https://app.ratel.sh/v1/systemone` with the key in `RATEL_API_KEY`.
+ *
+ * `"systemOne"` sends the query and each candidate's searchable text to this
+ * endpoint, which forwards them to the system-one model provider. The other
+ * methods never leave the process.
+ *
+ * **Experimental** — may change without a major version bump.
+ */
+export interface SystemOneConfig {
+  /** Endpoint URL (staging, a self-hosted proxy, tests). */
+  url?: string;
+  /** Name of the environment variable holding the bearer key (read at search time). */
+  apiKeyEnv?: string;
+}
+
+/** Per-call options for `searchAsync`; each field overrides the catalog's default. */
+export interface SearchAsyncOptions {
+  /** Who initiated the call (default `"direct"`); recorded, never affects ranking. */
+  origin?: SearchOrigin;
+  /** First-stage method for this call. */
+  method?: SearchMethod;
+  /** Reranker for this call; `null` turns the catalog's reranker off. */
+  reranker?: RerankerConfig | null;
+  /** Correlates the search with the invokes that follow it (ADR-0014). */
+  turnId?: string;
+}
+
+const DENSE_METHODS: ReadonlySet<SearchMethod> = new Set(["semantic", "hybrid"]);
+
+/** Whether either stage ranks against embeddings, so registration must embed. @internal */
+export function usesDense(method: SearchMethod, reranker?: RerankerConfig | null): boolean {
+  return DENSE_METHODS.has(method) || (!!reranker && DENSE_METHODS.has(reranker.method));
+}
+
+/**
+ * Reject a reranker the core would refuse, at construction rather than at the
+ * first search. @internal
+ */
+export function assertValidReranker(method: SearchMethod, reranker?: RerankerConfig | null): void {
+  if (!reranker) return;
+  if (reranker.method === method) {
+    throw new Error(
+      `reranker method "${reranker.method}" is the same as the first-stage method; ` +
+        "a reranker must use a different method",
+    );
+  }
+  const { depth } = reranker;
+  if (depth !== undefined && !(Number.isInteger(depth) && depth >= 1)) {
+    throw new Error(`reranker depth must be a positive integer, got ${depth}`);
+  }
+}
+
+/**
+ * Resolve `searchAsync`'s two call shapes — positional `(origin, method,
+ * turnId)` or one options object — against the catalog defaults. @internal
+ */
+export function resolveSearchAsyncArgs(
+  originOrOptions: SearchOrigin | SearchAsyncOptions | undefined,
+  method: SearchMethod | undefined,
+  turnId: string | undefined,
+  defaults: { method: SearchMethod; reranker: RerankerConfig | undefined },
+): {
+  origin: SearchOrigin;
+  method: SearchMethod;
+  reranker: RerankerConfig | undefined;
+  turnId: string | undefined;
+} {
+  const options: SearchAsyncOptions =
+    typeof originOrOptions === "object" && originOrOptions !== null
+      ? originOrOptions
+      : { origin: originOrOptions, method, turnId };
+  const resolved = {
+    origin: options.origin ?? "direct",
+    method: options.method ?? defaults.method,
+    reranker: options.reranker === undefined ? defaults.reranker : (options.reranker ?? undefined),
+    turnId: options.turnId,
+  };
+  assertValidReranker(resolved.method, resolved.reranker);
+  return resolved;
+}
+
+/** Guidance thrown by a synchronous `search` on a catalog with a reranker. @internal */
+export const RERANKER_NEEDS_ASYNC =
+  "this catalog has a reranker, which runs off the event loop; use searchAsync()";
 
 type EmbeddingConfigKey =
   | "huggingface"
@@ -402,6 +507,18 @@ export interface ToolCatalogOptions {
    * artifact is missing one or more ids from the catalog's current corpus.
    */
   experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
+  /**
+   * Re-score the first stage's top candidates with another method — see
+   * {@link RerankerConfig}. Applies to `searchAsync` (and the capability tools,
+   * which use it); a synchronous `search` on a catalog with a reranker throws.
+   * **Experimental.**
+   */
+  reranker?: RerankerConfig;
+  /**
+   * Override where `"systemOne"` (as `method` or reranker) sends rankings —
+   * see {@link SystemOneConfig}. **Experimental.**
+   */
+  systemOne?: SystemOneConfig;
 }
 
 /**
@@ -445,6 +562,7 @@ export class ToolCatalog {
   private overrideSearchableDescriptions = new Map<string, string>();
   private readonly warnedShadowIds = new Set<string>();
   private readonly method: SearchMethod;
+  private readonly reranker: RerankerConfig | undefined;
   private readonly embeddingArtifact: ExperimentalEmbeddingArtifact | undefined;
 
   /**
@@ -455,11 +573,14 @@ export class ToolCatalog {
    */
   constructor(options: ToolCatalogOptions = {}) {
     this.method = options.method ?? "bm25";
+    assertValidReranker(this.method, options.reranker);
+    this.reranker = options.reranker;
     this.registry = new ToolRegistry(
       options.embedding,
       this.method,
       options.experimentalDenseWeight,
       options.experimentalBm25,
+      { reranker: options.reranker, systemOne: options.systemOne },
     );
     this.embeddingArtifact = options.experimentalEmbeddingArtifact;
     if (options.trace) {
@@ -594,6 +715,7 @@ export class ToolCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): SearchHit[] {
+    if (this.reranker) throw new Error(RERANKER_NEEDS_ASYNC);
     return traceSearch(
       SearchTarget.Tool,
       query,
@@ -605,22 +727,51 @@ export class ToolCatalog {
     );
   }
 
-  /** Search with any retrieval method without blocking the Node.js event loop. */
+  /**
+   * Search with any retrieval method — and the catalog's reranker, if any —
+   * without blocking the Node.js event loop. Takes either positional
+   * `(origin, method, turnId)` or one {@link SearchAsyncOptions} object, whose
+   * `reranker` (or `null`) overrides the catalog's for this call.
+   */
+  searchAsync(query: string, topK: number, options: SearchAsyncOptions): Promise<SearchHit[]>;
   searchAsync(
     query: string,
     topK: number,
-    origin: SearchOrigin = "direct",
+    origin?: SearchOrigin,
+    method?: SearchMethod,
+    turnId?: string,
+  ): Promise<SearchHit[]>;
+  searchAsync(
+    query: string,
+    topK: number,
+    originOrOptions?: SearchOrigin | SearchAsyncOptions,
     method?: SearchMethod,
     turnId?: string,
   ): Promise<SearchHit[]> {
+    let args: ReturnType<typeof resolveSearchAsyncArgs>;
+    try {
+      args = resolveSearchAsyncArgs(originOrOptions, method, turnId, {
+        method: this.method,
+        reranker: this.reranker,
+      });
+    } catch (error) {
+      return Promise.reject(error);
+    }
     return traceSearchAsync(
       SearchTarget.Tool,
       query,
       topK,
-      origin,
+      args.origin,
       (projection) =>
-        this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method, projection),
-      turnId,
+        this.registry.searchWithOptionsAsync(
+          query,
+          topK,
+          args.origin,
+          args.method,
+          args.reranker,
+          projection,
+        ),
+      args.turnId,
     );
   }
 

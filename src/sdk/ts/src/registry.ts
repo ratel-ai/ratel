@@ -14,15 +14,23 @@ import {
   type Tool,
 } from "../native/index.cjs";
 import { assertNotArtifactBusy } from "./artifact-source-warm.js";
-import type {
-  EmbeddingSpec,
-  ExperimentalBm25Params,
-  ObservationPolicyOptions,
-  SearchMethod,
-  SearchOrigin,
-  TraceSinkConfig,
+import {
+  type EmbeddingSpec,
+  type ExperimentalBm25Params,
+  type ObservationPolicyOptions,
+  type RerankerConfig,
+  type SearchMethod,
+  type SearchOrigin,
+  type SystemOneConfig,
+  type TraceSinkConfig,
+  usesDense,
 } from "./catalog.js";
-import { mapArtifactBuildError, mapArtifactWarmError, mapEmbedderError } from "./errors.js";
+import {
+  mapArtifactBuildError,
+  mapArtifactWarmError,
+  mapEmbedderError,
+  mapSearchError,
+} from "./errors.js";
 import { assertValidFact, type Fact } from "./grounding.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
 import { type RuntimeEventProjection, recordCatalogDefinitions } from "./telemetry.js";
@@ -36,6 +44,14 @@ function toNativeEmbedding(
 ): NativeEmbeddingConfig | undefined {
   if (embedding === undefined) return undefined;
   return typeof embedding === "string" ? { spec: embedding } : embedding;
+}
+
+/** Two-stage and system-one settings shared by the tool and skill registries. */
+export interface RegistryRankingOptions {
+  /** Catalog-default reranker; decides whether registration embeds. */
+  reranker?: RerankerConfig;
+  /** Override where `"systemOne"` sends rankings. */
+  systemOne?: SystemOneConfig;
 }
 
 /**
@@ -67,15 +83,21 @@ export class ToolRegistry {
    *   `"hybrid"` only. Throws outside `[0, 1]`.
    * @param experimentalBm25 - BM25 `k1`/`b` override. See
    *   {@link ExperimentalBm25Params}.
+   * @param ranking - Catalog-default reranker (a semantic/hybrid one also
+   *   makes registration embed) and the system-one endpoint override.
    */
   constructor(
     embedding?: EmbeddingSpec,
     method: SearchMethod = "bm25",
     experimentalDenseWeight?: number,
     experimentalBm25?: ExperimentalBm25Params,
+    ranking: RegistryRankingOptions = {},
   ) {
     this.native = new NativeToolRegistry(toNativeEmbedding(embedding));
-    this.eager = method === "semantic" || method === "hybrid";
+    this.eager = usesDense(method, ranking.reranker);
+    if (ranking.systemOne) {
+      this.native.setSystemOne(ranking.systemOne.url, ranking.systemOne.apiKeyEnv);
+    }
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
     }
@@ -209,7 +231,7 @@ export class ToolRegistry {
     return this.native.searchWithMethod(query, topK, origin, method, projection);
   }
 
-  /** Search on a libuv worker; supports `"bm25"`, `"semantic"`, and `"hybrid"`. */
+  /** Search on a libuv worker; supports every method. */
   async searchWithMethodAsync(
     query: string,
     topK: number,
@@ -217,16 +239,39 @@ export class ToolRegistry {
     method: SearchMethod,
     projection?: RuntimeEventProjection,
   ): Promise<SearchHit[]> {
+    return this.searchWithOptionsAsync(query, topK, origin, method, undefined, projection);
+  }
+
+  /**
+   * Search on a libuv worker with an optional second-stage `reranker`
+   * (ADR-0026). Throws a typed {@link SystemOneError} when a standalone
+   * `"systemOne"` search fails.
+   */
+  async searchWithOptionsAsync(
+    query: string,
+    topK: number,
+    origin: SearchOrigin,
+    method: SearchMethod,
+    reranker: RerankerConfig | undefined,
+    projection?: RuntimeEventProjection,
+  ): Promise<SearchHit[]> {
     try {
       // Guard the await behind the flag so the default path stays synchronous
       // up to the native call — the pending-dense counter must increment before
       // control yields, or a following register() would slip past serialization.
-      if (method !== "bm25" && this.#rebuildOnModelChange) {
+      if (usesDense(method, reranker) && this.#rebuildOnModelChange) {
         await this.#maybeRebuildOnModelChange();
       }
-      return await this.native.searchWithMethodAsync(query, topK, origin, method, projection);
+      return await this.native.searchWithOptionsAsync(
+        query,
+        topK,
+        origin,
+        method,
+        reranker,
+        projection,
+      );
     } catch (error) {
-      throw mapEmbedderError(error);
+      throw mapSearchError(error);
     }
   }
 
@@ -448,15 +493,21 @@ export class SkillRegistry {
    *   `"hybrid"` only. Throws outside `[0, 1]`.
    * @param experimentalBm25 - BM25 `k1`/`b` override. See
    *   {@link ExperimentalBm25Params}.
+   * @param ranking - Catalog-default reranker (a semantic/hybrid one also
+   *   makes registration embed) and the system-one endpoint override.
    */
   constructor(
     embedding?: EmbeddingSpec,
     method: SearchMethod = "bm25",
     experimentalDenseWeight?: number,
     experimentalBm25?: ExperimentalBm25Params,
+    ranking: RegistryRankingOptions = {},
   ) {
     this.native = new NativeSkillRegistry(toNativeEmbedding(embedding));
-    this.eager = method === "semantic" || method === "hybrid";
+    this.eager = usesDense(method, ranking.reranker);
+    if (ranking.systemOne) {
+      this.native.setSystemOne(ranking.systemOne.url, ranking.systemOne.apiKeyEnv);
+    }
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
     }
@@ -599,16 +650,32 @@ export class SkillRegistry {
     method: SearchMethod,
     projection?: RuntimeEventProjection,
   ): Promise<SkillHit[]> {
+    return this.searchWithOptionsAsync(query, topK, origin, method, undefined, projection);
+  }
+
+  /** Search with an optional reranker — see `ToolRegistry.searchWithOptionsAsync`. */
+  async searchWithOptionsAsync(
+    query: string,
+    topK: number,
+    origin: SearchOrigin,
+    method: SearchMethod,
+    reranker: RerankerConfig | undefined,
+    projection?: RuntimeEventProjection,
+  ): Promise<SkillHit[]> {
     try {
-      // Guard the await behind the flag so the default path stays synchronous
-      // up to the native call — the pending-dense counter must increment before
-      // control yields, or a following register() would slip past serialization.
-      if (method !== "bm25" && this.#rebuildOnModelChange) {
+      if (usesDense(method, reranker) && this.#rebuildOnModelChange) {
         await this.#maybeRebuildOnModelChange();
       }
-      return await this.native.searchWithMethodAsync(query, topK, origin, method, projection);
+      return await this.native.searchWithOptionsAsync(
+        query,
+        topK,
+        origin,
+        method,
+        reranker,
+        projection,
+      );
     } catch (error) {
-      throw mapEmbedderError(error);
+      throw mapSearchError(error);
     }
   }
 

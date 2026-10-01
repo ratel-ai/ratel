@@ -169,6 +169,79 @@ const ARTIFACT_WARM_ERROR_PREFIX: &str = "RATEL_ARTIFACT_WARM_ERROR:";
 /// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
 const ARTIFACT_ERROR_PREFIX: &str = "RATEL_ARTIFACT_ERROR:";
 
+/// Private NAPI→TypeScript transport prefix for system-one search errors.
+/// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
+const SYSTEM_ONE_ERROR_PREFIX: &str = "RATEL_SYSTEM_ONE_ERROR:";
+
+/// The second stage of a two-stage search (ADR-0026): `method` re-scores the
+/// first stage's top `depth` candidates (default 50).
+#[napi(object)]
+pub struct RerankerConfig {
+    pub method: String,
+    pub depth: Option<u32>,
+}
+
+fn parse_method(method: &str) -> napi::Result<SearchMethod> {
+    method
+        .parse()
+        .map_err(|e: ratel_ai_core::ParseSearchMethodError| napi::Error::from_reason(e.to_string()))
+}
+
+fn resolve_reranker(config: Option<&RerankerConfig>) -> napi::Result<Option<core::Reranker>> {
+    let Some(config) = config else {
+        return Ok(None);
+    };
+    let reranker = core::Reranker::new(parse_method(&config.method)?);
+    match config.depth {
+        Some(depth) => reranker
+            .with_depth(depth as usize)
+            .map(Some)
+            .map_err(|e| napi::Error::from_reason(e.to_string())),
+        None => Ok(Some(reranker)),
+    }
+}
+
+/// Whether either stage ranks against the dense cache, and so must hold the
+/// dense gate like a semantic search does.
+fn uses_dense(method: &str, reranker: Option<&RerankerConfig>) -> bool {
+    let dense = |m: &str| matches!(m, "semantic" | "dense" | "hybrid");
+    dense(method) || reranker.is_some_and(|r| dense(&r.method))
+}
+
+fn system_one_error_code(error: &core::SystemOneError) -> &'static str {
+    match error {
+        core::SystemOneError::Config { .. } => "Config",
+        core::SystemOneError::Unauthorized { .. } => "Unauthorized",
+        core::SystemOneError::RateLimited => "RateLimited",
+        core::SystemOneError::Http { .. } => "Http",
+        core::SystemOneError::Unreachable { .. } => "Unreachable",
+        core::SystemOneError::Malformed { .. } => "Malformed",
+        _ => "Unknown",
+    }
+}
+
+/// Embedder and option errors keep their plain message (the TS side already
+/// classifies embedder messages); a system-one failure travels in a private
+/// envelope so TS can raise a typed `SystemOneError` without parsing prose.
+fn map_search_error(error: core::SearchError) -> napi::Error {
+    match error {
+        core::SearchError::SystemOne(inner) => {
+            let status = match &inner {
+                core::SystemOneError::Unauthorized { status }
+                | core::SystemOneError::Http { status } => Some(*status),
+                _ => None,
+            };
+            let payload = json!({
+                "code": system_one_error_code(&inner),
+                "message": inner.to_string(),
+                "status": status,
+            });
+            napi::Error::from_reason(format!("{SYSTEM_ONE_ERROR_PREFIX}{payload}"))
+        }
+        other => napi::Error::from_reason(other.to_string()),
+    }
+}
+
 /// Private native configuration consumed by the public SDK in Phase 4.
 #[napi(object)]
 pub struct TraceEventSubscriptionConfig {
@@ -586,6 +659,7 @@ pub struct ToolSearchTask {
     top_k: u32,
     origin: String,
     method: String,
+    reranker: Option<RerankerConfig>,
     context: core::TraceEventContext,
     _permit: Option<DenseOperationPermit>,
 }
@@ -604,6 +678,7 @@ pub struct SkillSearchTask {
     top_k: u32,
     origin: String,
     method: String,
+    reranker: Option<RerankerConfig>,
     context: core::TraceEventContext,
     _permit: Option<DenseOperationPermit>,
 }
@@ -752,12 +827,11 @@ impl Task for ToolSearchTask {
 
     fn compute(&mut self) -> napi::Result<Self::Output> {
         let parsed_origin = parse_origin(self.origin.as_str());
-        let parsed_method: SearchMethod =
-            self.method
-                .parse()
-                .map_err(|e: ratel_ai_core::ParseSearchMethodError| {
-                    napi::Error::from_reason(e.to_string())
-                })?;
+        let mut options = core::SearchOptions::new(parse_method(&self.method)?)
+            .with_context(self.context.clone());
+        if let Some(reranker) = resolve_reranker(self.reranker.as_ref())? {
+            options = options.with_reranker(reranker);
+        }
         let _dense = self
             .dense_gate
             .as_ref()
@@ -771,13 +845,7 @@ impl Task for ToolSearchTask {
             .read()
             .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
         registry
-            .search_with_method_and_context(
-                &self.query,
-                self.top_k as usize,
-                parsed_origin,
-                parsed_method,
-                self.context.clone(),
-            )
+            .search_with_options(&self.query, self.top_k as usize, parsed_origin, options)
             .map(|hits| {
                 hits.into_iter()
                     .map(|hit| SearchHit {
@@ -789,7 +857,7 @@ impl Task for ToolSearchTask {
                     })
                     .collect()
             })
-            .map_err(|e| napi::Error::from_reason(e.to_string()))
+            .map_err(map_search_error)
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
@@ -877,12 +945,11 @@ impl Task for SkillSearchTask {
 
     fn compute(&mut self) -> napi::Result<Self::Output> {
         let parsed_origin = parse_origin(self.origin.as_str());
-        let parsed_method: SearchMethod =
-            self.method
-                .parse()
-                .map_err(|e: ratel_ai_core::ParseSearchMethodError| {
-                    napi::Error::from_reason(e.to_string())
-                })?;
+        let mut options = core::SearchOptions::new(parse_method(&self.method)?)
+            .with_context(self.context.clone());
+        if let Some(reranker) = resolve_reranker(self.reranker.as_ref())? {
+            options = options.with_reranker(reranker);
+        }
         let _dense = self
             .dense_gate
             .as_ref()
@@ -896,13 +963,7 @@ impl Task for SkillSearchTask {
             .read()
             .map_err(|_| napi::Error::from_reason("skill registry lock poisoned"))?;
         registry
-            .search_with_method_and_context(
-                &self.query,
-                self.top_k as usize,
-                parsed_origin,
-                parsed_method,
-                self.context.clone(),
-            )
+            .search_with_options(&self.query, self.top_k as usize, parsed_origin, options)
             .map(|hits| {
                 hits.into_iter()
                     .map(|hit| SkillHit {
@@ -914,7 +975,7 @@ impl Task for SkillSearchTask {
                     })
                     .collect()
             })
-            .map_err(|e| napi::Error::from_reason(e.to_string()))
+            .map_err(map_search_error)
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
@@ -1469,7 +1530,7 @@ impl ToolRegistry {
                 })?;
         if !matches!(parsed_method, SearchMethod::Bm25) {
             return Err(napi::Error::from_reason(
-                "semantic and hybrid search are asynchronous; use searchWithMethodAsync() or ToolCatalog.searchAsync()",
+                "semantic, hybrid, and systemOne search are asynchronous; use searchWithMethodAsync() or ToolCatalog.searchAsync()",
             ));
         }
         let hits = self
@@ -1506,7 +1567,22 @@ impl ToolRegistry {
         method: String,
         context: Option<TraceEventContextConfig>,
     ) -> AsyncTask<ToolSearchTask> {
-        let is_dense = matches!(method.as_str(), "semantic" | "dense" | "hybrid");
+        self.search_with_options_async(query, top_k, origin, method, None, context)
+    }
+
+    /// Search on a libuv worker with an optional second-stage `reranker`
+    /// (ADR-0026). Supports every method, including `"systemOne"`.
+    #[napi(ts_return_type = "Promise<Array<SearchHit>>")]
+    pub fn search_with_options_async(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        method: String,
+        reranker: Option<RerankerConfig>,
+        context: Option<TraceEventContextConfig>,
+    ) -> AsyncTask<ToolSearchTask> {
+        let is_dense = uses_dense(&method, reranker.as_ref());
         AsyncTask::new(ToolSearchTask {
             inner: self.inner.clone(),
             dense_gate: is_dense.then(|| self.dense_gate.clone()),
@@ -1514,9 +1590,30 @@ impl ToolRegistry {
             top_k,
             origin,
             method,
+            reranker,
             context: trace_event_context(context),
             _permit: is_dense.then(|| DenseOperationPermit::new(self.pending_dense.clone())),
         })
+    }
+
+    /// Point `"systemOne"` searches and rerankers at another endpoint or key;
+    /// unset fields keep Ratel Cloud's defaults.
+    #[napi]
+    pub fn set_system_one(
+        &self,
+        url: Option<String>,
+        api_key_env: Option<String>,
+    ) -> napi::Result<()> {
+        let mut config = core::SystemOneConfig::default();
+        if let Some(url) = url {
+            config = config.with_url(url);
+        }
+        if let Some(name) = api_key_env {
+            config = config.with_api_key_env(name);
+        }
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        registry.set_system_one(config);
+        Ok(())
     }
 
     /// Pre-compute embeddings for not-yet-embedded tools on a worker. Registration
@@ -2482,7 +2579,7 @@ impl SkillRegistry {
                 })?;
         if !matches!(parsed_method, SearchMethod::Bm25) {
             return Err(napi::Error::from_reason(
-                "semantic and hybrid search are asynchronous; use searchWithMethodAsync() or SkillCatalog.searchAsync()",
+                "semantic, hybrid, and systemOne search are asynchronous; use searchWithMethodAsync() or SkillCatalog.searchAsync()",
             ));
         }
         let hits = self
@@ -2519,7 +2616,22 @@ impl SkillRegistry {
         method: String,
         context: Option<TraceEventContextConfig>,
     ) -> AsyncTask<SkillSearchTask> {
-        let is_dense = matches!(method.as_str(), "semantic" | "dense" | "hybrid");
+        self.search_with_options_async(query, top_k, origin, method, None, context)
+    }
+
+    /// Search on a libuv worker with an optional second-stage `reranker`
+    /// (ADR-0026). Supports every method, including `"systemOne"`.
+    #[napi(ts_return_type = "Promise<Array<SkillHit>>")]
+    pub fn search_with_options_async(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        method: String,
+        reranker: Option<RerankerConfig>,
+        context: Option<TraceEventContextConfig>,
+    ) -> AsyncTask<SkillSearchTask> {
+        let is_dense = uses_dense(&method, reranker.as_ref());
         AsyncTask::new(SkillSearchTask {
             inner: self.inner.clone(),
             dense_gate: is_dense.then(|| self.dense_gate.clone()),
@@ -2527,9 +2639,30 @@ impl SkillRegistry {
             top_k,
             origin,
             method,
+            reranker,
             context: trace_event_context(context),
             _permit: is_dense.then(|| DenseOperationPermit::new(self.pending_dense.clone())),
         })
+    }
+
+    /// Point `"systemOne"` searches and rerankers at another endpoint or key;
+    /// unset fields keep Ratel Cloud's defaults.
+    #[napi]
+    pub fn set_system_one(
+        &self,
+        url: Option<String>,
+        api_key_env: Option<String>,
+    ) -> napi::Result<()> {
+        let mut config = core::SystemOneConfig::default();
+        if let Some(url) = url {
+            config = config.with_url(url);
+        }
+        if let Some(name) = api_key_env {
+            config = config.with_api_key_env(name);
+        }
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        registry.set_system_one(config);
+        Ok(())
     }
 
     /// See `ToolRegistry.build_embeddings`.

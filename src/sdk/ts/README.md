@@ -194,6 +194,26 @@ await catalog.invoke("read_github_issues", {}, undefined, turnId); // pairs with
 await catalog.invoke("create_linear_task", {}, undefined, turnId); // pairs with the second
 ```
 
+## Reranking and system-one (experimental)
+
+A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates; `reranker.method` re-scores the top `depth` of them (default 50) and never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"`, or `"systemOne"`, but not the same method twice:
+
+```ts
+const catalog = new ToolCatalog({ method: "bm25", reranker: { method: "systemOne", depth: 50 } });
+await catalog.register(tools);
+const hits = await catalog.searchAsync("refund the last order", 5);
+```
+
+`"systemOne"` asks a hosted system-one model (Jev today) to pick from the candidates. It can also be the only stage: `new ToolCatalog({ method: "systemOne" })` ranks the whole catalog. It calls Ratel Cloud at `https://app.ratel.sh/v1/systemone` with the key in `RATEL_API_KEY`; `systemOne: { url, apiKeyEnv }` points it elsewhere.
+
+**`"systemOne"` sends the query and every candidate's searchable text (name, description, schema terms) to that endpoint, which forwards them to the model provider.** The other methods never leave the process.
+
+- A reranker runs off the event loop: use `searchAsync`. Synchronous `search` throws on a catalog with a reranker, and on `"systemOne"`.
+- `searchAsync` also takes an options object, whose `reranker` overrides the catalog's for one call (`null` turns it off): `catalog.searchAsync(q, 5, { method: "hybrid", reranker: null })`.
+- A failed standalone `"systemOne"` search throws a `SystemOneError` with a stable `.code` (`"Unauthorized"`, `"RateLimited"`, `"Http"`, `"Unreachable"`, `"Malformed"`, `"Config"`). A failed `"systemOne"` **reranker** returns the first stage's order instead and records a `rerank_fallback` trace stage.
+- A semantic or hybrid reranker makes `register()` build embeddings, as a semantic `method` does.
+- `SkillCatalog` and `ratel()` take the same `reranker` and `systemOne` options. Facts do not: with `method: "systemOne"`, `ratel()` ranks facts with BM25.
+
 ## Framework adapters
 
 To work in a host framework's native tool and message shapes, adapt the core with a

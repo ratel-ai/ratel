@@ -14,8 +14,10 @@ import {
   type EmbeddingSpec,
   type ExecutableTool,
   type InputValidator,
+  type RerankerConfig,
   runToolInvocation,
   type SearchMethod,
+  type SystemOneConfig,
   ToolCatalog,
   type TraceSinkConfig,
 } from "./catalog.js";
@@ -63,6 +65,13 @@ export interface RatelConfig {
    * - Or set `onMiss: "embed"` to infer uncovered current-kind entries at runtime.
    */
   experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
+  /** Second-stage reranker forwarded to the tool and skill catalogs — see
+   * {@link ToolCatalogOptions.reranker}. Facts are not reranked. **Experimental.** */
+  reranker?: RerankerConfig;
+  /** System-one endpoint override forwarded to the tool and skill catalogs — see
+   * {@link ToolCatalogOptions.systemOne}. Facts do not support `"systemOne"`; with
+   * `method: "systemOne"` they rank with BM25. **Experimental.** */
+  systemOne?: SystemOneConfig;
   /** Max tools each host-driven `recall` returns: capped at 50; 0, negative, or
    * non-integer values fall back to the default 5. */
   recallTopK?: number;
@@ -473,12 +482,16 @@ export function ratel(config: RatelConfig = {}): Ratel {
     embedding: config.embedding,
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
+    reranker: config.reranker,
+    systemOne: config.systemOne,
   });
   const skills = new SkillCatalog({
     method: config.method,
     embedding: config.embedding,
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
+    reranker: config.reranker,
+    systemOne: config.systemOne,
   });
   const events = new RuntimeEvents([catalog, skills], config.events);
   let factsCatalog: FactCatalog | undefined;
@@ -587,7 +600,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
   const facts = (): FactCatalog => {
     if (factsCatalog === undefined) {
       factsCatalog = new FactCatalog({
-        method: config.method,
+        // Facts have no system-one path; rank them lexically instead.
+        method: config.method === "systemOne" ? "bm25" : config.method,
         embedding: config.embedding,
         trace: config.trace,
         factsTopK: config.factsTopK,
@@ -616,8 +630,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
     const effective = method ?? catalogMethod;
     if (effective !== "bm25") {
       throw new Error(
-        `ratel: tools.search() is synchronous and ranks BM25 only; "${effective}" ranks against ` +
-          "prebuilt embeddings — use tools.searchAsync().",
+        `ratel: tools.search() is synchronous and ranks BM25 only; "${effective}" runs off ` +
+          "the event loop — use tools.searchAsync().",
       );
     }
     return catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", "bm25", turnId);

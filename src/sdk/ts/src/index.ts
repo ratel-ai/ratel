@@ -55,8 +55,11 @@ export type {
   ObservationPolicyOptions,
   OriginFilterOption,
   ProvenanceOption,
+  RerankerConfig,
+  SearchAsyncOptions,
   SearchMethod,
   SearchOrigin,
+  SystemOneConfig,
   ToolCatalogOptions,
   TraceSinkConfig,
 } from "./catalog.js";
@@ -75,7 +78,7 @@ export type {
   ExperimentalEmbeddingArtifact,
 } from "./embedding-artifact.js";
 export { experimentalBuildEmbeddingArtifact } from "./embedding-artifact.js";
-export type { DefinitionOverlayErrorCode } from "./errors.js";
+export type { DefinitionOverlayErrorCode, SystemOneErrorCode } from "./errors.js";
 export {
   ArtifactError,
   ArtifactWarmError,
@@ -83,6 +86,7 @@ export {
   DimensionMismatchError,
   EmbedderError,
   IncompatibleMergeError,
+  SystemOneError,
 } from "./errors.js";
 export { experimentalDefineExperiment } from "./experiment.js";
 export type {
@@ -133,6 +137,7 @@ export type {
 } from "./ratel.js";
 export { ratel } from "./ratel.js";
 /** Adaptive usage ranking: the shared read model of what users invoke (ADR-0014). */
+export type { RegistryRankingOptions } from "./registry.js";
 export { IntentGraph, SkillRegistry, ToolRegistry } from "./registry.js";
 export type {
   CatalogSnapshot,
