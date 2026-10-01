@@ -11,6 +11,7 @@ use std::fmt;
 
 use crate::embedding::EmbedderError;
 use crate::method::SearchMethod;
+use crate::system_one::SystemOneError;
 use crate::trace::TraceEventContext;
 
 /// A second-stage ranker over the first stage's top `depth` candidates.
@@ -104,6 +105,9 @@ impl SearchOptions {
 pub enum SearchError {
     /// The semantic or hybrid path failed (see [`EmbedderError`]).
     Embedder(EmbedderError),
+    /// A standalone system-one search failed (see [`SystemOneError`]). A
+    /// system-one *reranker* never raises this: it falls back to stage 1.
+    SystemOne(SystemOneError),
     /// The search options cannot be honoured — e.g. a reranker using the same
     /// method as the first stage, which would only re-derive stage 1's order.
     InvalidOptions {
@@ -116,6 +120,7 @@ impl fmt::Display for SearchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SearchError::Embedder(e) => e.fmt(f),
+            SearchError::SystemOne(e) => e.fmt(f),
             SearchError::InvalidOptions { message } => {
                 write!(f, "invalid search options: {message}")
             }
@@ -127,8 +132,15 @@ impl std::error::Error for SearchError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             SearchError::Embedder(e) => Some(e),
+            SearchError::SystemOne(e) => Some(e),
             SearchError::InvalidOptions { .. } => None,
         }
+    }
+}
+
+impl From<SystemOneError> for SearchError {
+    fn from(e: SystemOneError) -> Self {
+        SearchError::SystemOne(e)
     }
 }
 

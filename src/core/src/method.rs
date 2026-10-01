@@ -12,7 +12,11 @@ use std::fmt;
 use std::str::FromStr;
 
 /// Which ranking engine a search uses.
+///
+/// `#[non_exhaustive]`: a later method is an additive change, so match with a
+/// wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum SearchMethod {
     /// Lexical BM25 over the flattened searchable text. Default; no model.
     #[default]
@@ -21,16 +25,22 @@ pub enum SearchMethod {
     Semantic,
     /// BM25 and dense arms fused on normalised scores (ADR-0024).
     Hybrid,
+    /// A hosted system-one model picks from the candidates (ADR-0026). Calls
+    /// the registry's system-one endpoint, so it is fallible and sends the
+    /// query and candidate text off-process. Reachable through
+    /// `search_with_options` only.
+    SystemOne,
 }
 
 impl SearchMethod {
     /// The trace/`as_str` identifier used across the SDKs: `"bm25"`,
-    /// `"semantic"`, `"hybrid"`.
+    /// `"semantic"`, `"hybrid"`, `"systemOne"`.
     pub fn as_str(&self) -> &'static str {
         match self {
             SearchMethod::Bm25 => "bm25",
             SearchMethod::Semantic => "semantic",
             SearchMethod::Hybrid => "hybrid",
+            SearchMethod::SystemOne => "systemOne",
         }
     }
 }
@@ -49,7 +59,7 @@ impl fmt::Display for ParseSearchMethodError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "unknown search method {:?} (expected \"bm25\", \"semantic\", or \"hybrid\")",
+            "unknown search method {:?} (expected \"bm25\", \"semantic\", \"hybrid\", or \"systemOne\")",
             self.0
         )
     }
@@ -61,7 +71,8 @@ impl FromStr for SearchMethod {
     type Err = ParseSearchMethodError;
 
     /// Parse the SDK identifier: `"bm25"`, `"semantic"` (with `"dense"`
-    /// accepted as an alias), or `"hybrid"`.
+    /// accepted as an alias), `"hybrid"`, or `"systemOne"` (`"systemone"`
+    /// also accepted).
     ///
     /// # Errors
     ///
@@ -82,6 +93,7 @@ impl FromStr for SearchMethod {
             "bm25" => Ok(SearchMethod::Bm25),
             "semantic" | "dense" => Ok(SearchMethod::Semantic),
             "hybrid" => Ok(SearchMethod::Hybrid),
+            "systemOne" | "systemone" => Ok(SearchMethod::SystemOne),
             other => Err(ParseSearchMethodError(other.to_string())),
         }
     }

@@ -1,6 +1,8 @@
 //! Shared test helpers for artifact/warm embedder stubs (crate-internal, tests only).
 
+use std::io::Read;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use crate::dense_cache::Embeddable;
 use crate::embedding::{Embedded, Embedder, EmbedderError};
@@ -153,4 +155,92 @@ pub(crate) fn build_test_artifact<'a, T: Embeddable + 'a>(
     vectors: Vec<Vec<f32>>,
 ) -> Vec<u8> {
     build_artifact(kind, items, &ArtifactBuildStub::new(fingerprint, vectors)).unwrap()
+}
+
+/// Read one HTTP/1.1 request from a mock-server connection: the JSON body and
+/// the `authorization` header, if any. Shared by the endpoint-embedder and
+/// system-one client tests.
+pub(crate) fn read_http_request(
+    stream: &mut std::net::TcpStream,
+) -> (serde_json::Value, Option<String>) {
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let mut request = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    loop {
+        let read = stream.read(&mut buffer).unwrap();
+        assert!(read > 0, "connection closed before request body");
+        request.extend_from_slice(&buffer[..read]);
+        if let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+            let body_start = header_end + 4;
+            let headers = std::str::from_utf8(&request[..header_end]).unwrap();
+            let content_len = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().unwrap())
+                })
+                .expect("content-length");
+            if request.len() >= body_start + content_len {
+                let authorization = headers.lines().find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("authorization")
+                        .then(|| value.trim().to_string())
+                });
+                let body =
+                    serde_json::from_slice(&request[body_start..body_start + content_len]).unwrap();
+                return (body, authorization);
+            }
+        }
+    }
+}
+
+/// A [`crate::system_one::SystemOne`] that answers from a script and records
+/// the candidate ids it was offered — registry tests use it in place of the
+/// HTTP client.
+pub(crate) struct ScriptedSystemOne {
+    reply: Result<Vec<(String, f32)>, crate::SystemOneError>,
+    offered: std::sync::Mutex<Vec<Vec<String>>>,
+}
+
+impl ScriptedSystemOne {
+    /// Answers every call with `ranked`, cut at the call's `top_k`.
+    pub(crate) fn ranking(ranked: &[(&str, f32)]) -> Self {
+        Self {
+            reply: Ok(ranked.iter().map(|(id, s)| ((*id).into(), *s)).collect()),
+            offered: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Fails every call with `error`.
+    pub(crate) fn failing(error: crate::SystemOneError) -> Self {
+        Self {
+            reply: Err(error),
+            offered: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// The candidate ids of each call, in call order.
+    pub(crate) fn offered(&self) -> Vec<Vec<String>> {
+        self.offered.lock().unwrap().clone()
+    }
+}
+
+impl crate::system_one::SystemOne for ScriptedSystemOne {
+    fn rank(
+        &self,
+        _query: &str,
+        candidates: &[crate::system_one::Candidate],
+        top_k: usize,
+    ) -> Result<Vec<(String, f32)>, crate::SystemOneError> {
+        self.offered
+            .lock()
+            .unwrap()
+            .push(candidates.iter().map(|c| c.id.clone()).collect());
+        let mut ranked = self.reply.clone()?;
+        ranked.truncate(top_k);
+        Ok(ranked)
+    }
 }

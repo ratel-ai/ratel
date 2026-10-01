@@ -17,6 +17,9 @@ use crate::indexing::searchable_text;
 use crate::method::SearchMethod;
 use crate::rerank::{SearchError, SearchOptions, order_by_rescore};
 use crate::search::{Bm25Cache, Bm25Params};
+use crate::system_one::{
+    Candidate, RatelCloudSystemOne, SystemOne, SystemOneConfig, SystemOneError,
+};
 use crate::tool::Tool;
 use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchHitTrace, SearchStage, TraceEnvelope, TraceEvent,
@@ -88,6 +91,8 @@ pub struct SearchHit {
     ///   fusion it replaced, the magnitude is meaningful: both arms carry an
     ///   absolute value, so `0.9` and `0.3` say something about match quality.
     ///   `w` is the catalog's [`DenseWeight`](crate::DenseWeight).
+    /// - `SystemOne` (first stage or reranker): the model's probability for
+    ///   the tool, in `[0, 1]` (ADR-0026). Like cosine, a raw method score.
     ///
     /// Scores are comparable within one result list, not across methods or
     /// corpora. Ties are broken by `tool_id` ascending, so ordering is
@@ -159,6 +164,20 @@ fn to_search_hits(ranked: Vec<(String, f32)>, scale: Scale) -> Vec<SearchHit> {
         .collect()
 }
 
+/// The system-one ranker a registry starts with: Ratel Cloud, `RATEL_API_KEY`.
+pub(crate) fn default_system_one() -> Arc<dyn SystemOne> {
+    Arc::new(RatelCloudSystemOne::new(SystemOneConfig::default()))
+}
+
+/// A tool as a system-one candidate, judged on the same text the other
+/// methods rank (ADR-0004, ADR-0021).
+fn candidate(tool: &Tool) -> Candidate {
+    Candidate {
+        id: tool.id.clone(),
+        text: tool.embed_text(),
+    }
+}
+
 impl Embeddable for Tool {
     fn embed_id(&self) -> &str {
         &self.id
@@ -212,6 +231,10 @@ pub struct ToolRegistry {
     /// Read only by the hybrid path; the single-arm methods have nothing to
     /// weigh. Defaults to the shipped 0.7.
     dense_weight: DenseWeight,
+    /// The system-one ranker (ADR-0026) — Ratel Cloud's endpoint unless
+    /// [`Self::set_system_one`] points it elsewhere. Only `SystemOne` searches
+    /// and rerankers call it; building it opens no connection.
+    system_one: Arc<dyn SystemOne>,
 }
 
 impl Default for ToolRegistry {
@@ -232,6 +255,7 @@ impl ToolRegistry {
             dense: DenseCache::new(),
             graph: None,
             dense_weight: DenseWeight::default(),
+            system_one: default_system_one(),
         }
     }
 
@@ -248,6 +272,7 @@ impl ToolRegistry {
             dense: DenseCache::with_embedder(embedder),
             graph: None,
             dense_weight: DenseWeight::default(),
+            system_one: default_system_one(),
         }
     }
 
@@ -261,6 +286,7 @@ impl ToolRegistry {
             dense: DenseCache::new(),
             graph: None,
             dense_weight: DenseWeight::default(),
+            system_one: default_system_one(),
         }
     }
 
@@ -278,6 +304,7 @@ impl ToolRegistry {
             dense: DenseCache::with_model(model),
             graph: None,
             dense_weight: DenseWeight::default(),
+            system_one: default_system_one(),
         }
     }
 
@@ -347,6 +374,37 @@ impl ToolRegistry {
     #[must_use]
     pub fn experimental_dense_weight(&self) -> DenseWeight {
         self.dense_weight
+    }
+
+    /// Point `SystemOne` searches and rerankers at another endpoint or key
+    /// (ADR-0026). The default is Ratel Cloud with `RATEL_API_KEY`.
+    pub fn set_system_one(&mut self, config: SystemOneConfig) {
+        self.system_one = Arc::new(RatelCloudSystemOne::new(config));
+    }
+
+    /// Stand a scripted ranker in for the HTTP client.
+    #[cfg(test)]
+    pub(crate) fn set_system_one_for_test(&mut self, system_one: Arc<dyn SystemOne>) {
+        self.system_one = system_one;
+    }
+
+    /// Ask the system-one ranker to rank `ids` (all tools when `None`),
+    /// keeping at most `top_k`.
+    fn system_one_rank(
+        &self,
+        query: &str,
+        ids: Option<&[String]>,
+        top_k: usize,
+    ) -> Result<Vec<(String, f32)>, SystemOneError> {
+        let candidates: Vec<Candidate> = match ids {
+            Some(ids) => ids
+                .iter()
+                .filter_map(|id| self.tools.get(id))
+                .map(candidate)
+                .collect(),
+            None => self.tools.values().map(candidate).collect(),
+        };
+        self.system_one.rank(query, &candidates, top_k)
     }
 
     /// Set the BM25 `k1`/`b` tuning; forces a rebuild on the next search. See
@@ -796,6 +854,9 @@ impl ToolRegistry {
             }
             SearchMethod::Semantic => self.semantic_search_traced(query, top_k, origin, context),
             SearchMethod::Hybrid => self.hybrid_search_traced(query, top_k, origin, context),
+            SearchMethod::SystemOne => Err(EmbedderError::Config {
+                message: "systemOne needs search_with_options, which can report its errors".into(),
+            }),
         }
     }
 
@@ -810,10 +871,17 @@ impl ToolRegistry {
     /// search event is recorded, carrying stage 1's stages plus a `rerank`
     /// stage.
     ///
+    /// `SystemOne` — as the first stage or the reranker — sends the query and
+    /// candidate text to the registry's system-one endpoint. As a reranker, a
+    /// failed call falls back to stage 1's order and records a
+    /// `rerank_fallback` stage instead of a `rerank` one; as the first stage it
+    /// is an error. The usage arm does not apply to a system-one first stage.
+    ///
     /// # Errors
     /// [`SearchError::InvalidOptions`] when the reranker uses the first stage's
     /// method; [`SearchError::Embedder`] when either stage is semantic or
-    /// hybrid and the embeddings are not built or the embedder fails.
+    /// hybrid and the embeddings are not built or the embedder fails;
+    /// [`SearchError::SystemOne`] when a system-one first stage fails.
     pub fn search_with_options(
         &self,
         query: &str,
@@ -828,6 +896,9 @@ impl ToolRegistry {
             ..
         } = options;
         let Some(reranker) = reranker else {
+            if method == SearchMethod::SystemOne {
+                return self.system_one_search(query, top_k, origin, context);
+            }
             return Ok(self.search_with_method_and_context(query, top_k, origin, method, context)?);
         };
         if reranker.method() == method {
@@ -845,21 +916,35 @@ impl ToolRegistry {
         }
         let depth = reranker.depth().max(top_k);
         let turn_key = context.turn_id.as_deref();
-        let (candidates, mut stages) = match method {
+        let (mut candidates, mut stages) = match method {
             SearchMethod::Bm25 => self.bm25_ranked(query, depth, turn_key),
             SearchMethod::Semantic => self.semantic_ranked(query, depth, turn_key)?,
             SearchMethod::Hybrid => self.hybrid_ranked(query, depth, turn_key)?,
+            SearchMethod::SystemOne => self.system_one_ranked(query, depth)?,
         };
-        let candidate_ids: Vec<String> = candidates.into_iter().map(|h| h.tool_id).collect();
+        let candidate_ids: Vec<String> = candidates.iter().map(|h| h.tool_id.clone()).collect();
 
         let t = Instant::now();
-        let (mut rescored, scale) =
-            self.rank_candidates(query, &candidate_ids, reranker.method())?;
-        order_by_rescore(&mut rescored, &candidate_ids);
-        let mut hits = to_search_hits(rescored, scale);
-        hits.truncate(top_k);
+        let (hits, stage_name) = if reranker.method() == SearchMethod::SystemOne {
+            match self.system_one_rank(query, Some(&candidate_ids), top_k) {
+                Ok(ranked) => (to_search_hits(ranked, Scale::Probability), "rerank"),
+                // An enhancement failing must not fail the search: stage 1's
+                // order is still a ranking.
+                Err(_) => {
+                    candidates.truncate(top_k);
+                    (candidates, "rerank_fallback")
+                }
+            }
+        } else {
+            let (mut rescored, scale) =
+                self.rank_candidates(query, &candidate_ids, reranker.method())?;
+            order_by_rescore(&mut rescored, &candidate_ids);
+            let mut hits = to_search_hits(rescored, scale);
+            hits.truncate(top_k);
+            (hits, "rerank")
+        };
         stages.push(SearchStage {
-            name: "rerank".into(),
+            name: stage_name.into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: hits.first().map(|h| h.score as f64),
         });
@@ -867,6 +952,45 @@ impl ToolRegistry {
         let took_ms = started.elapsed().as_millis() as u64;
         self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
         Ok(hits)
+    }
+
+    /// A standalone system-one search: the whole catalog is the candidate set.
+    fn system_one_search(
+        &self,
+        query: &str,
+        top_k: usize,
+        origin: Origin,
+        context: TraceEventContext,
+    ) -> Result<Vec<SearchHit>, SearchError> {
+        let started = Instant::now();
+        if self.tools.is_empty() || top_k == 0 {
+            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            return Ok(Vec::new());
+        }
+        let (hits, stages) = self.system_one_ranked(query, top_k)?;
+        let took_ms = started.elapsed().as_millis() as u64;
+        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        Ok(hits)
+    }
+
+    /// The system-one ranking of the whole catalog and its `systemone` stage,
+    /// without recording the search.
+    fn system_one_ranked(
+        &self,
+        query: &str,
+        top_k: usize,
+    ) -> Result<(Vec<SearchHit>, Vec<SearchStage>), SystemOneError> {
+        let t = Instant::now();
+        let hits = to_search_hits(
+            self.system_one_rank(query, None, top_k)?,
+            Scale::Probability,
+        );
+        let stage = SearchStage {
+            name: "systemone".into(),
+            took_ms: t.elapsed().as_millis() as u64,
+            top_score: hits.first().map(|h| h.score as f64),
+        };
+        Ok((hits, vec![stage]))
     }
 
     /// Re-score `ids` (stage-1 candidates) with `method`, returning every
@@ -919,6 +1043,9 @@ impl ToolRegistry {
                 let fused = score_fuse(&bm25, ceiling, &dense, None, self.dense_weight);
                 (fused, Scale::Fused)
             }
+            // `search_with_options` routes a system-one reranker to the
+            // fallible-with-fallback path before reaching here.
+            SearchMethod::SystemOne => unreachable!("system-one reranks via system_one_rank"),
         })
     }
 
@@ -3739,5 +3866,152 @@ mod tests {
                 .unwrap();
             assert_eq!(ids_of(&a), ids_of(&b));
         }
+    }
+
+    // ---- System-one (ADR-0026) ----
+
+    use crate::SystemOneError;
+    use crate::test_support::ScriptedSystemOne;
+
+    fn system_one(reg: &mut ToolRegistry, s1: ScriptedSystemOne) -> Arc<ScriptedSystemOne> {
+        let s1 = Arc::new(s1);
+        reg.set_system_one_for_test(s1.clone());
+        s1
+    }
+
+    #[test]
+    fn system_one_parses_from_the_sdk_identifier() {
+        assert_eq!(
+            "systemOne".parse::<SearchMethod>(),
+            Ok(SearchMethod::SystemOne)
+        );
+        assert_eq!(
+            "systemone".parse::<SearchMethod>(),
+            Ok(SearchMethod::SystemOne)
+        );
+        assert_eq!(SearchMethod::SystemOne.as_str(), "systemOne");
+    }
+
+    #[test]
+    fn standalone_system_one_ranks_the_whole_catalog() {
+        let mut reg = rerank_catalog();
+        let s1 = system_one(
+            &mut reg,
+            ScriptedSystemOne::ranking(&[("erase_disk", 0.8), ("delete_file", 0.15)]),
+        );
+        let hits = reg
+            .search_with_options(
+                "remove the file",
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::SystemOne),
+            )
+            .unwrap();
+        assert_eq!(ids_of(&hits), vec!["erase_disk", "delete_file"]);
+        assert!(hits.iter().all(|h| !h.fused));
+        assert!(hits.iter().all(|h| (h.relevance - h.score).abs() < 1e-6));
+        let mut offered = s1.offered().remove(0);
+        offered.sort();
+        assert_eq!(
+            offered,
+            vec!["delete_file", "erase_disk", "purge_cache", "read_file"],
+            "standalone offers every tool"
+        );
+    }
+
+    #[test]
+    fn standalone_system_one_failure_is_a_typed_error() {
+        let mut reg = rerank_catalog();
+        system_one(
+            &mut reg,
+            ScriptedSystemOne::failing(SystemOneError::RateLimited),
+        );
+        let err = reg
+            .search_with_options(
+                "remove the file",
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::SystemOne),
+            )
+            .err()
+            .expect("standalone failure surfaces");
+        assert!(matches!(
+            err,
+            SearchError::SystemOne(SystemOneError::RateLimited)
+        ));
+    }
+
+    #[test]
+    fn system_one_rerank_sees_only_stage_one_candidates() {
+        let mut reg = rerank_catalog();
+        let s1 = system_one(
+            &mut reg,
+            ScriptedSystemOne::ranking(&[("purge_cache", 0.7), ("delete_file", 0.2)]),
+        );
+        let stage_one = reg.search("remove the file", 50);
+        let hits = reg
+            .search_with_options(
+                "remove the file",
+                5,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::SystemOne)),
+            )
+            .unwrap();
+        assert_eq!(ids_of(&hits), vec!["purge_cache", "delete_file"]);
+        assert_eq!(
+            s1.offered(),
+            vec![
+                stage_one
+                    .iter()
+                    .map(|h| h.tool_id.clone())
+                    .collect::<Vec<_>>()
+            ]
+        );
+    }
+
+    #[test]
+    fn a_failed_system_one_rerank_falls_back_to_stage_one() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = rerank_catalog();
+        reg.set_trace_sink(sink.clone());
+        system_one(
+            &mut reg,
+            ScriptedSystemOne::failing(SystemOneError::Http { status: 503 }),
+        );
+        let stage_one = reg.search("remove the file", 3);
+        sink.drain();
+        let hits = reg
+            .search_with_options(
+                "remove the file",
+                3,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::SystemOne)),
+            )
+            .unwrap();
+        assert_eq!(ids_of(&hits), ids_of(&stage_one));
+        let stages: Vec<String> = sink
+            .drain()
+            .into_iter()
+            .find_map(|e| match e.event {
+                TraceEvent::Search { stages, .. } => Some(stages),
+                _ => None,
+            })
+            .unwrap()
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(stages, vec!["bm25", "rerank_fallback"]);
+    }
+
+    #[test]
+    fn search_with_method_rejects_system_one() {
+        let reg = rerank_catalog();
+        let err = reg
+            .search_with_method("q", 5, Origin::Direct, SearchMethod::SystemOne)
+            .err()
+            .expect("the legacy entry point cannot carry a system-one error");
+        assert!(matches!(err, EmbedderError::Config { .. }));
     }
 }

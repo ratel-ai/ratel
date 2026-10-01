@@ -240,6 +240,9 @@ impl FactRegistry {
             SearchMethod::Bm25 => Ok(self.bm25_search_traced(query, top_k, origin)),
             SearchMethod::Semantic => self.semantic_search_traced(query, top_k, origin),
             SearchMethod::Hybrid => self.hybrid_search_traced(query, top_k, origin),
+            SearchMethod::SystemOne => Err(EmbedderError::Config {
+                message: "systemOne is not supported for facts".into(),
+            }),
         }
     }
 
