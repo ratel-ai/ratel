@@ -63,6 +63,7 @@ export type {
   SearchAsyncOptions,
   SearchMethod,
   SearchOrigin,
+  SystemOneConfig,
   ToolCatalogOptions,
   TraceSinkConfig,
 } from "./catalog.js";
@@ -81,7 +82,7 @@ export type {
   ExperimentalEmbeddingArtifact,
 } from "./embedding-artifact.js";
 export { experimentalBuildEmbeddingArtifact } from "./embedding-artifact.js";
-export type { CloudErrorCode, DefinitionOverlayErrorCode } from "./errors.js";
+export type { CloudErrorCode, DefinitionOverlayErrorCode, SystemOneErrorCode } from "./errors.js";
 export {
   ArtifactError,
   ArtifactWarmError,
@@ -90,6 +91,7 @@ export {
   DimensionMismatchError,
   EmbedderError,
   IncompatibleMergeError,
+  SystemOneError,
 } from "./errors.js";
 export { experimentalDefineExperiment } from "./experiment.js";
 export type {

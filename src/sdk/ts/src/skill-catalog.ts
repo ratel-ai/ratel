@@ -12,6 +12,7 @@ import {
   type SearchAsyncOptions,
   type SearchMethod,
   type SearchOrigin,
+  type SystemOneConfig,
   type TraceSinkConfig,
 } from "./catalog.js";
 import {
@@ -102,6 +103,9 @@ export interface SkillCatalogOptions {
   /** Re-score the first stage's top candidates with another method — see
    * {@link ToolCatalogOptions.reranker}. **Experimental.** */
   reranker?: RerankerConfig;
+  /** Where `"systemOne"` sends rankings — see
+   * {@link ToolCatalogOptions.systemOne}. **Experimental.** */
+  systemOne?: SystemOneConfig;
 }
 
 /**
@@ -135,7 +139,7 @@ export class SkillCatalog {
       this.method,
       options.experimentalDenseWeight,
       options.experimentalBm25,
-      { reranker: options.reranker },
+      { reranker: options.reranker, systemOne: options.systemOne },
     );
     this.embeddingArtifact = options.experimentalEmbeddingArtifact;
     if (options.trace) {

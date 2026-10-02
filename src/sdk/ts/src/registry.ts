@@ -25,6 +25,7 @@ import {
   type RerankerConfig,
   type SearchMethod,
   type SearchOrigin,
+  type SystemOneConfig,
   type TraceSinkConfig,
   usesDense,
 } from "./catalog.js";
@@ -33,6 +34,7 @@ import {
   mapArtifactWarmError,
   mapCloudError,
   mapEmbedderError,
+  mapSearchError,
 } from "./errors.js";
 import { assertValidFact, type Fact } from "./grounding.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
@@ -53,6 +55,8 @@ function toNativeEmbedding(
 export interface RegistryRankingOptions {
   /** Catalog-default reranker; decides whether registration embeds. */
   reranker?: RerankerConfig;
+  /** Where `"systemOne"` sends rankings (Jev, called directly). */
+  systemOne?: SystemOneConfig;
   /** Make Ratel Cloud the owner: enables {@link ToolRegistry.cloudPickAsync} and sync. */
   cloud?: CloudConfig;
 }
@@ -98,6 +102,10 @@ export class ToolRegistry {
   ) {
     this.native = new NativeToolRegistry(toNativeEmbedding(embedding));
     this.eager = usesDense(method, ranking.reranker);
+    if (ranking.systemOne) {
+      const { url, apiKeyEnv, model } = ranking.systemOne;
+      this.native.setSystemOne(url, apiKeyEnv, model);
+    }
     if (ranking.cloud) {
       this.native.setCloud(ranking.cloud.url, ranking.cloud.apiKeyEnv);
     }
@@ -247,7 +255,8 @@ export class ToolRegistry {
 
   /**
    * Search on a libuv worker with an optional second-stage `reranker`
-   * (ADR-0026).
+   * (ADR-0026). Throws a typed {@link SystemOneError} when a standalone
+   * `"systemOne"` search fails.
    */
   async searchWithOptionsAsync(
     query: string,
@@ -273,7 +282,7 @@ export class ToolRegistry {
         projection,
       );
     } catch (error) {
-      throw mapEmbedderError(error);
+      throw mapSearchError(error);
     }
   }
 
@@ -541,6 +550,10 @@ export class SkillRegistry {
   ) {
     this.native = new NativeSkillRegistry(toNativeEmbedding(embedding));
     this.eager = usesDense(method, ranking.reranker);
+    if (ranking.systemOne) {
+      const { url, apiKeyEnv, model } = ranking.systemOne;
+      this.native.setSystemOne(url, apiKeyEnv, model);
+    }
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
     }
@@ -708,7 +721,7 @@ export class SkillRegistry {
         projection,
       );
     } catch (error) {
-      throw mapEmbedderError(error);
+      throw mapSearchError(error);
     }
   }
 

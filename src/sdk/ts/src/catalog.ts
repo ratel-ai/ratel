@@ -284,14 +284,16 @@ export interface BaselineTurn {
  * (or warms a configured embedding artifact). Dense ranking uses
  * `searchAsync()`.
  */
-export type SearchMethod = "bm25" | "semantic" | "hybrid";
+export type SearchMethod = "bm25" | "semantic" | "hybrid" | "systemOne";
 
 /**
  * A second stage over the first stage's candidates (ADR-0026): `method`
  * re-scores the top `depth` (default 50) hits of the catalog's `method`. It
  * never adds a tool the first stage did not return.
  *
- * Any method may rerank any other, but not itself.
+ * Any method may rerank any other, but not itself. A `"systemOne"` reranker
+ * that fails (Jev down, rate limited) returns the first stage's order rather
+ * than throwing.
  *
  * **Experimental** — may change without a major version bump.
  */
@@ -300,6 +302,26 @@ export interface RerankerConfig {
   method: SearchMethod;
   /** How many first-stage candidates to re-score (default 50; raised to `topK` when lower). */
   depth?: number;
+}
+
+/**
+ * Where `"systemOne"` sends its rankings: Jev (TypeSafe AI), called directly
+ * from this process (ADR-0026). Defaults: `https://api.typesafe.ai`, the key in
+ * `TYPESAFE_API_KEY`, model `jev-latest`.
+ *
+ * `"systemOne"` sends the query and each candidate's searchable text to Jev.
+ * The other local methods never leave the process. For a catalog Ratel Cloud
+ * owns, use {@link CloudConfig} instead — Cloud runs Jev behind its picker.
+ *
+ * **Experimental** — may change without a major version bump.
+ */
+export interface SystemOneConfig {
+  /** Jev base URL (a proxy, tests); `/v1/systemone` is appended. */
+  url?: string;
+  /** Name of the environment variable holding the Jev key (read at search time). */
+  apiKeyEnv?: string;
+  /** Jev model (default `"jev-latest"`). */
+  model?: string;
 }
 
 /**
@@ -365,13 +387,17 @@ export interface CloudSyncOutcome {
 /** Reject a `cloud` option the catalog cannot honour. @internal */
 export function assertValidCloud(
   cloud: CloudConfig | undefined,
-  options: { method?: SearchMethod; reranker?: RerankerConfig },
+  options: { method?: SearchMethod; reranker?: RerankerConfig; systemOne?: SystemOneConfig },
 ): void {
   if (!cloud) return;
-  if (options.method !== undefined || options.reranker !== undefined) {
+  if (
+    options.method !== undefined ||
+    options.reranker !== undefined ||
+    options.systemOne !== undefined
+  ) {
     throw new Error(
-      "a cloud catalog is ranked by the Cloud Tool Picker; drop `method` and `reranker` " +
-        "and choose a `cloud.mode` instead",
+      "a cloud catalog is ranked by the Cloud Tool Picker; drop `method`, `reranker` and " +
+        "`systemOne` and choose a `cloud.mode` instead",
     );
   }
   if (cloud.mode !== undefined && !PICK_MODES.has(cloud.mode)) {
@@ -581,9 +607,14 @@ export interface ToolCatalogOptions {
    */
   reranker?: RerankerConfig;
   /**
+   * Where `"systemOne"` (as `method` or reranker) sends rankings — Jev, called
+   * directly; see {@link SystemOneConfig}. **Experimental.**
+   */
+  systemOne?: SystemOneConfig;
+  /**
    * Make Ratel Cloud this catalog's owner and rank through its Tool Picker —
-   * see {@link CloudConfig}. Not combinable with `method` or `reranker`.
-   * **Experimental.**
+   * see {@link CloudConfig}. Not combinable with `method`, `reranker` or
+   * `systemOne`. **Experimental.**
    */
   cloud?: CloudConfig;
 }
@@ -654,7 +685,7 @@ export class ToolCatalog {
       this.method,
       options.experimentalDenseWeight,
       options.experimentalBm25,
-      { reranker: options.reranker, cloud: options.cloud },
+      { reranker: options.reranker, systemOne: options.systemOne, cloud: options.cloud },
     );
     this.embeddingArtifact = options.experimentalEmbeddingArtifact;
     if (options.trace) {

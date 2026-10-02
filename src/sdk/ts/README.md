@@ -227,9 +227,25 @@ const hits = await r.tools.searchAsync("refund the last order", 5);   // POST /v
 - **Errors:** `CloudError.code` is one of `"Unauthorized"`, `"InsufficientCredits"`, `"NoSyncedTools"`, `"RateLimited"` (with `retryAfterSecs`), `"TooLarge"`, `"Timeout"`, `"Unavailable"`, `"Http"`, `"Malformed"` or `"Config"`.
 - **Skills and facts** stay local for now.
 
+## System-one ranking with Jev (experimental)
+
+For a catalog that lives in your process, `"systemOne"` asks [Jev](https://docs.typesafe.ai) (TypeSafe AI) to pick tools directly. There is no Ratel Cloud involved, and you supply your own TypeSafe key ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). It can be the only stage, or a reranker on top of a local method:
+
+```ts
+new ToolCatalog({ method: "systemOne" });                                       // Jev ranks every tool
+new ToolCatalog({ method: "bm25", reranker: { method: "systemOne", depth: 50 } }); // BM25, then Jev
+```
+
+- **Configuration:** `systemOne: { url?, apiKeyEnv?, model? }`. The defaults are `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`.
+- **Large catalogs:** one Jev question holds up to 150 tools. Above that, the tools are split into groups judged in parallel, and the winners go to a final round.
+- **Failures:** a failed standalone search throws `SystemOneError` (`.code`, `.status`). A failed reranker falls back to the first stage's order and records a `rerank_fallback` trace stage.
+- **Privacy:** **`"systemOne"` sends the query and each candidate's searchable text to Jev.**
+
+`"systemOne"` and `cloud` are two routes to the same model. `cloud` is for a catalog Ratel Cloud owns, and Cloud runs Jev on the server for `precise` and `exhaustive`. `systemOne` is for a catalog the SDK owns, and the SDK calls Jev itself. One catalog can't use both. Facts don't support `"systemOne"`.
+
 ## Reranking (experimental)
 
-A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker.method` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"` or `"hybrid"`, but the two stages must use different methods:
+A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker.method` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"` or `"systemOne"`, but the two stages must use different methods:
 
 ```ts
 const catalog = new ToolCatalog({ method: "bm25", reranker: { method: "semantic", depth: 30 } });

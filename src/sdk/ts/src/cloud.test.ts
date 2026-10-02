@@ -234,6 +234,7 @@ describe("ToolCatalog cloud: pick", () => {
     const cloud = { url: mock.url, apiKeyEnv: KEY_ENV };
     expect(() => new ToolCatalog({ cloud, method: "semantic" })).toThrow(/cloud/);
     expect(() => new ToolCatalog({ cloud, reranker: { method: "semantic" } })).toThrow(/cloud/);
+    expect(() => new ToolCatalog({ cloud, systemOne: {} })).toThrow(/cloud/);
     expect(() => new ToolCatalog({ cloud: { ...cloud, mode: "fast" as never } })).toThrow(/mode/);
   });
 });

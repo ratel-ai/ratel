@@ -310,6 +310,92 @@ export function mapArtifactBuildError(error: unknown): unknown {
   return mapArtifactError(error);
 }
 
+/** Stable categories for a failed system-one (Jev) ranking (ADR-0026). */
+export type SystemOneErrorCode =
+  | "Config"
+  | "Unauthorized"
+  | "RateLimited"
+  | "Http"
+  | "Unreachable"
+  | "Malformed"
+  | "Unknown";
+
+/**
+ * A `"systemOne"` search failed: Jev was unreachable, rejected the key, rate
+ * limited, or answered with something that is not a ranking. Raised by a
+ * standalone `"systemOne"` search only — a `"systemOne"` **reranker** falls
+ * back to the first stage's order instead of throwing.
+ */
+export class SystemOneError extends Error {
+  /** Stable machine-readable discriminant; prefer it over parsing `message`. */
+  readonly code: SystemOneErrorCode;
+  /** The HTTP status, for `"Unauthorized"` and `"Http"`. */
+  readonly status?: number;
+
+  /**
+   * @param message - The underlying failure description (the core error text).
+   * @param code - The stable {@link SystemOneError.code} discriminant.
+   * @param status - The HTTP status, when Jev answered.
+   */
+  constructor(message: string, code: SystemOneErrorCode, status?: number) {
+    super(message);
+    this.name = "SystemOneError";
+    this.code = code;
+    if (status !== undefined) this.status = status;
+  }
+}
+
+/** Private NAPI→TS transport prefix — must match native `SYSTEM_ONE_ERROR_PREFIX`. */
+const SYSTEM_ONE_ERROR_PREFIX = "RATEL_SYSTEM_ONE_ERROR:";
+
+const SYSTEM_ONE_ERROR_CODES: ReadonlySet<string> = new Set([
+  "Config",
+  "Unauthorized",
+  "RateLimited",
+  "Http",
+  "Unreachable",
+  "Malformed",
+  "Unknown",
+]);
+
+/**
+ * Decode the private native system-one envelope into a typed
+ * {@link SystemOneError}. Malformed envelopes and other errors are returned
+ * unchanged.
+ *
+ * @param error - The error thrown by the native binding.
+ * @returns The typed system-one error, or `error` unchanged when it is not one.
+ */
+export function mapSystemOneError(error: unknown): unknown {
+  if (!(error instanceof Error)) return error;
+  if (!error.message.startsWith(SYSTEM_ONE_ERROR_PREFIX)) return error;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(error.message.slice(SYSTEM_ONE_ERROR_PREFIX.length));
+  } catch {
+    return error;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return error;
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.code !== "string" || !SYSTEM_ONE_ERROR_CODES.has(record.code)) return error;
+  if (typeof record.message !== "string") return error;
+  const status = typeof record.status === "number" ? record.status : undefined;
+  return new SystemOneError(record.message, record.code as SystemOneErrorCode, status);
+}
+
+/**
+ * Re-raise a native search failure as its typed error: system-one first, then
+ * embedder. Anything unrecognized is returned unchanged.
+ *
+ * @param error - The error thrown by the native binding.
+ * @returns The typed error, or `error` unchanged when it is not recognized.
+ */
+export function mapSearchError(error: unknown): unknown {
+  const systemOne = mapSystemOneError(error);
+  if (systemOne !== error) return systemOne;
+  return mapEmbedderError(error);
+}
+
 /** Stable categories for a failed Ratel Cloud request (ADR-0026, ADR-0027). */
 export type CloudErrorCode =
   | "Config"

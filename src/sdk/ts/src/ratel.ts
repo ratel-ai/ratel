@@ -18,6 +18,7 @@ import {
   type RerankerConfig,
   runToolInvocation,
   type SearchMethod,
+  type SystemOneConfig,
   ToolCatalog,
   type TraceSinkConfig,
 } from "./catalog.js";
@@ -69,6 +70,11 @@ export interface RatelConfig {
   /** Second-stage reranker forwarded to the tool and skill catalogs — see
    * {@link ToolCatalogOptions.reranker}. Facts are not reranked. **Experimental.** */
   reranker?: RerankerConfig;
+  /** Where `"systemOne"` (as method or reranker) sends rankings — Jev, called
+   * directly — forwarded to the tool and skill catalogs; see
+   * {@link ToolCatalogOptions.systemOne}. Facts do not support `"systemOne"`; with
+   * `method: "systemOne"` they rank with BM25. **Experimental.** */
+  systemOne?: SystemOneConfig;
   /** Make Ratel Cloud the tool catalog's owner: `tools.register` syncs it to the Cloud
    * project and `tools.searchAsync` (and the capability tools) rank through the Cloud
    * Tool Picker — see {@link CloudConfig}. The sync uses the runtime-events `sourceId`
@@ -493,7 +499,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
             sourceId: config.cloud.sourceId ?? config.events?.sourceId ?? defaultSourceId(),
           },
         }
-      : { method: config.method, reranker: config.reranker }),
+      : { method: config.method, reranker: config.reranker, systemOne: config.systemOne }),
   });
   const skills = new SkillCatalog({
     method: config.method,
@@ -501,6 +507,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
     reranker: config.reranker,
+    systemOne: config.systemOne,
   });
   const events = new RuntimeEvents([catalog, skills], config.events);
   let factsCatalog: FactCatalog | undefined;
@@ -609,7 +616,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
   const facts = (): FactCatalog => {
     if (factsCatalog === undefined) {
       factsCatalog = new FactCatalog({
-        method: config.method,
+        // Facts have no system-one path; rank them lexically instead.
+        method: config.method === "systemOne" ? "bm25" : config.method,
         embedding: config.embedding,
         trace: config.trace,
         factsTopK: config.factsTopK,

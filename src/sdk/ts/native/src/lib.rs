@@ -169,6 +169,10 @@ const ARTIFACT_WARM_ERROR_PREFIX: &str = "RATEL_ARTIFACT_WARM_ERROR:";
 /// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
 const ARTIFACT_ERROR_PREFIX: &str = "RATEL_ARTIFACT_ERROR:";
 
+/// Private NAPI→TypeScript transport prefix for system-one (Jev) errors.
+/// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
+const SYSTEM_ONE_ERROR_PREFIX: &str = "RATEL_SYSTEM_ONE_ERROR:";
+
 /// Private NAPI→TypeScript transport prefix for Ratel Cloud errors.
 /// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
 const CLOUD_ERROR_PREFIX: &str = "RATEL_CLOUD_ERROR:";
@@ -208,8 +212,56 @@ fn uses_dense(method: &str, reranker: Option<&RerankerConfig>) -> bool {
     dense(method) || reranker.is_some_and(|r| dense(&r.method))
 }
 
+fn system_one_error_code(error: &core::SystemOneError) -> &'static str {
+    match error {
+        core::SystemOneError::Config { .. } => "Config",
+        core::SystemOneError::Unauthorized { .. } => "Unauthorized",
+        core::SystemOneError::RateLimited => "RateLimited",
+        core::SystemOneError::Http { .. } => "Http",
+        core::SystemOneError::Unreachable { .. } => "Unreachable",
+        core::SystemOneError::Malformed { .. } => "Malformed",
+        _ => "Unknown",
+    }
+}
+
+/// Embedder and option errors keep their plain message (the TS side already
+/// classifies embedder messages); a system-one failure travels in a private
+/// envelope so TS can raise a typed `SystemOneError` without parsing prose.
 fn map_search_error(error: core::SearchError) -> napi::Error {
-    napi::Error::from_reason(error.to_string())
+    match error {
+        core::SearchError::SystemOne(inner) => {
+            let status = match &inner {
+                core::SystemOneError::Unauthorized { status }
+                | core::SystemOneError::Http { status } => Some(*status),
+                _ => None,
+            };
+            let payload = json!({
+                "code": system_one_error_code(&inner),
+                "message": inner.to_string(),
+                "status": status,
+            });
+            napi::Error::from_reason(format!("{SYSTEM_ONE_ERROR_PREFIX}{payload}"))
+        }
+        other => napi::Error::from_reason(other.to_string()),
+    }
+}
+
+fn system_one_config(
+    url: Option<String>,
+    api_key_env: Option<String>,
+    model: Option<String>,
+) -> core::SystemOneConfig {
+    let mut config = core::SystemOneConfig::default();
+    if let Some(url) = url {
+        config = config.with_url(url);
+    }
+    if let Some(name) = api_key_env {
+        config = config.with_api_key_env(name);
+    }
+    if let Some(model) = model {
+        config = config.with_model(model);
+    }
+    config
 }
 
 /// A Cloud failure travels in a private envelope so TS can raise a typed
@@ -1625,7 +1677,7 @@ impl ToolRegistry {
                 })?;
         if !matches!(parsed_method, SearchMethod::Bm25) {
             return Err(napi::Error::from_reason(
-                "semantic and hybrid search are asynchronous; use searchWithMethodAsync() or ToolCatalog.searchAsync()",
+                "semantic, hybrid, and systemOne search are asynchronous; use searchWithMethodAsync() or ToolCatalog.searchAsync()",
             ));
         }
         let hits = self
@@ -1689,6 +1741,21 @@ impl ToolRegistry {
             context: trace_event_context(context),
             _permit: is_dense.then(|| DenseOperationPermit::new(self.pending_dense.clone())),
         })
+    }
+
+    /// Point `"systemOne"` searches and rerankers at another Jev endpoint, key
+    /// or model; unset fields keep the defaults (`https://api.typesafe.ai`,
+    /// `TYPESAFE_API_KEY`, `jev-latest`).
+    #[napi]
+    pub fn set_system_one(
+        &self,
+        url: Option<String>,
+        api_key_env: Option<String>,
+        model: Option<String>,
+    ) -> napi::Result<()> {
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        registry.set_system_one(system_one_config(url, api_key_env, model));
+        Ok(())
     }
 
     /// Make Ratel Cloud this catalog's owner (ADR-0026); unset fields keep the
@@ -2704,7 +2771,7 @@ impl SkillRegistry {
                 })?;
         if !matches!(parsed_method, SearchMethod::Bm25) {
             return Err(napi::Error::from_reason(
-                "semantic and hybrid search are asynchronous; use searchWithMethodAsync() or SkillCatalog.searchAsync()",
+                "semantic, hybrid, and systemOne search are asynchronous; use searchWithMethodAsync() or SkillCatalog.searchAsync()",
             ));
         }
         let hits = self
@@ -2768,6 +2835,21 @@ impl SkillRegistry {
             context: trace_event_context(context),
             _permit: is_dense.then(|| DenseOperationPermit::new(self.pending_dense.clone())),
         })
+    }
+
+    /// Point `"systemOne"` searches and rerankers at another Jev endpoint, key
+    /// or model; unset fields keep the defaults (`https://api.typesafe.ai`,
+    /// `TYPESAFE_API_KEY`, `jev-latest`).
+    #[napi]
+    pub fn set_system_one(
+        &self,
+        url: Option<String>,
+        api_key_env: Option<String>,
+        model: Option<String>,
+    ) -> napi::Result<()> {
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
+        registry.set_system_one(system_one_config(url, api_key_env, model));
+        Ok(())
     }
 
     /// See `ToolRegistry.build_embeddings`.
