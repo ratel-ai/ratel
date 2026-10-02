@@ -308,6 +308,9 @@ pub(crate) struct HttpCloud {
     config: CloudConfig,
     fast: ureq::Agent,
     slow: ureq::Agent,
+    /// A key that bypasses the environment; tests set it rather than mutate
+    /// the process environment other threads are reading.
+    key_override: Option<String>,
 }
 
 impl HttpCloud {
@@ -325,14 +328,25 @@ impl HttpCloud {
             config,
             fast: agent(FAST_TIMEOUT_SECS),
             slow: agent(SLOW_TIMEOUT_SECS),
+            key_override: None,
         }
     }
 }
 
 impl HttpCloud {
+    /// Use `key` instead of reading the environment.
+    #[cfg(test)]
+    pub(crate) fn with_key(mut self, key: impl Into<String>) -> Self {
+        self.key_override = Some(key.into());
+        self
+    }
+
     /// Read the key at call time; an unset variable is a clear `Config` error,
     /// not a downstream 401.
     fn bearer(&self) -> Result<String, CloudError> {
+        if let Some(key) = &self.key_override {
+            return Ok(format!("Bearer {key}"));
+        }
         let var = &self.config.api_key_env;
         std::env::var(var)
             .map(|key| format!("Bearer {key}"))
@@ -542,12 +556,8 @@ mod tests {
     use super::*;
     use crate::test_support::{MockHttpRequest, read_http_request_full};
 
+    /// An environment variable no test sets: tests inject the key instead.
     const KEY: &str = "RATEL_CORE_CLOUD_TEST_KEY";
-
-    fn set_key() {
-        // A unique test-only name no other thread reads.
-        unsafe { std::env::set_var(KEY, "cloud-token") };
-    }
 
     /// Answers each connection with the next `(status, extra headers, body)`
     /// and reports the requests it saw.
@@ -592,6 +602,7 @@ mod tests {
 
     fn client(url: &str) -> HttpCloud {
         HttpCloud::new(CloudConfig::default().with_url(url).with_api_key_env(KEY))
+            .with_key("cloud-token")
     }
 
     fn tool(id: &str) -> SnapshotTool {
@@ -626,7 +637,6 @@ mod tests {
 
     #[test]
     fn pick_sends_the_contract_and_reads_the_ranking() {
-        set_key();
         let (url, rx) = mock(vec![(
             200,
             "",
@@ -656,7 +666,6 @@ mod tests {
 
     #[test]
     fn pick_drops_repeats_and_clamps_scores() {
-        set_key();
         let (url, _rx) = mock(vec![(
             200,
             "",
@@ -671,7 +680,6 @@ mod tests {
 
     #[test]
     fn statuses_map_to_typed_errors() {
-        set_key();
         let err = |msg: &str| format!(r#"{{"error":{{"message":"{msg}"}}}}"#);
         let (url, _rx) = mock(vec![
             (401, "", err("bad key").into()),
@@ -717,8 +725,33 @@ mod tests {
     }
 
     #[test]
+    fn forbidden_too_large_and_a_bare_rate_limit_are_typed() {
+        let err = |msg: &str| format!(r#"{{"error":{{"message":"{msg}"}}}}"#);
+        let (url, _rx) = mock(vec![
+            (403, "", err("wrong project").into()),
+            (413, "", err("snapshot too big").into()),
+            (429, "", err("slow down").into()),
+        ]);
+        let c = client(&url);
+        let pick = || c.pick("q", PickMode::Precise, 5).unwrap_err();
+        assert_eq!(pick(), CloudError::Unauthorized { status: 403 });
+        assert_eq!(
+            pick(),
+            CloudError::TooLarge {
+                message: "snapshot too big".into()
+            }
+        );
+        assert_eq!(
+            pick(),
+            CloudError::RateLimited {
+                retry_after_secs: None
+            },
+            "no Retry-After header, no wait hint"
+        );
+    }
+
+    #[test]
     fn the_status_decides_even_when_the_body_is_unreadable() {
-        set_key();
         // Not UTF-8: an error page that cannot be read as text.
         let garbage = vec![0xff, 0xfe, b'<', b'h', 0xc3];
         let (url, _rx) = mock(vec![
@@ -755,7 +788,6 @@ mod tests {
             c.pick("q", PickMode::Instant, 5),
             Err(CloudError::Config { .. })
         ));
-        set_key();
         let long = "x".repeat(2_001);
         assert!(matches!(
             client("http://127.0.0.1:9").pick(&long, PickMode::Instant, 5),
@@ -765,7 +797,6 @@ mod tests {
 
     #[test]
     fn put_snapshot_sends_the_contract_and_reads_the_version() {
-        set_key();
         let (url, rx) = mock(vec![(
             200,
             "etag: \"abc\"\r\n",
@@ -803,7 +834,6 @@ mod tests {
 
     #[test]
     fn an_oversized_snapshot_fails_before_any_request() {
-        set_key();
         let many: Vec<SnapshotTool> = (0..5_001).map(|i| tool(&format!("t{i}"))).collect();
         assert!(matches!(
             client("http://127.0.0.1:9").put_snapshot("svc", &many),
@@ -817,7 +847,6 @@ mod tests {
 
     #[test]
     fn an_unreachable_cloud_is_typed() {
-        set_key();
         let port = TcpListener::bind("127.0.0.1:0")
             .unwrap()
             .local_addr()

@@ -298,7 +298,8 @@ impl crate::cloud::CloudApi for ScriptedCloud {
 }
 /// A [`crate::system_one::SystemOne`] that answers from a script and records
 /// the candidate ids it was offered — registry tests use it in place of the
-/// HTTP client.
+/// HTTP client. Like the real client it only ranks offered ids and returns
+/// every candidate, the unscripted ones last at 0.
 pub(crate) struct ScriptedSystemOne {
     reply: Result<Vec<(String, f32)>, crate::SystemOneError>,
     offered: std::sync::Mutex<Vec<Vec<String>>>,
@@ -344,11 +345,20 @@ impl crate::system_one::SystemOne for ScriptedSystemOne {
         kind: crate::CandidateKind,
     ) -> Result<Vec<(String, f32)>, crate::SystemOneError> {
         self.kinds.lock().unwrap().push(kind);
-        self.offered
-            .lock()
-            .unwrap()
-            .push(candidates.iter().map(|c| c.id.clone()).collect());
-        let mut ranked = self.reply.clone()?;
+        let offered: Vec<String> = candidates.iter().map(|c| c.id.clone()).collect();
+        self.offered.lock().unwrap().push(offered.clone());
+        // Behave like the real client: rank only what was offered, and return
+        // every other candidate after the scripted ones at 0, in input order.
+        let scripted = self.reply.clone()?;
+        let mut ranked: Vec<(String, f32)> = scripted
+            .into_iter()
+            .filter(|(id, _)| offered.contains(id))
+            .collect();
+        for id in offered {
+            if !ranked.iter().any(|(r, _)| *r == id) {
+                ranked.push((id, 0.0));
+            }
+        }
         ranked.truncate(top_k);
         Ok(ranked)
     }

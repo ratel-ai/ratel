@@ -305,6 +305,9 @@ struct JevChoice {
 pub(crate) struct JevSystemOne {
     config: SystemOneConfig,
     agent: ureq::Agent,
+    /// A key that bypasses the environment; tests set it rather than mutate
+    /// the process environment other threads are reading.
+    key_override: Option<String>,
 }
 
 impl JevSystemOne {
@@ -316,12 +319,26 @@ impl JevSystemOne {
             .http_status_as_error(false)
             .build()
             .into();
-        Self { config, agent }
+        Self {
+            config,
+            agent,
+            key_override: None,
+        }
+    }
+
+    /// Use `key` instead of reading the environment.
+    #[cfg(test)]
+    pub(crate) fn with_key(mut self, key: impl Into<String>) -> Self {
+        self.key_override = Some(key.into());
+        self
     }
 
     /// Read the key at call time; an unset variable is a clear `Config` error,
     /// not a downstream 401.
     fn api_key(&self) -> Result<String, SystemOneError> {
+        if let Some(key) = &self.key_override {
+            return Ok(key.clone());
+        }
         let var = &self.config.api_key_env;
         std::env::var(var).map_err(|_| SystemOneError::Config {
             message: format!("api_key_env=\"{var}\" but that environment variable is not set"),
@@ -644,12 +661,8 @@ mod tests {
     use super::*;
     use crate::test_support::{MockHttpRequest, read_http_request_full};
 
+    /// An environment variable no test sets: tests inject the key instead.
     const KEY: &str = "RATEL_CORE_JEV_TEST_KEY";
-
-    fn set_key() {
-        // A unique test-only name no other thread reads.
-        unsafe { std::env::set_var(KEY, "jev-token") };
-    }
 
     fn cands(ids: &[&str]) -> Vec<Candidate> {
         ids.iter()
@@ -737,6 +750,7 @@ mod tests {
                 .with_url(url)
                 .with_api_key_env(KEY),
         )
+        .with_key("jev-token")
     }
 
     #[test]
@@ -749,7 +763,6 @@ mod tests {
 
     #[test]
     fn asks_one_choice_question_and_ranks_by_probability() {
-        set_key();
         let scores = HashMap::from([
             ("text of refund".to_string(), 0.93),
             ("text of list".to_string(), 0.07),
@@ -783,7 +796,6 @@ mod tests {
 
     #[test]
     fn a_large_catalog_runs_as_a_tournament() {
-        set_key();
         // 400 candidates → three groups of ≤150, then a final round.
         let ids: Vec<String> = (0..400).map(|i| format!("tool{i:03}")).collect();
         let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
@@ -810,7 +822,6 @@ mod tests {
 
     #[test]
     fn a_top_k_as_large_as_a_group_still_converges() {
-        set_key();
         // 160 candidates in groups of [150, 10]; keeping the top 150 of each
         // would advance the whole field and never finish.
         let ids: Vec<String> = (0..160).map(|i| format!("tool{i:03}")).collect();
@@ -838,7 +849,6 @@ mod tests {
 
     #[test]
     fn a_char_budget_split_still_converges() {
-        set_key();
         // 50 options of 2,000 chars split [40, 10] by the 80,000-char budget;
         // a reranker depth of 45 would keep every candidate of both groups.
         let many: Vec<Candidate> = (0..50)
@@ -866,8 +876,31 @@ mod tests {
     }
 
     #[test]
+    fn a_catalog_whose_group_winners_overflow_one_question_runs_another_round() {
+        // 1,640 options of 2,000 chars split into 41 groups of 40. Their 41
+        // best still exceed one question's 80,000 chars, so they play a second
+        // round of groups before the final: 41 + 2 + 1 requests.
+        let many: Vec<Candidate> = (0..1_640)
+            .map(|i| Candidate {
+                id: format!("c{i:04}"),
+                text: format!("{i:04}{}", "y".repeat(MAX_OPTION_CHARS - 4)),
+            })
+            .collect();
+        let best = many[1_234].text.clone();
+        let (url, seen) = mock(by_text(HashMap::from([(best, 0.9)])), 44);
+        let ranked = client(&url)
+            .rank("q", &many, 5, CandidateKind::Tool)
+            .unwrap();
+        assert_eq!(ranked[0].0, "c1234");
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            44,
+            "41 groups, a 2-group round, the final"
+        );
+    }
+
+    #[test]
     fn each_kind_asks_its_own_question() {
-        set_key();
         for kind in [
             CandidateKind::Tool,
             CandidateKind::Skill,
@@ -909,7 +942,6 @@ mod tests {
 
     #[test]
     fn statuses_map_to_typed_errors() {
-        set_key();
         let err = |msg: &str| format!(r#"{{"error":{{"message":"{msg}"}}}}"#);
         let replies: Vec<(u16, &str, String)> = vec![
             (400, "", err("bad question")),
@@ -1045,7 +1077,6 @@ mod tests {
 
     #[test]
     fn a_non_ranking_answer_is_malformed() {
-        set_key();
         let (url, _seen) = mock(
             Box::new(|_| (200, String::new(), r#"{"nope":true}"#.into())),
             1,
@@ -1071,7 +1102,6 @@ mod tests {
 
     #[test]
     fn an_unreachable_endpoint_is_typed() {
-        set_key();
         let port = TcpListener::bind("127.0.0.1:0")
             .unwrap()
             .local_addr()

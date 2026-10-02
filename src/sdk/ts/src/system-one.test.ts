@@ -290,3 +290,23 @@ describe("SkillCatalog systemOne", () => {
     expect(hits.map((h) => h.skillId)).toEqual([...offered].reverse());
   });
 });
+
+describe("SkillCatalog systemOne errors", () => {
+  it("throws a typed error when a standalone skill search fails", async () => {
+    mock.reset();
+    mock.reply(401, { error: { message: "bad key" } });
+    const skills = new SkillCatalog({
+      method: "systemOne",
+      systemOne: { url: mock.url, apiKeyEnv: KEY_ENV },
+    });
+    await skills.register([
+      { id: "pdf_forms", name: "pdf_forms", description: "fill pdf forms", body: "b" },
+    ]);
+
+    const error = await skills.searchAsync("pdf", 5).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(SystemOneError);
+    expect((error as SystemOneError).code).toBe("Unauthorized");
+    expect((error as SystemOneError).status).toBe(401);
+  });
+});

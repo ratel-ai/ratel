@@ -267,3 +267,17 @@ async def test_a_rate_limit_falls_back_and_reports_retry_after_when_standalone(
     assert info.value.code == "RateLimited"
     assert info.value.retry_after_secs == 7
 
+
+async def test_a_standalone_skill_search_raises_a_typed_error(mock: MockSystemOne) -> None:
+    mock.reply(401, {"error": {"message": "bad key"}})
+    skills = SkillCatalog(
+        method="systemOne", system_one={"url": mock.url, "api_key_env": KEY_ENV}
+    )
+    await skills.register([Skill(id="pdf_forms", name="pdf_forms", description="fill pdf forms")])
+
+    with pytest.raises(SystemOneError) as info:
+        await skills.search_async("pdf", 5)
+
+    assert info.value.code == "Unauthorized"
+    assert info.value.status == 401
+

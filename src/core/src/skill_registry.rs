@@ -2683,7 +2683,9 @@ mod tests {
                 SearchOptions::new(SearchMethod::SystemOne),
             )
             .unwrap();
-        assert_eq!(skill_ids(&hits), vec!["openapi_spec"]);
+        assert_eq!(skill_ids(&hits)[0], "openapi_spec");
+        assert_eq!(hits.len(), 4, "every skill is ranked, unscored ones last");
+        assert!(hits[1..].iter().all(|h| h.score == 0.0));
         assert_eq!(s1.offered()[0].len(), 4, "every skill is a candidate");
     }
 

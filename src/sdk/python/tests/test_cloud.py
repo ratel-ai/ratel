@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from ratel_ai import CloudError, ExecutableTool, ToolCatalog
+from ratel_ai import CloudError, ExecutableTool, ToolCatalog, TraceSinkConfig
 
 KEY_ENV = "RATEL_SDK_PY_CLOUD_TEST_KEY"
 SNAPSHOT = "/api/v1/catalog/snapshot"
@@ -284,4 +284,39 @@ def test_an_unknown_on_sync_error_is_rejected(mock: MockCloud) -> None:
         ToolCatalog(
             cloud={"url": mock.url, "api_key_env": KEY_ENV, "on_sync_error": "warning"}  # type: ignore[typeddict-item]
         )
+
+
+async def test_sync_now_re_sends_after_a_sync_that_only_warned(mock: MockCloud) -> None:
+    mock.syncs.append((503, {}))
+    catalog = _catalog(mock, on_sync_error="warn")
+    with pytest.warns(RuntimeWarning):
+        await catalog.register(_tool("refund"))
+    assert (await catalog.sync_now()).skipped is False
+    assert len(mock.of(SNAPSHOT)) == 2
+
+
+async def test_the_next_register_re_sends_after_a_failure(mock: MockCloud) -> None:
+    mock.syncs.append((503, {}))
+    catalog = _catalog(mock)
+    with pytest.raises(CloudError):
+        await catalog.register(_tool("refund"))
+    await catalog.register(_tool("charge"))
+    assert [t["id"] for t in mock.of(SNAPSHOT)[-1]["body"]["tools"]] == ["charge", "refund"]
+
+
+async def test_a_cloud_pick_carries_the_turn_id(mock: MockCloud) -> None:
+    catalog = ToolCatalog(
+        trace=TraceSinkConfig(kind="memory", session_id="s"),
+        cloud={"url": mock.url, "api_key_env": KEY_ENV, "source_id": "svc"},
+    )
+    await catalog.register(_tool("refund"))
+    await catalog.search_async("q", 5, turn_id="turn-7")
+    search = next(e for e in catalog.drain_trace_events() if e["type"] == "search")
+    assert search["turn_id"] == "turn-7"
+    assert search["stages"][0]["name"] == "cloud:precise"
+
+
+async def test_sync_now_needs_a_cloud_catalog() -> None:
+    with pytest.raises(RuntimeError, match="cloud"):
+        await ToolCatalog().sync_now()
 

@@ -4282,7 +4282,9 @@ mod tests {
                 SearchOptions::new(SearchMethod::SystemOne),
             )
             .unwrap();
-        assert_eq!(ids_of(&hits), vec!["erase_disk", "delete_file"]);
+        assert_eq!(ids_of(&hits)[..2], ["erase_disk", "delete_file"]);
+        assert_eq!(hits.len(), 4, "every tool is ranked, unscored ones last");
+        assert!(hits[2..].iter().all(|h| h.score == 0.0));
         assert!(hits.iter().all(|h| !h.fused));
         assert!(hits.iter().all(|h| (h.relevance - h.score).abs() < 1e-6));
         let mut offered = s1.offered().remove(0);
@@ -4335,7 +4337,8 @@ mod tests {
                     .with_reranker(Reranker::new(SearchMethod::SystemOne)),
             )
             .unwrap();
-        assert_eq!(ids_of(&hits), vec!["purge_cache", "delete_file"]);
+        assert_eq!(ids_of(&hits)[..2], ["purge_cache", "delete_file"]);
+        assert!(hits[2..].iter().all(|h| h.score == 0.0));
         assert_eq!(
             s1.offered(),
             vec![

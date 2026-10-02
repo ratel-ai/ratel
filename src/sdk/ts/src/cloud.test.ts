@@ -297,3 +297,51 @@ describe("validation parity", () => {
     await expect(skills.searchAsync("q", 3, { mode: "precise" })).rejects.toThrow(/mode/);
   });
 });
+
+describe("cloud sync recovery and correlation", () => {
+  it("re-sends through syncNow after a sync that only warned", async () => {
+    mock.syncs.push({ status: 503, body: {} });
+    const c = catalog({ onSyncError: "warn" });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await c.register(tool("refund")); // fails, only warns
+    warn.mockRestore();
+    expect((await c.syncNow()).skipped).toBe(false); // retried by syncNow
+    expect(mock.of(SNAPSHOT)).toHaveLength(2);
+  });
+
+  it("re-sends through the next register after a failure", async () => {
+    mock.syncs.push({ status: 503, body: {} });
+    const c = catalog();
+    await expect(c.register(tool("refund"))).rejects.toBeInstanceOf(CloudError);
+    await c.register(tool("charge"));
+    const last = mock.of(SNAPSHOT).at(-1);
+    expect((last?.body.tools as { id: string }[]).map((t) => t.id)).toEqual(["charge", "refund"]);
+  });
+
+  it("stamps a cloud pick with the caller's turn id", async () => {
+    const lines: string[] = [];
+    const c = new ToolCatalog({
+      cloud: { url: mock.url, apiKeyEnv: KEY_ENV, sourceId: "svc" },
+      trace: { kind: "callback", sessionId: "s", onEvent: (l) => lines.push(l) },
+    });
+    await c.register(tool("refund"));
+    await c.searchAsync("q", 5, { turnId: "turn-7" });
+    type Event = { type: string; turn_id?: string; stages?: { name: string }[] };
+    const findSearch = () =>
+      lines
+        .flatMap((l) => l.split("\n"))
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as Event)
+        .find((e) => e.type === "search");
+    // The callback sink delivers off the event loop; wait for the event.
+    const deadline = Date.now() + 2_000;
+    while (!findSearch() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
+    const search = findSearch();
+    expect(search?.turn_id).toBe("turn-7");
+    expect(search?.stages?.[0]?.name).toBe("cloud:precise");
+  });
+
+  it("syncNow needs a cloud catalog", async () => {
+    await expect(new ToolCatalog().syncNow()).rejects.toThrow(/cloud/);
+  });
+});
