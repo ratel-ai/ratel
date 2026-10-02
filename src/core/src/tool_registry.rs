@@ -529,6 +529,7 @@ impl ToolRegistry {
         {
             return Ok(SyncOutcome {
                 skipped: true,
+                unchanged: true,
                 ..outcome
             });
         }
@@ -4193,6 +4194,7 @@ mod tests {
         reg.cloud_sync("svc").unwrap();
         let again = reg.cloud_sync("svc").unwrap();
         assert!(again.skipped);
+        assert!(again.unchanged, "a skipped sync changed nothing");
         assert_eq!(again.catalog_version, "v1");
         assert_eq!(cloud.snapshot_count(), 1);
 
