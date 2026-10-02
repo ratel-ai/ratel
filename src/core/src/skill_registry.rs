@@ -797,11 +797,16 @@ impl SkillRegistry {
         let t = Instant::now();
         let (hits, stage_name) = if reranker.method() == SearchMethod::SystemOne {
             match self.system_one_rank(query, Some(&candidate_ids), top_k) {
-                Ok(ranked) => (to_skill_hits(ranked, Scale::Picked), "rerank"),
-                Err(_) => {
+                Ok(ranked) => (to_skill_hits(ranked, Scale::Picked), "rerank".to_string()),
+                // A transient failure must not fail the search: stage 1's order is
+                // still a ranking, and the stage name records why. Misconfiguration
+                // (no key, a rejected key, a refused request) fails every search the
+                // same way, so it is raised rather than hidden behind a fallback.
+                Err(e) if e.is_transient() => {
                     candidates.truncate(top_k);
-                    (candidates, "rerank_fallback")
+                    (candidates, format!("rerank_fallback:{}", e.code()))
                 }
+                Err(e) => return Err(SearchError::SystemOne(e)),
             }
         } else {
             let (mut rescored, scale) =
@@ -809,10 +814,10 @@ impl SkillRegistry {
             order_by_rescore(&mut rescored, &candidate_ids);
             let mut hits = to_skill_hits(rescored, scale);
             hits.truncate(top_k);
-            (hits, "rerank")
+            (hits, "rerank".to_string())
         };
         stages.push(SearchStage {
-            name: stage_name.into(),
+            name: stage_name,
             took_ms: t.elapsed().as_millis() as u64,
             top_score: hits.first().map(|h| h.score as f64),
         });
@@ -2716,5 +2721,26 @@ mod tests {
             )
             .unwrap();
         assert_eq!(skill_ids(&hits), skill_ids(&stage_one));
+    }
+
+    #[test]
+    fn a_misconfigured_skill_rerank_raises() {
+        let mut reg = rerank_catalog();
+        reg.set_system_one_for_test(Arc::new(ScriptedSystemOne::failing(
+            SystemOneError::Unauthorized { status: 401 },
+        )));
+        let result = reg.search_with_options(
+            "design the rest service",
+            3,
+            Origin::Direct,
+            SearchOptions::new(SearchMethod::Bm25)
+                .with_reranker(Reranker::new(SearchMethod::SystemOne)),
+        );
+        assert!(matches!(
+            result,
+            Err(SearchError::SystemOne(SystemOneError::Unauthorized {
+                status: 401
+            }))
+        ));
     }
 }

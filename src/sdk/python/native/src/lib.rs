@@ -445,28 +445,20 @@ create_exception!(
 );
 
 fn system_one_pyerr(e: core::SystemOneError) -> PyErr {
-    let code = match &e {
-        core::SystemOneError::Config { .. } => "Config",
-        core::SystemOneError::Unauthorized { .. } => "Unauthorized",
-        core::SystemOneError::RateLimited => "RateLimited",
-        core::SystemOneError::Http { .. } => "Http",
-        core::SystemOneError::Unreachable { .. } => "Unreachable",
-        core::SystemOneError::Malformed { .. } => "Malformed",
-        _ => "Unknown",
-    };
-    let status = match &e {
-        core::SystemOneError::Unauthorized { status } | core::SystemOneError::Http { status } => {
-            Some(*status)
-        }
+    let retry_after = match &e {
+        core::SystemOneError::RateLimited { retry_after_secs } => *retry_after_secs,
         _ => None,
     };
     Python::with_gil(|py| {
         let err = SystemOneError::new_err(e.to_string());
         let value = err.value(py);
-        if let Err(attr_err) = value.setattr("code", code) {
+        if let Err(attr_err) = value.setattr("code", e.code()) {
             return attr_err;
         }
-        if let Err(attr_err) = value.setattr("status", status) {
+        if let Err(attr_err) = value.setattr("status", e.status()) {
+            return attr_err;
+        }
+        if let Err(attr_err) = value.setattr("retry_after_secs", retry_after) {
             return attr_err;
         }
         err

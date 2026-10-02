@@ -1042,16 +1042,19 @@ impl ToolRegistry {
     /// stage.
     ///
     /// `SystemOne` — as the first stage or the reranker — sends the query and
-    /// candidate text to Jev (the registry's system-one endpoint). As a reranker, a
-    /// failed call falls back to stage 1's order and records a
-    /// `rerank_fallback` stage instead of a `rerank` one; as the first stage it
-    /// is an error. The usage arm does not apply to a system-one first stage.
+    /// candidate text to Jev (the registry's system-one endpoint). As the first
+    /// stage, any failure is an error. As a reranker, a transient failure
+    /// ([`SystemOneError::is_transient`]) falls back to stage 1's order and
+    /// records a `rerank_fallback:<code>` stage instead of `rerank`, while
+    /// misconfiguration (`Config`, `Unauthorized`, `InvalidRequest`) is an
+    /// error. The usage arm does not apply to a system-one first stage.
     ///
     /// # Errors
     /// [`SearchError::InvalidOptions`] when the reranker uses the first stage's
     /// method; [`SearchError::Embedder`] when either stage is semantic or
     /// hybrid and the embeddings are not built or the embedder fails;
-    /// [`SearchError::SystemOne`] when a system-one first stage fails.
+    /// [`SearchError::SystemOne`] when a system-one first stage fails, or a
+    /// system-one reranker is misconfigured.
     pub fn search_with_options(
         &self,
         query: &str,
@@ -1097,13 +1100,16 @@ impl ToolRegistry {
         let t = Instant::now();
         let (hits, stage_name) = if reranker.method() == SearchMethod::SystemOne {
             match self.system_one_rank(query, Some(&candidate_ids), top_k) {
-                Ok(ranked) => (to_search_hits(ranked, Scale::Picked), "rerank"),
-                // An enhancement failing must not fail the search: stage 1's
-                // order is still a ranking.
-                Err(_) => {
+                Ok(ranked) => (to_search_hits(ranked, Scale::Picked), "rerank".to_string()),
+                // A transient failure must not fail the search: stage 1's order is
+                // still a ranking, and the stage name records why. Misconfiguration
+                // (no key, a rejected key, a refused request) fails every search the
+                // same way, so it is raised rather than hidden behind a fallback.
+                Err(e) if e.is_transient() => {
                     candidates.truncate(top_k);
-                    (candidates, "rerank_fallback")
+                    (candidates, format!("rerank_fallback:{}", e.code()))
                 }
+                Err(e) => return Err(SearchError::SystemOne(e)),
             }
         } else {
             let (mut rescored, scale) =
@@ -1111,10 +1117,10 @@ impl ToolRegistry {
             order_by_rescore(&mut rescored, &candidate_ids);
             let mut hits = to_search_hits(rescored, scale);
             hits.truncate(top_k);
-            (hits, "rerank")
+            (hits, "rerank".to_string())
         };
         stages.push(SearchStage {
-            name: stage_name.into(),
+            name: stage_name,
             took_ms: t.elapsed().as_millis() as u64,
             top_score: hits.first().map(|h| h.score as f64),
         });
@@ -4291,7 +4297,9 @@ mod tests {
         let mut reg = rerank_catalog();
         system_one(
             &mut reg,
-            ScriptedSystemOne::failing(SystemOneError::RateLimited),
+            ScriptedSystemOne::failing(SystemOneError::RateLimited {
+                retry_after_secs: None,
+            }),
         );
         let err = reg
             .search_with_options(
@@ -4304,7 +4312,7 @@ mod tests {
             .expect("standalone failure surfaces");
         assert!(matches!(
             err,
-            SearchError::SystemOne(SystemOneError::RateLimited)
+            SearchError::SystemOne(SystemOneError::RateLimited { .. })
         ));
     }
 
@@ -4344,7 +4352,7 @@ mod tests {
         reg.set_trace_sink(sink.clone());
         system_one(
             &mut reg,
-            ScriptedSystemOne::failing(SystemOneError::Http { status: 503 }),
+            ScriptedSystemOne::failing(SystemOneError::Overloaded { status: 503 }),
         );
         let stage_one = reg.search("remove the file", 3);
         sink.drain();
@@ -4369,7 +4377,7 @@ mod tests {
             .into_iter()
             .map(|s| s.name)
             .collect();
-        assert_eq!(stages, vec!["bm25", "rerank_fallback"]);
+        assert_eq!(stages, vec!["bm25", "rerank_fallback:Overloaded"]);
     }
 
     #[test]
@@ -4384,6 +4392,77 @@ mod tests {
         )
         .unwrap();
         assert_eq!(s1.kinds(), vec![crate::CandidateKind::Tool]);
+    }
+
+    #[test]
+    fn a_misconfigured_system_one_rerank_raises_instead_of_falling_back() {
+        for error in [
+            SystemOneError::Config {
+                message: "no key".into(),
+            },
+            SystemOneError::Unauthorized { status: 401 },
+            SystemOneError::InvalidRequest {
+                status: 422,
+                message: "bad".into(),
+            },
+        ] {
+            let mut reg = rerank_catalog();
+            system_one(&mut reg, ScriptedSystemOne::failing(error.clone()));
+            let result = reg.search_with_options(
+                "remove the file",
+                3,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::SystemOne)),
+            );
+            match result {
+                Err(SearchError::SystemOne(raised)) => assert_eq!(raised, error),
+                _ => panic!("{} should raise", error.code()),
+            }
+        }
+    }
+
+    #[test]
+    fn every_transient_rerank_failure_falls_back_with_its_code() {
+        for error in [
+            SystemOneError::RateLimited {
+                retry_after_secs: Some(3),
+            },
+            SystemOneError::Overloaded { status: 529 },
+            SystemOneError::Timeout,
+            SystemOneError::Unreachable {
+                source: "down".into(),
+            },
+            SystemOneError::Http {
+                status: 500,
+                message: "boom".into(),
+            },
+            SystemOneError::Malformed {
+                source: "junk".into(),
+            },
+        ] {
+            let sink = Arc::new(MemorySink::new("s"));
+            let mut reg = rerank_catalog();
+            reg.set_trace_sink(sink.clone());
+            system_one(&mut reg, ScriptedSystemOne::failing(error.clone()));
+            reg.search_with_options(
+                "remove the file",
+                3,
+                Origin::Direct,
+                SearchOptions::new(SearchMethod::Bm25)
+                    .with_reranker(Reranker::new(SearchMethod::SystemOne)),
+            )
+            .unwrap_or_else(|_| panic!("{} should fall back", error.code()));
+            let last_stage = sink
+                .drain()
+                .into_iter()
+                .find_map(|e| match e.event {
+                    TraceEvent::Search { stages, .. } => stages.last().map(|s| s.name.clone()),
+                    _ => None,
+                })
+                .unwrap();
+            assert_eq!(last_stage, format!("rerank_fallback:{}", error.code()));
+        }
     }
 
     #[test]

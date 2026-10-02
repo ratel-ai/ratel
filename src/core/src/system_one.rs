@@ -141,7 +141,9 @@ impl SystemOneConfig {
     }
 }
 
-/// A system-one ranking failed.
+/// A system-one ranking failed. [`code`](Self::code) is the stable name the
+/// SDKs expose; [`is_transient`](Self::is_transient) splits failures a retry
+/// may cure from misconfiguration that will fail every time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SystemOneError {
@@ -156,23 +158,87 @@ pub enum SystemOneError {
         /// The HTTP status.
         status: u16,
     },
+    /// Jev refused the request itself (400/404/413/422): an unknown model,
+    /// options too long, a malformed question. Retrying sends the same thing.
+    InvalidRequest {
+        /// The HTTP status.
+        status: u16,
+        /// Jev's explanation, when it gave one.
+        message: String,
+    },
     /// Jev is rate limiting (429).
-    RateLimited,
-    /// Jev answered with another non-success status (e.g. 422, 529).
-    Http {
+    RateLimited {
+        /// Seconds to wait, from `Retry-After`, when Jev sent one.
+        retry_after_secs: Option<u64>,
+    },
+    /// Jev is up but cannot take the request now (503/529).
+    Overloaded {
         /// The HTTP status.
         status: u16,
     },
-    /// Jev could not be reached: DNS, TLS, connection refused, timeout.
+    /// The request timed out, locally or at a gateway (504).
+    Timeout,
+    /// Jev could not be reached: DNS, TLS, connection refused, a bad gateway
+    /// (502).
     Unreachable {
-        /// The underlying transport error.
+        /// The underlying error.
         source: String,
     },
-    /// Jev answered with something that is not a ranking.
+    /// Jev answered with another non-success status.
+    Http {
+        /// The HTTP status.
+        status: u16,
+        /// Jev's explanation, when it gave one.
+        message: String,
+    },
+    /// Jev answered success with something that is not a ranking.
     Malformed {
         /// What could not be read.
         source: String,
     },
+}
+
+impl SystemOneError {
+    /// A stable, machine-readable discriminant for the SDKs.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            SystemOneError::Config { .. } => "Config",
+            SystemOneError::Unauthorized { .. } => "Unauthorized",
+            SystemOneError::InvalidRequest { .. } => "InvalidRequest",
+            SystemOneError::RateLimited { .. } => "RateLimited",
+            SystemOneError::Overloaded { .. } => "Overloaded",
+            SystemOneError::Timeout => "Timeout",
+            SystemOneError::Unreachable { .. } => "Unreachable",
+            SystemOneError::Http { .. } => "Http",
+            SystemOneError::Malformed { .. } => "Malformed",
+        }
+    }
+
+    /// Whether a later attempt may succeed. `Config`, `Unauthorized` and
+    /// `InvalidRequest` fail the same way every time, so a reranker raises
+    /// them instead of silently falling back on every search.
+    #[must_use]
+    pub fn is_transient(&self) -> bool {
+        !matches!(
+            self,
+            SystemOneError::Config { .. }
+                | SystemOneError::Unauthorized { .. }
+                | SystemOneError::InvalidRequest { .. }
+        )
+    }
+
+    /// The HTTP status, when Jev answered with one.
+    #[must_use]
+    pub fn status(&self) -> Option<u16> {
+        match self {
+            SystemOneError::Unauthorized { status }
+            | SystemOneError::InvalidRequest { status, .. }
+            | SystemOneError::Overloaded { status }
+            | SystemOneError::Http { status, .. } => Some(*status),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for SystemOneError {
@@ -183,9 +249,21 @@ impl fmt::Display for SystemOneError {
                 f,
                 "jev rejected the key ({status}); check the key in api_key_env"
             ),
-            SystemOneError::RateLimited => write!(f, "jev is rate limiting (429); retry later"),
-            SystemOneError::Http { status } => write!(f, "jev returned HTTP {status}"),
+            SystemOneError::InvalidRequest { status, message } => {
+                write!(f, "jev refused the request ({status}): {message}")
+            }
+            SystemOneError::RateLimited { retry_after_secs } => match retry_after_secs {
+                Some(secs) => write!(f, "jev is rate limiting (429); retry in {secs}s"),
+                None => write!(f, "jev is rate limiting (429); retry later"),
+            },
+            SystemOneError::Overloaded { status } => {
+                write!(f, "jev is overloaded ({status}); retry later")
+            }
+            SystemOneError::Timeout => write!(f, "jev request timed out"),
             SystemOneError::Unreachable { source } => write!(f, "could not reach jev: {source}"),
+            SystemOneError::Http { status, message } => {
+                write!(f, "jev returned HTTP {status}: {message}")
+            }
             SystemOneError::Malformed { source } => write!(f, "malformed jev response: {source}"),
         }
     }
@@ -233,6 +311,9 @@ impl JevSystemOne {
     pub(crate) fn new(config: SystemOneConfig) -> Self {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(SYSTEM_ONE_TIMEOUT_SECS)))
+            // Read the status ourselves: error bodies carry Jev's explanation
+            // and 429 carries Retry-After.
+            .http_status_as_error(false)
             .build()
             .into();
         Self { config, agent }
@@ -247,13 +328,10 @@ impl JevSystemOne {
         })
     }
 
-    fn classify(e: ureq::Error) -> SystemOneError {
+    /// A transport failure: no HTTP status to read.
+    fn classify_transport(e: ureq::Error) -> SystemOneError {
         match e {
-            ureq::Error::StatusCode(status @ (401 | 403)) => {
-                SystemOneError::Unauthorized { status }
-            }
-            ureq::Error::StatusCode(429) => SystemOneError::RateLimited,
-            ureq::Error::StatusCode(status) => SystemOneError::Http { status },
+            ureq::Error::Timeout(_) => SystemOneError::Timeout,
             other => SystemOneError::Unreachable {
                 source: other.to_string(),
             },
@@ -294,13 +372,28 @@ impl JevSystemOne {
             .header("content-type", "application/json")
             .header("authorization", &format!("Bearer {key}"))
             .send_json(&body)
-            .map_err(Self::classify)?;
-        let parsed: JevResponse = resp
+            .map_err(Self::classify_transport)?;
+        let status = resp.status().as_u16();
+        let retry_after = retry_after_secs(resp.headers());
+        let text = resp
             .body_mut()
             .with_config()
             .limit(SYSTEM_ONE_RESPONSE_LIMIT_BYTES)
-            .read_json()
-            .map_err(|e| SystemOneError::Malformed {
+            .read_to_string();
+        if !(200..300).contains(&status) {
+            // The status decides the error; an unreadable error body only
+            // costs the explanation.
+            let message = text.map(|t| error_message(&t)).unwrap_or_default();
+            return Err(classify_status(status, message, retry_after));
+        }
+        let text = text.map_err(|e| match e {
+            ureq::Error::Timeout(_) => SystemOneError::Timeout,
+            other => SystemOneError::Malformed {
+                source: format!("unreadable response body: {other}"),
+            },
+        })?;
+        let parsed: JevResponse =
+            serde_json::from_str(&text).map_err(|e| SystemOneError::Malformed {
                 source: e.to_string(),
             })?;
         let answer = parsed
@@ -412,6 +505,51 @@ impl SystemOne for JevSystemOne {
     }
 }
 
+/// Map a non-2xx Jev status to its error.
+fn classify_status(status: u16, message: String, retry_after: Option<u64>) -> SystemOneError {
+    match status {
+        401 | 403 => SystemOneError::Unauthorized { status },
+        400 | 404 | 413 | 422 => SystemOneError::InvalidRequest { status, message },
+        429 => SystemOneError::RateLimited {
+            retry_after_secs: retry_after,
+        },
+        503 | 529 => SystemOneError::Overloaded { status },
+        504 => SystemOneError::Timeout,
+        502 => SystemOneError::Unreachable {
+            source: format!("bad gateway (502): {message}"),
+        },
+        _ => SystemOneError::Http { status, message },
+    }
+}
+
+/// `Retry-After` in seconds, when sent in that form.
+pub(crate) fn retry_after_secs(headers: &ureq::http::HeaderMap) -> Option<u64> {
+    headers
+        .get("retry-after")?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()
+}
+
+/// An error body's explanation: `{"error":{"message"}}`, `{"error":"…"}`,
+/// `{"detail":"…"}` or `{"message":"…"}`, else the start of the raw body.
+pub(crate) fn error_message(body: &str) -> String {
+    let parsed: Option<serde_json::Value> = serde_json::from_str(body).ok();
+    parsed
+        .as_ref()
+        .and_then(|v| {
+            v["error"]["message"]
+                .as_str()
+                .or_else(|| v["error"].as_str())
+                .or_else(|| v["detail"].as_str())
+                .or_else(|| v["message"].as_str())
+        })
+        .map(str::to_string)
+        .unwrap_or_else(|| body.chars().take(500).collect())
+}
+
 fn option_text(c: &Candidate) -> String {
     c.text.chars().take(MAX_OPTION_CHARS).collect()
 }
@@ -501,7 +639,9 @@ mod tests {
 
     /// A Jev stand-in. `answer` maps the criteria a request carries to the
     /// probabilities it returns; every request is recorded.
-    type Answer = Box<dyn Fn(&serde_json::Map<String, serde_json::Value>) -> (u16, String) + Send>;
+    /// `(status, extra header lines, body)` for one request.
+    type Answer =
+        Box<dyn Fn(&serde_json::Map<String, serde_json::Value>) -> (u16, String, String) + Send>;
 
     fn mock(answer: Answer, expected: usize) -> (String, Arc<Mutex<Vec<MockHttpRequest>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -524,10 +664,10 @@ mod tests {
                             .and_then(|q| q["criteria"].as_object())
                             .cloned()
                             .unwrap_or_default();
-                        let (status, body) = answer(&criteria);
+                        let (status, headers, body) = answer(&criteria);
                         log.lock().unwrap().push(request);
                         let response = format!(
-                            "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\n\
+                            "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\n{headers}\
                              content-length: {}\r\nconnection: close\r\n\r\n{body}",
                             body.len()
                         );
@@ -560,6 +700,7 @@ mod tests {
                 .collect();
             (
                 200,
+                String::new(),
                 serde_json::json!({"model": "jev-1.13.0",
                     "answers": {"tool": {"type": "choice", "probabilities": probs}}})
                 .to_string(),
@@ -713,6 +854,7 @@ mod tests {
                     .collect();
                 (
                     200,
+                    String::new(),
                     serde_json::json!({"answers": {noun: {"type": "choice", "probabilities": probs}}})
                         .to_string(),
                 )
@@ -736,26 +878,146 @@ mod tests {
     #[test]
     fn statuses_map_to_typed_errors() {
         set_key();
-        let statuses = Arc::new(Mutex::new(vec![401_u16, 429, 529]));
-        let answer: Answer = {
-            let statuses = statuses.clone();
-            Box::new(move |_| (statuses.lock().unwrap().remove(0), "{}".to_string()))
-        };
-        let (url, _seen) = mock(answer, 3);
+        let err = |msg: &str| format!(r#"{{"error":{{"message":"{msg}"}}}}"#);
+        let replies: Vec<(u16, &str, String)> = vec![
+            (400, "", err("bad question")),
+            (401, "", err("bad key")),
+            (403, "", err("forbidden")),
+            (404, "", err("no such model")),
+            (413, "", err("too long")),
+            (422, "", err("too many options")),
+            (429, "retry-after: 7\r\n", err("slow down")),
+            (429, "", err("slow down")),
+            (500, "", err("boom")),
+            (502, "", "<html>bad gateway</html>".into()),
+            (503, "", err("busy")),
+            (504, "", err("deadline")),
+            (529, "", err("overloaded")),
+        ];
+        let n = replies.len();
+        let queue = Arc::new(Mutex::new(replies));
+        let answer: Answer = Box::new(move |_| {
+            let (status, headers, body) = queue.lock().unwrap().remove(0);
+            (status, headers.to_string(), body)
+        });
+        let (url, _seen) = mock(answer, n);
         let c = client(&url);
         let call = || {
             c.rank("q", &cands(&["a"]), 1, CandidateKind::Tool)
                 .unwrap_err()
         };
+        let invalid = |status, message: &str| SystemOneError::InvalidRequest {
+            status,
+            message: message.into(),
+        };
+        assert_eq!(call(), invalid(400, "bad question"));
         assert_eq!(call(), SystemOneError::Unauthorized { status: 401 });
-        assert_eq!(call(), SystemOneError::RateLimited);
-        assert_eq!(call(), SystemOneError::Http { status: 529 });
+        assert_eq!(call(), SystemOneError::Unauthorized { status: 403 });
+        assert_eq!(call(), invalid(404, "no such model"));
+        assert_eq!(call(), invalid(413, "too long"));
+        assert_eq!(call(), invalid(422, "too many options"));
+        assert_eq!(
+            call(),
+            SystemOneError::RateLimited {
+                retry_after_secs: Some(7)
+            }
+        );
+        assert_eq!(
+            call(),
+            SystemOneError::RateLimited {
+                retry_after_secs: None
+            }
+        );
+        assert_eq!(
+            call(),
+            SystemOneError::Http {
+                status: 500,
+                message: "boom".into()
+            }
+        );
+        assert!(matches!(call(), SystemOneError::Unreachable { .. }));
+        assert_eq!(call(), SystemOneError::Overloaded { status: 503 });
+        assert_eq!(call(), SystemOneError::Timeout);
+        assert_eq!(call(), SystemOneError::Overloaded { status: 529 });
+    }
+
+    #[test]
+    fn codes_and_transience_split_misconfiguration_from_outages() {
+        let cases = [
+            (
+                SystemOneError::Config {
+                    message: String::new(),
+                },
+                "Config",
+                false,
+            ),
+            (
+                SystemOneError::Unauthorized { status: 401 },
+                "Unauthorized",
+                false,
+            ),
+            (
+                SystemOneError::InvalidRequest {
+                    status: 422,
+                    message: String::new(),
+                },
+                "InvalidRequest",
+                false,
+            ),
+            (
+                SystemOneError::RateLimited {
+                    retry_after_secs: None,
+                },
+                "RateLimited",
+                true,
+            ),
+            (
+                SystemOneError::Overloaded { status: 529 },
+                "Overloaded",
+                true,
+            ),
+            (SystemOneError::Timeout, "Timeout", true),
+            (
+                SystemOneError::Unreachable {
+                    source: String::new(),
+                },
+                "Unreachable",
+                true,
+            ),
+            (
+                SystemOneError::Http {
+                    status: 500,
+                    message: String::new(),
+                },
+                "Http",
+                true,
+            ),
+            (
+                SystemOneError::Malformed {
+                    source: String::new(),
+                },
+                "Malformed",
+                true,
+            ),
+        ];
+        for (error, code, transient) in cases {
+            assert_eq!(error.code(), code);
+            assert_eq!(error.is_transient(), transient, "{code}");
+        }
+        assert_eq!(
+            SystemOneError::Overloaded { status: 529 }.status(),
+            Some(529)
+        );
+        assert_eq!(SystemOneError::Timeout.status(), None);
     }
 
     #[test]
     fn a_non_ranking_answer_is_malformed() {
         set_key();
-        let (url, _seen) = mock(Box::new(|_| (200, r#"{"nope":true}"#.into())), 1);
+        let (url, _seen) = mock(
+            Box::new(|_| (200, String::new(), r#"{"nope":true}"#.into())),
+            1,
+        );
         assert!(matches!(
             client(&url).rank("q", &cands(&["a"]), 1, CandidateKind::Tool),
             Err(SystemOneError::Malformed { .. })

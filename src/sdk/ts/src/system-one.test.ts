@@ -24,7 +24,8 @@ interface SeenRequest {
 class MockSystemOne {
   readonly seen: SeenRequest[] = [];
   private preferred: { id: string; p: number } | undefined;
-  private readonly replies: { status: number; body: unknown }[] = [];
+  private readonly replies: { status: number; body: unknown; headers?: Record<string, string> }[] =
+    [];
   private server!: Server;
   url = "";
 
@@ -58,7 +59,10 @@ class MockSystemOne {
           },
         },
       };
-      res.writeHead(reply.status, { "content-type": "application/json" });
+      res.writeHead(reply.status, {
+        "content-type": "application/json",
+        ...("headers" in reply ? reply.headers : {}),
+      });
       res.end(JSON.stringify(reply.body));
     });
     await new Promise<void>((resolve) => this.server.listen(0, "127.0.0.1", resolve));
@@ -79,8 +83,8 @@ class MockSystemOne {
     this.preferred = { id, p };
   }
 
-  reply(status: number, body: unknown = {}): void {
-    this.replies.push({ status, body });
+  reply(status: number, body: unknown = {}, headers?: Record<string, string>): void {
+    this.replies.push({ status, body, headers });
   }
 
   reset(): void {
@@ -202,6 +206,36 @@ describe("ToolCatalog systemOne", () => {
     const hits = await c.searchAsync("file", 3);
 
     expect(hits.map((h) => h.toolId)).toEqual(await bm25Order("file", 3));
+  });
+
+  it("throws instead of falling back when the reranker is misconfigured", async () => {
+    mock.reset();
+    mock.reply(401, { error: { message: "bad key" } });
+    const c = catalog({ reranker: { method: "systemOne" } });
+    await c.register(TOOLS);
+
+    const error = await c.searchAsync("file", 3).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(SystemOneError);
+    expect((error as SystemOneError).code).toBe("Unauthorized");
+    expect((error as SystemOneError).status).toBe(401);
+  });
+
+  it("falls back on a rate limit and reports Retry-After when standalone", async () => {
+    mock.reset();
+    mock.reply(429, {}, { "retry-after": "7" });
+    const reranked = catalog({ reranker: { method: "systemOne" } });
+    await reranked.register(TOOLS);
+    expect((await reranked.searchAsync("file", 3)).map((h) => h.toolId)).toEqual(
+      await bm25Order("file", 3),
+    );
+
+    mock.reply(429, {}, { "retry-after": "7" });
+    const standalone = catalog({ method: "systemOne" });
+    await standalone.register(TOOLS);
+    const error = (await standalone.searchAsync("q", 3).catch((e: unknown) => e)) as SystemOneError;
+    expect(error.code).toBe("RateLimited");
+    expect(error.retryAfterSecs).toBe(7);
   });
 
   it("takes per-call options, including turning the reranker off", async () => {

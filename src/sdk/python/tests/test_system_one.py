@@ -24,7 +24,7 @@ class MockSystemOne:
 
     def __init__(self) -> None:
         self.seen: list[dict[str, Any]] = []
-        self.replies: list[tuple[int, dict[str, Any]]] = []
+        self.replies: list[tuple[int, dict[str, Any], dict[str, str]]] = []
         self.preferred: tuple[str, float] | None = None
         mock = self
 
@@ -39,8 +39,9 @@ class MockSystemOne:
                         "body": body,
                     }
                 )
+                headers: dict[str, str] = {}
                 if mock.replies:
-                    status, payload = mock.replies.pop(0)
+                    status, payload, headers = mock.replies.pop(0)
                 else:
                     # The question id is the kind being ranked: "tool", "skill", ….
                     kind, question = next(iter(body["questions"].items()))
@@ -60,6 +61,8 @@ class MockSystemOne:
                 data = json.dumps(payload).encode()
                 self.send_response(status)
                 self.send_header("content-type", "application/json")
+                for name, value in headers.items():
+                    self.send_header(name, value)
                 self.send_header("content-length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
@@ -72,8 +75,13 @@ class MockSystemOne:
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
 
-    def reply(self, status: int, payload: dict[str, Any] | None = None) -> None:
-        self.replies.append((status, payload or {}))
+    def reply(
+        self,
+        status: int,
+        payload: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self.replies.append((status, payload or {}, headers or {}))
 
     def offered(self, call: int = 0) -> list[str]:
         # A candidate's searchable text starts with its full name, and these
@@ -225,3 +233,37 @@ async def test_skill_catalog_reranks_the_same_way(mock: MockSystemOne) -> None:
     offered = mock.offered()
     assert "slides" not in offered
     assert [h.skill_id for h in hits] == list(reversed(offered))
+
+
+async def test_a_misconfigured_reranker_raises_instead_of_falling_back(
+    mock: MockSystemOne,
+) -> None:
+    mock.reply(401, {"error": {"message": "bad key"}})
+    catalog = _catalog(mock, reranker={"method": "systemOne"})
+    await catalog.register(TOOLS)
+
+    with pytest.raises(SystemOneError) as info:
+        await catalog.search_async("file", 3)
+
+    assert info.value.code == "Unauthorized"
+    assert info.value.status == 401
+
+
+async def test_a_rate_limit_falls_back_and_reports_retry_after_when_standalone(
+    mock: MockSystemOne,
+) -> None:
+    mock.reply(429, {}, {"retry-after": "7"})
+    reranked = _catalog(mock, reranker={"method": "systemOne"})
+    await reranked.register(TOOLS)
+    assert [h.tool_id for h in await reranked.search_async("file", 3)] == await _bm25_order(
+        "file", 3
+    )
+
+    mock.reply(429, {}, {"retry-after": "7"})
+    standalone = _catalog(mock, method="systemOne")
+    await standalone.register(TOOLS)
+    with pytest.raises(SystemOneError) as info:
+        await standalone.search_async("q", 3)
+    assert info.value.code == "RateLimited"
+    assert info.value.retry_after_secs == 7
+

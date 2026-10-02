@@ -314,34 +314,44 @@ export function mapArtifactBuildError(error: unknown): unknown {
 export type SystemOneErrorCode =
   | "Config"
   | "Unauthorized"
+  | "InvalidRequest"
   | "RateLimited"
-  | "Http"
+  | "Overloaded"
+  | "Timeout"
   | "Unreachable"
-  | "Malformed"
-  | "Unknown";
+  | "Http"
+  | "Malformed";
 
 /**
- * A `"systemOne"` search failed: Jev was unreachable, rejected the key, rate
- * limited, or answered with something that is not a ranking. Raised by a
- * standalone `"systemOne"` search only — a `"systemOne"` **reranker** falls
- * back to the first stage's order instead of throwing.
+ * A `"systemOne"` (Jev) ranking failed. A standalone `"systemOne"` search
+ * throws every failure. A `"systemOne"` **reranker** throws only
+ * misconfiguration (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`), which
+ * would fail every search the same way; on a transient failure it returns the
+ * first stage's order and records `rerank_fallback:<code>` on the trace.
  */
 export class SystemOneError extends Error {
   /** Stable machine-readable discriminant; prefer it over parsing `message`. */
   readonly code: SystemOneErrorCode;
-  /** The HTTP status, for `"Unauthorized"` and `"Http"`. */
+  /** The HTTP status, for `"Unauthorized"`, `"InvalidRequest"`, `"Overloaded"` and `"Http"`. */
   readonly status?: number;
+  /** Seconds Jev asked to wait, for `"RateLimited"` when it sent `Retry-After`. */
+  readonly retryAfterSecs?: number;
 
   /**
    * @param message - The underlying failure description (the core error text).
    * @param code - The stable {@link SystemOneError.code} discriminant.
-   * @param status - The HTTP status, when Jev answered.
+   * @param details - The HTTP status and `Retry-After`, when Jev sent them.
    */
-  constructor(message: string, code: SystemOneErrorCode, status?: number) {
+  constructor(
+    message: string,
+    code: SystemOneErrorCode,
+    details: { status?: number; retryAfterSecs?: number } = {},
+  ) {
     super(message);
     this.name = "SystemOneError";
     this.code = code;
-    if (status !== undefined) this.status = status;
+    if (details.status !== undefined) this.status = details.status;
+    if (details.retryAfterSecs !== undefined) this.retryAfterSecs = details.retryAfterSecs;
   }
 }
 
@@ -351,11 +361,13 @@ const SYSTEM_ONE_ERROR_PREFIX = "RATEL_SYSTEM_ONE_ERROR:";
 const SYSTEM_ONE_ERROR_CODES: ReadonlySet<string> = new Set([
   "Config",
   "Unauthorized",
+  "InvalidRequest",
   "RateLimited",
-  "Http",
+  "Overloaded",
+  "Timeout",
   "Unreachable",
+  "Http",
   "Malformed",
-  "Unknown",
 ]);
 
 /**
@@ -379,8 +391,10 @@ export function mapSystemOneError(error: unknown): unknown {
   const record = parsed as Record<string, unknown>;
   if (typeof record.code !== "string" || !SYSTEM_ONE_ERROR_CODES.has(record.code)) return error;
   if (typeof record.message !== "string") return error;
-  const status = typeof record.status === "number" ? record.status : undefined;
-  return new SystemOneError(record.message, record.code as SystemOneErrorCode, status);
+  return new SystemOneError(record.message, record.code as SystemOneErrorCode, {
+    status: typeof record.status === "number" ? record.status : undefined,
+    retryAfterSecs: typeof record.retryAfterSecs === "number" ? record.retryAfterSecs : undefined,
+  });
 }
 
 /**

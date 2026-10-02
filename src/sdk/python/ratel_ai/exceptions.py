@@ -11,11 +11,13 @@ failures; SDK merge composition is internal and there is no public Python merge
 API. ``ArtifactWarmError`` covers warm failures and carries ``code`` /
 ``missing`` attributes set by the native binding.
 
-``SystemOneError`` covers a failed standalone ``"systemOne"`` (Jev) search
-(ADR-0027) and carries ``code`` (``"Config"``, ``"Unauthorized"``,
-``"RateLimited"``, ``"Http"``, ``"Unreachable"``, ``"Malformed"``) and ``status``.
-A ``"systemOne"`` reranker never raises it: it falls back to the first stage's
-order.
+``SystemOneError`` covers a failed ``"systemOne"`` (Jev) ranking (ADR-0027) and
+carries ``code`` (``"Config"``, ``"Unauthorized"``, ``"InvalidRequest"``,
+``"RateLimited"``, ``"Overloaded"``, ``"Timeout"``, ``"Unreachable"``, ``"Http"``,
+``"Malformed"``), ``status`` and ``retry_after_secs``. A standalone search raises
+every failure; a ``"systemOne"`` reranker raises only ``"Config"``,
+``"Unauthorized"`` and ``"InvalidRequest"`` and otherwise falls back to the first
+stage's order, recording ``rerank_fallback:<code>`` on the trace.
 
 ``CloudError`` covers a failed Ratel Cloud request — a Tool Picker search or a
 catalog sync on a ``cloud`` catalog (ADR-0027, ADR-0028) — and carries ``code``

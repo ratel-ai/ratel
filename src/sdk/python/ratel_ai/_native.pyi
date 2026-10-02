@@ -384,13 +384,17 @@ class SystemOneError(RuntimeError):
     """A "systemOne" (Jev) search failed (ADR-0027).
 
     Attributes:
-        code: ``"Config"`` | ``"Unauthorized"`` | ``"RateLimited"`` | ``"Http"`` |
-            ``"Unreachable"`` | ``"Malformed"`` | ``"Unknown"``.
-        status: the HTTP status for ``"Unauthorized"`` / ``"Http"``, else ``None``.
+        code: ``"Config"`` | ``"Unauthorized"`` | ``"InvalidRequest"`` |
+            ``"RateLimited"`` | ``"Overloaded"`` | ``"Timeout"`` | ``"Unreachable"`` |
+            ``"Http"`` | ``"Malformed"``.
+        status: the HTTP status for ``"Unauthorized"`` / ``"InvalidRequest"`` /
+            ``"Overloaded"`` / ``"Http"``, else ``None``.
+        retry_after_secs: Jev's ``Retry-After`` for ``"RateLimited"``, else ``None``.
     """
 
     code: str
     status: int | None
+    retry_after_secs: int | None
 
 class CloudError(RuntimeError):
     """A Ratel Cloud request failed: a Tool Picker search or a catalog sync.

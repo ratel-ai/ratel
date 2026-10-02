@@ -212,33 +212,21 @@ fn uses_dense(method: &str, reranker: Option<&RerankerConfig>) -> bool {
     dense(method) || reranker.is_some_and(|r| dense(&r.method))
 }
 
-fn system_one_error_code(error: &core::SystemOneError) -> &'static str {
-    match error {
-        core::SystemOneError::Config { .. } => "Config",
-        core::SystemOneError::Unauthorized { .. } => "Unauthorized",
-        core::SystemOneError::RateLimited => "RateLimited",
-        core::SystemOneError::Http { .. } => "Http",
-        core::SystemOneError::Unreachable { .. } => "Unreachable",
-        core::SystemOneError::Malformed { .. } => "Malformed",
-        _ => "Unknown",
-    }
-}
-
 /// Embedder and option errors keep their plain message (the TS side already
 /// classifies embedder messages); a system-one failure travels in a private
 /// envelope so TS can raise a typed `SystemOneError` without parsing prose.
 fn map_search_error(error: core::SearchError) -> napi::Error {
     match error {
         core::SearchError::SystemOne(inner) => {
-            let status = match &inner {
-                core::SystemOneError::Unauthorized { status }
-                | core::SystemOneError::Http { status } => Some(*status),
+            let retry_after = match &inner {
+                core::SystemOneError::RateLimited { retry_after_secs } => *retry_after_secs,
                 _ => None,
             };
             let payload = json!({
-                "code": system_one_error_code(&inner),
+                "code": inner.code(),
                 "message": inner.to_string(),
-                "status": status,
+                "status": inner.status(),
+                "retryAfterSecs": retry_after,
             });
             napi::Error::from_reason(format!("{SYSTEM_ONE_ERROR_PREFIX}{payload}"))
         }
