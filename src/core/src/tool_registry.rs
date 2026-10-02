@@ -487,8 +487,9 @@ impl ToolRegistry {
     /// (`PUT /api/v1/catalog/snapshot`, ADR-0028): executor-free, sorted by
     /// id, replacing whatever that source sent before. Skipped — no request,
     /// [`SyncOutcome::skipped`] set — when the snapshot matches the last one
-    /// Cloud acknowledged for the same source. A failed sync is not
-    /// remembered, so the next one sends again.
+    /// Cloud acknowledged for the same source. A failed sync forgets every
+    /// earlier acknowledgement, since the upload may have landed anyway, so
+    /// the next sync always sends.
     ///
     /// # Errors
     /// [`CloudError`] when no Cloud is configured, the catalog exceeds Cloud's
@@ -529,13 +530,17 @@ impl ToolRegistry {
                 ..outcome
             });
         }
-        let outcome = cloud.put_snapshot(source_id, &tools)?;
+        // Whatever happens, the last acknowledgement no longer describes Cloud:
+        // a failed upload (a timeout, an unreadable 2xx) may still have landed.
+        let result = cloud.put_snapshot(source_id, &tools);
         *self
             .cloud_synced
             .lock()
-            .unwrap_or_else(PoisonError::into_inner) =
-            Some((source_id.to_string(), hash, outcome.clone()));
-        Ok(outcome)
+            .unwrap_or_else(PoisonError::into_inner) = result
+            .as_ref()
+            .ok()
+            .map(|outcome| (source_id.to_string(), hash, outcome.clone()));
+        result
     }
 
     /// Point `SystemOne` searches and rerankers at another endpoint or key
@@ -4188,6 +4193,27 @@ mod tests {
             !reg.cloud_sync("other").unwrap().skipped,
             "a new source is sent"
         );
+        assert_eq!(cloud.snapshot_count(), 3);
+    }
+
+    #[test]
+    fn a_failed_cloud_sync_forgets_the_last_acknowledged_snapshot() {
+        // A failed upload may still have landed in Cloud, so after it the
+        // registry cannot trust any earlier acknowledgement: returning to that
+        // earlier catalog must re-send it, not skip.
+        let (mut reg, cloud) = cloud_catalog(ScriptedCloud::new());
+        reg.cloud_sync("svc").unwrap(); // A acknowledged
+        reg.register(tool("refund", "edited description")); // B
+        cloud.set_sync_reply(Err(CloudError::Timeout));
+        assert!(reg.cloud_sync("svc").is_err()); // B may be in Cloud anyway
+        cloud.set_sync_reply(Ok(crate::SyncOutcome {
+            catalog_version: "v3".into(),
+            tools: 0,
+            unchanged: false,
+            skipped: false,
+        }));
+        reg.register(tool("refund", "return funds for a payment")); // back to A
+        assert!(!reg.cloud_sync("svc").unwrap().skipped, "A must be re-sent");
         assert_eq!(cloud.snapshot_count(), 3);
     }
 
