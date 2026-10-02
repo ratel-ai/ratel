@@ -1,4 +1,4 @@
-# 26. System-one ranking via the Cloud Tool Picker, and a two-stage reranker
+# 26. System-one ranking — the Cloud Tool Picker and Jev direct — and a two-stage reranker
 
 Date: 2026-10-01 (revised 2026-10-02)
 
@@ -10,8 +10,11 @@ Proposed. Accepted once `ratel-bench` has measured the three picker modes agains
 Revised 2026-10-02: the first draft had the SDK own the catalog and send candidates to a
 stateless `/v1/systemone` endpoint. Ratel Cloud owns the catalog instead, and ranking goes
 through the documented [Tool Picker API](https://docs.ratel.sh/cloud/tool-picker). The first
-draft's `systemOne` method and `/v1/systemone` client were removed before release; its local
-reranker stays.
+draft's invented Ratel `/v1/systemone` endpoint was dropped before release.
+
+Revised again 2026-10-02: Jev support in the SDK is kept beside the picker (decision 7). The
+`systemOne` method and reranker call Jev directly, for catalogs the SDK owns; `cloud` serves
+catalogs Cloud owns. Both reach the same model.
 
 Builds on [ADR-0011](0011-selectable-retrieval-methods.md) (selectable methods; its "no
 cross-encoder reranker" is lifted here), [ADR-0014](0014-adaptive-usage-ranking.md) (the usage
@@ -101,13 +104,25 @@ for hosts that prefer a degraded answer to none.
 sync once Cloud's snapshot accepts them, and use the picker once it takes a `kind`
 ([ADR-0027](0027-cloud-catalog-sync.md)).
 
-**6. The local two-stage reranker stays.** Independent of Cloud, a catalog may set
-`reranker: { method, depth = 50 }` to re-score its first stage's top `depth` with any local
-method (`bm25`, `semantic`, `hybrid`) other than its own. It never adds a candidate; its score
+**6. The two-stage reranker stays.** Independent of Cloud, a catalog may set
+`reranker: { method, depth = 50 }` to re-score its first stage's top `depth` with any method
+(`bm25`, `semantic`, `hybrid`, `systemOne`) other than its own. It never adds a candidate; its score
 replaces stage 1's, ties keep stage 1's order; BM25 as a reranker keeps corpus-wide IDF; the
 usage arm applies to stage 1 only; one search event carries stage 1's stages plus `rerank`.
 Core exposes it as `search_with_options(query, top_k, origin, SearchOptions)` returning
 `SearchError`, beside the unchanged `search_with_method*`.
+
+**7. Jev, called directly, for catalogs the SDK owns.** `method: "systemOne"` (Jev ranks the
+whole catalog) and `reranker: { method: "systemOne" }` (Jev re-scores the first stage's
+candidates) call Jev's `POST /v1/systemone` from the SDK, configured by
+`systemOne: { url?, apiKeyEnv?, model? }` — defaults `https://api.typesafe.ai`,
+`TYPESAFE_API_KEY`, `jev-latest`. Core asks one `choice` question with the candidates' searchable
+text as index-keyed criteria (`t0…tN`) and ranks by the returned probabilities. A candidate set
+over 150 options or 80,000 characters — Cloud's per-question limits — runs as a tournament:
+groups that fit one question are ranked in parallel (6 at a time), each keeps its top `k`, and
+the winners go to a final round. A failed `systemOne` reranker returns stage 1's order and
+records a `rerank_fallback` stage; a failed standalone search raises a typed `SystemOneError`.
+`systemOne` and `cloud` on one catalog is a configuration error; facts do not support it.
 
 **Not in this decision:** conversation context as picker input, skill and fact picking, and
 OpenAI Decisions as a provider — all server-side concerns behind the same endpoint.
@@ -123,18 +138,19 @@ OpenAI Decisions as a provider — all server-side concerns behind the same endp
   needs no SDK release, and the SDK cannot tune them.
 - Correctness depends on sync: a search can only find what Cloud has. ADR-0027 makes `register`
   resolve after Cloud acknowledges the catalog, and the dropped-id warning surfaces drift.
+- Two routes reach Jev: Cloud's picker (Cloud's key, Cloud's credits, Cloud-owned catalog) and
+  `systemOne` (the user's TypeSafe key, an SDK-owned catalog). The tournament limits match
+  Cloud's so the two rank alike; a change to one should be mirrored in the other.
 - `@ratel-ai/cloud-sdk`'s `attach()` also publishes catalog snapshots. A host using both uploads
   the same snapshot twice under the same `source_id` — harmless, but the docs say to use one.
 
 ## Rejected
 
-- **SDK-owned catalog, candidates sent per call** (this ADR's first draft). It keeps the catalog
-  in-process, but the documented picker takes no candidates, and sending the whole catalog on
-  every `exhaustive` query is the cost Cloud-side sync avoids.
-- **Provider config on the catalog** (`{ jev: {...} }`). It puts provider keys and code in every
-  SDK and needs a release per provider.
-- **A `systemOne` search method.** The mode names the user-facing trade-off (speed vs. accuracy);
-  which model sits behind `precise` is Cloud's business.
+- **A Ratel-hosted stateless `/v1/systemone` endpoint** (this ADR's first draft): the SDK sends
+  candidates and Ratel forwards them to a provider. The documented picker ranks a synced catalog
+  instead, and the SDK-owned case is served by calling Jev directly (decision 7).
+- **Generic provider config on the catalog** (`{ jev: {...}, openai: {...} }`). `systemOne`
+  targets Jev only; further providers go behind Cloud's picker, which needs no SDK release.
 - **Local BM25 for `instant`.** Faster, but a second source of truth.
 - **The picker client in `@ratel-ai/cloud-sdk`** behind a core seam (the ADR-0022 pattern). It
   avoids a second snapshot publisher, but leaves Python without the picker until a Python cloud

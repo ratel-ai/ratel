@@ -1,0 +1,12 @@
+[project]
+name = "ratel-example-system-one-reranking"
+version = "0.0.0"
+description = "Ratel system-one ranking and the two-stage reranker"
+requires-python = ">=3.10"
+dependencies = [
+    "ratel-ai",
+]
+
+[tool.uv.sources]
+# Use the local SDK from this monorepo rather than PyPI.
+ratel-ai = { path = "../../src/sdk/python" }
