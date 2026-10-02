@@ -35,9 +35,10 @@ const MAX_QUERY_CHARS: usize = 2_000;
 
 /// `instant` and `precise` answer in well under a second; a slower answer is a
 /// fault. `exhaustive` runs a tournament that Cloud bounds at 45 s, so its
-/// timeout sits above that rather than cutting off a pick Cloud would finish.
+/// timeout sits above that rather than cutting off a pick Cloud would finish;
+/// a snapshot upload (up to 4 MB) takes the same long timeout.
 const FAST_TIMEOUT_SECS: u64 = 15;
-const EXHAUSTIVE_TIMEOUT_SECS: u64 = 60;
+const SLOW_TIMEOUT_SECS: u64 = 60;
 
 /// A pick or snapshot response is small; anything near this size is not one.
 const RESPONSE_LIMIT_BYTES: u64 = 4 * 1024 * 1024;
@@ -323,7 +324,7 @@ impl HttpCloud {
         Self {
             config,
             fast: agent(FAST_TIMEOUT_SECS),
-            slow: agent(EXHAUSTIVE_TIMEOUT_SECS),
+            slow: agent(SLOW_TIMEOUT_SECS),
         }
     }
 }
@@ -519,7 +520,8 @@ impl CloudApi for HttpCloud {
                 ),
             });
         }
-        let text = self.send(&self.fast, "PUT", "/api/v1/catalog/snapshot", &body)?;
+        // Up to 4 MB going up: the long timeout, not the one sized for a pick.
+        let text = self.send(&self.slow, "PUT", "/api/v1/catalog/snapshot", &body)?;
         let response: SnapshotResponse = serde_json::from_str(&text).map_err(malformed)?;
         Ok(SyncOutcome {
             catalog_version: response.catalog_version,
