@@ -406,14 +406,17 @@ impl JevSystemOne {
     }
 
     /// Rank more candidates than one question holds: rank groups in parallel,
-    /// keep each group's best few, and repeat until the field fits.
+    /// advance the best of each, and repeat until the field fits one question.
     ///
-    /// A group keeps at most `keep` (the caller's `top_k`), at most its share
-    /// of one question — `MAX_OPTIONS / groups` options and
-    /// `MAX_QUESTION_CHARS / groups` characters — so the winners fit one
-    /// question and the next round is the last, and at most all but one of its
-    /// members so every round eliminates someone. Keeping the full `keep` from each group would
-    /// advance the whole field whenever `keep` is as large as a group.
+    /// Winners are drawn round-robin by rank — every group's best, then every
+    /// group's second, … — until one question is full (`MAX_OPTIONS` options,
+    /// `MAX_QUESTION_CHARS` characters), so room a small group cannot use goes
+    /// to the others and the final question holds as many contenders as it
+    /// can. A group advances at most `keep` (the caller's `top_k`: a group's
+    /// `keep + 1`-th cannot make the final cut) and at most all but one of its
+    /// members, so every round shrinks the field. When even one winner per
+    /// group would not fit one question, each group advances only its best and
+    /// another round runs.
     fn tournament(
         &self,
         key: &str,
@@ -428,9 +431,7 @@ impl JevSystemOne {
                 return self.ask(key, query, &field, kind);
             }
             let groups = split_into_questions(&field);
-            let per_group = keep.min(MAX_OPTIONS / groups.len()).max(1);
-            let chars_share = MAX_QUESTION_CHARS / groups.len();
-            let mut winners: Vec<&Candidate> = Vec::new();
+            let mut ranked_groups: Vec<Vec<&Candidate>> = Vec::with_capacity(groups.len());
             for batch in groups.chunks(TOURNAMENT_CONCURRENCY) {
                 let results: Vec<Result<Vec<(String, f32)>, SystemOneError>> =
                     std::thread::scope(|scope| {
@@ -450,28 +451,21 @@ impl JevSystemOne {
                             .collect()
                     });
                 for (group, result) in batch.iter().zip(results) {
-                    let ranked = result?;
                     let by_id: HashMap<&str, &Candidate> =
                         group.iter().map(|c| (c.id.as_str(), *c)).collect();
-                    let quota = per_group.min(group.len().saturating_sub(1)).max(1);
-                    let (mut taken, mut chars) = (0, 0);
-                    for (id, _) in &ranked {
-                        let Some(c) = by_id.get(id.as_str()).copied() else {
-                            continue;
-                        };
-                        let len = option_chars(c);
-                        if taken == quota || (taken > 0 && chars + len > chars_share) {
-                            break;
-                        }
-                        winners.push(c);
-                        taken += 1;
-                        chars += len;
-                    }
+                    let cap = keep.min(group.len().saturating_sub(1)).max(1);
+                    let best: Vec<&Candidate> = result?
+                        .iter()
+                        .filter_map(|(id, _)| by_id.get(id.as_str()).copied())
+                        .take(cap)
+                        .collect();
+                    ranked_groups.push(best);
                 }
             }
+            let winners = advance(&ranked_groups);
             // Every group of two or more lost at least one member, and a field
             // that needs a tournament has such a group, so this cannot trigger;
-            // it guards the loop against a future change to the quotas.
+            // it guards the loop against a future change to `advance`.
             if winners.len() >= field.len() {
                 return Err(SystemOneError::Malformed {
                     source: "tournament made no progress".into(),
@@ -480,6 +474,35 @@ impl JevSystemOne {
             field = winners;
         }
     }
+}
+
+/// The candidates that go on to the next round, from each group's ranked,
+/// capped contenders: round-robin by rank while one question has room, or just
+/// each group's best when even those do not fit one question.
+fn advance<'a>(ranked_groups: &[Vec<&'a Candidate>]) -> Vec<&'a Candidate> {
+    let firsts: Vec<&Candidate> = ranked_groups
+        .iter()
+        .filter_map(|g| g.first().copied())
+        .collect();
+    if !fits_one_question(&firsts) {
+        return firsts;
+    }
+    let (mut winners, mut chars) = (Vec::new(), 0);
+    let depth = ranked_groups.iter().map(Vec::len).max().unwrap_or(0);
+    for rank in 0..depth {
+        for group in ranked_groups {
+            let Some(c) = group.get(rank).copied() else {
+                continue;
+            };
+            let len = option_chars(c);
+            if winners.len() == MAX_OPTIONS || chars + len > MAX_QUESTION_CHARS {
+                return winners;
+            }
+            winners.push(c);
+            chars += len;
+        }
+    }
+    winners
 }
 
 impl SystemOne for JevSystemOne {
@@ -801,7 +824,11 @@ mod tests {
             ranked[0].0, "tool155",
             "the group-2 winner survives the cut"
         );
-        assert!(ranked.len() <= MAX_OPTIONS);
+        assert_eq!(
+            ranked.len(),
+            150,
+            "the final question is filled up to top_k"
+        );
         assert_eq!(
             seen.lock().unwrap().len(),
             3,
@@ -826,6 +853,11 @@ mod tests {
             .rank("q", &many, 45, CandidateKind::Tool)
             .unwrap();
         assert_eq!(ranked[0].0, "c42");
+        assert_eq!(
+            ranked.len(),
+            40,
+            "one question holds 40 options of 2,000 chars"
+        );
         assert_eq!(
             seen.lock().unwrap().len(),
             3,
