@@ -1,7 +1,7 @@
 [project]
-name = "ratel-example-system-one-reranking"
+name = "ratel-example-cloud-tool-picker"
 version = "0.0.0"
-description = "Ratel system-one ranking and the two-stage reranker"
+description = "Ratel Cloud Tool Picker — a cloud-owned catalog, synced on register"
 requires-python = ">=3.10"
 dependencies = [
     "ratel-ai",

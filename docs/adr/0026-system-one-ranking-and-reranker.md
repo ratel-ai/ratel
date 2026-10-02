@@ -9,10 +9,9 @@ Proposed. Accepted once `ratel-bench` has measured the three picker modes agains
 
 Revised 2026-10-02: the first draft had the SDK own the catalog and send candidates to a
 stateless `/v1/systemone` endpoint. Ratel Cloud owns the catalog instead, and ranking goes
-through the documented [Tool Picker API](https://docs.ratel.sh/cloud/tool-picker). The
-implementation on branch `RS-114/configurable-systemone-support` predates this revision: its
-`systemOne` method and `/v1/systemone` client are replaced by what follows; its local reranker
-stays.
+through the documented [Tool Picker API](https://docs.ratel.sh/cloud/tool-picker). The first
+draft's `systemOne` method and `/v1/systemone` client were removed before release; its local
+reranker stays.
 
 Builds on [ADR-0011](0011-selectable-retrieval-methods.md) (selectable methods; its "no
 cross-encoder reranker" is lifted here), [ADR-0014](0014-adaptive-usage-ranking.md) (the usage

@@ -234,16 +234,17 @@ codes, SKUs, or internal jargon gives BM25 purchase those corpora do not have an
 lower value. If exact-name queries are missing their obvious match, lower it; if paraphrases are
 missing, raise it.
 
-**Experimental: two-stage ranking and `systemOne`.** A catalog's `reranker` option re-scores the
-first stage's top candidates (default 50) with a different method — any of `"bm25"`,
-`"semantic"`, `"hybrid"`, or `"systemOne"` — and never adds a tool the first stage missed.
-`"systemOne"` is also a standalone `method`: a hosted system-one model (Jev today) picks from the
-candidates via Ratel Cloud (`https://app.ratel.sh/v1/systemone`, key in `RATEL_API_KEY`). Unlike
-the other methods it **sends the query and the candidates' text off-process**, so do not
-recommend it to a user whose tool descriptions cannot leave their network. Rerankers and
-`"systemOne"` need the async search; a failed `"systemOne"` reranker falls back to the first
-stage's order
-([ADR-0026](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0026-system-one-ranking-and-reranker.md)).
+**Experimental: the Cloud Tool Picker and two-stage ranking.** `cloud: { mode }` on `ratel()` or
+a `ToolCatalog` makes Ratel Cloud the tool catalog's owner: `register` syncs the catalog to the
+Cloud project (`PUT /api/v1/catalog/snapshot`) and `searchAsync` ranks through the Tool Picker
+(`POST /v1/tools/pick`) in `instant` (BM25, free), `precise` (a BM25 shortlist judged by a
+system-one model) or `exhaustive` mode. Executors stay local. Unlike the local methods it **sends
+tool definitions and every query off-process**, so do not recommend it to a user whose tool
+descriptions cannot leave their network. Separately, a catalog's `reranker` option re-scores the
+first stage's top candidates (default 50) with a different local method (`bm25`, `semantic`,
+`hybrid`) and never adds a tool the first stage missed
+([ADR-0026](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0026-system-one-ranking-and-reranker.md),
+[ADR-0027](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-cloud-catalog-sync.md)).
 
 ### `replace` vs `suggest` mode
 
@@ -260,7 +261,8 @@ If you're not sure which one your user wants, default to `replace` — it's the 
 - [ADR-0004 — Retrieval and tool selection](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md): Retrieval over semantic tokens (names, descriptions, parameter names, enum values; JSON Schema structure stripped); replace by default, suggest opt-in.
 - [ADR-0006 — Native FFI bindings](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-native-ffi-bindings.md): Why the SDKs ship pre-built natives (NAPI-RS / PyO3).
 - [ADR-0011 — Selectable retrieval methods](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0011-selectable-retrieval-methods.md): BM25 (default), semantic, and hybrid ranking, chosen per catalog or per call.
-- [ADR-0026 — System-one ranking and a two-stage reranker](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0026-system-one-ranking-and-reranker.md): An optional reranker over any method, and a `systemOne` method backed by Ratel Cloud (experimental, proposed).
+- [ADR-0026 — System-one ranking via the Cloud Tool Picker, and a two-stage reranker](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0026-system-one-ranking-and-reranker.md): `cloud: { mode }` ranks through Ratel Cloud's Tool Picker; a local reranker over any method (experimental, proposed).
+- [ADR-0027 — Cloud catalog sync](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-cloud-catalog-sync.md): How a cloud catalog reaches Ratel Cloud — full per-source snapshots on register (experimental, proposed).
 - [ADR-0012 — Configurable embedding models](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models.md): Dense embeddings use a configurable in-process HuggingFace/local model, Ollama, or OpenAI-compatible endpoint.
 - [ADR-0014 — Adaptive usage ranking](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0014-adaptive-usage-ranking.md): A third RRF arm learned online from search-then-invoke pairs, plus the offline path that seeds it from a captured baseline before ranking is switched on.
 - [ADR-0019 — Retrieval experiments](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0019-retrieval-experiments.md): The TypeScript-only experimental surface for deterministic assignment, bounded shadow evaluation, lifecycle, comparison, and OpenTelemetry semantics.

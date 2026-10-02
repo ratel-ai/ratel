@@ -68,9 +68,9 @@ where embedding runs today, and resolves once Cloud acknowledges it. The SDK kee
 after `register` never ranks a stale catalog.
 
 **5. Failure keeps the local catalog.** Local registration always succeeds. A failed sync rejects
-`register` with a typed `CloudSyncError` (`Unauthorized`, `RateLimited`, `TooLarge`,
-`Unavailable`, `Malformed`) unless `onSyncError: "warn"` is set. The next mutation, or
-`await catalog.syncNow()`, retries with the full snapshot.
+`register` with the same typed `CloudError` the picker raises (`Unauthorized`, `RateLimited`,
+`TooLarge`, `Unavailable`, `Malformed`, …) unless `onSyncError: "warn"` (Python
+`on_sync_error="warn"`) is set. The next mutation, or `syncNow()` / `sync_now()`, retries.
 
 **6. Core owns it.** Snapshot building, hashing, coalescing and the HTTP call live in the Rust
 `CloudClient` shared with the picker, so TypeScript and Python sync identically.
