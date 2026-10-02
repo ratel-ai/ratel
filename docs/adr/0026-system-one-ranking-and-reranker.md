@@ -1,112 +1,142 @@
-# 26. System-one ranking and a two-stage reranker
+# 26. System-one ranking via the Cloud Tool Picker, and a two-stage reranker
 
-Date: 2026-10-01
+Date: 2026-10-01 (revised 2026-10-02)
 
 ## Status
 
-Proposed. Accepted once `ratel-bench` has measured `hybrid`, `hybrid → systemOne` and standalone
-`systemOne` against the live Ratel Cloud endpoint, as [ADR-0024](0024-hybrid-fuses-on-scores.md)
-was.
+Proposed. Accepted once `ratel-bench` has measured the three picker modes against local
+`bm25` / `hybrid`, as [ADR-0024](0024-hybrid-fuses-on-scores.md) was.
+
+Revised 2026-10-02: the first draft had the SDK own the catalog and send candidates to a
+stateless `/v1/systemone` endpoint. Ratel Cloud owns the catalog instead, and ranking goes
+through the documented [Tool Picker API](https://docs.ratel.sh/cloud/tool-picker). The
+implementation on branch `RS-114/configurable-systemone-support` predates this revision: its
+`systemOne` method and `/v1/systemone` client are replaced by what follows; its local reranker
+stays.
 
 Builds on [ADR-0011](0011-selectable-retrieval-methods.md) (selectable methods; its "no
-cross-encoder reranker" is lifted here), [ADR-0012](0012-configurable-embedding-models.md)
-(endpoint configuration shape) and [ADR-0014](0014-adaptive-usage-ranking.md) (the usage arm).
+cross-encoder reranker" is lifted here), [ADR-0014](0014-adaptive-usage-ranking.md) (the usage
+arm) and [ADR-0027](0027-cloud-catalog-sync.md) (how the catalog reaches Cloud).
 
 ## Context
 
-Every ranker Ratel ships scores a query against tool and skill text it holds in-process: BM25,
-dense cosine, or the two fused. Nothing reorders their output; the only re-ranking is the usage
-arm, which boosts what agents actually invoked.
+Every ranker Ratel ships scores a query against tool text it holds in-process: BM25, dense
+cosine, or the two fused. Nothing reorders their output; the only re-ranking is the usage arm.
 
-A new class of hosted "system-one" models picks the correct option for a query from a closed set
-in ~100–300 ms:
+Hosted "system-one" models pick the correct option for a query from a closed set in a few hundred
+milliseconds. Jev (TypeSafe AI) returns a probability per option for up to 255 options; a probe
+against a 4-tool payments catalog picked the refund tool BM25 ranked sixth, at 0.93, in 0.3 s.
+OpenAI's Decisions API is in limited preview with no public docs and, as described, returns a
+single pick.
 
-- **Jev** (TypeSafe AI) — `POST /v1/systemone` with a `choice` question whose criteria map up to
-  **255** option names to descriptions. It returns the argmax plus a **probability for every
-  option**, so a full ranking is one sort. State plus the longest question must fit 32k tokens;
-  $0.042 per million input tokens. Its published cookbooks rerank BM25 shortlists and select
-  skills from a 182-item catalog, both with large accuracy gains.
-- **OpenAI Decisions API** — announced 2026-09-29, limited preview, no public docs. As described
-  it returns **one** answer from a predefined set; scores and a ranked list are unconfirmed.
+Ratel Cloud exposes this as the Tool Picker, `POST https://cloud.ratel.sh/v1/tools/pick`:
 
-Both shapes are "rank these candidates for this query". Providers will differ in candidate limits,
-whether they return scores, auth and pricing, and more will appear.
+- request `{ query, mode?, top_k? }` (`top_k` 1–20, default 5), bearer `RATEL_API_KEY`;
+- response `{ mode, tools: [{ id, name, description, score }], confident, usage }`;
+- three modes:
+
+  | Mode | Pipeline | Latency | Cost |
+  |---|---|---|---|
+  | `instant` | BM25 | milliseconds | free |
+  | `precise` (default) | BM25 shortlist, Jev reranks, top `k` | ~300 ms | per token |
+  | `exhaustive` | Jev over the whole catalog, as a tournament (up to 2,000 tools) | 1–few s | per token |
+
+  Per the Cloud implementation (`ratel-cloud`, `lib/pick/engine.ts`): a catalog that fits one Jev
+  question (≤ 150 tools) goes to Jev whole in both judged modes; above that `precise` shortlists
+  the BM25 top 25 (the public docs say 30) and `exhaustive` runs groups that fit one question and
+  advances the winners. `confident` is Jev's confidence ≥ 0.8.
+
+- errors `400`, `401`, `402` (credits), `409` (no synced tools), `429` (`Retry-After`), `502`/`503`,
+  `504` (> 45 s).
+
+The request carries no tools. The picker ranks the project's runtime catalog (`kind = 'tool'`
+rows), filled by `PUT /api/v1/catalog/snapshot`, so the catalog's owner is Cloud, and an SDK that
+wants these modes must keep that catalog in sync ([ADR-0027](0027-cloud-catalog-sync.md)).
 
 ## Decision
 
-**1. `systemOne` is a fourth `SearchMethod`.** Identifier `"systemOne"` in the SDKs (`"systemone"`
-also parses). Like semantic it is fallible and async-only: synchronous `search` rejects it.
+**1. Cloud owns the catalog; the SDK calls the Tool Picker.** A catalog (and `ratel()`) takes one
+option:
 
-**2. Core calls one Ratel Cloud contract; providers live behind it.** The SDKs and core carry no
-provider code. Defaults: `https://app.ratel.sh/v1/systemone`, bearer key from `RATEL_API_KEY`. A
-catalog may override both with `systemOne: { url, apiKeyEnv }` — the ADR-0012 endpoint shape —
-for staging, self-hosted proxies and tests.
-
-```jsonc
-// request
-{ "query": "refund the last order",
-  "candidates": [{ "id": "stripe_refund", "text": "<searchable_text>" }],
-  "top_k": 5 }
-// response
-{ "ranked": [{ "id": "stripe_refund", "score": 0.88 }],
-  "provider": "jev", "model": "jev-1.13.0" }
+```ts
+cloud: { mode: "instant" | "precise" | "exhaustive", url?, apiKeyEnv? }
 ```
 
-Candidate `text` is the existing `searchable_text` projection (or the ADR-0021
-`experimental_searchable_description` override), so all four methods rank the same text. Core
-validates the response: unknown ids dropped, duplicates removed, scores clamped to `[0, 1]`,
-truncated to `top_k`. In core the client sits behind a crate-private `SystemOne` trait, so a
-direct-to-provider implementation can be added later without an API change.
+`url` defaults to `https://cloud.ratel.sh`, `apiKeyEnv` to `RATEL_API_KEY`. Setting `cloud`
+turns on catalog sync ([ADR-0027](0027-cloud-catalog-sync.md)) and routes tool searches to
+`/v1/tools/pick` with that mode. `searchAsync(q, k, { mode })` overrides the mode per call.
+`cloud` together with `method` or `reranker` is a configuration error: the mode picks the
+pipeline. Python spells it `cloud={"mode": ..., "url": ..., "api_key_env": ...}`.
 
-**3. Server-side, one generic driver over provider adapters.** Each adapter declares
-`max_candidates` and ranks one chunk. Above the limit the driver ranks chunks in parallel, keeps
-each chunk's top `top_k`, and runs a final round over the winners. Jev maps candidates to
-index-keyed criteria (`t0…tN`) and sorts the returned probabilities. A provider that returns a
-single pick "promotes the winner": it goes first, the rest keep their input order — which, as a
-reranker, is stage 1's order.
+**2. Every mode goes to Cloud, `instant` included.** A local BM25 would be faster, but only
+correct while the local and synced catalogs agree; one source of truth for every mode is worth a
+network hop. Synchronous `search()` therefore throws on a cloud catalog.
 
-**4. A two-stage reranker, generic over all four methods.** `reranker: { method, depth = 50 }`
-re-scores stage 1's top `depth` with any of `bm25 | semantic | hybrid | systemOne`:
+**3. Execution stays local.** The picker returns ids; `invoke` runs the locally registered
+executor with the local schema. A returned id that is not registered locally is dropped and
+warned about — it means the synced catalog is ahead of or apart from this process.
 
-- The stage-2 score replaces stage 1's; `SearchHit` keeps its shape.
-- BM25 as a reranker keeps **corpus-wide** IDF — recomputing it over 50 candidates would distort
-  scores. Semantic uses the candidates' cached vectors; hybrid applies ADR-0024 score fusion over
-  the candidate set.
-- The usage arm (ADR-0014) applies in stage 1 only, so it is not counted twice.
-- The same method in both stages is a configuration error. `depth < top_k` is raised to `top_k`.
-- If either stage is semantic or hybrid, `register()` builds embeddings, as today.
-- A failed `systemOne` rerank returns stage 1's order and records the error on a `rerank` trace
-  stage. A failed standalone `systemOne` search raises a typed `SystemOneError`.
+**4. The Ratel SDK owns the client, not `@ratel-ai/cloud-sdk`.** One option in one package, in
+both TypeScript and Python (cloud-sdk is TypeScript-only), and picking cannot be switched on
+without the sync it depends on. One Rust `CloudClient` in core, shared by the picker and sync and
+used by both SDKs, carries auth (key read at call time), timeouts (15 s; 60 s for `exhaustive`, above the
+server's 45 s), response validation (unknown and repeated ids dropped, scores clamped to `[0, 1]`,
+at most `top_k`) and typed errors:
 
-**5. Additive surfaces.** Existing `search_with_method*` keep their signatures and
-`EmbedderError`; a new `search_with_options` returns a `SearchError` covering embedder,
-system-one and configuration failures. `SearchMethod` gains a variant and becomes
-`#[non_exhaustive]` in the same core minor release, so later methods are additive. The SDK
-surfaces are marked experimental in docs and CHANGELOG.
+| Status | `CloudError` code |
+|---|---|
+| 401 / 403 | `Unauthorized` |
+| 402 | `InsufficientCredits` |
+| 409 | `NoSyncedTools` |
+| 429 | `RateLimited` (carries `retryAfter`) |
+| 504 / transport timeout | `Timeout` |
+| 502 / 503 / unreachable | `Unavailable` |
+| bad body | `Malformed` |
 
-**Not in this decision:** conversation context as model input, the usage arm on standalone
-`systemOne`, server-side catalog caching, and a direct-to-provider client.
+`top_k` above 20 is clamped to 20, because the capability tools may ask for more. Hits keep the
+`SearchHit` shape (`score` from the picker, `fused: false`); `confident` and `usage` ride the
+search trace stage. A failed pick throws; an opt-in `fallback: "local-bm25"` serves local BM25
+for hosts that prefer a degraded answer to none.
+
+**5. Tools only, for now.** The picker ranks tools. Skills and facts are searched locally; they
+sync once Cloud's snapshot accepts them, and use the picker once it takes a `kind`
+([ADR-0027](0027-cloud-catalog-sync.md)).
+
+**6. The local two-stage reranker stays.** Independent of Cloud, a catalog may set
+`reranker: { method, depth = 50 }` to re-score its first stage's top `depth` with any local
+method (`bm25`, `semantic`, `hybrid`) other than its own. It never adds a candidate; its score
+replaces stage 1's, ties keep stage 1's order; BM25 as a reranker keeps corpus-wide IDF; the
+usage arm applies to stage 1 only; one search event carries stage 1's stages plus `rerank`.
+Core exposes it as `search_with_options(query, top_k, origin, SearchOptions)` returning
+`SearchError`, beside the unchanged `search_with_method*`.
+
+**Not in this decision:** conversation context as picker input, skill and fact picking, and
+OpenAI Decisions as a provider — all server-side concerns behind the same endpoint.
 
 ## Consequences
 
-- **Data leaves the process.** With `systemOne` selected, the query and every candidate's text go
-  to Ratel Cloud and from there to the provider. The other three methods stay in-process; the SDK
-  READMEs say so prominently.
-- Each `systemOne` search adds a network round trip (~150–400 ms for ≤255 candidates, one more
-  round above that) and a per-token cost. Standalone mode sends the whole catalog on every query;
-  as a reranker only `depth` candidates are sent.
-- Adding a provider is a server-side adapter: no SDK or core release.
-- The reranker is useful without the cloud: `bm25 → semantic` gives a cheap lexical prefilter
-  in front of dense scoring.
-- `SearchMethod` gaining a variant breaks exhaustive matches in downstream Rust; core takes a
-  minor bump.
+- **Data leaves the process.** A cloud catalog uploads tool, skill and fact definitions and sends
+  every query to Ratel Cloud, which forwards text to the model provider. Local methods never
+  leave the process. The SDK READMEs say so in bold.
+- A search costs a network round trip in every mode and tokens in `precise` / `exhaustive`; free
+  plans allow 10 `precise` / `exhaustive` picks a minute.
+- Providers, the BM25 prefilter depth and chunking for large catalogs live in Cloud: changing them
+  needs no SDK release, and the SDK cannot tune them.
+- Correctness depends on sync: a search can only find what Cloud has. ADR-0027 makes `register`
+  resolve after Cloud acknowledges the catalog, and the dropped-id warning surfaces drift.
+- `@ratel-ai/cloud-sdk`'s `attach()` also publishes catalog snapshots. A host using both uploads
+  the same snapshot twice under the same `source_id` — harmless, but the docs say to use one.
 
 ## Rejected
 
-- **Configuring a provider on the catalog** (`experimentalSystemOne: { jev: {...} }`). It puts
-  provider keys and provider code in every SDK and needs a release per provider.
-- **A host callback** (`systemOne: async (query, candidates) => ranked`). It is flexible, but
-  needs two implementations (TS and Python) of chunking, validation and error handling, and
-  invites per-host drift.
-- **A system-one-only reranker.** Users asked for any method in either stage; the candidate
-  re-scoring core needs is the same for all four.
+- **SDK-owned catalog, candidates sent per call** (this ADR's first draft). It keeps the catalog
+  in-process, but the documented picker takes no candidates, and sending the whole catalog on
+  every `exhaustive` query is the cost Cloud-side sync avoids.
+- **Provider config on the catalog** (`{ jev: {...} }`). It puts provider keys and code in every
+  SDK and needs a release per provider.
+- **A `systemOne` search method.** The mode names the user-facing trade-off (speed vs. accuracy);
+  which model sits behind `precise` is Cloud's business.
+- **Local BM25 for `instant`.** Faster, but a second source of truth.
+- **The picker client in `@ratel-ai/cloud-sdk`** behind a core seam (the ADR-0022 pattern). It
+  avoids a second snapshot publisher, but leaves Python without the picker until a Python cloud
+  package exists, and splits one feature across two packages.
