@@ -409,6 +409,8 @@ pub struct TraceEventContextConfig {
     /// adaptive ranking's pairing — distinct from the trace-stream session id
     /// fixed at sink construction. See `core::TraceEventContext::turn_id`.
     pub turn_id: Option<String>,
+    /// Application-provided subject id for the turn this event belongs to.
+    pub end_user_id: Option<String>,
 }
 
 fn trace_event_context(config: Option<TraceEventContextConfig>) -> core::TraceEventContext {
@@ -421,6 +423,7 @@ fn trace_event_context(config: Option<TraceEventContextConfig>) -> core::TraceEv
         trace_id: config.trace_id,
         span_id: config.span_id,
         turn_id: config.turn_id,
+        end_user_id: config.end_user_id,
         ..core::TraceEventContext::default()
     }
 }

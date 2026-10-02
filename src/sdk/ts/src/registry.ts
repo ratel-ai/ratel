@@ -39,6 +39,7 @@ import {
 import { assertValidFact, type Fact } from "./grounding.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
 import { type RuntimeEventProjection, recordCatalogDefinitions } from "./telemetry.js";
+import { withTurnContext } from "./turn.js";
 
 export { IntentGraph };
 
@@ -239,7 +240,7 @@ export class ToolRegistry {
     method: SearchMethod,
     projection?: RuntimeEventProjection,
   ): SearchHit[] {
-    return this.native.searchWithMethod(query, topK, origin, method, projection);
+    return this.native.searchWithMethod(query, topK, origin, method, withTurnContext(projection));
   }
 
   /** Search on a libuv worker; supports every method. */
@@ -279,7 +280,7 @@ export class ToolRegistry {
         origin,
         method,
         reranker,
-        projection,
+        withTurnContext(projection),
       );
     } catch (error) {
       throw mapSearchError(error);
@@ -300,7 +301,13 @@ export class ToolRegistry {
     projection?: RuntimeEventProjection,
   ): Promise<CloudPick> {
     try {
-      return await this.native.cloudPickAsync(query, topK, origin, mode, projection);
+      return await this.native.cloudPickAsync(
+        query,
+        topK,
+        origin,
+        mode,
+        withTurnContext(projection),
+      );
     } catch (error) {
       throw mapCloudError(error);
     }
@@ -324,7 +331,8 @@ export class ToolRegistry {
    * Record a custom event on the local trace stream (ADR-0007). Throws on an
    * object that doesn't parse as a known trace event.
    */
-  recordEvent(event: object, projection?: RuntimeEventProjection): void {
+  recordEvent(event: object, explicit?: RuntimeEventProjection): void {
+    const projection = withTurnContext(explicit);
     if (projection) {
       this.native.recordEventWithContext(event, projection);
     } else {
@@ -685,7 +693,7 @@ export class SkillRegistry {
     method: SearchMethod,
     projection?: RuntimeEventProjection,
   ): SkillHit[] {
-    return this.native.searchWithMethod(query, topK, origin, method, projection);
+    return this.native.searchWithMethod(query, topK, origin, method, withTurnContext(projection));
   }
 
   /** Search on a libuv worker — see `ToolRegistry.searchWithMethodAsync`. */
@@ -718,7 +726,7 @@ export class SkillRegistry {
         origin,
         method,
         reranker,
-        projection,
+        withTurnContext(projection),
       );
     } catch (error) {
       throw mapSearchError(error);
@@ -726,7 +734,8 @@ export class SkillRegistry {
   }
 
   /** Record a custom event on the local trace stream (ADR-0007). */
-  recordEvent(event: object, projection?: RuntimeEventProjection): void {
+  recordEvent(event: object, explicit?: RuntimeEventProjection): void {
+    const projection = withTurnContext(explicit);
     if (projection) {
       this.native.recordEventWithContext(event, projection);
     } else {

@@ -137,6 +137,7 @@ import type {
 } from "./experiment-sink.js";
 import type { ExperimentRankedItem } from "./experiment-types.js";
 import { newRuntimeEventId } from "./runtime-events.js";
+import { withTurnContext } from "./turn.js";
 
 const TRACER_NAME = "@ratel-ai/sdk";
 const LOGGER_NAME = "@ratel-ai/sdk";
@@ -199,10 +200,12 @@ export interface RuntimeEventProjection {
   /**
    * Correlates one turn's search with the invoke(s) that confirm it, for
    * adaptive ranking's pairing (ADR-0014) — distinct from the trace-stream
-   * session id fixed when the sink was configured. Caller-supplied only;
-   * never minted here.
+   * session id fixed when the sink was configured. An explicit argument wins;
+   * otherwise the innermost turn scope supplies it (see `turn.ts`).
    */
   turnId?: string;
+  /** Application-provided end-user id, from the active turn scope. */
+  endUserId?: string;
 }
 
 /** @internal Definition fields shared by tool, skill, and fact registrations. */
@@ -335,16 +338,37 @@ function eventProjection(
   turnId?: string,
 ): RuntimeEventProjection {
   const eventId = newRuntimeEventId();
-  const spanContext = span.spanContext();
   span.setAttribute(RATEL_EVENT_ID, eventId);
-  return {
+  return withTurnContext({
     eventId,
     ...(invocationId === undefined ? {} : { invocationId }),
     ...(turnId === undefined ? {} : { turnId }),
-    ...(spanContext.isRemote || /^0+$/.test(spanContext.traceId)
-      ? {}
-      : { traceId: spanContext.traceId, spanId: spanContext.spanId }),
-  };
+    ...spanCorrelation(span),
+  }) as RuntimeEventProjection;
+}
+
+function spanCorrelation(span: Span | undefined): { traceId?: string; spanId?: string } {
+  const spanContext = span?.spanContext();
+  if (spanContext === undefined || spanContext.isRemote || /^0+$/.test(spanContext.traceId)) {
+    return {};
+  }
+  return { traceId: spanContext.traceId, spanId: spanContext.spanId };
+}
+
+/**
+ * @internal Correlation for an event the SDK records without opening a span of
+ * its own (a turn start, or a tool the host ran): the active turn scope plus the
+ * caller's active OTel span, so the event joins the host's trace.
+ */
+export function ambientProjection(
+  options: { invocationId?: string; turnId?: string } = {},
+): RuntimeEventProjection {
+  return withTurnContext({
+    eventId: newRuntimeEventId(),
+    ...(options.invocationId === undefined ? {} : { invocationId: options.invocationId }),
+    ...(options.turnId === undefined ? {} : { turnId: options.turnId }),
+    ...spanCorrelation(trace.getActiveSpan()),
+  }) as RuntimeEventProjection;
 }
 
 function getTracer() {

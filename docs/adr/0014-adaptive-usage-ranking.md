@@ -34,6 +34,12 @@ Amended 2026-08-27: a cluster **records what its searches surfaced** — see [Im
 recorded, not consumed](#impressions-are-recorded-not-consumed). Edges still come from
 invocations only; the decision below is unchanged and nothing reads the new map.
 
+Amended 2026-10-01: the SDKs' turn scope ([ADR-0026](0026-turn-scope.md)) stamps `turn_id` on
+everything inside it and mints one when the caller gives none, and the framework adapters open a
+scope per agent call. The caller still decides where a turn starts; it no longer has to thread the
+id through each call. A tool the host ran itself, reported through `recordToolCall`, pairs like
+an invoke.
+
 Amended 2026-09-25: **the attribution unit is the search, not the turn.** `turn_id` bounds which
 searches an invoke may attribute to; *which* one it attributes to is decided by what each search
 returned. A turn keeps every search it made, and an invoke pairs with the newest one that offered

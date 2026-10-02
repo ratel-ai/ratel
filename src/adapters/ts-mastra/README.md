@@ -57,6 +57,19 @@ Standalone (framework-free) use of the same core is also fine — `r` is `ratel(
 
 It is a no-op — spending no recall-id — when the last message is not a user turn, the user text is empty, or nothing matched. Because `processInput` runs once per generation (not per step), the pair is injected once and is **not** re-injected during the agent's tool-call loop.
 
+## One turn per generation
+
+Each `agent.generate()` / `agent.stream()` is one Ratel turn with no extra code beyond
+`recallProcessor()`: it opens the turn, and the generation's searches and tool calls carry its
+`turn_id` (keyed by the generation's `requestContext`, so pass a fresh one per call if you pass your
+own). If you already wrap the call in `r.turn(...)` (to set `endUserId` or your own id), the adapter
+joins that turn. Tools the Agent holds beside `r.modelTools()` are recorded as external tool calls as
+they complete; Mastra does not mark a failed call in its transcript, so they all record as
+completed, without durations, and the last step's calls are not seen.
+
+The user's message is not sent unless you opt in: `mastra({ captureUserMessage: true })`. Needs an
+`@ratel-ai/sdk` with the turn scope; on an older SDK the adapter behaves as before.
+
 ## Limitations
 
 - **Single-message recall encoding.** A `MastraDBMessage` has no `tool` role: a completed call+result is one assistant message with `content.format: 2` and a single resolved `tool-invocation` part. The recall pair is therefore encoded as **one** assistant message (Mastra renders it to the model as an assistant tool-call followed by a tool result).

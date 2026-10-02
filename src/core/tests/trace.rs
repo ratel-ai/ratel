@@ -517,6 +517,80 @@ fn registry_forwards_event_context_to_its_sink() {
 }
 
 #[test]
+fn turn_start_flattens_to_the_runtime_wire_shape() {
+    let sink = MemorySink::with_source("session", "source");
+
+    sink.record_with_context(
+        TraceEvent::TurnStart {
+            user_message: Some("book a flight".into()),
+        },
+        TraceEventContext {
+            turn_id: Some("turn-1".into()),
+            end_user_id: Some("user-1".into()),
+            ..TraceEventContext::default()
+        },
+    );
+    sink.record_with_context(
+        TraceEvent::TurnStart { user_message: None },
+        TraceEventContext {
+            turn_id: Some("turn-2".into()),
+            ..TraceEventContext::default()
+        },
+    );
+
+    let events = sink.snapshot();
+    let with_message = serde_json::to_value(&events[0]).unwrap();
+    assert_eq!(with_message["type"], "turn_start");
+    assert_eq!(with_message["turn_id"], "turn-1");
+    assert_eq!(with_message["end_user_id"], "user-1");
+    assert_eq!(with_message["user_message"], "book a flight");
+    let without_message = serde_json::to_value(&events[1]).unwrap();
+    assert_eq!(without_message["type"], "turn_start");
+    assert!(without_message.get("user_message").is_none());
+    assert!(without_message.get("end_user_id").is_none());
+
+    let parsed: TraceEvent =
+        serde_json::from_value(json!({ "type": "turn_start" })).expect("user_message is optional");
+    assert_eq!(parsed, TraceEvent::TurnStart { user_message: None });
+}
+
+#[test]
+fn turn_start_is_not_usage_evidence_and_keeps_the_turn_paired() {
+    let fanout = FanoutSink::with_source("session", "source");
+    let graph = Arc::new(RwLock::new(IntentGraph::empty()));
+    let learner = Arc::new(UsageLearner::new(graph.clone(), Arc::new(NoopSink)));
+    let subscription = fanout.subscribe(learner, 8);
+    let in_turn = || TraceEventContext {
+        turn_id: Some("turn-1".into()),
+        ..TraceEventContext::default()
+    };
+
+    fanout.record_with_context(TraceEvent::TurnStart { user_message: None }, in_turn());
+    fanout.record_with_context(
+        TraceEvent::Search {
+            query: "find logs".into(),
+            origin: Origin::Agent,
+            top_k: 5,
+            hits: vec![],
+            stages: vec![],
+            took_ms: 1,
+        },
+        in_turn(),
+    );
+    fanout.record_with_context(TraceEvent::TurnStart { user_message: None }, in_turn());
+    fanout.record_with_context(
+        TraceEvent::InvokeStart {
+            tool_id: "logs".into(),
+            args_size_bytes: 0,
+        },
+        in_turn(),
+    );
+    subscription.flush();
+
+    assert_eq!(graph.read().unwrap().len(), 1);
+}
+
+#[test]
 fn fanout_is_non_blocking_and_reports_drop_oldest_loss() {
     let fanout = FanoutSink::with_source("session", "source");
     let fast = Arc::new(MemorySink::new("ignored"));

@@ -173,8 +173,40 @@ const [hit] = catalog.search("What is the weather in Rome?", 1);
 console.log(await catalog.invoke(hit.toolId, { city: "Rome" }));
 ```
 
+### Mark each request as one turn
+
+Wrap the work for one user request in `r.turn(...)`. Every search, skill load, and tool call
+inside it, across `await`, carries the same `turn_id`, and one `turn_start` event opens the turn.
+Concurrent requests keep their own turns.
+
+```ts
+const r = ratel();
+
+app.post("/chat", async (req, res) => {
+  const answer = await r.turn(() => runAgent(req.body.message), {
+    id: req.id, // optional; a fresh id is minted when omitted
+    endUserId: req.user.id, // optional; stamped on every event in the turn
+    userMessage: req.body.message, // optional; sent only because you pass it
+  });
+  res.json(answer);
+});
+```
+
+If your framework runs a tool itself instead of through `r.tools.invoke`, record it so the turn
+still shows the call (`origin: "external"`):
+
+```ts
+r.recordToolCall({ toolId: "web_search", tookMs: 120 });
+r.recordToolCall({ toolId: "web_search", error: err }); // a failed call
+```
+
+`r.currentTurnId()` (or the `currentTurnId()` export) returns the active id. The framework
+adapters open a turn per agent call on their own. See
+[ADR 0026](../../../docs/adr/0026-turn-scope.md).
+
 ### `turnId`
 
+An explicit `turnId` argument still works, and wins over the turn scope.
 `search` and `invoke` both take a trailing `turnId`. Mint **one per user message** and reuse it
 for every search and invoke that message produces — including a turn that searches several times
 for several subtasks. The `search_capabilities` capability tool forwards its executor's third

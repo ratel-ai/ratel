@@ -68,6 +68,19 @@ const result = streamText({
 
 Standalone (framework-free) use of the same core is also fine — `r` is `ratel(config)` before `.adaptTo`, exposing native `ExecutableTool`s. See [`@ratel-ai/sdk`](../../sdk/ts/README.md).
 
+## One turn per call
+
+Each `generateText` / `streamText` call is one Ratel turn with no extra code: `appendRecall` or
+step 0 of `prepareStep` opens it, and the call's searches and tool calls carry its `turn_id`. If you
+already wrap the request in `r.turn(...)` (to set `endUserId` or your own id), the adapter joins that
+turn instead of opening another. Tools you pass to the model beside `r.modelTools()` are recorded as
+external tool calls when `prepareStep` is in use, from the following step, so the last step's calls
+and their durations are not seen; call `r.recordToolCall(...)` yourself (for example from
+`onStepFinish`) if you need them.
+
+The user's message is not sent unless you opt in: `aiSdk({ captureUserMessage: true })`. Needs an
+`@ratel-ai/sdk` with the turn scope; on an older SDK the adapter behaves as before.
+
 ## Two ways to recall: `appendRecall` vs `prepareStep`
 
 Both inject the same synthetic `search_capabilities` call/result pair; they differ in **persistence**, which is what drives prompt-cache behaviour across turns.

@@ -47,6 +47,7 @@ The remotely publishable v1 event set is:
 | Auth | `auth_refresh`, `auth_needs`, `auth_flow_start`, `auth_flow_end` | upstream id and outcome; never credentials |
 | Experiments | `experiment_selection`, `experiment_results`, `experiment_comparison`, `experiment_skip`, `experiment_fallback`, `experiment_drop`, `experiment_invocation`, `experiment_outcome` | `selection_id`; served/shadow arm data; agreement metrics; result ids/scores; attribution, drop/fallback reason, and labelled outcome as applicable |
 | Delivery | `events_dropped` | dropped count, reason, and observation window |
+| Turn | `turn_start` | `turn_id` and `end_user_id` on the envelope; `user_message` only when the application passed it ([ADR-0026](0026-turn-scope.md)) |
 
 For search events, the envelope `event_id` identifies the search. A hit's zero-based rank is its
 position in the ordered `hits[]` array rather than a repeated field on each hit.
@@ -97,6 +98,7 @@ Every event is flattened into this v2 envelope:
 | `catalog_version` | optional catalog revision known at emission |
 | `environment` | optional deployment environment |
 | `end_user_id` | optional application-provided subject id |
+| `turn_id` | optional application turn id; the SDK turn scope stamps it ([ADR-0026](0026-turn-scope.md)) |
 | `trace_id`, `span_id` | optional active OTel correlation ids |
 | `type` and payload | flattened event tag and fields |
 

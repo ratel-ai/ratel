@@ -8,4 +8,4 @@
  * @packageDocumentation
  */
 
-export { type MastraExt, type MastraTool, mastra } from "./mastra.js";
+export { type MastraExt, type MastraOptions, type MastraTool, mastra } from "./mastra.js";
