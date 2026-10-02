@@ -49,6 +49,7 @@ from .catalog import (
     RerankerConfig,
     SearchMethod,
     SearchOrigin,
+    SystemOneConfig,
     Tool,
     ToolCatalog,
     ToolRegistry,
@@ -69,6 +70,7 @@ from .exceptions import (
     DimensionMismatchError,
     EmbedderError,
     IncompatibleMergeError,
+    SystemOneError,
 )
 from .intent_graph_storage import (
     IntentGraphStorage,
@@ -158,6 +160,8 @@ __all__ = [
     "SkillHit",
     "SkillRegistry",
     "StaleIntentGraphError",
+    "SystemOneConfig",
+    "SystemOneError",
     "Tool",
     "BaselineTurn",
     "ToolCatalog",

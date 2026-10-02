@@ -193,6 +193,11 @@ class ToolRegistry:
         identical to `search`.
         """
 
+    def set_system_one(
+        self, url: str | None = ..., api_key_env: str | None = ..., model: str | None = ...
+    ) -> None:
+        """Point "systemOne" searches and rerankers at another Jev endpoint, key or model."""
+
     def _search_with_options(
         self,
         query: str,
@@ -375,6 +380,18 @@ class ArtifactError(RuntimeError):
 class IncompatibleMergeError(ArtifactError):
     """Valid RAT1 parts that cannot be merged."""
 
+class SystemOneError(RuntimeError):
+    """A "systemOne" (Jev) search failed (ADR-0026).
+
+    Attributes:
+        code: ``"Config"`` | ``"Unauthorized"`` | ``"RateLimited"`` | ``"Http"`` |
+            ``"Unreachable"`` | ``"Malformed"`` | ``"Unknown"``.
+        status: the HTTP status for ``"Unauthorized"`` / ``"Http"``, else ``None``.
+    """
+
+    code: str
+    status: int | None
+
 class CloudError(RuntimeError):
     """A Ratel Cloud request failed: a Tool Picker search or a catalog sync.
 
@@ -522,6 +539,11 @@ class SkillRegistry:
         context: object | None = ...,
     ) -> list[SkillHit]:
         """BM25 search tagged with who initiated it — see `ToolRegistry.search_with_origin`."""
+
+    def set_system_one(
+        self, url: str | None = ..., api_key_env: str | None = ..., model: str | None = ...
+    ) -> None:
+        """Point "systemOne" searches and rerankers at another Jev endpoint, key or model."""
 
     def _search_with_options(
         self,

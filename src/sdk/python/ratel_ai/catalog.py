@@ -59,7 +59,9 @@ unaffected.
 
 SearchMethod = str
 """Retrieval engine: ``"bm25"`` (lexical, model-free, the default),
-``"semantic"`` (dense embeddings) or ``"hybrid"`` (both, fused).
+``"semantic"`` (dense embeddings), ``"hybrid"`` (both, fused), or
+``"systemOne"`` (Jev picks — sends the query and candidate text to Jev,
+called directly; see ADR-0026).
 """
 
 OriginFilterOption = Literal["any", "agent", "baseline"]
@@ -151,11 +153,25 @@ class RerankerConfig(_RerankerOptions):
 
     ``method`` re-scores the top ``depth`` (default 50, raised to ``top_k`` when
     lower) hits of the catalog's ``method`` and never adds a tool the first
-    stage did not return. Any method may rerank any other, but not itself.
-    **Experimental** — may change without a major version bump.
+    stage did not return. Any method may rerank any other, but not itself. A
+    ``"systemOne"`` reranker that fails returns the first stage's order instead
+    of raising. **Experimental** — may change without a major version bump.
     """
 
     method: str
+
+
+class SystemOneConfig(TypedDict, total=False):
+    """Where ``"systemOne"`` sends rankings: Jev (TypeSafe AI), called directly.
+
+    Defaults: ``https://api.typesafe.ai``, the key in ``TYPESAFE_API_KEY`` (read
+    at search time), model ``jev-latest``. For a catalog Ratel Cloud owns, use
+    `CloudConfig` instead — Cloud runs Jev behind its picker. **Experimental.**
+    """
+
+    url: str
+    api_key_env: str
+    model: str
 
 
 PickMode = Literal["instant", "precise", "exhaustive"]
@@ -209,14 +225,17 @@ _CLOUD_NEEDS_ASYNC = (
 
 
 def _validate_cloud(
-    cloud: CloudConfig | None, method: str | None, reranker: RerankerConfig | None
+    cloud: CloudConfig | None,
+    method: str | None,
+    reranker: RerankerConfig | None,
+    system_one: SystemOneConfig | None = None,
 ) -> None:
     if cloud is None:
         return
-    if method is not None or reranker is not None:
+    if method is not None or reranker is not None or system_one is not None:
         raise ValueError(
-            "a cloud catalog is ranked by the Cloud Tool Picker; drop `method` and "
-            "`reranker` and choose a cloud `mode` instead"
+            "a cloud catalog is ranked by the Cloud Tool Picker; drop `method`, "
+            "`reranker` and `system_one` and choose a cloud `mode` instead"
         )
     mode = cloud.get("mode")
     if mode is not None and mode not in _PICK_MODES:
@@ -225,7 +244,7 @@ def _validate_cloud(
         )
 
 
-_METHODS = ("bm25", "semantic", "hybrid")
+_METHODS = ("bm25", "semantic", "hybrid", "systemOne")
 _DENSE_METHODS = ("semantic", "hybrid")
 _RERANKER_NEEDS_ASYNC = (
     "this catalog has a reranker, which runs off the event loop; "
@@ -434,6 +453,7 @@ class ToolRegistry:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
         cloud: CloudConfig | None = None,
     ) -> None: ...
 
@@ -504,6 +524,7 @@ class ToolRegistry:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
         cloud: CloudConfig | None = None,
         spec: str | None = None,
         huggingface: str | None = None,
@@ -545,6 +566,10 @@ class ToolRegistry:
             self._native.set_experimental_dense_weight(experimental_dense_weight)
         if experimental_bm25_k1 is not None or experimental_bm25_b is not None:
             self._native.set_experimental_bm25_params(experimental_bm25_k1, experimental_bm25_b)
+        if system_one is not None:
+            self._native.set_system_one(
+                system_one.get("url"), system_one.get("api_key_env"), system_one.get("model")
+            )
         if cloud is not None:
             self._native.set_cloud(cloud.get("url"), cloud.get("api_key_env"))
         self._eager = _uses_dense(method, reranker)
@@ -733,7 +758,8 @@ class ToolRegistry:
     ) -> list[SearchHit]:
         """Search immediately with plain BM25; run anything else on a worker thread.
 
-        ``reranker`` re-scores the first stage's candidates (ADR-0026).
+        ``reranker`` re-scores the first stage's candidates (ADR-0026). A
+        standalone ``"systemOne"`` failure raises `SystemOneError`.
         """
         _validate_method(method)
         _validate_reranker(method, reranker)
@@ -1139,6 +1165,7 @@ class ToolCatalog:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
+        system_one: SystemOneConfig | None = None,
         cloud: CloudConfig | None = None,
     ) -> None:
         """Create an empty catalog.
@@ -1196,12 +1223,17 @@ class ToolCatalog:
                 method — see `RerankerConfig`. Applies to `search_async` (and
                 the capability tools, which use it); a synchronous `search` on a
                 catalog with a reranker raises. **Experimental.**
+            system_one: where ``"systemOne"`` (as method or reranker) sends
+                rankings — Jev, called directly; see `SystemOneConfig`.
+                ``"systemOne"`` sends the query and each candidate's searchable
+                text to Jev. **Experimental.**
             cloud: make Ratel Cloud this catalog's owner — ``register`` syncs
                 the catalog to the Cloud project and ``search_async`` ranks
                 through the Cloud Tool Picker; see `CloudConfig`. Not
-                combinable with ``method`` or ``reranker``. **Experimental.**
+                combinable with ``method``, ``reranker`` or ``system_one``.
+                **Experimental.**
         """
-        _validate_cloud(cloud, method, reranker)
+        _validate_cloud(cloud, method, reranker, system_one)
         method = method or "bm25"
         _validate_method(method)
         _validate_reranker(method, reranker)
@@ -1220,6 +1252,7 @@ class ToolCatalog:
             experimental_bm25_b=experimental_bm25_b,
             experimental_embedding_artifact=experimental_embedding_artifact,
             reranker=reranker,
+            system_one=system_one,
             cloud=cloud,
         )
         if trace is not None:
@@ -1381,6 +1414,7 @@ class ToolCatalog:
             mode: pick mode for this call, on a cloud catalog.
 
         Raises:
+            SystemOneError: a standalone ``"systemOne"`` search failed.
             CloudError: a cloud catalog's Tool Picker search failed.
         """
         if self._cloud is not None:

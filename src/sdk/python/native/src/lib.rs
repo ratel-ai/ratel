@@ -437,6 +437,60 @@ create_exception!(
     "A Ratel Cloud request failed: a Tool Picker search or a catalog sync (subclass of RuntimeError)."
 );
 
+create_exception!(
+    _native,
+    SystemOneError,
+    PyRuntimeError,
+    "A systemOne (Jev) search failed: Jev unreachable, key rejected, rate limited, or a malformed ranking (subclass of RuntimeError)."
+);
+
+fn system_one_pyerr(e: core::SystemOneError) -> PyErr {
+    let code = match &e {
+        core::SystemOneError::Config { .. } => "Config",
+        core::SystemOneError::Unauthorized { .. } => "Unauthorized",
+        core::SystemOneError::RateLimited => "RateLimited",
+        core::SystemOneError::Http { .. } => "Http",
+        core::SystemOneError::Unreachable { .. } => "Unreachable",
+        core::SystemOneError::Malformed { .. } => "Malformed",
+        _ => "Unknown",
+    };
+    let status = match &e {
+        core::SystemOneError::Unauthorized { status } | core::SystemOneError::Http { status } => {
+            Some(*status)
+        }
+        _ => None,
+    };
+    Python::with_gil(|py| {
+        let err = SystemOneError::new_err(e.to_string());
+        let value = err.value(py);
+        if let Err(attr_err) = value.setattr("code", code) {
+            return attr_err;
+        }
+        if let Err(attr_err) = value.setattr("status", status) {
+            return attr_err;
+        }
+        err
+    })
+}
+
+fn system_one_config(
+    url: Option<String>,
+    api_key_env: Option<String>,
+    model: Option<String>,
+) -> core::SystemOneConfig {
+    let mut config = core::SystemOneConfig::default();
+    if let Some(url) = url {
+        config = config.with_url(url);
+    }
+    if let Some(name) = api_key_env {
+        config = config.with_api_key_env(name);
+    }
+    if let Some(model) = model {
+        config = config.with_model(model);
+    }
+    config
+}
+
 fn cloud_pyerr(e: core::CloudError) -> PyErr {
     let status = match &e {
         core::CloudError::Unauthorized { status } | core::CloudError::Http { status, .. } => {
@@ -465,10 +519,11 @@ fn cloud_pyerr(e: core::CloudError) -> PyErr {
 }
 
 /// Map a two-stage search failure: embedder errors keep their typed classes,
-/// bad options `ValueError`.
+/// system-one failures raise `SystemOneError`, bad options `ValueError`.
 fn map_search_err(e: core::SearchError) -> PyErr {
     match e {
         core::SearchError::Embedder(inner) => map_embedder_err(inner),
+        core::SearchError::SystemOne(inner) => system_one_pyerr(inner),
         core::SearchError::InvalidOptions { message } => PyValueError::new_err(message),
         other => PyRuntimeError::new_err(other.to_string()),
     }
@@ -1108,6 +1163,20 @@ impl ToolRegistry {
                 relevance: f64::from(hit.relevance),
             })
             .collect())
+    }
+
+    /// Point `"systemOne"` searches and rerankers at another Jev endpoint, key
+    /// or model; unset fields keep the defaults (`https://api.typesafe.ai`,
+    /// `TYPESAFE_API_KEY`, `jev-latest`).
+    #[pyo3(signature = (url=None, api_key_env=None, model=None))]
+    fn set_system_one(
+        &mut self,
+        url: Option<String>,
+        api_key_env: Option<String>,
+        model: Option<String>,
+    ) {
+        self.inner
+            .set_system_one(system_one_config(url, api_key_env, model));
     }
 
     /// Private GIL-releasing two-stage search (ADR-0026): `method`, then an
@@ -1767,6 +1836,20 @@ impl SkillRegistry {
             .collect())
     }
 
+    /// Point `"systemOne"` searches and rerankers at another Jev endpoint, key
+    /// or model; unset fields keep the defaults (`https://api.typesafe.ai`,
+    /// `TYPESAFE_API_KEY`, `jev-latest`).
+    #[pyo3(signature = (url=None, api_key_env=None, model=None))]
+    fn set_system_one(
+        &mut self,
+        url: Option<String>,
+        api_key_env: Option<String>,
+        model: Option<String>,
+    ) {
+        self.inner
+            .set_system_one(system_one_config(url, api_key_env, model));
+    }
+
     /// Private GIL-releasing two-stage search (ADR-0026): `method`, then an
     /// optional `reranker_method` over its top `reranker_depth` candidates.
     #[pyo3(signature = (query, top_k, origin, method, reranker_method=None, reranker_depth=None, context=None))]
@@ -2398,5 +2481,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     m.add("ArtifactWarmError", m.py().get_type::<ArtifactWarmError>())?;
     m.add("CloudError", m.py().get_type::<CloudError>())?;
+    m.add("SystemOneError", m.py().get_type::<SystemOneError>())?;
     Ok(())
 }

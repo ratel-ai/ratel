@@ -214,3 +214,9 @@ def test_cloud_with_a_local_method_or_bad_mode_is_rejected(mock: MockCloud) -> N
         ToolCatalog(reranker={"method": "semantic"}, cloud=cloud)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="mode"):
         ToolCatalog(cloud={**cloud, "mode": "fast"})  # type: ignore[typeddict-item]
+
+
+def test_cloud_with_system_one_is_rejected(mock: MockCloud) -> None:
+    cloud = {"url": mock.url, "api_key_env": KEY_ENV}
+    with pytest.raises(ValueError, match="cloud"):
+        ToolCatalog(system_one={}, cloud=cloud)  # type: ignore[arg-type]

@@ -163,9 +163,25 @@ hits = await catalog.search_async("refund the last order", 5)   # POST /v1/tools
   - Ids the picker returns that aren't registered locally are dropped, with a `RuntimeWarning`.
 - **Errors:** `CloudError` carries `.code`, `.status` and `.retry_after_secs`.
 
+## System-one ranking with Jev (experimental)
+
+For a catalog that lives in your process, `"systemOne"` asks [Jev](https://docs.typesafe.ai) (TypeSafe AI) to pick tools directly. There is no Ratel Cloud involved, and you supply your own TypeSafe key ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)):
+
+```python
+ToolCatalog(method="systemOne")                                            # Jev ranks every tool
+ToolCatalog(method="bm25", reranker={"method": "systemOne", "depth": 50})  # BM25, then Jev
+```
+
+- **Configuration:** `system_one={"url", "api_key_env", "model"}`. The defaults are `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`.
+- **Large catalogs:** above 150 tools, the tools are split into groups judged in parallel, and the winners go to a final round.
+- **Failures:** a failed standalone search raises `SystemOneError` (`.code`, `.status`). A failed reranker falls back to the first stage's order.
+- **Privacy:** **`"systemOne"` sends the query and each candidate's searchable text to Jev.**
+
+`cloud` is for a catalog Ratel Cloud owns, where Cloud runs Jev behind its Tool Picker. `system_one` is for a catalog the SDK owns. One catalog can't use both.
+
 ## Reranking (experimental)
 
-A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker["method"]` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"` or `"hybrid"`, but the two stages must use different methods:
+A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker["method"]` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"` or `"systemOne"`, but the two stages must use different methods:
 
 ```python
 catalog = ToolCatalog(method="bm25", reranker={"method": "semantic", "depth": 30})
