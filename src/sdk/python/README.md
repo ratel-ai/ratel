@@ -137,25 +137,44 @@ await catalog.invoke("create_linear_task", {}, turn_id)  # pairs with the second
 
 Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel/tree/main/examples/pydantic-ai).
 
-## Reranking and system-one (experimental)
+## Ratel Cloud Tool Picker (experimental)
 
-A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates; `reranker["method"]` re-scores the top `depth` of them (default 50) and never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"`, or `"systemOne"`, but not the same method twice:
+`cloud` makes Ratel Cloud the tool catalog's owner ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md), [ADR 0027](../../../docs/adr/0027-cloud-catalog-sync.md)). `register` uploads the catalog to your Cloud project, and `search_async` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Executors stay local.
 
 ```python
-catalog = ToolCatalog(method="bm25", reranker={"method": "systemOne", "depth": 50})
-await catalog.register(tools)
-hits = await catalog.search_async("refund the last order", 5)
+catalog = ToolCatalog(cloud={"mode": "precise"})        # key in RATEL_API_KEY
+await catalog.register(tools)                            # syncs the catalog to Cloud
+hits = await catalog.search_async("refund the last order", 5)   # POST /v1/tools/pick
 ```
 
-`"systemOne"` asks a hosted system-one model (Jev today) to pick from the candidates. It can also be the only stage: `ToolCatalog(method="systemOne")` ranks the whole catalog. It calls Ratel Cloud at `https://app.ratel.sh/v1/systemone` with the key in `RATEL_API_KEY`; `system_one={"url": ..., "api_key_env": ...}` points it elsewhere.
+`mode` is `"instant"` (BM25, free), `"precise"` (the default: a BM25 shortlist judged by a system-one model, metered) or `"exhaustive"` (the model over the whole catalog, metered). **A `cloud` catalog sends its tool names, descriptions and schemas, and every query, to Ratel Cloud.**
 
-**`"systemOne"` sends the query and every candidate's searchable text (name, description, schema terms) to that endpoint, which forwards them to the model provider.** The other methods never leave the process.
+- **Options:**
+  - `cloud={"mode", "url", "api_key_env", "source_id", "on_sync_error"}`; every key is optional.
+  - `source_id` names this service's catalog in the project. It defaults to `OTEL_SERVICE_NAME`, then `"ratel"`.
+  - `cloud` can't be combined with `method` or `reranker`.
+- **Sync:**
+  - `register` resolves once Cloud has acknowledged the catalog. An unchanged catalog isn't re-sent.
+  - A failed sync raises `CloudError` (a `RuntimeError`); the tool stays registered locally. `on_sync_error="warn"` only warns instead.
+  - `await catalog.sync_now()` retries a failed sync.
+- **Search:**
+  - `search_async(q, k, mode="instant")` overrides the mode for one call. `top_k` is capped at 20.
+  - Synchronous `search` raises on a `cloud` catalog.
+  - Ids the picker returns that aren't registered locally are dropped, with a `RuntimeWarning`.
+- **Errors:** `CloudError` carries `.code`, `.status` and `.retry_after_secs`.
 
-- A reranker runs off the event loop: use `search_async`. Synchronous `search` raises on a catalog with a reranker, and on `"systemOne"`.
-- `search_async(..., reranker=...)` overrides the catalog's reranker for one call; `reranker=False` turns it off.
-- A failed standalone `"systemOne"` search raises `SystemOneError` (a `RuntimeError`) with `.code` (`"Unauthorized"`, `"RateLimited"`, `"Http"`, `"Unreachable"`, `"Malformed"`, `"Config"`) and `.status`. A failed `"systemOne"` **reranker** returns the first stage's order instead and records a `rerank_fallback` trace stage.
-- A semantic or hybrid reranker makes `register()` build embeddings, as a semantic `method` does.
-- `SkillCatalog` takes the same `reranker` and `system_one` arguments. Facts do not support `"systemOne"`.
+## Reranking (experimental)
+
+A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker["method"]` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"` or `"hybrid"`, but the two stages must use different methods:
+
+```python
+catalog = ToolCatalog(method="bm25", reranker={"method": "semantic", "depth": 30})
+await catalog.register(tools)    # a semantic reranker makes register() build embeddings
+hits = await catalog.search_async("deploy the service", 5)
+plain = await catalog.search_async("deploy the service", 5, reranker=False)   # off for one call
+```
+
+A reranker needs `search_async`; synchronous `search` raises on a catalog that has one. `SkillCatalog` takes the same `reranker` argument.
 
 ## Runtime events and catalog snapshots
 

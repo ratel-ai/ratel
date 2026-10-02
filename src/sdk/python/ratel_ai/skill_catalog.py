@@ -30,7 +30,6 @@ from .catalog import (
     RerankerConfig,
     SearchMethod,
     SearchOrigin,
-    SystemOneConfig,
     TraceSinkConfig,
     _registry_embedding_kwargs,
     _resolve_reranker,
@@ -141,7 +140,6 @@ class SkillRegistry:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
     ) -> None: ...
 
     @overload
@@ -211,7 +209,6 @@ class SkillRegistry:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
         spec: str | None = None,
         huggingface: str | None = None,
         local: str | None = None,
@@ -251,8 +248,6 @@ class SkillRegistry:
             self._native.set_experimental_dense_weight(experimental_dense_weight)
         if experimental_bm25_k1 is not None or experimental_bm25_b is not None:
             self._native.set_experimental_bm25_params(experimental_bm25_k1, experimental_bm25_b)
-        if system_one is not None:
-            self._native.set_system_one(system_one.get("url"), system_one.get("api_key_env"))
         self._eager = _uses_dense(method, reranker)
         self._embedding_artifact = experimental_embedding_artifact
         self._warn_on_model_mismatch = True
@@ -740,7 +735,6 @@ class SkillCatalog:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
     ) -> None:
         """Create an empty skill catalog.
 
@@ -774,8 +768,6 @@ class SkillCatalog:
                 for uncovered current-kind entries is ``on_miss="embed"``.
             reranker: second-stage reranker — see `ToolCatalog.__init__`.
                 **Experimental.**
-            system_one: system-one endpoint override — see
-                `ToolCatalog.__init__`. **Experimental.**
         """
         _validate_method(method)
         _validate_reranker(method, reranker)
@@ -790,7 +782,6 @@ class SkillCatalog:
             experimental_bm25_b=experimental_bm25_b,
             experimental_embedding_artifact=experimental_embedding_artifact,
             reranker=reranker,
-            system_one=system_one,
         )
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)

@@ -205,8 +205,21 @@ class ToolRegistry:
     ) -> list[SearchHit]:
         """Private worker-thread two-stage search primitive (ADR-0026)."""
 
-    def set_system_one(self, url: str | None = ..., api_key_env: str | None = ...) -> None:
-        """Point "systemOne" searches and rerankers at another endpoint or key."""
+    def set_cloud(self, url: str | None = ..., api_key_env: str | None = ...) -> None:
+        """Make Ratel Cloud this catalog's owner (ADR-0026)."""
+
+    def _cloud_pick(
+        self,
+        query: str,
+        top_k: int,
+        origin: str,
+        mode: str,
+        context: object | None = ...,
+    ) -> tuple[list[SearchHit], list[str], bool | None]:
+        """Private worker-thread Tool Picker search: (hits, dropped ids, confident)."""
+
+    def _cloud_sync(self, source_id: str) -> tuple[str, int, bool, bool]:
+        """Private worker-thread catalog sync: (catalog_version, tools, unchanged, skipped)."""
 
     def _search_with_method(
         self,
@@ -362,17 +375,20 @@ class ArtifactError(RuntimeError):
 class IncompatibleMergeError(ArtifactError):
     """Valid RAT1 parts that cannot be merged."""
 
-class SystemOneError(RuntimeError):
-    """A "systemOne" search failed (ADR-0026).
+class CloudError(RuntimeError):
+    """A Ratel Cloud request failed: a Tool Picker search or a catalog sync.
 
     Attributes:
-        code: ``"Config"`` | ``"Unauthorized"`` | ``"RateLimited"`` | ``"Http"`` |
-            ``"Unreachable"`` | ``"Malformed"`` | ``"Unknown"``.
+        code: ``"Config"`` | ``"Unauthorized"`` | ``"InsufficientCredits"`` |
+            ``"NoSyncedTools"`` | ``"RateLimited"`` | ``"TooLarge"`` | ``"Timeout"`` |
+            ``"Unavailable"`` | ``"Http"`` | ``"Malformed"``.
         status: the HTTP status for ``"Unauthorized"`` / ``"Http"``, else ``None``.
+        retry_after_secs: Cloud's ``Retry-After`` for ``"RateLimited"``, else ``None``.
     """
 
     code: str
     status: int | None
+    retry_after_secs: int | None
 
 class ArtifactWarmError(RuntimeError):
     """Warming the dense cache from an embedding artifact failed.
@@ -518,9 +534,6 @@ class SkillRegistry:
         context: object | None = ...,
     ) -> list[SkillHit]:
         """Private worker-thread two-stage search primitive (ADR-0026)."""
-
-    def set_system_one(self, url: str | None = ..., api_key_env: str | None = ...) -> None:
-        """Point "systemOne" searches and rerankers at another endpoint or key."""
 
     def _search_with_method(
         self,

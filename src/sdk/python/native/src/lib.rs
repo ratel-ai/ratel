@@ -432,34 +432,32 @@ create_exception!(
 );
 create_exception!(
     _native,
-    SystemOneError,
+    CloudError,
     PyRuntimeError,
-    "A systemOne search failed: endpoint unreachable, key rejected, rate limited, or a malformed ranking (subclass of RuntimeError)."
+    "A Ratel Cloud request failed: a Tool Picker search or a catalog sync (subclass of RuntimeError)."
 );
 
-fn system_one_pyerr(e: core::SystemOneError) -> PyErr {
-    let code = match &e {
-        core::SystemOneError::Config { .. } => "Config",
-        core::SystemOneError::Unauthorized { .. } => "Unauthorized",
-        core::SystemOneError::RateLimited => "RateLimited",
-        core::SystemOneError::Http { .. } => "Http",
-        core::SystemOneError::Unreachable { .. } => "Unreachable",
-        core::SystemOneError::Malformed { .. } => "Malformed",
-        _ => "Unknown",
-    };
+fn cloud_pyerr(e: core::CloudError) -> PyErr {
     let status = match &e {
-        core::SystemOneError::Unauthorized { status } | core::SystemOneError::Http { status } => {
+        core::CloudError::Unauthorized { status } | core::CloudError::Http { status, .. } => {
             Some(*status)
         }
         _ => None,
     };
+    let retry_after = match &e {
+        core::CloudError::RateLimited { retry_after_secs } => *retry_after_secs,
+        _ => None,
+    };
     Python::with_gil(|py| {
-        let err = SystemOneError::new_err(e.to_string());
+        let err = CloudError::new_err(e.to_string());
         let value = err.value(py);
-        if let Err(attr_err) = value.setattr("code", code) {
+        if let Err(attr_err) = value.setattr("code", e.code()) {
             return attr_err;
         }
         if let Err(attr_err) = value.setattr("status", status) {
+            return attr_err;
+        }
+        if let Err(attr_err) = value.setattr("retry_after_secs", retry_after) {
             return attr_err;
         }
         err
@@ -467,11 +465,10 @@ fn system_one_pyerr(e: core::SystemOneError) -> PyErr {
 }
 
 /// Map a two-stage search failure: embedder errors keep their typed classes,
-/// system-one failures raise `SystemOneError`, bad options `ValueError`.
+/// bad options `ValueError`.
 fn map_search_err(e: core::SearchError) -> PyErr {
     match e {
         core::SearchError::Embedder(inner) => map_embedder_err(inner),
-        core::SearchError::SystemOne(inner) => system_one_pyerr(inner),
         core::SearchError::InvalidOptions { message } => PyValueError::new_err(message),
         other => PyRuntimeError::new_err(other.to_string()),
     }
@@ -499,8 +496,8 @@ fn search_options(
     Ok(options)
 }
 
-fn system_one_config(url: Option<String>, api_key_env: Option<String>) -> core::SystemOneConfig {
-    let mut config = core::SystemOneConfig::default();
+fn cloud_config(url: Option<String>, api_key_env: Option<String>) -> core::CloudConfig {
+    let mut config = core::CloudConfig::default();
     if let Some(url) = url {
         config = config.with_url(url);
     }
@@ -1115,7 +1112,6 @@ impl ToolRegistry {
 
     /// Private GIL-releasing two-stage search (ADR-0026): `method`, then an
     /// optional `reranker_method` over its top `reranker_depth` candidates.
-    /// Supports `"systemOne"`; its failures raise `SystemOneError`.
     #[pyo3(signature = (query, top_k, origin, method, reranker_method=None, reranker_depth=None, context=None))]
     #[allow(clippy::too_many_arguments)]
     fn _search_with_options(
@@ -1150,12 +1146,66 @@ impl ToolRegistry {
             .collect())
     }
 
-    /// Point `"systemOne"` searches and rerankers at another endpoint or key;
-    /// unset fields keep Ratel Cloud's defaults.
+    /// Make Ratel Cloud this catalog's owner (ADR-0026); unset fields keep the
+    /// defaults (`https://cloud.ratel.sh`, `RATEL_API_KEY`).
     #[pyo3(signature = (url=None, api_key_env=None))]
-    fn set_system_one(&mut self, url: Option<String>, api_key_env: Option<String>) {
-        self.inner
-            .set_system_one(system_one_config(url, api_key_env));
+    fn set_cloud(&mut self, url: Option<String>, api_key_env: Option<String>) {
+        self.inner.set_cloud(cloud_config(url, api_key_env));
+    }
+
+    /// Private GIL-releasing Tool Picker search: `(hits, dropped_ids,
+    /// confident)`. Failures raise `CloudError`; an unknown mode `ValueError`.
+    #[pyo3(signature = (query, top_k, origin, mode, context=None))]
+    fn _cloud_pick(
+        &self,
+        py: Python<'_>,
+        query: String,
+        top_k: u32,
+        origin: String,
+        mode: String,
+        context: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<(Vec<SearchHit>, Vec<String>, Option<bool>)> {
+        let mode = mode
+            .parse::<core::PickMode>()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let origin = parse_origin(origin.as_str());
+        let context = trace_event_context(context)?;
+        let pick = py
+            .allow_threads(|| {
+                self.inner
+                    .cloud_pick(&query, top_k as usize, origin, mode, context)
+            })
+            .map_err(cloud_pyerr)?;
+        let hits = pick
+            .hits
+            .into_iter()
+            .map(|hit| SearchHit {
+                tool_id: hit.tool_id,
+                score: hit.score as f64,
+                rank: hit.rank,
+                fused: hit.fused,
+                relevance: f64::from(hit.relevance),
+            })
+            .collect();
+        Ok((hits, pick.dropped, pick.confident))
+    }
+
+    /// Private GIL-releasing catalog sync (ADR-0027): `(catalog_version,
+    /// tools, unchanged, skipped)`. Failures raise `CloudError`.
+    fn _cloud_sync(
+        &self,
+        py: Python<'_>,
+        source_id: String,
+    ) -> PyResult<(String, usize, bool, bool)> {
+        let outcome = py
+            .allow_threads(|| self.inner.cloud_sync(&source_id))
+            .map_err(cloud_pyerr)?;
+        Ok((
+            outcome.catalog_version,
+            outcome.tools,
+            outcome.unchanged,
+            outcome.skipped,
+        ))
     }
 
     /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
@@ -1719,7 +1769,6 @@ impl SkillRegistry {
 
     /// Private GIL-releasing two-stage search (ADR-0026): `method`, then an
     /// optional `reranker_method` over its top `reranker_depth` candidates.
-    /// Supports `"systemOne"`; its failures raise `SystemOneError`.
     #[pyo3(signature = (query, top_k, origin, method, reranker_method=None, reranker_depth=None, context=None))]
     #[allow(clippy::too_many_arguments)]
     fn _search_with_options(
@@ -1752,14 +1801,6 @@ impl SkillRegistry {
                 relevance: f64::from(hit.relevance),
             })
             .collect())
-    }
-
-    /// Point `"systemOne"` searches and rerankers at another endpoint or key;
-    /// unset fields keep Ratel Cloud's defaults.
-    #[pyo3(signature = (url=None, api_key_env=None))]
-    fn set_system_one(&mut self, url: Option<String>, api_key_env: Option<String>) {
-        self.inner
-            .set_system_one(system_one_config(url, api_key_env));
     }
 
     /// Private GIL-releasing method search — see [`ToolRegistry::_search_with_method`].
@@ -2356,6 +2397,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.py().get_type::<IncompatibleMergeError>(),
     )?;
     m.add("ArtifactWarmError", m.py().get_type::<ArtifactWarmError>())?;
-    m.add("SystemOneError", m.py().get_type::<SystemOneError>())?;
+    m.add("CloudError", m.py().get_type::<CloudError>())?;
     Ok(())
 }
