@@ -1,20 +1,11 @@
 # 27. System-one ranking — the Cloud Tool Picker and Jev direct — and a two-stage reranker
 
-Date: 2026-10-01 (revised 2026-10-02)
+Date: 2026-10-01
 
 ## Status
 
 Proposed. Accepted once `ratel-bench` has measured the three picker modes against local
 `bm25` / `hybrid`, as [ADR-0024](0024-hybrid-fuses-on-scores.md) was.
-
-Revised 2026-10-02: the first draft had the SDK own the catalog and send candidates to a
-stateless `/v1/systemone` endpoint. Ratel Cloud owns the catalog instead, and ranking goes
-through the documented [Tool Picker API](https://docs.ratel.sh/cloud/tool-picker). The first
-draft's invented Ratel `/v1/systemone` endpoint was dropped before release.
-
-Revised again 2026-10-02: Jev support in the SDK is kept beside the picker (decision 7). The
-`systemOne` method and reranker call Jev directly, for catalogs the SDK owns; `cloud` serves
-catalogs Cloud owns. Both reach the same model.
 
 Builds on [ADR-0011](0011-selectable-retrieval-methods.md) (selectable methods; its "no
 cross-encoder reranker" is lifted here), [ADR-0014](0014-adaptive-usage-ranking.md) (the usage
@@ -61,14 +52,16 @@ wants these modes must keep that catalog in sync ([ADR-0028](0028-cloud-catalog-
 option:
 
 ```ts
-cloud: { mode: "instant" | "precise" | "exhaustive", url?, apiKeyEnv? }
+cloud: { mode: "instant" | "precise" | "exhaustive", url?, apiKeyEnv?, sourceId?, onSyncError? }
 ```
 
 `url` defaults to `https://cloud.ratel.sh`, `apiKeyEnv` to `RATEL_API_KEY`. Setting `cloud`
 turns on catalog sync ([ADR-0028](0028-cloud-catalog-sync.md)) and routes tool searches to
 `/v1/tools/pick` with that mode. `searchAsync(q, k, { mode })` overrides the mode per call.
-`cloud` together with `method` or `reranker` is a configuration error: the mode picks the
-pipeline. Python spells it `cloud={"mode": ..., "url": ..., "api_key_env": ...}`.
+`cloud` together with `method`, `reranker` or `systemOne` on one catalog is a configuration
+error: the mode picks the pipeline. On `ratel()`, those options then apply to the skill catalog
+only. Python spells it `cloud={"mode": ..., "url": ..., "api_key_env": ..., "source_id": ...,
+"on_sync_error": ...}`.
 
 **2. Every mode goes to Cloud, `instant` included.** A local BM25 would be faster, but only
 correct while the local and synced catalogs agree; one source of truth for every mode is worth a
@@ -80,25 +73,28 @@ warned about — it means the synced catalog is ahead of or apart from this proc
 
 **4. The Ratel SDK owns the client, not `@ratel-ai/cloud-sdk`.** One option in one package, in
 both TypeScript and Python (cloud-sdk is TypeScript-only), and picking cannot be switched on
-without the sync it depends on. One Rust `CloudClient` in core, shared by the picker and sync and
-used by both SDKs, carries auth (key read at call time), timeouts (15 s; 60 s for `exhaustive`, above the
+without the sync it depends on. One core client (`HttpCloud`, behind the crate-private
+`CloudApi` trait), shared by the picker and sync and used by both SDKs, carries auth (key read at call time), timeouts (15 s; 60 s for `exhaustive`, above the
 server's 45 s), response validation (unknown and repeated ids dropped, scores clamped to `[0, 1]`,
 at most `top_k`) and typed errors:
 
 | Status | `CloudError` code |
 |---|---|
+| before any request (no key, query over 2,000 chars, bad `source_id`) | `Config` |
 | 401 / 403 | `Unauthorized` |
 | 402 | `InsufficientCredits` |
 | 409 | `NoSyncedTools` |
-| 429 | `RateLimited` (carries `retryAfter`) |
+| 413, or a snapshot over Cloud's limits checked locally | `TooLarge` |
+| 429 | `RateLimited` (carries `retryAfterSecs` / `retry_after_secs`) |
 | 504 / transport timeout | `Timeout` |
 | 502 / 503 / unreachable | `Unavailable` |
-| bad body | `Malformed` |
+| any other non-2xx | `Http` |
+| a body that is not the expected response | `Malformed` |
 
 `top_k` above 20 is clamped to 20, because the capability tools may ask for more. Hits keep the
-`SearchHit` shape (`score` from the picker, `fused: false`); `confident` and `usage` ride the
-search trace stage. A failed pick throws; an opt-in `fallback: "local-bm25"` serves local BM25
-for hosts that prefer a degraded answer to none.
+`SearchHit` shape (`score` from the picker, `fused: false`), and the search event carries one
+`cloud:<mode>` stage. Core returns the picker's `confident` (`CloudPick`); the SDKs do not
+surface it yet, and `usage` is not read. A failed pick throws; there is no local fallback.
 
 **5. Tools only, for now.** The picker ranks tools. Skills and facts are searched locally; they
 sync once Cloud's snapshot accepts them, and use the picker once it takes a `kind`
@@ -120,7 +116,11 @@ candidates) call Jev's `POST /v1/systemone` from the SDK, configured by
 text as index-keyed criteria (`t0…tN`) and ranks by the returned probabilities. A candidate set
 over 150 options or 80,000 characters — Cloud's per-question limits — runs as a tournament:
 groups that fit one question are ranked in parallel (6 at a time), each keeps its top `k`, and
-the winners go to a final round. A failed `systemOne` reranker returns stage 1's order and
+the winners go to a final round. Each group keeps at most `k`, at most its share of one
+question (`150 / groups` options and `80,000 / groups` characters) and at most all but one of
+its members, so every round shrinks the field and the round after the groups fits one question.
+A tournament therefore returns at most what fits that final question, which for a large `k` can
+be fewer than `k`. A failed `systemOne` reranker returns stage 1's order and
 records a `rerank_fallback` stage; a failed standalone search raises a typed `SystemOneError`.
 `systemOne` and `cloud` on one catalog is a configuration error; facts do not support it.
 
@@ -129,9 +129,13 @@ OpenAI Decisions as a provider — all server-side concerns behind the same endp
 
 ## Consequences
 
-- **Data leaves the process.** A cloud catalog uploads tool, skill and fact definitions and sends
-  every query to Ratel Cloud, which forwards text to the model provider. Local methods never
-  leave the process. The SDK READMEs say so in bold.
+- **Data leaves the process.** A cloud catalog uploads its tool definitions and sends every query
+  to Ratel Cloud, which forwards text to the model provider; `systemOne` sends the query and the
+  candidates' text to Jev. Local methods never leave the process. The SDK READMEs say so in bold.
+- **Naming.** The new options ship as `cloud`, `systemOne` / `system_one` and `reranker`, without
+  the `experimental*` prefix the repo uses for new surfaces, to keep them short in the common
+  case. They are marked experimental in TSDoc, docstrings and READMEs and may change without a
+  major version bump.
 - A search costs a network round trip in every mode and tokens in `precise` / `exhaustive`; free
   plans allow 10 `precise` / `exhaustive` picks a minute.
 - Providers, the BM25 prefilter depth and chunking for large catalogs live in Cloud: changing them
@@ -146,7 +150,7 @@ OpenAI Decisions as a provider — all server-side concerns behind the same endp
 
 ## Rejected
 
-- **A Ratel-hosted stateless `/v1/systemone` endpoint** (this ADR's first draft): the SDK sends
+- **A Ratel-hosted stateless `/v1/systemone` endpoint**: the SDK sends
   candidates and Ratel forwards them to a provider. The documented picker ranks a synced catalog
   instead, and the SDK-owned case is served by calling Jev directly (decision 7).
 - **Generic provider config on the catalog** (`{ jev: {...}, openai: {...} }`). `systemOne`

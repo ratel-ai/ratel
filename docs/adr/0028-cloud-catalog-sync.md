@@ -28,8 +28,8 @@ The Tool Picker ranks the project's runtime catalog — `runtime_catalog_entries
   `RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS=true` and content capture are on.
 
 The ADR-0020 runtime-events endpoint (`/api/v1/events`) does not write the catalog.
-`@ratel-ai/cloud-sdk`'s `attach()` already publishes snapshots to the first channel; the Ratel
-SDK has no publisher of its own, and ADR-0027 puts the picker in the Ratel SDK.
+`@ratel-ai/cloud-sdk`'s `attach()` publishes snapshots to the first channel. ADR-0027 puts the
+picker in the Ratel SDK, so the Ratel SDK publishes them itself too.
 
 Only the snapshot channel is fit for ranking: complete, restart-safe, with removals. The logs
 channel is observation — the same lossiness ADR-0020 states for `catalog_definition` events.
@@ -55,15 +55,19 @@ built from the catalog's existing executor-free `snapshot()`. Executors, validat
 credentials never leave the process. `source_id` is the runtime's existing `sourceId` (ADR-0020),
 so two services sharing a project replace only their own tools.
 
-**3. When it runs.** The first sync in a process always sends the full snapshot — that is what
-covers restarts. After it, `register`, `replaceAll` and removals trigger a sync, coalesced so a
-batch costs one request and the 20/min limit is not a concern for ordinary registration. The SDK
-computes the canonical snapshot hash Cloud computes (cloud-sdk's `hashCatalogSnapshot`) and skips
-the request when it equals the last acknowledged `catalogVersion`. Limits are checked client-side
-first: a catalog over 5,000 tools or 4 MB fails the sync with a clear error rather than a 413.
+**3. When it runs.** Every `register` on a cloud catalog syncs once, after its batch is indexed,
+so a batch costs one request; `syncNow()` / `sync_now()` syncs on demand. The first sync in a
+process always sends the full snapshot — that is what covers restarts. Core hashes the snapshot
+it is about to send (SHA-256 of the executor-free tools, sorted by id) and skips the request when
+that hash and `source_id` match the last snapshot Cloud acknowledged; it is the SDK's own hash,
+not Cloud's `catalogVersion`. A failed upload forgets every earlier acknowledgement, because it
+may have landed anyway, so the next sync always sends. Limits are checked client-side first: a
+catalog over 5,000 tools or 4 MB, or a `source_id` over 512 characters, fails the sync with a
+clear error rather than a 413.
 
-**4. `register` waits for Cloud.** Sync runs inside the already-async `register` / `replaceAll`,
-where embedding runs today, and resolves once Cloud acknowledges it. The SDK keeps the returned
+**4. `register` waits for Cloud.** Sync runs inside the already-async `register`, where
+embedding runs today, and resolves once Cloud acknowledges it. In Python, a `register` that is
+never awaited never syncs; the next pick raises instead of ranking a catalog Cloud never got. The SDK keeps the returned
 `catalogVersion`; once the picker accepts one (ask 2), pick requests send it so a search right
 after `register` never ranks a stale catalog.
 
@@ -72,8 +76,8 @@ after `register` never ranks a stale catalog.
 `TooLarge`, `Unavailable`, `Malformed`, …) unless `onSyncError: "warn"` (Python
 `on_sync_error="warn"`) is set. The next mutation, or `syncNow()` / `sync_now()`, retries.
 
-**6. Core owns it.** Snapshot building, hashing, coalescing and the HTTP call live in the Rust
-`CloudClient` shared with the picker, so TypeScript and Python sync identically.
+**6. Core owns it.** Snapshot building, hashing and the HTTP call live in core (`HttpCloud`,
+shared with the picker), so TypeScript and Python sync identically.
 
 **7. Skills and facts sync once Cloud accepts them** (ask 1), through the same snapshot, with
 `tags` and without bodies or `metadata` unless `syncBodies: true`. Until then they stay local;
@@ -109,7 +113,7 @@ recommend one or the other.
 
 - **Syncing through `ratel.catalog.definition` logs or events** — upsert-only, best effort, no
   removals, nothing on an unchanged restart.
-- **A new sync endpoint** (this ADR's first draft) — the snapshot endpoint already provides
+- **A new sync endpoint** — the snapshot endpoint already provides
   per-source replace, hash idempotency and a version.
 - **Delegating sync to `@ratel-ai/cloud-sdk`'s `attach()`** — TypeScript-only, and a second
   package for the picker's prerequisite.
