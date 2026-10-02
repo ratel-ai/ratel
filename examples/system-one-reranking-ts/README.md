@@ -54,4 +54,4 @@ src/index.ts      entry — bm25, bm25 -> systemOne, systemOne alone, failure be
 - `method: "systemOne"` makes Jev the only stage. Above 150 tools, the candidates are split into groups, and each group's winners go into a final round.
 - `systemOne: { url, apiKeyEnv, model }` sets where calls go. The defaults are `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`.
 - `searchAsync(q, k, { reranker: null })` turns the catalog's reranker off for one call. Synchronous `search` throws on `"systemOne"` and on any catalog with a reranker.
-- **Failure:** a failed system-one *reranker* returns the first stage's order and records a `rerank_fallback` trace stage. A failed standalone `"systemOne"` search throws `SystemOneError` with a stable `.code`.
+- **Failure:** a failed standalone `"systemOne"` search throws `SystemOneError` with a stable `.code`. A system-one *reranker* throws only misconfiguration (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`); on any other failure, like the unreachable Jev above, it returns the first stage's order and records a `rerank_fallback:<code>` trace stage.

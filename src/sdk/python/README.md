@@ -180,7 +180,7 @@ hits = await catalog.search_async("refund the last order", 5)   # POST /v1/tools
 - **Options:**
   - `cloud={"mode", "url", "api_key_env", "source_id", "on_sync_error"}`; every key is optional.
   - `source_id` names this service's catalog in the project. It defaults to `OTEL_SERVICE_NAME`, then `"ratel"`.
-  - `cloud` can't be combined with `method` or `reranker`.
+  - `cloud` can't be combined with `method`, `reranker`, `system_one` or `experimental_embedding_artifact`.
 - **Sync:**
   - `register` resolves once Cloud has acknowledged the catalog. An unchanged catalog isn't re-sent.
   - A failed sync raises `CloudError` (a `RuntimeError`); the tool stays registered locally. `on_sync_error="warn"` only warns instead.
@@ -201,8 +201,8 @@ ToolCatalog(method="bm25", reranker={"method": "systemOne", "depth": 50})  # BM2
 ```
 
 - **Configuration:** `system_one={"url", "api_key_env", "model"}`. The defaults are `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`.
-- **Large catalogs:** above 150 tools, the tools are split into groups judged in parallel, and the winners go to a final round.
-- **Failures:** a failed standalone search raises `SystemOneError` (`.code`, `.status`). A failed reranker falls back to the first stage's order.
+- **Large catalogs:** above 150 tools (or 80,000 characters), the tools are split into groups judged in parallel, and the best of each group fill a final question. Results never exceed what that final question holds.
+- **Failures:** `SystemOneError` (a `RuntimeError`) carries `.code` (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`, `"RateLimited"`, `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"`, `"Malformed"`), `.status` and `.retry_after_secs`. A standalone search raises every failure. A reranker raises misconfiguration (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`) and otherwise falls back to the first stage's order, recording `rerank_fallback:<code>` on the trace.
 - **Privacy:** **`"systemOne"` sends the query and each candidate's searchable text to Jev.**
 
 `cloud` is for a catalog Ratel Cloud owns, where Cloud runs Jev behind its Tool Picker. `system_one` is for a catalog the SDK owns. One catalog can't use both.

@@ -247,7 +247,8 @@ pub(crate) enum Scale {
     /// A score fusion of already-normalised arms — absolute in `[0, 1]`, so it
     /// needs no further mapping.
     Fused,
-    /// A Cloud Tool Picker score — already `[0, 1]` and a raw method score,
+    /// A system-one probability, from Jev directly or the Cloud Tool Picker —
+    /// already `[0, 1]` and a raw method score,
     /// not a fusion (ADR-0027).
     Picked,
 }

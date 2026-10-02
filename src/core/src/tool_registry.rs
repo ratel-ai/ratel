@@ -94,12 +94,14 @@ pub struct SearchHit {
     ///   fusion it replaced, the magnitude is meaningful: both arms carry an
     ///   absolute value, so `0.9` and `0.3` say something about match quality.
     ///   `w` is the catalog's [`DenseWeight`](crate::DenseWeight).
-    /// - `SystemOne` (first stage or reranker): the model's probability for
-    ///   the tool, in `[0, 1]` (ADR-0027). Like cosine, a raw method score.
+    /// - `SystemOne` (first stage or reranker) and a Cloud pick: the model's
+    ///   probability for the tool, in `[0, 1]` (ADR-0027). Like cosine, a raw
+    ///   method score.
     ///
     /// Scores are comparable within one result list, not across methods or
-    /// corpora. Ties are broken by `tool_id` ascending, so ordering is
-    /// deterministic across processes.
+    /// corpora. Ordering is deterministic across processes: a single method
+    /// breaks ties by `tool_id` ascending, a reranker by stage-1 order, and
+    /// system-one and Cloud picks by the order the model returned.
     ///
     /// **The scale also depends on [`fused`](Self::fused).** With adaptive
     /// ranking on, a matched query returns RRF scores (~0.03) while an unmatched
@@ -211,8 +213,8 @@ impl Embeddable for Tool {
 /// catalogs.
 ///
 /// Tools are [`Self::register`]ed into an id-keyed corpus (re-registering an
-/// id replaces it in place) and ranked by one of three engines selected per
-/// call via [`SearchMethod`]. The plain [`Self::search`] path is lexical BM25:
+/// id replaces it in place) and ranked by one of four engines selected per
+/// call via [`SearchMethod`], optionally followed by a [`crate::Reranker`]. The plain [`Self::search`] path is lexical BM25:
 /// infallible, model-free, ready as soon as tools are registered. Semantic
 /// and hybrid go through [`Self::search_with_method`] and require
 /// [`Self::build_embeddings`] first — a search never embeds the corpus (see
@@ -1031,7 +1033,7 @@ impl ToolRegistry {
         }
     }
 
-    /// Search with a first-stage method and an optional [`Reranker`]
+    /// Search with a first-stage method and an optional [`Reranker`](crate::Reranker)
     /// (ADR-0027).
     ///
     /// Without a reranker this is [`Self::search_with_method_and_context`]. With

@@ -21,7 +21,7 @@
 //!   the higher layers *push* into the context, always-on or retrieval-gated
 //!   per [`PinMode`].
 //!
-//! All rank a query with one of three engines, selected by [`SearchMethod`]:
+//! All rank a query with one of four engines, selected by [`SearchMethod`]:
 //!
 //! - [`SearchMethod::Bm25`] (default) — lexical BM25. Needs no model and
 //!   never fails; [`ToolRegistry::search`] and [`SkillRegistry::search`] use
@@ -29,8 +29,16 @@
 //! - [`SearchMethod::Semantic`] — cosine similarity over dense embeddings
 //!   from a configurable in-process HuggingFace/local model (default
 //!   `bge-small-en-v1.5`) or OpenAI-compatible endpoint (ADR-0011/ADR-0012).
-//! - [`SearchMethod::Hybrid`] — the BM25 and dense rankings fused with
-//!   Reciprocal Rank Fusion.
+//! - [`SearchMethod::Hybrid`] — the BM25 and dense scores normalised and
+//!   fused (ADR-0024).
+//! - [`SearchMethod::SystemOne`] — a hosted system-one model, Jev, picks
+//!   from the candidates; tools and skills only (ADR-0027).
+//!
+//! [`ToolRegistry::search_with_options`] adds a second stage: a [`Reranker`]
+//! re-scores the first stage's top candidates with any other method. A tool
+//! catalog can instead be owned by Ratel Cloud: [`ToolRegistry::cloud_sync`]
+//! uploads it and [`ToolRegistry::cloud_pick`] ranks through the Cloud Tool
+//! Picker (ADR-0027, ADR-0028).
 //!
 //! Semantic and hybrid searches rank against an embedding cache built by
 //! [`ToolRegistry::build_embeddings`] / [`SkillRegistry::build_embeddings`];

@@ -10,9 +10,13 @@ With `TYPESAFE_API_KEY` set it calls Jev. Without it, it runs against `local_jev
 TYPESAFE_API_KEY=... uv run main.py   # omit the key for the stand-in
 ```
 
-Output against Jev:
+Output against Jev (`jev-1.13.0`; Jev's probabilities vary slightly from run to run):
 
 ```
+jev: https://api.typesafe.ai
+
+query: "the customer was charged twice, give them their money back"
+
 bm25               : stripe_list_charges (1.74) > stripe_create_charge (1.71) > stripe_create_customer (0.27)
   (bm25 ranks stripe_refund_payment #6)
 bm25 -> systemOne  : stripe_refund_payment (0.92) > stripe_list_charges (0.08) > stripe_create_charge (0.00)
@@ -30,4 +34,4 @@ jev down:
 
 - `ToolCatalog(reranker={"method": "systemOne", "depth": 20}, system_one={"url": ..., "api_key_env": ..., "model": ...})`
 - `await catalog.search_async(q, k, reranker=False)` turns the catalog's reranker off for one call.
-- A failed standalone search raises `SystemOneError` (a `RuntimeError`) with `.code` and `.status`. A failed reranker falls back to BM25's order.
+- A failed standalone search raises `SystemOneError` (a `RuntimeError`) with `.code`, `.status` and `.retry_after_secs`. A reranker raises only misconfiguration (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`); on any other failure it falls back to BM25's order.

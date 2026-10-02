@@ -59,8 +59,9 @@ cloud: { mode: "instant" | "precise" | "exhaustive", url?, apiKeyEnv?, sourceId?
 turns on catalog sync ([ADR-0028](0028-cloud-catalog-sync.md)) and routes tool searches to
 `/v1/tools/pick` with that mode. `searchAsync(q, k, { mode })` overrides the mode per call.
 `cloud` together with `method`, `reranker` or `systemOne` on one catalog is a configuration
-error: the mode picks the pipeline. On `ratel()`, those options then apply to the skill catalog
-only. Python spells it `cloud={"mode": ..., "url": ..., "api_key_env": ..., "source_id": ...,
+error: the mode picks the pipeline, and so is `experimentalEmbeddingArtifact`, since a cloud
+catalog never ranks with embeddings. On `ratel()`, those options (and the artifact) then apply to
+the skill catalog only. Python spells it `cloud={"mode": ..., "url": ..., "api_key_env": ..., "source_id": ...,
 "on_sync_error": ...}`.
 
 **2. Every mode goes to Cloud, `instant` included.** A local BM25 would be faster, but only
@@ -75,7 +76,7 @@ warned about — it means the synced catalog is ahead of or apart from this proc
 both TypeScript and Python (cloud-sdk is TypeScript-only), and picking cannot be switched on
 without the sync it depends on. One core client (`HttpCloud`, behind the crate-private
 `CloudApi` trait), shared by the picker and sync and used by both SDKs, carries auth (key read at call time), timeouts (15 s; 60 s for `exhaustive`, above the
-server's 45 s), response validation (unknown and repeated ids dropped, scores clamped to `[0, 1]`,
+server's 45 s, and for snapshot uploads of up to 4 MB), response validation (unknown and repeated ids dropped, scores clamped to `[0, 1]`,
 at most `top_k`) and typed errors:
 
 | Status | `CloudError` code |
@@ -113,16 +114,24 @@ whole catalog) and `reranker: { method: "systemOne" }` (Jev re-scores the first 
 candidates) call Jev's `POST /v1/systemone` from the SDK, configured by
 `systemOne: { url?, apiKeyEnv?, model? }` — defaults `https://api.typesafe.ai`,
 `TYPESAFE_API_KEY`, `jev-latest`. Core asks one `choice` question with the candidates' searchable
-text as index-keyed criteria (`t0…tN`) and ranks by the returned probabilities. A candidate set
-over 150 options or 80,000 characters — Cloud's per-question limits — runs as a tournament:
-groups that fit one question are ranked in parallel (6 at a time), each keeps its top `k`, and
-the winners go to a final round. Each group keeps at most `k`, at most its share of one
-question (`150 / groups` options and `80,000 / groups` characters) and at most all but one of
-its members, so every round shrinks the field and the round after the groups fits one question.
-A tournament therefore returns at most what fits that final question, which for a large `k` can
-be fewer than `k`. A failed `systemOne` reranker returns stage 1's order and
-records a `rerank_fallback` stage; a failed standalone search raises a typed `SystemOneError`.
-`systemOne` and `cloud` on one catalog is a configuration error; facts do not support it.
+text as index-keyed criteria (`t0…tN`) and ranks by the returned probabilities. The question is
+worded for what is being ranked (`CandidateKind`: tool, skill or fact) and uses that kind as its
+id. A candidate set over 150 options or 80,000 characters — Cloud's per-question limits — runs as
+a tournament: groups that fit one question are ranked in parallel (6 at a time), and winners are
+drawn round-robin by rank (every group's best, then every group's second, …) until one question
+is full, each group advancing at most `k` and at most all but one of its members. Every round
+shrinks the field and the round after the groups is normally the final; only when the groups'
+winners alone overflow one question does a further round run. A tournament returns at most what
+fits that final question.
+
+Failures carry a stable `SystemOneError` code: `Config` (no key), `Unauthorized` (401/403),
+`InvalidRequest` (400/404/413/422), `RateLimited` (429, with `retryAfterSecs`), `Overloaded`
+(503/529), `Timeout` (504 or transport), `Unreachable` (502, DNS, TLS, refused), `Http` (any other
+status) and `Malformed` (a 2xx that is not a ranking). A standalone `systemOne` search raises
+every failure. A `systemOne` reranker raises misconfiguration (`Config`, `Unauthorized`,
+`InvalidRequest`), which would fail every search the same way, and on any other failure returns
+stage 1's order with a `rerank_fallback:<code>` stage. `systemOne` and `cloud` on one catalog is
+a configuration error; facts do not support it yet.
 
 **Not in this decision:** conversation context as picker input, skill and fact picking, and
 OpenAI Decisions as a provider — all server-side concerns behind the same endpoint.

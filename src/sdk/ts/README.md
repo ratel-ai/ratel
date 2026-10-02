@@ -247,7 +247,7 @@ const hits = await r.tools.searchAsync("refund the last order", 5);   // POST /v
 - **Options:**
   - `cloud: { mode?, url?, apiKeyEnv?, sourceId?, onSyncError? }` works on `ratel()` and on a standalone `ToolCatalog`.
   - `sourceId` names this service's catalog in the project, because a sync replaces that source's tools. It defaults to the runtime-events `sourceId`, then `OTEL_SERVICE_NAME`, then `"ratel"`.
-  - `cloud` can't be combined with `method` or `reranker`. On `ratel()`, those options still apply to skills.
+  - `cloud` can't be combined with `method`, `reranker`, `systemOne` or `experimentalEmbeddingArtifact`. On `ratel()`, those options still apply to skills.
 - **Sync:**
   - `register` resolves once Cloud has acknowledged the catalog. An unchanged catalog isn't re-sent.
   - A failed sync rejects `register` with a `CloudError`; the tool stays registered locally. `onSyncError: "warn"` only warns instead.
@@ -269,8 +269,9 @@ new ToolCatalog({ method: "bm25", reranker: { method: "systemOne", depth: 50 } }
 ```
 
 - **Configuration:** `systemOne: { url?, apiKeyEnv?, model? }`. The defaults are `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`.
-- **Large catalogs:** one Jev question holds up to 150 tools. Above that, the tools are split into groups judged in parallel, and the winners go to a final round.
-- **Failures:** a failed standalone search throws `SystemOneError` (`.code`, `.status`). A failed reranker falls back to the first stage's order and records a `rerank_fallback` trace stage.
+- **Large catalogs:** one Jev question holds up to 150 tools (and 80,000 characters). Above that, the tools are split into groups judged in parallel, and the best of each group fill a final question. Results never exceed what that final question holds.
+- **What Jev is asked:** the question names what is being ranked, so a tool catalog asks which tool to call and a skill catalog which skill helps.
+- **Failures:** `SystemOneError` carries `.code` (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`, `"RateLimited"`, `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"`, `"Malformed"`), `.status` and `.retryAfterSecs`. A standalone search throws every failure. A reranker throws misconfiguration (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`) and otherwise falls back to the first stage's order and records a `rerank_fallback:<code>` trace stage.
 - **Privacy:** **`"systemOne"` sends the query and each candidate's searchable text to Jev.**
 
 `"systemOne"` and `cloud` are two routes to the same model. `cloud` is for a catalog Ratel Cloud owns, and Cloud runs Jev on the server for `precise` and `exhaustive`. `systemOne` is for a catalog the SDK owns, and the SDK calls Jev itself. One catalog can't use both. Facts don't support `"systemOne"`.
