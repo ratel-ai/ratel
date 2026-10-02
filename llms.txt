@@ -245,8 +245,8 @@ descriptions cannot leave their network. For a catalog the SDK owns, `method: "s
 Cloud — and also sends the query and candidate text off-process. A catalog's `reranker` option
 re-scores the first stage's top candidates (default 50) with a different method (`bm25`,
 `semantic`, `hybrid`, or `systemOne`) and never adds a tool the first stage missed
-([ADR-0026](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0026-system-one-ranking-and-reranker.md),
-[ADR-0027](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-cloud-catalog-sync.md)).
+([ADR-0027](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-system-one-ranking-and-reranker.md),
+[ADR-0028](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0028-cloud-catalog-sync.md)).
 
 ### `replace` vs `suggest` mode
 
@@ -263,8 +263,8 @@ If you're not sure which one your user wants, default to `replace` — it's the 
 - [ADR-0004 — Retrieval and tool selection](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md): Retrieval over semantic tokens (names, descriptions, parameter names, enum values; JSON Schema structure stripped); replace by default, suggest opt-in.
 - [ADR-0006 — Native FFI bindings](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-native-ffi-bindings.md): Why the SDKs ship pre-built natives (NAPI-RS / PyO3).
 - [ADR-0011 — Selectable retrieval methods](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0011-selectable-retrieval-methods.md): BM25 (default), semantic, and hybrid ranking, chosen per catalog or per call.
-- [ADR-0026 — System-one ranking — the Cloud Tool Picker and Jev direct — and a two-stage reranker](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0026-system-one-ranking-and-reranker.md): `cloud: { mode }` ranks through Ratel Cloud's Tool Picker; `systemOne` calls Jev directly for SDK-owned catalogs; a reranker over any method (experimental, proposed).
-- [ADR-0027 — Cloud catalog sync](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-cloud-catalog-sync.md): How a cloud catalog reaches Ratel Cloud — full per-source snapshots on register (experimental, proposed).
+- [ADR-0027 — System-one ranking — the Cloud Tool Picker and Jev direct — and a two-stage reranker](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-system-one-ranking-and-reranker.md): `cloud: { mode }` ranks through Ratel Cloud's Tool Picker; `systemOne` calls Jev directly for SDK-owned catalogs; a reranker over any method (experimental, proposed).
+- [ADR-0028 — Cloud catalog sync](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0028-cloud-catalog-sync.md): How a cloud catalog reaches Ratel Cloud — full per-source snapshots on register (experimental, proposed).
 - [ADR-0012 — Configurable embedding models](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models.md): Dense embeddings use a configurable in-process HuggingFace/local model, Ollama, or OpenAI-compatible endpoint.
 - [ADR-0014 — Adaptive usage ranking](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0014-adaptive-usage-ranking.md): A third RRF arm learned online from search-then-invoke pairs, plus the offline path that seeds it from a captured baseline before ranking is switched on.
 - [ADR-0019 — Retrieval experiments](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0019-retrieval-experiments.md): The TypeScript-only experimental surface for deterministic assignment, bounded shadow evaluation, lifecycle, comparison, and OpenTelemetry semantics.

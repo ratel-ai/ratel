@@ -1,6 +1,6 @@
 // A local stand-in for the two Ratel Cloud endpoints a cloud catalog uses, so
 // the example runs with no API key. It speaks the real wire contracts
-// (ADR-0026, ADR-0027):
+// (ADR-0027, ADR-0028):
 //
 //   PUT  /api/v1/catalog/snapshot  { source_id, tools }      -> { sourceId, catalogVersion, tools, unchanged }
 //   POST /v1/tools/pick            { query, mode, top_k }    -> { mode, tools: [{ id, name, description, score }], confident }

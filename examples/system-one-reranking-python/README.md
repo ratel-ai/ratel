@@ -1,6 +1,6 @@
 # `examples/system-one-reranking-python` — Jev as a system-one ranker, called directly
 
-The Python mirror of [`examples/system-one-reranking-ts`](../system-one-reranking-ts/README.md); see that README for the walkthrough ([ADR-0026](../../docs/adr/0026-system-one-ranking-and-reranker.md)). The catalog lives in your process, and `"systemOne"` sends the query and candidates straight to [Jev](https://docs.typesafe.ai), either as a reranker over BM25 or as the only stage.
+The Python mirror of [`examples/system-one-reranking-ts`](../system-one-reranking-ts/README.md); see that README for the walkthrough ([ADR-0027](../../docs/adr/0027-system-one-ranking-and-reranker.md)). The catalog lives in your process, and `"systemOne"` sends the query and candidates straight to [Jev](https://docs.typesafe.ai), either as a reranker over BM25 or as the only stage.
 
 With `TYPESAFE_API_KEY` set it calls Jev. Without it, it runs against `local_jev.py`, a local stand-in that speaks Jev's wire format and judges with a toy intent table. For a catalog Ratel Cloud owns, see [`examples/cloud-tool-picker-python`](../cloud-tool-picker-python/README.md).
 

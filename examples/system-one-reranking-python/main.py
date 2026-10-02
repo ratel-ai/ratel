@@ -1,4 +1,4 @@
-"""System-one ranking with Jev, called directly (ADR-0026), end to end.
+"""System-one ranking with Jev, called directly (ADR-0027), end to end.
 
     uv run main.py
 

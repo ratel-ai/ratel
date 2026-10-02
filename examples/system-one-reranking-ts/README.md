@@ -1,6 +1,6 @@
 # `examples/system-one-reranking-ts` — Jev as a system-one ranker, called directly
 
-This example shows the SDK-side system-one path of [ADR-0026](../../docs/adr/0026-system-one-ranking-and-reranker.md). The catalog lives in your process, and `"systemOne"` sends the query and candidates straight to [Jev](https://docs.typesafe.ai) (TypeSafe AI). On a refund request, BM25 confidently picks the wrong tool. Jev fixes it in one of two ways:
+This example shows the SDK-side system-one path of [ADR-0027](../../docs/adr/0027-system-one-ranking-and-reranker.md). The catalog lives in your process, and `"systemOne"` sends the query and candidates straight to [Jev](https://docs.typesafe.ai) (TypeSafe AI). On a refund request, BM25 confidently picks the wrong tool. Jev fixes it in one of two ways:
 
 - **As a reranker:** BM25 retrieves candidates and `"systemOne"` reorders them.
 - **On its own:** `method: "systemOne"` ranks the whole catalog.

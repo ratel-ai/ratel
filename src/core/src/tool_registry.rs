@@ -93,7 +93,7 @@ pub struct SearchHit {
     ///   absolute value, so `0.9` and `0.3` say something about match quality.
     ///   `w` is the catalog's [`DenseWeight`](crate::DenseWeight).
     /// - `SystemOne` (first stage or reranker): the model's probability for
-    ///   the tool, in `[0, 1]` (ADR-0026). Like cosine, a raw method score.
+    ///   the tool, in `[0, 1]` (ADR-0027). Like cosine, a raw method score.
     ///
     /// Scores are comparable within one result list, not across methods or
     /// corpora. Ties are broken by `tool_id` ascending, so ordering is
@@ -249,14 +249,14 @@ pub struct ToolRegistry {
     /// Read only by the hybrid path; the single-arm methods have nothing to
     /// weigh. Defaults to the shipped 0.7.
     dense_weight: DenseWeight,
-    /// Ratel Cloud, when this registry's catalog is Cloud-owned (ADR-0026):
+    /// Ratel Cloud, when this registry's catalog is Cloud-owned (ADR-0027):
     /// the Tool Picker and the catalog snapshot. `None` until
     /// [`Self::set_cloud`]; local search never touches it.
     cloud: Option<Arc<dyn CloudApi>>,
     /// The last snapshot Cloud acknowledged, so an unchanged catalog is not
     /// re-sent. Cleared whenever the Cloud configuration changes.
     cloud_synced: Mutex<Option<LastSync>>,
-    /// The system-one ranker (ADR-0026) — Jev, called directly, unless
+    /// The system-one ranker (ADR-0027) — Jev, called directly, unless
     /// [`Self::set_system_one`] points it elsewhere. Only `SystemOne` searches
     /// and rerankers call it; building it opens no connection.
     system_one: Arc<dyn SystemOne>,
@@ -409,7 +409,7 @@ impl ToolRegistry {
         self.dense_weight
     }
 
-    /// Make Ratel Cloud this catalog's owner (ADR-0026): [`Self::cloud_pick`]
+    /// Make Ratel Cloud this catalog's owner (ADR-0027): [`Self::cloud_pick`]
     /// ranks through the Tool Picker and [`Self::cloud_sync`] uploads the
     /// catalog. Local search methods are unaffected.
     pub fn set_cloud(&mut self, config: CloudConfig) {
@@ -484,7 +484,7 @@ impl ToolRegistry {
     }
 
     /// Upload this catalog to Cloud as `source_id`'s complete tool snapshot
-    /// (`PUT /api/v1/catalog/snapshot`, ADR-0027): executor-free, sorted by
+    /// (`PUT /api/v1/catalog/snapshot`, ADR-0028): executor-free, sorted by
     /// id, replacing whatever that source sent before. Skipped — no request,
     /// [`SyncOutcome::skipped`] set — when the snapshot matches the last one
     /// Cloud acknowledged for the same source. A failed sync is not
@@ -539,7 +539,7 @@ impl ToolRegistry {
     }
 
     /// Point `SystemOne` searches and rerankers at another endpoint or key
-    /// (ADR-0026). The default is Jev with `TYPESAFE_API_KEY`.
+    /// (ADR-0027). The default is Jev with `TYPESAFE_API_KEY`.
     pub fn set_system_one(&mut self, config: SystemOneConfig) {
         self.system_one = Arc::new(JevSystemOne::new(config));
     }
@@ -1023,7 +1023,7 @@ impl ToolRegistry {
     }
 
     /// Search with a first-stage method and an optional [`Reranker`]
-    /// (ADR-0026).
+    /// (ADR-0027).
     ///
     /// Without a reranker this is [`Self::search_with_method_and_context`]. With
     /// one, the first stage retrieves `max(depth, top_k)` candidates and the
@@ -3808,7 +3808,7 @@ mod tests {
         );
     }
 
-    // ---- Two-stage reranking (ADR-0026) ----
+    // ---- Two-stage reranking (ADR-0027) ----
 
     use crate::rerank::Reranker;
 
@@ -4027,7 +4027,7 @@ mod tests {
         }
     }
 
-    // ---- Cloud Tool Picker and catalog sync (ADR-0026, ADR-0027) ----
+    // ---- Cloud Tool Picker and catalog sync (ADR-0027, ADR-0028) ----
 
     use crate::test_support::ScriptedCloud;
     use crate::{CloudError, PickMode};
@@ -4206,7 +4206,7 @@ mod tests {
         assert_eq!(cloud.snapshot_count(), 2);
     }
 
-    // ---- System-one (ADR-0026) ----
+    // ---- System-one (ADR-0027) ----
 
     use crate::SystemOneError;
     use crate::test_support::ScriptedSystemOne;

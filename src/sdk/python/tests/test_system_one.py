@@ -1,4 +1,4 @@
-"""System-one ranking and the two-stage reranker (ADR-0026), against a local
+"""System-one ranking and the two-stage reranker (ADR-0027), against a local
 stand-in for Jev's ``POST /v1/systemone``."""
 
 from __future__ import annotations

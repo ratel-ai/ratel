@@ -1,6 +1,6 @@
 # `examples/cloud-tool-picker-python` — the Ratel Cloud Tool Picker
 
-This is the Python mirror of [`examples/cloud-tool-picker-ts`](../cloud-tool-picker-ts/README.md); see that README for the full walkthrough. A `ToolCatalog(cloud=...)` uploads its catalog to Ratel Cloud on `register` and ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker) in `search_async` ([ADR-0026](../../docs/adr/0026-system-one-ranking-and-reranker.md), [ADR-0027](../../docs/adr/0027-cloud-catalog-sync.md)).
+This is the Python mirror of [`examples/cloud-tool-picker-ts`](../cloud-tool-picker-ts/README.md); see that README for the full walkthrough. A `ToolCatalog(cloud=...)` uploads its catalog to Ratel Cloud on `register` and ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker) in `search_async` ([ADR-0027](../../docs/adr/0027-system-one-ranking-and-reranker.md), [ADR-0028](../../docs/adr/0028-cloud-catalog-sync.md)).
 
 **No API key needed.** `local_cloud.py` is a local stand-in for the two Cloud endpoints, and it speaks the real wire contracts. Its ranking is a toy, so it shows the plumbing, not ranking quality.
 

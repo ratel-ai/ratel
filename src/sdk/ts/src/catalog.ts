@@ -289,7 +289,7 @@ export interface BaselineTurn {
 export type SearchMethod = "bm25" | "semantic" | "hybrid" | "systemOne";
 
 /**
- * A second stage over the first stage's candidates (ADR-0026): `method`
+ * A second stage over the first stage's candidates (ADR-0027): `method`
  * re-scores the top `depth` (default 50) hits of the catalog's `method`. It
  * never adds a tool the first stage did not return.
  *
@@ -308,7 +308,7 @@ export interface RerankerConfig {
 
 /**
  * Where `"systemOne"` sends its rankings: Jev (TypeSafe AI), called directly
- * from this process (ADR-0026). Defaults: `https://api.typesafe.ai`, the key in
+ * from this process (ADR-0027). Defaults: `https://api.typesafe.ai`, the key in
  * `TYPESAFE_API_KEY`, model `jev-latest`.
  *
  * `"systemOne"` sends the query and each candidate's searchable text to Jev.
@@ -327,7 +327,7 @@ export interface SystemOneConfig {
 }
 
 /**
- * How the Cloud Tool Picker ranks (ADR-0026): `"instant"` is BM25
+ * How the Cloud Tool Picker ranks (ADR-0027): `"instant"` is BM25
  * (milliseconds, free), `"precise"` judges a BM25 shortlist with a system-one
  * model (~300 ms, metered), `"exhaustive"` judges the whole catalog (seconds,
  * metered).
@@ -337,7 +337,7 @@ export type PickMode = "instant" | "precise" | "exhaustive";
 const PICK_MODES: ReadonlySet<string> = new Set(["instant", "precise", "exhaustive"]);
 
 /**
- * Makes Ratel Cloud the catalog's owner (ADR-0026, ADR-0027): `register`
+ * Makes Ratel Cloud the catalog's owner (ADR-0027, ADR-0028): `register`
  * uploads the catalog's executor-free definitions to the Cloud project, and
  * `searchAsync` ranks through the Cloud Tool Picker. Executors stay local.
  *
@@ -779,7 +779,7 @@ export class ToolCatalog {
   }
 
   /**
-   * Upload the catalog to Ratel Cloud now (ADR-0027). `register` already does
+   * Upload the catalog to Ratel Cloud now (ADR-0028). `register` already does
    * this on a `cloud` catalog; call it to retry after a failed sync. Skipped
    * when nothing changed since the last acknowledged sync.
    *

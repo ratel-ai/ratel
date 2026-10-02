@@ -1,4 +1,4 @@
-"""Cloud-owned catalogs (ADR-0026, ADR-0027): sync on register, Tool Picker on
+"""Cloud-owned catalogs (ADR-0027, ADR-0028): sync on register, Tool Picker on
 search, against a local stand-in for Ratel Cloud."""
 
 from __future__ import annotations

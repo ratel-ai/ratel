@@ -62,7 +62,7 @@ SearchMethod = str
 """Retrieval engine: ``"bm25"`` (lexical, model-free, the default),
 ``"semantic"`` (dense embeddings), ``"hybrid"`` (both, fused), or
 ``"systemOne"`` (Jev picks — sends the query and candidate text to Jev,
-called directly; see ADR-0026).
+called directly; see ADR-0027).
 """
 
 OriginFilterOption = Literal["any", "agent", "baseline"]
@@ -150,7 +150,7 @@ class _RerankerOptions(TypedDict, total=False):
 
 
 class RerankerConfig(_RerankerOptions):
-    """A second stage over the first stage's candidates (ADR-0026).
+    """A second stage over the first stage's candidates (ADR-0027).
 
     ``method`` re-scores the top ``depth`` (default 50, raised to ``top_k`` when
     lower) hits of the catalog's ``method`` and never adds a tool the first
@@ -176,7 +176,7 @@ class SystemOneConfig(TypedDict, total=False):
 
 
 PickMode = Literal["instant", "precise", "exhaustive"]
-"""How the Cloud Tool Picker ranks (ADR-0026): ``"instant"`` is BM25
+"""How the Cloud Tool Picker ranks (ADR-0027): ``"instant"`` is BM25
 (milliseconds, free), ``"precise"`` judges a BM25 shortlist with a system-one
 model (~300 ms, metered), ``"exhaustive"`` judges the whole catalog (seconds,
 metered)."""
@@ -185,7 +185,7 @@ _PICK_MODES = ("instant", "precise", "exhaustive")
 
 
 class CloudConfig(TypedDict, total=False):
-    """Make Ratel Cloud the catalog's owner (ADR-0026, ADR-0027).
+    """Make Ratel Cloud the catalog's owner (ADR-0027, ADR-0028).
 
     ``register`` uploads the catalog's executor-free definitions to the Cloud
     project and ``search_async`` ranks through the Cloud Tool Picker. Executors
@@ -761,7 +761,7 @@ class ToolRegistry:
     ) -> list[SearchHit]:
         """Search immediately with plain BM25; run anything else on a worker thread.
 
-        ``reranker`` re-scores the first stage's candidates (ADR-0026). A
+        ``reranker`` re-scores the first stage's candidates (ADR-0027). A
         standalone ``"systemOne"`` failure raises `SystemOneError`.
         """
         _validate_method(method)
@@ -789,7 +789,7 @@ class ToolRegistry:
         mode: PickMode,
         projection: RuntimeEventProjection | None = None,
     ) -> tuple[list[SearchHit], list[str], bool | None]:
-        """Rank through the Cloud Tool Picker on a worker thread (ADR-0026).
+        """Rank through the Cloud Tool Picker on a worker thread (ADR-0027).
 
         Returns ``(hits, dropped_ids, confident)``. Raises `CloudError`.
         """
@@ -799,7 +799,7 @@ class ToolRegistry:
         )
 
     async def cloud_sync_async(self, source_id: str) -> CloudSyncOutcome:
-        """Upload the catalog as ``source_id``'s snapshot on a worker thread (ADR-0027).
+        """Upload the catalog as ``source_id``'s snapshot on a worker thread (ADR-0028).
 
         Skipped when unchanged since the last acknowledged sync. Raises `CloudError`.
         """
@@ -1329,7 +1329,7 @@ class ToolCatalog:
             )
 
     async def sync_now(self) -> CloudSyncOutcome:
-        """Upload the catalog to Ratel Cloud now (ADR-0027).
+        """Upload the catalog to Ratel Cloud now (ADR-0028).
 
         ``register`` already does this on a cloud catalog; call it to retry
         after a failed sync. Skipped when nothing changed since the last

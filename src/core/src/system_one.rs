@@ -1,4 +1,4 @@
-//! System-one ranking with Jev, called directly (ADR-0026).
+//! System-one ranking with Jev, called directly (ADR-0027).
 //!
 //! Jev (TypeSafe AI) answers a `choice` question over named options with a
 //! probability per option, so one call ranks up to [`MAX_OPTIONS`] candidates.

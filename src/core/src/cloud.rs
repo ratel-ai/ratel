@@ -1,4 +1,4 @@
-//! Ratel Cloud as the catalog's owner (ADR-0026, ADR-0027): the Tool Picker
+//! Ratel Cloud as the catalog's owner (ADR-0027, ADR-0028): the Tool Picker
 //! ranks tools Cloud holds, and the catalog snapshot keeps that copy current.
 //!
 //! Two endpoints, one client:

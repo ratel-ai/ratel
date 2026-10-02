@@ -208,10 +208,10 @@ class ToolRegistry:
         reranker_depth: int | None = ...,
         context: object | None = ...,
     ) -> list[SearchHit]:
-        """Private worker-thread two-stage search primitive (ADR-0026)."""
+        """Private worker-thread two-stage search primitive (ADR-0027)."""
 
     def set_cloud(self, url: str | None = ..., api_key_env: str | None = ...) -> None:
-        """Make Ratel Cloud this catalog's owner (ADR-0026)."""
+        """Make Ratel Cloud this catalog's owner (ADR-0027)."""
 
     def _cloud_pick(
         self,
@@ -381,7 +381,7 @@ class IncompatibleMergeError(ArtifactError):
     """Valid RAT1 parts that cannot be merged."""
 
 class SystemOneError(RuntimeError):
-    """A "systemOne" (Jev) search failed (ADR-0026).
+    """A "systemOne" (Jev) search failed (ADR-0027).
 
     Attributes:
         code: ``"Config"`` | ``"Unauthorized"`` | ``"RateLimited"`` | ``"Http"`` |
@@ -555,7 +555,7 @@ class SkillRegistry:
         reranker_depth: int | None = ...,
         context: object | None = ...,
     ) -> list[SkillHit]:
-        """Private worker-thread two-stage search primitive (ADR-0026)."""
+        """Private worker-thread two-stage search primitive (ADR-0027)."""
 
     def _search_with_method(
         self,

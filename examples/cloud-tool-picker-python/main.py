@@ -1,4 +1,4 @@
-"""The Ratel Cloud Tool Picker (ADR-0026) on a cloud-owned catalog (ADR-0027).
+"""The Ratel Cloud Tool Picker (ADR-0027) on a cloud-owned catalog (ADR-0028).
 
     uv run main.py
 

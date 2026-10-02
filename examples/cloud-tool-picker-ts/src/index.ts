@@ -1,4 +1,4 @@
-// The Ratel Cloud Tool Picker (ADR-0026) on a cloud-owned catalog (ADR-0027).
+// The Ratel Cloud Tool Picker (ADR-0027) on a cloud-owned catalog (ADR-0028).
 //
 // 1. Local BM25 is confidently wrong for a "charged twice" question.
 // 2. `cloud` on ratel(): register syncs the catalog to Cloud.

@@ -177,7 +177,7 @@ const SYSTEM_ONE_ERROR_PREFIX: &str = "RATEL_SYSTEM_ONE_ERROR:";
 /// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
 const CLOUD_ERROR_PREFIX: &str = "RATEL_CLOUD_ERROR:";
 
-/// The second stage of a two-stage search (ADR-0026): `method` re-scores the
+/// The second stage of a two-stage search (ADR-0027): `method` re-scores the
 /// first stage's top `depth` candidates (default 50).
 #[napi(object)]
 pub struct RerankerConfig {
@@ -1721,7 +1721,7 @@ impl ToolRegistry {
     }
 
     /// Search on a libuv worker with an optional second-stage `reranker`
-    /// (ADR-0026).
+    /// (ADR-0027).
     #[napi(ts_return_type = "Promise<Array<SearchHit>>")]
     pub fn search_with_options_async(
         &self,
@@ -1761,7 +1761,7 @@ impl ToolRegistry {
         Ok(())
     }
 
-    /// Make Ratel Cloud this catalog's owner (ADR-0026); unset fields keep the
+    /// Make Ratel Cloud this catalog's owner (ADR-0027); unset fields keep the
     /// defaults (`https://cloud.ratel.sh`, `RATEL_API_KEY`).
     #[napi]
     pub fn set_cloud(&self, url: Option<String>, api_key_env: Option<String>) -> napi::Result<()> {
@@ -1801,7 +1801,7 @@ impl ToolRegistry {
     }
 
     /// Upload the catalog to Cloud as `sourceId`'s snapshot on a libuv worker
-    /// (ADR-0027); skipped when unchanged since the last acknowledged sync.
+    /// (ADR-0028); skipped when unchanged since the last acknowledged sync.
     #[napi(ts_return_type = "Promise<CloudSyncResult>")]
     pub fn cloud_sync_async(&self, source_id: String) -> AsyncTask<CloudSyncTask> {
         AsyncTask::new(CloudSyncTask {
@@ -2815,7 +2815,7 @@ impl SkillRegistry {
     }
 
     /// Search on a libuv worker with an optional second-stage `reranker`
-    /// (ADR-0026).
+    /// (ADR-0027).
     #[napi(ts_return_type = "Promise<Array<SkillHit>>")]
     pub fn search_with_options_async(
         &self,

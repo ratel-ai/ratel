@@ -1,6 +1,6 @@
 # `examples/cloud-tool-picker-ts` — the Ratel Cloud Tool Picker
 
-This example shows [ADR-0026](../../docs/adr/0026-system-one-ranking-and-reranker.md) and [ADR-0027](../../docs/adr/0027-cloud-catalog-sync.md) end to end. A support agent's tool catalog is owned by Ratel Cloud: `register` uploads it, and `searchAsync` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Local BM25 picks the wrong tool for a refund request. The picker's judged modes pick the right one.
+This example shows [ADR-0027](../../docs/adr/0027-system-one-ranking-and-reranker.md) and [ADR-0028](../../docs/adr/0028-cloud-catalog-sync.md) end to end. A support agent's tool catalog is owned by Ratel Cloud: `register` uploads it, and `searchAsync` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Local BM25 picks the wrong tool for a refund request. The picker's judged modes pick the right one.
 
 **No API key needed.** `src/local-cloud.ts` is a local stand-in for the two Cloud endpoints, and it speaks the real wire contracts. Its ranking is a toy (word overlap, plus a hard-coded intent table in place of the system-one judge), so it shows the plumbing, not ranking quality. The Python mirror is [`examples/cloud-tool-picker-python`](../cloud-tool-picker-python/README.md).
 

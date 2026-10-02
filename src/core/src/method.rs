@@ -25,7 +25,7 @@ pub enum SearchMethod {
     Semantic,
     /// BM25 and dense arms fused on normalised scores (ADR-0024).
     Hybrid,
-    /// A hosted system-one model (Jev) picks from the candidates (ADR-0026).
+    /// A hosted system-one model (Jev) picks from the candidates (ADR-0027).
     /// Calls Jev directly, so it is fallible and sends the query and candidate
     /// text off-process. Reachable through `search_with_options` only.
     SystemOne,

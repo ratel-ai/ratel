@@ -228,7 +228,7 @@ await catalog.invoke("create_linear_task", {}, undefined, turnId); // pairs with
 
 ## Ratel Cloud Tool Picker (experimental)
 
-`cloud` makes Ratel Cloud the tool catalog's owner ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md), [ADR 0027](../../../docs/adr/0027-cloud-catalog-sync.md)). `register` uploads the catalog to your Cloud project, and `searchAsync` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Executors stay local: the picker returns ids, and `invoke` runs your handler.
+`cloud` makes Ratel Cloud the tool catalog's owner ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md), [ADR 0028](../../../docs/adr/0028-cloud-catalog-sync.md)). `register` uploads the catalog to your Cloud project, and `searchAsync` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Executors stay local: the picker returns ids, and `invoke` runs your handler.
 
 ```ts
 const r = ratel({ cloud: { mode: "precise" } });      // key in RATEL_API_KEY
@@ -261,7 +261,7 @@ const hits = await r.tools.searchAsync("refund the last order", 5);   // POST /v
 
 ## System-one ranking with Jev (experimental)
 
-For a catalog that lives in your process, `"systemOne"` asks [Jev](https://docs.typesafe.ai) (TypeSafe AI) to pick tools directly. There is no Ratel Cloud involved, and you supply your own TypeSafe key ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). It can be the only stage, or a reranker on top of a local method:
+For a catalog that lives in your process, `"systemOne"` asks [Jev](https://docs.typesafe.ai) (TypeSafe AI) to pick tools directly. There is no Ratel Cloud involved, and you supply your own TypeSafe key ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md)). It can be the only stage, or a reranker on top of a local method:
 
 ```ts
 new ToolCatalog({ method: "systemOne" });                                       // Jev ranks every tool
@@ -277,7 +277,7 @@ new ToolCatalog({ method: "bm25", reranker: { method: "systemOne", depth: 50 } }
 
 ## Reranking (experimental)
 
-A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker.method` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"` or `"systemOne"`, but the two stages must use different methods:
+A catalog can rank in two stages ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker.method` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"` or `"systemOne"`, but the two stages must use different methods:
 
 ```ts
 const catalog = new ToolCatalog({ method: "bm25", reranker: { method: "semantic", depth: 30 } });

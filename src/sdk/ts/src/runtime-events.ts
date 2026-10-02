@@ -345,7 +345,7 @@ export class RuntimeEvents {
 
 // Core invocation events carry no `origin`; a tool the host ran itself and
 // reported through `recordToolCall` is marked by invocation id and stamped here,
-// where events leave the SDK (ADR-0026).
+// where events leave the SDK (ADR-0027).
 function stampExternalOrigin(event: RuntimeEvent): RuntimeEvent {
   if (
     (event.type === "invoke_start" ||

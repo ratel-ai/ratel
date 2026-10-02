@@ -310,7 +310,7 @@ export function mapArtifactBuildError(error: unknown): unknown {
   return mapArtifactError(error);
 }
 
-/** Stable categories for a failed system-one (Jev) ranking (ADR-0026). */
+/** Stable categories for a failed system-one (Jev) ranking (ADR-0027). */
 export type SystemOneErrorCode =
   | "Config"
   | "Unauthorized"
@@ -396,7 +396,7 @@ export function mapSearchError(error: unknown): unknown {
   return mapEmbedderError(error);
 }
 
-/** Stable categories for a failed Ratel Cloud request (ADR-0026, ADR-0027). */
+/** Stable categories for a failed Ratel Cloud request (ADR-0027, ADR-0028). */
 export type CloudErrorCode =
   | "Config"
   | "Unauthorized"

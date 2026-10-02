@@ -1,4 +1,4 @@
-# 26. System-one ranking — the Cloud Tool Picker and Jev direct — and a two-stage reranker
+# 27. System-one ranking — the Cloud Tool Picker and Jev direct — and a two-stage reranker
 
 Date: 2026-10-01 (revised 2026-10-02)
 
@@ -18,7 +18,7 @@ catalogs Cloud owns. Both reach the same model.
 
 Builds on [ADR-0011](0011-selectable-retrieval-methods.md) (selectable methods; its "no
 cross-encoder reranker" is lifted here), [ADR-0014](0014-adaptive-usage-ranking.md) (the usage
-arm) and [ADR-0027](0027-cloud-catalog-sync.md) (how the catalog reaches Cloud).
+arm) and [ADR-0028](0028-cloud-catalog-sync.md) (how the catalog reaches Cloud).
 
 ## Context
 
@@ -53,7 +53,7 @@ Ratel Cloud exposes this as the Tool Picker, `POST https://cloud.ratel.sh/v1/too
 
 The request carries no tools. The picker ranks the project's runtime catalog (`kind = 'tool'`
 rows), filled by `PUT /api/v1/catalog/snapshot`, so the catalog's owner is Cloud, and an SDK that
-wants these modes must keep that catalog in sync ([ADR-0027](0027-cloud-catalog-sync.md)).
+wants these modes must keep that catalog in sync ([ADR-0028](0028-cloud-catalog-sync.md)).
 
 ## Decision
 
@@ -65,7 +65,7 @@ cloud: { mode: "instant" | "precise" | "exhaustive", url?, apiKeyEnv? }
 ```
 
 `url` defaults to `https://cloud.ratel.sh`, `apiKeyEnv` to `RATEL_API_KEY`. Setting `cloud`
-turns on catalog sync ([ADR-0027](0027-cloud-catalog-sync.md)) and routes tool searches to
+turns on catalog sync ([ADR-0028](0028-cloud-catalog-sync.md)) and routes tool searches to
 `/v1/tools/pick` with that mode. `searchAsync(q, k, { mode })` overrides the mode per call.
 `cloud` together with `method` or `reranker` is a configuration error: the mode picks the
 pipeline. Python spells it `cloud={"mode": ..., "url": ..., "api_key_env": ...}`.
@@ -102,7 +102,7 @@ for hosts that prefer a degraded answer to none.
 
 **5. Tools only, for now.** The picker ranks tools. Skills and facts are searched locally; they
 sync once Cloud's snapshot accepts them, and use the picker once it takes a `kind`
-([ADR-0027](0027-cloud-catalog-sync.md)).
+([ADR-0028](0028-cloud-catalog-sync.md)).
 
 **6. The two-stage reranker stays.** Independent of Cloud, a catalog may set
 `reranker: { method, depth = 50 }` to re-score its first stage's top `depth` with any method
@@ -136,7 +136,7 @@ OpenAI Decisions as a provider — all server-side concerns behind the same endp
   plans allow 10 `precise` / `exhaustive` picks a minute.
 - Providers, the BM25 prefilter depth and chunking for large catalogs live in Cloud: changing them
   needs no SDK release, and the SDK cannot tune them.
-- Correctness depends on sync: a search can only find what Cloud has. ADR-0027 makes `register`
+- Correctness depends on sync: a search can only find what Cloud has. ADR-0028 makes `register`
   resolve after Cloud acknowledges the catalog, and the dropped-id warning surfaces drift.
 - Two routes reach Jev: Cloud's picker (Cloud's key, Cloud's credits, Cloud-owned catalog) and
   `systemOne` (the user's TypeSafe key, an SDK-owned catalog). The tournament limits match

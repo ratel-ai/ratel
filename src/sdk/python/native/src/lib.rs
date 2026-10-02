@@ -1179,7 +1179,7 @@ impl ToolRegistry {
             .set_system_one(system_one_config(url, api_key_env, model));
     }
 
-    /// Private GIL-releasing two-stage search (ADR-0026): `method`, then an
+    /// Private GIL-releasing two-stage search (ADR-0027): `method`, then an
     /// optional `reranker_method` over its top `reranker_depth` candidates.
     #[pyo3(signature = (query, top_k, origin, method, reranker_method=None, reranker_depth=None, context=None))]
     #[allow(clippy::too_many_arguments)]
@@ -1215,7 +1215,7 @@ impl ToolRegistry {
             .collect())
     }
 
-    /// Make Ratel Cloud this catalog's owner (ADR-0026); unset fields keep the
+    /// Make Ratel Cloud this catalog's owner (ADR-0027); unset fields keep the
     /// defaults (`https://cloud.ratel.sh`, `RATEL_API_KEY`).
     #[pyo3(signature = (url=None, api_key_env=None))]
     fn set_cloud(&mut self, url: Option<String>, api_key_env: Option<String>) {
@@ -1259,7 +1259,7 @@ impl ToolRegistry {
         Ok((hits, pick.dropped, pick.confident))
     }
 
-    /// Private GIL-releasing catalog sync (ADR-0027): `(catalog_version,
+    /// Private GIL-releasing catalog sync (ADR-0028): `(catalog_version,
     /// tools, unchanged, skipped)`. Failures raise `CloudError`.
     fn _cloud_sync(
         &self,
@@ -1850,7 +1850,7 @@ impl SkillRegistry {
             .set_system_one(system_one_config(url, api_key_env, model));
     }
 
-    /// Private GIL-releasing two-stage search (ADR-0026): `method`, then an
+    /// Private GIL-releasing two-stage search (ADR-0027): `method`, then an
     /// optional `reranker_method` over its top `reranker_depth` candidates.
     #[pyo3(signature = (query, top_k, origin, method, reranker_method=None, reranker_depth=None, context=None))]
     #[allow(clippy::too_many_arguments)]

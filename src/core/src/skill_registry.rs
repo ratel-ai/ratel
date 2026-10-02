@@ -122,7 +122,7 @@ pub struct SkillRegistry {
     /// weigh. Defaults to the shipped 0.7.
     dense_weight: DenseWeight,
     /// The system-one ranker — the skill-side twin of
-    /// [`crate::ToolRegistry`]'s field (ADR-0026).
+    /// [`crate::ToolRegistry`]'s field (ADR-0027).
     system_one: Arc<dyn SystemOne>,
 }
 
@@ -742,7 +742,7 @@ impl SkillRegistry {
 
     /// Search with a first-stage method and an optional [`Reranker`] — the
     /// skill twin of [`crate::ToolRegistry::search_with_options`], with the
-    /// same semantics and errors (ADR-0026).
+    /// same semantics and errors (ADR-0027).
     ///
     /// # Errors
     /// The same [`SearchError`] cases as
@@ -2552,7 +2552,7 @@ mod tests {
         }
     }
 
-    // ---- Two-stage reranking (ADR-0026), the skill twin ----
+    // ---- Two-stage reranking (ADR-0027), the skill twin ----
 
     use crate::rerank::{Reranker, SearchError, SearchOptions};
 
@@ -2657,7 +2657,7 @@ mod tests {
         );
     }
 
-    // ---- System-one (ADR-0026), the skill twin ----
+    // ---- System-one (ADR-0027), the skill twin ----
 
     use crate::SystemOneError;
     use crate::test_support::ScriptedSystemOne;

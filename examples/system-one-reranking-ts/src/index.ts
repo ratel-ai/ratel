@@ -1,4 +1,4 @@
-// System-one ranking with Jev, called directly (ADR-0026), end to end.
+// System-one ranking with Jev, called directly (ADR-0027), end to end.
 //
 // 1. BM25 alone is confidently wrong for a "charged twice" question.
 // 2. BM25 retrieves, Jev reranks its candidates.

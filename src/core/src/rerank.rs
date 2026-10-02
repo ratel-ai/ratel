@@ -1,6 +1,6 @@
 //! Two-stage retrieval: a first-stage [`SearchMethod`] picks candidates, an
 //! optional [`Reranker`] re-scores the top `depth` of them with any method
-//! (ADR-0026).
+//! (ADR-0027).
 //!
 //! The reranker sees only stage 1's candidates; it never widens the set. Its
 //! score replaces stage 1's, and ties fall back to stage 1's order rather than

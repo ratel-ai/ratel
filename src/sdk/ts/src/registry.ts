@@ -256,7 +256,7 @@ export class ToolRegistry {
 
   /**
    * Search on a libuv worker with an optional second-stage `reranker`
-   * (ADR-0026). Throws a typed {@link SystemOneError} when a standalone
+   * (ADR-0027). Throws a typed {@link SystemOneError} when a standalone
    * `"systemOne"` search fails.
    */
   async searchWithOptionsAsync(
@@ -288,7 +288,7 @@ export class ToolRegistry {
   }
 
   /**
-   * Rank through the Cloud Tool Picker on a libuv worker (ADR-0026). Needs a
+   * Rank through the Cloud Tool Picker on a libuv worker (ADR-0027). Needs a
    * registry constructed with `cloud`.
    *
    * @throws {@link CloudError} when the pick fails.
@@ -315,7 +315,7 @@ export class ToolRegistry {
 
   /**
    * Upload the catalog to Cloud as `sourceId`'s snapshot on a libuv worker
-   * (ADR-0027); skipped when unchanged since the last acknowledged sync.
+   * (ADR-0028); skipped when unchanged since the last acknowledged sync.
    *
    * @throws {@link CloudError} when the upload fails.
    */

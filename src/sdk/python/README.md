@@ -167,7 +167,7 @@ Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capab
 
 ## Ratel Cloud Tool Picker (experimental)
 
-`cloud` makes Ratel Cloud the tool catalog's owner ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md), [ADR 0027](../../../docs/adr/0027-cloud-catalog-sync.md)). `register` uploads the catalog to your Cloud project, and `search_async` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Executors stay local.
+`cloud` makes Ratel Cloud the tool catalog's owner ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md), [ADR 0028](../../../docs/adr/0028-cloud-catalog-sync.md)). `register` uploads the catalog to your Cloud project, and `search_async` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Executors stay local.
 
 ```python
 catalog = ToolCatalog(cloud={"mode": "precise"})        # key in RATEL_API_KEY
@@ -193,7 +193,7 @@ hits = await catalog.search_async("refund the last order", 5)   # POST /v1/tools
 
 ## System-one ranking with Jev (experimental)
 
-For a catalog that lives in your process, `"systemOne"` asks [Jev](https://docs.typesafe.ai) (TypeSafe AI) to pick tools directly. There is no Ratel Cloud involved, and you supply your own TypeSafe key ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)):
+For a catalog that lives in your process, `"systemOne"` asks [Jev](https://docs.typesafe.ai) (TypeSafe AI) to pick tools directly. There is no Ratel Cloud involved, and you supply your own TypeSafe key ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md)):
 
 ```python
 ToolCatalog(method="systemOne")                                            # Jev ranks every tool
@@ -209,7 +209,7 @@ ToolCatalog(method="bm25", reranker={"method": "systemOne", "depth": 50})  # BM2
 
 ## Reranking (experimental)
 
-A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker["method"]` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"` or `"systemOne"`, but the two stages must use different methods:
+A catalog can rank in two stages ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker["method"]` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"` or `"systemOne"`, but the two stages must use different methods:
 
 ```python
 catalog = ToolCatalog(method="bm25", reranker={"method": "semantic", "depth": 30})

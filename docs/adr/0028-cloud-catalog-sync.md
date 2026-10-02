@@ -1,4 +1,4 @@
-# 27. Cloud catalog sync
+# 28. Cloud catalog sync
 
 Date: 2026-10-02
 
@@ -7,7 +7,7 @@ Date: 2026-10-02
 Proposed. Tool sync uses Cloud's existing `PUT /api/v1/catalog/snapshot`; skill and fact sync,
 and a catalog version on the picker, need the Cloud changes listed under **Asks of Cloud**.
 
-Required by [ADR-0026](0026-system-one-ranking-and-reranker.md) (Cloud Tool Picker). Builds on
+Required by [ADR-0027](0027-system-one-ranking-and-reranker.md) (Cloud Tool Picker). Builds on
 [ADR-0020](0020-runtime-events-lane.md) (`source_id`, the `catalog_definition` content hash) and
 [ADR-0022](0022-vendor-neutral-definition-overlay-seam.md) (the pull direction, Cloud → SDK).
 
@@ -29,7 +29,7 @@ The Tool Picker ranks the project's runtime catalog — `runtime_catalog_entries
 
 The ADR-0020 runtime-events endpoint (`/api/v1/events`) does not write the catalog.
 `@ratel-ai/cloud-sdk`'s `attach()` already publishes snapshots to the first channel; the Ratel
-SDK has no publisher of its own, and ADR-0026 puts the picker in the Ratel SDK.
+SDK has no publisher of its own, and ADR-0027 puts the picker in the Ratel SDK.
 
 Only the snapshot channel is fit for ranking: complete, restart-safe, with removals. The logs
 channel is observation — the same lossiness ADR-0020 states for `catalog_definition` events.

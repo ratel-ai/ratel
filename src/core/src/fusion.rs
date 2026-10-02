@@ -248,7 +248,7 @@ pub(crate) enum Scale {
     /// needs no further mapping.
     Fused,
     /// A Cloud Tool Picker score — already `[0, 1]` and a raw method score,
-    /// not a fusion (ADR-0026).
+    /// not a fusion (ADR-0027).
     Picked,
 }
 
