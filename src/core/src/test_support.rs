@@ -296,3 +296,50 @@ impl crate::cloud::CloudApi for ScriptedCloud {
         Ok(outcome)
     }
 }
+/// A [`crate::system_one::SystemOne`] that answers from a script and records
+/// the candidate ids it was offered — registry tests use it in place of the
+/// HTTP client.
+pub(crate) struct ScriptedSystemOne {
+    reply: Result<Vec<(String, f32)>, crate::SystemOneError>,
+    offered: std::sync::Mutex<Vec<Vec<String>>>,
+}
+
+impl ScriptedSystemOne {
+    /// Answers every call with `ranked`, cut at the call's `top_k`.
+    pub(crate) fn ranking(ranked: &[(&str, f32)]) -> Self {
+        Self {
+            reply: Ok(ranked.iter().map(|(id, s)| ((*id).into(), *s)).collect()),
+            offered: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Fails every call with `error`.
+    pub(crate) fn failing(error: crate::SystemOneError) -> Self {
+        Self {
+            reply: Err(error),
+            offered: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// The candidate ids of each call, in call order.
+    pub(crate) fn offered(&self) -> Vec<Vec<String>> {
+        self.offered.lock().unwrap().clone()
+    }
+}
+
+impl crate::system_one::SystemOne for ScriptedSystemOne {
+    fn rank(
+        &self,
+        _query: &str,
+        candidates: &[crate::system_one::Candidate],
+        top_k: usize,
+    ) -> Result<Vec<(String, f32)>, crate::SystemOneError> {
+        self.offered
+            .lock()
+            .unwrap()
+            .push(candidates.iter().map(|c| c.id.clone()).collect());
+        let mut ranked = self.reply.clone()?;
+        ranked.truncate(top_k);
+        Ok(ranked)
+    }
+}

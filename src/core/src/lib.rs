@@ -99,6 +99,7 @@ mod search;
 mod skill;
 mod skill_indexing;
 mod skill_registry;
+mod system_one;
 mod tool;
 mod tool_registry;
 mod trace;
@@ -127,6 +128,10 @@ pub use rerank::{Reranker, SearchError, SearchOptions};
 pub use search::Bm25Params;
 pub use skill::Skill;
 pub use skill_registry::{ReplaceOutcome, SkillHit, SkillRegistry};
+pub use system_one::{
+    DEFAULT_SYSTEM_ONE_API_KEY_ENV, DEFAULT_SYSTEM_ONE_MODEL, DEFAULT_SYSTEM_ONE_URL,
+    SystemOneConfig, SystemOneError,
+};
 pub use tool::Tool;
 pub use tool_registry::{AdaptiveRankingStatus, CloudPick, SearchHit, ToolRegistry};
 pub use trace::{
