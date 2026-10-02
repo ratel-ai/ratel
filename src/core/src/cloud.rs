@@ -370,14 +370,18 @@ impl HttpCloud {
             .body_mut()
             .with_config()
             .limit(RESPONSE_LIMIT_BYTES)
-            .read_to_string()
-            .map_err(|e| CloudError::Malformed {
-                source: format!("unreadable response body: {e}"),
-            })?;
+            .read_to_string();
         if (200..300).contains(&status) {
-            return Ok(text);
+            return text.map_err(|e| match e {
+                ureq::Error::Timeout(_) => CloudError::Timeout,
+                other => CloudError::Malformed {
+                    source: format!("unreadable response body: {other}"),
+                },
+            });
         }
-        let message = error_message(&text);
+        // The status decides the error; an unreadable error body (a gateway's
+        // HTML page, a cut connection) only costs the explanation.
+        let message = text.map(|t| error_message(&t)).unwrap_or_default();
         Err(match status {
             401 | 403 => CloudError::Unauthorized { status },
             402 => CloudError::InsufficientCredits { message },
@@ -546,7 +550,7 @@ mod tests {
     /// Answers each connection with the next `(status, extra headers, body)`
     /// and reports the requests it saw.
     fn mock(
-        replies: Vec<(u16, &'static str, String)>,
+        replies: Vec<(u16, &'static str, Vec<u8>)>,
     ) -> (String, mpsc::Receiver<Vec<MockHttpRequest>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -561,12 +565,13 @@ mod tests {
                     Ok((mut stream, _)) => {
                         stream.set_nonblocking(false).unwrap();
                         seen.push(read_http_request_full(&mut stream));
-                        let response = format!(
+                        let head = format!(
                             "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\n{headers}\
-                             content-length: {}\r\nconnection: close\r\n\r\n{body}",
+                             content-length: {}\r\nconnection: close\r\n\r\n",
                             body.len()
                         );
-                        stream.write_all(response.as_bytes()).unwrap();
+                        stream.write_all(head.as_bytes()).unwrap();
+                        stream.write_all(&body).unwrap();
                         replies.pop_front();
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -667,13 +672,13 @@ mod tests {
         set_key();
         let err = |msg: &str| format!(r#"{{"error":{{"message":"{msg}"}}}}"#);
         let (url, _rx) = mock(vec![
-            (401, "", err("bad key")),
-            (402, "", err("no credits")),
-            (409, "", err("no tools")),
-            (429, "retry-after: 7\r\n", err("slow down")),
-            (504, "", err("deadline")),
-            (503, "", err("down")),
-            (418, "", err("teapot")),
+            (401, "", err("bad key").into()),
+            (402, "", err("no credits").into()),
+            (409, "", err("no tools").into()),
+            (429, "retry-after: 7\r\n", err("slow down").into()),
+            (504, "", err("deadline").into()),
+            (503, "", err("down").into()),
+            (418, "", err("teapot").into()),
             (200, "", "not json".into()),
         ]);
         let c = client(&url);
@@ -707,6 +712,34 @@ mod tests {
             }
         );
         assert!(matches!(pick(), CloudError::Malformed { .. }));
+    }
+
+    #[test]
+    fn the_status_decides_even_when_the_body_is_unreadable() {
+        set_key();
+        // Not UTF-8: an error page that cannot be read as text.
+        let garbage = vec![0xff, 0xfe, b'<', b'h', 0xc3];
+        let (url, _rx) = mock(vec![
+            (502, "", garbage.clone()),
+            (429, "retry-after: 3\r\n", garbage.clone()),
+            (200, "", garbage),
+        ]);
+        let c = client(&url);
+        let pick = || c.pick("q", PickMode::Precise, 5).unwrap_err();
+        assert!(
+            matches!(pick(), CloudError::Unavailable { .. }),
+            "502 stays Unavailable"
+        );
+        assert_eq!(
+            pick(),
+            CloudError::RateLimited {
+                retry_after_secs: Some(3)
+            }
+        );
+        assert!(
+            matches!(pick(), CloudError::Malformed { .. }),
+            "an unreadable success is still Malformed"
+        );
     }
 
     #[test]
