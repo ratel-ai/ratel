@@ -344,7 +344,8 @@ function trackHandlerWork(subscriber: SdkSubscriber, batch: readonly RuntimeEven
   void pending.then(() => subscriber.pending.delete(pending));
 }
 
-function defaultSourceId(): string {
+/** @internal The runtime's default source id: the OTel service name, else `"ratel"`. */
+export function defaultSourceId(): string {
   if (process.env.OTEL_SERVICE_NAME) return process.env.OTEL_SERVICE_NAME;
   const serviceName = process.env.OTEL_RESOURCE_ATTRIBUTES?.split(",")
     .map((entry) => entry.trim().split("=", 2))

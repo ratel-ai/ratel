@@ -194,25 +194,51 @@ await catalog.invoke("read_github_issues", {}, undefined, turnId); // pairs with
 await catalog.invoke("create_linear_task", {}, undefined, turnId); // pairs with the second
 ```
 
-## Reranking and system-one (experimental)
+## Ratel Cloud Tool Picker (experimental)
 
-A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates; `reranker.method` re-scores the top `depth` of them (default 50) and never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"`, or `"systemOne"`, but not the same method twice:
+`cloud` makes Ratel Cloud the tool catalog's owner ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md), [ADR 0027](../../../docs/adr/0027-cloud-catalog-sync.md)). `register` uploads the catalog to your Cloud project, and `searchAsync` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Executors stay local: the picker returns ids, and `invoke` runs your handler.
 
 ```ts
-const catalog = new ToolCatalog({ method: "bm25", reranker: { method: "systemOne", depth: 50 } });
-await catalog.register(tools);
-const hits = await catalog.searchAsync("refund the last order", 5);
+const r = ratel({ cloud: { mode: "precise" } });      // key in RATEL_API_KEY
+await r.tools.register(...tools);                      // syncs the catalog to Cloud
+const hits = await r.tools.searchAsync("refund the last order", 5);   // POST /v1/tools/pick
 ```
 
-`"systemOne"` asks a hosted system-one model (Jev today) to pick from the candidates. It can also be the only stage: `new ToolCatalog({ method: "systemOne" })` ranks the whole catalog. It calls Ratel Cloud at `https://app.ratel.sh/v1/systemone` with the key in `RATEL_API_KEY`; `systemOne: { url, apiKeyEnv }` points it elsewhere.
+| `mode` | How it ranks | Speed | Cost |
+|---|---|---|---|
+| `"instant"` | BM25 | milliseconds | free |
+| `"precise"` (default) | a BM25 shortlist judged by a system-one model | ~300 ms | metered |
+| `"exhaustive"` | the system-one model over the whole catalog | seconds | metered |
 
-**`"systemOne"` sends the query and every candidate's searchable text (name, description, schema terms) to that endpoint, which forwards them to the model provider.** The other methods never leave the process.
+**A `cloud` catalog sends its tool names, descriptions and schemas, and every query, to Ratel Cloud.** Local methods never leave the process.
 
-- A reranker runs off the event loop: use `searchAsync`. Synchronous `search` throws on a catalog with a reranker, and on `"systemOne"`.
-- `searchAsync` also takes an options object, whose `reranker` overrides the catalog's for one call (`null` turns it off): `catalog.searchAsync(q, 5, { method: "hybrid", reranker: null })`.
-- A failed standalone `"systemOne"` search throws a `SystemOneError` with a stable `.code` (`"Unauthorized"`, `"RateLimited"`, `"Http"`, `"Unreachable"`, `"Malformed"`, `"Config"`). A failed `"systemOne"` **reranker** returns the first stage's order instead and records a `rerank_fallback` trace stage.
-- A semantic or hybrid reranker makes `register()` build embeddings, as a semantic `method` does.
-- `SkillCatalog` and `ratel()` take the same `reranker` and `systemOne` options. Facts do not: with `method: "systemOne"`, `ratel()` ranks facts with BM25.
+- **Options:**
+  - `cloud: { mode?, url?, apiKeyEnv?, sourceId?, onSyncError? }` works on `ratel()` and on a standalone `ToolCatalog`.
+  - `sourceId` names this service's catalog in the project, because a sync replaces that source's tools. It defaults to the runtime-events `sourceId`, then `OTEL_SERVICE_NAME`, then `"ratel"`.
+  - `cloud` can't be combined with `method` or `reranker`. On `ratel()`, those options still apply to skills.
+- **Sync:**
+  - `register` resolves once Cloud has acknowledged the catalog. An unchanged catalog isn't re-sent.
+  - A failed sync rejects `register` with a `CloudError`; the tool stays registered locally. `onSyncError: "warn"` only warns instead.
+  - `await catalog.syncNow()` retries a failed sync.
+- **Search:**
+  - `searchAsync(q, k, { mode })` overrides the mode for one call. `topK` is capped at 20.
+  - Synchronous `search` throws on a `cloud` catalog.
+  - Ids the picker returns that aren't registered locally are dropped, with a warning.
+- **Errors:** `CloudError.code` is one of `"Unauthorized"`, `"InsufficientCredits"`, `"NoSyncedTools"`, `"RateLimited"` (with `retryAfterSecs`), `"TooLarge"`, `"Timeout"`, `"Unavailable"`, `"Http"`, `"Malformed"` or `"Config"`.
+- **Skills and facts** stay local for now.
+
+## Reranking (experimental)
+
+A catalog can rank in two stages ([ADR 0026](../../../docs/adr/0026-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker.method` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"` or `"hybrid"`, but the two stages must use different methods:
+
+```ts
+const catalog = new ToolCatalog({ method: "bm25", reranker: { method: "semantic", depth: 30 } });
+await catalog.register(tools);   // a semantic reranker makes register() build embeddings
+const hits = await catalog.searchAsync("deploy the service", 5);
+const plain = await catalog.searchAsync("deploy the service", 5, { reranker: null });   // off for one call
+```
+
+A reranker runs off the event loop, so synchronous `search` throws on a catalog that has one. `SkillCatalog` and `ratel()` take the same `reranker` option.
 
 ## Framework adapters
 

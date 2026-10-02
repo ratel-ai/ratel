@@ -11,13 +11,13 @@ import {
   searchCapabilitiesTool,
 } from "./capabilities.js";
 import {
+  type CloudConfig,
   type EmbeddingSpec,
   type ExecutableTool,
   type InputValidator,
   type RerankerConfig,
   runToolInvocation,
   type SearchMethod,
-  type SystemOneConfig,
   ToolCatalog,
   type TraceSinkConfig,
 } from "./catalog.js";
@@ -28,6 +28,7 @@ import { FactCatalog } from "./fact-catalog.js";
 import type { GroundingResult, GroundingSnapshotItem, GroundOptions } from "./grounding.js";
 import { isPackageInstalled } from "./package-resolution.js";
 import {
+  defaultSourceId,
   type ExperimentalDefinitionOverride,
   type ExperimentalDefinitionOverridesAttachment,
   type ExperimentalDefinitionOverridesAttachOptions,
@@ -68,10 +69,11 @@ export interface RatelConfig {
   /** Second-stage reranker forwarded to the tool and skill catalogs — see
    * {@link ToolCatalogOptions.reranker}. Facts are not reranked. **Experimental.** */
   reranker?: RerankerConfig;
-  /** System-one endpoint override forwarded to the tool and skill catalogs — see
-   * {@link ToolCatalogOptions.systemOne}. Facts do not support `"systemOne"`; with
-   * `method: "systemOne"` they rank with BM25. **Experimental.** */
-  systemOne?: SystemOneConfig;
+  /** Make Ratel Cloud the tool catalog's owner: `tools.register` syncs it to the Cloud
+   * project and `tools.searchAsync` (and the capability tools) rank through the Cloud
+   * Tool Picker — see {@link CloudConfig}. The sync uses the runtime-events `sourceId`
+   * unless `cloud.sourceId` is set. Skills and facts stay local. **Experimental.** */
+  cloud?: CloudConfig;
   /** Max tools each host-driven `recall` returns: capped at 50; 0, negative, or
    * non-integer values fall back to the default 5. */
   recallTopK?: number;
@@ -477,13 +479,21 @@ const KNOWN_FRAMEWORKS: readonly {
 export function ratel(config: RatelConfig = {}): Ratel {
   const catalogMethod: SearchMethod = config.method ?? "bm25";
   const embeddingArtifact = config.experimentalEmbeddingArtifact;
+  // A cloud tool catalog is ranked by the Tool Picker, so `method` and
+  // `reranker` then apply to skills only. Its sync uses the same source id the
+  // runtime-events stream defaults to.
   const catalog = new ToolCatalog({
-    method: config.method,
     embedding: config.embedding,
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
-    reranker: config.reranker,
-    systemOne: config.systemOne,
+    ...(config.cloud
+      ? {
+          cloud: {
+            ...config.cloud,
+            sourceId: config.cloud.sourceId ?? config.events?.sourceId ?? defaultSourceId(),
+          },
+        }
+      : { method: config.method, reranker: config.reranker }),
   });
   const skills = new SkillCatalog({
     method: config.method,
@@ -491,7 +501,6 @@ export function ratel(config: RatelConfig = {}): Ratel {
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
     reranker: config.reranker,
-    systemOne: config.systemOne,
   });
   const events = new RuntimeEvents([catalog, skills], config.events);
   let factsCatalog: FactCatalog | undefined;
@@ -600,8 +609,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
   const facts = (): FactCatalog => {
     if (factsCatalog === undefined) {
       factsCatalog = new FactCatalog({
-        // Facts have no system-one path; rank them lexically instead.
-        method: config.method === "systemOne" ? "bm25" : config.method,
+        method: config.method,
         embedding: config.embedding,
         trace: config.trace,
         factsTopK: config.factsTopK,

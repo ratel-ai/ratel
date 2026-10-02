@@ -169,9 +169,9 @@ const ARTIFACT_WARM_ERROR_PREFIX: &str = "RATEL_ARTIFACT_WARM_ERROR:";
 /// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
 const ARTIFACT_ERROR_PREFIX: &str = "RATEL_ARTIFACT_ERROR:";
 
-/// Private NAPI→TypeScript transport prefix for system-one search errors.
+/// Private NAPI→TypeScript transport prefix for Ratel Cloud errors.
 /// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
-const SYSTEM_ONE_ERROR_PREFIX: &str = "RATEL_SYSTEM_ONE_ERROR:";
+const CLOUD_ERROR_PREFIX: &str = "RATEL_CLOUD_ERROR:";
 
 /// The second stage of a two-stage search (ADR-0026): `method` re-scores the
 /// first stage's top `depth` candidates (default 50).
@@ -208,37 +208,132 @@ fn uses_dense(method: &str, reranker: Option<&RerankerConfig>) -> bool {
     dense(method) || reranker.is_some_and(|r| dense(&r.method))
 }
 
-fn system_one_error_code(error: &core::SystemOneError) -> &'static str {
-    match error {
-        core::SystemOneError::Config { .. } => "Config",
-        core::SystemOneError::Unauthorized { .. } => "Unauthorized",
-        core::SystemOneError::RateLimited => "RateLimited",
-        core::SystemOneError::Http { .. } => "Http",
-        core::SystemOneError::Unreachable { .. } => "Unreachable",
-        core::SystemOneError::Malformed { .. } => "Malformed",
-        _ => "Unknown",
+fn map_search_error(error: core::SearchError) -> napi::Error {
+    napi::Error::from_reason(error.to_string())
+}
+
+/// A Cloud failure travels in a private envelope so TS can raise a typed
+/// `CloudError` without parsing prose.
+fn map_cloud_error(error: core::CloudError) -> napi::Error {
+    let status = match &error {
+        core::CloudError::Unauthorized { status } | core::CloudError::Http { status, .. } => {
+            Some(*status)
+        }
+        _ => None,
+    };
+    let retry_after = match &error {
+        core::CloudError::RateLimited { retry_after_secs } => *retry_after_secs,
+        _ => None,
+    };
+    let payload = json!({
+        "code": error.code(),
+        "message": error.to_string(),
+        "status": status,
+        "retryAfterSecs": retry_after,
+    });
+    napi::Error::from_reason(format!("{CLOUD_ERROR_PREFIX}{payload}"))
+}
+
+/// A Tool Picker result: the picked tools registered here, the picked ids
+/// that are not, and whether the judge was confident.
+#[napi(object)]
+pub struct CloudPickResult {
+    pub hits: Vec<SearchHit>,
+    pub dropped: Vec<String>,
+    pub confident: Option<bool>,
+}
+
+/// What a catalog sync did.
+#[napi(object)]
+pub struct CloudSyncResult {
+    pub catalog_version: String,
+    pub tools: u32,
+    pub unchanged: bool,
+    pub skipped: bool,
+}
+
+pub struct CloudPickTask {
+    inner: Arc<RwLock<core::ToolRegistry>>,
+    query: String,
+    top_k: u32,
+    origin: String,
+    mode: String,
+    context: core::TraceEventContext,
+    _permit: DenseOperationPermit,
+}
+
+impl Task for CloudPickTask {
+    type Output = CloudPickResult;
+    type JsValue = CloudPickResult;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        let mode: core::PickMode = self
+            .mode
+            .parse()
+            .map_err(|e: core::ParsePickModeError| napi::Error::from_reason(e.to_string()))?;
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
+        let pick = registry
+            .cloud_pick(
+                &self.query,
+                self.top_k as usize,
+                parse_origin(self.origin.as_str()),
+                mode,
+                self.context.clone(),
+            )
+            .map_err(map_cloud_error)?;
+        Ok(CloudPickResult {
+            hits: pick
+                .hits
+                .into_iter()
+                .map(|hit| SearchHit {
+                    tool_id: hit.tool_id,
+                    score: hit.score as f64,
+                    rank: hit.rank,
+                    fused: hit.fused,
+                    relevance: f64::from(hit.relevance),
+                })
+                .collect(),
+            dropped: pick.dropped,
+            confident: pick.confident,
+        })
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(output)
     }
 }
 
-/// Embedder and option errors keep their plain message (the TS side already
-/// classifies embedder messages); a system-one failure travels in a private
-/// envelope so TS can raise a typed `SystemOneError` without parsing prose.
-fn map_search_error(error: core::SearchError) -> napi::Error {
-    match error {
-        core::SearchError::SystemOne(inner) => {
-            let status = match &inner {
-                core::SystemOneError::Unauthorized { status }
-                | core::SystemOneError::Http { status } => Some(*status),
-                _ => None,
-            };
-            let payload = json!({
-                "code": system_one_error_code(&inner),
-                "message": inner.to_string(),
-                "status": status,
-            });
-            napi::Error::from_reason(format!("{SYSTEM_ONE_ERROR_PREFIX}{payload}"))
-        }
-        other => napi::Error::from_reason(other.to_string()),
+pub struct CloudSyncTask {
+    inner: Arc<RwLock<core::ToolRegistry>>,
+    source_id: String,
+    _permit: DenseOperationPermit,
+}
+
+impl Task for CloudSyncTask {
+    type Output = CloudSyncResult;
+    type JsValue = CloudSyncResult;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
+        let outcome = registry
+            .cloud_sync(&self.source_id)
+            .map_err(map_cloud_error)?;
+        Ok(CloudSyncResult {
+            catalog_version: outcome.catalog_version,
+            tools: outcome.tools as u32,
+            unchanged: outcome.unchanged,
+            skipped: outcome.skipped,
+        })
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(output)
     }
 }
 
@@ -1530,7 +1625,7 @@ impl ToolRegistry {
                 })?;
         if !matches!(parsed_method, SearchMethod::Bm25) {
             return Err(napi::Error::from_reason(
-                "semantic, hybrid, and systemOne search are asynchronous; use searchWithMethodAsync() or ToolCatalog.searchAsync()",
+                "semantic and hybrid search are asynchronous; use searchWithMethodAsync() or ToolCatalog.searchAsync()",
             ));
         }
         let hits = self
@@ -1571,7 +1666,7 @@ impl ToolRegistry {
     }
 
     /// Search on a libuv worker with an optional second-stage `reranker`
-    /// (ADR-0026). Supports every method, including `"systemOne"`.
+    /// (ADR-0026).
     #[napi(ts_return_type = "Promise<Array<SearchHit>>")]
     pub fn search_with_options_async(
         &self,
@@ -1596,15 +1691,11 @@ impl ToolRegistry {
         })
     }
 
-    /// Point `"systemOne"` searches and rerankers at another endpoint or key;
-    /// unset fields keep Ratel Cloud's defaults.
+    /// Make Ratel Cloud this catalog's owner (ADR-0026); unset fields keep the
+    /// defaults (`https://cloud.ratel.sh`, `RATEL_API_KEY`).
     #[napi]
-    pub fn set_system_one(
-        &self,
-        url: Option<String>,
-        api_key_env: Option<String>,
-    ) -> napi::Result<()> {
-        let mut config = core::SystemOneConfig::default();
+    pub fn set_cloud(&self, url: Option<String>, api_key_env: Option<String>) -> napi::Result<()> {
+        let mut config = core::CloudConfig::default();
         if let Some(url) = url {
             config = config.with_url(url);
         }
@@ -1612,8 +1703,42 @@ impl ToolRegistry {
             config = config.with_api_key_env(name);
         }
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
-        registry.set_system_one(config);
+        registry.set_cloud(config);
         Ok(())
+    }
+
+    /// Rank through the Cloud Tool Picker on a libuv worker. Holds the busy
+    /// permit for the request, so a concurrent register fails fast instead of
+    /// blocking the event loop on the network call.
+    #[napi(ts_return_type = "Promise<CloudPickResult>")]
+    pub fn cloud_pick_async(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        mode: String,
+        context: Option<TraceEventContextConfig>,
+    ) -> AsyncTask<CloudPickTask> {
+        AsyncTask::new(CloudPickTask {
+            inner: self.inner.clone(),
+            query,
+            top_k,
+            origin,
+            mode,
+            context: trace_event_context(context),
+            _permit: DenseOperationPermit::new(self.pending_dense.clone()),
+        })
+    }
+
+    /// Upload the catalog to Cloud as `sourceId`'s snapshot on a libuv worker
+    /// (ADR-0027); skipped when unchanged since the last acknowledged sync.
+    #[napi(ts_return_type = "Promise<CloudSyncResult>")]
+    pub fn cloud_sync_async(&self, source_id: String) -> AsyncTask<CloudSyncTask> {
+        AsyncTask::new(CloudSyncTask {
+            inner: self.inner.clone(),
+            source_id,
+            _permit: DenseOperationPermit::new(self.pending_dense.clone()),
+        })
     }
 
     /// Pre-compute embeddings for not-yet-embedded tools on a worker. Registration
@@ -2579,7 +2704,7 @@ impl SkillRegistry {
                 })?;
         if !matches!(parsed_method, SearchMethod::Bm25) {
             return Err(napi::Error::from_reason(
-                "semantic, hybrid, and systemOne search are asynchronous; use searchWithMethodAsync() or SkillCatalog.searchAsync()",
+                "semantic and hybrid search are asynchronous; use searchWithMethodAsync() or SkillCatalog.searchAsync()",
             ));
         }
         let hits = self
@@ -2620,7 +2745,7 @@ impl SkillRegistry {
     }
 
     /// Search on a libuv worker with an optional second-stage `reranker`
-    /// (ADR-0026). Supports every method, including `"systemOne"`.
+    /// (ADR-0026).
     #[napi(ts_return_type = "Promise<Array<SkillHit>>")]
     pub fn search_with_options_async(
         &self,
@@ -2643,26 +2768,6 @@ impl SkillRegistry {
             context: trace_event_context(context),
             _permit: is_dense.then(|| DenseOperationPermit::new(self.pending_dense.clone())),
         })
-    }
-
-    /// Point `"systemOne"` searches and rerankers at another endpoint or key;
-    /// unset fields keep Ratel Cloud's defaults.
-    #[napi]
-    pub fn set_system_one(
-        &self,
-        url: Option<String>,
-        api_key_env: Option<String>,
-    ) -> napi::Result<()> {
-        let mut config = core::SystemOneConfig::default();
-        if let Some(url) = url {
-            config = config.with_url(url);
-        }
-        if let Some(name) = api_key_env {
-            config = config.with_api_key_env(name);
-        }
-        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
-        registry.set_system_one(config);
-        Ok(())
     }
 
     /// See `ToolRegistry.build_embeddings`.

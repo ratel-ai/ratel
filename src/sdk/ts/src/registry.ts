@@ -15,21 +15,24 @@ import {
 } from "../native/index.cjs";
 import { assertNotArtifactBusy } from "./artifact-source-warm.js";
 import {
+  type CloudConfig,
+  type CloudPick,
+  type CloudSyncOutcome,
   type EmbeddingSpec,
   type ExperimentalBm25Params,
   type ObservationPolicyOptions,
+  type PickMode,
   type RerankerConfig,
   type SearchMethod,
   type SearchOrigin,
-  type SystemOneConfig,
   type TraceSinkConfig,
   usesDense,
 } from "./catalog.js";
 import {
   mapArtifactBuildError,
   mapArtifactWarmError,
+  mapCloudError,
   mapEmbedderError,
-  mapSearchError,
 } from "./errors.js";
 import { assertValidFact, type Fact } from "./grounding.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
@@ -50,8 +53,8 @@ function toNativeEmbedding(
 export interface RegistryRankingOptions {
   /** Catalog-default reranker; decides whether registration embeds. */
   reranker?: RerankerConfig;
-  /** Override where `"systemOne"` sends rankings. */
-  systemOne?: SystemOneConfig;
+  /** Make Ratel Cloud the owner: enables {@link ToolRegistry.cloudPickAsync} and sync. */
+  cloud?: CloudConfig;
 }
 
 /**
@@ -95,8 +98,8 @@ export class ToolRegistry {
   ) {
     this.native = new NativeToolRegistry(toNativeEmbedding(embedding));
     this.eager = usesDense(method, ranking.reranker);
-    if (ranking.systemOne) {
-      this.native.setSystemOne(ranking.systemOne.url, ranking.systemOne.apiKeyEnv);
+    if (ranking.cloud) {
+      this.native.setCloud(ranking.cloud.url, ranking.cloud.apiKeyEnv);
     }
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
@@ -244,8 +247,7 @@ export class ToolRegistry {
 
   /**
    * Search on a libuv worker with an optional second-stage `reranker`
-   * (ADR-0026). Throws a typed {@link SystemOneError} when a standalone
-   * `"systemOne"` search fails.
+   * (ADR-0026).
    */
   async searchWithOptionsAsync(
     query: string,
@@ -271,7 +273,41 @@ export class ToolRegistry {
         projection,
       );
     } catch (error) {
-      throw mapSearchError(error);
+      throw mapEmbedderError(error);
+    }
+  }
+
+  /**
+   * Rank through the Cloud Tool Picker on a libuv worker (ADR-0026). Needs a
+   * registry constructed with `cloud`.
+   *
+   * @throws {@link CloudError} when the pick fails.
+   */
+  async cloudPickAsync(
+    query: string,
+    topK: number,
+    origin: SearchOrigin,
+    mode: PickMode,
+    projection?: RuntimeEventProjection,
+  ): Promise<CloudPick> {
+    try {
+      return await this.native.cloudPickAsync(query, topK, origin, mode, projection);
+    } catch (error) {
+      throw mapCloudError(error);
+    }
+  }
+
+  /**
+   * Upload the catalog to Cloud as `sourceId`'s snapshot on a libuv worker
+   * (ADR-0027); skipped when unchanged since the last acknowledged sync.
+   *
+   * @throws {@link CloudError} when the upload fails.
+   */
+  async cloudSyncAsync(sourceId: string): Promise<CloudSyncOutcome> {
+    try {
+      return await this.native.cloudSyncAsync(sourceId);
+    } catch (error) {
+      throw mapCloudError(error);
     }
   }
 
@@ -505,9 +541,6 @@ export class SkillRegistry {
   ) {
     this.native = new NativeSkillRegistry(toNativeEmbedding(embedding));
     this.eager = usesDense(method, ranking.reranker);
-    if (ranking.systemOne) {
-      this.native.setSystemOne(ranking.systemOne.url, ranking.systemOne.apiKeyEnv);
-    }
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
     }
@@ -675,7 +708,7 @@ export class SkillRegistry {
         projection,
       );
     } catch (error) {
-      throw mapSearchError(error);
+      throw mapEmbedderError(error);
     }
   }
 

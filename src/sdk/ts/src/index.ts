@@ -45,6 +45,9 @@ export {
 } from "./capabilities.js";
 export type {
   BaselineTurn,
+  CloudConfig,
+  CloudPick,
+  CloudSyncOutcome,
   EmbeddingModelConfig,
   EmbeddingSpec,
   ExecutableTool,
@@ -54,12 +57,12 @@ export type {
   InputValidator,
   ObservationPolicyOptions,
   OriginFilterOption,
+  PickMode,
   ProvenanceOption,
   RerankerConfig,
   SearchAsyncOptions,
   SearchMethod,
   SearchOrigin,
-  SystemOneConfig,
   ToolCatalogOptions,
   TraceSinkConfig,
 } from "./catalog.js";
@@ -78,15 +81,15 @@ export type {
   ExperimentalEmbeddingArtifact,
 } from "./embedding-artifact.js";
 export { experimentalBuildEmbeddingArtifact } from "./embedding-artifact.js";
-export type { DefinitionOverlayErrorCode, SystemOneErrorCode } from "./errors.js";
+export type { CloudErrorCode, DefinitionOverlayErrorCode } from "./errors.js";
 export {
   ArtifactError,
   ArtifactWarmError,
+  CloudError,
   DefinitionOverlayError,
   DimensionMismatchError,
   EmbedderError,
   IncompatibleMergeError,
-  SystemOneError,
 } from "./errors.js";
 export { experimentalDefineExperiment } from "./experiment.js";
 export type {

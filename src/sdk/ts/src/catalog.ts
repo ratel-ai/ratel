@@ -13,7 +13,7 @@ import {
 } from "./embedding-artifact.js";
 import { type IntentGraph, ToolRegistry } from "./registry.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
-import { newRuntimeEventId } from "./runtime-events.js";
+import { defaultSourceId, newRuntimeEventId } from "./runtime-events.js";
 import {
   argsSizeBytes,
   errorMessage,
@@ -284,16 +284,14 @@ export interface BaselineTurn {
  * (or warms a configured embedding artifact). Dense ranking uses
  * `searchAsync()`.
  */
-export type SearchMethod = "bm25" | "semantic" | "hybrid" | "systemOne";
+export type SearchMethod = "bm25" | "semantic" | "hybrid";
 
 /**
  * A second stage over the first stage's candidates (ADR-0026): `method`
  * re-scores the top `depth` (default 50) hits of the catalog's `method`. It
  * never adds a tool the first stage did not return.
  *
- * Any method may rerank any other, but not itself. A `"systemOne"` reranker
- * that fails (endpoint down, rate limited) returns the first stage's order
- * rather than throwing.
+ * Any method may rerank any other, but not itself.
  *
  * **Experimental** — may change without a major version bump.
  */
@@ -305,20 +303,82 @@ export interface RerankerConfig {
 }
 
 /**
- * Where `"systemOne"` sends its rankings. Both fields default to Ratel Cloud:
- * `https://app.ratel.sh/v1/systemone` with the key in `RATEL_API_KEY`.
+ * How the Cloud Tool Picker ranks (ADR-0026): `"instant"` is BM25
+ * (milliseconds, free), `"precise"` judges a BM25 shortlist with a system-one
+ * model (~300 ms, metered), `"exhaustive"` judges the whole catalog (seconds,
+ * metered).
+ */
+export type PickMode = "instant" | "precise" | "exhaustive";
+
+const PICK_MODES: ReadonlySet<string> = new Set(["instant", "precise", "exhaustive"]);
+
+/**
+ * Makes Ratel Cloud the catalog's owner (ADR-0026, ADR-0027): `register`
+ * uploads the catalog's executor-free definitions to the Cloud project, and
+ * `searchAsync` ranks through the Cloud Tool Picker. Executors stay local.
  *
- * `"systemOne"` sends the query and each candidate's searchable text to this
- * endpoint, which forwards them to the system-one model provider. The other
- * methods never leave the process.
+ * **The catalog's names, descriptions and schemas, and every query, leave the
+ * process.** Local methods never do.
  *
  * **Experimental** — may change without a major version bump.
  */
-export interface SystemOneConfig {
-  /** Endpoint URL (staging, a self-hosted proxy, tests). */
+export interface CloudConfig {
+  /** Pick mode for `searchAsync` (default `"precise"`); overridable per call. */
+  mode?: PickMode;
+  /** Cloud base URL (default `https://cloud.ratel.sh`). */
   url?: string;
-  /** Name of the environment variable holding the bearer key (read at search time). */
+  /** Name of the environment variable holding the project key (default `RATEL_API_KEY`). */
   apiKeyEnv?: string;
+  /**
+   * This process's catalog in the Cloud project. A sync replaces that
+   * source's tools, so services sharing a project need distinct ids. Default:
+   * `OTEL_SERVICE_NAME`, else `"ratel"` (`ratel()` passes its runtime-events
+   * `sourceId`).
+   */
+  sourceId?: string;
+  /** `"throw"` (default): a failed sync rejects `register`. `"warn"`: it only warns. */
+  onSyncError?: "throw" | "warn";
+}
+
+/** What the Cloud Tool Picker returned for one search. */
+export interface CloudPick {
+  /** The picked tools registered in this catalog, best-first. */
+  hits: SearchHit[];
+  /** Picked ids not registered in this catalog — dropped, nothing here can invoke them. */
+  dropped: string[];
+  /** Whether the judge was confident in its top pick; absent or `null` for `"instant"`. */
+  confident?: boolean | null;
+}
+
+/** What a catalog sync did. */
+export interface CloudSyncOutcome {
+  /** Cloud's version of this source's catalog after the sync. */
+  catalogVersion: string;
+  /** How many tools the snapshot held. */
+  tools: number;
+  /** Cloud already held exactly this snapshot. */
+  unchanged: boolean;
+  /** No request was sent: nothing changed since the last acknowledged sync. */
+  skipped: boolean;
+}
+
+/** Reject a `cloud` option the catalog cannot honour. @internal */
+export function assertValidCloud(
+  cloud: CloudConfig | undefined,
+  options: { method?: SearchMethod; reranker?: RerankerConfig },
+): void {
+  if (!cloud) return;
+  if (options.method !== undefined || options.reranker !== undefined) {
+    throw new Error(
+      "a cloud catalog is ranked by the Cloud Tool Picker; drop `method` and `reranker` " +
+        "and choose a `cloud.mode` instead",
+    );
+  }
+  if (cloud.mode !== undefined && !PICK_MODES.has(cloud.mode)) {
+    throw new Error(
+      `unknown cloud mode "${cloud.mode}" (expected "instant", "precise", or "exhaustive")`,
+    );
+  }
 }
 
 /** Per-call options for `searchAsync`; each field overrides the catalog's default. */
@@ -331,6 +391,8 @@ export interface SearchAsyncOptions {
   reranker?: RerankerConfig | null;
   /** Correlates the search with the invokes that follow it (ADR-0014). */
   turnId?: string;
+  /** Pick mode for this call, on a `cloud` catalog. */
+  mode?: PickMode;
 }
 
 const DENSE_METHODS: ReadonlySet<SearchMethod> = new Set(["semantic", "hybrid"]);
@@ -386,6 +448,10 @@ export function resolveSearchAsyncArgs(
   assertValidReranker(resolved.method, resolved.reranker);
   return resolved;
 }
+
+/** Guidance thrown by a synchronous `search` on a cloud catalog. @internal */
+export const CLOUD_NEEDS_ASYNC =
+  "this catalog ranks through the Cloud Tool Picker, a network call; use searchAsync()";
 
 /** Guidance thrown by a synchronous `search` on a catalog with a reranker. @internal */
 export const RERANKER_NEEDS_ASYNC =
@@ -515,10 +581,11 @@ export interface ToolCatalogOptions {
    */
   reranker?: RerankerConfig;
   /**
-   * Override where `"systemOne"` (as `method` or reranker) sends rankings —
-   * see {@link SystemOneConfig}. **Experimental.**
+   * Make Ratel Cloud this catalog's owner and rank through its Tool Picker —
+   * see {@link CloudConfig}. Not combinable with `method` or `reranker`.
+   * **Experimental.**
    */
-  systemOne?: SystemOneConfig;
+  cloud?: CloudConfig;
 }
 
 /**
@@ -563,6 +630,8 @@ export class ToolCatalog {
   private readonly warnedShadowIds = new Set<string>();
   private readonly method: SearchMethod;
   private readonly reranker: RerankerConfig | undefined;
+  private readonly cloud: (CloudConfig & { sourceId: string }) | undefined;
+  private readonly warnedDroppedIds = new Set<string>();
   private readonly embeddingArtifact: ExperimentalEmbeddingArtifact | undefined;
 
   /**
@@ -572,15 +641,20 @@ export class ToolCatalog {
    *   Construction validates configuration but never loads a model.
    */
   constructor(options: ToolCatalogOptions = {}) {
+    assertValidCloud(options.cloud, options);
     this.method = options.method ?? "bm25";
     assertValidReranker(this.method, options.reranker);
     this.reranker = options.reranker;
+    this.cloud = options.cloud && {
+      ...options.cloud,
+      sourceId: options.cloud.sourceId ?? defaultSourceId(),
+    };
     this.registry = new ToolRegistry(
       options.embedding,
       this.method,
       options.experimentalDenseWeight,
       options.experimentalBm25,
-      { reranker: options.reranker, systemOne: options.systemOne },
+      { reranker: options.reranker, cloud: options.cloud },
     );
     this.embeddingArtifact = options.experimentalEmbeddingArtifact;
     if (options.trace) {
@@ -668,6 +742,31 @@ export class ToolCatalog {
       this.tools.set(tool.id, metadata);
     }
     await this.ensureDenseReady();
+    if (this.cloud) await this.syncCloud();
+  }
+
+  /**
+   * Upload the catalog to Ratel Cloud now (ADR-0027). `register` already does
+   * this on a `cloud` catalog; call it to retry after a failed sync. Skipped
+   * when nothing changed since the last acknowledged sync.
+   *
+   * @throws {@link CloudError} when the upload fails, or the catalog has no `cloud`.
+   */
+  async syncNow(): Promise<CloudSyncOutcome> {
+    if (!this.cloud) throw new Error("syncNow() needs a catalog constructed with `cloud`");
+    return this.registry.cloudSyncAsync(this.cloud.sourceId);
+  }
+
+  private async syncCloud(): Promise<void> {
+    try {
+      await this.syncNow();
+    } catch (error) {
+      if (this.cloud?.onSyncError !== "warn") throw error;
+      console.warn(
+        `ratel: cloud catalog sync failed; picks may rank a stale catalog until the next ` +
+          `register or syncNow(): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private applyDefinitionOverride(tool: ExecutableTool): ExecutableTool {
@@ -715,6 +814,7 @@ export class ToolCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): SearchHit[] {
+    if (this.cloud) throw new Error(CLOUD_NEEDS_ASYNC);
     if (this.reranker) throw new Error(RERANKER_NEEDS_ASYNC);
     return traceSearch(
       SearchTarget.Tool,
@@ -748,6 +848,7 @@ export class ToolCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): Promise<SearchHit[]> {
+    if (this.cloud) return this.pickAsync(query, topK, originOrOptions, method, turnId);
     let args: ReturnType<typeof resolveSearchAsyncArgs>;
     try {
       args = resolveSearchAsyncArgs(originOrOptions, method, turnId, {
@@ -772,6 +873,49 @@ export class ToolCatalog {
           projection,
         ),
       args.turnId,
+    );
+  }
+
+  private pickAsync(
+    query: string,
+    topK: number,
+    originOrOptions: SearchOrigin | SearchAsyncOptions | undefined,
+    method: SearchMethod | undefined,
+    turnId: string | undefined,
+  ): Promise<SearchHit[]> {
+    const cloud = this.cloud as CloudConfig;
+    const options: SearchAsyncOptions =
+      typeof originOrOptions === "object" && originOrOptions !== null
+        ? originOrOptions
+        : { origin: originOrOptions, method, turnId };
+    if (options.method !== undefined || options.reranker) {
+      return Promise.reject(
+        new Error("a cloud catalog is ranked by the Cloud Tool Picker; pass `mode`, not `method`"),
+      );
+    }
+    const mode = options.mode ?? cloud.mode ?? "precise";
+    if (!PICK_MODES.has(mode)) {
+      return Promise.reject(new Error(`unknown cloud mode "${mode}"`));
+    }
+    const origin = options.origin ?? "direct";
+    return traceSearchAsync(
+      SearchTarget.Tool,
+      query,
+      topK,
+      origin,
+      async (projection) => {
+        const pick = await this.registry.cloudPickAsync(query, topK, origin, mode, projection);
+        const unseen = pick.dropped.filter((id) => !this.warnedDroppedIds.has(id));
+        if (unseen.length > 0) {
+          for (const id of unseen) this.warnedDroppedIds.add(id);
+          console.warn(
+            `ratel: the Cloud Tool Picker returned tools not registered in this catalog ` +
+              `(${unseen.join(", ")}); they were dropped. Register them here, or re-sync.`,
+          );
+        }
+        return pick.hits;
+      },
+      options.turnId,
     );
   }
 

@@ -310,88 +310,87 @@ export function mapArtifactBuildError(error: unknown): unknown {
   return mapArtifactError(error);
 }
 
-/** Stable categories for a failed system-one ranking (ADR-0026). */
-export type SystemOneErrorCode =
+/** Stable categories for a failed Ratel Cloud request (ADR-0026, ADR-0027). */
+export type CloudErrorCode =
   | "Config"
   | "Unauthorized"
+  | "InsufficientCredits"
+  | "NoSyncedTools"
   | "RateLimited"
+  | "TooLarge"
+  | "Timeout"
+  | "Unavailable"
   | "Http"
-  | "Unreachable"
-  | "Malformed"
-  | "Unknown";
+  | "Malformed";
 
 /**
- * A `"systemOne"` search failed: the endpoint was unreachable, rejected the
- * key, rate limited, or answered with something that is not a ranking. Raised
- * by a standalone `"systemOne"` search only — a `"systemOne"` **reranker**
- * falls back to the first stage's order instead of throwing.
+ * A Ratel Cloud request failed — a Tool Picker search on a `cloud` catalog, or
+ * the catalog sync behind `register`. Branch on {@link CloudError.code}.
  */
-export class SystemOneError extends Error {
+export class CloudError extends Error {
   /** Stable machine-readable discriminant; prefer it over parsing `message`. */
-  readonly code: SystemOneErrorCode;
+  readonly code: CloudErrorCode;
   /** The HTTP status, for `"Unauthorized"` and `"Http"`. */
   readonly status?: number;
+  /** Seconds Cloud asked to wait, for `"RateLimited"` when it sent `Retry-After`. */
+  readonly retryAfterSecs?: number;
 
   /**
    * @param message - The underlying failure description (the core error text).
-   * @param code - The stable {@link SystemOneError.code} discriminant.
-   * @param status - The HTTP status, when the endpoint answered.
+   * @param code - The stable {@link CloudError.code} discriminant.
+   * @param details - The HTTP status and `Retry-After`, when Cloud sent them.
    */
-  constructor(message: string, code: SystemOneErrorCode, status?: number) {
+  constructor(
+    message: string,
+    code: CloudErrorCode,
+    details: { status?: number; retryAfterSecs?: number } = {},
+  ) {
     super(message);
-    this.name = "SystemOneError";
+    this.name = "CloudError";
     this.code = code;
-    if (status !== undefined) this.status = status;
+    if (details.status !== undefined) this.status = details.status;
+    if (details.retryAfterSecs !== undefined) this.retryAfterSecs = details.retryAfterSecs;
   }
 }
 
-/** Private NAPI→TS transport prefix — must match native `SYSTEM_ONE_ERROR_PREFIX`. */
-const SYSTEM_ONE_ERROR_PREFIX = "RATEL_SYSTEM_ONE_ERROR:";
+/** Private NAPI→TS transport prefix — must match native `CLOUD_ERROR_PREFIX`. */
+const CLOUD_ERROR_PREFIX = "RATEL_CLOUD_ERROR:";
 
-const SYSTEM_ONE_ERROR_CODES: ReadonlySet<string> = new Set([
+const CLOUD_ERROR_CODES: ReadonlySet<string> = new Set([
   "Config",
   "Unauthorized",
+  "InsufficientCredits",
+  "NoSyncedTools",
   "RateLimited",
+  "TooLarge",
+  "Timeout",
+  "Unavailable",
   "Http",
-  "Unreachable",
   "Malformed",
-  "Unknown",
 ]);
 
 /**
- * Decode the private native system-one envelope into a typed
- * {@link SystemOneError}. Malformed envelopes and other errors are returned
- * unchanged.
+ * Decode the private native Cloud envelope into a typed {@link CloudError}.
+ * Malformed envelopes and other errors are returned unchanged.
  *
  * @param error - The error thrown by the native binding.
- * @returns The typed system-one error, or `error` unchanged when it is not one.
+ * @returns The typed Cloud error, or `error` unchanged when it is not one.
  */
-export function mapSystemOneError(error: unknown): unknown {
+export function mapCloudError(error: unknown): unknown {
   if (!(error instanceof Error)) return error;
-  if (!error.message.startsWith(SYSTEM_ONE_ERROR_PREFIX)) return error;
+  if (!error.message.startsWith(CLOUD_ERROR_PREFIX)) return error;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(error.message.slice(SYSTEM_ONE_ERROR_PREFIX.length));
+    parsed = JSON.parse(error.message.slice(CLOUD_ERROR_PREFIX.length));
   } catch {
     return error;
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return error;
   const record = parsed as Record<string, unknown>;
-  if (typeof record.code !== "string" || !SYSTEM_ONE_ERROR_CODES.has(record.code)) return error;
+  if (typeof record.code !== "string" || !CLOUD_ERROR_CODES.has(record.code)) return error;
   if (typeof record.message !== "string") return error;
-  const status = typeof record.status === "number" ? record.status : undefined;
-  return new SystemOneError(record.message, record.code as SystemOneErrorCode, status);
-}
-
-/**
- * Re-raise a native search failure as its typed error: system-one first, then
- * embedder. Anything unrecognized is returned unchanged.
- *
- * @param error - The error thrown by the native binding.
- * @returns The typed error, or `error` unchanged when it is not recognized.
- */
-export function mapSearchError(error: unknown): unknown {
-  const systemOne = mapSystemOneError(error);
-  if (systemOne !== error) return systemOne;
-  return mapEmbedderError(error);
+  return new CloudError(record.message, record.code as CloudErrorCode, {
+    status: typeof record.status === "number" ? record.status : undefined,
+    retryAfterSecs: typeof record.retryAfterSecs === "number" ? record.retryAfterSecs : undefined,
+  });
 }
