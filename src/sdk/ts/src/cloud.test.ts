@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CloudError, type ExecutableTool, ratel, ToolCatalog } from "./index.js";
+import { CloudError, type ExecutableTool, ratel, SkillCatalog, ToolCatalog } from "./index.js";
 
 const KEY_ENV = "RATEL_SDK_TS_CLOUD_TEST_KEY";
 
@@ -273,5 +273,27 @@ describe("cloud and embedding artifacts", () => {
           experimentalEmbeddingArtifact: { path: "/nonexistent.rat1" },
         }),
     ).toThrow(/artifact/i);
+  });
+});
+
+describe("validation parity", () => {
+  it("rejects an unknown reranker method at construction", () => {
+    expect(() => new ToolCatalog({ reranker: { method: "fuzzy" as never } })).toThrow(
+      /unknown search method/,
+    );
+  });
+
+  it("rejects an unknown onSyncError", () => {
+    expect(
+      () =>
+        new ToolCatalog({
+          cloud: { url: mock.url, apiKeyEnv: KEY_ENV, onSyncError: "warning" as never },
+        }),
+    ).toThrow(/onSyncError/);
+  });
+
+  it("rejects a pick mode on a skill catalog, which has no cloud", async () => {
+    const skills = new SkillCatalog();
+    await expect(skills.searchAsync("q", 3, { mode: "precise" })).rejects.toThrow(/mode/);
   });
 });

@@ -254,6 +254,11 @@ def _validate_cloud(
         raise ValueError(
             f'unknown cloud mode "{mode}" (expected "instant", "precise", or "exhaustive")'
         )
+    on_sync_error = cloud.get("on_sync_error")
+    if on_sync_error is not None and on_sync_error not in ("raise", "warn"):
+        raise ValueError(
+            f'unknown cloud on_sync_error "{on_sync_error}" (expected "raise" or "warn")'
+        )
 
 
 _METHODS = ("bm25", "semantic", "hybrid", "systemOne")
@@ -280,6 +285,10 @@ def _validate_reranker(method: str, reranker: RerankerConfig | None) -> None:
     """Reject a reranker the core would refuse, before the first search."""
     if reranker is None:
         return
+    if "method" not in reranker:
+        raise ValueError(
+            'a reranker needs a "method" ("bm25", "semantic", "hybrid", or "systemOne")'
+        )
     _validate_method(reranker["method"])
     if reranker["method"] == method:
         raise ValueError(

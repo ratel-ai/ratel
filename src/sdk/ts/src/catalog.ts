@@ -418,6 +418,15 @@ export function assertValidCloud(
       `unknown cloud mode "${cloud.mode}" (expected "instant", "precise", or "exhaustive")`,
     );
   }
+  if (
+    cloud.onSyncError !== undefined &&
+    cloud.onSyncError !== "throw" &&
+    cloud.onSyncError !== "warn"
+  ) {
+    throw new Error(
+      `unknown cloud onSyncError "${cloud.onSyncError}" (expected "throw" or "warn")`,
+    );
+  }
 }
 
 /** Per-call options for `searchAsync`; each field overrides the catalog's default. */
@@ -435,6 +444,7 @@ export interface SearchAsyncOptions {
 }
 
 const DENSE_METHODS: ReadonlySet<SearchMethod> = new Set(["semantic", "hybrid"]);
+const SEARCH_METHODS: ReadonlySet<string> = new Set(["bm25", "semantic", "hybrid", "systemOne"]);
 
 /** Whether either stage ranks against embeddings, so registration must embed. @internal */
 export function usesDense(method: SearchMethod, reranker?: RerankerConfig | null): boolean {
@@ -447,6 +457,12 @@ export function usesDense(method: SearchMethod, reranker?: RerankerConfig | null
  */
 export function assertValidReranker(method: SearchMethod, reranker?: RerankerConfig | null): void {
   if (!reranker) return;
+  if (!SEARCH_METHODS.has(reranker.method)) {
+    throw new Error(
+      `unknown search method "${reranker.method}" for the reranker ` +
+        '(expected "bm25", "semantic", "hybrid", or "systemOne")',
+    );
+  }
   if (reranker.method === method) {
     throw new Error(
       `reranker method "${reranker.method}" is the same as the first-stage method; ` +

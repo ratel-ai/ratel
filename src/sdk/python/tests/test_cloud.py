@@ -273,3 +273,15 @@ def test_cloud_with_an_embedding_artifact_is_rejected(mock: MockCloud) -> None:
             experimental_embedding_artifact={"path": "/nonexistent.rat1"},  # type: ignore[typeddict-item]
         )
 
+
+def test_a_reranker_without_a_method_is_a_value_error() -> None:
+    with pytest.raises(ValueError, match="method"):
+        ToolCatalog(reranker={"depth": 10})  # type: ignore[typeddict-item]
+
+
+def test_an_unknown_on_sync_error_is_rejected(mock: MockCloud) -> None:
+    with pytest.raises(ValueError, match="on_sync_error"):
+        ToolCatalog(
+            cloud={"url": mock.url, "api_key_env": KEY_ENV, "on_sync_error": "warning"}  # type: ignore[typeddict-item]
+        )
+

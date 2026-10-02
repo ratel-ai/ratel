@@ -352,6 +352,11 @@ export class SkillCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): Promise<SkillHit[]> {
+    if (typeof originOrOptions === "object" && originOrOptions?.mode !== undefined) {
+      return Promise.reject(
+        new Error("`mode` picks a Cloud Tool Picker mode; a skill catalog has no cloud"),
+      );
+    }
     let args: ReturnType<typeof resolveSearchAsyncArgs>;
     try {
       args = resolveSearchAsyncArgs(originOrOptions, method, turnId, {
