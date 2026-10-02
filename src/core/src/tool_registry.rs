@@ -20,7 +20,9 @@ use crate::indexing::searchable_text;
 use crate::method::SearchMethod;
 use crate::rerank::{SearchError, SearchOptions, order_by_rescore};
 use crate::search::{Bm25Cache, Bm25Params};
-use crate::system_one::{Candidate, JevSystemOne, SystemOne, SystemOneConfig, SystemOneError};
+use crate::system_one::{
+    Candidate, CandidateKind, JevSystemOne, SystemOne, SystemOneConfig, SystemOneError,
+};
 use crate::tool::Tool;
 use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchHitTrace, SearchStage, TraceEnvelope, TraceEvent,
@@ -571,7 +573,8 @@ impl ToolRegistry {
                 .collect(),
             None => self.tools.values().map(candidate).collect(),
         };
-        self.system_one.rank(query, &candidates, top_k)
+        self.system_one
+            .rank(query, &candidates, top_k, CandidateKind::Tool)
     }
 
     /// Set the BM25 `k1`/`b` tuning; forces a rebuild on the next search. See
@@ -4367,6 +4370,20 @@ mod tests {
             .map(|s| s.name)
             .collect();
         assert_eq!(stages, vec!["bm25", "rerank_fallback"]);
+    }
+
+    #[test]
+    fn tool_searches_ask_jev_about_tools() {
+        let mut reg = rerank_catalog();
+        let s1 = system_one(&mut reg, ScriptedSystemOne::ranking(&[("read_file", 0.9)]));
+        reg.search_with_options(
+            "q",
+            5,
+            Origin::Direct,
+            SearchOptions::new(SearchMethod::SystemOne),
+        )
+        .unwrap();
+        assert_eq!(s1.kinds(), vec![crate::CandidateKind::Tool]);
     }
 
     #[test]

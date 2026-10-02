@@ -38,11 +38,13 @@ class LocalJev:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self) -> None:  # noqa: N802 - http.server API
                 body = json.loads(self.rfile.read(int(self.headers["content-length"])))
-                probabilities = _judge(body["state"], body["questions"]["tool"]["criteria"])
+                # The question id is the kind being ranked: "tool", "skill", ….
+                kind, question = next(iter(body["questions"].items()))
+                probabilities = _judge(body["state"], question["criteria"])
                 data = json.dumps(
                     {
                         "model": body["model"],
-                        "answers": {"tool": {"type": "choice", "probabilities": probabilities}},
+                        "answers": {kind: {"type": "choice", "probabilities": probabilities}},
                     }
                 ).encode()
                 self.send_response(200)

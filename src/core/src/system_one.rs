@@ -46,7 +46,39 @@ const SYSTEM_ONE_TIMEOUT_SECS: u64 = 15;
 /// A Jev answer is a probability map; anything near this size is not one.
 const SYSTEM_ONE_RESPONSE_LIMIT_BYTES: u64 = 4 * 1024 * 1024;
 
-const INSTRUCTIONS: &str = "Which tool best handles this request?";
+/// What kind of catalog item a system-one question picks among. It sets the
+/// question's wording, so the model judges a tool, a skill or a fact as what
+/// it is, and the question's id in Jev's request and answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CandidateKind {
+    /// A callable tool: the model picks the one to call.
+    Tool,
+    /// A skill: the model picks the playbook whose instructions help most.
+    Skill,
+    /// A fact: the model picks the piece of grounding most relevant.
+    Fact,
+}
+
+impl CandidateKind {
+    /// The singular noun: `"tool"`, `"skill"`, `"fact"`. Also the question id.
+    #[must_use]
+    pub fn noun(&self) -> &'static str {
+        match self {
+            CandidateKind::Tool => "tool",
+            CandidateKind::Skill => "skill",
+            CandidateKind::Fact => "fact",
+        }
+    }
+
+    fn instructions(&self) -> &'static str {
+        match self {
+            CandidateKind::Tool => "Which tool should be called to handle this request?",
+            CandidateKind::Skill => "Which skill's instructions best help with this request?",
+            CandidateKind::Fact => "Which fact is most relevant to this request?",
+        }
+    }
+}
 
 /// Which Jev endpoint, key and model a registry uses.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -171,23 +203,19 @@ pub(crate) struct Candidate {
 /// Rank `candidates` for `query`, best first, keeping at most `top_k`.
 pub(crate) trait SystemOne: Send + Sync {
     /// `(id, score)` best-first, every id one of `candidates`, scores in
-    /// `[0, 1]`, at most `top_k` entries.
+    /// `[0, 1]`, at most `top_k` entries. `kind` is what the candidates are.
     fn rank(
         &self,
         query: &str,
         candidates: &[Candidate],
         top_k: usize,
+        kind: CandidateKind,
     ) -> Result<Vec<(String, f32)>, SystemOneError>;
 }
 
 #[derive(Deserialize)]
 struct JevResponse {
-    answers: JevAnswers,
-}
-
-#[derive(Deserialize)]
-struct JevAnswers {
-    tool: JevChoice,
+    answers: HashMap<String, JevChoice>,
 }
 
 #[derive(Deserialize)]
@@ -239,6 +267,7 @@ impl JevSystemOne {
         key: &str,
         query: &str,
         candidates: &[&Candidate],
+        kind: CandidateKind,
     ) -> Result<Vec<(String, f32)>, SystemOneError> {
         // Index keys (`t0`…) rather than ids: an id may be long or odd, and the
         // option name is part of what Jev reads.
@@ -251,7 +280,11 @@ impl JevSystemOne {
             "model": self.config.model,
             "state": query,
             "questions": {
-                "tool": { "type": "choice", "instructions": INSTRUCTIONS, "criteria": criteria }
+                kind.noun(): {
+                    "type": "choice",
+                    "instructions": kind.instructions(),
+                    "criteria": criteria
+                }
             }
         });
         let url = format!("{}/v1/systemone", self.config.url);
@@ -270,10 +303,13 @@ impl JevSystemOne {
             .map_err(|e| SystemOneError::Malformed {
                 source: e.to_string(),
             })?;
-        Ok(from_probabilities(
-            &parsed.answers.tool.probabilities,
-            candidates,
-        ))
+        let answer = parsed
+            .answers
+            .get(kind.noun())
+            .ok_or_else(|| SystemOneError::Malformed {
+                source: format!("no answer to the \"{}\" question", kind.noun()),
+            })?;
+        Ok(from_probabilities(&answer.probabilities, candidates))
     }
 
     /// Rank more candidates than one question holds: rank groups in parallel,
@@ -291,11 +327,12 @@ impl JevSystemOne {
         query: &str,
         candidates: Vec<&Candidate>,
         keep: usize,
+        kind: CandidateKind,
     ) -> Result<Vec<(String, f32)>, SystemOneError> {
         let mut field = candidates;
         loop {
             if fits_one_question(&field) {
-                return self.ask(key, query, &field);
+                return self.ask(key, query, &field, kind);
             }
             let groups = split_into_questions(&field);
             let per_group = keep.min(MAX_OPTIONS / groups.len()).max(1);
@@ -306,7 +343,7 @@ impl JevSystemOne {
                     std::thread::scope(|scope| {
                         let handles: Vec<_> = batch
                             .iter()
-                            .map(|group| scope.spawn(|| self.ask(key, query, group)))
+                            .map(|group| scope.spawn(|| self.ask(key, query, group, kind)))
                             .collect();
                         handles
                             .into_iter()
@@ -358,6 +395,7 @@ impl SystemOne for JevSystemOne {
         query: &str,
         candidates: &[Candidate],
         top_k: usize,
+        kind: CandidateKind,
     ) -> Result<Vec<(String, f32)>, SystemOneError> {
         if candidates.is_empty() || top_k == 0 {
             return Ok(Vec::new());
@@ -368,7 +406,7 @@ impl SystemOne for JevSystemOne {
             .iter()
             .filter(|c| seen.insert(c.id.as_str()))
             .collect();
-        let mut ranked = self.tournament(&key, query, unique, top_k.max(1))?;
+        let mut ranked = self.tournament(&key, query, unique, top_k.max(1), kind)?;
         ranked.truncate(top_k);
         Ok(ranked)
     }
@@ -479,8 +517,11 @@ mod tests {
                     Ok((mut stream, _)) => {
                         stream.set_nonblocking(false).unwrap();
                         let request = read_http_request_full(&mut stream);
-                        let criteria = request.body["questions"]["tool"]["criteria"]
+                        // Whichever question was asked: its id depends on the kind.
+                        let criteria = request.body["questions"]
                             .as_object()
+                            .and_then(|qs| qs.values().next())
+                            .and_then(|q| q["criteria"].as_object())
                             .cloned()
                             .unwrap_or_default();
                         let (status, body) = answer(&criteria);
@@ -551,7 +592,12 @@ mod tests {
         ]);
         let (url, seen) = mock(by_text(scores), 1);
         let ranked = client(&url)
-            .rank("money back", &cands(&["charge", "list", "refund"]), 5)
+            .rank(
+                "money back",
+                &cands(&["charge", "list", "refund"]),
+                5,
+                CandidateKind::Tool,
+            )
             .unwrap();
         assert_eq!(
             ranked,
@@ -582,7 +628,9 @@ mod tests {
             ("text of tool321".to_string(), 0.6),
         ]);
         let (url, seen) = mock(by_text(scores), 4);
-        let ranked = client(&url).rank("q", &cands(&id_refs), 2).unwrap();
+        let ranked = client(&url)
+            .rank("q", &cands(&id_refs), 2, CandidateKind::Tool)
+            .unwrap();
         assert_eq!(ranked[0].0, "tool123");
         assert_eq!(ranked[1].0, "tool321");
         let seen = seen.lock().unwrap();
@@ -605,7 +653,9 @@ mod tests {
         let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
         let scores = HashMap::from([("text of tool155".to_string(), 0.9)]);
         let (url, seen) = mock(by_text(scores), 3);
-        let ranked = client(&url).rank("q", &cands(&id_refs), 150).unwrap();
+        let ranked = client(&url)
+            .rank("q", &cands(&id_refs), 150, CandidateKind::Tool)
+            .unwrap();
         assert_eq!(
             ranked[0].0, "tool155",
             "the group-2 winner survives the cut"
@@ -631,13 +681,56 @@ mod tests {
             .collect();
         let best = many[42].text.clone();
         let (url, seen) = mock(by_text(HashMap::from([(best, 0.8)])), 3);
-        let ranked = client(&url).rank("q", &many, 45).unwrap();
+        let ranked = client(&url)
+            .rank("q", &many, 45, CandidateKind::Tool)
+            .unwrap();
         assert_eq!(ranked[0].0, "c42");
         assert_eq!(
             seen.lock().unwrap().len(),
             3,
             "two groups and one final round"
         );
+    }
+
+    #[test]
+    fn each_kind_asks_its_own_question() {
+        set_key();
+        for kind in [
+            CandidateKind::Tool,
+            CandidateKind::Skill,
+            CandidateKind::Fact,
+        ] {
+            let noun = kind.noun();
+            let answer: Answer = Box::new(move |criteria| {
+                let probs: serde_json::Map<String, serde_json::Value> = criteria
+                    .keys()
+                    .map(|k| {
+                        (
+                            k.clone(),
+                            serde_json::json!(if k == "t1" { 0.9 } else { 0.1 }),
+                        )
+                    })
+                    .collect();
+                (
+                    200,
+                    serde_json::json!({"answers": {noun: {"type": "choice", "probabilities": probs}}})
+                        .to_string(),
+                )
+            });
+            let (url, seen) = mock(answer, 1);
+            let ranked = client(&url)
+                .rank("q", &cands(&["a", "b"]), 2, kind)
+                .unwrap();
+            assert_eq!(
+                ranked[0].0, "b",
+                "{noun}: the answer is read under its own key"
+            );
+            let body = &seen.lock().unwrap()[0].body;
+            let question = &body["questions"][noun];
+            assert_eq!(question["type"], "choice", "{noun}");
+            let instructions = question["instructions"].as_str().unwrap();
+            assert!(instructions.contains(noun), "{noun}: {instructions}");
+        }
     }
 
     #[test]
@@ -650,7 +743,10 @@ mod tests {
         };
         let (url, _seen) = mock(answer, 3);
         let c = client(&url);
-        let call = || c.rank("q", &cands(&["a"]), 1).unwrap_err();
+        let call = || {
+            c.rank("q", &cands(&["a"]), 1, CandidateKind::Tool)
+                .unwrap_err()
+        };
         assert_eq!(call(), SystemOneError::Unauthorized { status: 401 });
         assert_eq!(call(), SystemOneError::RateLimited);
         assert_eq!(call(), SystemOneError::Http { status: 529 });
@@ -661,7 +757,7 @@ mod tests {
         set_key();
         let (url, _seen) = mock(Box::new(|_| (200, r#"{"nope":true}"#.into())), 1);
         assert!(matches!(
-            client(&url).rank("q", &cands(&["a"]), 1),
+            client(&url).rank("q", &cands(&["a"]), 1, CandidateKind::Tool),
             Err(SystemOneError::Malformed { .. })
         ));
     }
@@ -674,7 +770,7 @@ mod tests {
                 .with_api_key_env("RATEL_CORE_JEV_UNSET_KEY"),
         );
         assert!(matches!(
-            c.rank("q", &cands(&["a"]), 1),
+            c.rank("q", &cands(&["a"]), 1, CandidateKind::Tool),
             Err(SystemOneError::Config { .. })
         ));
     }
@@ -688,7 +784,7 @@ mod tests {
             .unwrap()
             .port();
         let err = client(&format!("http://127.0.0.1:{port}"))
-            .rank("q", &cands(&["a"]), 1)
+            .rank("q", &cands(&["a"]), 1, CandidateKind::Tool)
             .unwrap_err();
         assert!(matches!(err, SystemOneError::Unreachable { .. }), "{err}");
     }
@@ -696,7 +792,7 @@ mod tests {
     #[test]
     fn no_candidates_means_no_request() {
         let c = client("http://127.0.0.1:9");
-        assert!(c.rank("q", &[], 5).unwrap().is_empty());
+        assert!(c.rank("q", &[], 5, CandidateKind::Tool).unwrap().is_empty());
     }
 
     #[test]

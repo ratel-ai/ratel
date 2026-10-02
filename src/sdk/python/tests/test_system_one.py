@@ -42,7 +42,9 @@ class MockSystemOne:
                 if mock.replies:
                     status, payload = mock.replies.pop(0)
                 else:
-                    criteria = body["questions"]["tool"]["criteria"]
+                    # The question id is the kind being ranked: "tool", "skill", ….
+                    kind, question = next(iter(body["questions"].items()))
+                    criteria = question["criteria"]
                     keys = list(criteria)
                     probs = {}
                     for i, key in enumerate(keys):
@@ -53,7 +55,7 @@ class MockSystemOne:
                             probs[key] = p if criteria[key].split(" ")[0] == pid else 0.0
                     status, payload = 200, {
                         "model": "jev-1.13.0",
-                        "answers": {"tool": {"type": "choice", "probabilities": probs}},
+                        "answers": {kind: {"type": "choice", "probabilities": probs}},
                     }
                 data = json.dumps(payload).encode()
                 self.send_response(status)
@@ -76,7 +78,8 @@ class MockSystemOne:
     def offered(self, call: int = 0) -> list[str]:
         # A candidate's searchable text starts with its full name, and these
         # fixtures name every item after its id.
-        criteria = self.seen[call]["body"]["questions"]["tool"]["criteria"]
+        question = next(iter(self.seen[call]["body"]["questions"].values()))
+        criteria = question["criteria"]
         return [text.split(" ")[0] for text in criteria.values()]
 
     def close(self) -> None:

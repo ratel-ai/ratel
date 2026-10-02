@@ -11,7 +11,10 @@ interface SeenRequest {
   body: {
     model: string;
     state: string;
-    questions: { tool: { type: string; criteria: Record<string, string> } };
+    questions: Record<
+      string,
+      { type: string; instructions: string; criteria: Record<string, string> }
+    >;
   };
 }
 
@@ -30,19 +33,24 @@ class MockSystemOne {
       const body = JSON.parse(await readBody(req));
       this.seen.push({ path: req.url ?? "", authorization: req.headers.authorization, body });
       const scripted = this.replies.shift();
-      const keys = Object.keys(body.questions.tool.criteria);
+      // The question id is the kind being ranked: "tool", "skill", ….
+      const [kind, question] = Object.entries(body.questions)[0] as [
+        string,
+        { criteria: Record<string, string> },
+      ];
+      const keys = Object.keys(question.criteria);
       const preferred = this.preferred;
       const reply = scripted ?? {
         status: 200,
         body: {
           model: "jev-1.13.0",
           answers: {
-            tool: {
+            [kind]: {
               type: "choice",
               probabilities: Object.fromEntries(
                 keys.map((k, i) => {
                   if (!preferred) return [k, (i + 1) / (keys.length + 1)];
-                  const id = body.questions.tool.criteria[k].split(" ")[0];
+                  const id = question.criteria[k].split(" ")[0];
                   return [k, id === preferred.id ? preferred.p : 0];
                 }),
               ),
@@ -62,7 +70,8 @@ class MockSystemOne {
    * candidate's searchable text starts with its full name, and these fixtures
    * name every item after its id. */
   offered(call = 0): string[] {
-    return Object.values(this.seen[call].body.questions.tool.criteria).map((t) => t.split(" ")[0]);
+    const [question] = Object.values(this.seen[call].body.questions);
+    return Object.values(question.criteria).map((t) => t.split(" ")[0]);
   }
 
   /** Answer with `p` for `id` and 0 for every other option. */
@@ -154,6 +163,7 @@ describe("ToolCatalog systemOne", () => {
     expect(mock.seen[0].body.state).toBe("email my boss");
     expect(mock.seen[0].body.model).toBe("jev-latest");
     expect(mock.seen[0].body.questions.tool.type).toBe("choice");
+    expect(mock.seen[0].body.questions.tool.instructions).toContain("tool");
     expect(mock.offered().sort()).toEqual(TOOLS.map((t) => t.id).sort());
   });
 

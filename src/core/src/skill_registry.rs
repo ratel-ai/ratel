@@ -17,7 +17,9 @@ use crate::rerank::{SearchError, SearchOptions, order_by_rescore};
 use crate::search::{Bm25Cache, Bm25Params};
 use crate::skill::Skill;
 use crate::skill_indexing::searchable_text;
-use crate::system_one::{Candidate, JevSystemOne, SystemOne, SystemOneConfig, SystemOneError};
+use crate::system_one::{
+    Candidate, CandidateKind, JevSystemOne, SystemOne, SystemOneConfig, SystemOneError,
+};
 use crate::tool_registry::{AdaptiveRankingStatus, default_system_one};
 use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchStage, SkillHitTrace, TraceEvent, TraceEventContext,
@@ -271,7 +273,8 @@ impl SkillRegistry {
                 .collect(),
             None => self.skills.values().map(candidate).collect(),
         };
-        self.system_one.rank(query, &candidates, top_k)
+        self.system_one
+            .rank(query, &candidates, top_k, CandidateKind::Skill)
     }
 
     /// Set the BM25 `k1`/`b` tuning; forces a rebuild on the next search. See
@@ -2677,6 +2680,21 @@ mod tests {
             .unwrap();
         assert_eq!(skill_ids(&hits), vec!["openapi_spec"]);
         assert_eq!(s1.offered()[0].len(), 4, "every skill is a candidate");
+    }
+
+    #[test]
+    fn skill_searches_ask_jev_about_skills() {
+        let mut reg = rerank_catalog();
+        let s1 = Arc::new(ScriptedSystemOne::ranking(&[("api_design", 0.9)]));
+        reg.set_system_one_for_test(s1.clone());
+        reg.search_with_options(
+            "design the rest service",
+            5,
+            Origin::Direct,
+            SearchOptions::new(SearchMethod::SystemOne),
+        )
+        .unwrap();
+        assert_eq!(s1.kinds(), vec![crate::CandidateKind::Skill]);
     }
 
     #[test]

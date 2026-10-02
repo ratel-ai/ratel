@@ -129,8 +129,8 @@ pub use search::Bm25Params;
 pub use skill::Skill;
 pub use skill_registry::{ReplaceOutcome, SkillHit, SkillRegistry};
 pub use system_one::{
-    DEFAULT_SYSTEM_ONE_API_KEY_ENV, DEFAULT_SYSTEM_ONE_MODEL, DEFAULT_SYSTEM_ONE_URL,
-    SystemOneConfig, SystemOneError,
+    CandidateKind, DEFAULT_SYSTEM_ONE_API_KEY_ENV, DEFAULT_SYSTEM_ONE_MODEL,
+    DEFAULT_SYSTEM_ONE_URL, SystemOneConfig, SystemOneError,
 };
 pub use tool::Tool;
 pub use tool_registry::{AdaptiveRankingStatus, CloudPick, SearchHit, ToolRegistry};

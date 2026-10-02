@@ -2,6 +2,8 @@
 // TypeSafe key. It speaks Jev's wire format:
 //
 //   request  { model, state, questions: { tool: { type: "choice", criteria: { t0: "…", … } } } }
+//
+// (The question id is the kind being ranked: "tool" here, "skill" for skills.)
 //   response { model, answers: { tool: { type: "choice", probabilities: { t0: 0.9, … } } } }
 //
 // Its "judge" is a hard-coded intent table: it shows the plumbing, not ranking
@@ -45,12 +47,16 @@ export async function startLocalJev(): Promise<LocalJev> {
     req.on("end", () => {
       state.requests += 1;
       const { model, state: query, questions } = JSON.parse(body);
+      const [kind, question] = Object.entries(questions)[0] as [
+        string,
+        { criteria: Record<string, string> },
+      ];
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
           model,
           answers: {
-            tool: { type: "choice", probabilities: judge(query, questions.tool.criteria) },
+            [kind]: { type: "choice", probabilities: judge(query, question.criteria) },
           },
         }),
       );

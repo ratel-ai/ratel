@@ -302,6 +302,7 @@ impl crate::cloud::CloudApi for ScriptedCloud {
 pub(crate) struct ScriptedSystemOne {
     reply: Result<Vec<(String, f32)>, crate::SystemOneError>,
     offered: std::sync::Mutex<Vec<Vec<String>>>,
+    kinds: std::sync::Mutex<Vec<crate::CandidateKind>>,
 }
 
 impl ScriptedSystemOne {
@@ -310,6 +311,7 @@ impl ScriptedSystemOne {
         Self {
             reply: Ok(ranked.iter().map(|(id, s)| ((*id).into(), *s)).collect()),
             offered: std::sync::Mutex::new(Vec::new()),
+            kinds: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -318,12 +320,18 @@ impl ScriptedSystemOne {
         Self {
             reply: Err(error),
             offered: std::sync::Mutex::new(Vec::new()),
+            kinds: std::sync::Mutex::new(Vec::new()),
         }
     }
 
     /// The candidate ids of each call, in call order.
     pub(crate) fn offered(&self) -> Vec<Vec<String>> {
         self.offered.lock().unwrap().clone()
+    }
+
+    /// The kind each call asked about, in call order.
+    pub(crate) fn kinds(&self) -> Vec<crate::CandidateKind> {
+        self.kinds.lock().unwrap().clone()
     }
 }
 
@@ -333,7 +341,9 @@ impl crate::system_one::SystemOne for ScriptedSystemOne {
         _query: &str,
         candidates: &[crate::system_one::Candidate],
         top_k: usize,
+        kind: crate::CandidateKind,
     ) -> Result<Vec<(String, f32)>, crate::SystemOneError> {
+        self.kinds.lock().unwrap().push(kind);
         self.offered
             .lock()
             .unwrap()
