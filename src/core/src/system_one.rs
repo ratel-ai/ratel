@@ -277,7 +277,14 @@ impl JevSystemOne {
     }
 
     /// Rank more candidates than one question holds: rank groups in parallel,
-    /// keep each group's best `keep`, and repeat until the field fits.
+    /// keep each group's best few, and repeat until the field fits.
+    ///
+    /// A group keeps at most `keep` (the caller's `top_k`), at most its share
+    /// of one question — `MAX_OPTIONS / groups` options and
+    /// `MAX_QUESTION_CHARS / groups` characters — so the winners fit one
+    /// question and the next round is the last, and at most all but one of its
+    /// members so every round eliminates someone. Keeping the full `keep` from each group would
+    /// advance the whole field whenever `keep` is as large as a group.
     fn tournament(
         &self,
         key: &str,
@@ -291,6 +298,8 @@ impl JevSystemOne {
                 return self.ask(key, query, &field);
             }
             let groups = split_into_questions(&field);
+            let per_group = keep.min(MAX_OPTIONS / groups.len()).max(1);
+            let chars_share = MAX_QUESTION_CHARS / groups.len();
             let mut winners: Vec<&Candidate> = Vec::new();
             for batch in groups.chunks(TOURNAMENT_CONCURRENCY) {
                 let results: Vec<Result<Vec<(String, f32)>, SystemOneError>> =
@@ -314,16 +323,25 @@ impl JevSystemOne {
                     let ranked = result?;
                     let by_id: HashMap<&str, &Candidate> =
                         group.iter().map(|c| (c.id.as_str(), *c)).collect();
-                    winners.extend(
-                        ranked
-                            .iter()
-                            .take(keep)
-                            .filter_map(|(id, _)| by_id.get(id.as_str()).copied()),
-                    );
+                    let quota = per_group.min(group.len().saturating_sub(1)).max(1);
+                    let (mut taken, mut chars) = (0, 0);
+                    for (id, _) in &ranked {
+                        let Some(c) = by_id.get(id.as_str()).copied() else {
+                            continue;
+                        };
+                        let len = option_chars(c);
+                        if taken == quota || (taken > 0 && chars + len > chars_share) {
+                            break;
+                        }
+                        winners.push(c);
+                        taken += 1;
+                        chars += len;
+                    }
                 }
             }
-            // Every group kept at least one winner, so the field shrank unless
-            // each group was a single candidate — which `fits` would have taken.
+            // Every group of two or more lost at least one member, and a field
+            // that needs a tournament has such a group, so this cannot trigger;
+            // it guards the loop against a future change to the quotas.
             if winners.len() >= field.len() {
                 return Err(SystemOneError::Malformed {
                     source: "tournament made no progress".into(),
@@ -576,6 +594,50 @@ mod tests {
                 .len()
                 <= MAX_OPTIONS
         }));
+    }
+
+    #[test]
+    fn a_top_k_as_large_as_a_group_still_converges() {
+        set_key();
+        // 160 candidates in groups of [150, 10]; keeping the top 150 of each
+        // would advance the whole field and never finish.
+        let ids: Vec<String> = (0..160).map(|i| format!("tool{i:03}")).collect();
+        let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let scores = HashMap::from([("text of tool155".to_string(), 0.9)]);
+        let (url, seen) = mock(by_text(scores), 3);
+        let ranked = client(&url).rank("q", &cands(&id_refs), 150).unwrap();
+        assert_eq!(
+            ranked[0].0, "tool155",
+            "the group-2 winner survives the cut"
+        );
+        assert!(ranked.len() <= MAX_OPTIONS);
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            3,
+            "two groups and one final round"
+        );
+    }
+
+    #[test]
+    fn a_char_budget_split_still_converges() {
+        set_key();
+        // 50 options of 2,000 chars split [40, 10] by the 80,000-char budget;
+        // a reranker depth of 45 would keep every candidate of both groups.
+        let many: Vec<Candidate> = (0..50)
+            .map(|i| Candidate {
+                id: format!("c{i:02}"),
+                text: format!("{i:02}{}", "y".repeat(MAX_OPTION_CHARS - 2)),
+            })
+            .collect();
+        let best = many[42].text.clone();
+        let (url, seen) = mock(by_text(HashMap::from([(best, 0.8)])), 3);
+        let ranked = client(&url).rank("q", &many, 45).unwrap();
+        assert_eq!(ranked[0].0, "c42");
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            3,
+            "two groups and one final round"
+        );
     }
 
     #[test]
