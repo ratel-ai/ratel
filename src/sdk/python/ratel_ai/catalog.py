@@ -219,6 +219,11 @@ class CloudSyncOutcome:
     skipped: bool
 
 
+_UNAWAITED_CLOUD_REGISTER = (
+    "a register() call was not awaited, so its Cloud sync never ran — "
+    "`await catalog.register(...)` before searching a cloud catalog"
+)
+
 _CLOUD_NEEDS_ASYNC = (
     "this catalog ranks through the Cloud Tool Picker, a network call; "
     "use `await catalog.search_async(...)`"
@@ -778,7 +783,8 @@ class ToolRegistry:
         return await self._run_dense(
             lambda: self._native._search_with_options(
                 query, top_k, origin, method, reranker_method, reranker_depth, ambient
-            )
+            ),
+            gated=_uses_dense(method, reranker),
         )
 
     async def cloud_pick_async(
@@ -795,7 +801,7 @@ class ToolRegistry:
         """
         ambient = with_turn_context(projection)
         return await self._run_dense(
-            lambda: self._native._cloud_pick(query, top_k, origin, mode, ambient)
+            lambda: self._native._cloud_pick(query, top_k, origin, mode, ambient), gated=False
         )
 
     async def cloud_sync_async(self, source_id: str) -> CloudSyncOutcome:
@@ -804,7 +810,7 @@ class ToolRegistry:
         Skipped when unchanged since the last acknowledged sync. Raises `CloudError`.
         """
         version, tools, unchanged, skipped = await self._run_dense(
-            lambda: self._native._cloud_sync(source_id)
+            lambda: self._native._cloud_sync(source_id), gated=False
         )
         return CloudSyncOutcome(version, tools, unchanged, skipped)
 
@@ -1019,9 +1025,18 @@ class ToolRegistry:
         """Drain captured native trace events."""
         return self._native.drain_trace_events()
 
-    async def _run_dense(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+    async def _run_dense(
+        self, operation: Callable[[], _DenseResult], *, gated: bool = True
+    ) -> _DenseResult:
+        """Run ``operation`` on a worker thread, counted as pending.
+
+        Pending makes a concurrent mutation fail fast. ``gated`` also serializes
+        it behind the dense gate; network-only work (Cloud picks and syncs, a
+        system-one search with no dense stage) passes ``gated=False`` so
+        concurrent requests overlap instead of queueing behind one another.
+        """
         self._queue_dense()
-        runner = self._run_dense_task(operation)
+        runner = self._run_dense_task(operation, gated)
         try:
             task = asyncio.create_task(runner)
         except BaseException:
@@ -1039,8 +1054,12 @@ class ToolRegistry:
         await asyncio.wait({task})
         return task.result()
 
-    async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+    async def _run_dense_task(
+        self, operation: Callable[[], _DenseResult], gated: bool
+    ) -> _DenseResult:
         try:
+            if not gated:
+                return await asyncio.to_thread(operation)
             return await asyncio.to_thread(self._run_dense_worker, operation)
         finally:
             # Also runs when the default executor rejects submission, before a
@@ -1250,6 +1269,10 @@ class ToolCatalog:
         self._cloud = cloud
         self._source_id = (cloud or {}).get("source_id") or _default_source_id()
         self._warned_dropped: set[str] = set()
+        # Syncs `register` scheduled but nobody has started driving. Bumped
+        # synchronously, so a forgotten `await` leaves it > 0 and the next pick
+        # fails loudly instead of ranking a Cloud catalog that never got the tools.
+        self._undriven_syncs = 0
         self._registry = ToolRegistry(
             embedding,
             method=method,
@@ -1293,6 +1316,8 @@ class ToolCatalog:
             ValueError: if any `execute` is `None`, or a schema isn't JSON-serializable.
             EmbedderError: when embedding fails (when awaited).
             ArtifactWarmError: when a configured artifact fails (when awaited).
+            CloudError: when a cloud catalog's sync fails and ``on_sync_error``
+                is not ``"warn"`` (when awaited).
             RuntimeError: if a dense operation already owns the registry.
         """
         batch = [tools] if isinstance(tools, ExecutableTool) else list(tools)
@@ -1312,9 +1337,12 @@ class ToolCatalog:
         build = self._registry._build_tracked(bool(batch))
         if self._cloud is None:
             return build
+        self._undriven_syncs += 1
         return self._build_then_sync(build)
 
     async def _build_then_sync(self, build: Awaitable[None]) -> None:
+        # Driven now: a pick that races an in-flight sync is not a forgotten await.
+        self._undriven_syncs -= 1
         await build
         try:
             await self.sync_now()
@@ -1449,6 +1477,8 @@ class ToolCatalog:
         mode: PickMode | None,
         turn_id: str | None,
     ) -> list[SearchHit]:
+        if self._undriven_syncs > 0:
+            raise RuntimeError(_UNAWAITED_CLOUD_REGISTER)
         if method is not None or reranker not in (None, False):
             raise ValueError(
                 "a cloud catalog is ranked by the Cloud Tool Picker; pass `mode`, not `method`"

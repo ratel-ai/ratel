@@ -3,9 +3,11 @@ search, against a local stand-in for Ratel Cloud."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
+import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -28,6 +30,7 @@ class MockCloud:
         self.picks: list[tuple[int, dict[str, Any], dict[str, str]]] = []
         self.syncs: list[tuple[int, dict[str, Any]]] = []
         self.synced: list[str] = []
+        self.pick_delay = 0.0
         mock = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -55,6 +58,9 @@ class MockCloud:
                         }
                     if status == 200:
                         mock.synced = [t["id"] for t in body["tools"]]
+                elif mock.pick_delay:
+                    time.sleep(mock.pick_delay)
+                    status, payload = 200, {"tools": [], "confident": None}
                 elif mock.picks:
                     status, payload, headers = mock.picks.pop(0)
                 else:
@@ -220,3 +226,41 @@ def test_cloud_with_system_one_is_rejected(mock: MockCloud) -> None:
     cloud = {"url": mock.url, "api_key_env": KEY_ENV}
     with pytest.raises(ValueError, match="cloud"):
         ToolCatalog(system_one={}, cloud=cloud)  # type: ignore[arg-type]
+
+
+async def test_concurrent_picks_run_in_parallel(mock: MockCloud) -> None:
+    catalog = _catalog(mock)
+    await catalog.register(_tool("refund"))
+    mock.pick_delay = 0.4
+
+    started = time.monotonic()
+    await asyncio.gather(*(catalog.search_async("q", 5) for _ in range(3)))
+    elapsed = time.monotonic() - started
+
+    # Serialized behind one lock, three 0.4 s picks would take >= 1.2 s.
+    assert elapsed < 0.9, f"picks ran one at a time ({elapsed:.2f}s)"
+
+
+async def test_register_during_a_pick_fails_fast(mock: MockCloud) -> None:
+    catalog = _catalog(mock)
+    await catalog.register(_tool("refund"))
+    mock.pick_delay = 0.4
+    pick = asyncio.ensure_future(catalog.search_async("q", 5))
+    await asyncio.sleep(0.1)
+    with pytest.raises(RuntimeError, match="busy"):
+        await catalog.register(_tool("charge"))
+    await pick
+
+
+
+async def test_a_pick_after_an_unawaited_register_raises(mock: MockCloud) -> None:
+    catalog = _catalog(mock)
+    pending = catalog.register(_tool("refund"))  # the await was forgotten
+    with pytest.raises(RuntimeError, match="await"):
+        await catalog.search_async("q", 5)
+    assert mock.of(SNAPSHOT) == [], "nothing was synced"
+
+    await pending
+    assert len(mock.of(SNAPSHOT)) == 1
+    hits = await catalog.search_async("q", 5)
+    assert [h.tool_id for h in hits] == ["refund"]

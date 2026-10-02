@@ -713,6 +713,7 @@ export class ToolCatalog {
    *   dense-preparation request — separate `register` calls prepare separately.
    * @throws {@link EmbedderError} when embedding fails;
    *   {@link ArtifactWarmError} when a configured artifact fails;
+   *   {@link CloudError} when a `cloud` catalog's sync fails (unless `onSyncError: "warn"`);
    *   plain `Error` if `execute` is missing.
    */
   async register(tools: ExecutableTool | readonly ExecutableTool[]): Promise<void> {

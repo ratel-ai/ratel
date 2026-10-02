@@ -469,7 +469,8 @@ class SkillRegistry:
         return await self._run_dense(
             lambda: self._native._search_with_options(
                 query, top_k, origin, method, reranker_method, reranker_depth, ambient
-            )
+            ),
+            gated=_uses_dense(method, reranker),
         )
 
     def record_event(
@@ -629,9 +630,18 @@ class SkillRegistry:
         """Drain captured native trace events."""
         return self._native.drain_trace_events()
 
-    async def _run_dense(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+    async def _run_dense(
+        self, operation: Callable[[], _DenseResult], *, gated: bool = True
+    ) -> _DenseResult:
+        """Run ``operation`` on a worker thread, counted as pending.
+
+        Pending makes a concurrent mutation fail fast. ``gated`` also serializes
+        it behind the dense gate; network-only work (Cloud picks and syncs, a
+        system-one search with no dense stage) passes ``gated=False`` so
+        concurrent requests overlap instead of queueing behind one another.
+        """
         self._queue_dense()
-        runner = self._run_dense_task(operation)
+        runner = self._run_dense_task(operation, gated)
         try:
             task = asyncio.create_task(runner)
         except BaseException:
@@ -647,8 +657,12 @@ class SkillRegistry:
         await asyncio.wait({task})
         return task.result()
 
-    async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
+    async def _run_dense_task(
+        self, operation: Callable[[], _DenseResult], gated: bool
+    ) -> _DenseResult:
         try:
+            if not gated:
+                return await asyncio.to_thread(operation)
             return await asyncio.to_thread(self._run_dense_worker, operation)
         finally:
             self._finish_dense()
