@@ -1,10 +1,13 @@
 use std::collections::HashMap;
-use std::sync::{Arc, PoisonError, RwLock};
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Instant;
 
 use indexmap::IndexMap;
 
 use crate::artifact_warm::{ArtifactWarmError, OnArtifactMiss};
+use crate::cloud::{
+    CloudApi, CloudConfig, CloudError, HttpCloud, PickMode, SnapshotTool, SyncOutcome,
+};
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
 use crate::embedding_artifact::{ArtifactEntryKind, ArtifactError};
@@ -17,9 +20,6 @@ use crate::indexing::searchable_text;
 use crate::method::SearchMethod;
 use crate::rerank::{SearchError, SearchOptions, order_by_rescore};
 use crate::search::{Bm25Cache, Bm25Params};
-use crate::system_one::{
-    Candidate, RatelCloudSystemOne, SystemOne, SystemOneConfig, SystemOneError,
-};
 use crate::tool::Tool;
 use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchHitTrace, SearchStage, TraceEnvelope, TraceEvent,
@@ -91,8 +91,6 @@ pub struct SearchHit {
     ///   fusion it replaced, the magnitude is meaningful: both arms carry an
     ///   absolute value, so `0.9` and `0.3` say something about match quality.
     ///   `w` is the catalog's [`DenseWeight`](crate::DenseWeight).
-    /// - `SystemOne` (first stage or reranker): the model's probability for
-    ///   the tool, in `[0, 1]` (ADR-0026). Like cosine, a raw method score.
     ///
     /// Scores are comparable within one result list, not across methods or
     /// corpora. Ties are broken by `tool_id` ascending, so ordering is
@@ -164,19 +162,22 @@ fn to_search_hits(ranked: Vec<(String, f32)>, scale: Scale) -> Vec<SearchHit> {
         .collect()
 }
 
-/// The system-one ranker a registry starts with: Ratel Cloud, `RATEL_API_KEY`.
-pub(crate) fn default_system_one() -> Arc<dyn SystemOne> {
-    Arc::new(RatelCloudSystemOne::new(SystemOneConfig::default()))
+/// The result of [`ToolRegistry::cloud_pick`].
+#[non_exhaustive]
+pub struct CloudPick {
+    /// The picked tools that are registered here, best-first.
+    pub hits: Vec<SearchHit>,
+    /// Ids Cloud picked that are not registered in this registry — Cloud's
+    /// synced catalog is ahead of, or apart from, this process. Dropped
+    /// because there is nothing here to invoke.
+    pub dropped: Vec<String>,
+    /// Whether the judge was confident in its top pick; `None` for `instant`.
+    pub confident: Option<bool>,
 }
 
-/// A tool as a system-one candidate, judged on the same text the other
-/// methods rank (ADR-0004, ADR-0021).
-fn candidate(tool: &Tool) -> Candidate {
-    Candidate {
-        id: tool.id.clone(),
-        text: tool.embed_text(),
-    }
-}
+/// The last snapshot Cloud acknowledged: which source, its content hash, and
+/// the outcome to report when the next sync would send the same thing.
+type LastSync = (String, [u8; 32], SyncOutcome);
 
 impl Embeddable for Tool {
     fn embed_id(&self) -> &str {
@@ -231,10 +232,13 @@ pub struct ToolRegistry {
     /// Read only by the hybrid path; the single-arm methods have nothing to
     /// weigh. Defaults to the shipped 0.7.
     dense_weight: DenseWeight,
-    /// The system-one ranker (ADR-0026) — Ratel Cloud's endpoint unless
-    /// [`Self::set_system_one`] points it elsewhere. Only `SystemOne` searches
-    /// and rerankers call it; building it opens no connection.
-    system_one: Arc<dyn SystemOne>,
+    /// Ratel Cloud, when this registry's catalog is Cloud-owned (ADR-0026):
+    /// the Tool Picker and the catalog snapshot. `None` until
+    /// [`Self::set_cloud`]; local search never touches it.
+    cloud: Option<Arc<dyn CloudApi>>,
+    /// The last snapshot Cloud acknowledged, so an unchanged catalog is not
+    /// re-sent. Cleared whenever the Cloud configuration changes.
+    cloud_synced: Mutex<Option<LastSync>>,
 }
 
 impl Default for ToolRegistry {
@@ -255,7 +259,8 @@ impl ToolRegistry {
             dense: DenseCache::new(),
             graph: None,
             dense_weight: DenseWeight::default(),
-            system_one: default_system_one(),
+            cloud: None,
+            cloud_synced: Mutex::new(None),
         }
     }
 
@@ -272,7 +277,8 @@ impl ToolRegistry {
             dense: DenseCache::with_embedder(embedder),
             graph: None,
             dense_weight: DenseWeight::default(),
-            system_one: default_system_one(),
+            cloud: None,
+            cloud_synced: Mutex::new(None),
         }
     }
 
@@ -286,7 +292,8 @@ impl ToolRegistry {
             dense: DenseCache::new(),
             graph: None,
             dense_weight: DenseWeight::default(),
-            system_one: default_system_one(),
+            cloud: None,
+            cloud_synced: Mutex::new(None),
         }
     }
 
@@ -304,7 +311,8 @@ impl ToolRegistry {
             dense: DenseCache::with_model(model),
             graph: None,
             dense_weight: DenseWeight::default(),
-            system_one: default_system_one(),
+            cloud: None,
+            cloud_synced: Mutex::new(None),
         }
     }
 
@@ -376,35 +384,133 @@ impl ToolRegistry {
         self.dense_weight
     }
 
-    /// Point `SystemOne` searches and rerankers at another endpoint or key
-    /// (ADR-0026). The default is Ratel Cloud with `RATEL_API_KEY`.
-    pub fn set_system_one(&mut self, config: SystemOneConfig) {
-        self.system_one = Arc::new(RatelCloudSystemOne::new(config));
+    /// Make Ratel Cloud this catalog's owner (ADR-0026): [`Self::cloud_pick`]
+    /// ranks through the Tool Picker and [`Self::cloud_sync`] uploads the
+    /// catalog. Local search methods are unaffected.
+    pub fn set_cloud(&mut self, config: CloudConfig) {
+        self.cloud = Some(Arc::new(HttpCloud::new(config)));
+        *self
+            .cloud_synced
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = None;
     }
 
-    /// Stand a scripted ranker in for the HTTP client.
+    /// Stand a scripted Cloud in for HTTP.
     #[cfg(test)]
-    pub(crate) fn set_system_one_for_test(&mut self, system_one: Arc<dyn SystemOne>) {
-        self.system_one = system_one;
+    pub(crate) fn set_cloud_for_test(&mut self, cloud: Arc<dyn CloudApi>) {
+        self.cloud = Some(cloud);
+        *self
+            .cloud_synced
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = None;
     }
 
-    /// Ask the system-one ranker to rank `ids` (all tools when `None`),
-    /// keeping at most `top_k`.
-    fn system_one_rank(
+    fn cloud(&self) -> Result<&Arc<dyn CloudApi>, CloudError> {
+        self.cloud.as_ref().ok_or_else(|| CloudError::Config {
+            message: "no ratel cloud configured for this registry".into(),
+        })
+    }
+
+    /// Rank through the Cloud Tool Picker (`POST /v1/tools/pick`). Cloud ranks
+    /// its synced catalog, so a picked id that is not registered here is
+    /// returned in [`CloudPick::dropped`], not as a hit. `top_k` is clamped to
+    /// [`crate::MAX_PICK_TOP_K`]; `0` sends nothing. Records one search event
+    /// with a `cloud:<mode>` stage.
+    ///
+    /// # Errors
+    /// [`CloudError`] when no Cloud is configured or the pick fails.
+    pub fn cloud_pick(
         &self,
         query: &str,
-        ids: Option<&[String]>,
         top_k: usize,
-    ) -> Result<Vec<(String, f32)>, SystemOneError> {
-        let candidates: Vec<Candidate> = match ids {
-            Some(ids) => ids
-                .iter()
-                .filter_map(|id| self.tools.get(id))
-                .map(candidate)
-                .collect(),
-            None => self.tools.values().map(candidate).collect(),
+        origin: Origin,
+        mode: PickMode,
+        context: TraceEventContext,
+    ) -> Result<CloudPick, CloudError> {
+        let cloud = self.cloud()?;
+        let started = Instant::now();
+        if top_k == 0 {
+            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            return Ok(CloudPick {
+                hits: Vec::new(),
+                dropped: Vec::new(),
+                confident: None,
+            });
+        }
+        let top_k = top_k.min(crate::MAX_PICK_TOP_K);
+        let picked = cloud.pick(query, mode, top_k)?;
+        let (kept, dropped): (Vec<_>, Vec<_>) = picked
+            .ranked
+            .into_iter()
+            .partition(|(id, _)| self.tools.contains_key(id));
+        let hits = to_search_hits(kept, Scale::Picked);
+        let took_ms = started.elapsed().as_millis() as u64;
+        let stage = SearchStage {
+            name: format!("cloud:{mode}"),
+            took_ms,
+            top_score: hits.first().map(|h| h.score as f64),
         };
-        self.system_one.rank(query, &candidates, top_k)
+        self.record_search(query, origin, top_k, &hits, vec![stage], took_ms, context);
+        Ok(CloudPick {
+            hits,
+            dropped: dropped.into_iter().map(|(id, _)| id).collect(),
+            confident: picked.confident,
+        })
+    }
+
+    /// Upload this catalog to Cloud as `source_id`'s complete tool snapshot
+    /// (`PUT /api/v1/catalog/snapshot`, ADR-0027): executor-free, sorted by
+    /// id, replacing whatever that source sent before. Skipped — no request,
+    /// [`SyncOutcome::skipped`] set — when the snapshot matches the last one
+    /// Cloud acknowledged for the same source. A failed sync is not
+    /// remembered, so the next one sends again.
+    ///
+    /// # Errors
+    /// [`CloudError`] when no Cloud is configured, the catalog exceeds Cloud's
+    /// limits, or the upload fails.
+    pub fn cloud_sync(&self, source_id: &str) -> Result<SyncOutcome, CloudError> {
+        use sha2::{Digest, Sha256};
+
+        let cloud = self.cloud()?;
+        let mut tools: Vec<SnapshotTool> = self
+            .tools
+            .values()
+            .map(|t| SnapshotTool {
+                id: t.id.clone(),
+                name: t.name.clone(),
+                description: t.description.clone(),
+                searchable_description: t.experimental_searchable_description.clone(),
+                input_schema: t.input_schema.clone(),
+                output_schema: t.output_schema.clone(),
+            })
+            .collect();
+        tools.sort_by(|a, b| a.id.cmp(&b.id));
+        let bytes = serde_json::to_vec(&tools).map_err(|e| CloudError::Malformed {
+            source: format!("could not serialize the catalog: {e}"),
+        })?;
+        let hash: [u8; 32] = Sha256::digest(&bytes).into();
+
+        let last = self
+            .cloud_synced
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some((source, last_hash, outcome)) = last
+            && source == source_id
+            && last_hash == hash
+        {
+            return Ok(SyncOutcome {
+                skipped: true,
+                ..outcome
+            });
+        }
+        let outcome = cloud.put_snapshot(source_id, &tools)?;
+        *self
+            .cloud_synced
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) =
+            Some((source_id.to_string(), hash, outcome.clone()));
+        Ok(outcome)
     }
 
     /// Set the BM25 `k1`/`b` tuning; forces a rebuild on the next search. See
@@ -854,9 +960,6 @@ impl ToolRegistry {
             }
             SearchMethod::Semantic => self.semantic_search_traced(query, top_k, origin, context),
             SearchMethod::Hybrid => self.hybrid_search_traced(query, top_k, origin, context),
-            SearchMethod::SystemOne => Err(EmbedderError::Config {
-                message: "systemOne needs search_with_options, which can report its errors".into(),
-            }),
         }
     }
 
@@ -871,17 +974,10 @@ impl ToolRegistry {
     /// search event is recorded, carrying stage 1's stages plus a `rerank`
     /// stage.
     ///
-    /// `SystemOne` — as the first stage or the reranker — sends the query and
-    /// candidate text to the registry's system-one endpoint. As a reranker, a
-    /// failed call falls back to stage 1's order and records a
-    /// `rerank_fallback` stage instead of a `rerank` one; as the first stage it
-    /// is an error. The usage arm does not apply to a system-one first stage.
-    ///
     /// # Errors
     /// [`SearchError::InvalidOptions`] when the reranker uses the first stage's
     /// method; [`SearchError::Embedder`] when either stage is semantic or
-    /// hybrid and the embeddings are not built or the embedder fails;
-    /// [`SearchError::SystemOne`] when a system-one first stage fails.
+    /// hybrid and the embeddings are not built or the embedder fails.
     pub fn search_with_options(
         &self,
         query: &str,
@@ -896,9 +992,6 @@ impl ToolRegistry {
             ..
         } = options;
         let Some(reranker) = reranker else {
-            if method == SearchMethod::SystemOne {
-                return self.system_one_search(query, top_k, origin, context);
-            }
             return Ok(self.search_with_method_and_context(query, top_k, origin, method, context)?);
         };
         if reranker.method() == method {
@@ -916,35 +1009,21 @@ impl ToolRegistry {
         }
         let depth = reranker.depth().max(top_k);
         let turn_key = context.turn_id.as_deref();
-        let (mut candidates, mut stages) = match method {
+        let (candidates, mut stages) = match method {
             SearchMethod::Bm25 => self.bm25_ranked(query, depth, turn_key),
             SearchMethod::Semantic => self.semantic_ranked(query, depth, turn_key)?,
             SearchMethod::Hybrid => self.hybrid_ranked(query, depth, turn_key)?,
-            SearchMethod::SystemOne => self.system_one_ranked(query, depth)?,
         };
-        let candidate_ids: Vec<String> = candidates.iter().map(|h| h.tool_id.clone()).collect();
+        let candidate_ids: Vec<String> = candidates.into_iter().map(|h| h.tool_id).collect();
 
         let t = Instant::now();
-        let (hits, stage_name) = if reranker.method() == SearchMethod::SystemOne {
-            match self.system_one_rank(query, Some(&candidate_ids), top_k) {
-                Ok(ranked) => (to_search_hits(ranked, Scale::Probability), "rerank"),
-                // An enhancement failing must not fail the search: stage 1's
-                // order is still a ranking.
-                Err(_) => {
-                    candidates.truncate(top_k);
-                    (candidates, "rerank_fallback")
-                }
-            }
-        } else {
-            let (mut rescored, scale) =
-                self.rank_candidates(query, &candidate_ids, reranker.method())?;
-            order_by_rescore(&mut rescored, &candidate_ids);
-            let mut hits = to_search_hits(rescored, scale);
-            hits.truncate(top_k);
-            (hits, "rerank")
-        };
+        let (mut rescored, scale) =
+            self.rank_candidates(query, &candidate_ids, reranker.method())?;
+        order_by_rescore(&mut rescored, &candidate_ids);
+        let mut hits = to_search_hits(rescored, scale);
+        hits.truncate(top_k);
         stages.push(SearchStage {
-            name: stage_name.into(),
+            name: "rerank".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: hits.first().map(|h| h.score as f64),
         });
@@ -952,45 +1031,6 @@ impl ToolRegistry {
         let took_ms = started.elapsed().as_millis() as u64;
         self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
         Ok(hits)
-    }
-
-    /// A standalone system-one search: the whole catalog is the candidate set.
-    fn system_one_search(
-        &self,
-        query: &str,
-        top_k: usize,
-        origin: Origin,
-        context: TraceEventContext,
-    ) -> Result<Vec<SearchHit>, SearchError> {
-        let started = Instant::now();
-        if self.tools.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
-            return Ok(Vec::new());
-        }
-        let (hits, stages) = self.system_one_ranked(query, top_k)?;
-        let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
-        Ok(hits)
-    }
-
-    /// The system-one ranking of the whole catalog and its `systemone` stage,
-    /// without recording the search.
-    fn system_one_ranked(
-        &self,
-        query: &str,
-        top_k: usize,
-    ) -> Result<(Vec<SearchHit>, Vec<SearchStage>), SystemOneError> {
-        let t = Instant::now();
-        let hits = to_search_hits(
-            self.system_one_rank(query, None, top_k)?,
-            Scale::Probability,
-        );
-        let stage = SearchStage {
-            name: "systemone".into(),
-            took_ms: t.elapsed().as_millis() as u64,
-            top_score: hits.first().map(|h| h.score as f64),
-        };
-        Ok((hits, vec![stage]))
     }
 
     /// Re-score `ids` (stage-1 candidates) with `method`, returning every
@@ -1043,9 +1083,6 @@ impl ToolRegistry {
                 let fused = score_fuse(&bm25, ceiling, &dense, None, self.dense_weight);
                 (fused, Scale::Fused)
             }
-            // `search_with_options` routes a system-one reranker to the
-            // fallible-with-fallback path before reaching here.
-            SearchMethod::SystemOne => unreachable!("system-one reranks via system_one_rank"),
         })
     }
 
@@ -3868,150 +3905,182 @@ mod tests {
         }
     }
 
-    // ---- System-one (ADR-0026) ----
+    // ---- Cloud Tool Picker and catalog sync (ADR-0026, ADR-0027) ----
 
-    use crate::SystemOneError;
-    use crate::test_support::ScriptedSystemOne;
+    use crate::test_support::ScriptedCloud;
+    use crate::{CloudError, PickMode};
 
-    fn system_one(reg: &mut ToolRegistry, s1: ScriptedSystemOne) -> Arc<ScriptedSystemOne> {
-        let s1 = Arc::new(s1);
-        reg.set_system_one_for_test(s1.clone());
-        s1
+    fn cloud_catalog(cloud: ScriptedCloud) -> (ToolRegistry, Arc<ScriptedCloud>) {
+        let cloud = Arc::new(cloud);
+        let mut reg = ToolRegistry::new();
+        reg.set_cloud_for_test(cloud.clone());
+        reg.register(tool("refund", "return funds for a payment"));
+        reg.register(tool("list_charges", "list the charges"));
+        (reg, cloud)
     }
 
     #[test]
-    fn system_one_parses_from_the_sdk_identifier() {
-        assert_eq!(
-            "systemOne".parse::<SearchMethod>(),
-            Ok(SearchMethod::SystemOne)
-        );
-        assert_eq!(
-            "systemone".parse::<SearchMethod>(),
-            Ok(SearchMethod::SystemOne)
-        );
-        assert_eq!(SearchMethod::SystemOne.as_str(), "systemOne");
-    }
-
-    #[test]
-    fn standalone_system_one_ranks_the_whole_catalog() {
-        let mut reg = rerank_catalog();
-        let s1 = system_one(
-            &mut reg,
-            ScriptedSystemOne::ranking(&[("erase_disk", 0.8), ("delete_file", 0.15)]),
-        );
-        let hits = reg
-            .search_with_options(
-                "remove the file",
-                5,
-                Origin::Direct,
-                SearchOptions::new(SearchMethod::SystemOne),
-            )
-            .unwrap();
-        assert_eq!(ids_of(&hits), vec!["erase_disk", "delete_file"]);
-        assert!(hits.iter().all(|h| !h.fused));
-        assert!(hits.iter().all(|h| (h.relevance - h.score).abs() < 1e-6));
-        let mut offered = s1.offered().remove(0);
-        offered.sort();
-        assert_eq!(
-            offered,
-            vec!["delete_file", "erase_disk", "purge_cache", "read_file"],
-            "standalone offers every tool"
-        );
-    }
-
-    #[test]
-    fn standalone_system_one_failure_is_a_typed_error() {
-        let mut reg = rerank_catalog();
-        system_one(
-            &mut reg,
-            ScriptedSystemOne::failing(SystemOneError::RateLimited),
-        );
+    fn cloud_pick_without_a_cloud_is_a_config_error() {
+        let reg = ToolRegistry::new();
         let err = reg
-            .search_with_options(
-                "remove the file",
+            .cloud_pick(
+                "q",
                 5,
                 Origin::Direct,
-                SearchOptions::new(SearchMethod::SystemOne),
+                PickMode::Precise,
+                TraceEventContext::default(),
             )
             .err()
-            .expect("standalone failure surfaces");
-        assert!(matches!(
-            err,
-            SearchError::SystemOne(SystemOneError::RateLimited)
+            .expect("no cloud configured");
+        assert!(matches!(err, CloudError::Config { .. }));
+    }
+
+    #[test]
+    fn cloud_pick_returns_ranked_hits_and_drops_ids_not_registered_here() {
+        let (reg, cloud) = cloud_catalog(ScriptedCloud::new().picking(
+            &[("refund", 0.9), ("ghost", 0.5), ("list_charges", 0.1)],
+            Some(true),
         ));
-    }
-
-    #[test]
-    fn system_one_rerank_sees_only_stage_one_candidates() {
-        let mut reg = rerank_catalog();
-        let s1 = system_one(
-            &mut reg,
-            ScriptedSystemOne::ranking(&[("purge_cache", 0.7), ("delete_file", 0.2)]),
-        );
-        let stage_one = reg.search("remove the file", 50);
-        let hits = reg
-            .search_with_options(
-                "remove the file",
+        let pick = reg
+            .cloud_pick(
+                "money back",
                 5,
-                Origin::Direct,
-                SearchOptions::new(SearchMethod::Bm25)
-                    .with_reranker(Reranker::new(SearchMethod::SystemOne)),
+                Origin::Agent,
+                PickMode::Exhaustive,
+                TraceEventContext::default(),
             )
             .unwrap();
-        assert_eq!(ids_of(&hits), vec!["purge_cache", "delete_file"]);
+        assert_eq!(ids_of(&pick.hits), vec!["refund", "list_charges"]);
+        assert_eq!(pick.hits[1].rank, 1, "ranks close over the dropped id");
+        assert_eq!(pick.dropped, vec!["ghost".to_string()]);
+        assert_eq!(pick.confident, Some(true));
+        assert!(
+            pick.hits
+                .iter()
+                .all(|h| !h.fused && (h.relevance - h.score).abs() < 1e-6)
+        );
         assert_eq!(
-            s1.offered(),
-            vec![
-                stage_one
-                    .iter()
-                    .map(|h| h.tool_id.clone())
-                    .collect::<Vec<_>>()
-            ]
+            cloud.picks.lock().unwrap().as_slice(),
+            &[("money back".to_string(), PickMode::Exhaustive, 5)]
         );
     }
 
     #[test]
-    fn a_failed_system_one_rerank_falls_back_to_stage_one() {
-        let sink = Arc::new(MemorySink::new("s"));
-        let mut reg = rerank_catalog();
-        reg.set_trace_sink(sink.clone());
-        system_one(
-            &mut reg,
-            ScriptedSystemOne::failing(SystemOneError::Http { status: 503 }),
-        );
-        let stage_one = reg.search("remove the file", 3);
-        sink.drain();
-        let hits = reg
-            .search_with_options(
-                "remove the file",
-                3,
-                Origin::Direct,
-                SearchOptions::new(SearchMethod::Bm25)
-                    .with_reranker(Reranker::new(SearchMethod::SystemOne)),
-            )
+    fn cloud_pick_clamps_top_k_and_skips_the_call_at_zero() {
+        let (reg, cloud) = cloud_catalog(ScriptedCloud::new());
+        let ctx = TraceEventContext::default;
+        reg.cloud_pick("q", 50, Origin::Direct, PickMode::Instant, ctx())
             .unwrap();
-        assert_eq!(ids_of(&hits), ids_of(&stage_one));
-        let stages: Vec<String> = sink
+        assert_eq!(cloud.picks.lock().unwrap()[0].2, 20);
+        let none = reg
+            .cloud_pick("q", 0, Origin::Direct, PickMode::Instant, ctx())
+            .unwrap();
+        assert!(none.hits.is_empty());
+        assert_eq!(
+            cloud.picks.lock().unwrap().len(),
+            1,
+            "top_k 0 sends nothing"
+        );
+    }
+
+    #[test]
+    fn cloud_pick_records_one_search_with_a_cloud_stage() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let (mut reg, _cloud) =
+            cloud_catalog(ScriptedCloud::new().picking(&[("refund", 0.8)], None));
+        reg.set_trace_sink(sink.clone());
+        reg.cloud_pick(
+            "q",
+            5,
+            Origin::Direct,
+            PickMode::Precise,
+            TraceEventContext::default(),
+        )
+        .unwrap();
+        let searches: Vec<_> = sink
             .drain()
             .into_iter()
-            .find_map(|e| match e.event {
-                TraceEvent::Search { stages, .. } => Some(stages),
+            .filter_map(|e| match e.event {
+                TraceEvent::Search { stages, hits, .. } => Some((stages, hits)),
                 _ => None,
             })
-            .unwrap()
-            .into_iter()
-            .map(|s| s.name)
             .collect();
-        assert_eq!(stages, vec!["bm25", "rerank_fallback"]);
+        assert_eq!(searches.len(), 1);
+        assert_eq!(searches[0].0[0].name, "cloud:precise");
+        assert_eq!(searches[0].1[0].tool_id, "refund");
     }
 
     #[test]
-    fn search_with_method_rejects_system_one() {
-        let reg = rerank_catalog();
+    fn cloud_pick_failures_propagate() {
+        let (reg, _cloud) = cloud_catalog(ScriptedCloud::new().failing_picks(
+            CloudError::NoSyncedTools {
+                message: "sync first".into(),
+            },
+        ));
         let err = reg
-            .search_with_method("q", 5, Origin::Direct, SearchMethod::SystemOne)
+            .cloud_pick(
+                "q",
+                5,
+                Origin::Direct,
+                PickMode::Precise,
+                TraceEventContext::default(),
+            )
             .err()
-            .expect("the legacy entry point cannot carry a system-one error");
-        assert!(matches!(err, EmbedderError::Config { .. }));
+            .unwrap();
+        assert!(matches!(err, CloudError::NoSyncedTools { .. }));
+    }
+
+    #[test]
+    fn cloud_sync_sends_an_executor_free_snapshot_sorted_by_id() {
+        let (mut reg, cloud) = cloud_catalog(ScriptedCloud::new());
+        let mut overridden = tool("a_first", "plain");
+        overridden.experimental_searchable_description = Some("override text".into());
+        reg.register(overridden);
+        let outcome = reg.cloud_sync("svc").unwrap();
+        assert_eq!(outcome.tools, 3);
+        assert!(!outcome.skipped);
+        let snapshots = cloud.snapshots.lock().unwrap();
+        let (source, tools) = &snapshots[0];
+        assert_eq!(source, "svc");
+        let ids: Vec<&str> = tools.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, vec!["a_first", "list_charges", "refund"]);
+        assert_eq!(
+            tools[0].searchable_description.as_deref(),
+            Some("override text")
+        );
+        assert_eq!(tools[1].searchable_description, None);
+    }
+
+    #[test]
+    fn cloud_sync_skips_an_unchanged_snapshot_and_resends_after_a_change() {
+        let (mut reg, cloud) = cloud_catalog(ScriptedCloud::new());
+        reg.cloud_sync("svc").unwrap();
+        let again = reg.cloud_sync("svc").unwrap();
+        assert!(again.skipped);
+        assert_eq!(again.catalog_version, "v1");
+        assert_eq!(cloud.snapshot_count(), 1);
+
+        reg.register(tool("new_tool", "added later"));
+        assert!(!reg.cloud_sync("svc").unwrap().skipped);
+        assert!(
+            !reg.cloud_sync("other").unwrap().skipped,
+            "a new source is sent"
+        );
+        assert_eq!(cloud.snapshot_count(), 3);
+    }
+
+    #[test]
+    fn a_failed_cloud_sync_is_retried_by_the_next_one() {
+        let (reg, cloud) = cloud_catalog(ScriptedCloud::new());
+        cloud.set_sync_reply(Err(CloudError::Timeout));
+        assert!(matches!(reg.cloud_sync("svc"), Err(CloudError::Timeout)));
+        cloud.set_sync_reply(Ok(crate::SyncOutcome {
+            catalog_version: "v2".into(),
+            tools: 0,
+            unchanged: false,
+            skipped: false,
+        }));
+        assert!(!reg.cloud_sync("svc").unwrap().skipped);
+        assert_eq!(cloud.snapshot_count(), 2);
     }
 }

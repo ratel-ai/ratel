@@ -157,12 +157,26 @@ pub(crate) fn build_test_artifact<'a, T: Embeddable + 'a>(
     build_artifact(kind, items, &ArtifactBuildStub::new(fingerprint, vectors)).unwrap()
 }
 
+/// One request as a mock server saw it.
+pub(crate) struct MockHttpRequest {
+    /// `"PUT /api/v1/catalog/snapshot HTTP/1.1"`.
+    pub(crate) request_line: String,
+    pub(crate) body: serde_json::Value,
+    pub(crate) authorization: Option<String>,
+}
+
 /// Read one HTTP/1.1 request from a mock-server connection: the JSON body and
 /// the `authorization` header, if any. Shared by the endpoint-embedder and
-/// system-one client tests.
+/// cloud client tests.
 pub(crate) fn read_http_request(
     stream: &mut std::net::TcpStream,
 ) -> (serde_json::Value, Option<String>) {
+    let request = read_http_request_full(stream);
+    (request.body, request.authorization)
+}
+
+/// [`read_http_request`], keeping the request line too.
+pub(crate) fn read_http_request_full(stream: &mut std::net::TcpStream) -> MockHttpRequest {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
@@ -191,56 +205,94 @@ pub(crate) fn read_http_request(
                 });
                 let body =
                     serde_json::from_slice(&request[body_start..body_start + content_len]).unwrap();
-                return (body, authorization);
+                return MockHttpRequest {
+                    request_line: headers.lines().next().unwrap_or_default().to_string(),
+                    body,
+                    authorization,
+                };
             }
         }
     }
 }
 
-/// A [`crate::system_one::SystemOne`] that answers from a script and records
-/// the candidate ids it was offered — registry tests use it in place of the
-/// HTTP client.
-pub(crate) struct ScriptedSystemOne {
-    reply: Result<Vec<(String, f32)>, crate::SystemOneError>,
-    offered: std::sync::Mutex<Vec<Vec<String>>>,
+/// A [`crate::cloud::CloudApi`] that answers from a script and records every
+/// call — registry tests use it in place of HTTP.
+pub(crate) struct ScriptedCloud {
+    pick_reply: std::sync::Mutex<Result<crate::cloud::Picked, crate::CloudError>>,
+    sync_reply: std::sync::Mutex<Result<crate::SyncOutcome, crate::CloudError>>,
+    /// `(query, mode, top_k)` per pick.
+    pub(crate) picks: std::sync::Mutex<Vec<(String, crate::PickMode, usize)>>,
+    /// `(source_id, tools)` per snapshot sent.
+    pub(crate) snapshots: std::sync::Mutex<Vec<(String, Vec<crate::cloud::SnapshotTool>)>>,
 }
 
-impl ScriptedSystemOne {
-    /// Answers every call with `ranked`, cut at the call's `top_k`.
-    pub(crate) fn ranking(ranked: &[(&str, f32)]) -> Self {
+impl ScriptedCloud {
+    pub(crate) fn new() -> Self {
         Self {
-            reply: Ok(ranked.iter().map(|(id, s)| ((*id).into(), *s)).collect()),
-            offered: std::sync::Mutex::new(Vec::new()),
+            pick_reply: std::sync::Mutex::new(Ok(crate::cloud::Picked {
+                ranked: Vec::new(),
+                confident: None,
+            })),
+            sync_reply: std::sync::Mutex::new(Ok(crate::SyncOutcome {
+                catalog_version: "v1".into(),
+                tools: 0,
+                unchanged: false,
+                skipped: false,
+            })),
+            picks: std::sync::Mutex::new(Vec::new()),
+            snapshots: std::sync::Mutex::new(Vec::new()),
         }
     }
 
-    /// Fails every call with `error`.
-    pub(crate) fn failing(error: crate::SystemOneError) -> Self {
-        Self {
-            reply: Err(error),
-            offered: std::sync::Mutex::new(Vec::new()),
-        }
+    pub(crate) fn picking(self, ranked: &[(&str, f32)], confident: Option<bool>) -> Self {
+        *self.pick_reply.lock().unwrap() = Ok(crate::cloud::Picked {
+            ranked: ranked.iter().map(|(id, s)| ((*id).into(), *s)).collect(),
+            confident,
+        });
+        self
     }
 
-    /// The candidate ids of each call, in call order.
-    pub(crate) fn offered(&self) -> Vec<Vec<String>> {
-        self.offered.lock().unwrap().clone()
+    pub(crate) fn failing_picks(self, error: crate::CloudError) -> Self {
+        *self.pick_reply.lock().unwrap() = Err(error);
+        self
+    }
+
+    pub(crate) fn set_sync_reply(&self, reply: Result<crate::SyncOutcome, crate::CloudError>) {
+        *self.sync_reply.lock().unwrap() = reply;
+    }
+
+    pub(crate) fn snapshot_count(&self) -> usize {
+        self.snapshots.lock().unwrap().len()
     }
 }
 
-impl crate::system_one::SystemOne for ScriptedSystemOne {
-    fn rank(
+impl crate::cloud::CloudApi for ScriptedCloud {
+    fn pick(
         &self,
-        _query: &str,
-        candidates: &[crate::system_one::Candidate],
+        query: &str,
+        mode: crate::PickMode,
         top_k: usize,
-    ) -> Result<Vec<(String, f32)>, crate::SystemOneError> {
-        self.offered
+    ) -> Result<crate::cloud::Picked, crate::CloudError> {
+        self.picks
             .lock()
             .unwrap()
-            .push(candidates.iter().map(|c| c.id.clone()).collect());
-        let mut ranked = self.reply.clone()?;
-        ranked.truncate(top_k);
-        Ok(ranked)
+            .push((query.to_string(), mode, top_k));
+        let mut reply = self.pick_reply.lock().unwrap().clone()?;
+        reply.ranked.truncate(top_k);
+        Ok(reply)
+    }
+
+    fn put_snapshot(
+        &self,
+        source_id: &str,
+        tools: &[crate::cloud::SnapshotTool],
+    ) -> Result<crate::SyncOutcome, crate::CloudError> {
+        self.snapshots
+            .lock()
+            .unwrap()
+            .push((source_id.to_string(), tools.to_vec()));
+        let mut outcome = self.sync_reply.lock().unwrap().clone()?;
+        outcome.tools = tools.len();
+        Ok(outcome)
     }
 }

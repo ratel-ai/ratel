@@ -17,10 +17,7 @@ use crate::rerank::{SearchError, SearchOptions, order_by_rescore};
 use crate::search::{Bm25Cache, Bm25Params};
 use crate::skill::Skill;
 use crate::skill_indexing::searchable_text;
-use crate::system_one::{
-    Candidate, RatelCloudSystemOne, SystemOne, SystemOneConfig, SystemOneError,
-};
-use crate::tool_registry::{AdaptiveRankingStatus, default_system_one};
+use crate::tool_registry::AdaptiveRankingStatus;
 use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchStage, SkillHitTrace, TraceEvent, TraceEventContext,
     TraceSink,
@@ -123,9 +120,6 @@ pub struct SkillRegistry {
     /// Read only by the hybrid path; the single-arm methods have nothing to
     /// weigh. Defaults to the shipped 0.7.
     dense_weight: DenseWeight,
-    /// The system-one ranker — the skill-side twin of
-    /// [`crate::ToolRegistry`]'s field (ADR-0026).
-    system_one: Arc<dyn SystemOne>,
 }
 
 impl Default for SkillRegistry {
@@ -146,7 +140,6 @@ impl SkillRegistry {
             dense: DenseCache::new(),
             graph: None,
             dense_weight: DenseWeight::default(),
-            system_one: default_system_one(),
         }
     }
 
@@ -161,7 +154,6 @@ impl SkillRegistry {
             dense: DenseCache::new(),
             graph: None,
             dense_weight: DenseWeight::default(),
-            system_one: default_system_one(),
         }
     }
 
@@ -179,7 +171,6 @@ impl SkillRegistry {
             dense: DenseCache::with_model(model),
             graph: None,
             dense_weight: DenseWeight::default(),
-            system_one: default_system_one(),
         }
     }
 
@@ -239,41 +230,6 @@ impl SkillRegistry {
     #[must_use]
     pub fn experimental_dense_weight(&self) -> DenseWeight {
         self.dense_weight
-    }
-
-    /// Point `SystemOne` searches and rerankers at another endpoint or key —
-    /// see [`crate::ToolRegistry::set_system_one`].
-    pub fn set_system_one(&mut self, config: SystemOneConfig) {
-        self.system_one = Arc::new(RatelCloudSystemOne::new(config));
-    }
-
-    /// Stand a scripted ranker in for the HTTP client.
-    #[cfg(test)]
-    pub(crate) fn set_system_one_for_test(&mut self, system_one: Arc<dyn SystemOne>) {
-        self.system_one = system_one;
-    }
-
-    /// Ask the system-one ranker to rank `ids` (all skills when `None`),
-    /// keeping at most `top_k`.
-    fn system_one_rank(
-        &self,
-        query: &str,
-        ids: Option<&[String]>,
-        top_k: usize,
-    ) -> Result<Vec<(String, f32)>, SystemOneError> {
-        let candidate = |skill: &Skill| Candidate {
-            id: skill.id.clone(),
-            text: skill.embed_text(),
-        };
-        let candidates: Vec<Candidate> = match ids {
-            Some(ids) => ids
-                .iter()
-                .filter_map(|id| self.skills.get(id))
-                .map(candidate)
-                .collect(),
-            None => self.skills.values().map(candidate).collect(),
-        };
-        self.system_one.rank(query, &candidates, top_k)
     }
 
     /// Set the BM25 `k1`/`b` tuning; forces a rebuild on the next search. See
@@ -736,9 +692,6 @@ impl SkillRegistry {
             }
             SearchMethod::Semantic => self.semantic_search_traced(query, top_k, origin, context),
             SearchMethod::Hybrid => self.hybrid_search_traced(query, top_k, origin, context),
-            SearchMethod::SystemOne => Err(EmbedderError::Config {
-                message: "systemOne needs search_with_options, which can report its errors".into(),
-            }),
         }
     }
 
@@ -765,9 +718,6 @@ impl SkillRegistry {
             ..
         } = options;
         let Some(reranker) = reranker else {
-            if method == SearchMethod::SystemOne {
-                return self.system_one_search(query, top_k, origin, context);
-            }
             return Ok(self.search_with_method_and_context(query, top_k, origin, method, context)?);
         };
         if reranker.method() == method {
@@ -785,33 +735,21 @@ impl SkillRegistry {
         }
         let depth = reranker.depth().max(top_k);
         let turn_key = context.turn_id.as_deref();
-        let (mut candidates, mut stages) = match method {
+        let (candidates, mut stages) = match method {
             SearchMethod::Bm25 => self.bm25_ranked(query, depth, turn_key),
             SearchMethod::Semantic => self.semantic_ranked(query, depth, turn_key)?,
             SearchMethod::Hybrid => self.hybrid_ranked(query, depth, turn_key)?,
-            SearchMethod::SystemOne => self.system_one_ranked(query, depth)?,
         };
-        let candidate_ids: Vec<String> = candidates.iter().map(|h| h.skill_id.clone()).collect();
+        let candidate_ids: Vec<String> = candidates.into_iter().map(|h| h.skill_id).collect();
 
         let t = Instant::now();
-        let (hits, stage_name) = if reranker.method() == SearchMethod::SystemOne {
-            match self.system_one_rank(query, Some(&candidate_ids), top_k) {
-                Ok(ranked) => (to_skill_hits(ranked, Scale::Probability), "rerank"),
-                Err(_) => {
-                    candidates.truncate(top_k);
-                    (candidates, "rerank_fallback")
-                }
-            }
-        } else {
-            let (mut rescored, scale) =
-                self.rank_candidates(query, &candidate_ids, reranker.method())?;
-            order_by_rescore(&mut rescored, &candidate_ids);
-            let mut hits = to_skill_hits(rescored, scale);
-            hits.truncate(top_k);
-            (hits, "rerank")
-        };
+        let (mut rescored, scale) =
+            self.rank_candidates(query, &candidate_ids, reranker.method())?;
+        order_by_rescore(&mut rescored, &candidate_ids);
+        let mut hits = to_skill_hits(rescored, scale);
+        hits.truncate(top_k);
         stages.push(SearchStage {
-            name: stage_name.into(),
+            name: "rerank".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: hits.first().map(|h| h.score as f64),
         });
@@ -819,45 +757,6 @@ impl SkillRegistry {
         let took_ms = started.elapsed().as_millis() as u64;
         self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
         Ok(hits)
-    }
-
-    /// A standalone system-one search over every skill.
-    fn system_one_search(
-        &self,
-        query: &str,
-        top_k: usize,
-        origin: Origin,
-        context: TraceEventContext,
-    ) -> Result<Vec<SkillHit>, SearchError> {
-        let started = Instant::now();
-        if self.skills.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
-            return Ok(Vec::new());
-        }
-        let (hits, stages) = self.system_one_ranked(query, top_k)?;
-        let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
-        Ok(hits)
-    }
-
-    /// The system-one ranking of every skill and its `systemone` stage,
-    /// without recording the search.
-    fn system_one_ranked(
-        &self,
-        query: &str,
-        top_k: usize,
-    ) -> Result<(Vec<SkillHit>, Vec<SearchStage>), SystemOneError> {
-        let t = Instant::now();
-        let hits = to_skill_hits(
-            self.system_one_rank(query, None, top_k)?,
-            Scale::Probability,
-        );
-        let stage = SearchStage {
-            name: "systemone".into(),
-            took_ms: t.elapsed().as_millis() as u64,
-            top_score: hits.first().map(|h| h.score as f64),
-        };
-        Ok((hits, vec![stage]))
     }
 
     /// Re-score stage-1 candidates — the skill twin of the tool registry's
@@ -905,7 +804,6 @@ impl SkillRegistry {
                 let fused = score_fuse(&bm25, ceiling, &dense, None, self.dense_weight);
                 (fused, Scale::Fused)
             }
-            SearchMethod::SystemOne => unreachable!("system-one reranks via system_one_rank"),
         })
     }
 
@@ -1325,7 +1223,6 @@ mod tests {
             dense: DenseCache::with_embedder(embedder),
             graph: None,
             dense_weight: DenseWeight::default(),
-            system_one: default_system_one(),
         }
     }
 
@@ -2660,48 +2557,5 @@ mod tests {
             stages,
             vec![vec!["dense".to_string(), "rerank".to_string()]]
         );
-    }
-
-    // ---- System-one (ADR-0026), the skill twin ----
-
-    use crate::SystemOneError;
-    use crate::test_support::ScriptedSystemOne;
-
-    #[test]
-    fn skill_standalone_system_one_ranks_every_skill() {
-        let mut reg = rerank_catalog();
-        let s1 = Arc::new(ScriptedSystemOne::ranking(&[("openapi_spec", 0.9)]));
-        reg.set_system_one_for_test(s1.clone());
-        let hits = reg
-            .search_with_options(
-                "design the rest service",
-                5,
-                Origin::Direct,
-                SearchOptions::new(SearchMethod::SystemOne),
-            )
-            .unwrap();
-        assert_eq!(skill_ids(&hits), vec!["openapi_spec"]);
-        assert_eq!(s1.offered()[0].len(), 4, "every skill is a candidate");
-    }
-
-    #[test]
-    fn skill_system_one_rerank_falls_back_to_stage_one() {
-        let mut reg = rerank_catalog();
-        reg.set_system_one_for_test(Arc::new(ScriptedSystemOne::failing(
-            SystemOneError::Unreachable {
-                source: "down".into(),
-            },
-        )));
-        let stage_one = reg.search("design the rest service", 3);
-        let hits = reg
-            .search_with_options(
-                "design the rest service",
-                3,
-                Origin::Direct,
-                SearchOptions::new(SearchMethod::Bm25)
-                    .with_reranker(Reranker::new(SearchMethod::SystemOne)),
-            )
-            .unwrap();
-        assert_eq!(skill_ids(&hits), skill_ids(&stage_one));
     }
 }

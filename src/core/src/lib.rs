@@ -82,6 +82,7 @@
 #![warn(missing_docs)]
 
 mod artifact_warm;
+mod cloud;
 mod dense_cache;
 mod dense_search;
 mod embedding;
@@ -98,7 +99,6 @@ mod search;
 mod skill;
 mod skill_indexing;
 mod skill_registry;
-mod system_one;
 mod tool;
 mod tool_registry;
 mod trace;
@@ -111,6 +111,10 @@ mod harness;
 mod test_support;
 
 pub use artifact_warm::{ArtifactWarmError, OnArtifactMiss, ParseOnArtifactMissError};
+pub use cloud::{
+    CloudConfig, CloudError, DEFAULT_CLOUD_API_KEY_ENV, DEFAULT_CLOUD_URL, MAX_PICK_TOP_K,
+    ParsePickModeError, PickMode, SyncOutcome,
+};
 pub use dense_cache::WarmError;
 pub use embedding::EmbedderError;
 pub use embedding_artifact::{ArtifactError, merge_embedding_artifacts};
@@ -123,11 +127,8 @@ pub use rerank::{Reranker, SearchError, SearchOptions};
 pub use search::Bm25Params;
 pub use skill::Skill;
 pub use skill_registry::{ReplaceOutcome, SkillHit, SkillRegistry};
-pub use system_one::{
-    DEFAULT_SYSTEM_ONE_API_KEY_ENV, DEFAULT_SYSTEM_ONE_URL, SystemOneConfig, SystemOneError,
-};
 pub use tool::Tool;
-pub use tool_registry::{AdaptiveRankingStatus, SearchHit, ToolRegistry};
+pub use tool_registry::{AdaptiveRankingStatus, CloudPick, SearchHit, ToolRegistry};
 pub use trace::{
     CatalogKind, ChurnKind, EmbedderLoadStatus, FactHitTrace, FactInjectReason, FanoutSink,
     FanoutSubscription, FnSink, JsonlSink, MemorySink, NoopSink, Origin, SearchHitTrace,

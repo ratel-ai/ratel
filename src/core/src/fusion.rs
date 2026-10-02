@@ -247,9 +247,9 @@ pub(crate) enum Scale {
     /// A score fusion of already-normalised arms — absolute in `[0, 1]`, so it
     /// needs no further mapping.
     Fused,
-    /// A system-one model's probability — already `[0, 1]` and a raw method
-    /// score, not a fusion (ADR-0026).
-    Probability,
+    /// A Cloud Tool Picker score — already `[0, 1]` and a raw method score,
+    /// not a fusion (ADR-0026).
+    Picked,
 }
 
 /// Map each score onto `[0, 1]` by the rule its scale admits.
@@ -274,7 +274,7 @@ pub(crate) fn normalize(ranked: &[(String, f32)], scale: Scale) -> Vec<f32> {
         Scale::Cosine => return ranked.iter().map(|(_, s)| (s + 1.0) / 2.0).collect(),
         // Already `[0, 1]` and already absolute — the whole point of fusing on
         // scores rather than ranks.
-        Scale::Fused | Scale::Probability => {
+        Scale::Fused | Scale::Picked => {
             return ranked.iter().map(|(_, s)| s.clamp(0.0, 1.0)).collect();
         }
         // A ceiling of zero means no query term appears anywhere in the corpus,
