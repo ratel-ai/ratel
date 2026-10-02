@@ -518,13 +518,11 @@ const KNOWN_FRAMEWORKS: readonly {
 export function ratel(config: RatelConfig = {}): Ratel {
   const catalogMethod: SearchMethod = config.method ?? "bm25";
   const embeddingArtifact = config.experimentalEmbeddingArtifact;
-  // A cloud tool catalog is ranked by the Tool Picker, so `method` and
-  // `reranker` then apply to skills only. Its sync uses the same source id the
-  // runtime-events stream defaults to.
+  // A cloud tool catalog is ranked by the Tool Picker, so `method`,
+  // `reranker`, `systemOne` and the embedding artifact then apply to skills
+  // only. Its sync uses the same source id the runtime-events stream defaults to.
   const catalog = new ToolCatalog({
-    embedding: config.embedding,
     trace: config.trace,
-    experimentalEmbeddingArtifact: embeddingArtifact,
     ...(config.cloud
       ? {
           cloud: {
@@ -532,7 +530,13 @@ export function ratel(config: RatelConfig = {}): Ratel {
             sourceId: config.cloud.sourceId ?? config.events?.sourceId ?? defaultSourceId(),
           },
         }
-      : { method: config.method, reranker: config.reranker, systemOne: config.systemOne }),
+      : {
+          embedding: config.embedding,
+          experimentalEmbeddingArtifact: embeddingArtifact,
+          method: config.method,
+          reranker: config.reranker,
+          systemOne: config.systemOne,
+        }),
   });
   const skills = new SkillCatalog({
     method: config.method,

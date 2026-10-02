@@ -253,3 +253,25 @@ describe("ratel() cloud", () => {
     expect(mock.of(PICK)[0].body).toMatchObject({ mode: "instant" });
   });
 });
+
+describe("cloud and embedding artifacts", () => {
+  it("ratel() does not hand the cloud tool catalog an embedding artifact", async () => {
+    const r = ratel({
+      cloud: { url: mock.url, apiKeyEnv: KEY_ENV, mode: "instant" },
+      experimentalEmbeddingArtifact: { path: "/nonexistent/ratel-artifact.rat1" },
+    });
+    // A warmed artifact would fail here: the path does not exist.
+    await r.tools.register(tool("refund"));
+    expect(mock.of(SNAPSHOT)).toHaveLength(1);
+  });
+
+  it("rejects an embedding artifact on a standalone cloud catalog", () => {
+    expect(
+      () =>
+        new ToolCatalog({
+          cloud: { url: mock.url, apiKeyEnv: KEY_ENV },
+          experimentalEmbeddingArtifact: { path: "/nonexistent.rat1" },
+        }),
+    ).toThrow(/artifact/i);
+  });
+});

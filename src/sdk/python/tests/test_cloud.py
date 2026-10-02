@@ -264,3 +264,12 @@ async def test_a_pick_after_an_unawaited_register_raises(mock: MockCloud) -> Non
     assert len(mock.of(SNAPSHOT)) == 1
     hits = await catalog.search_async("q", 5)
     assert [h.tool_id for h in hits] == ["refund"]
+
+
+def test_cloud_with_an_embedding_artifact_is_rejected(mock: MockCloud) -> None:
+    with pytest.raises(ValueError, match="artifact"):
+        ToolCatalog(
+            cloud={"url": mock.url, "api_key_env": KEY_ENV},
+            experimental_embedding_artifact={"path": "/nonexistent.rat1"},  # type: ignore[typeddict-item]
+        )
+

@@ -389,9 +389,20 @@ export interface CloudSyncOutcome {
 /** Reject a `cloud` option the catalog cannot honour. @internal */
 export function assertValidCloud(
   cloud: CloudConfig | undefined,
-  options: { method?: SearchMethod; reranker?: RerankerConfig; systemOne?: SystemOneConfig },
+  options: {
+    method?: SearchMethod;
+    reranker?: RerankerConfig;
+    systemOne?: SystemOneConfig;
+    experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
+  },
 ): void {
   if (!cloud) return;
+  if (options.experimentalEmbeddingArtifact !== undefined) {
+    throw new Error(
+      "a cloud catalog is ranked by the Cloud Tool Picker and never uses embeddings; " +
+        "drop `experimentalEmbeddingArtifact`",
+    );
+  }
   if (
     options.method !== undefined ||
     options.reranker !== undefined ||

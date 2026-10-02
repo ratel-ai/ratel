@@ -235,9 +235,15 @@ def _validate_cloud(
     method: str | None,
     reranker: RerankerConfig | None,
     system_one: SystemOneConfig | None = None,
+    embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
 ) -> None:
     if cloud is None:
         return
+    if embedding_artifact is not None:
+        raise ValueError(
+            "a cloud catalog is ranked by the Cloud Tool Picker and never uses embeddings; "
+            "drop `experimental_embedding_artifact`"
+        )
     if method is not None or reranker is not None or system_one is not None:
         raise ValueError(
             "a cloud catalog is ranked by the Cloud Tool Picker; drop `method`, "
@@ -1258,7 +1264,7 @@ class ToolCatalog:
                 combinable with ``method``, ``reranker`` or ``system_one``.
                 **Experimental.**
         """
-        _validate_cloud(cloud, method, reranker, system_one)
+        _validate_cloud(cloud, method, reranker, system_one, experimental_embedding_artifact)
         method = method or "bm25"
         _validate_method(method)
         _validate_reranker(method, reranker)
