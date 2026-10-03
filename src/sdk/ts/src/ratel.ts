@@ -14,6 +14,8 @@ import {
   type EmbeddingSpec,
   type ExecutableTool,
   type InputValidator,
+  type RankFn,
+  type RerankerConfig,
   runToolInvocation,
   type SearchMethod,
   ToolCatalog,
@@ -64,6 +66,18 @@ export interface RatelConfig {
    * - Or set `onMiss: "embed"` to infer uncovered current-kind entries at runtime.
    */
   experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
+  /** Second-stage reranker forwarded to the tool and skill catalogs — see
+   * {@link ToolCatalogOptions.reranker}. Facts are not reranked. **Experimental.** */
+  reranker?: RerankerConfig;
+  /** Your own ranking function, with `method: "custom"`, forwarded to the tool and
+   * skill catalogs — see {@link ToolCatalogOptions.retrieveFn}. Facts have no
+   * custom path; with `method: "custom"` they rank with BM25. **Experimental.** */
+  retrieveFn?: RankFn;
+  /** Your own reranking function, forwarded to the tool and skill catalogs — see
+   * {@link ToolCatalogOptions.rerankerFn}. **Experimental.** */
+  rerankerFn?: RankFn;
+  /** How many first-stage candidates `rerankerFn` sees (default 50). */
+  rerankerDepth?: number;
   /** Max tools each host-driven `recall` returns: capped at 50; 0, negative, or
    * non-integer values fall back to the default 5. */
   recallTopK?: number;
@@ -501,14 +515,21 @@ const KNOWN_FRAMEWORKS: readonly {
 export function ratel(config: RatelConfig = {}): Ratel {
   const catalogMethod: SearchMethod = config.method ?? "bm25";
   const embeddingArtifact = config.experimentalEmbeddingArtifact;
-  const catalog = new ToolCatalog({
+  const ranking = {
     method: config.method,
+    reranker: config.reranker,
+    retrieveFn: config.retrieveFn,
+    rerankerFn: config.rerankerFn,
+    rerankerDepth: config.rerankerDepth,
+  };
+  const catalog = new ToolCatalog({
+    ...ranking,
     embedding: config.embedding,
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
   });
   const skills = new SkillCatalog({
-    method: config.method,
+    ...ranking,
     embedding: config.embedding,
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
@@ -620,7 +641,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
   const facts = (): FactCatalog => {
     if (factsCatalog === undefined) {
       factsCatalog = new FactCatalog({
-        method: config.method,
+        // Facts have no custom path; rank them lexically instead.
+        method: config.method === "custom" ? "bm25" : config.method,
         embedding: config.embedding,
         trace: config.trace,
         factsTopK: config.factsTopK,
@@ -649,8 +671,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
     const effective = method ?? catalogMethod;
     if (effective !== "bm25") {
       throw new Error(
-        `ratel: tools.search() is synchronous and ranks BM25 only; "${effective}" ranks against ` +
-          "prebuilt embeddings — use tools.searchAsync().",
+        `ratel: tools.search() is synchronous and ranks BM25 only; "${effective}" runs off ` +
+          "the event loop — use tools.searchAsync().",
       );
     }
     return catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", "bm25", turnId);

@@ -1,10 +1,11 @@
-//! Rank fusion and the shared deterministic ordering used across rankers.
+//! Score and rank fusion, and the shared deterministic ordering used across
+//! rankers.
 //!
-//! Reciprocal Rank Fusion (RRF) combines the BM25 and dense rankings into one
-//! candidate list for the hybrid pipeline (see [`crate::tool_registry`] and
-//! ADR-0011). It fuses on *rank position*, not raw scores, so it is immune to
-//! the incomparable scales of BM25 (unbounded) and cosine ([-1, 1]). Pure Rust,
-//! no heavy deps — its tests run on every build without a model download.
+//! Hybrid fuses the BM25 and dense arms on normalised scores ([`score_fuse`],
+//! ADR-0024). Reciprocal Rank Fusion remains for folding the usage arm
+//! (ADR-0014) into a single-arm BM25 or semantic search, where it fuses on
+//! *rank position*. Pure Rust, no heavy deps — its tests run on every build
+//! without a model download.
 
 /// RRF damping constant. 60 is the Cormack et al. (2009) default and the field
 /// standard; large enough that the reciprocal curve is gentle past the head of
@@ -246,6 +247,9 @@ pub(crate) enum Scale {
     /// A score fusion of already-normalised arms — absolute in `[0, 1]`, so it
     /// needs no further mapping.
     Fused,
+    /// A score from a caller-supplied ranking function, clamped to `[0, 1]` —
+    /// a raw method score, not a fusion (ADR-0027).
+    Picked,
 }
 
 /// Map each score onto `[0, 1]` by the rule its scale admits.
@@ -270,7 +274,9 @@ pub(crate) fn normalize(ranked: &[(String, f32)], scale: Scale) -> Vec<f32> {
         Scale::Cosine => return ranked.iter().map(|(_, s)| (s + 1.0) / 2.0).collect(),
         // Already `[0, 1]` and already absolute — the whole point of fusing on
         // scores rather than ranks.
-        Scale::Fused => return ranked.iter().map(|(_, s)| s.clamp(0.0, 1.0)).collect(),
+        Scale::Fused | Scale::Picked => {
+            return ranked.iter().map(|(_, s)| s.clamp(0.0, 1.0)).collect();
+        }
         // A ceiling of zero means no query term appears anywhere in the corpus,
         // so every score is zero too and there is nothing to divide.
         Scale::Bm25 { ceiling } if ceiling > 0.0 => {

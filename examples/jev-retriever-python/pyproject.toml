@@ -1,0 +1,12 @@
+[project]
+name = "ratel-example-jev-retriever"
+version = "0.0.0"
+description = "Jev as a retriever and reranker through Ratel's ranking-function hooks"
+requires-python = ">=3.10"
+dependencies = [
+    "ratel-ai",
+]
+
+[tool.uv.sources]
+# Use the local SDK from this monorepo rather than PyPI.
+ratel-ai = { path = "../../src/sdk/python" }

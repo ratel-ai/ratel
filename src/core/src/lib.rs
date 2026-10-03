@@ -21,7 +21,7 @@
 //!   the higher layers *push* into the context, always-on or retrieval-gated
 //!   per [`PinMode`].
 //!
-//! All rank a query with one of three engines, selected by [`SearchMethod`]:
+//! All rank a query with one of four engines, selected by [`SearchMethod`]:
 //!
 //! - [`SearchMethod::Bm25`] (default) — lexical BM25. Needs no model and
 //!   never fails; [`ToolRegistry::search`] and [`SkillRegistry::search`] use
@@ -29,8 +29,17 @@
 //! - [`SearchMethod::Semantic`] — cosine similarity over dense embeddings
 //!   from a configurable in-process HuggingFace/local model (default
 //!   `bge-small-en-v1.5`) or OpenAI-compatible endpoint (ADR-0011/ADR-0012).
-//! - [`SearchMethod::Hybrid`] — the BM25 and dense rankings fused with
-//!   Reciprocal Rank Fusion.
+//! - [`SearchMethod::Hybrid`] — the BM25 and dense scores normalised and
+//!   fused (ADR-0024).
+//!
+//! [`ToolRegistry::search_with_options`] adds a second stage: a [`Reranker`]
+//! re-scores the first stage's top candidates with any other method. A ranking
+//! function the caller supplies (a model such as Jev, called by the SDK) plugs
+//! in between two phases instead: [`ToolRegistry::rank_candidates`] /
+//! [`ToolRegistry::complete_custom_search`] to rank the whole catalog, and
+//! [`ToolRegistry::stage_one`] / [`ToolRegistry::complete_rerank`] to rerank
+//! (ADR-0027). [`JevRanker`] is the Jev client the SDKs wrap into such a
+//! function.
 //!
 //! Semantic and hybrid searches rank against an embedding cache built by
 //! [`ToolRegistry::build_embeddings`] / [`SkillRegistry::build_embeddings`];
@@ -92,7 +101,9 @@ mod fact_indexing;
 mod fact_registry;
 mod fusion;
 mod indexing;
+mod jev;
 mod method;
+mod rerank;
 mod search;
 mod skill;
 mod skill_indexing;
@@ -116,7 +127,12 @@ pub use embedding_config::{EmbeddingModel, EmbeddingSpec, Pooling};
 pub use fact::{Fact, ParsePinModeError, PinMode};
 pub use fact_registry::{FactHit, FactRegistry};
 pub use fusion::{DenseWeight, InvalidDenseWeight};
+pub use jev::{
+    CandidateKind, DEFAULT_JEV_API_KEY_ENV, DEFAULT_JEV_MODEL, DEFAULT_JEV_URL, JevConfig,
+    JevError, JevRanker,
+};
 pub use method::{ParseSearchMethodError, SearchMethod};
+pub use rerank::{RankCandidate, RerankOutcome, Reranker, SearchError, SearchOptions, StageOne};
 pub use search::Bm25Params;
 pub use skill::Skill;
 pub use skill_registry::{ReplaceOutcome, SkillHit, SkillRegistry};

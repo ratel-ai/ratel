@@ -474,6 +474,7 @@ function fakeNative(state: { status: string }) {
       dimMismatch: false,
     }),
     searchWithMethodAsync: async () => [],
+    searchWithOptionsAsync: async () => [],
   };
 }
 
