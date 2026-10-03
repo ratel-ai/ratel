@@ -39,8 +39,9 @@ parallel to `SearchOrigin`.
   text (`dense_search`). The same `searchable_text` projection feeds it. (The model is the
   default; **ADR-0012** makes it configurable per catalog — HuggingFace/local/endpoint.)
 - **Hybrid** runs the BM25 and dense arms to a fixed retrieval depth and fuses them, no
-  cross-encoder reranker. ([ADR-0027](0027-system-one-ranking-and-reranker.md) adds a fourth
-  method, `systemOne`, and an optional second-stage reranker over any method.)
+  cross-encoder reranker. ([ADR-0027](0027-custom-retriever-and-reranker-functions.md) adds
+  a `"custom"` method ranked by a caller-supplied function, and an optional second stage: a
+  built-in reranker or a caller-supplied one.)
 
   > **Superseded by [ADR-0024](0024-hybrid-fuses-on-scores.md).** Hybrid fuses on **normalised
   > scores**, not rank positions. The reasoning below — that RRF fuses on rank so BM25's

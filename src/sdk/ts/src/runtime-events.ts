@@ -345,7 +345,7 @@ export class RuntimeEvents {
 
 // Core invocation events carry no `origin`; a tool the host ran itself and
 // reported through `recordToolCall` is marked by invocation id and stamped here,
-// where events leave the SDK (ADR-0027).
+// where events leave the SDK (ADR-0026).
 function stampExternalOrigin(event: RuntimeEvent): RuntimeEvent {
   if (
     (event.type === "invoke_start" ||
@@ -373,8 +373,7 @@ function trackHandlerWork(subscriber: SdkSubscriber, batch: readonly RuntimeEven
   void pending.then(() => subscriber.pending.delete(pending));
 }
 
-/** @internal The runtime's default source id: the OTel service name, else `"ratel"`. */
-export function defaultSourceId(): string {
+function defaultSourceId(): string {
   if (process.env.OTEL_SERVICE_NAME) return process.env.OTEL_SERVICE_NAME;
   const serviceName = process.env.OTEL_RESOURCE_ATTRIBUTES?.split(",")
     .map((entry) => entry.trim().split("=", 2))

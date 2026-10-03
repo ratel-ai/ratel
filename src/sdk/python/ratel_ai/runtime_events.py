@@ -346,7 +346,7 @@ _INVOKE_EVENT_TYPES = frozenset(("invoke_start", "invoke_end", "invoke_error"))
 
 def _stamp_external_origin(event: RuntimeEvent) -> RuntimeEvent:
     # Core invocation events carry no `origin`; a tool the host ran itself and
-    # reported through `record_tool_call` is marked by invocation id (ADR-0027).
+    # reported through `record_tool_call` is marked by invocation id (ADR-0026).
     from .turns import is_external_invocation
 
     if event.get("type") in _INVOKE_EVENT_TYPES and is_external_invocation(
