@@ -33,7 +33,7 @@ const DEFAULT_FACTS_TOP_K = 3;
 export interface FactCatalogOptions {
   /** Local trace stream destination (default: discard). See {@link TraceSinkConfig}. */
   trace?: TraceSinkConfig;
-  /** Default retrieval method for `search` (default `"bm25"`). `"systemOne"`
+  /** Default retrieval method for `search` (default `"bm25"`). `"custom"`
    * is not supported for facts and throws. */
   method?: SearchMethod;
   /** Embedding model for semantic/hybrid retrieval — see
@@ -88,8 +88,8 @@ export class FactCatalog {
   constructor(options: FactCatalogOptions = {}) {
     warnExperimentalFactsOnce();
     this.method = options.method ?? "bm25";
-    if (this.method === "systemOne") {
-      throw new Error('FactCatalog: method "systemOne" is not supported for facts');
+    if (this.method === "custom") {
+      throw new Error('FactCatalog: method "custom" is not supported for facts');
     }
     this.factsTopK = options.factsTopK;
     this.registry = new FactRegistry(options.embedding, this.method);

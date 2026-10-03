@@ -6,7 +6,7 @@ TypeSafe key. It speaks Jev's wire format::
 
 Its "judge" is a hard-coded intent table: it shows the plumbing, not ranking
 quality. Set TYPESAFE_API_KEY to call Jev itself. The TypeScript twin is
-``examples/system-one-reranking-ts/src/local-jev.ts``.
+``examples/jev-retriever-ts/src/local-jev.ts``.
 """
 
 from __future__ import annotations

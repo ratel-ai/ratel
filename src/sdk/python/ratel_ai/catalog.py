@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, Literal, TypedDict, TypeVar, Union, overload
 
+from ._custom_ranking import RankFn, custom_rerank, custom_search
 from ._native import IntentGraph as IntentGraph  # re-exported for `ratel_ai.IntentGraph`
 from ._native import NativeEventSubscription, SearchHit
 from ._native import ToolRegistry as _NativeToolRegistry
@@ -27,8 +28,7 @@ from .embedding_artifact import (
     OnArtifactMiss,
     resolve_embedding_artifact,
 )
-from .exceptions import CloudError
-from .runtime_events import _default_source_id, new_runtime_event_id
+from .runtime_events import new_runtime_event_id
 from .telemetry import (
     SEARCH_TARGET_TOOL,
     RuntimeEventProjection,
@@ -61,8 +61,8 @@ unaffected.
 SearchMethod = str
 """Retrieval engine: ``"bm25"`` (lexical, model-free, the default),
 ``"semantic"`` (dense embeddings), ``"hybrid"`` (both, fused), or
-``"systemOne"`` (Jev picks — sends the query and candidate text to Jev,
-called directly; see ADR-0027).
+``"custom"`` (your own ``retrieve_fn``, e.g. Jev via `ratel_jev_plugin`; see
+ADR-0027).
 """
 
 OriginFilterOption = Literal["any", "agent", "baseline"]
@@ -152,119 +152,27 @@ class _RerankerOptions(TypedDict, total=False):
 class RerankerConfig(_RerankerOptions):
     """A second stage over the first stage's candidates (ADR-0027).
 
-    ``method`` re-scores the top ``depth`` (default 50, raised to ``top_k`` when
-    lower) hits of the catalog's ``method`` and never adds a tool the first
-    stage did not return. Any method may rerank any other, but not itself. A
-    ``"systemOne"`` reranker that fails returns the first stage's order instead
-    of raising. **Experimental** — may change without a major version bump.
+    A built-in ``method`` (``"bm25"``, ``"semantic"`` or ``"hybrid"``) re-scores
+    the top ``depth`` (default 50, raised to ``top_k`` when lower) hits of the
+    catalog's ``method`` and never adds a tool the first stage did not return.
+    It may not use the first stage's own method. For a model you call yourself,
+    use ``reranker_fn`` instead. **Experimental** — may change without a major
+    version bump.
     """
 
     method: str
 
 
-class SystemOneConfig(TypedDict, total=False):
-    """Where ``"systemOne"`` sends rankings: Jev (TypeSafe AI), called directly.
-
-    Defaults: ``https://api.typesafe.ai``, the key in ``TYPESAFE_API_KEY`` (read
-    at search time), model ``jev-latest``. For a catalog Ratel Cloud owns, use
-    `CloudConfig` instead — Cloud runs Jev behind its picker. **Experimental.**
-    """
-
-    url: str
-    api_key_env: str
-    model: str
-
-
-PickMode = Literal["instant", "precise", "exhaustive"]
-"""How the Cloud Tool Picker ranks (ADR-0027): ``"instant"`` is BM25
-(milliseconds, free), ``"precise"`` judges a BM25 shortlist with a system-one
-model (~300 ms, metered), ``"exhaustive"`` judges the whole catalog (seconds,
-metered)."""
-
-_PICK_MODES = ("instant", "precise", "exhaustive")
-
-
-class CloudConfig(TypedDict, total=False):
-    """Make Ratel Cloud the catalog's owner (ADR-0027, ADR-0028).
-
-    ``register`` uploads the catalog's executor-free definitions to the Cloud
-    project and ``search_async`` ranks through the Cloud Tool Picker. Executors
-    stay local. **The catalog's names, descriptions and schemas, and every
-    query, leave the process.** **Experimental.**
-
-    Keys:
-        mode: pick mode for ``search_async`` (default ``"precise"``).
-        url: Cloud base URL (default ``https://cloud.ratel.sh``).
-        api_key_env: environment variable holding the project key (default
-            ``RATEL_API_KEY``).
-        source_id: this process's catalog in the project; a sync replaces that
-            source's tools. Default: ``OTEL_SERVICE_NAME``, else ``"ratel"``.
-        on_sync_error: ``"raise"`` (default) or ``"warn"``.
-    """
-
-    mode: PickMode
-    url: str
-    api_key_env: str
-    source_id: str
-    on_sync_error: Literal["raise", "warn"]
-
-
-@dataclass(frozen=True)
-class CloudSyncOutcome:
-    """What a catalog sync did."""
-
-    catalog_version: str
-    tools: int
-    unchanged: bool
-    skipped: bool
-
-
-_UNAWAITED_CLOUD_REGISTER = (
-    "a register() call was not awaited, so its Cloud sync never ran — "
-    "`await catalog.register(...)` before searching a cloud catalog"
-)
-
-_CLOUD_NEEDS_ASYNC = (
-    "this catalog ranks through the Cloud Tool Picker, a network call; "
-    "use `await catalog.search_async(...)`"
-)
-
-
-def _validate_cloud(
-    cloud: CloudConfig | None,
-    method: str | None,
-    reranker: RerankerConfig | None,
-    system_one: SystemOneConfig | None = None,
-    embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
-) -> None:
-    if cloud is None:
-        return
-    if embedding_artifact is not None:
-        raise ValueError(
-            "a cloud catalog is ranked by the Cloud Tool Picker and never uses embeddings; "
-            "drop `experimental_embedding_artifact`"
-        )
-    if method is not None or reranker is not None or system_one is not None:
-        raise ValueError(
-            "a cloud catalog is ranked by the Cloud Tool Picker; drop `method`, "
-            "`reranker` and `system_one` and choose a cloud `mode` instead"
-        )
-    mode = cloud.get("mode")
-    if mode is not None and mode not in _PICK_MODES:
-        raise ValueError(
-            f'unknown cloud mode "{mode}" (expected "instant", "precise", or "exhaustive")'
-        )
-    on_sync_error = cloud.get("on_sync_error")
-    if on_sync_error is not None and on_sync_error not in ("raise", "warn"):
-        raise ValueError(
-            f'unknown cloud on_sync_error "{on_sync_error}" (expected "raise" or "warn")'
-        )
-
-
-_METHODS = ("bm25", "semantic", "hybrid", "systemOne")
+_BUILT_IN_METHODS = ("bm25", "semantic", "hybrid")
+_METHODS = (*_BUILT_IN_METHODS, "custom")
 _DENSE_METHODS = ("semantic", "hybrid")
+_DEFAULT_RERANKER_DEPTH = 50
 _RERANKER_NEEDS_ASYNC = (
     "this catalog has a reranker, which runs off the event loop; "
+    "use `await catalog.search_async(...)`"
+)
+_CUSTOM_NEEDS_ASYNC = (
+    'this catalog ranks with its retrieve_fn (method "custom"), which may be async; '
     "use `await catalog.search_async(...)`"
 )
 
@@ -281,23 +189,60 @@ def _uses_dense(method: str, reranker: RerankerConfig | None) -> bool:
     )
 
 
+def _validate_depth(name: str, depth: object) -> None:
+    if depth is not None and (isinstance(depth, bool) or not isinstance(depth, int) or depth < 1):
+        raise ValueError(f"{name} must be a positive integer, got {depth!r}")
+
+
 def _validate_reranker(method: str, reranker: RerankerConfig | None) -> None:
     """Reject a reranker the core would refuse, before the first search."""
     if reranker is None:
         return
     if "method" not in reranker:
+        raise ValueError('a reranker needs a "method" ("bm25", "semantic", or "hybrid")')
+    if reranker["method"] not in _BUILT_IN_METHODS:
         raise ValueError(
-            'a reranker needs a "method" ("bm25", "semantic", "hybrid", or "systemOne")'
+            f'unknown search method "{reranker["method"]}" for the reranker '
+            '(expected "bm25", "semantic", or "hybrid"; for your own model use reranker_fn)'
         )
-    _validate_method(reranker["method"])
+    if method == "custom":
+        raise ValueError('a reranker needs a "bm25", "semantic" or "hybrid" first stage')
     if reranker["method"] == method:
         raise ValueError(
             f'reranker method "{method}" is the same as the first-stage method; '
             "a reranker must use a different method"
         )
-    depth = reranker.get("depth")
-    if depth is not None and (isinstance(depth, bool) or not isinstance(depth, int) or depth < 1):
-        raise ValueError(f"reranker depth must be a positive integer, got {depth!r}")
+    _validate_depth("reranker depth", reranker.get("depth"))
+
+
+def _validate_ranking(
+    owner: str,
+    method: str,
+    reranker: RerankerConfig | None,
+    retrieve_fn: RankFn | None,
+    reranker_fn: RankFn | None,
+    reranker_depth: int | None,
+) -> None:
+    """Reject ranking options that contradict each other, at construction."""
+    _validate_method(method)
+    if retrieve_fn is not None and not callable(retrieve_fn):
+        raise ValueError(f"{owner}: retrieve_fn must be callable")
+    if reranker_fn is not None and not callable(reranker_fn):
+        raise ValueError(f"{owner}: reranker_fn must be callable")
+    if method == "custom" and retrieve_fn is None:
+        raise ValueError(f'{owner}: method "custom" needs a retrieve_fn')
+    if retrieve_fn is not None and method != "custom":
+        raise ValueError(f'{owner}: retrieve_fn needs method "custom"')
+    if reranker_fn is not None and reranker is not None:
+        raise ValueError(f"{owner}: pass either reranker or reranker_fn, not both")
+    if reranker_fn is not None and method == "custom":
+        raise ValueError(
+            f'{owner}: reranker_fn needs a "bm25", "semantic" or "hybrid" first stage'
+        )
+    if reranker_depth is not None and reranker_fn is None:
+        raise ValueError(f"{owner}: reranker_depth needs a reranker_fn")
+    _validate_depth("reranker_depth", reranker_depth)
+    _validate_reranker(method, reranker)
 
 
 def _resolve_reranker(
@@ -474,8 +419,6 @@ class ToolRegistry:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
-        cloud: CloudConfig | None = None,
     ) -> None: ...
 
     @overload
@@ -545,8 +488,6 @@ class ToolRegistry:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
-        cloud: CloudConfig | None = None,
         spec: str | None = None,
         huggingface: str | None = None,
         local: str | None = None,
@@ -587,12 +528,6 @@ class ToolRegistry:
             self._native.set_experimental_dense_weight(experimental_dense_weight)
         if experimental_bm25_k1 is not None or experimental_bm25_b is not None:
             self._native.set_experimental_bm25_params(experimental_bm25_k1, experimental_bm25_b)
-        if system_one is not None:
-            self._native.set_system_one(
-                system_one.get("url"), system_one.get("api_key_env"), system_one.get("model")
-            )
-        if cloud is not None:
-            self._native.set_cloud(cloud.get("url"), cloud.get("api_key_env"))
         self._eager = _uses_dense(method, reranker)
         self._embedding_artifact = experimental_embedding_artifact
         self._warn_on_model_mismatch = True
@@ -681,7 +616,7 @@ class ToolRegistry:
     def search_with_method(
         self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
     ) -> list[SearchHit]:
-        """Run BM25 synchronously; dense and system-one retrieval are async-only."""
+        """Run BM25 synchronously; dense and custom retrieval are async-only."""
         _validate_method(method)
         if method != "bm25":
             raise RuntimeError(
@@ -778,56 +713,66 @@ class ToolRegistry:
         projection: RuntimeEventProjection | None = None,
         *,
         reranker: RerankerConfig | None = None,
+        retrieve_fn: RankFn | None = None,
+        reranker_fn: RankFn | None = None,
+        reranker_depth: int = _DEFAULT_RERANKER_DEPTH,
     ) -> list[SearchHit]:
         """Search immediately with plain BM25; run anything else on a worker thread.
 
-        ``reranker`` re-scores the first stage's candidates (ADR-0027). A
-        standalone ``"systemOne"`` failure raises `SystemOneError`.
+        ``reranker`` re-scores the first stage's candidates with a built-in
+        method; ``retrieve_fn`` (with ``method="custom"``) and ``reranker_fn``
+        rank with your own function (ADR-0027).
         """
         _validate_method(method)
         _validate_reranker(method, reranker)
+        ambient = with_turn_context(projection)
+        if method == "custom":
+            if retrieve_fn is None:
+                raise ValueError('method "custom" needs a retrieve_fn')
+            return await custom_search(
+                self._native, "tool", retrieve_fn, query, top_k, origin, ambient
+            )
+        if reranker_fn is not None:
+            return await custom_rerank(
+                self._native,
+                lambda: self._stage_one(query, top_k, reranker_depth, method, ambient),
+                "tool",
+                reranker_fn,
+                query,
+                top_k,
+                origin,
+                ambient,
+            )
         if method == "bm25" and reranker is None:
             return self.search_with_origin(query, top_k, origin, projection)
-        if _uses_dense(method, reranker):
-            if self._undriven_builds > 0:
-                raise RuntimeError(_UNAWAITED_REGISTER)
-            await self._maybe_rebuild_on_model_change()
-        ambient = with_turn_context(projection)
+        if self._undriven_builds > 0:
+            raise RuntimeError(_UNAWAITED_REGISTER)
+        await self._maybe_rebuild_on_model_change()
         reranker_method = reranker["method"] if reranker is not None else None
-        reranker_depth = reranker.get("depth") if reranker is not None else None
+        reranker_depth_opt = reranker.get("depth") if reranker is not None else None
         return await self._run_dense(
             lambda: self._native._search_with_options(
-                query, top_k, origin, method, reranker_method, reranker_depth, ambient
-            ),
-            gated=_uses_dense(method, reranker),
+                query, top_k, origin, method, reranker_method, reranker_depth_opt, ambient
+            )
         )
 
-    async def cloud_pick_async(
+    async def _stage_one(
         self,
         query: str,
         top_k: int,
-        origin: SearchOrigin,
-        mode: PickMode,
-        projection: RuntimeEventProjection | None = None,
-    ) -> tuple[list[SearchHit], list[str], bool | None]:
-        """Rank through the Cloud Tool Picker on a worker thread (ADR-0027).
-
-        Returns ``(hits, dropped_ids, confident)``. Raises `CloudError`.
-        """
-        ambient = with_turn_context(projection)
+        depth: int,
+        method: str,
+        ambient: RuntimeEventProjection | None,
+    ) -> Any:
+        turn_id = (ambient or {}).get("turn_id")
+        if method not in _DENSE_METHODS:
+            return self._native._stage_one(query, top_k, depth, method, turn_id)
+        if self._undriven_builds > 0:
+            raise RuntimeError(_UNAWAITED_REGISTER)
+        await self._maybe_rebuild_on_model_change()
         return await self._run_dense(
-            lambda: self._native._cloud_pick(query, top_k, origin, mode, ambient), gated=False
+            lambda: self._native._stage_one(query, top_k, depth, method, turn_id)
         )
-
-    async def cloud_sync_async(self, source_id: str) -> CloudSyncOutcome:
-        """Upload the catalog as ``source_id``'s snapshot on a worker thread (ADR-0028).
-
-        Skipped when unchanged since the last acknowledged sync. Raises `CloudError`.
-        """
-        version, tools, unchanged, skipped = await self._run_dense(
-            lambda: self._native._cloud_sync(source_id), gated=False
-        )
-        return CloudSyncOutcome(version, tools, unchanged, skipped)
 
     def record_event(
         self,
@@ -1040,18 +985,9 @@ class ToolRegistry:
         """Drain captured native trace events."""
         return self._native.drain_trace_events()
 
-    async def _run_dense(
-        self, operation: Callable[[], _DenseResult], *, gated: bool = True
-    ) -> _DenseResult:
-        """Run ``operation`` on a worker thread, counted as pending.
-
-        Pending makes a concurrent mutation fail fast. ``gated`` also serializes
-        it behind the dense gate; network-only work (Cloud picks and syncs, a
-        system-one search with no dense stage) passes ``gated=False`` so
-        concurrent requests overlap instead of queueing behind one another.
-        """
+    async def _run_dense(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
         self._queue_dense()
-        runner = self._run_dense_task(operation, gated)
+        runner = self._run_dense_task(operation)
         try:
             task = asyncio.create_task(runner)
         except BaseException:
@@ -1069,12 +1005,8 @@ class ToolRegistry:
         await asyncio.wait({task})
         return task.result()
 
-    async def _run_dense_task(
-        self, operation: Callable[[], _DenseResult], gated: bool
-    ) -> _DenseResult:
+    async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
         try:
-            if not gated:
-                return await asyncio.to_thread(operation)
             return await asyncio.to_thread(self._run_dense_worker, operation)
         finally:
             # Also runs when the default executor rejects submission, before a
@@ -1198,15 +1130,16 @@ class ToolCatalog:
     def __init__(
         self,
         trace: TraceSinkConfig | None = None,
-        method: SearchMethod | None = None,
+        method: SearchMethod = "bm25",
         embedding: EmbeddingSpec | None = None,
         experimental_dense_weight: float | None = None,
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
-        cloud: CloudConfig | None = None,
+        retrieve_fn: RankFn | None = None,
+        reranker_fn: RankFn | None = None,
+        reranker_depth: int | None = None,
     ) -> None:
         """Create an empty catalog.
 
@@ -1260,34 +1193,30 @@ class ToolCatalog:
                 ``experimental_build_embedding_artifact``; the runtime remedy
                 for uncovered current-kind entries is ``on_miss="embed"``.
             reranker: re-score the first stage's top candidates with another
-                method — see `RerankerConfig`. Applies to `search_async` (and
-                the capability tools, which use it); a synchronous `search` on a
-                catalog with a reranker raises. **Experimental.**
-            system_one: where ``"systemOne"`` (as method or reranker) sends
-                rankings — Jev, called directly; see `SystemOneConfig`.
-                ``"systemOne"`` sends the query and each candidate's searchable
-                text to Jev. **Experimental.**
-            cloud: make Ratel Cloud this catalog's owner — ``register`` syncs
-                the catalog to the Cloud project and ``search_async`` ranks
-                through the Cloud Tool Picker; see `CloudConfig`. Not
-                combinable with ``method``, ``reranker`` or ``system_one``.
+                built-in method — see `RerankerConfig`. Applies to
+                `search_async` (and the capability tools, which use it); a
+                synchronous `search` on a catalog with a reranker raises.
                 **Experimental.**
+            retrieve_fn: rank the whole catalog with your own function — a
+                model you call, such as Jev via `ratel_jev_plugin`. Needs
+                ``method="custom"``; see `RankFn`. **Experimental.**
+            reranker_fn: rerank the first stage's top ``reranker_depth``
+                candidates with your own function. Not combinable with
+                ``reranker`` or ``method="custom"``; see `RankFn`.
+                **Experimental.**
+            reranker_depth: how many first-stage candidates ``reranker_fn``
+                sees (default 50; raised to ``top_k`` when lower).
         """
-        _validate_cloud(cloud, method, reranker, system_one, experimental_embedding_artifact)
-        method = method or "bm25"
-        _validate_method(method)
-        _validate_reranker(method, reranker)
+        _validate_ranking(
+            "ToolCatalog", method, reranker, retrieve_fn, reranker_fn, reranker_depth
+        )
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
         self._method: SearchMethod = method
         self._reranker = reranker
-        self._cloud = cloud
-        self._source_id = (cloud or {}).get("source_id") or _default_source_id()
-        self._warned_dropped: set[str] = set()
-        # Syncs `register` scheduled but nobody has started driving. Bumped
-        # synchronously, so a forgotten `await` leaves it > 0 and the next pick
-        # fails loudly instead of ranking a Cloud catalog that never got the tools.
-        self._undriven_syncs = 0
+        self._retrieve_fn = retrieve_fn
+        self._reranker_fn = reranker_fn
+        self._reranker_depth = reranker_depth or _DEFAULT_RERANKER_DEPTH
         self._registry = ToolRegistry(
             embedding,
             method=method,
@@ -1296,8 +1225,6 @@ class ToolCatalog:
             experimental_bm25_b=experimental_bm25_b,
             experimental_embedding_artifact=experimental_embedding_artifact,
             reranker=reranker,
-            system_one=system_one,
-            cloud=cloud,
         )
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
@@ -1331,8 +1258,6 @@ class ToolCatalog:
             ValueError: if any `execute` is `None`, or a schema isn't JSON-serializable.
             EmbedderError: when embedding fails (when awaited).
             ArtifactWarmError: when a configured artifact fails (when awaited).
-            CloudError: when a cloud catalog's sync fails and ``on_sync_error``
-                is not ``"warn"`` (when awaited).
             RuntimeError: if a dense operation already owns the registry.
         """
         batch = [tools] if isinstance(tools, ExecutableTool) else list(tools)
@@ -1349,42 +1274,7 @@ class ToolCatalog:
                 input_schema=tool.input_schema,
                 output_schema=tool.output_schema,
             )
-        build = self._registry._build_tracked(bool(batch))
-        if self._cloud is None:
-            return build
-        self._undriven_syncs += 1
-        return self._build_then_sync(build)
-
-    async def _build_then_sync(self, build: Awaitable[None]) -> None:
-        # Driven now: a pick that races an in-flight sync is not a forgotten await.
-        self._undriven_syncs -= 1
-        await build
-        try:
-            await self.sync_now()
-        except CloudError as error:
-            if (self._cloud or {}).get("on_sync_error") != "warn":
-                raise
-            warnings.warn(
-                "ratel: cloud catalog sync failed; picks may rank a stale catalog until "
-                f"the next register or sync_now(): {error}",
-                RuntimeWarning,
-                stacklevel=3,
-            )
-
-    async def sync_now(self) -> CloudSyncOutcome:
-        """Upload the catalog to Ratel Cloud now (ADR-0028).
-
-        ``register`` already does this on a cloud catalog; call it to retry
-        after a failed sync. Skipped when nothing changed since the last
-        acknowledged sync.
-
-        Raises:
-            CloudError: the upload failed.
-            RuntimeError: the catalog was not constructed with ``cloud``.
-        """
-        if self._cloud is None:
-            raise RuntimeError("sync_now() needs a catalog constructed with `cloud`")
-        return await self._registry.cloud_sync_async(self._source_id)
+        return self._registry._build_tracked(bool(batch))
 
     def search(
         self,
@@ -1418,9 +1308,9 @@ class ToolCatalog:
         """
         resolved_method = method or self._method
         _validate_method(resolved_method)
-        if self._cloud is not None:
-            raise RuntimeError(_CLOUD_NEEDS_ASYNC)
-        if self._reranker is not None:
+        if resolved_method == "custom":
+            raise RuntimeError(_CUSTOM_NEEDS_ASYNC)
+        if self._reranker is not None or self._reranker_fn is not None:
             raise RuntimeError(_RERANKER_NEEDS_ASYNC)
         if resolved_method != "bm25":
             raise RuntimeError(
@@ -1444,7 +1334,6 @@ class ToolCatalog:
         method: SearchMethod | None = None,
         turn_id: str | None = None,
         reranker: RerankerConfig | Literal[False] | None = None,
-        mode: PickMode | None = None,
     ) -> list[SearchHit]:
         """Rank tools asynchronously with any method and the catalog's reranker.
 
@@ -1455,21 +1344,27 @@ class ToolCatalog:
             query: what the caller wants to do.
             top_k: max hits to return.
             origin: who initiated the search — labels the trace event only.
-            method: per-call override of the catalog's default method.
+            method: per-call override of the catalog's default method;
+                ``"custom"`` needs the catalog's ``retrieve_fn``.
             turn_id: correlates this search with the invoke(s) that follow it
                 (ADR-0014) — see `search`.
-            reranker: per-call reranker; ``None`` (default) uses the catalog's,
-                ``False`` turns it off for this call.
-            mode: pick mode for this call, on a cloud catalog.
+            reranker: per-call built-in reranker, replacing the catalog's
+                ``reranker`` or ``reranker_fn``; ``None`` (default) keeps the
+                catalog's, ``False`` turns both off for this call.
 
         Raises:
-            SystemOneError: a standalone ``"systemOne"`` search failed.
-            CloudError: a cloud catalog's Tool Picker search failed.
+            ValueError: invalid ranking options.
+            RetrieverError: re-raised from ``retrieve_fn``, or a non-transient
+                one from ``reranker_fn``; anything else they raise propagates.
         """
-        if self._cloud is not None:
-            return await self._pick_async(query, top_k, origin, method, reranker, mode, turn_id)
         resolved_method = method or self._method
+        _validate_method(resolved_method)
+        if resolved_method == "custom" and self._retrieve_fn is None:
+            raise ValueError('method "custom" needs a catalog constructed with a retrieve_fn')
         resolved_reranker = _resolve_reranker(reranker, self._reranker)
+        reranker_fn = self._reranker_fn if reranker is None else None
+        if resolved_method == "custom":
+            resolved_reranker, reranker_fn = None, None
         _validate_reranker(resolved_method, resolved_reranker)
         return await trace_search_async(
             SEARCH_TARGET_TOOL,
@@ -1477,48 +1372,18 @@ class ToolCatalog:
             top_k,
             origin,
             lambda projection: self._registry.search_async(
-                query, top_k, origin, resolved_method, projection, reranker=resolved_reranker
+                query,
+                top_k,
+                origin,
+                resolved_method,
+                projection,
+                reranker=resolved_reranker,
+                retrieve_fn=self._retrieve_fn,
+                reranker_fn=reranker_fn,
+                reranker_depth=self._reranker_depth,
             ),
             turn_id,
         )
-
-    async def _pick_async(
-        self,
-        query: str,
-        top_k: int,
-        origin: SearchOrigin,
-        method: SearchMethod | None,
-        reranker: RerankerConfig | Literal[False] | None,
-        mode: PickMode | None,
-        turn_id: str | None,
-    ) -> list[SearchHit]:
-        if self._undriven_syncs > 0:
-            raise RuntimeError(_UNAWAITED_CLOUD_REGISTER)
-        if method is not None or reranker not in (None, False):
-            raise ValueError(
-                "a cloud catalog is ranked by the Cloud Tool Picker; pass `mode`, not `method`"
-            )
-        resolved = mode or (self._cloud or {}).get("mode") or "precise"
-        if resolved not in _PICK_MODES:
-            raise ValueError(f'unknown cloud mode "{resolved}"')
-
-        async def _pick(projection: RuntimeEventProjection) -> list[SearchHit]:
-            hits, dropped, _confident = await self._registry.cloud_pick_async(
-                query, top_k, origin, resolved, projection
-            )
-            unseen = [i for i in dropped if i not in self._warned_dropped]
-            if unseen:
-                self._warned_dropped.update(unseen)
-                warnings.warn(
-                    "ratel: the Cloud Tool Picker returned tools not registered in this "
-                    f"catalog ({', '.join(unseen)}); they were dropped. Register them here, "
-                    "or re-sync.",
-                    RuntimeWarning,
-                    stacklevel=4,
-                )
-            return hits
-
-        return await trace_search_async(SEARCH_TARGET_TOOL, query, top_k, origin, _pick, turn_id)
 
     def has(self, tool_id: str) -> bool:
         """Return whether a tool with this id is registered."""

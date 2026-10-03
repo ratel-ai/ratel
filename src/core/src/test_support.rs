@@ -159,7 +159,7 @@ pub(crate) fn build_test_artifact<'a, T: Embeddable + 'a>(
 
 /// One request as a mock server saw it.
 pub(crate) struct MockHttpRequest {
-    /// `"PUT /api/v1/catalog/snapshot HTTP/1.1"`.
+    /// `"POST /v1/systemone HTTP/1.1"`.
     pub(crate) request_line: String,
     pub(crate) body: serde_json::Value,
     pub(crate) authorization: Option<String>,
@@ -167,7 +167,7 @@ pub(crate) struct MockHttpRequest {
 
 /// Read one HTTP/1.1 request from a mock-server connection: the JSON body and
 /// the `authorization` header, if any. Shared by the endpoint-embedder and
-/// cloud client tests.
+/// Jev client tests.
 pub(crate) fn read_http_request(
     stream: &mut std::net::TcpStream,
 ) -> (serde_json::Value, Option<String>) {
@@ -212,154 +212,5 @@ pub(crate) fn read_http_request_full(stream: &mut std::net::TcpStream) -> MockHt
                 };
             }
         }
-    }
-}
-
-/// A [`crate::cloud::CloudApi`] that answers from a script and records every
-/// call — registry tests use it in place of HTTP.
-pub(crate) struct ScriptedCloud {
-    pick_reply: std::sync::Mutex<Result<crate::cloud::Picked, crate::CloudError>>,
-    sync_reply: std::sync::Mutex<Result<crate::SyncOutcome, crate::CloudError>>,
-    /// `(query, mode, top_k)` per pick.
-    pub(crate) picks: std::sync::Mutex<Vec<(String, crate::PickMode, usize)>>,
-    /// `(source_id, tools)` per snapshot sent.
-    pub(crate) snapshots: std::sync::Mutex<Vec<(String, Vec<crate::cloud::SnapshotTool>)>>,
-}
-
-impl ScriptedCloud {
-    pub(crate) fn new() -> Self {
-        Self {
-            pick_reply: std::sync::Mutex::new(Ok(crate::cloud::Picked {
-                ranked: Vec::new(),
-                confident: None,
-            })),
-            sync_reply: std::sync::Mutex::new(Ok(crate::SyncOutcome {
-                catalog_version: "v1".into(),
-                tools: 0,
-                unchanged: false,
-                skipped: false,
-            })),
-            picks: std::sync::Mutex::new(Vec::new()),
-            snapshots: std::sync::Mutex::new(Vec::new()),
-        }
-    }
-
-    pub(crate) fn picking(self, ranked: &[(&str, f32)], confident: Option<bool>) -> Self {
-        *self.pick_reply.lock().unwrap() = Ok(crate::cloud::Picked {
-            ranked: ranked.iter().map(|(id, s)| ((*id).into(), *s)).collect(),
-            confident,
-        });
-        self
-    }
-
-    pub(crate) fn failing_picks(self, error: crate::CloudError) -> Self {
-        *self.pick_reply.lock().unwrap() = Err(error);
-        self
-    }
-
-    pub(crate) fn set_sync_reply(&self, reply: Result<crate::SyncOutcome, crate::CloudError>) {
-        *self.sync_reply.lock().unwrap() = reply;
-    }
-
-    pub(crate) fn snapshot_count(&self) -> usize {
-        self.snapshots.lock().unwrap().len()
-    }
-}
-
-impl crate::cloud::CloudApi for ScriptedCloud {
-    fn pick(
-        &self,
-        query: &str,
-        mode: crate::PickMode,
-        top_k: usize,
-    ) -> Result<crate::cloud::Picked, crate::CloudError> {
-        self.picks
-            .lock()
-            .unwrap()
-            .push((query.to_string(), mode, top_k));
-        let mut reply = self.pick_reply.lock().unwrap().clone()?;
-        reply.ranked.truncate(top_k);
-        Ok(reply)
-    }
-
-    fn put_snapshot(
-        &self,
-        source_id: &str,
-        tools: &[crate::cloud::SnapshotTool],
-    ) -> Result<crate::SyncOutcome, crate::CloudError> {
-        self.snapshots
-            .lock()
-            .unwrap()
-            .push((source_id.to_string(), tools.to_vec()));
-        let mut outcome = self.sync_reply.lock().unwrap().clone()?;
-        outcome.tools = tools.len();
-        Ok(outcome)
-    }
-}
-/// A [`crate::system_one::SystemOne`] that answers from a script and records
-/// the candidate ids it was offered — registry tests use it in place of the
-/// HTTP client. Like the real client it only ranks offered ids and returns
-/// every candidate, the unscripted ones last at 0.
-pub(crate) struct ScriptedSystemOne {
-    reply: Result<Vec<(String, f32)>, crate::SystemOneError>,
-    offered: std::sync::Mutex<Vec<Vec<String>>>,
-    kinds: std::sync::Mutex<Vec<crate::CandidateKind>>,
-}
-
-impl ScriptedSystemOne {
-    /// Answers every call with `ranked`, cut at the call's `top_k`.
-    pub(crate) fn ranking(ranked: &[(&str, f32)]) -> Self {
-        Self {
-            reply: Ok(ranked.iter().map(|(id, s)| ((*id).into(), *s)).collect()),
-            offered: std::sync::Mutex::new(Vec::new()),
-            kinds: std::sync::Mutex::new(Vec::new()),
-        }
-    }
-
-    /// Fails every call with `error`.
-    pub(crate) fn failing(error: crate::SystemOneError) -> Self {
-        Self {
-            reply: Err(error),
-            offered: std::sync::Mutex::new(Vec::new()),
-            kinds: std::sync::Mutex::new(Vec::new()),
-        }
-    }
-
-    /// The candidate ids of each call, in call order.
-    pub(crate) fn offered(&self) -> Vec<Vec<String>> {
-        self.offered.lock().unwrap().clone()
-    }
-
-    /// The kind each call asked about, in call order.
-    pub(crate) fn kinds(&self) -> Vec<crate::CandidateKind> {
-        self.kinds.lock().unwrap().clone()
-    }
-}
-
-impl crate::system_one::SystemOne for ScriptedSystemOne {
-    fn rank(
-        &self,
-        _query: &str,
-        candidates: &[crate::system_one::Candidate],
-        top_k: usize,
-        kind: crate::CandidateKind,
-    ) -> Result<Vec<(String, f32)>, crate::SystemOneError> {
-        self.kinds.lock().unwrap().push(kind);
-        let offered: Vec<String> = candidates.iter().map(|c| c.id.clone()).collect();
-        self.offered.lock().unwrap().push(offered.clone());
-        // Behave like the real client: rank only what was offered, and return
-        // every other candidate after the scripted ones at 0, in input order.
-        let scripted = self.reply.clone()?;
-        let mut ranked: Vec<(String, f32)> = scripted
-            .into_iter()
-            .filter(|(id, _)| offered.contains(id))
-            .collect();
-        for id in offered {
-            if !ranked.iter().any(|(r, _)| *r == id) {
-                ranked.push((id, 0.0));
-            }
-        }
-        ranked.truncate(top_k);
-        Ok(ranked)
     }
 }

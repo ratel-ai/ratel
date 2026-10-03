@@ -226,59 +226,33 @@ await catalog.invoke("read_github_issues", {}, undefined, turnId); // pairs with
 await catalog.invoke("create_linear_task", {}, undefined, turnId); // pairs with the second
 ```
 
-## Ratel Cloud Tool Picker (experimental)
+## Your own retriever or reranker (experimental)
 
-`cloud` makes Ratel Cloud the tool catalog's owner ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md), [ADR 0028](../../../docs/adr/0028-cloud-catalog-sync.md)). `register` uploads the catalog to your Cloud project, and `searchAsync` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Executors stay local: the picker returns ids, and `invoke` runs your handler.
-
-```ts
-const r = ratel({ cloud: { mode: "precise" } });      // key in RATEL_API_KEY
-await r.tools.register(...tools);                      // syncs the catalog to Cloud
-const hits = await r.tools.searchAsync("refund the last order", 5);   // POST /v1/tools/pick
-```
-
-| `mode` | How it ranks | Speed | Cost |
-|---|---|---|---|
-| `"instant"` | BM25 | milliseconds | free |
-| `"precise"` (default) | a BM25 shortlist judged by a system-one model | ~300 ms | metered |
-| `"exhaustive"` | the system-one model over the whole catalog | seconds | metered |
-
-**A `cloud` catalog sends its tool names, descriptions and schemas, and every query, to Ratel Cloud.** Local methods never leave the process.
-
-- **Options:**
-  - `cloud: { mode?, url?, apiKeyEnv?, sourceId?, onSyncError? }` works on `ratel()` and on a standalone `ToolCatalog`.
-  - `sourceId` names this service's catalog in the project, because a sync replaces that source's tools. It defaults to the runtime-events `sourceId`, then `OTEL_SERVICE_NAME`, then `"ratel"`.
-  - `cloud` can't be combined with `method`, `reranker`, `systemOne` or `experimentalEmbeddingArtifact`. On `ratel()`, those options still apply to skills.
-- **Sync:**
-  - `register` resolves once Cloud has acknowledged the catalog. An unchanged catalog isn't re-sent.
-  - A failed sync rejects `register` with a `CloudError`; the tool stays registered locally. `onSyncError: "warn"` only warns instead.
-  - `await catalog.syncNow()` retries a failed sync.
-- **Search:**
-  - `searchAsync(q, k, { mode })` overrides the mode for one call. `topK` is capped at 20.
-  - Synchronous `search` throws on a `cloud` catalog.
-  - Ids the picker returns that aren't registered locally are dropped, with a warning.
-- **Errors:** `CloudError.code` is one of `"Unauthorized"`, `"InsufficientCredits"`, `"NoSyncedTools"`, `"RateLimited"` (with `retryAfterSecs`), `"TooLarge"`, `"Timeout"`, `"Unavailable"`, `"Http"`, `"Malformed"` or `"Config"`.
-- **Skills and facts** stay local for now.
-
-## System-one ranking with Jev (experimental)
-
-For a catalog that lives in your process, `"systemOne"` asks [Jev](https://docs.typesafe.ai) (TypeSafe AI) to pick tools directly. There is no Ratel Cloud involved, and you supply your own TypeSafe key ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md)). It can be the only stage, or a reranker on top of a local method:
+A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
 
 ```ts
-new ToolCatalog({ method: "systemOne" });                                       // Jev ranks every tool
-new ToolCatalog({ method: "bm25", reranker: { method: "systemOne", depth: 50 } }); // BM25, then Jev
+import { ratel, ratelJevPlugin, type RankFn } from "@ratel-ai/sdk";
+
+const jev = ratelJevPlugin();                                   // Jev (TypeSafe AI); key in TYPESAFE_API_KEY
+ratel({ method: "custom", retrieveFn: jev.retrieve });          // Jev ranks every tool and skill
+ratel({ method: "bm25", rerankerFn: jev.rerank });              // BM25, then Jev over its top 50
+ratel({ method: "bm25", rerankerFn: jev.rerank, rerankerDepth: 20 });
+
+const mine: RankFn = (query, candidates) =>                    // any model, your own call
+  Promise.all(candidates.map(async (c) => ({ id: c.id, score: await myModel(query, c.text) })));
 ```
 
-- **Configuration:** `systemOne: { url?, apiKeyEnv?, model? }`. The defaults are `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`.
-- **Large catalogs:** one Jev question holds up to 150 tools (and 80,000 characters). Above that, the tools are split into groups judged in parallel, and the best of each group fill a final question. Results never exceed what that final question holds.
-- **What Jev is asked:** the question names what is being ranked, so a tool catalog asks which tool to call and a skill catalog which skill helps.
-- **Failures:** `SystemOneError` carries `.code` (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`, `"RateLimited"`, `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"`, `"Malformed"`), `.status` and `.retryAfterSecs`. A standalone search throws every failure. A reranker throws misconfiguration (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`) and otherwise falls back to the first stage's order and records a `rerank_fallback:<code>` trace stage.
-- **Privacy:** **`"systemOne"` sends the query and each candidate's searchable text to Jev.**
-
-`"systemOne"` and `cloud` are two routes to the same model. `cloud` is for a catalog Ratel Cloud owns, and Cloud runs Jev on the server for `precise` and `exhaustive`. `systemOne` is for a catalog the SDK owns, and the SDK calls Jev itself. One catalog can't use both. Facts don't support `"systemOne"`.
+- **The contract:** `(query, candidates: { id, kind: "tool" | "skill", text }[], topK) => { id, score }[]`, sync or async. Unknown ids are dropped, each id counts once, and scores are clamped to `[0, 1]`.
+  - As `retrieveFn` (with `method: "custom"`) the search returns only the ids the function returned, best first, at most `topK`.
+  - As `rerankerFn` it sees the first stage's top `rerankerDepth` (default 50, raised to `topK`). It can't add a tool the first stage missed; candidates it leaves out follow at 0, in first-stage order.
+- **Failures:** whatever `retrieveFn` throws fails the search. A `rerankerFn` that throws a `RetrieverError` with `transient: true` keeps the first stage's order and records a `rerank_fallback:<code>` trace stage; anything else it throws fails the search.
+- **Rules:** both are async-only (synchronous `search` throws). `rerankerFn` can't be combined with `reranker`, nor with `method: "custom"`. `searchAsync(q, k, { reranker: null })` turns either reranker off for one call. `SkillCatalog` takes the same options; facts don't, and `ratel()` ranks facts with BM25 when `method` is `"custom"`.
+- **The Jev plugin:** `ratelJevPlugin({ url?, apiKeyEnv?, model? })` defaults to `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`. Above 150 candidates (or 80,000 characters) it judges groups in parallel and fills a final question with their winners. Its `RetrieverError.code` is `"Config"`, `"Unauthorized"` or `"InvalidRequest"` (not transient), or `"RateLimited"` (with `retryAfterSecs`), `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"` or `"Malformed"` (transient).
+- **Privacy:** **the Jev plugin sends the query and each candidate's searchable text to TypeSafe AI.** The built-in methods never leave the process.
 
 ## Reranking (experimental)
 
-A catalog can rank in two stages ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker.method` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"` or `"systemOne"`, but the two stages must use different methods:
+A catalog can rank in two stages with built-in methods ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). `method` picks candidates, and `reranker.method` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"` or `"hybrid"`, but the two stages must use different methods:
 
 ```ts
 const catalog = new ToolCatalog({ method: "bm25", reranker: { method: "semantic", depth: 30 } });

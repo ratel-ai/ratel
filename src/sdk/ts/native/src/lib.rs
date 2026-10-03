@@ -169,13 +169,9 @@ const ARTIFACT_WARM_ERROR_PREFIX: &str = "RATEL_ARTIFACT_WARM_ERROR:";
 /// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
 const ARTIFACT_ERROR_PREFIX: &str = "RATEL_ARTIFACT_ERROR:";
 
-/// Private NAPI→TypeScript transport prefix for system-one (Jev) errors.
-/// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
-const SYSTEM_ONE_ERROR_PREFIX: &str = "RATEL_SYSTEM_ONE_ERROR:";
-
-/// Private NAPI→TypeScript transport prefix for Ratel Cloud errors.
-/// Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
-const CLOUD_ERROR_PREFIX: &str = "RATEL_CLOUD_ERROR:";
+/// Private NAPI→TypeScript transport prefix for ranking-function errors (the
+/// Jev ranker's). Must stay identical to the constant in `src/sdk/ts/src/errors.ts`.
+const RETRIEVER_ERROR_PREFIX: &str = "RATEL_RETRIEVER_ERROR:";
 
 /// The second stage of a two-stage search (ADR-0027): `method` re-scores the
 /// first stage's top `depth` candidates (default 50).
@@ -213,167 +209,347 @@ fn uses_dense(method: &str, reranker: Option<&RerankerConfig>) -> bool {
 }
 
 /// Embedder and option errors keep their plain message (the TS side already
-/// classifies embedder messages); a system-one failure travels in a private
-/// envelope so TS can raise a typed `SystemOneError` without parsing prose.
+/// classifies embedder messages).
 fn map_search_error(error: core::SearchError) -> napi::Error {
-    match error {
-        core::SearchError::SystemOne(inner) => {
-            let retry_after = match &inner {
-                core::SystemOneError::RateLimited { retry_after_secs } => *retry_after_secs,
-                _ => None,
-            };
-            let payload = json!({
-                "code": inner.code(),
-                "message": inner.to_string(),
-                "status": inner.status(),
-                "retryAfterSecs": retry_after,
-            });
-            napi::Error::from_reason(format!("{SYSTEM_ONE_ERROR_PREFIX}{payload}"))
-        }
-        other => napi::Error::from_reason(other.to_string()),
+    napi::Error::from_reason(error.to_string())
+}
+
+/// A catalog item offered to a caller-supplied ranking function (ADR-0027).
+#[napi(object)]
+pub struct RankCandidate {
+    pub id: String,
+    pub text: String,
+}
+
+/// One id a ranking function scored.
+#[napi(object)]
+pub struct RankedId {
+    pub id: String,
+    pub score: f64,
+}
+
+fn from_core_candidates(candidates: &[core::RankCandidate]) -> Vec<RankCandidate> {
+    candidates
+        .iter()
+        .map(|c| RankCandidate {
+            id: c.id.clone(),
+            text: c.text.clone(),
+        })
+        .collect()
+}
+
+fn to_core_ranked(ranked: Vec<RankedId>) -> Vec<(String, f32)> {
+    ranked.into_iter().map(|r| (r.id, r.score as f32)).collect()
+}
+
+/// A reranker's outcome from TS: its ranking, or the code of a transient
+/// failure to fall back on — exactly one of them.
+fn rerank_outcome(
+    ranked: Option<Vec<RankedId>>,
+    fallback_code: Option<String>,
+) -> napi::Result<core::RerankOutcome> {
+    match (ranked, fallback_code) {
+        (Some(ranked), None) => Ok(core::RerankOutcome::Ranked(to_core_ranked(ranked))),
+        (None, Some(code)) => Ok(core::RerankOutcome::Fallback { code }),
+        _ => Err(napi::Error::from_reason(
+            "completeRerank needs either a ranking or a fallback code",
+        )),
     }
 }
 
-fn system_one_config(
-    url: Option<String>,
-    api_key_env: Option<String>,
-    model: Option<String>,
-) -> core::SystemOneConfig {
-    let mut config = core::SystemOneConfig::default();
-    if let Some(url) = url {
-        config = config.with_url(url);
-    }
-    if let Some(name) = api_key_env {
-        config = config.with_api_key_env(name);
-    }
-    if let Some(model) = model {
-        config = config.with_model(model);
-    }
-    config
+/// Whether a first stage ranks against the dense cache, and so must hold the
+/// dense gate like a semantic search does.
+fn is_dense_method(method: &str) -> bool {
+    matches!(method, "semantic" | "dense" | "hybrid")
 }
 
-/// A Cloud failure travels in a private envelope so TS can raise a typed
-/// `CloudError` without parsing prose.
-fn map_cloud_error(error: core::CloudError) -> napi::Error {
-    let status = match &error {
-        core::CloudError::Unauthorized { status } | core::CloudError::Http { status, .. } => {
-            Some(*status)
-        }
-        _ => None,
-    };
+fn tool_hits(hits: Vec<core::SearchHit>) -> Vec<SearchHit> {
+    hits.into_iter()
+        .map(|hit| SearchHit {
+            tool_id: hit.tool_id,
+            score: hit.score as f64,
+            rank: hit.rank,
+            fused: hit.fused,
+            relevance: f64::from(hit.relevance),
+        })
+        .collect()
+}
+
+fn skill_hits(hits: Vec<core::SkillHit>) -> Vec<SkillHit> {
+    hits.into_iter()
+        .map(|hit| SkillHit {
+            skill_id: hit.skill_id,
+            score: hit.score as f64,
+            rank: hit.rank,
+            fused: hit.fused,
+            relevance: f64::from(hit.relevance),
+        })
+        .collect()
+}
+
+/// A Jev failure travels in a private envelope so TS can raise a typed
+/// `RetrieverError` without parsing prose.
+fn map_jev_error(error: core::JevError) -> napi::Error {
     let retry_after = match &error {
-        core::CloudError::RateLimited { retry_after_secs } => *retry_after_secs,
+        core::JevError::RateLimited { retry_after_secs } => *retry_after_secs,
         _ => None,
     };
     let payload = json!({
         "code": error.code(),
         "message": error.to_string(),
-        "status": status,
+        "status": error.status(),
         "retryAfterSecs": retry_after,
+        "transient": error.is_transient(),
     });
-    napi::Error::from_reason(format!("{CLOUD_ERROR_PREFIX}{payload}"))
+    napi::Error::from_reason(format!("{RETRIEVER_ERROR_PREFIX}{payload}"))
 }
 
-/// A Tool Picker result: the picked tools registered here, the picked ids
-/// that are not, and whether the judge was confident.
+/// Where the Jev ranker sends requests; unset fields keep the defaults
+/// (`https://api.typesafe.ai`, `TYPESAFE_API_KEY`, `jev-latest`).
 #[napi(object)]
-pub struct CloudPickResult {
-    pub hits: Vec<SearchHit>,
-    pub dropped: Vec<String>,
-    pub confident: Option<bool>,
+pub struct JevRankerConfig {
+    pub url: Option<String>,
+    pub api_key_env: Option<String>,
+    pub model: Option<String>,
 }
 
-/// What a catalog sync did.
-#[napi(object)]
-pub struct CloudSyncResult {
-    pub catalog_version: String,
-    pub tools: u32,
-    pub unchanged: bool,
-    pub skipped: bool,
+/// The Jev client behind the SDK's Jev plugin (ADR-0027). Search never calls
+/// it; the plugin wraps `rankAsync` into a retrieve/rerank function.
+#[napi]
+pub struct JevRanker {
+    inner: Arc<core::JevRanker>,
 }
 
-pub struct CloudPickTask {
-    inner: Arc<RwLock<core::ToolRegistry>>,
-    query: String,
-    top_k: u32,
-    origin: String,
-    mode: String,
-    context: core::TraceEventContext,
-    _permit: DenseOperationPermit,
-}
+#[napi]
+impl JevRanker {
+    #[napi(constructor)]
+    pub fn new(config: Option<JevRankerConfig>) -> Self {
+        let mut c = core::JevConfig::default();
+        if let Some(config) = config {
+            if let Some(url) = config.url {
+                c = c.with_url(url);
+            }
+            if let Some(name) = config.api_key_env {
+                c = c.with_api_key_env(name);
+            }
+            if let Some(model) = config.model {
+                c = c.with_model(model);
+            }
+        }
+        Self {
+            inner: Arc::new(core::JevRanker::new(c)),
+        }
+    }
 
-impl Task for CloudPickTask {
-    type Output = CloudPickResult;
-    type JsValue = CloudPickResult;
-
-    fn compute(&mut self) -> napi::Result<Self::Output> {
-        let mode: core::PickMode = self
-            .mode
-            .parse()
-            .map_err(|e: core::ParsePickModeError| napi::Error::from_reason(e.to_string()))?;
-        let registry = self
-            .inner
-            .read()
-            .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
-        let pick = registry
-            .cloud_pick(
-                &self.query,
-                self.top_k as usize,
-                parse_origin(self.origin.as_str()),
-                mode,
-                self.context.clone(),
-            )
-            .map_err(map_cloud_error)?;
-        Ok(CloudPickResult {
-            hits: pick
-                .hits
+    /// Rank `candidates` for `query` on a libuv worker: `(id, probability)`
+    /// best first, at most `topK`. `kind` is `"tool"` or `"skill"`.
+    #[napi(ts_return_type = "Promise<Array<RankedId>>")]
+    pub fn rank_async(
+        &self,
+        query: String,
+        candidates: Vec<RankCandidate>,
+        top_k: u32,
+        kind: String,
+    ) -> napi::Result<AsyncTask<JevRankTask>> {
+        let kind = match kind.as_str() {
+            "tool" => core::CandidateKind::Tool,
+            "skill" => core::CandidateKind::Skill,
+            other => {
+                return Err(napi::Error::from_reason(format!(
+                    "unknown candidate kind {other:?} (expected \"tool\" or \"skill\")"
+                )));
+            }
+        };
+        Ok(AsyncTask::new(JevRankTask {
+            ranker: self.inner.clone(),
+            query,
+            candidates: candidates
                 .into_iter()
-                .map(|hit| SearchHit {
-                    tool_id: hit.tool_id,
-                    score: hit.score as f64,
-                    rank: hit.rank,
-                    fused: hit.fused,
-                    relevance: f64::from(hit.relevance),
+                .map(|c| core::RankCandidate {
+                    id: c.id,
+                    text: c.text,
                 })
                 .collect(),
-            dropped: pick.dropped,
-            confident: pick.confident,
-        })
+            top_k: top_k as usize,
+            kind,
+        }))
+    }
+}
+
+pub struct JevRankTask {
+    ranker: Arc<core::JevRanker>,
+    query: String,
+    candidates: Vec<core::RankCandidate>,
+    top_k: usize,
+    kind: core::CandidateKind,
+}
+
+impl Task for JevRankTask {
+    type Output = Vec<(String, f32)>;
+    type JsValue = Vec<RankedId>;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        self.ranker
+            .rank(&self.query, &self.candidates, self.top_k, self.kind)
+            .map_err(map_jev_error)
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
-        Ok(output)
+        Ok(output
+            .into_iter()
+            .map(|(id, score)| RankedId {
+                id,
+                score: f64::from(score),
+            })
+            .collect())
     }
 }
 
-pub struct CloudSyncTask {
-    inner: Arc<RwLock<core::ToolRegistry>>,
-    source_id: String,
-    _permit: DenseOperationPermit,
+/// Stage 1 of a tool search whose reranker runs in TypeScript (ADR-0027).
+/// Hand it to `ToolRegistry.completeRerank` once; it records the search then.
+#[napi]
+pub struct ToolStageOne {
+    inner: Mutex<Option<core::StageOne<core::SearchHit>>>,
+    candidates: Vec<RankCandidate>,
 }
 
-impl Task for CloudSyncTask {
-    type Output = CloudSyncResult;
-    type JsValue = CloudSyncResult;
+#[napi]
+impl ToolStageOne {
+    /// The candidates to rerank, in stage-1 order.
+    #[napi(getter)]
+    pub fn candidates(&self) -> Vec<RankCandidate> {
+        self.candidates
+            .iter()
+            .map(|c| RankCandidate {
+                id: c.id.clone(),
+                text: c.text.clone(),
+            })
+            .collect()
+    }
+}
+
+/// The skill twin of [`ToolStageOne`].
+#[napi]
+pub struct SkillStageOne {
+    inner: Mutex<Option<core::StageOne<core::SkillHit>>>,
+    candidates: Vec<RankCandidate>,
+}
+
+#[napi]
+impl SkillStageOne {
+    /// The candidates to rerank, in stage-1 order.
+    #[napi(getter)]
+    pub fn candidates(&self) -> Vec<RankCandidate> {
+        self.candidates
+            .iter()
+            .map(|c| RankCandidate {
+                id: c.id.clone(),
+                text: c.text.clone(),
+            })
+            .collect()
+    }
+}
+
+fn take_stage<H>(slot: &Mutex<Option<core::StageOne<H>>>) -> napi::Result<core::StageOne<H>> {
+    slot.lock()
+        .map_err(|_| napi::Error::from_reason("stage-one lock poisoned"))?
+        .take()
+        .ok_or_else(|| napi::Error::from_reason("this stage-one result was already completed"))
+}
+
+pub struct ToolStageOneTask {
+    inner: Arc<RwLock<core::ToolRegistry>>,
+    dense_gate: Option<Arc<Mutex<()>>>,
+    query: String,
+    top_k: u32,
+    depth: u32,
+    method: String,
+    turn_id: Option<String>,
+    _permit: Option<DenseOperationPermit>,
+}
+
+impl Task for ToolStageOneTask {
+    type Output = core::StageOne<core::SearchHit>;
+    type JsValue = ToolStageOne;
 
     fn compute(&mut self) -> napi::Result<Self::Output> {
+        let method = parse_method(&self.method)?;
+        let _dense = self
+            .dense_gate
+            .as_ref()
+            .map(|gate| {
+                gate.lock()
+                    .map_err(|_| napi::Error::from_reason("dense operation mutex poisoned"))
+            })
+            .transpose()?;
         let registry = self
             .inner
             .read()
             .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
-        let outcome = registry
-            .cloud_sync(&self.source_id)
-            .map_err(map_cloud_error)?;
-        Ok(CloudSyncResult {
-            catalog_version: outcome.catalog_version,
-            tools: outcome.tools as u32,
-            unchanged: outcome.unchanged,
-            skipped: outcome.skipped,
-        })
+        registry
+            .stage_one(
+                &self.query,
+                self.top_k as usize,
+                self.depth as usize,
+                method,
+                self.turn_id.as_deref(),
+            )
+            .map_err(map_search_error)
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
-        Ok(output)
+        Ok(ToolStageOne {
+            candidates: from_core_candidates(output.candidates()),
+            inner: Mutex::new(Some(output)),
+        })
+    }
+}
+
+pub struct SkillStageOneTask {
+    inner: Arc<RwLock<core::SkillRegistry>>,
+    dense_gate: Option<Arc<Mutex<()>>>,
+    query: String,
+    top_k: u32,
+    depth: u32,
+    method: String,
+    turn_id: Option<String>,
+    _permit: Option<DenseOperationPermit>,
+}
+
+impl Task for SkillStageOneTask {
+    type Output = core::StageOne<core::SkillHit>;
+    type JsValue = SkillStageOne;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        let method = parse_method(&self.method)?;
+        let _dense = self
+            .dense_gate
+            .as_ref()
+            .map(|gate| {
+                gate.lock()
+                    .map_err(|_| napi::Error::from_reason("dense operation mutex poisoned"))
+            })
+            .transpose()?;
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("skill registry lock poisoned"))?;
+        registry
+            .stage_one(
+                &self.query,
+                self.top_k as usize,
+                self.depth as usize,
+                method,
+                self.turn_id.as_deref(),
+            )
+            .map_err(map_search_error)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(SkillStageOne {
+            candidates: from_core_candidates(output.candidates()),
+            inner: Mutex::new(Some(output)),
+        })
     }
 }
 
@@ -1668,7 +1844,7 @@ impl ToolRegistry {
                 })?;
         if !matches!(parsed_method, SearchMethod::Bm25) {
             return Err(napi::Error::from_reason(
-                "semantic, hybrid, and systemOne search are asynchronous; use searchWithMethodAsync() or ToolCatalog.searchAsync()",
+                "semantic and hybrid search are asynchronous; use searchWithMethodAsync() or ToolCatalog.searchAsync()",
             ));
         }
         let hits = self
@@ -1734,69 +1910,96 @@ impl ToolRegistry {
         })
     }
 
-    /// Point `"systemOne"` searches and rerankers at another Jev endpoint, key
-    /// or model; unset fields keep the defaults (`https://api.typesafe.ai`,
-    /// `TYPESAFE_API_KEY`, `jev-latest`).
+    /// Every tool as a candidate for a caller-supplied ranking function
+    /// (ADR-0027), in registration order.
     #[napi]
-    pub fn set_system_one(
-        &self,
-        url: Option<String>,
-        api_key_env: Option<String>,
-        model: Option<String>,
-    ) -> napi::Result<()> {
-        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
-        registry.set_system_one(system_one_config(url, api_key_env, model));
-        Ok(())
+    pub fn rank_candidates(&self) -> napi::Result<Vec<RankCandidate>> {
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
+        Ok(from_core_candidates(&registry.rank_candidates()))
     }
 
-    /// Make Ratel Cloud this catalog's owner (ADR-0027); unset fields keep the
-    /// defaults (`https://cloud.ratel.sh`, `RATEL_API_KEY`).
+    /// Complete a search a caller-supplied function ranked over
+    /// `rankCandidates()`; records it. `tookMs` is the function's running time.
     #[napi]
-    pub fn set_cloud(&self, url: Option<String>, api_key_env: Option<String>) -> napi::Result<()> {
-        let mut config = core::CloudConfig::default();
-        if let Some(url) = url {
-            config = config.with_url(url);
-        }
-        if let Some(name) = api_key_env {
-            config = config.with_api_key_env(name);
-        }
-        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
-        registry.set_cloud(config);
-        Ok(())
-    }
-
-    /// Rank through the Cloud Tool Picker on a libuv worker. Holds the busy
-    /// permit for the request, so a concurrent register fails fast instead of
-    /// blocking the event loop on the network call.
-    #[napi(ts_return_type = "Promise<CloudPickResult>")]
-    pub fn cloud_pick_async(
+    pub fn complete_custom_search(
         &self,
         query: String,
         top_k: u32,
         origin: String,
-        mode: String,
+        ranked: Vec<RankedId>,
+        took_ms: u32,
         context: Option<TraceEventContextConfig>,
-    ) -> AsyncTask<CloudPickTask> {
-        AsyncTask::new(CloudPickTask {
+    ) -> napi::Result<Vec<SearchHit>> {
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
+        Ok(tool_hits(registry.complete_custom_search(
+            &query,
+            top_k as usize,
+            parse_origin(origin.as_str()),
+            to_core_ranked(ranked),
+            u64::from(took_ms),
+            trace_event_context(context),
+        )))
+    }
+
+    /// Run stage 1 of a search whose reranker runs in TypeScript, on a libuv
+    /// worker; records nothing until `completeRerank`.
+    #[napi(ts_return_type = "Promise<ToolStageOne>")]
+    pub fn stage_one_async(
+        &self,
+        query: String,
+        top_k: u32,
+        depth: u32,
+        method: String,
+        turn_id: Option<String>,
+    ) -> AsyncTask<ToolStageOneTask> {
+        let is_dense = is_dense_method(&method);
+        AsyncTask::new(ToolStageOneTask {
             inner: self.inner.clone(),
+            dense_gate: is_dense.then(|| self.dense_gate.clone()),
             query,
             top_k,
-            origin,
-            mode,
-            context: trace_event_context(context),
-            _permit: DenseOperationPermit::new(self.pending_dense.clone()),
+            depth,
+            method,
+            turn_id,
+            _permit: is_dense.then(|| DenseOperationPermit::new(self.pending_dense.clone())),
         })
     }
 
-    /// Upload the catalog to Cloud as `sourceId`'s snapshot on a libuv worker
-    /// (ADR-0028); skipped when unchanged since the last acknowledged sync.
-    #[napi(ts_return_type = "Promise<CloudSyncResult>")]
-    pub fn cloud_sync_async(&self, source_id: String) -> AsyncTask<CloudSyncTask> {
-        AsyncTask::new(CloudSyncTask {
-            inner: self.inner.clone(),
-            source_id,
-            _permit: DenseOperationPermit::new(self.pending_dense.clone()),
-        })
+    /// Complete a search started by `stageOneAsync` with the reranker's
+    /// `ranked` list, or with `fallbackCode` to keep stage 1's order after a
+    /// transient failure; records it. `tookMs` is the reranker's running time.
+    #[napi]
+    #[allow(clippy::too_many_arguments)]
+    pub fn complete_rerank(
+        &self,
+        query: String,
+        origin: String,
+        stage_one: &ToolStageOne,
+        ranked: Option<Vec<RankedId>>,
+        fallback_code: Option<String>,
+        took_ms: u32,
+        context: Option<TraceEventContextConfig>,
+    ) -> napi::Result<Vec<SearchHit>> {
+        let outcome = rerank_outcome(ranked, fallback_code)?;
+        let stage = take_stage(&stage_one.inner)?;
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?;
+        Ok(tool_hits(registry.complete_rerank(
+            &query,
+            parse_origin(origin.as_str()),
+            stage,
+            outcome,
+            u64::from(took_ms),
+            trace_event_context(context),
+        )))
     }
 
     /// Pre-compute embeddings for not-yet-embedded tools on a worker. Registration
@@ -2762,7 +2965,7 @@ impl SkillRegistry {
                 })?;
         if !matches!(parsed_method, SearchMethod::Bm25) {
             return Err(napi::Error::from_reason(
-                "semantic, hybrid, and systemOne search are asynchronous; use searchWithMethodAsync() or SkillCatalog.searchAsync()",
+                "semantic and hybrid search are asynchronous; use searchWithMethodAsync() or SkillCatalog.searchAsync()",
             ));
         }
         let hits = self
@@ -2828,19 +3031,96 @@ impl SkillRegistry {
         })
     }
 
-    /// Point `"systemOne"` searches and rerankers at another Jev endpoint, key
-    /// or model; unset fields keep the defaults (`https://api.typesafe.ai`,
-    /// `TYPESAFE_API_KEY`, `jev-latest`).
+    /// Every skill as a candidate for a caller-supplied ranking function
+    /// (ADR-0027), in registration order.
     #[napi]
-    pub fn set_system_one(
+    pub fn rank_candidates(&self) -> napi::Result<Vec<RankCandidate>> {
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("skill registry lock poisoned"))?;
+        Ok(from_core_candidates(&registry.rank_candidates()))
+    }
+
+    /// Complete a search a caller-supplied function ranked over
+    /// `rankCandidates()`; records it. `tookMs` is the function's running time.
+    #[napi]
+    pub fn complete_custom_search(
         &self,
-        url: Option<String>,
-        api_key_env: Option<String>,
-        model: Option<String>,
-    ) -> napi::Result<()> {
-        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
-        registry.set_system_one(system_one_config(url, api_key_env, model));
-        Ok(())
+        query: String,
+        top_k: u32,
+        origin: String,
+        ranked: Vec<RankedId>,
+        took_ms: u32,
+        context: Option<TraceEventContextConfig>,
+    ) -> napi::Result<Vec<SkillHit>> {
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("skill registry lock poisoned"))?;
+        Ok(skill_hits(registry.complete_custom_search(
+            &query,
+            top_k as usize,
+            parse_origin(origin.as_str()),
+            to_core_ranked(ranked),
+            u64::from(took_ms),
+            trace_event_context(context),
+        )))
+    }
+
+    /// Run stage 1 of a search whose reranker runs in TypeScript, on a libuv
+    /// worker; records nothing until `completeRerank`.
+    #[napi(ts_return_type = "Promise<SkillStageOne>")]
+    pub fn stage_one_async(
+        &self,
+        query: String,
+        top_k: u32,
+        depth: u32,
+        method: String,
+        turn_id: Option<String>,
+    ) -> AsyncTask<SkillStageOneTask> {
+        let is_dense = is_dense_method(&method);
+        AsyncTask::new(SkillStageOneTask {
+            inner: self.inner.clone(),
+            dense_gate: is_dense.then(|| self.dense_gate.clone()),
+            query,
+            top_k,
+            depth,
+            method,
+            turn_id,
+            _permit: is_dense.then(|| DenseOperationPermit::new(self.pending_dense.clone())),
+        })
+    }
+
+    /// Complete a search started by `stageOneAsync` with the reranker's
+    /// `ranked` list, or with `fallbackCode` to keep stage 1's order after a
+    /// transient failure; records it. `tookMs` is the reranker's running time.
+    #[napi]
+    #[allow(clippy::too_many_arguments)]
+    pub fn complete_rerank(
+        &self,
+        query: String,
+        origin: String,
+        stage_one: &SkillStageOne,
+        ranked: Option<Vec<RankedId>>,
+        fallback_code: Option<String>,
+        took_ms: u32,
+        context: Option<TraceEventContextConfig>,
+    ) -> napi::Result<Vec<SkillHit>> {
+        let outcome = rerank_outcome(ranked, fallback_code)?;
+        let stage = take_stage(&stage_one.inner)?;
+        let registry = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("skill registry lock poisoned"))?;
+        Ok(skill_hits(registry.complete_rerank(
+            &query,
+            parse_origin(origin.as_str()),
+            stage,
+            outcome,
+            u64::from(took_ms),
+            trace_event_context(context),
+        )))
     }
 
     /// See `ToolRegistry.build_embeddings`.

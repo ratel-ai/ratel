@@ -21,6 +21,7 @@ analogue: constant content injected into the context, gated by the pure
 version bump.
 """
 
+from ._custom_ranking import RankCandidate, RankCandidateKind, RankedId, RankFn
 from ._native import SearchHit, SkillHit
 from .capabilities import (
     INVOKE_TOOL_ID,
@@ -34,8 +35,6 @@ from .capabilities import (
 from .catalog import (
     AdaptiveRankingStatus,
     BaselineTurn,
-    CloudConfig,
-    CloudSyncOutcome,
     EmbeddingModelConfig,
     EmbeddingSpec,
     EndpointEmbeddingConfig,
@@ -46,12 +45,10 @@ from .catalog import (
     LocalEmbeddingConfig,
     OllamaEmbeddingConfig,
     OriginFilterOption,
-    PickMode,
     ProvenanceOption,
     RerankerConfig,
     SearchMethod,
     SearchOrigin,
-    SystemOneConfig,
     Tool,
     ToolCatalog,
     ToolRegistry,
@@ -68,11 +65,10 @@ from .embedding_artifact import (
 from .exceptions import (
     ArtifactError,
     ArtifactWarmError,
-    CloudError,
     DimensionMismatchError,
     EmbedderError,
     IncompatibleMergeError,
-    SystemOneError,
+    RetrieverError,
 )
 from .intent_graph_storage import (
     IntentGraphStorage,
@@ -84,6 +80,7 @@ from .intent_graph_storage import (
     S3Transport,
     StaleIntentGraphError,
 )
+from .jev import RetrieverPlugin, ratel_jev_plugin
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
 from .runtime_events import (
     RUNTIME_EVENT_MAX_HITS,
@@ -136,11 +133,13 @@ __all__ = [
     "OllamaEmbeddingConfig",
     "PendingReplace",
     "ReplaceOutcome",
-    "CloudConfig",
-    "CloudError",
-    "CloudSyncOutcome",
-    "PickMode",
+    "RankCandidate",
+    "RankCandidateKind",
+    "RankedId",
+    "RankFn",
     "RerankerConfig",
+    "RetrieverError",
+    "RetrieverPlugin",
     "RuntimeCatalog",
     "RuntimeEvent",
     "RuntimeEventHandler",
@@ -163,8 +162,6 @@ __all__ = [
     "SkillHit",
     "SkillRegistry",
     "StaleIntentGraphError",
-    "SystemOneConfig",
-    "SystemOneError",
     "Tool",
     "BaselineTurn",
     "ToolCatalog",
@@ -176,6 +173,7 @@ __all__ = [
     "configure_telemetry",
     "current_turn_id",
     "experimental_build_embedding_artifact",
+    "ratel_jev_plugin",
     "format_upstream_line",
     "get_skill_content_tool",
     "invoke_tool_tool",

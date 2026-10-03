@@ -432,25 +432,18 @@ create_exception!(
 );
 create_exception!(
     _native,
-    CloudError,
+    JevError,
     PyRuntimeError,
-    "A Ratel Cloud request failed: a Tool Picker search or a catalog sync (subclass of RuntimeError)."
+    "A Jev ranking failed; carries `code`, `status`, `retry_after_secs` and `transient`. The Python Jev plugin re-raises it as `RetrieverError`."
 );
 
-create_exception!(
-    _native,
-    SystemOneError,
-    PyRuntimeError,
-    "A systemOne (Jev) search failed: Jev unreachable, key rejected, rate limited, or a malformed ranking (subclass of RuntimeError)."
-);
-
-fn system_one_pyerr(e: core::SystemOneError) -> PyErr {
+fn jev_pyerr(e: core::JevError) -> PyErr {
     let retry_after = match &e {
-        core::SystemOneError::RateLimited { retry_after_secs } => *retry_after_secs,
+        core::JevError::RateLimited { retry_after_secs } => *retry_after_secs,
         _ => None,
     };
     Python::with_gil(|py| {
-        let err = SystemOneError::new_err(e.to_string());
+        let err = JevError::new_err(e.to_string());
         let value = err.value(py);
         if let Err(attr_err) = value.setattr("code", e.code()) {
             return attr_err;
@@ -461,49 +454,7 @@ fn system_one_pyerr(e: core::SystemOneError) -> PyErr {
         if let Err(attr_err) = value.setattr("retry_after_secs", retry_after) {
             return attr_err;
         }
-        err
-    })
-}
-
-fn system_one_config(
-    url: Option<String>,
-    api_key_env: Option<String>,
-    model: Option<String>,
-) -> core::SystemOneConfig {
-    let mut config = core::SystemOneConfig::default();
-    if let Some(url) = url {
-        config = config.with_url(url);
-    }
-    if let Some(name) = api_key_env {
-        config = config.with_api_key_env(name);
-    }
-    if let Some(model) = model {
-        config = config.with_model(model);
-    }
-    config
-}
-
-fn cloud_pyerr(e: core::CloudError) -> PyErr {
-    let status = match &e {
-        core::CloudError::Unauthorized { status } | core::CloudError::Http { status, .. } => {
-            Some(*status)
-        }
-        _ => None,
-    };
-    let retry_after = match &e {
-        core::CloudError::RateLimited { retry_after_secs } => *retry_after_secs,
-        _ => None,
-    };
-    Python::with_gil(|py| {
-        let err = CloudError::new_err(e.to_string());
-        let value = err.value(py);
-        if let Err(attr_err) = value.setattr("code", e.code()) {
-            return attr_err;
-        }
-        if let Err(attr_err) = value.setattr("status", status) {
-            return attr_err;
-        }
-        if let Err(attr_err) = value.setattr("retry_after_secs", retry_after) {
+        if let Err(attr_err) = value.setattr("transient", e.is_transient()) {
             return attr_err;
         }
         err
@@ -511,11 +462,10 @@ fn cloud_pyerr(e: core::CloudError) -> PyErr {
 }
 
 /// Map a two-stage search failure: embedder errors keep their typed classes,
-/// system-one failures raise `SystemOneError`, bad options `ValueError`.
+/// bad options raise `ValueError`.
 fn map_search_err(e: core::SearchError) -> PyErr {
     match e {
         core::SearchError::Embedder(inner) => map_embedder_err(inner),
-        core::SearchError::SystemOne(inner) => system_one_pyerr(inner),
         core::SearchError::InvalidOptions { message } => PyValueError::new_err(message),
         other => PyRuntimeError::new_err(other.to_string()),
     }
@@ -526,13 +476,9 @@ fn search_options(
     reranker_method: Option<&str>,
     reranker_depth: Option<u32>,
 ) -> PyResult<core::SearchOptions> {
-    let parse = |m: &str| {
-        m.parse::<core::SearchMethod>()
-            .map_err(|e| PyValueError::new_err(e.to_string()))
-    };
-    let mut options = core::SearchOptions::new(parse(method)?);
+    let mut options = core::SearchOptions::new(parse_search_method(method)?);
     if let Some(reranker_method) = reranker_method {
-        let mut reranker = core::Reranker::new(parse(reranker_method)?);
+        let mut reranker = core::Reranker::new(parse_search_method(reranker_method)?);
         if let Some(depth) = reranker_depth {
             reranker = reranker
                 .with_depth(depth as usize)
@@ -543,15 +489,166 @@ fn search_options(
     Ok(options)
 }
 
-fn cloud_config(url: Option<String>, api_key_env: Option<String>) -> core::CloudConfig {
-    let mut config = core::CloudConfig::default();
-    if let Some(url) = url {
-        config = config.with_url(url);
+fn parse_search_method(method: &str) -> PyResult<core::SearchMethod> {
+    method
+        .parse::<core::SearchMethod>()
+        .map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
+fn candidate_tuples(candidates: &[core::RankCandidate]) -> Vec<(String, String)> {
+    candidates
+        .iter()
+        .map(|c| (c.id.clone(), c.text.clone()))
+        .collect()
+}
+
+fn ranked_pairs(ranked: Vec<(String, f64)>) -> Vec<(String, f32)> {
+    ranked
+        .into_iter()
+        .map(|(id, score)| (id, score as f32))
+        .collect()
+}
+
+/// A reranker's outcome from Python: its ranking, or the code of a transient
+/// failure to fall back on — exactly one of them.
+fn rerank_outcome(
+    ranked: Option<Vec<(String, f64)>>,
+    fallback_code: Option<String>,
+) -> PyResult<core::RerankOutcome> {
+    match (ranked, fallback_code) {
+        (Some(ranked), None) => Ok(core::RerankOutcome::Ranked(ranked_pairs(ranked))),
+        (None, Some(code)) => Ok(core::RerankOutcome::Fallback { code }),
+        _ => Err(PyValueError::new_err(
+            "_complete_rerank needs either a ranking or a fallback code",
+        )),
     }
-    if let Some(name) = api_key_env {
-        config = config.with_api_key_env(name);
+}
+
+fn take_stage<H>(slot: &Mutex<Option<core::StageOne<H>>>) -> PyResult<core::StageOne<H>> {
+    slot.lock()
+        .map_err(|_| PyRuntimeError::new_err("stage-one lock poisoned"))?
+        .take()
+        .ok_or_else(|| PyRuntimeError::new_err("this stage-one result was already completed"))
+}
+
+/// The Jev client behind the Python Jev plugin (ADR-0027). Search never calls
+/// it; the plugin wraps `rank` into a retrieve/rerank function.
+#[pyclass(frozen)]
+pub struct JevRanker {
+    inner: core::JevRanker,
+}
+
+#[pymethods]
+impl JevRanker {
+    /// A Jev client; unset fields keep the defaults (`https://api.typesafe.ai`,
+    /// `TYPESAFE_API_KEY`, `jev-latest`). Opens no connection.
+    #[new]
+    #[pyo3(signature = (url=None, api_key_env=None, model=None))]
+    fn new(url: Option<String>, api_key_env: Option<String>, model: Option<String>) -> Self {
+        let mut config = core::JevConfig::default();
+        if let Some(url) = url {
+            config = config.with_url(url);
+        }
+        if let Some(name) = api_key_env {
+            config = config.with_api_key_env(name);
+        }
+        if let Some(model) = model {
+            config = config.with_model(model);
+        }
+        Self {
+            inner: core::JevRanker::new(config),
+        }
     }
-    config
+
+    /// Rank `(id, text)` candidates for `query` with the GIL released:
+    /// `(id, probability)` best first, at most `top_k`. `kind` is `"tool"` or
+    /// `"skill"`. Failures raise `JevError`.
+    fn rank(
+        &self,
+        py: Python<'_>,
+        query: String,
+        candidates: Vec<(String, String)>,
+        top_k: u32,
+        kind: &str,
+    ) -> PyResult<Vec<(String, f64)>> {
+        let kind = match kind {
+            "tool" => core::CandidateKind::Tool,
+            "skill" => core::CandidateKind::Skill,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown candidate kind {other:?} (expected \"tool\" or \"skill\")"
+                )));
+            }
+        };
+        let candidates: Vec<core::RankCandidate> = candidates
+            .into_iter()
+            .map(|(id, text)| core::RankCandidate { id, text })
+            .collect();
+        let ranked = py
+            .allow_threads(|| self.inner.rank(&query, &candidates, top_k as usize, kind))
+            .map_err(jev_pyerr)?;
+        Ok(ranked
+            .into_iter()
+            .map(|(id, score)| (id, f64::from(score)))
+            .collect())
+    }
+}
+
+/// Stage 1 of a tool search whose reranker runs in Python (ADR-0027). Hand it
+/// to `ToolRegistry._complete_rerank` once; it records the search then.
+#[pyclass(frozen)]
+pub struct ToolStageOne {
+    inner: Mutex<Option<core::StageOne<core::SearchHit>>>,
+    candidates: Vec<(String, String)>,
+}
+
+#[pymethods]
+impl ToolStageOne {
+    /// The `(id, text)` candidates to rerank, in stage-1 order.
+    #[getter]
+    fn candidates(&self) -> Vec<(String, String)> {
+        self.candidates.clone()
+    }
+}
+
+/// The skill twin of [`ToolStageOne`].
+#[pyclass(frozen)]
+pub struct SkillStageOne {
+    inner: Mutex<Option<core::StageOne<core::SkillHit>>>,
+    candidates: Vec<(String, String)>,
+}
+
+#[pymethods]
+impl SkillStageOne {
+    /// The `(id, text)` candidates to rerank, in stage-1 order.
+    #[getter]
+    fn candidates(&self) -> Vec<(String, String)> {
+        self.candidates.clone()
+    }
+}
+
+fn tool_hits(hits: Vec<core::SearchHit>) -> Vec<SearchHit> {
+    hits.into_iter()
+        .map(|hit| SearchHit {
+            tool_id: hit.tool_id,
+            score: hit.score as f64,
+            rank: hit.rank,
+            fused: hit.fused,
+            relevance: f64::from(hit.relevance),
+        })
+        .collect()
+}
+
+fn skill_hits(hits: Vec<core::SkillHit>) -> Vec<SkillHit> {
+    hits.into_iter()
+        .map(|hit| SkillHit {
+            skill_id: hit.skill_id,
+            score: hit.score as f64,
+            rank: hit.rank,
+            fused: hit.fused,
+            relevance: f64::from(hit.relevance),
+        })
+        .collect()
 }
 
 /// Map a core embedding error to a typed Python exception (base `EmbedderError`,
@@ -1157,20 +1254,6 @@ impl ToolRegistry {
             .collect())
     }
 
-    /// Point `"systemOne"` searches and rerankers at another Jev endpoint, key
-    /// or model; unset fields keep the defaults (`https://api.typesafe.ai`,
-    /// `TYPESAFE_API_KEY`, `jev-latest`).
-    #[pyo3(signature = (url=None, api_key_env=None, model=None))]
-    fn set_system_one(
-        &mut self,
-        url: Option<String>,
-        api_key_env: Option<String>,
-        model: Option<String>,
-    ) {
-        self.inner
-            .set_system_one(system_one_config(url, api_key_env, model));
-    }
-
     /// Private GIL-releasing two-stage search (ADR-0027): `method`, then an
     /// optional `reranker_method` over its top `reranker_depth` candidates.
     #[pyo3(signature = (query, top_k, origin, method, reranker_method=None, reranker_depth=None, context=None))]
@@ -1207,66 +1290,89 @@ impl ToolRegistry {
             .collect())
     }
 
-    /// Make Ratel Cloud this catalog's owner (ADR-0027); unset fields keep the
-    /// defaults (`https://cloud.ratel.sh`, `RATEL_API_KEY`).
-    #[pyo3(signature = (url=None, api_key_env=None))]
-    fn set_cloud(&mut self, url: Option<String>, api_key_env: Option<String>) {
-        self.inner.set_cloud(cloud_config(url, api_key_env));
+    /// Every tool as an `(id, text)` candidate for a caller-supplied ranking
+    /// function (ADR-0027), in registration order.
+    fn rank_candidates(&self) -> Vec<(String, String)> {
+        candidate_tuples(&self.inner.rank_candidates())
     }
 
-    /// Private GIL-releasing Tool Picker search: `(hits, dropped_ids,
-    /// confident)`. Failures raise `CloudError`; an unknown mode `ValueError`.
-    #[pyo3(signature = (query, top_k, origin, mode, context=None))]
-    fn _cloud_pick(
+    /// Complete a search a caller-supplied function ranked over
+    /// `rank_candidates()`; records it. `took_ms` is the function's running time.
+    #[pyo3(signature = (query, top_k, origin, ranked, took_ms, context=None))]
+    fn _complete_custom_search(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        ranked: Vec<(String, f64)>,
+        took_ms: u64,
+        context: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Vec<SearchHit>> {
+        Ok(tool_hits(self.inner.complete_custom_search(
+            &query,
+            top_k as usize,
+            parse_origin(origin.as_str()),
+            ranked_pairs(ranked),
+            took_ms,
+            trace_event_context(context)?,
+        )))
+    }
+
+    /// Run stage 1 of a search whose reranker runs in Python, with the GIL
+    /// released; records nothing until `_complete_rerank`.
+    #[pyo3(signature = (query, top_k, depth, method, turn_id=None))]
+    fn _stage_one(
         &self,
         py: Python<'_>,
         query: String,
         top_k: u32,
-        origin: String,
-        mode: String,
-        context: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<(Vec<SearchHit>, Vec<String>, Option<bool>)> {
-        let mode = mode
-            .parse::<core::PickMode>()
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let origin = parse_origin(origin.as_str());
-        let context = trace_event_context(context)?;
-        let pick = py
+        depth: u32,
+        method: String,
+        turn_id: Option<String>,
+    ) -> PyResult<ToolStageOne> {
+        let method = parse_search_method(&method)?;
+        let stage = py
             .allow_threads(|| {
-                self.inner
-                    .cloud_pick(&query, top_k as usize, origin, mode, context)
+                self.inner.stage_one(
+                    &query,
+                    top_k as usize,
+                    depth as usize,
+                    method,
+                    turn_id.as_deref(),
+                )
             })
-            .map_err(cloud_pyerr)?;
-        let hits = pick
-            .hits
-            .into_iter()
-            .map(|hit| SearchHit {
-                tool_id: hit.tool_id,
-                score: hit.score as f64,
-                rank: hit.rank,
-                fused: hit.fused,
-                relevance: f64::from(hit.relevance),
-            })
-            .collect();
-        Ok((hits, pick.dropped, pick.confident))
+            .map_err(map_search_err)?;
+        Ok(ToolStageOne {
+            candidates: candidate_tuples(stage.candidates()),
+            inner: Mutex::new(Some(stage)),
+        })
     }
 
-    /// Private GIL-releasing catalog sync (ADR-0028): `(catalog_version,
-    /// tools, unchanged, skipped)`. Failures raise `CloudError`.
-    fn _cloud_sync(
+    /// Complete a search started by `_stage_one` with the reranker's `ranked`
+    /// list, or with `fallback_code` to keep stage 1's order after a transient
+    /// failure; records it. `took_ms` is the reranker's running time.
+    #[pyo3(signature = (query, origin, stage_one, ranked, fallback_code, took_ms, context=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn _complete_rerank(
         &self,
-        py: Python<'_>,
-        source_id: String,
-    ) -> PyResult<(String, usize, bool, bool)> {
-        let outcome = py
-            .allow_threads(|| self.inner.cloud_sync(&source_id))
-            .map_err(cloud_pyerr)?;
-        Ok((
-            outcome.catalog_version,
-            outcome.tools,
-            outcome.unchanged,
-            outcome.skipped,
-        ))
+        query: String,
+        origin: String,
+        stage_one: &ToolStageOne,
+        ranked: Option<Vec<(String, f64)>>,
+        fallback_code: Option<String>,
+        took_ms: u64,
+        context: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Vec<SearchHit>> {
+        let outcome = rerank_outcome(ranked, fallback_code)?;
+        let stage = take_stage(&stage_one.inner)?;
+        Ok(tool_hits(self.inner.complete_rerank(
+            &query,
+            parse_origin(origin.as_str()),
+            stage,
+            outcome,
+            took_ms,
+            trace_event_context(context)?,
+        )))
     }
 
     /// Search with an explicit method (`"bm25"` | `"semantic"` | `"hybrid"`).
@@ -1828,18 +1934,89 @@ impl SkillRegistry {
             .collect())
     }
 
-    /// Point `"systemOne"` searches and rerankers at another Jev endpoint, key
-    /// or model; unset fields keep the defaults (`https://api.typesafe.ai`,
-    /// `TYPESAFE_API_KEY`, `jev-latest`).
-    #[pyo3(signature = (url=None, api_key_env=None, model=None))]
-    fn set_system_one(
-        &mut self,
-        url: Option<String>,
-        api_key_env: Option<String>,
-        model: Option<String>,
-    ) {
-        self.inner
-            .set_system_one(system_one_config(url, api_key_env, model));
+    /// Every skill as an `(id, text)` candidate for a caller-supplied ranking
+    /// function (ADR-0027), in registration order.
+    fn rank_candidates(&self) -> Vec<(String, String)> {
+        candidate_tuples(&self.inner.rank_candidates())
+    }
+
+    /// Complete a search a caller-supplied function ranked over
+    /// `rank_candidates()`; records it. `took_ms` is the function's running time.
+    #[pyo3(signature = (query, top_k, origin, ranked, took_ms, context=None))]
+    fn _complete_custom_search(
+        &self,
+        query: String,
+        top_k: u32,
+        origin: String,
+        ranked: Vec<(String, f64)>,
+        took_ms: u64,
+        context: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Vec<SkillHit>> {
+        Ok(skill_hits(self.inner.complete_custom_search(
+            &query,
+            top_k as usize,
+            parse_origin(origin.as_str()),
+            ranked_pairs(ranked),
+            took_ms,
+            trace_event_context(context)?,
+        )))
+    }
+
+    /// Run stage 1 of a search whose reranker runs in Python, with the GIL
+    /// released; records nothing until `_complete_rerank`.
+    #[pyo3(signature = (query, top_k, depth, method, turn_id=None))]
+    fn _stage_one(
+        &self,
+        py: Python<'_>,
+        query: String,
+        top_k: u32,
+        depth: u32,
+        method: String,
+        turn_id: Option<String>,
+    ) -> PyResult<SkillStageOne> {
+        let method = parse_search_method(&method)?;
+        let stage = py
+            .allow_threads(|| {
+                self.inner.stage_one(
+                    &query,
+                    top_k as usize,
+                    depth as usize,
+                    method,
+                    turn_id.as_deref(),
+                )
+            })
+            .map_err(map_search_err)?;
+        Ok(SkillStageOne {
+            candidates: candidate_tuples(stage.candidates()),
+            inner: Mutex::new(Some(stage)),
+        })
+    }
+
+    /// Complete a search started by `_stage_one` with the reranker's `ranked`
+    /// list, or with `fallback_code` to keep stage 1's order after a transient
+    /// failure; records it. `took_ms` is the reranker's running time.
+    #[pyo3(signature = (query, origin, stage_one, ranked, fallback_code, took_ms, context=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn _complete_rerank(
+        &self,
+        query: String,
+        origin: String,
+        stage_one: &SkillStageOne,
+        ranked: Option<Vec<(String, f64)>>,
+        fallback_code: Option<String>,
+        took_ms: u64,
+        context: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Vec<SkillHit>> {
+        let outcome = rerank_outcome(ranked, fallback_code)?;
+        let stage = take_stage(&stage_one.inner)?;
+        Ok(skill_hits(self.inner.complete_rerank(
+            &query,
+            parse_origin(origin.as_str()),
+            stage,
+            outcome,
+            took_ms,
+            trace_event_context(context)?,
+        )))
     }
 
     /// Private GIL-releasing two-stage search (ADR-0027): `method`, then an
@@ -2472,7 +2649,9 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.py().get_type::<IncompatibleMergeError>(),
     )?;
     m.add("ArtifactWarmError", m.py().get_type::<ArtifactWarmError>())?;
-    m.add("CloudError", m.py().get_type::<CloudError>())?;
-    m.add("SystemOneError", m.py().get_type::<SystemOneError>())?;
+    m.add("JevError", m.py().get_type::<JevError>())?;
+    m.add_class::<JevRanker>()?;
+    m.add_class::<ToolStageOne>()?;
+    m.add_class::<SkillStageOne>()?;
     Ok(())
 }

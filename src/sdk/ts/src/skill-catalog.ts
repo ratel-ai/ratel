@@ -2,17 +2,20 @@ import { SearchTarget } from "@ratel-ai/telemetry";
 import type { NativeEventSubscription, ReplaceOutcome, Skill, SkillHit } from "../native/index.cjs";
 import { warmFromEmbeddingArtifactSource } from "./artifact-source-warm.js";
 import {
-  assertValidReranker,
+  assertValidRanking,
+  CUSTOM_NEEDS_ASYNC,
   type EmbeddingSpec,
   type ExperimentalBm25Params,
   type ObservationPolicyOptions,
+  type RankFn,
+  type RankingOptions,
   RERANKER_NEEDS_ASYNC,
   type RerankerConfig,
+  type ResolvedSearch,
   resolveSearchAsyncArgs,
   type SearchAsyncOptions,
   type SearchMethod,
   type SearchOrigin,
-  type SystemOneConfig,
   type TraceSinkConfig,
 } from "./catalog.js";
 import {
@@ -100,12 +103,17 @@ export interface SkillCatalogOptions {
    * artifact is missing one or more ids from the catalog's current corpus.
    */
   experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
-  /** Re-score the first stage's top candidates with another method — see
+  /** Re-score the first stage's top candidates with another built-in method — see
    * {@link ToolCatalogOptions.reranker}. **Experimental.** */
   reranker?: RerankerConfig;
-  /** Where `"systemOne"` sends rankings — see
-   * {@link ToolCatalogOptions.systemOne}. **Experimental.** */
-  systemOne?: SystemOneConfig;
+  /** Rank every skill with your own function (`method: "custom"`) — see
+   * {@link ToolCatalogOptions.retrieveFn}. **Experimental.** */
+  retrieveFn?: RankFn;
+  /** Rerank the first stage's top candidates with your own function — see
+   * {@link ToolCatalogOptions.rerankerFn}. **Experimental.** */
+  rerankerFn?: RankFn;
+  /** How many first-stage candidates `rerankerFn` sees (default 50). */
+  rerankerDepth?: number;
 }
 
 /**
@@ -121,7 +129,7 @@ export class SkillCatalog {
   private overrideSearchableDescriptions = new Map<string, string>();
   private readonly warnedShadowIds = new Set<string>();
   private readonly method: SearchMethod;
-  private readonly reranker: RerankerConfig | undefined;
+  private readonly ranking: RankingOptions;
   private readonly embeddingArtifact: ExperimentalEmbeddingArtifact | undefined;
 
   /**
@@ -131,15 +139,19 @@ export class SkillCatalog {
    *   Construction validates configuration but never loads a model.
    */
   constructor(options: SkillCatalogOptions = {}) {
-    this.method = options.method ?? "bm25";
-    assertValidReranker(this.method, options.reranker);
-    this.reranker = options.reranker;
+    this.method = assertValidRanking("SkillCatalog", options);
+    this.ranking = {
+      reranker: options.reranker,
+      retrieveFn: options.retrieveFn,
+      rerankerFn: options.rerankerFn,
+      rerankerDepth: options.rerankerDepth,
+    };
     this.registry = new SkillRegistry(
       options.embedding,
       this.method,
       options.experimentalDenseWeight,
       options.experimentalBm25,
-      { reranker: options.reranker, systemOne: options.systemOne },
+      { reranker: options.reranker },
     );
     this.embeddingArtifact = options.experimentalEmbeddingArtifact;
     if (options.trace) {
@@ -319,7 +331,8 @@ export class SkillCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): SkillHit[] {
-    if (this.reranker) throw new Error(RERANKER_NEEDS_ASYNC);
+    if ((method ?? this.method) === "custom") throw new Error(CUSTOM_NEEDS_ASYNC);
+    if (this.ranking.reranker || this.ranking.rerankerFn) throw new Error(RERANKER_NEEDS_ASYNC);
     return traceSearch(
       SearchTarget.Skill,
       query,
@@ -352,16 +365,11 @@ export class SkillCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): Promise<SkillHit[]> {
-    if (typeof originOrOptions === "object" && originOrOptions?.mode !== undefined) {
-      return Promise.reject(
-        new Error("`mode` picks a Cloud Tool Picker mode; a skill catalog has no cloud"),
-      );
-    }
-    let args: ReturnType<typeof resolveSearchAsyncArgs>;
+    let args: ResolvedSearch;
     try {
       args = resolveSearchAsyncArgs(originOrOptions, method, turnId, {
+        ...this.ranking,
         method: this.method,
-        reranker: this.reranker,
       });
     } catch (error) {
       return Promise.reject(error);
@@ -372,14 +380,7 @@ export class SkillCatalog {
       topK,
       args.origin,
       (projection) =>
-        this.registry.searchWithOptionsAsync(
-          query,
-          topK,
-          args.origin,
-          args.method,
-          args.reranker,
-          projection,
-        ),
+        this.registry.rankAsync(query, topK, args, this.ranking.retrieveFn, projection),
       args.turnId,
     );
   }

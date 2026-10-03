@@ -165,51 +165,34 @@ await catalog.invoke("create_linear_task", {}, turn_id)  # pairs with the second
 
 Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel/tree/main/examples/pydantic-ai).
 
-## Ratel Cloud Tool Picker (experimental)
+## Your own retriever or reranker (experimental)
 
-`cloud` makes Ratel Cloud the tool catalog's owner ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md), [ADR 0028](../../../docs/adr/0028-cloud-catalog-sync.md)). `register` uploads the catalog to your Cloud project, and `search_async` ranks through the [Tool Picker](https://docs.ratel.sh/cloud/tool-picker). Executors stay local.
-
-```python
-catalog = ToolCatalog(cloud={"mode": "precise"})        # key in RATEL_API_KEY
-await catalog.register(tools)                            # syncs the catalog to Cloud
-hits = await catalog.search_async("refund the last order", 5)   # POST /v1/tools/pick
-```
-
-`mode` is `"instant"` (BM25, free), `"precise"` (the default: a BM25 shortlist judged by a system-one model, metered) or `"exhaustive"` (the model over the whole catalog, metered). **A `cloud` catalog sends its tool names, descriptions and schemas, and every query, to Ratel Cloud.**
-
-- **Options:**
-  - `cloud={"mode", "url", "api_key_env", "source_id", "on_sync_error"}`; every key is optional.
-  - `source_id` names this service's catalog in the project. It defaults to `OTEL_SERVICE_NAME`, then `"ratel"`.
-  - `cloud` can't be combined with `method`, `reranker`, `system_one` or `experimental_embedding_artifact`.
-- **Sync:**
-  - `register` resolves once Cloud has acknowledged the catalog. An unchanged catalog isn't re-sent.
-  - A failed sync raises `CloudError` (a `RuntimeError`); the tool stays registered locally. `on_sync_error="warn"` only warns instead.
-  - `await catalog.sync_now()` retries a failed sync.
-- **Search:**
-  - `search_async(q, k, mode="instant")` overrides the mode for one call. `top_k` is capped at 20.
-  - Synchronous `search` raises on a `cloud` catalog.
-  - Ids the picker returns that aren't registered locally are dropped, with a `RuntimeWarning`.
-- **Errors:** `CloudError` carries `.code`, `.status` and `.retry_after_secs`.
-
-## System-one ranking with Jev (experimental)
-
-For a catalog that lives in your process, `"systemOne"` asks [Jev](https://docs.typesafe.ai) (TypeSafe AI) to pick tools directly. There is no Ratel Cloud involved, and you supply your own TypeSafe key ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md)):
+A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
 
 ```python
-ToolCatalog(method="systemOne")                                            # Jev ranks every tool
-ToolCatalog(method="bm25", reranker={"method": "systemOne", "depth": 50})  # BM25, then Jev
+from ratel_ai import RankCandidate, RankedId, ToolCatalog, ratel_jev_plugin
+
+jev = ratel_jev_plugin()                                     # Jev (TypeSafe AI); key in TYPESAFE_API_KEY
+ToolCatalog(method="custom", retrieve_fn=jev.retrieve)       # Jev ranks every tool
+ToolCatalog(method="bm25", reranker_fn=jev.rerank)           # BM25, then Jev over its top 50
+ToolCatalog(method="bm25", reranker_fn=jev.rerank, reranker_depth=20)
+
+
+async def mine(query: str, candidates: list[RankCandidate], top_k: int) -> list[RankedId]:
+    return [{"id": c.id, "score": await my_model(query, c.text)} for c in candidates]
 ```
 
-- **Configuration:** `system_one={"url", "api_key_env", "model"}`. The defaults are `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`.
-- **Large catalogs:** above 150 tools (or 80,000 characters), the tools are split into groups judged in parallel, and the best of each group fill a final question. Results never exceed what that final question holds.
-- **Failures:** `SystemOneError` (a `RuntimeError`) carries `.code` (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`, `"RateLimited"`, `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"`, `"Malformed"`), `.status` and `.retry_after_secs`. A standalone search raises every failure. A reranker raises misconfiguration (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`) and otherwise falls back to the first stage's order, recording `rerank_fallback:<code>` on the trace.
-- **Privacy:** **`"systemOne"` sends the query and each candidate's searchable text to Jev.**
-
-`cloud` is for a catalog Ratel Cloud owns, where Cloud runs Jev behind its Tool Picker. `system_one` is for a catalog the SDK owns. One catalog can't use both.
+- **The contract:** `(query, candidates, top_k)` to a list of `{"id", "score"}`, sync or async. Each `RankCandidate` has `.id`, `.kind` (`"tool"` or `"skill"`) and `.text`. Unknown ids are dropped, each id counts once, and scores are clamped to `[0, 1]`.
+  - As `retrieve_fn` (with `method="custom"`) the search returns only the ids the function returned, best first, at most `top_k`.
+  - As `reranker_fn` it sees the first stage's top `reranker_depth` (default 50, raised to `top_k`). It can't add a tool the first stage missed; candidates it leaves out follow at 0, in first-stage order.
+- **Failures:** whatever `retrieve_fn` raises fails the search. A `reranker_fn` that raises a `RetrieverError` with `transient=True` keeps the first stage's order and records `rerank_fallback:<code>` on the trace; anything else it raises fails the search.
+- **Rules:** both need `search_async` (synchronous `search` raises). `reranker_fn` can't be combined with `reranker`, nor with `method="custom"`. `search_async(q, k, reranker=False)` turns either reranker off for one call. `SkillCatalog` takes the same arguments.
+- **The Jev plugin:** `ratel_jev_plugin(url=None, api_key_env=None, model=None)` defaults to `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`, and calls Jev on a worker thread. Above 150 candidates (or 80,000 characters) it judges groups in parallel and fills a final question with their winners. Its `RetrieverError.code` is `"Config"`, `"Unauthorized"` or `"InvalidRequest"` (not transient), or `"RateLimited"` (with `.retry_after_secs`), `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"` or `"Malformed"` (transient).
+- **Privacy:** **the Jev plugin sends the query and each candidate's searchable text to TypeSafe AI.** The built-in methods never leave the process.
 
 ## Reranking (experimental)
 
-A catalog can rank in two stages ([ADR 0027](../../../docs/adr/0027-system-one-ranking-and-reranker.md)). `method` picks candidates, and `reranker["method"]` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"`, `"hybrid"` or `"systemOne"`, but the two stages must use different methods:
+A catalog can rank in two stages with built-in methods ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). `method` picks candidates, and `reranker["method"]` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"` or `"hybrid"`, but the two stages must use different methods:
 
 ```python
 catalog = ToolCatalog(method="bm25", reranker={"method": "semantic", "depth": 30})

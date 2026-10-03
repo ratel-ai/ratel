@@ -11,19 +11,9 @@ failures; SDK merge composition is internal and there is no public Python merge
 API. ``ArtifactWarmError`` covers warm failures and carries ``code`` /
 ``missing`` attributes set by the native binding.
 
-``SystemOneError`` covers a failed ``"systemOne"`` (Jev) ranking (ADR-0027) and
-carries ``code`` (``"Config"``, ``"Unauthorized"``, ``"InvalidRequest"``,
-``"RateLimited"``, ``"Overloaded"``, ``"Timeout"``, ``"Unreachable"``, ``"Http"``,
-``"Malformed"``), ``status`` and ``retry_after_secs``. A standalone search raises
-every failure; a ``"systemOne"`` reranker raises only ``"Config"``,
-``"Unauthorized"`` and ``"InvalidRequest"`` and otherwise falls back to the first
-stage's order, recording ``rerank_fallback:<code>`` on the trace.
-
-``CloudError`` covers a failed Ratel Cloud request — a Tool Picker search or a
-catalog sync on a ``cloud`` catalog (ADR-0027, ADR-0028) — and carries ``code``
-(``"Config"``, ``"Unauthorized"``, ``"InsufficientCredits"``, ``"NoSyncedTools"``,
-``"RateLimited"``, ``"TooLarge"``, ``"Timeout"``, ``"Unavailable"``, ``"Http"``,
-``"Malformed"``), ``status`` and ``retry_after_secs`` (``None`` when absent).
+``RetrieverError`` is raised by, or for, a caller-supplied ranking function
+(``retrieve_fn`` / ``reranker_fn``, ADR-0027); the Jev plugin raises it for every
+Jev failure.
 """
 
 from __future__ import annotations
@@ -31,12 +21,50 @@ from __future__ import annotations
 from ._native import (
     ArtifactError,
     ArtifactWarmError,
-    CloudError,
     DimensionMismatchError,
     EmbedderError,
     IncompatibleMergeError,
-    SystemOneError,
 )
+
+
+class RetrieverError(RuntimeError):
+    """A retrieve or rerank function failed (ADR-0027).
+
+    Raise it from your own ``retrieve_fn`` / ``reranker_fn`` to control what a
+    search does with the failure; the Jev plugin (`ratel_jev_plugin`) raises it
+    for every Jev failure. As a **reranker**, one with ``transient=True`` does
+    not fail the search: it returns the first stage's order and records
+    ``rerank_fallback:<code>`` on the trace. Anything else a function raises,
+    including a non-transient ``RetrieverError``, fails the search.
+
+    Jev's codes: ``"Config"``, ``"Unauthorized"``, ``"InvalidRequest"`` (not
+    transient); ``"RateLimited"``, ``"Overloaded"``, ``"Timeout"``,
+    ``"Unreachable"``, ``"Http"``, ``"Malformed"`` (transient).
+
+    Attributes:
+        code: stable machine-readable discriminant.
+        transient: whether a retry may succeed.
+        status: the HTTP status, when the model's service sent one.
+        retry_after_secs: seconds the service asked to wait, when it sent
+            ``Retry-After``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        code: str,
+        *,
+        transient: bool = False,
+        status: int | None = None,
+        retry_after_secs: int | None = None,
+    ) -> None:
+        """Create the error; ``transient`` defaults to ``False``."""
+        super().__init__(message)
+        self.code = code
+        self.transient = transient
+        self.status = status
+        self.retry_after_secs = retry_after_secs
+
 
 __all__ = [
     "ArtifactError",
@@ -44,6 +72,5 @@ __all__ = [
     "DimensionMismatchError",
     "EmbedderError",
     "IncompatibleMergeError",
-    "CloudError",
-    "SystemOneError",
+    "RetrieverError",
 ]

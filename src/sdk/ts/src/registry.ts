@@ -15,27 +15,19 @@ import {
 } from "../native/index.cjs";
 import { assertNotArtifactBusy } from "./artifact-source-warm.js";
 import {
-  type CloudConfig,
-  type CloudPick,
-  type CloudSyncOutcome,
   type EmbeddingSpec,
   type ExperimentalBm25Params,
   type ObservationPolicyOptions,
-  type PickMode,
+  type RankFn,
   type RerankerConfig,
+  type ResolvedSearch,
   type SearchMethod,
   type SearchOrigin,
-  type SystemOneConfig,
   type TraceSinkConfig,
   usesDense,
 } from "./catalog.js";
-import {
-  mapArtifactBuildError,
-  mapArtifactWarmError,
-  mapCloudError,
-  mapEmbedderError,
-  mapSearchError,
-} from "./errors.js";
+import { customRerank, customSearch } from "./custom-ranking.js";
+import { mapArtifactBuildError, mapArtifactWarmError, mapEmbedderError } from "./errors.js";
 import { assertValidFact, type Fact } from "./grounding.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
 import { type RuntimeEventProjection, recordCatalogDefinitions } from "./telemetry.js";
@@ -52,14 +44,10 @@ function toNativeEmbedding(
   return typeof embedding === "string" ? { spec: embedding } : embedding;
 }
 
-/** Two-stage and system-one settings shared by the tool and skill registries. */
+/** Two-stage settings shared by the tool and skill registries. */
 export interface RegistryRankingOptions {
   /** Catalog-default reranker; decides whether registration embeds. */
   reranker?: RerankerConfig;
-  /** Where `"systemOne"` sends rankings (Jev, called directly). */
-  systemOne?: SystemOneConfig;
-  /** Make Ratel Cloud the owner: enables {@link ToolRegistry.cloudPickAsync} and sync. */
-  cloud?: CloudConfig;
 }
 
 /**
@@ -92,7 +80,7 @@ export class ToolRegistry {
    * @param experimentalBm25 - BM25 `k1`/`b` override. See
    *   {@link ExperimentalBm25Params}.
    * @param ranking - Catalog-default reranker (a semantic/hybrid one also
-   *   makes registration embed) and the system-one endpoint override.
+   *   makes registration embed).
    */
   constructor(
     embedding?: EmbeddingSpec,
@@ -103,13 +91,6 @@ export class ToolRegistry {
   ) {
     this.native = new NativeToolRegistry(toNativeEmbedding(embedding));
     this.eager = usesDense(method, ranking.reranker);
-    if (ranking.systemOne) {
-      const { url, apiKeyEnv, model } = ranking.systemOne;
-      this.native.setSystemOne(url, apiKeyEnv, model);
-    }
-    if (ranking.cloud) {
-      this.native.setCloud(ranking.cloud.url, ranking.cloud.apiKeyEnv);
-    }
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
     }
@@ -254,11 +235,7 @@ export class ToolRegistry {
     return this.searchWithOptionsAsync(query, topK, origin, method, undefined, projection);
   }
 
-  /**
-   * Search on a libuv worker with an optional second-stage `reranker`
-   * (ADR-0027). Throws a typed {@link SystemOneError} when a standalone
-   * `"systemOne"` search fails.
-   */
+  /** Search on a libuv worker with an optional second-stage `reranker` (ADR-0027). */
   async searchWithOptionsAsync(
     query: string,
     topK: number,
@@ -283,48 +260,51 @@ export class ToolRegistry {
         withTurnContext(projection),
       );
     } catch (error) {
-      throw mapSearchError(error);
+      throw mapEmbedderError(error);
     }
   }
 
   /**
-   * Rank through the Cloud Tool Picker on a libuv worker (ADR-0027). Needs a
-   * registry constructed with `cloud`.
-   *
-   * @throws {@link CloudError} when the pick fails.
+   * Run one resolved `searchAsync`: a `"custom"` first stage through
+   * `retrieveFn`, a `rerankerFn` over a built-in first stage, or a built-in
+   * search with an optional built-in reranker (ADR-0027). @internal
    */
-  async cloudPickAsync(
+  async rankAsync(
     query: string,
     topK: number,
-    origin: SearchOrigin,
-    mode: PickMode,
+    search: ResolvedSearch,
+    retrieveFn: RankFn | undefined,
     projection?: RuntimeEventProjection,
-  ): Promise<CloudPick> {
-    try {
-      return await this.native.cloudPickAsync(
+  ): Promise<SearchHit[]> {
+    if (search.method === "custom") {
+      if (!retrieveFn) throw new Error('method "custom" needs a retrieveFn');
+      const context = withTurnContext(projection);
+      return customSearch(this.native, "tool", retrieveFn, query, topK, search.origin, context);
+    }
+    if (search.rerankerFn) {
+      if (usesDense(search.method) && this.#rebuildOnModelChange) {
+        await this.#maybeRebuildOnModelChange();
+      }
+      return customRerank(
+        this.native,
+        "tool",
+        search.rerankerFn,
         query,
         topK,
-        origin,
-        mode,
+        search.origin,
+        search.method,
+        search.rerankerDepth,
         withTurnContext(projection),
       );
-    } catch (error) {
-      throw mapCloudError(error);
     }
-  }
-
-  /**
-   * Upload the catalog to Cloud as `sourceId`'s snapshot on a libuv worker
-   * (ADR-0028); skipped when unchanged since the last acknowledged sync.
-   *
-   * @throws {@link CloudError} when the upload fails.
-   */
-  async cloudSyncAsync(sourceId: string): Promise<CloudSyncOutcome> {
-    try {
-      return await this.native.cloudSyncAsync(sourceId);
-    } catch (error) {
-      throw mapCloudError(error);
-    }
+    return this.searchWithOptionsAsync(
+      query,
+      topK,
+      search.origin,
+      search.method,
+      search.reranker,
+      projection,
+    );
   }
 
   /**
@@ -547,7 +527,7 @@ export class SkillRegistry {
    * @param experimentalBm25 - BM25 `k1`/`b` override. See
    *   {@link ExperimentalBm25Params}.
    * @param ranking - Catalog-default reranker (a semantic/hybrid one also
-   *   makes registration embed) and the system-one endpoint override.
+   *   makes registration embed).
    */
   constructor(
     embedding?: EmbeddingSpec,
@@ -558,10 +538,6 @@ export class SkillRegistry {
   ) {
     this.native = new NativeSkillRegistry(toNativeEmbedding(embedding));
     this.eager = usesDense(method, ranking.reranker);
-    if (ranking.systemOne) {
-      const { url, apiKeyEnv, model } = ranking.systemOne;
-      this.native.setSystemOne(url, apiKeyEnv, model);
-    }
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
     }
@@ -729,8 +705,46 @@ export class SkillRegistry {
         withTurnContext(projection),
       );
     } catch (error) {
-      throw mapSearchError(error);
+      throw mapEmbedderError(error);
     }
+  }
+  /** Run one resolved `searchAsync` — see `ToolRegistry.rankAsync`. @internal */
+  async rankAsync(
+    query: string,
+    topK: number,
+    search: ResolvedSearch,
+    retrieveFn: RankFn | undefined,
+    projection?: RuntimeEventProjection,
+  ): Promise<SkillHit[]> {
+    if (search.method === "custom") {
+      if (!retrieveFn) throw new Error('method "custom" needs a retrieveFn');
+      const context = withTurnContext(projection);
+      return customSearch(this.native, "skill", retrieveFn, query, topK, search.origin, context);
+    }
+    if (search.rerankerFn) {
+      if (usesDense(search.method) && this.#rebuildOnModelChange) {
+        await this.#maybeRebuildOnModelChange();
+      }
+      return customRerank(
+        this.native,
+        "skill",
+        search.rerankerFn,
+        query,
+        topK,
+        search.origin,
+        search.method,
+        search.rerankerDepth,
+        withTurnContext(projection),
+      );
+    }
+    return this.searchWithOptionsAsync(
+      query,
+      topK,
+      search.origin,
+      search.method,
+      search.reranker,
+      projection,
+    );
   }
 
   /** Record a custom event on the local trace stream (ADR-0007). */

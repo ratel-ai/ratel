@@ -31,14 +31,15 @@
 //!   `bge-small-en-v1.5`) or OpenAI-compatible endpoint (ADR-0011/ADR-0012).
 //! - [`SearchMethod::Hybrid`] — the BM25 and dense scores normalised and
 //!   fused (ADR-0024).
-//! - [`SearchMethod::SystemOne`] — a hosted system-one model, Jev, picks
-//!   from the candidates; tools and skills only (ADR-0027).
 //!
 //! [`ToolRegistry::search_with_options`] adds a second stage: a [`Reranker`]
-//! re-scores the first stage's top candidates with any other method. A tool
-//! catalog can instead be owned by Ratel Cloud: [`ToolRegistry::cloud_sync`]
-//! uploads it and [`ToolRegistry::cloud_pick`] ranks through the Cloud Tool
-//! Picker (ADR-0027, ADR-0028).
+//! re-scores the first stage's top candidates with any other method. A ranking
+//! function the caller supplies (a model such as Jev, called by the SDK) plugs
+//! in between two phases instead: [`ToolRegistry::rank_candidates`] /
+//! [`ToolRegistry::complete_custom_search`] to rank the whole catalog, and
+//! [`ToolRegistry::stage_one`] / [`ToolRegistry::complete_rerank`] to rerank
+//! (ADR-0027). [`JevRanker`] is the Jev client the SDKs wrap into such a
+//! function.
 //!
 //! Semantic and hybrid searches rank against an embedding cache built by
 //! [`ToolRegistry::build_embeddings`] / [`SkillRegistry::build_embeddings`];
@@ -90,7 +91,6 @@
 #![warn(missing_docs)]
 
 mod artifact_warm;
-mod cloud;
 mod dense_cache;
 mod dense_search;
 mod embedding;
@@ -101,13 +101,13 @@ mod fact_indexing;
 mod fact_registry;
 mod fusion;
 mod indexing;
+mod jev;
 mod method;
 mod rerank;
 mod search;
 mod skill;
 mod skill_indexing;
 mod skill_registry;
-mod system_one;
 mod tool;
 mod tool_registry;
 mod trace;
@@ -120,10 +120,6 @@ mod harness;
 mod test_support;
 
 pub use artifact_warm::{ArtifactWarmError, OnArtifactMiss, ParseOnArtifactMissError};
-pub use cloud::{
-    CloudConfig, CloudError, DEFAULT_CLOUD_API_KEY_ENV, DEFAULT_CLOUD_URL, MAX_PICK_TOP_K,
-    ParsePickModeError, PickMode, SyncOutcome,
-};
 pub use dense_cache::WarmError;
 pub use embedding::EmbedderError;
 pub use embedding_artifact::{ArtifactError, merge_embedding_artifacts};
@@ -131,17 +127,17 @@ pub use embedding_config::{EmbeddingModel, EmbeddingSpec, Pooling};
 pub use fact::{Fact, ParsePinModeError, PinMode};
 pub use fact_registry::{FactHit, FactRegistry};
 pub use fusion::{DenseWeight, InvalidDenseWeight};
+pub use jev::{
+    CandidateKind, DEFAULT_JEV_API_KEY_ENV, DEFAULT_JEV_MODEL, DEFAULT_JEV_URL, JevConfig,
+    JevError, JevRanker,
+};
 pub use method::{ParseSearchMethodError, SearchMethod};
-pub use rerank::{Reranker, SearchError, SearchOptions};
+pub use rerank::{RankCandidate, RerankOutcome, Reranker, SearchError, SearchOptions, StageOne};
 pub use search::Bm25Params;
 pub use skill::Skill;
 pub use skill_registry::{ReplaceOutcome, SkillHit, SkillRegistry};
-pub use system_one::{
-    CandidateKind, DEFAULT_SYSTEM_ONE_API_KEY_ENV, DEFAULT_SYSTEM_ONE_MODEL,
-    DEFAULT_SYSTEM_ONE_URL, SystemOneConfig, SystemOneError,
-};
 pub use tool::Tool;
-pub use tool_registry::{AdaptiveRankingStatus, CloudPick, SearchHit, ToolRegistry};
+pub use tool_registry::{AdaptiveRankingStatus, SearchHit, ToolRegistry};
 pub use trace::{
     CatalogKind, ChurnKind, EmbedderLoadStatus, FactHitTrace, FactInjectReason, FanoutSink,
     FanoutSubscription, FnSink, JsonlSink, MemorySink, NoopSink, Origin, SearchHitTrace,

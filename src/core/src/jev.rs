@@ -1,38 +1,38 @@
-//! System-one ranking with Jev, called directly (ADR-0027).
+//! A client for Jev (TypeSafe AI), the ranker behind the SDKs' Jev plugin
+//! (ADR-0027).
 //!
-//! Jev (TypeSafe AI) answers a `choice` question over named options with a
-//! probability per option, so one call ranks up to [`MAX_OPTIONS`] candidates.
-//! A larger candidate set runs as a tournament: groups that fit one question
-//! are ranked in parallel, their winners advance, and the last round fits one
-//! question. This is the SDK-side path, for a catalog the SDK owns; a
-//! Cloud-owned catalog reaches Jev through the Tool Picker instead
-//! (`crate::cloud`).
+//! Jev answers a `choice` question over named options with a probability per
+//! option, so one call ranks up to [`MAX_OPTIONS`] candidates. A larger
+//! candidate set runs as a tournament: groups that fit one question are ranked
+//! in parallel, their winners advance, and the last round fits one question.
 //!
-//! The client sits behind the crate-private [`SystemOne`] trait so registry
-//! tests can stand a script in for HTTP.
+//! Nothing in the registries calls this: search knows only caller-supplied
+//! ranking functions ([`crate::RankCandidate`]). The SDKs wrap [`JevRanker`]
+//! into such a function, so a change to Jev's interface stays in this file.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::time::Duration;
 
+use crate::rerank::RankCandidate as Candidate;
+
 use serde::Deserialize;
 
 /// Where Jev lives unless a catalog overrides it.
-pub const DEFAULT_SYSTEM_ONE_URL: &str = "https://api.typesafe.ai";
+pub const DEFAULT_JEV_URL: &str = "https://api.typesafe.ai";
 
 /// The environment variable holding the Jev key unless overridden.
-pub const DEFAULT_SYSTEM_ONE_API_KEY_ENV: &str = "TYPESAFE_API_KEY";
+pub const DEFAULT_JEV_API_KEY_ENV: &str = "TYPESAFE_API_KEY";
 
 /// The Jev model unless overridden.
-pub const DEFAULT_SYSTEM_ONE_MODEL: &str = "jev-latest";
+pub const DEFAULT_JEV_MODEL: &str = "jev-latest";
 
-/// Options per question. Jev accepts 255; Ratel Cloud's picker judges at most
-/// 150 per question, and the SDK matches it so both paths rank alike.
+/// Options per question. Jev accepts 255; 150 keeps each question well inside
+/// its token budget.
 const MAX_OPTIONS: usize = 150;
 
 /// Characters of option text per question, and per option. A question's
-/// options and the query must fit Jev's 32k-token budget; Cloud's picker uses
-/// the same 80k-character cap.
+/// options and the query must fit Jev's 32k-token budget.
 const MAX_QUESTION_CHARS: usize = 80_000;
 const MAX_OPTION_CHARS: usize = 2_000;
 
@@ -41,12 +41,12 @@ const TOURNAMENT_CONCURRENCY: usize = 6;
 
 /// Jev answers one question in ~100–300 ms; a call that takes this long is
 /// broken, not slow.
-const SYSTEM_ONE_TIMEOUT_SECS: u64 = 15;
+const JEV_TIMEOUT_SECS: u64 = 15;
 
 /// A Jev answer is a probability map; anything near this size is not one.
-const SYSTEM_ONE_RESPONSE_LIMIT_BYTES: u64 = 4 * 1024 * 1024;
+const JEV_RESPONSE_LIMIT_BYTES: u64 = 4 * 1024 * 1024;
 
-/// What kind of catalog item a system-one question picks among. It sets the
+/// What kind of catalog item a Jev question picks among. It sets the
 /// question's wording, so the model judges a tool, a skill or a fact as what
 /// it is, and the question's id in Jev's request and answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,23 +82,23 @@ impl CandidateKind {
 
 /// Which Jev endpoint, key and model a registry uses.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SystemOneConfig {
+pub struct JevConfig {
     url: String,
     api_key_env: String,
     model: String,
 }
 
-impl Default for SystemOneConfig {
+impl Default for JevConfig {
     fn default() -> Self {
         Self {
-            url: DEFAULT_SYSTEM_ONE_URL.into(),
-            api_key_env: DEFAULT_SYSTEM_ONE_API_KEY_ENV.into(),
-            model: DEFAULT_SYSTEM_ONE_MODEL.into(),
+            url: DEFAULT_JEV_URL.into(),
+            api_key_env: DEFAULT_JEV_API_KEY_ENV.into(),
+            model: DEFAULT_JEV_MODEL.into(),
         }
     }
 }
 
-impl SystemOneConfig {
+impl JevConfig {
     /// Use another base URL (a proxy, tests); `/v1/systemone` is appended and a
     /// trailing slash is ignored.
     #[must_use]
@@ -141,12 +141,12 @@ impl SystemOneConfig {
     }
 }
 
-/// A system-one ranking failed. [`code`](Self::code) is the stable name the
+/// A Jev ranking failed. [`code`](Self::code) is the stable name the
 /// SDKs expose; [`is_transient`](Self::is_transient) splits failures a retry
 /// may cure from misconfiguration that will fail every time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum SystemOneError {
+pub enum JevError {
     /// Misconfigured before any request was sent — e.g. the key's
     /// environment variable is not set.
     Config {
@@ -198,20 +198,20 @@ pub enum SystemOneError {
     },
 }
 
-impl SystemOneError {
+impl JevError {
     /// A stable, machine-readable discriminant for the SDKs.
     #[must_use]
     pub fn code(&self) -> &'static str {
         match self {
-            SystemOneError::Config { .. } => "Config",
-            SystemOneError::Unauthorized { .. } => "Unauthorized",
-            SystemOneError::InvalidRequest { .. } => "InvalidRequest",
-            SystemOneError::RateLimited { .. } => "RateLimited",
-            SystemOneError::Overloaded { .. } => "Overloaded",
-            SystemOneError::Timeout => "Timeout",
-            SystemOneError::Unreachable { .. } => "Unreachable",
-            SystemOneError::Http { .. } => "Http",
-            SystemOneError::Malformed { .. } => "Malformed",
+            JevError::Config { .. } => "Config",
+            JevError::Unauthorized { .. } => "Unauthorized",
+            JevError::InvalidRequest { .. } => "InvalidRequest",
+            JevError::RateLimited { .. } => "RateLimited",
+            JevError::Overloaded { .. } => "Overloaded",
+            JevError::Timeout => "Timeout",
+            JevError::Unreachable { .. } => "Unreachable",
+            JevError::Http { .. } => "Http",
+            JevError::Malformed { .. } => "Malformed",
         }
     }
 
@@ -222,9 +222,9 @@ impl SystemOneError {
     pub fn is_transient(&self) -> bool {
         !matches!(
             self,
-            SystemOneError::Config { .. }
-                | SystemOneError::Unauthorized { .. }
-                | SystemOneError::InvalidRequest { .. }
+            JevError::Config { .. }
+                | JevError::Unauthorized { .. }
+                | JevError::InvalidRequest { .. }
         )
     }
 
@@ -232,64 +232,44 @@ impl SystemOneError {
     #[must_use]
     pub fn status(&self) -> Option<u16> {
         match self {
-            SystemOneError::Unauthorized { status }
-            | SystemOneError::InvalidRequest { status, .. }
-            | SystemOneError::Overloaded { status }
-            | SystemOneError::Http { status, .. } => Some(*status),
+            JevError::Unauthorized { status }
+            | JevError::InvalidRequest { status, .. }
+            | JevError::Overloaded { status }
+            | JevError::Http { status, .. } => Some(*status),
             _ => None,
         }
     }
 }
 
-impl fmt::Display for SystemOneError {
+impl fmt::Display for JevError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SystemOneError::Config { message } => write!(f, "system-one config: {message}"),
-            SystemOneError::Unauthorized { status } => write!(
+            JevError::Config { message } => write!(f, "jev config: {message}"),
+            JevError::Unauthorized { status } => write!(
                 f,
-                "jev rejected the key ({status}); check the key in api_key_env"
+                "jev rejected the key ({status}); check the key its env var holds"
             ),
-            SystemOneError::InvalidRequest { status, message } => {
+            JevError::InvalidRequest { status, message } => {
                 write!(f, "jev refused the request ({status}): {message}")
             }
-            SystemOneError::RateLimited { retry_after_secs } => match retry_after_secs {
+            JevError::RateLimited { retry_after_secs } => match retry_after_secs {
                 Some(secs) => write!(f, "jev is rate limiting (429); retry in {secs}s"),
                 None => write!(f, "jev is rate limiting (429); retry later"),
             },
-            SystemOneError::Overloaded { status } => {
+            JevError::Overloaded { status } => {
                 write!(f, "jev is overloaded ({status}); retry later")
             }
-            SystemOneError::Timeout => write!(f, "jev request timed out"),
-            SystemOneError::Unreachable { source } => write!(f, "could not reach jev: {source}"),
-            SystemOneError::Http { status, message } => {
+            JevError::Timeout => write!(f, "jev request timed out"),
+            JevError::Unreachable { source } => write!(f, "could not reach jev: {source}"),
+            JevError::Http { status, message } => {
                 write!(f, "jev returned HTTP {status}: {message}")
             }
-            SystemOneError::Malformed { source } => write!(f, "malformed jev response: {source}"),
+            JevError::Malformed { source } => write!(f, "malformed jev response: {source}"),
         }
     }
 }
 
-impl std::error::Error for SystemOneError {}
-
-/// One option the model may pick: an id and the text it is judged on.
-#[derive(Debug, Clone)]
-pub(crate) struct Candidate {
-    pub(crate) id: String,
-    pub(crate) text: String,
-}
-
-/// Rank `candidates` for `query`, best first, keeping at most `top_k`.
-pub(crate) trait SystemOne: Send + Sync {
-    /// `(id, score)` best-first, every id one of `candidates`, scores in
-    /// `[0, 1]`, at most `top_k` entries. `kind` is what the candidates are.
-    fn rank(
-        &self,
-        query: &str,
-        candidates: &[Candidate],
-        top_k: usize,
-        kind: CandidateKind,
-    ) -> Result<Vec<(String, f32)>, SystemOneError>;
-}
+impl std::error::Error for JevError {}
 
 #[derive(Deserialize)]
 struct JevResponse {
@@ -301,19 +281,21 @@ struct JevChoice {
     probabilities: HashMap<String, f32>,
 }
 
-/// The shipped [`SystemOne`]: Jev's `/v1/systemone`, called directly.
-pub(crate) struct JevSystemOne {
-    config: SystemOneConfig,
+/// Jev's `/v1/systemone`, called directly. Building one opens no connection.
+pub struct JevRanker {
+    config: JevConfig,
     agent: ureq::Agent,
     /// A key that bypasses the environment; tests set it rather than mutate
     /// the process environment other threads are reading.
     key_override: Option<String>,
 }
 
-impl JevSystemOne {
-    pub(crate) fn new(config: SystemOneConfig) -> Self {
+impl JevRanker {
+    /// A ranker for `config`; the key is read from its env var at call time.
+    #[must_use]
+    pub fn new(config: JevConfig) -> Self {
         let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(Duration::from_secs(SYSTEM_ONE_TIMEOUT_SECS)))
+            .timeout_global(Some(Duration::from_secs(JEV_TIMEOUT_SECS)))
             // Read the status ourselves: error bodies carry Jev's explanation
             // and 429 carries Retry-After.
             .http_status_as_error(false)
@@ -335,21 +317,21 @@ impl JevSystemOne {
 
     /// Read the key at call time; an unset variable is a clear `Config` error,
     /// not a downstream 401.
-    fn api_key(&self) -> Result<String, SystemOneError> {
+    fn api_key(&self) -> Result<String, JevError> {
         if let Some(key) = &self.key_override {
             return Ok(key.clone());
         }
         let var = &self.config.api_key_env;
-        std::env::var(var).map_err(|_| SystemOneError::Config {
-            message: format!("api_key_env=\"{var}\" but that environment variable is not set"),
+        std::env::var(var).map_err(|_| JevError::Config {
+            message: format!("{var} is not set; put the Jev key in it"),
         })
     }
 
     /// A transport failure: no HTTP status to read.
-    fn classify_transport(e: ureq::Error) -> SystemOneError {
+    fn classify_transport(e: ureq::Error) -> JevError {
         match e {
-            ureq::Error::Timeout(_) => SystemOneError::Timeout,
-            other => SystemOneError::Unreachable {
+            ureq::Error::Timeout(_) => JevError::Timeout,
+            other => JevError::Unreachable {
                 source: other.to_string(),
             },
         }
@@ -363,7 +345,7 @@ impl JevSystemOne {
         query: &str,
         candidates: &[&Candidate],
         kind: CandidateKind,
-    ) -> Result<Vec<(String, f32)>, SystemOneError> {
+    ) -> Result<Vec<(String, f32)>, JevError> {
         // Index keys (`t0`…) rather than ids: an id may be long or odd, and the
         // option name is part of what Jev reads.
         let criteria: serde_json::Map<String, serde_json::Value> = candidates
@@ -395,7 +377,7 @@ impl JevSystemOne {
         let text = resp
             .body_mut()
             .with_config()
-            .limit(SYSTEM_ONE_RESPONSE_LIMIT_BYTES)
+            .limit(JEV_RESPONSE_LIMIT_BYTES)
             .read_to_string();
         if !(200..300).contains(&status) {
             // The status decides the error; an unreadable error body only
@@ -404,19 +386,18 @@ impl JevSystemOne {
             return Err(classify_status(status, message, retry_after));
         }
         let text = text.map_err(|e| match e {
-            ureq::Error::Timeout(_) => SystemOneError::Timeout,
-            other => SystemOneError::Malformed {
+            ureq::Error::Timeout(_) => JevError::Timeout,
+            other => JevError::Malformed {
                 source: format!("unreadable response body: {other}"),
             },
         })?;
-        let parsed: JevResponse =
-            serde_json::from_str(&text).map_err(|e| SystemOneError::Malformed {
-                source: e.to_string(),
-            })?;
+        let parsed: JevResponse = serde_json::from_str(&text).map_err(|e| JevError::Malformed {
+            source: e.to_string(),
+        })?;
         let answer = parsed
             .answers
             .get(kind.noun())
-            .ok_or_else(|| SystemOneError::Malformed {
+            .ok_or_else(|| JevError::Malformed {
                 source: format!("no answer to the \"{}\" question", kind.noun()),
             })?;
         Ok(from_probabilities(&answer.probabilities, candidates))
@@ -441,7 +422,7 @@ impl JevSystemOne {
         candidates: Vec<&Candidate>,
         keep: usize,
         kind: CandidateKind,
-    ) -> Result<Vec<(String, f32)>, SystemOneError> {
+    ) -> Result<Vec<(String, f32)>, JevError> {
         let mut field = candidates;
         loop {
             if fits_one_question(&field) {
@@ -450,7 +431,7 @@ impl JevSystemOne {
             let groups = split_into_questions(&field);
             let mut ranked_groups: Vec<Vec<&Candidate>> = Vec::with_capacity(groups.len());
             for batch in groups.chunks(TOURNAMENT_CONCURRENCY) {
-                let results: Vec<Result<Vec<(String, f32)>, SystemOneError>> =
+                let results: Vec<Result<Vec<(String, f32)>, JevError>> =
                     std::thread::scope(|scope| {
                         let handles: Vec<_> = batch
                             .iter()
@@ -460,7 +441,7 @@ impl JevSystemOne {
                             .into_iter()
                             .map(|h| {
                                 h.join().unwrap_or_else(|_| {
-                                    Err(SystemOneError::Malformed {
+                                    Err(JevError::Malformed {
                                         source: "a tournament round panicked".into(),
                                     })
                                 })
@@ -484,7 +465,7 @@ impl JevSystemOne {
             // that needs a tournament has such a group, so this cannot trigger;
             // it guards the loop against a future change to `advance`.
             if winners.len() >= field.len() {
-                return Err(SystemOneError::Malformed {
+                return Err(JevError::Malformed {
                     source: "tournament made no progress".into(),
                 });
             }
@@ -522,14 +503,21 @@ fn advance<'a>(ranked_groups: &[Vec<&'a Candidate>]) -> Vec<&'a Candidate> {
     winners
 }
 
-impl SystemOne for JevSystemOne {
-    fn rank(
+impl JevRanker {
+    /// Rank `candidates` for `query`: `(id, probability)` best first, every id
+    /// one of `candidates`, at most `top_k`. `kind` is what the candidates
+    /// are; Jev is asked about tools or skills accordingly.
+    ///
+    /// # Errors
+    /// [`JevError`] when the key is unset, Jev refuses the request, or it
+    /// cannot be reached or understood.
+    pub fn rank(
         &self,
         query: &str,
         candidates: &[Candidate],
         top_k: usize,
         kind: CandidateKind,
-    ) -> Result<Vec<(String, f32)>, SystemOneError> {
+    ) -> Result<Vec<(String, f32)>, JevError> {
         if candidates.is_empty() || top_k == 0 {
             return Ok(Vec::new());
         }
@@ -546,19 +534,19 @@ impl SystemOne for JevSystemOne {
 }
 
 /// Map a non-2xx Jev status to its error.
-fn classify_status(status: u16, message: String, retry_after: Option<u64>) -> SystemOneError {
+fn classify_status(status: u16, message: String, retry_after: Option<u64>) -> JevError {
     match status {
-        401 | 403 => SystemOneError::Unauthorized { status },
-        400 | 404 | 413 | 422 => SystemOneError::InvalidRequest { status, message },
-        429 => SystemOneError::RateLimited {
+        401 | 403 => JevError::Unauthorized { status },
+        400 | 404 | 413 | 422 => JevError::InvalidRequest { status, message },
+        429 => JevError::RateLimited {
             retry_after_secs: retry_after,
         },
-        503 | 529 => SystemOneError::Overloaded { status },
-        504 => SystemOneError::Timeout,
-        502 => SystemOneError::Unreachable {
+        503 | 529 => JevError::Overloaded { status },
+        504 => JevError::Timeout,
+        502 => JevError::Unreachable {
             source: format!("bad gateway (502): {message}"),
         },
-        _ => SystemOneError::Http { status, message },
+        _ => JevError::Http { status, message },
     }
 }
 
@@ -744,18 +732,14 @@ mod tests {
         })
     }
 
-    fn client(url: &str) -> JevSystemOne {
-        JevSystemOne::new(
-            SystemOneConfig::default()
-                .with_url(url)
-                .with_api_key_env(KEY),
-        )
-        .with_key("jev-token")
+    fn client(url: &str) -> JevRanker {
+        JevRanker::new(JevConfig::default().with_url(url).with_api_key_env(KEY))
+            .with_key("jev-token")
     }
 
     #[test]
     fn config_defaults_to_jev() {
-        let c = SystemOneConfig::default();
+        let c = JevConfig::default();
         assert_eq!(c.url(), "https://api.typesafe.ai");
         assert_eq!(c.api_key_env(), "TYPESAFE_API_KEY");
         assert_eq!(c.model(), "jev-latest");
@@ -970,58 +954,58 @@ mod tests {
             c.rank("q", &cands(&["a"]), 1, CandidateKind::Tool)
                 .unwrap_err()
         };
-        let invalid = |status, message: &str| SystemOneError::InvalidRequest {
+        let invalid = |status, message: &str| JevError::InvalidRequest {
             status,
             message: message.into(),
         };
         assert_eq!(call(), invalid(400, "bad question"));
-        assert_eq!(call(), SystemOneError::Unauthorized { status: 401 });
-        assert_eq!(call(), SystemOneError::Unauthorized { status: 403 });
+        assert_eq!(call(), JevError::Unauthorized { status: 401 });
+        assert_eq!(call(), JevError::Unauthorized { status: 403 });
         assert_eq!(call(), invalid(404, "no such model"));
         assert_eq!(call(), invalid(413, "too long"));
         assert_eq!(call(), invalid(422, "too many options"));
         assert_eq!(
             call(),
-            SystemOneError::RateLimited {
+            JevError::RateLimited {
                 retry_after_secs: Some(7)
             }
         );
         assert_eq!(
             call(),
-            SystemOneError::RateLimited {
+            JevError::RateLimited {
                 retry_after_secs: None
             }
         );
         assert_eq!(
             call(),
-            SystemOneError::Http {
+            JevError::Http {
                 status: 500,
                 message: "boom".into()
             }
         );
-        assert!(matches!(call(), SystemOneError::Unreachable { .. }));
-        assert_eq!(call(), SystemOneError::Overloaded { status: 503 });
-        assert_eq!(call(), SystemOneError::Timeout);
-        assert_eq!(call(), SystemOneError::Overloaded { status: 529 });
+        assert!(matches!(call(), JevError::Unreachable { .. }));
+        assert_eq!(call(), JevError::Overloaded { status: 503 });
+        assert_eq!(call(), JevError::Timeout);
+        assert_eq!(call(), JevError::Overloaded { status: 529 });
     }
 
     #[test]
     fn codes_and_transience_split_misconfiguration_from_outages() {
         let cases = [
             (
-                SystemOneError::Config {
+                JevError::Config {
                     message: String::new(),
                 },
                 "Config",
                 false,
             ),
             (
-                SystemOneError::Unauthorized { status: 401 },
+                JevError::Unauthorized { status: 401 },
                 "Unauthorized",
                 false,
             ),
             (
-                SystemOneError::InvalidRequest {
+                JevError::InvalidRequest {
                     status: 422,
                     message: String::new(),
                 },
@@ -1029,27 +1013,23 @@ mod tests {
                 false,
             ),
             (
-                SystemOneError::RateLimited {
+                JevError::RateLimited {
                     retry_after_secs: None,
                 },
                 "RateLimited",
                 true,
             ),
+            (JevError::Overloaded { status: 529 }, "Overloaded", true),
+            (JevError::Timeout, "Timeout", true),
             (
-                SystemOneError::Overloaded { status: 529 },
-                "Overloaded",
-                true,
-            ),
-            (SystemOneError::Timeout, "Timeout", true),
-            (
-                SystemOneError::Unreachable {
+                JevError::Unreachable {
                     source: String::new(),
                 },
                 "Unreachable",
                 true,
             ),
             (
-                SystemOneError::Http {
+                JevError::Http {
                     status: 500,
                     message: String::new(),
                 },
@@ -1057,7 +1037,7 @@ mod tests {
                 true,
             ),
             (
-                SystemOneError::Malformed {
+                JevError::Malformed {
                     source: String::new(),
                 },
                 "Malformed",
@@ -1068,11 +1048,8 @@ mod tests {
             assert_eq!(error.code(), code);
             assert_eq!(error.is_transient(), transient, "{code}");
         }
-        assert_eq!(
-            SystemOneError::Overloaded { status: 529 }.status(),
-            Some(529)
-        );
-        assert_eq!(SystemOneError::Timeout.status(), None);
+        assert_eq!(JevError::Overloaded { status: 529 }.status(), Some(529));
+        assert_eq!(JevError::Timeout.status(), None);
     }
 
     #[test]
@@ -1083,20 +1060,20 @@ mod tests {
         );
         assert!(matches!(
             client(&url).rank("q", &cands(&["a"]), 1, CandidateKind::Tool),
-            Err(SystemOneError::Malformed { .. })
+            Err(JevError::Malformed { .. })
         ));
     }
 
     #[test]
     fn an_unset_key_env_fails_before_any_request() {
-        let c = JevSystemOne::new(
-            SystemOneConfig::default()
+        let c = JevRanker::new(
+            JevConfig::default()
                 .with_url("http://127.0.0.1:9")
                 .with_api_key_env("RATEL_CORE_JEV_UNSET_KEY"),
         );
         assert!(matches!(
             c.rank("q", &cands(&["a"]), 1, CandidateKind::Tool),
-            Err(SystemOneError::Config { .. })
+            Err(JevError::Config { .. })
         ));
     }
 
@@ -1110,7 +1087,7 @@ mod tests {
         let err = client(&format!("http://127.0.0.1:{port}"))
             .rank("q", &cands(&["a"]), 1, CandidateKind::Tool)
             .unwrap_err();
-        assert!(matches!(err, SystemOneError::Unreachable { .. }), "{err}");
+        assert!(matches!(err, JevError::Unreachable { .. }), "{err}");
     }
 
     #[test]

@@ -16,10 +16,14 @@ from collections.abc import Awaitable, Callable, Generator, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeVar, overload
 
+from ._custom_ranking import RankFn, custom_rerank, custom_search
 from ._native import IntentGraph as IntentGraph  # re-exported for `ratel_ai.IntentGraph`
 from ._native import NativeEventSubscription, SkillHit
 from ._native import SkillRegistry as _NativeSkillRegistry
 from .catalog import (
+    _CUSTOM_NEEDS_ASYNC,
+    _DEFAULT_RERANKER_DEPTH,
+    _DENSE_METHODS,
     _REGISTRY_BUSY,
     _RERANKER_NEEDS_ASYNC,
     _UNAWAITED_REGISTER,
@@ -30,12 +34,12 @@ from .catalog import (
     RerankerConfig,
     SearchMethod,
     SearchOrigin,
-    SystemOneConfig,
     TraceSinkConfig,
     _registry_embedding_kwargs,
     _resolve_reranker,
     _uses_dense,
     _validate_method,
+    _validate_ranking,
     _validate_reranker,
 )
 from .embedding_artifact import (
@@ -142,7 +146,6 @@ class SkillRegistry:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
     ) -> None: ...
 
     @overload
@@ -212,7 +215,6 @@ class SkillRegistry:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
         spec: str | None = None,
         huggingface: str | None = None,
         local: str | None = None,
@@ -252,10 +254,6 @@ class SkillRegistry:
             self._native.set_experimental_dense_weight(experimental_dense_weight)
         if experimental_bm25_k1 is not None or experimental_bm25_b is not None:
             self._native.set_experimental_bm25_params(experimental_bm25_k1, experimental_bm25_b)
-        if system_one is not None:
-            self._native.set_system_one(
-                system_one.get("url"), system_one.get("api_key_env"), system_one.get("model")
-            )
         self._eager = _uses_dense(method, reranker)
         self._embedding_artifact = experimental_embedding_artifact
         self._warn_on_model_mismatch = True
@@ -358,7 +356,7 @@ class SkillRegistry:
     def search_with_method(
         self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
     ) -> list[SkillHit]:
-        """Run BM25 synchronously; dense and system-one retrieval are async-only."""
+        """Run BM25 synchronously; dense and custom retrieval are async-only."""
         _validate_method(method)
         if method != "bm25":
             raise RuntimeError(
@@ -450,6 +448,9 @@ class SkillRegistry:
         projection: RuntimeEventProjection | None = None,
         *,
         reranker: RerankerConfig | None = None,
+        retrieve_fn: RankFn | None = None,
+        reranker_fn: RankFn | None = None,
+        reranker_depth: int = _DEFAULT_RERANKER_DEPTH,
     ) -> list[SkillHit]:
         """Search immediately with plain BM25; run anything else on a worker thread.
 
@@ -457,20 +458,53 @@ class SkillRegistry:
         """
         _validate_method(method)
         _validate_reranker(method, reranker)
+        ambient = with_turn_context(projection)
+        if method == "custom":
+            if retrieve_fn is None:
+                raise ValueError('method "custom" needs a retrieve_fn')
+            return await custom_search(
+                self._native, "skill", retrieve_fn, query, top_k, origin, ambient
+            )
+        if reranker_fn is not None:
+            return await custom_rerank(
+                self._native,
+                lambda: self._stage_one(query, top_k, reranker_depth, method, ambient),
+                "skill",
+                reranker_fn,
+                query,
+                top_k,
+                origin,
+                ambient,
+            )
         if method == "bm25" and reranker is None:
             return self.search_with_origin(query, top_k, origin, projection)
-        if _uses_dense(method, reranker):
-            if self._undriven_builds > 0:
-                raise RuntimeError(_UNAWAITED_REGISTER)
-            await self._maybe_rebuild_on_model_change()
-        ambient = with_turn_context(projection)
+        if self._undriven_builds > 0:
+            raise RuntimeError(_UNAWAITED_REGISTER)
+        await self._maybe_rebuild_on_model_change()
         reranker_method = reranker["method"] if reranker is not None else None
-        reranker_depth = reranker.get("depth") if reranker is not None else None
+        reranker_depth_opt = reranker.get("depth") if reranker is not None else None
         return await self._run_dense(
             lambda: self._native._search_with_options(
-                query, top_k, origin, method, reranker_method, reranker_depth, ambient
-            ),
-            gated=_uses_dense(method, reranker),
+                query, top_k, origin, method, reranker_method, reranker_depth_opt, ambient
+            )
+        )
+
+    async def _stage_one(
+        self,
+        query: str,
+        top_k: int,
+        depth: int,
+        method: str,
+        ambient: RuntimeEventProjection | None,
+    ) -> Any:
+        turn_id = (ambient or {}).get("turn_id")
+        if method not in _DENSE_METHODS:
+            return self._native._stage_one(query, top_k, depth, method, turn_id)
+        if self._undriven_builds > 0:
+            raise RuntimeError(_UNAWAITED_REGISTER)
+        await self._maybe_rebuild_on_model_change()
+        return await self._run_dense(
+            lambda: self._native._stage_one(query, top_k, depth, method, turn_id)
         )
 
     def record_event(
@@ -630,18 +664,9 @@ class SkillRegistry:
         """Drain captured native trace events."""
         return self._native.drain_trace_events()
 
-    async def _run_dense(
-        self, operation: Callable[[], _DenseResult], *, gated: bool = True
-    ) -> _DenseResult:
-        """Run ``operation`` on a worker thread, counted as pending.
-
-        Pending makes a concurrent mutation fail fast. ``gated`` also serializes
-        it behind the dense gate; network-only work (Cloud picks and syncs, a
-        system-one search with no dense stage) passes ``gated=False`` so
-        concurrent requests overlap instead of queueing behind one another.
-        """
+    async def _run_dense(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
         self._queue_dense()
-        runner = self._run_dense_task(operation, gated)
+        runner = self._run_dense_task(operation)
         try:
             task = asyncio.create_task(runner)
         except BaseException:
@@ -657,12 +682,8 @@ class SkillRegistry:
         await asyncio.wait({task})
         return task.result()
 
-    async def _run_dense_task(
-        self, operation: Callable[[], _DenseResult], gated: bool
-    ) -> _DenseResult:
+    async def _run_dense_task(self, operation: Callable[[], _DenseResult]) -> _DenseResult:
         try:
-            if not gated:
-                return await asyncio.to_thread(operation)
             return await asyncio.to_thread(self._run_dense_worker, operation)
         finally:
             self._finish_dense()
@@ -761,7 +782,9 @@ class SkillCatalog:
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
         reranker: RerankerConfig | None = None,
-        system_one: SystemOneConfig | None = None,
+        retrieve_fn: RankFn | None = None,
+        reranker_fn: RankFn | None = None,
+        reranker_depth: int | None = None,
     ) -> None:
         """Create an empty skill catalog.
 
@@ -793,16 +816,25 @@ class SkillCatalog:
                 is a mixed artifact built via
                 ``experimental_build_embedding_artifact``; the runtime remedy
                 for uncovered current-kind entries is ``on_miss="embed"``.
-            reranker: second-stage reranker — see `ToolCatalog.__init__`.
-                **Experimental.**
-            system_one: where ``"systemOne"`` sends rankings — see
+            reranker: second-stage built-in reranker — see
                 `ToolCatalog.__init__`. **Experimental.**
+            retrieve_fn: rank every skill with your own function
+                (``method="custom"``) — see `ToolCatalog.__init__`.
+                **Experimental.**
+            reranker_fn: rerank the first stage's top candidates with your own
+                function — see `ToolCatalog.__init__`. **Experimental.**
+            reranker_depth: how many first-stage candidates ``reranker_fn``
+                sees (default 50).
         """
-        _validate_method(method)
-        _validate_reranker(method, reranker)
+        _validate_ranking(
+            "SkillCatalog", method, reranker, retrieve_fn, reranker_fn, reranker_depth
+        )
         self._skills: dict[str, Skill] = {}
         self._method: SearchMethod = method
         self._reranker = reranker
+        self._retrieve_fn = retrieve_fn
+        self._reranker_fn = reranker_fn
+        self._reranker_depth = reranker_depth or _DEFAULT_RERANKER_DEPTH
         self._registry = SkillRegistry(
             embedding,
             method=method,
@@ -811,7 +843,6 @@ class SkillCatalog:
             experimental_bm25_b=experimental_bm25_b,
             experimental_embedding_artifact=experimental_embedding_artifact,
             reranker=reranker,
-            system_one=system_one,
         )
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
@@ -910,7 +941,9 @@ class SkillCatalog:
         """
         resolved_method = method or self._method
         _validate_method(resolved_method)
-        if self._reranker is not None:
+        if resolved_method == "custom":
+            raise RuntimeError(_CUSTOM_NEEDS_ASYNC)
+        if self._reranker is not None or self._reranker_fn is not None:
             raise RuntimeError(_RERANKER_NEEDS_ASYNC)
         if resolved_method != "bm25":
             raise RuntimeError(
@@ -938,11 +971,18 @@ class SkillCatalog:
         """Rank skills asynchronously with any method and the catalog's reranker.
 
         Dense methods require a complete cache built explicitly beforehand.
-        ``reranker`` overrides the catalog's for this call (``False`` turns it
-        off) — see `ToolCatalog.search_async`.
+        ``reranker`` overrides the catalog's ``reranker`` or ``reranker_fn``
+        for this call (``False`` turns both off) — see
+        `ToolCatalog.search_async`.
         """
         resolved_method = method or self._method
+        _validate_method(resolved_method)
+        if resolved_method == "custom" and self._retrieve_fn is None:
+            raise ValueError('method "custom" needs a catalog constructed with a retrieve_fn')
         resolved_reranker = _resolve_reranker(reranker, self._reranker)
+        reranker_fn = self._reranker_fn if reranker is None else None
+        if resolved_method == "custom":
+            resolved_reranker, reranker_fn = None, None
         _validate_reranker(resolved_method, resolved_reranker)
         return await trace_search_async(
             SEARCH_TARGET_SKILL,
@@ -950,7 +990,15 @@ class SkillCatalog:
             top_k,
             origin,
             lambda projection: self._registry.search_async(
-                query, top_k, origin, resolved_method, projection, reranker=resolved_reranker
+                query,
+                top_k,
+                origin,
+                resolved_method,
+                projection,
+                reranker=resolved_reranker,
+                retrieve_fn=self._retrieve_fn,
+                reranker_fn=reranker_fn,
+                reranker_depth=self._reranker_depth,
             ),
             turn_id,
         )

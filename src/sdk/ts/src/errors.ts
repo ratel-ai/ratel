@@ -310,186 +310,75 @@ export function mapArtifactBuildError(error: unknown): unknown {
   return mapArtifactError(error);
 }
 
-/** Stable categories for a failed system-one (Jev) ranking (ADR-0027). */
-export type SystemOneErrorCode =
-  | "Config"
-  | "Unauthorized"
-  | "InvalidRequest"
-  | "RateLimited"
-  | "Overloaded"
-  | "Timeout"
-  | "Unreachable"
-  | "Http"
-  | "Malformed";
-
 /**
- * A `"systemOne"` (Jev) ranking failed. A standalone `"systemOne"` search
- * throws every failure. A `"systemOne"` **reranker** throws only
- * misconfiguration (`"Config"`, `"Unauthorized"`, `"InvalidRequest"`), which
- * would fail every search the same way; on a transient failure it returns the
- * first stage's order and records `rerank_fallback:<code>` on the trace.
+ * A retrieve or rerank function failed (ADR-0027). Throw it from your own
+ * `retrieveFn` / `rerankerFn` to control what a search does with the failure;
+ * the Jev plugin ({@link ratelJevPlugin}) throws it for every Jev failure.
+ *
+ * As a **reranker**, a `RetrieverError` with `transient: true` does not fail
+ * the search: it returns the first stage's order and records
+ * `rerank_fallback:<code>` on the trace. Anything else a function throws —
+ * including a non-transient `RetrieverError` — fails the search.
+ *
+ * Jev's codes: `"Config"`, `"Unauthorized"`, `"InvalidRequest"` (not
+ * transient); `"RateLimited"`, `"Overloaded"`, `"Timeout"`, `"Unreachable"`,
+ * `"Http"`, `"Malformed"` (transient).
  */
-export class SystemOneError extends Error {
+export class RetrieverError extends Error {
   /** Stable machine-readable discriminant; prefer it over parsing `message`. */
-  readonly code: SystemOneErrorCode;
-  /** The HTTP status, for `"Unauthorized"`, `"InvalidRequest"`, `"Overloaded"` and `"Http"`. */
+  readonly code: string;
+  /** Whether a retry may succeed; a transient reranker failure falls back to stage 1. */
+  readonly transient: boolean;
+  /** The HTTP status, when the model's service sent one. */
   readonly status?: number;
-  /** Seconds Jev asked to wait, for `"RateLimited"` when it sent `Retry-After`. */
+  /** Seconds the service asked to wait, when it sent `Retry-After`. */
   readonly retryAfterSecs?: number;
 
   /**
-   * @param message - The underlying failure description (the core error text).
-   * @param code - The stable {@link SystemOneError.code} discriminant.
-   * @param details - The HTTP status and `Retry-After`, when Jev sent them.
+   * @param message - What went wrong.
+   * @param code - The stable {@link RetrieverError.code} discriminant.
+   * @param details - Whether it is transient (default `false`), and the HTTP
+   *   status and `Retry-After`, when known.
    */
   constructor(
     message: string,
-    code: SystemOneErrorCode,
-    details: { status?: number; retryAfterSecs?: number } = {},
+    code: string,
+    details: { transient?: boolean; status?: number; retryAfterSecs?: number } = {},
   ) {
     super(message);
-    this.name = "SystemOneError";
+    this.name = "RetrieverError";
     this.code = code;
+    this.transient = details.transient ?? false;
     if (details.status !== undefined) this.status = details.status;
     if (details.retryAfterSecs !== undefined) this.retryAfterSecs = details.retryAfterSecs;
   }
 }
 
-/** Private NAPI→TS transport prefix — must match native `SYSTEM_ONE_ERROR_PREFIX`. */
-const SYSTEM_ONE_ERROR_PREFIX = "RATEL_SYSTEM_ONE_ERROR:";
-
-const SYSTEM_ONE_ERROR_CODES: ReadonlySet<string> = new Set([
-  "Config",
-  "Unauthorized",
-  "InvalidRequest",
-  "RateLimited",
-  "Overloaded",
-  "Timeout",
-  "Unreachable",
-  "Http",
-  "Malformed",
-]);
+/** Private NAPI→TS transport prefix — must match native `RETRIEVER_ERROR_PREFIX`. */
+const RETRIEVER_ERROR_PREFIX = "RATEL_RETRIEVER_ERROR:";
 
 /**
- * Decode the private native system-one envelope into a typed
- * {@link SystemOneError}. Malformed envelopes and other errors are returned
+ * Decode the private native ranker envelope into a typed
+ * {@link RetrieverError}. Malformed envelopes and other errors are returned
  * unchanged.
  *
  * @param error - The error thrown by the native binding.
- * @returns The typed system-one error, or `error` unchanged when it is not one.
+ * @returns The typed error, or `error` unchanged when it is not one.
  */
-export function mapSystemOneError(error: unknown): unknown {
+export function mapRetrieverError(error: unknown): unknown {
   if (!(error instanceof Error)) return error;
-  if (!error.message.startsWith(SYSTEM_ONE_ERROR_PREFIX)) return error;
+  if (!error.message.startsWith(RETRIEVER_ERROR_PREFIX)) return error;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(error.message.slice(SYSTEM_ONE_ERROR_PREFIX.length));
+    parsed = JSON.parse(error.message.slice(RETRIEVER_ERROR_PREFIX.length));
   } catch {
     return error;
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return error;
   const record = parsed as Record<string, unknown>;
-  if (typeof record.code !== "string" || !SYSTEM_ONE_ERROR_CODES.has(record.code)) return error;
-  if (typeof record.message !== "string") return error;
-  return new SystemOneError(record.message, record.code as SystemOneErrorCode, {
-    status: typeof record.status === "number" ? record.status : undefined,
-    retryAfterSecs: typeof record.retryAfterSecs === "number" ? record.retryAfterSecs : undefined,
-  });
-}
-
-/**
- * Re-raise a native search failure as its typed error: system-one first, then
- * embedder. Anything unrecognized is returned unchanged.
- *
- * @param error - The error thrown by the native binding.
- * @returns The typed error, or `error` unchanged when it is not recognized.
- */
-export function mapSearchError(error: unknown): unknown {
-  const systemOne = mapSystemOneError(error);
-  if (systemOne !== error) return systemOne;
-  return mapEmbedderError(error);
-}
-
-/** Stable categories for a failed Ratel Cloud request (ADR-0027, ADR-0028). */
-export type CloudErrorCode =
-  | "Config"
-  | "Unauthorized"
-  | "InsufficientCredits"
-  | "NoSyncedTools"
-  | "RateLimited"
-  | "TooLarge"
-  | "Timeout"
-  | "Unavailable"
-  | "Http"
-  | "Malformed";
-
-/**
- * A Ratel Cloud request failed — a Tool Picker search on a `cloud` catalog, or
- * the catalog sync behind `register`. Branch on {@link CloudError.code}.
- */
-export class CloudError extends Error {
-  /** Stable machine-readable discriminant; prefer it over parsing `message`. */
-  readonly code: CloudErrorCode;
-  /** The HTTP status, for `"Unauthorized"` and `"Http"`. */
-  readonly status?: number;
-  /** Seconds Cloud asked to wait, for `"RateLimited"` when it sent `Retry-After`. */
-  readonly retryAfterSecs?: number;
-
-  /**
-   * @param message - The underlying failure description (the core error text).
-   * @param code - The stable {@link CloudError.code} discriminant.
-   * @param details - The HTTP status and `Retry-After`, when Cloud sent them.
-   */
-  constructor(
-    message: string,
-    code: CloudErrorCode,
-    details: { status?: number; retryAfterSecs?: number } = {},
-  ) {
-    super(message);
-    this.name = "CloudError";
-    this.code = code;
-    if (details.status !== undefined) this.status = details.status;
-    if (details.retryAfterSecs !== undefined) this.retryAfterSecs = details.retryAfterSecs;
-  }
-}
-
-/** Private NAPI→TS transport prefix — must match native `CLOUD_ERROR_PREFIX`. */
-const CLOUD_ERROR_PREFIX = "RATEL_CLOUD_ERROR:";
-
-const CLOUD_ERROR_CODES: ReadonlySet<string> = new Set([
-  "Config",
-  "Unauthorized",
-  "InsufficientCredits",
-  "NoSyncedTools",
-  "RateLimited",
-  "TooLarge",
-  "Timeout",
-  "Unavailable",
-  "Http",
-  "Malformed",
-]);
-
-/**
- * Decode the private native Cloud envelope into a typed {@link CloudError}.
- * Malformed envelopes and other errors are returned unchanged.
- *
- * @param error - The error thrown by the native binding.
- * @returns The typed Cloud error, or `error` unchanged when it is not one.
- */
-export function mapCloudError(error: unknown): unknown {
-  if (!(error instanceof Error)) return error;
-  if (!error.message.startsWith(CLOUD_ERROR_PREFIX)) return error;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(error.message.slice(CLOUD_ERROR_PREFIX.length));
-  } catch {
-    return error;
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return error;
-  const record = parsed as Record<string, unknown>;
-  if (typeof record.code !== "string" || !CLOUD_ERROR_CODES.has(record.code)) return error;
-  if (typeof record.message !== "string") return error;
-  return new CloudError(record.message, record.code as CloudErrorCode, {
+  if (typeof record.code !== "string" || typeof record.message !== "string") return error;
+  return new RetrieverError(record.message, record.code, {
+    transient: record.transient === true,
     status: typeof record.status === "number" ? record.status : undefined,
     retryAfterSecs: typeof record.retryAfterSecs === "number" ? record.retryAfterSecs : undefined,
   });

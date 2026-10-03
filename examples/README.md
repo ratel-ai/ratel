@@ -9,10 +9,8 @@ adaptive-ranking-ts/     Ratel adaptive usage ranking — learn from invocations
 adaptive-ranking-python/ Ratel adaptive usage ranking — the Python mirror, plus model-swap recovery
 configurable-adaptive-ranking-ts/ Seed an intent graph from a baseline capture, then switch ranking on (TS)
 configurable-adaptive-ranking-python/ Seeding — the Python mirror
-cloud-tool-picker-ts/ Ratel Cloud Tool Picker on a cloud-owned catalog, against a local Cloud stand-in (TS)
-cloud-tool-picker-python/ Cloud Tool Picker — the Python mirror
-system-one-reranking-ts/ Jev as a system-one ranker and reranker, called directly from the SDK (TS)
-system-one-reranking-python/ Jev system-one ranking — the Python mirror
+jev-retriever-ts/ Jev as a retriever and reranker through retrieveFn / rerankerFn (TS)
+jev-retriever-python/ Jev retriever and reranker — the Python mirror
 s3-support-adaptive-ranking/ Live S3 intent graph storage smoke test (real AWS, manual-only) (TS)
 s3-support-adaptive-ranking-python/ Live S3 intent graph storage smoke test — the Python mirror
 ai-sdk/           Ratel + Vercel AI SDK — top-K filtering + capability tools in ToolLoopAgent.generate

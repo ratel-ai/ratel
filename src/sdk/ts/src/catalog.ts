@@ -13,7 +13,7 @@ import {
 } from "./embedding-artifact.js";
 import { type IntentGraph, ToolRegistry } from "./registry.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
-import { defaultSourceId, newRuntimeEventId } from "./runtime-events.js";
+import { newRuntimeEventId } from "./runtime-events.js";
 import {
   argsSizeBytes,
   errorMessage,
@@ -286,169 +286,106 @@ export interface BaselineTurn {
  * (or warms a configured embedding artifact). Dense ranking uses
  * `searchAsync()`.
  */
-export type SearchMethod = "bm25" | "semantic" | "hybrid" | "systemOne";
+export type SearchMethod = "bm25" | "semantic" | "hybrid" | "custom";
+
+/** The built-in methods: everything but `"custom"`. */
+export type BuiltInSearchMethod = Exclude<SearchMethod, "custom">;
 
 /**
- * A second stage over the first stage's candidates (ADR-0027): `method`
- * re-scores the top `depth` (default 50) hits of the catalog's `method`. It
- * never adds a tool the first stage did not return.
- *
- * Any method may rerank any other, but not itself. A `"systemOne"` reranker
- * that fails (Jev down, rate limited) returns the first stage's order rather
- * than throwing.
+ * A second stage over the first stage's candidates (ADR-0027): a built-in
+ * `method` re-scores the top `depth` (default 50) hits of the catalog's
+ * `method`. It never adds a tool the first stage did not return, and may not
+ * use the first stage's own method. For a model you call yourself, use
+ * {@link ToolCatalogOptions.rerankerFn} instead.
  *
  * **Experimental** — may change without a major version bump.
  */
 export interface RerankerConfig {
   /** The method that re-scores the candidates. */
-  method: SearchMethod;
+  method: BuiltInSearchMethod;
   /** How many first-stage candidates to re-score (default 50; raised to `topK` when lower). */
   depth?: number;
 }
 
+/** What kind of catalog item a ranking function is asked about. */
+export type RankCandidateKind = "tool" | "skill";
+
+/** A catalog item offered to a {@link RankFn}. */
+export interface RankCandidate {
+  /** The tool or skill id; return it to rank the item. */
+  id: string;
+  /** Whether this is a tool or a skill. One call offers one kind. */
+  kind: RankCandidateKind;
+  /** The text the built-in methods rank: name plus description (or its searchable override). */
+  text: string;
+}
+
+/** One id a {@link RankFn} scored. */
+export interface RankedId {
+  /** One of the offered candidates' ids; anything else is dropped. */
+  id: string;
+  /** Higher is better; clamped to `[0, 1]`, a non-finite score reads as `0`. */
+  score: number;
+}
+
 /**
- * Where `"systemOne"` sends its rankings: Jev (TypeSafe AI), called directly
- * from this process (ADR-0027). Defaults: `https://api.typesafe.ai`, the key in
- * `TYPESAFE_API_KEY`, model `jev-latest`.
+ * A caller-supplied ranking function (ADR-0027) — a model you call, such as
+ * Jev via {@link ratelJevPlugin}. Returns `{ id, score }` pairs in any order.
  *
- * `"systemOne"` sends the query and each candidate's searchable text to Jev.
- * The other local methods never leave the process. For a catalog Ratel Cloud
- * owns, use {@link CloudConfig} instead — Cloud runs Jev behind its picker.
+ * - As {@link ToolCatalogOptions.retrieveFn} (`method: "custom"`) it ranks the
+ *   whole catalog; the search returns only the ids it returned, best first, at
+ *   most `topK`.
+ * - As {@link ToolCatalogOptions.rerankerFn} it ranks the first stage's top
+ *   candidates; ids outside them are dropped, candidates it left out follow at
+ *   `0`, and ties keep the first stage's order.
+ *
+ * A throw fails the search, except a {@link RetrieverError} with
+ * `transient: true` from a reranker, which keeps the first stage's order.
  *
  * **Experimental** — may change without a major version bump.
  */
-export interface SystemOneConfig {
-  /** Jev base URL (a proxy, tests); `/v1/systemone` is appended. */
-  url?: string;
-  /** Name of the environment variable holding the Jev key (read at search time). */
-  apiKeyEnv?: string;
-  /** Jev model (default `"jev-latest"`). */
-  model?: string;
-}
-
-/**
- * How the Cloud Tool Picker ranks (ADR-0027): `"instant"` is BM25
- * (milliseconds, free), `"precise"` judges a BM25 shortlist with a system-one
- * model (~300 ms, metered), `"exhaustive"` judges the whole catalog (seconds,
- * metered).
- */
-export type PickMode = "instant" | "precise" | "exhaustive";
-
-const PICK_MODES: ReadonlySet<string> = new Set(["instant", "precise", "exhaustive"]);
-
-/**
- * Makes Ratel Cloud the catalog's owner (ADR-0027, ADR-0028): `register`
- * uploads the catalog's executor-free definitions to the Cloud project, and
- * `searchAsync` ranks through the Cloud Tool Picker. Executors stay local.
- *
- * **The catalog's names, descriptions and schemas, and every query, leave the
- * process.** Local methods never do.
- *
- * **Experimental** — may change without a major version bump.
- */
-export interface CloudConfig {
-  /** Pick mode for `searchAsync` (default `"precise"`); overridable per call. */
-  mode?: PickMode;
-  /** Cloud base URL (default `https://cloud.ratel.sh`). */
-  url?: string;
-  /** Name of the environment variable holding the project key (default `RATEL_API_KEY`). */
-  apiKeyEnv?: string;
-  /**
-   * This process's catalog in the Cloud project. A sync replaces that
-   * source's tools, so services sharing a project need distinct ids. Default:
-   * `OTEL_SERVICE_NAME`, else `"ratel"` (`ratel()` passes its runtime-events
-   * `sourceId`).
-   */
-  sourceId?: string;
-  /** `"throw"` (default): a failed sync rejects `register`. `"warn"`: it only warns. */
-  onSyncError?: "throw" | "warn";
-}
-
-/** What the Cloud Tool Picker returned for one search. */
-export interface CloudPick {
-  /** The picked tools registered in this catalog, best-first. */
-  hits: SearchHit[];
-  /** Picked ids not registered in this catalog — dropped, nothing here can invoke them. */
-  dropped: string[];
-  /** Whether the judge was confident in its top pick; absent or `null` for `"instant"`. */
-  confident?: boolean | null;
-}
-
-/** What a catalog sync did. */
-export interface CloudSyncOutcome {
-  /** Cloud's version of this source's catalog after the sync. */
-  catalogVersion: string;
-  /** How many tools the snapshot held. */
-  tools: number;
-  /** Cloud already held exactly this snapshot. */
-  unchanged: boolean;
-  /** No request was sent: nothing changed since the last acknowledged sync. */
-  skipped: boolean;
-}
-
-/** Reject a `cloud` option the catalog cannot honour. @internal */
-export function assertValidCloud(
-  cloud: CloudConfig | undefined,
-  options: {
-    method?: SearchMethod;
-    reranker?: RerankerConfig;
-    systemOne?: SystemOneConfig;
-    experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
-  },
-): void {
-  if (!cloud) return;
-  if (options.experimentalEmbeddingArtifact !== undefined) {
-    throw new Error(
-      "a cloud catalog is ranked by the Cloud Tool Picker and never uses embeddings; " +
-        "drop `experimentalEmbeddingArtifact`",
-    );
-  }
-  if (
-    options.method !== undefined ||
-    options.reranker !== undefined ||
-    options.systemOne !== undefined
-  ) {
-    throw new Error(
-      "a cloud catalog is ranked by the Cloud Tool Picker; drop `method`, `reranker` and " +
-        "`systemOne` and choose a `cloud.mode` instead",
-    );
-  }
-  if (cloud.mode !== undefined && !PICK_MODES.has(cloud.mode)) {
-    throw new Error(
-      `unknown cloud mode "${cloud.mode}" (expected "instant", "precise", or "exhaustive")`,
-    );
-  }
-  if (
-    cloud.onSyncError !== undefined &&
-    cloud.onSyncError !== "throw" &&
-    cloud.onSyncError !== "warn"
-  ) {
-    throw new Error(
-      `unknown cloud onSyncError "${cloud.onSyncError}" (expected "throw" or "warn")`,
-    );
-  }
-}
+export type RankFn = (
+  query: string,
+  candidates: RankCandidate[],
+  topK: number,
+) => Promise<RankedId[]> | RankedId[];
 
 /** Per-call options for `searchAsync`; each field overrides the catalog's default. */
 export interface SearchAsyncOptions {
   /** Who initiated the call (default `"direct"`); recorded, never affects ranking. */
   origin?: SearchOrigin;
-  /** First-stage method for this call. */
+  /** First-stage method for this call. `"custom"` needs the catalog's `retrieveFn`. */
   method?: SearchMethod;
-  /** Reranker for this call; `null` turns the catalog's reranker off. */
+  /** Built-in reranker for this call; `null` turns off the catalog's reranker or `rerankerFn`. */
   reranker?: RerankerConfig | null;
   /** Correlates the search with the invokes that follow it (ADR-0014). */
   turnId?: string;
-  /** Pick mode for this call, on a `cloud` catalog. */
-  mode?: PickMode;
+}
+
+/** The ranking options a tool or skill catalog accepts. @internal */
+export interface RankingOptions {
+  method?: SearchMethod;
+  reranker?: RerankerConfig;
+  retrieveFn?: RankFn;
+  rerankerFn?: RankFn;
+  rerankerDepth?: number;
 }
 
 const DENSE_METHODS: ReadonlySet<SearchMethod> = new Set(["semantic", "hybrid"]);
-const SEARCH_METHODS: ReadonlySet<string> = new Set(["bm25", "semantic", "hybrid", "systemOne"]);
+const BUILT_IN_METHODS: ReadonlySet<string> = new Set(["bm25", "semantic", "hybrid"]);
+
+/** Default number of first-stage candidates a reranker re-scores. @internal */
+export const DEFAULT_RERANKER_DEPTH = 50;
 
 /** Whether either stage ranks against embeddings, so registration must embed. @internal */
 export function usesDense(method: SearchMethod, reranker?: RerankerConfig | null): boolean {
   return DENSE_METHODS.has(method) || (!!reranker && DENSE_METHODS.has(reranker.method));
+}
+
+function assertDepth(name: string, depth: number | undefined): void {
+  if (depth !== undefined && !(Number.isInteger(depth) && depth >= 1)) {
+    throw new Error(`${name} must be a positive integer, got ${depth}`);
+  }
 }
 
 /**
@@ -457,11 +394,14 @@ export function usesDense(method: SearchMethod, reranker?: RerankerConfig | null
  */
 export function assertValidReranker(method: SearchMethod, reranker?: RerankerConfig | null): void {
   if (!reranker) return;
-  if (!SEARCH_METHODS.has(reranker.method)) {
+  if (!BUILT_IN_METHODS.has(reranker.method)) {
     throw new Error(
       `unknown search method "${reranker.method}" for the reranker ` +
-        '(expected "bm25", "semantic", "hybrid", or "systemOne")',
+        '(expected "bm25", "semantic", or "hybrid"; for your own model use rerankerFn)',
     );
+  }
+  if (method === "custom") {
+    throw new Error('a reranker needs a "bm25", "semantic" or "hybrid" first stage, not "custom"');
   }
   if (reranker.method === method) {
     throw new Error(
@@ -469,10 +409,54 @@ export function assertValidReranker(method: SearchMethod, reranker?: RerankerCon
         "a reranker must use a different method",
     );
   }
-  const { depth } = reranker;
-  if (depth !== undefined && !(Number.isInteger(depth) && depth >= 1)) {
-    throw new Error(`reranker depth must be a positive integer, got ${depth}`);
+  assertDepth("reranker depth", reranker.depth);
+}
+
+/** Reject ranking options that contradict each other, at construction. @internal */
+export function assertValidRanking(owner: string, options: RankingOptions): SearchMethod {
+  const method = options.method ?? "bm25";
+  if (method !== "custom" && !BUILT_IN_METHODS.has(method)) {
+    throw new Error(
+      `${owner}: unknown search method "${method}" (expected "bm25", "semantic", "hybrid", or "custom")`,
+    );
   }
+  const { retrieveFn, rerankerFn, rerankerDepth } = options;
+  if (retrieveFn !== undefined && typeof retrieveFn !== "function") {
+    throw new Error(`${owner}: retrieveFn must be a function`);
+  }
+  if (rerankerFn !== undefined && typeof rerankerFn !== "function") {
+    throw new Error(`${owner}: rerankerFn must be a function`);
+  }
+  if (method === "custom" && !retrieveFn) {
+    throw new Error(`${owner}: method "custom" needs a retrieveFn`);
+  }
+  if (retrieveFn && method !== "custom") {
+    throw new Error(`${owner}: retrieveFn needs method "custom"`);
+  }
+  if (rerankerFn && options.reranker) {
+    throw new Error(`${owner}: pass either reranker or rerankerFn, not both`);
+  }
+  if (rerankerFn && method === "custom") {
+    throw new Error(
+      `${owner}: rerankerFn needs a "bm25", "semantic" or "hybrid" first stage, not "custom"`,
+    );
+  }
+  if (rerankerDepth !== undefined && !rerankerFn) {
+    throw new Error(`${owner}: rerankerDepth needs a rerankerFn`);
+  }
+  assertDepth("rerankerDepth", rerankerDepth);
+  assertValidReranker(method, options.reranker);
+  return method;
+}
+
+/** How one `searchAsync` call ranks, after per-call overrides. @internal */
+export interface ResolvedSearch {
+  origin: SearchOrigin;
+  method: SearchMethod;
+  reranker: RerankerConfig | undefined;
+  rerankerFn: RankFn | undefined;
+  rerankerDepth: number;
+  turnId: string | undefined;
 }
 
 /**
@@ -483,34 +467,39 @@ export function resolveSearchAsyncArgs(
   originOrOptions: SearchOrigin | SearchAsyncOptions | undefined,
   method: SearchMethod | undefined,
   turnId: string | undefined,
-  defaults: { method: SearchMethod; reranker: RerankerConfig | undefined },
-): {
-  origin: SearchOrigin;
-  method: SearchMethod;
-  reranker: RerankerConfig | undefined;
-  turnId: string | undefined;
-} {
+  defaults: RankingOptions & { method: SearchMethod },
+): ResolvedSearch {
   const options: SearchAsyncOptions =
     typeof originOrOptions === "object" && originOrOptions !== null
       ? originOrOptions
       : { origin: originOrOptions, method, turnId };
-  const resolved = {
+  const resolvedMethod = options.method ?? defaults.method;
+  if (resolvedMethod === "custom" && !defaults.retrieveFn) {
+    throw new Error('method "custom" needs a catalog constructed with a retrieveFn');
+  }
+  // A per-call reranker replaces the catalog's, built-in or function; `null`
+  // turns both off. Neither applies to a custom first stage.
+  const override = options.reranker !== undefined;
+  const reranker = override ? (options.reranker ?? undefined) : defaults.reranker;
+  const rerankerFn = override || resolvedMethod === "custom" ? undefined : defaults.rerankerFn;
+  if (resolvedMethod !== "custom" || reranker) assertValidReranker(resolvedMethod, reranker);
+  return {
     origin: options.origin ?? "direct",
-    method: options.method ?? defaults.method,
-    reranker: options.reranker === undefined ? defaults.reranker : (options.reranker ?? undefined),
+    method: resolvedMethod,
+    reranker: resolvedMethod === "custom" ? undefined : reranker,
+    rerankerFn,
+    rerankerDepth: defaults.rerankerDepth ?? DEFAULT_RERANKER_DEPTH,
     turnId: options.turnId,
   };
-  assertValidReranker(resolved.method, resolved.reranker);
-  return resolved;
 }
-
-/** Guidance thrown by a synchronous `search` on a cloud catalog. @internal */
-export const CLOUD_NEEDS_ASYNC =
-  "this catalog ranks through the Cloud Tool Picker, a network call; use searchAsync()";
 
 /** Guidance thrown by a synchronous `search` on a catalog with a reranker. @internal */
 export const RERANKER_NEEDS_ASYNC =
   "this catalog has a reranker, which runs off the event loop; use searchAsync()";
+
+/** Guidance thrown by a synchronous `search` on a `"custom"` catalog. @internal */
+export const CUSTOM_NEEDS_ASYNC =
+  'this catalog ranks with its retrieveFn (method "custom"), which may be async; use searchAsync()';
 
 type EmbeddingConfigKey =
   | "huggingface"
@@ -629,23 +618,37 @@ export interface ToolCatalogOptions {
    */
   experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
   /**
-   * Re-score the first stage's top candidates with another method — see
-   * {@link RerankerConfig}. Applies to `searchAsync` (and the capability tools,
-   * which use it); a synchronous `search` on a catalog with a reranker throws.
-   * **Experimental.**
+   * Re-score the first stage's top candidates with another built-in method —
+   * see {@link RerankerConfig}. Applies to `searchAsync` (and the capability
+   * tools, which use it); a synchronous `search` on a catalog with a reranker
+   * throws. **Experimental.**
    */
   reranker?: RerankerConfig;
   /**
-   * Where `"systemOne"` (as `method` or reranker) sends rankings — Jev, called
-   * directly; see {@link SystemOneConfig}. **Experimental.**
+   * Rank the whole catalog with your own function — a model you call, such as
+   * Jev via {@link ratelJevPlugin}. Needs `method: "custom"`. See
+   * {@link RankFn}. **Experimental.**
+   *
+   * @example
+   * ```ts
+   * const jev = ratelJevPlugin();
+   * new ToolCatalog({ method: "custom", retrieveFn: jev.retrieve });
+   * ```
    */
-  systemOne?: SystemOneConfig;
+  retrieveFn?: RankFn;
   /**
-   * Make Ratel Cloud this catalog's owner and rank through its Tool Picker —
-   * see {@link CloudConfig}. Not combinable with `method`, `reranker` or
-   * `systemOne`. **Experimental.**
+   * Rerank the first stage's top `rerankerDepth` candidates with your own
+   * function. Not combinable with `reranker` or `method: "custom"`. See
+   * {@link RankFn}. **Experimental.**
+   *
+   * @example
+   * ```ts
+   * new ToolCatalog({ method: "bm25", rerankerFn: ratelJevPlugin().rerank });
+   * ```
    */
-  cloud?: CloudConfig;
+  rerankerFn?: RankFn;
+  /** How many first-stage candidates `rerankerFn` sees (default 50; raised to `topK` when lower). */
+  rerankerDepth?: number;
 }
 
 /**
@@ -689,9 +692,7 @@ export class ToolCatalog {
   private overrideSearchableDescriptions = new Map<string, string>();
   private readonly warnedShadowIds = new Set<string>();
   private readonly method: SearchMethod;
-  private readonly reranker: RerankerConfig | undefined;
-  private readonly cloud: (CloudConfig & { sourceId: string }) | undefined;
-  private readonly warnedDroppedIds = new Set<string>();
+  private readonly ranking: RankingOptions;
   private readonly embeddingArtifact: ExperimentalEmbeddingArtifact | undefined;
 
   /**
@@ -701,20 +702,19 @@ export class ToolCatalog {
    *   Construction validates configuration but never loads a model.
    */
   constructor(options: ToolCatalogOptions = {}) {
-    assertValidCloud(options.cloud, options);
-    this.method = options.method ?? "bm25";
-    assertValidReranker(this.method, options.reranker);
-    this.reranker = options.reranker;
-    this.cloud = options.cloud && {
-      ...options.cloud,
-      sourceId: options.cloud.sourceId ?? defaultSourceId(),
+    this.method = assertValidRanking("ToolCatalog", options);
+    this.ranking = {
+      reranker: options.reranker,
+      retrieveFn: options.retrieveFn,
+      rerankerFn: options.rerankerFn,
+      rerankerDepth: options.rerankerDepth,
     };
     this.registry = new ToolRegistry(
       options.embedding,
       this.method,
       options.experimentalDenseWeight,
       options.experimentalBm25,
-      { reranker: options.reranker, systemOne: options.systemOne, cloud: options.cloud },
+      { reranker: options.reranker },
     );
     this.embeddingArtifact = options.experimentalEmbeddingArtifact;
     if (options.trace) {
@@ -740,7 +740,6 @@ export class ToolCatalog {
    *   dense-preparation request — separate `register` calls prepare separately.
    * @throws {@link EmbedderError} when embedding fails;
    *   {@link ArtifactWarmError} when a configured artifact fails;
-   *   {@link CloudError} when a `cloud` catalog's sync fails (unless `onSyncError: "warn"`);
    *   plain `Error` if `execute` is missing.
    */
   async register(tools: ExecutableTool | readonly ExecutableTool[]): Promise<void> {
@@ -803,31 +802,6 @@ export class ToolCatalog {
       this.tools.set(tool.id, metadata);
     }
     await this.ensureDenseReady();
-    if (this.cloud) await this.syncCloud();
-  }
-
-  /**
-   * Upload the catalog to Ratel Cloud now (ADR-0028). `register` already does
-   * this on a `cloud` catalog; call it to retry after a failed sync. Skipped
-   * when nothing changed since the last acknowledged sync.
-   *
-   * @throws {@link CloudError} when the upload fails, or the catalog has no `cloud`.
-   */
-  async syncNow(): Promise<CloudSyncOutcome> {
-    if (!this.cloud) throw new Error("syncNow() needs a catalog constructed with `cloud`");
-    return this.registry.cloudSyncAsync(this.cloud.sourceId);
-  }
-
-  private async syncCloud(): Promise<void> {
-    try {
-      await this.syncNow();
-    } catch (error) {
-      if (this.cloud?.onSyncError !== "warn") throw error;
-      console.warn(
-        `ratel: cloud catalog sync failed; picks may rank a stale catalog until the next ` +
-          `register or syncNow(): ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
   private applyDefinitionOverride(tool: ExecutableTool): ExecutableTool {
@@ -875,15 +849,15 @@ export class ToolCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): SearchHit[] {
-    if (this.cloud) throw new Error(CLOUD_NEEDS_ASYNC);
-    if (this.reranker) throw new Error(RERANKER_NEEDS_ASYNC);
+    const resolved = method ?? this.method;
+    if (resolved === "custom") throw new Error(CUSTOM_NEEDS_ASYNC);
+    if (this.ranking.reranker || this.ranking.rerankerFn) throw new Error(RERANKER_NEEDS_ASYNC);
     return traceSearch(
       SearchTarget.Tool,
       query,
       topK,
       origin,
-      (projection) =>
-        this.registry.searchWithMethod(query, topK, origin, method ?? this.method, projection),
+      (projection) => this.registry.searchWithMethod(query, topK, origin, resolved, projection),
       turnId,
     );
   }
@@ -909,12 +883,11 @@ export class ToolCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): Promise<SearchHit[]> {
-    if (this.cloud) return this.pickAsync(query, topK, originOrOptions, method, turnId);
-    let args: ReturnType<typeof resolveSearchAsyncArgs>;
+    let args: ResolvedSearch;
     try {
       args = resolveSearchAsyncArgs(originOrOptions, method, turnId, {
+        ...this.ranking,
         method: this.method,
-        reranker: this.reranker,
       });
     } catch (error) {
       return Promise.reject(error);
@@ -925,58 +898,8 @@ export class ToolCatalog {
       topK,
       args.origin,
       (projection) =>
-        this.registry.searchWithOptionsAsync(
-          query,
-          topK,
-          args.origin,
-          args.method,
-          args.reranker,
-          projection,
-        ),
+        this.registry.rankAsync(query, topK, args, this.ranking.retrieveFn, projection),
       args.turnId,
-    );
-  }
-
-  private pickAsync(
-    query: string,
-    topK: number,
-    originOrOptions: SearchOrigin | SearchAsyncOptions | undefined,
-    method: SearchMethod | undefined,
-    turnId: string | undefined,
-  ): Promise<SearchHit[]> {
-    const cloud = this.cloud as CloudConfig;
-    const options: SearchAsyncOptions =
-      typeof originOrOptions === "object" && originOrOptions !== null
-        ? originOrOptions
-        : { origin: originOrOptions, method, turnId };
-    if (options.method !== undefined || options.reranker) {
-      return Promise.reject(
-        new Error("a cloud catalog is ranked by the Cloud Tool Picker; pass `mode`, not `method`"),
-      );
-    }
-    const mode = options.mode ?? cloud.mode ?? "precise";
-    if (!PICK_MODES.has(mode)) {
-      return Promise.reject(new Error(`unknown cloud mode "${mode}"`));
-    }
-    const origin = options.origin ?? "direct";
-    return traceSearchAsync(
-      SearchTarget.Tool,
-      query,
-      topK,
-      origin,
-      async (projection) => {
-        const pick = await this.registry.cloudPickAsync(query, topK, origin, mode, projection);
-        const unseen = pick.dropped.filter((id) => !this.warnedDroppedIds.has(id));
-        if (unseen.length > 0) {
-          for (const id of unseen) this.warnedDroppedIds.add(id);
-          console.warn(
-            `ratel: the Cloud Tool Picker returned tools not registered in this catalog ` +
-              `(${unseen.join(", ")}); they were dropped. Register them here, or re-sync.`,
-          );
-        }
-        return pick.hits;
-      },
-      options.turnId,
     );
   }
 

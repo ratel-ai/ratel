@@ -4,7 +4,7 @@ requires-python = ">=3.10"
 
 [[package]]
 name = "ratel-ai"
-version = "0.13.0rc5"
+version = "0.13.0rc10"
 source = { directory = "../../src/sdk/python" }
 dependencies = [
     { name = "ratel-ai-telemetry" },
@@ -36,7 +36,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ratel-example-system-one-reranking"
+name = "ratel-example-jev-retriever"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

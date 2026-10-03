@@ -45,9 +45,7 @@ export {
 } from "./capabilities.js";
 export type {
   BaselineTurn,
-  CloudConfig,
-  CloudPick,
-  CloudSyncOutcome,
+  BuiltInSearchMethod,
   EmbeddingModelConfig,
   EmbeddingSpec,
   ExecutableTool,
@@ -57,13 +55,15 @@ export type {
   InputValidator,
   ObservationPolicyOptions,
   OriginFilterOption,
-  PickMode,
   ProvenanceOption,
+  RankCandidate,
+  RankCandidateKind,
+  RankedId,
+  RankFn,
   RerankerConfig,
   SearchAsyncOptions,
   SearchMethod,
   SearchOrigin,
-  SystemOneConfig,
   ToolCatalogOptions,
   TraceSinkConfig,
 } from "./catalog.js";
@@ -82,16 +82,15 @@ export type {
   ExperimentalEmbeddingArtifact,
 } from "./embedding-artifact.js";
 export { experimentalBuildEmbeddingArtifact } from "./embedding-artifact.js";
-export type { CloudErrorCode, DefinitionOverlayErrorCode, SystemOneErrorCode } from "./errors.js";
+export type { DefinitionOverlayErrorCode } from "./errors.js";
 export {
   ArtifactError,
   ArtifactWarmError,
-  CloudError,
   DefinitionOverlayError,
   DimensionMismatchError,
   EmbedderError,
   IncompatibleMergeError,
-  SystemOneError,
+  RetrieverError,
 } from "./errors.js";
 export { experimentalDefineExperiment } from "./experiment.js";
 export type {
@@ -125,6 +124,8 @@ export {
   S3IntentGraphStorage,
   StaleIntentGraphError,
 } from "./intent-graph-storage.js";
+export type { JevPluginConfig, RetrieverPlugin } from "./jev.js";
+export { ratelJevPlugin } from "./jev.js";
 export type { McpServerHandle, McpToolsListErrorCode, RegisterMcpServerOptions } from "./mcp.js";
 export { McpToolsListError, registerMcpServer } from "./mcp.js";
 // The framework-adapter SPI and factory (ADR-0013): `ratel(config).adaptTo(adapter)`.
