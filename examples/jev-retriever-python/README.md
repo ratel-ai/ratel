@@ -19,9 +19,9 @@ query: "the customer was charged twice, give them their money back"
 
 bm25                : stripe_list_charges (1.74) > stripe_create_charge (1.71) > stripe_create_customer (0.27)
   (bm25 ranks stripe_refund_payment #6)
-bm25 -> jev         : stripe_refund_payment (0.88) > stripe_list_charges (0.12) > stripe_create_charge (0.00)
+bm25 -> jev         : stripe_refund_payment (0.86) > stripe_list_charges (0.14) > stripe_create_charge (0.00)
   reranker=False    : stripe_list_charges (1.74) > stripe_create_charge (1.71) > stripe_create_customer (0.27)
-jev alone           : stripe_refund_payment (0.89) > stripe_list_charges (0.11) > stripe_create_charge (0.00)
+jev alone           : stripe_refund_payment (0.86) > stripe_list_charges (0.14)
 bm25 -> your fn     : stripe_refund_payment (1.00) > stripe_list_charges (0.00) > stripe_create_charge (0.00)
 
 jev down:

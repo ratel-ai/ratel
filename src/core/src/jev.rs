@@ -36,6 +36,11 @@ const MAX_OPTIONS: usize = 150;
 const MAX_QUESTION_CHARS: usize = 80_000;
 const MAX_OPTION_CHARS: usize = 2_000;
 
+/// Below this probability Jev is saying "not this one": such options pad
+/// `top_k` as filler rather than being picks, so a ranking drops them (the
+/// best pick always stays).
+const MIN_PROBABILITY: f32 = 0.01;
+
 /// How many tournament groups run at once.
 const TOURNAMENT_CONCURRENCY: usize = 6;
 
@@ -505,7 +510,8 @@ fn advance<'a>(ranked_groups: &[Vec<&'a Candidate>]) -> Vec<&'a Candidate> {
 
 impl JevRanker {
     /// Rank `candidates` for `query`: `(id, probability)` best first, every id
-    /// one of `candidates`, at most `top_k`. `kind` is what the candidates
+    /// one of `candidates`, at most `top_k`. Picks below [`MIN_PROBABILITY`]
+    /// are dropped, except the best one. `kind` is what the candidates
     /// are; Jev is asked about tools or skills accordingly.
     ///
     /// # Errors
@@ -528,6 +534,13 @@ impl JevRanker {
             .filter(|c| seen.insert(c.id.as_str()))
             .collect();
         let mut ranked = self.tournament(&key, query, unique, top_k.max(1), kind)?;
+        // Keep the best pick even when every probability is low (a large,
+        // uncertain field spreads probability thin), and drop the near-zero tail.
+        let mut position = 0;
+        ranked.retain(|(_, p)| {
+            position += 1;
+            position == 1 || *p >= MIN_PROBABILITY
+        });
         ranked.truncate(top_k);
         Ok(ranked)
     }
@@ -714,11 +727,17 @@ mod tests {
     /// Answers with probabilities from a fixed per-text score table, so the
     /// same candidate scores the same in any group or round.
     fn by_text(scores: HashMap<String, f32>) -> Answer {
+        by_text_or(scores, 0.0)
+    }
+
+    /// [`by_text`], scoring every unlisted option `floor` rather than 0, for
+    /// tests that count the options a ranking keeps.
+    fn by_text_or(scores: HashMap<String, f32>, floor: f32) -> Answer {
         Box::new(move |criteria| {
             let probs: serde_json::Map<String, serde_json::Value> = criteria
                 .iter()
                 .map(|(k, text)| {
-                    let p = scores.get(text.as_str().unwrap()).copied().unwrap_or(0.0);
+                    let p = scores.get(text.as_str().unwrap()).copied().unwrap_or(floor);
                     (k.clone(), serde_json::json!(p))
                 })
                 .collect();
@@ -762,11 +781,8 @@ mod tests {
             .unwrap();
         assert_eq!(
             ranked,
-            vec![
-                ("refund".into(), 0.93),
-                ("list".into(), 0.07),
-                ("charge".into(), 0.0)
-            ]
+            vec![("refund".into(), 0.93), ("list".into(), 0.07)],
+            "the 0.0 option is filler and is dropped"
         );
         let request = &seen.lock().unwrap()[0];
         assert_eq!(request.request_line, "POST /v1/systemone HTTP/1.1");
@@ -776,6 +792,43 @@ mod tests {
         let tool = &request.body["questions"]["tool"];
         assert_eq!(tool["type"], "choice");
         assert_eq!(tool["criteria"]["t2"], "text of refund");
+    }
+
+    #[test]
+    fn near_zero_picks_are_dropped() {
+        let scores = HashMap::from([
+            ("text of refund".to_string(), 0.9),
+            ("text of list".to_string(), 0.08),
+            ("text of charge".to_string(), 0.005),
+        ]);
+        let (url, _seen) = mock(by_text(scores), 1);
+        let ranked = client(&url)
+            .rank(
+                "money back",
+                &cands(&["charge", "list", "refund", "email"]),
+                5,
+                CandidateKind::Tool,
+            )
+            .unwrap();
+        assert_eq!(
+            ranked,
+            vec![("refund".into(), 0.9), ("list".into(), 0.08)],
+            "picks below MIN_PROBABILITY are filler, not picks"
+        );
+    }
+
+    #[test]
+    fn the_best_pick_survives_even_when_every_probability_is_low() {
+        // A thin spread: no option reaches MIN_PROBABILITY.
+        let scores = HashMap::from([
+            ("text of a".to_string(), 0.008),
+            ("text of b".to_string(), 0.006),
+        ]);
+        let (url, _seen) = mock(by_text(scores), 1);
+        let ranked = client(&url)
+            .rank("q", &cands(&["a", "b", "c"]), 5, CandidateKind::Tool)
+            .unwrap();
+        assert_eq!(ranked, vec![("a".into(), 0.008)]);
     }
 
     #[test]
@@ -811,7 +864,7 @@ mod tests {
         let ids: Vec<String> = (0..160).map(|i| format!("tool{i:03}")).collect();
         let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
         let scores = HashMap::from([("text of tool155".to_string(), 0.9)]);
-        let (url, seen) = mock(by_text(scores), 3);
+        let (url, seen) = mock(by_text_or(scores, 0.02), 3);
         let ranked = client(&url)
             .rank("q", &cands(&id_refs), 150, CandidateKind::Tool)
             .unwrap();
@@ -842,7 +895,7 @@ mod tests {
             })
             .collect();
         let best = many[42].text.clone();
-        let (url, seen) = mock(by_text(HashMap::from([(best, 0.8)])), 3);
+        let (url, seen) = mock(by_text_or(HashMap::from([(best, 0.8)]), 0.02), 3);
         let ranked = client(&url)
             .rank("q", &many, 45, CandidateKind::Tool)
             .unwrap();

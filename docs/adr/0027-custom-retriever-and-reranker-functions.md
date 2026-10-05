@@ -70,7 +70,9 @@ status?, retryAfterSecs? }` is generic, so any model's function can use it.
 (`JevRanker`) outside the search path, with the defaults `https://api.typesafe.ai`,
 `TYPESAFE_API_KEY` (read at call time) and `jev-latest`. It asks one `choice` question per call
 (question id `tool` or `skill`), above 150 options or 80,000 characters runs groups of that size
-in parallel (6 at a time) and fills a final question with their winners round-robin. Its failures
+in parallel (6 at a time) and fills a final question with their winners round-robin. It drops
+picks below probability 0.01 (keeping the best one), so a retriever returns real picks rather than
+zero-score filler. Its failures
 map to `RetrieverError` codes: `Config`, `Unauthorized`, `InvalidRequest` (not transient);
 `RateLimited` (with `Retry-After`), `Overloaded`, `Timeout`, `Unreachable`, `Http`, `Malformed`
 (transient). A change to Jev's API touches the plugin only.

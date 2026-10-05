@@ -29,9 +29,9 @@ query: "the customer was charged twice, give them their money back"
 
 bm25                : stripe_list_charges (1.74) > stripe_create_charge (1.71) > stripe_create_customer (0.27)
   (bm25 ranks stripe_refund_payment #6)
-bm25 -> jev         : stripe_refund_payment (0.86) > stripe_list_charges (0.14) > stripe_create_charge (0.00)
+bm25 -> jev         : stripe_refund_payment (0.84) > stripe_list_charges (0.16) > stripe_create_charge (0.00)
   reranker: null    : stripe_list_charges (1.74) > stripe_create_charge (1.71) > stripe_create_customer (0.27)
-jev alone           : stripe_refund_payment (0.87) > stripe_list_charges (0.13) > stripe_create_charge (0.00)
+jev alone           : stripe_refund_payment (0.86) > stripe_list_charges (0.14)
 bm25 -> your fn     : stripe_refund_payment (1.00) > stripe_list_charges (0.00) > stripe_create_charge (0.00)
 
 jev down:
@@ -39,7 +39,7 @@ jev down:
   as the retriever  : RetrieverError code=Unreachable transient=true
 ```
 
-BM25 ranks the refund tool sixth because the query's strongest term is *charged*. Jev brings it to the top from BM25's first 20 candidates (`rerankerDepth: 20`). A reranker never adds tools, so it could not do this if BM25 hadn't retrieved the tool at all.
+BM25 ranks the refund tool sixth because the query's strongest term is *charged*. Jev brings it to the top from BM25's first 20 candidates (`rerankerDepth: 20`). A reranker never adds tools, so it could not do this if BM25 hadn't retrieved the tool at all. As a reranker the list still fills to 3 from BM25's order; on its own, Jev returns only its real picks (below 0.01 is dropped).
 
 **The Jev plugin sends the query and every candidate's searchable text (name, description, schema terms) to Jev.** BM25, semantic and hybrid never leave the process.
 
