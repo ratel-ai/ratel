@@ -907,7 +907,7 @@ impl ToolRegistry {
         context: TraceEventContext,
     ) -> Vec<SearchHit> {
         let ranked = order_retrieved(ranked, |id| self.tools.contains_key(id), top_k);
-        let hits = to_search_hits(ranked, Scale::Picked);
+        let hits = to_search_hits(ranked, Scale::Custom);
         let stage = SearchStage {
             name: "custom".into(),
             took_ms,
@@ -978,7 +978,7 @@ impl ToolRegistry {
         let (hits, stage_name) = match outcome {
             RerankOutcome::Ranked(ranked) => {
                 let ordered = order_reranked(ranked, &stage_one.ids(), top_k);
-                (to_search_hits(ordered, Scale::Picked), "rerank".to_string())
+                (to_search_hits(ordered, Scale::Custom), "rerank".to_string())
             }
             RerankOutcome::Fallback { code } => {
                 let mut hits = std::mem::take(&mut stage_one.hits);
