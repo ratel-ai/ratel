@@ -56,7 +56,9 @@ search returns only the ids it returned, best first, at most ``top_k``. As
 ``reranker_fn`` it ranks the first stage's top candidates; ids outside them are
 dropped, candidates it left out follow at 0, and ties keep the first stage's
 order. A raise fails the search, except a `RetrieverError` with
-``transient=True`` from a reranker, which keeps the first stage's order.
+``transient=True`` from a reranker, which keeps the first stage's order. A
+failed search records no ``search`` trace event; the error reaches the caller
+and the ``ratel.search`` span.
 **Experimental.**
 """
 

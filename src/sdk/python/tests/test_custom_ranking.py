@@ -200,6 +200,25 @@ async def test_anything_else_a_reranker_raises_fails_the_search(error: Exception
     assert caught.value is error
 
 
+async def test_a_failed_search_records_no_search_event() -> None:
+    async def failing(_q: str, _c: list[RankCandidate], _k: int) -> list[RankedId]:
+        raise RetrieverError("bad key", "Unauthorized", status=401)
+
+    for catalog in (
+        ToolCatalog(reranker_fn=failing, trace=TraceSinkConfig(kind="memory", session_id="x")),
+        ToolCatalog(
+            method="custom",
+            retrieve_fn=failing,
+            trace=TraceSinkConfig(kind="memory", session_id="x"),
+        ),
+    ):
+        await catalog.register(TOOLS)
+        catalog.drain_trace_events()
+        with pytest.raises(RetrieverError):
+            await catalog.search_async("file", 3)
+        assert _searches(catalog) == []
+
+
 async def test_reranker_false_turns_the_reranker_fn_off_and_sync_search_refuses() -> None:
     fn = Scripted({"send_email": 1.0})
     catalog = ToolCatalog(reranker_fn=fn)

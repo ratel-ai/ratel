@@ -63,7 +63,10 @@ stage's own). BM25 keeps corpus-wide IDF. The usage arm runs in stage 1 only. `r
 **4. Failure is the function's to classify.** A retriever's error fails the search. A
 reranker's `RetrieverError` with `transient: true` keeps stage 1's order and records
 `rerank_fallback:<code>`; anything else fails the search. `RetrieverError { code, transient,
-status?, retryAfterSecs? }` is generic, so any model's function can use it.
+status?, retryAfterSecs? }` is generic, so any model's function can use it. A search that fails
+records no `search` event on the local trace stream, as a failed built-in search does not: the
+error surfaces to the caller and on the `ratel.search` span (status ERROR) when telemetry is on.
+Only the transient reranker fallback, which still returns hits, is recorded.
 
 **5. Jev ships as a plugin over the hooks.** `ratelJevPlugin({ url?, apiKeyEnv?, model? })`
 (Python `ratel_jev_plugin`) returns `{ retrieve, rerank }`. Its client lives in core's `jev.rs`

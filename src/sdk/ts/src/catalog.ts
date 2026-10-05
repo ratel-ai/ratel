@@ -340,7 +340,9 @@ export interface RankedId {
  *   `0`, and ties keep the first stage's order.
  *
  * A throw fails the search, except a {@link RetrieverError} with
- * `transient: true` from a reranker, which keeps the first stage's order.
+ * `transient: true` from a reranker, which keeps the first stage's order. A
+ * failed search records no `search` trace event; the error reaches the caller
+ * and the `ratel.search` span.
  *
  * **Experimental** — may change without a major version bump.
  */

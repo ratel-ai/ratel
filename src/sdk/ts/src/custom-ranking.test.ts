@@ -188,6 +188,30 @@ describe("rerankerFn", () => {
     }
   });
 
+  it("records no search event when the search fails", async () => {
+    const failing: RankFn = async () => {
+      throw new RetrieverError("bad key", "Unauthorized", { status: 401 });
+    };
+    const reranked = new ToolCatalog({
+      rerankerFn: failing,
+      trace: { kind: "memory", sessionId: "x" },
+    });
+    await reranked.register(TOOLS);
+    reranked.drainTraceEvents();
+    await expect(reranked.searchAsync("file", 3)).rejects.toThrow("bad key");
+    expect(searches(reranked)).toEqual([]);
+
+    const custom = new ToolCatalog({
+      method: "custom",
+      retrieveFn: failing,
+      trace: { kind: "memory", sessionId: "x" },
+    });
+    await custom.register(TOOLS);
+    custom.drainTraceEvents();
+    await expect(custom.searchAsync("file", 3)).rejects.toThrow("bad key");
+    expect(searches(custom)).toEqual([]);
+  });
+
   it("is turned off per call by reranker: null", async () => {
     const { fn, calls } = scripted({ send_email: 1 });
     const catalog = new ToolCatalog({ rerankerFn: fn });
