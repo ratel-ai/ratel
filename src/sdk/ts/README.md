@@ -226,6 +226,44 @@ await catalog.invoke("read_github_issues", {}, undefined, turnId); // pairs with
 await catalog.invoke("create_linear_task", {}, undefined, turnId); // pairs with the second
 ```
 
+## Your own retriever or reranker (experimental)
+
+A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
+
+```ts
+import { ratel, ratelJevPlugin, type RankFn } from "@ratel-ai/sdk";
+
+const jev = ratelJevPlugin();                                   // Jev (TypeSafe AI); key in TYPESAFE_API_KEY
+ratel({ method: "custom", retrieveFn: jev.retrieve });          // Jev ranks every tool and skill
+ratel({ method: "bm25", rerankerFn: jev.rerank });              // BM25, then Jev over its top 50
+ratel({ method: "bm25", rerankerFn: jev.rerank, rerankerDepth: 20 });
+
+const mine: RankFn = (query, candidates) =>                    // any model, your own call
+  Promise.all(candidates.map(async (c) => ({ id: c.id, score: await myModel(query, c.text) })));
+```
+
+- **The contract:** `(query, candidates: { id, kind: "tool" | "skill", text }[], topK) => { id, score }[]`, sync or async. Unknown ids are dropped, each id counts once, and scores are clamped to `[0, 1]`.
+  - As `retrieveFn` (with `method: "custom"`) the search returns only the ids the function returned, best first, at most `topK`.
+  - As `rerankerFn` it sees the first stage's top `rerankerDepth` (default 50, raised to `topK`). It can't add a tool the first stage missed; candidates it leaves out follow at 0, in first-stage order.
+- **Failures:** whatever `retrieveFn` throws fails the search. A `rerankerFn` that throws a `RetrieverError` with `transient: true` keeps the first stage's order and records a `rerank_fallback:<code>` trace stage; anything else it throws fails the search.
+  - A search that fails records no `search` event on the local trace stream, the same as a failed built-in search. The error reaches your `searchAsync` call and, with telemetry on, marks the `ratel.search` span as an error.
+- **Rules:** both are async-only (synchronous `search` throws). `rerankerFn` can't be combined with `reranker`, nor with `method: "custom"`. `searchAsync(q, k, { reranker: null })` turns either reranker off for one call. `SkillCatalog` takes the same options; facts don't, and `ratel()` ranks facts with BM25 when `method` is `"custom"`.
+- **The Jev plugin:** `ratelJevPlugin({ url?, apiKeyEnv?, model? })` defaults to `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`. Above 150 candidates (or 80,000 characters) it judges groups in parallel and fills a final question with their winners. It returns only real picks: probabilities below 0.01 are dropped, except the best one. Its `RetrieverError.code` is `"Config"`, `"Unauthorized"` or `"InvalidRequest"` (not transient), or `"RateLimited"` (with `retryAfterSecs`), `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"` or `"Malformed"` (transient).
+- **Privacy:** **the Jev plugin sends the query and each candidate's searchable text to TypeSafe AI.** The built-in methods never leave the process.
+
+## Reranking (experimental)
+
+A catalog can rank in two stages with built-in methods ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). `method` picks candidates, and `reranker.method` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"` or `"hybrid"`, but the two stages must use different methods:
+
+```ts
+const catalog = new ToolCatalog({ method: "bm25", reranker: { method: "semantic", depth: 30 } });
+await catalog.register(tools);   // a semantic reranker makes register() build embeddings
+const hits = await catalog.searchAsync("deploy the service", 5);
+const plain = await catalog.searchAsync("deploy the service", 5, { reranker: null });   // off for one call
+```
+
+A reranker runs off the event loop, so synchronous `search` throws on a catalog that has one. `SkillCatalog` and `ratel()` take the same `reranker` option.
+
 ## Framework adapters
 
 To work in a host framework's native tool and message shapes, adapt the core with a

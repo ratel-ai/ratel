@@ -21,6 +21,7 @@ analogue: constant content injected into the context, gated by the pure
 version bump.
 """
 
+from ._custom_ranking import RankCandidate, RankCandidateKind, RankedId, RankFn
 from ._native import SearchHit, SkillHit
 from .capabilities import (
     INVOKE_TOOL_ID,
@@ -45,6 +46,7 @@ from .catalog import (
     OllamaEmbeddingConfig,
     OriginFilterOption,
     ProvenanceOption,
+    RerankerConfig,
     SearchMethod,
     SearchOrigin,
     Tool,
@@ -66,6 +68,7 @@ from .exceptions import (
     DimensionMismatchError,
     EmbedderError,
     IncompatibleMergeError,
+    RetrieverError,
 )
 from .intent_graph_storage import (
     IntentGraphStorage,
@@ -77,6 +80,7 @@ from .intent_graph_storage import (
     S3Transport,
     StaleIntentGraphError,
 )
+from .jev import RetrieverPlugin, ratel_jev_plugin
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
 from .runtime_events import (
     RUNTIME_EVENT_MAX_HITS,
@@ -129,6 +133,13 @@ __all__ = [
     "OllamaEmbeddingConfig",
     "PendingReplace",
     "ReplaceOutcome",
+    "RankCandidate",
+    "RankCandidateKind",
+    "RankedId",
+    "RankFn",
+    "RerankerConfig",
+    "RetrieverError",
+    "RetrieverPlugin",
     "RuntimeCatalog",
     "RuntimeEvent",
     "RuntimeEventHandler",
@@ -162,6 +173,7 @@ __all__ = [
     "configure_telemetry",
     "current_turn_id",
     "experimental_build_embedding_artifact",
+    "ratel_jev_plugin",
     "format_upstream_line",
     "get_skill_content_tool",
     "invoke_tool_tool",

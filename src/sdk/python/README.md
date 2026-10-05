@@ -165,6 +165,45 @@ await catalog.invoke("create_linear_task", {}, turn_id)  # pairs with the second
 
 Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel/tree/main/examples/pydantic-ai).
 
+## Your own retriever or reranker (experimental)
+
+A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
+
+```python
+from ratel_ai import RankCandidate, RankedId, ToolCatalog, ratel_jev_plugin
+
+jev = ratel_jev_plugin()                                     # Jev (TypeSafe AI); key in TYPESAFE_API_KEY
+ToolCatalog(method="custom", retrieve_fn=jev.retrieve)       # Jev ranks every tool
+ToolCatalog(method="bm25", reranker_fn=jev.rerank)           # BM25, then Jev over its top 50
+ToolCatalog(method="bm25", reranker_fn=jev.rerank, reranker_depth=20)
+
+
+async def mine(query: str, candidates: list[RankCandidate], top_k: int) -> list[RankedId]:
+    return [{"id": c.id, "score": await my_model(query, c.text)} for c in candidates]
+```
+
+- **The contract:** `(query, candidates, top_k)` to a list of `{"id", "score"}`, sync or async. Each `RankCandidate` has `.id`, `.kind` (`"tool"` or `"skill"`) and `.text`. Unknown ids are dropped, each id counts once, and scores are clamped to `[0, 1]`.
+  - As `retrieve_fn` (with `method="custom"`) the search returns only the ids the function returned, best first, at most `top_k`.
+  - As `reranker_fn` it sees the first stage's top `reranker_depth` (default 50, raised to `top_k`). It can't add a tool the first stage missed; candidates it leaves out follow at 0, in first-stage order.
+- **Failures:** whatever `retrieve_fn` raises fails the search. A `reranker_fn` that raises a `RetrieverError` with `transient=True` keeps the first stage's order and records `rerank_fallback:<code>` on the trace; anything else it raises fails the search.
+  - A search that fails records no `search` event on the local trace stream, the same as a failed built-in search. The error reaches your `search_async` call and, with telemetry on, marks the `ratel.search` span as an error.
+- **Rules:** both need `search_async` (synchronous `search` raises). `reranker_fn` can't be combined with `reranker`, nor with `method="custom"`. `search_async(q, k, reranker=False)` turns either reranker off for one call. `SkillCatalog` takes the same arguments.
+- **The Jev plugin:** `ratel_jev_plugin(url=None, api_key_env=None, model=None)` defaults to `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`, and calls Jev on a worker thread. Above 150 candidates (or 80,000 characters) it judges groups in parallel and fills a final question with their winners. It returns only real picks: probabilities below 0.01 are dropped, except the best one. Its `RetrieverError.code` is `"Config"`, `"Unauthorized"` or `"InvalidRequest"` (not transient), or `"RateLimited"` (with `.retry_after_secs`), `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"` or `"Malformed"` (transient).
+- **Privacy:** **the Jev plugin sends the query and each candidate's searchable text to TypeSafe AI.** The built-in methods never leave the process.
+
+## Reranking (experimental)
+
+A catalog can rank in two stages with built-in methods ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). `method` picks candidates, and `reranker["method"]` re-scores the top `depth` of them (default 50). A reranker never adds a tool the first stage missed. Either stage can be `"bm25"`, `"semantic"` or `"hybrid"`, but the two stages must use different methods:
+
+```python
+catalog = ToolCatalog(method="bm25", reranker={"method": "semantic", "depth": 30})
+await catalog.register(tools)    # a semantic reranker makes register() build embeddings
+hits = await catalog.search_async("deploy the service", 5)
+plain = await catalog.search_async("deploy the service", 5, reranker=False)   # off for one call
+```
+
+A reranker needs `search_async`; synchronous `search` raises on a catalog that has one. `SkillCatalog` takes the same `reranker` argument.
+
 ## Runtime events and catalog snapshots
 
 `RuntimeEvents` merges tool and skill facts into one bounded push stream. Give the paired

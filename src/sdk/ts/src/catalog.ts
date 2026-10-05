@@ -279,14 +279,229 @@ export interface BaselineTurn {
  *
  * - `"bm25"` — lexical ranking; model-free and infallible (the default).
  * - `"semantic"` — cosine similarity over prebuilt embeddings.
- * - `"hybrid"` — BM25 and semantic rankings fused with Reciprocal Rank Fusion
- *   (ADR-0011).
+ * - `"hybrid"` — BM25 and semantic scores normalised and fused (ADR-0011,
+ *   ADR-0024).
  *
  * `"semantic"`/`"hybrid"` need a prepared dense cache: registration builds it
  * (or warms a configured embedding artifact). Dense ranking uses
  * `searchAsync()`.
  */
-export type SearchMethod = "bm25" | "semantic" | "hybrid";
+export type SearchMethod = "bm25" | "semantic" | "hybrid" | "custom";
+
+/** The built-in methods: everything but `"custom"`. */
+export type BuiltInSearchMethod = Exclude<SearchMethod, "custom">;
+
+/**
+ * A second stage over the first stage's candidates (ADR-0027): a built-in
+ * `method` re-scores the top `depth` (default 50) hits of the catalog's
+ * `method`. It never adds a tool the first stage did not return, and may not
+ * use the first stage's own method. For a model you call yourself, use
+ * {@link ToolCatalogOptions.rerankerFn} instead.
+ *
+ * **Experimental** — may change without a major version bump.
+ */
+export interface RerankerConfig {
+  /** The method that re-scores the candidates. */
+  method: BuiltInSearchMethod;
+  /** How many first-stage candidates to re-score (default 50; raised to `topK` when lower). */
+  depth?: number;
+}
+
+/** What kind of catalog item a ranking function is asked about. */
+export type RankCandidateKind = "tool" | "skill";
+
+/** A catalog item offered to a {@link RankFn}. */
+export interface RankCandidate {
+  /** The tool or skill id; return it to rank the item. */
+  id: string;
+  /** Whether this is a tool or a skill. One call offers one kind. */
+  kind: RankCandidateKind;
+  /** The text the built-in methods rank: name plus description (or its searchable override). */
+  text: string;
+}
+
+/** One id a {@link RankFn} scored. */
+export interface RankedId {
+  /** One of the offered candidates' ids; anything else is dropped. */
+  id: string;
+  /** Higher is better; clamped to `[0, 1]`, a non-finite score reads as `0`. */
+  score: number;
+}
+
+/**
+ * A caller-supplied ranking function (ADR-0027) — a model you call, such as
+ * Jev via {@link ratelJevPlugin}. Returns `{ id, score }` pairs in any order.
+ *
+ * - As {@link ToolCatalogOptions.retrieveFn} (`method: "custom"`) it ranks the
+ *   whole catalog; the search returns only the ids it returned, best first, at
+ *   most `topK`.
+ * - As {@link ToolCatalogOptions.rerankerFn} it ranks the first stage's top
+ *   candidates; ids outside them are dropped, candidates it left out follow at
+ *   `0`, and ties keep the first stage's order.
+ *
+ * A throw fails the search, except a {@link RetrieverError} with
+ * `transient: true` from a reranker, which keeps the first stage's order. A
+ * failed search records no `search` trace event; the error reaches the caller
+ * and the `ratel.search` span.
+ *
+ * **Experimental** — may change without a major version bump.
+ */
+export type RankFn = (
+  query: string,
+  candidates: RankCandidate[],
+  topK: number,
+) => Promise<RankedId[]> | RankedId[];
+
+/** Per-call options for `searchAsync`; each field overrides the catalog's default. */
+export interface SearchAsyncOptions {
+  /** Who initiated the call (default `"direct"`); recorded, never affects ranking. */
+  origin?: SearchOrigin;
+  /** First-stage method for this call. `"custom"` needs the catalog's `retrieveFn`. */
+  method?: SearchMethod;
+  /** Built-in reranker for this call; `null` turns off the catalog's reranker or `rerankerFn`. */
+  reranker?: RerankerConfig | null;
+  /** Correlates the search with the invokes that follow it (ADR-0014). */
+  turnId?: string;
+}
+
+/** The ranking options a tool or skill catalog accepts. @internal */
+export interface RankingOptions {
+  method?: SearchMethod;
+  reranker?: RerankerConfig;
+  retrieveFn?: RankFn;
+  rerankerFn?: RankFn;
+  rerankerDepth?: number;
+}
+
+const DENSE_METHODS: ReadonlySet<SearchMethod> = new Set(["semantic", "hybrid"]);
+const BUILT_IN_METHODS: ReadonlySet<string> = new Set(["bm25", "semantic", "hybrid"]);
+
+/** Default number of first-stage candidates a reranker re-scores. @internal */
+export const DEFAULT_RERANKER_DEPTH = 50;
+
+/** Whether either stage ranks against embeddings, so registration must embed. @internal */
+export function usesDense(method: SearchMethod, reranker?: RerankerConfig | null): boolean {
+  return DENSE_METHODS.has(method) || (!!reranker && DENSE_METHODS.has(reranker.method));
+}
+
+function assertDepth(name: string, depth: number | undefined): void {
+  if (depth !== undefined && !(Number.isInteger(depth) && depth >= 1)) {
+    throw new Error(`${name} must be a positive integer, got ${depth}`);
+  }
+}
+
+/**
+ * Reject a reranker the core would refuse, at construction rather than at the
+ * first search. @internal
+ */
+export function assertValidReranker(method: SearchMethod, reranker?: RerankerConfig | null): void {
+  if (!reranker) return;
+  if (!BUILT_IN_METHODS.has(reranker.method)) {
+    throw new Error(
+      `unknown search method "${reranker.method}" for the reranker ` +
+        '(expected "bm25", "semantic", or "hybrid"; for your own model use rerankerFn)',
+    );
+  }
+  if (method === "custom") {
+    throw new Error('a reranker needs a "bm25", "semantic" or "hybrid" first stage, not "custom"');
+  }
+  if (reranker.method === method) {
+    throw new Error(
+      `reranker method "${reranker.method}" is the same as the first-stage method; ` +
+        "a reranker must use a different method",
+    );
+  }
+  assertDepth("reranker depth", reranker.depth);
+}
+
+/** Reject ranking options that contradict each other, at construction. @internal */
+export function assertValidRanking(owner: string, options: RankingOptions): SearchMethod {
+  const method = options.method ?? "bm25";
+  if (method !== "custom" && !BUILT_IN_METHODS.has(method)) {
+    throw new Error(
+      `${owner}: unknown search method "${method}" (expected "bm25", "semantic", "hybrid", or "custom")`,
+    );
+  }
+  const { retrieveFn, rerankerFn, rerankerDepth } = options;
+  if (retrieveFn !== undefined && typeof retrieveFn !== "function") {
+    throw new Error(`${owner}: retrieveFn must be a function`);
+  }
+  if (rerankerFn !== undefined && typeof rerankerFn !== "function") {
+    throw new Error(`${owner}: rerankerFn must be a function`);
+  }
+  if (method === "custom" && !retrieveFn) {
+    throw new Error(`${owner}: method "custom" needs a retrieveFn`);
+  }
+  if (retrieveFn && method !== "custom") {
+    throw new Error(`${owner}: retrieveFn needs method "custom"`);
+  }
+  if (rerankerFn && options.reranker) {
+    throw new Error(`${owner}: pass either reranker or rerankerFn, not both`);
+  }
+  if (rerankerFn && method === "custom") {
+    throw new Error(
+      `${owner}: rerankerFn needs a "bm25", "semantic" or "hybrid" first stage, not "custom"`,
+    );
+  }
+  if (rerankerDepth !== undefined && !rerankerFn) {
+    throw new Error(`${owner}: rerankerDepth needs a rerankerFn`);
+  }
+  assertDepth("rerankerDepth", rerankerDepth);
+  assertValidReranker(method, options.reranker);
+  return method;
+}
+
+/** How one `searchAsync` call ranks, after per-call overrides. @internal */
+export interface ResolvedSearch {
+  origin: SearchOrigin;
+  method: SearchMethod;
+  reranker: RerankerConfig | undefined;
+  rerankerFn: RankFn | undefined;
+  rerankerDepth: number;
+  turnId: string | undefined;
+}
+
+/**
+ * Resolve `searchAsync`'s two call shapes — positional `(origin, method,
+ * turnId)` or one options object — against the catalog defaults. @internal
+ */
+export function resolveSearchAsyncArgs(
+  originOrOptions: SearchOrigin | SearchAsyncOptions | undefined,
+  method: SearchMethod | undefined,
+  turnId: string | undefined,
+  defaults: RankingOptions & { method: SearchMethod },
+): ResolvedSearch {
+  const options: SearchAsyncOptions =
+    typeof originOrOptions === "object" && originOrOptions !== null
+      ? originOrOptions
+      : { origin: originOrOptions, method, turnId };
+  const resolvedMethod = options.method ?? defaults.method;
+  if (resolvedMethod === "custom" && !defaults.retrieveFn) {
+    throw new Error('method "custom" needs a catalog constructed with a retrieveFn');
+  }
+  // A per-call reranker replaces the catalog's, built-in or function; `null`
+  // turns both off. Neither applies to a custom first stage.
+  const override = options.reranker !== undefined;
+  const reranker = override ? (options.reranker ?? undefined) : defaults.reranker;
+  const rerankerFn = override || resolvedMethod === "custom" ? undefined : defaults.rerankerFn;
+  if (resolvedMethod !== "custom" || reranker) assertValidReranker(resolvedMethod, reranker);
+  return {
+    origin: options.origin ?? "direct",
+    method: resolvedMethod,
+    reranker: resolvedMethod === "custom" ? undefined : reranker,
+    rerankerFn,
+    rerankerDepth: defaults.rerankerDepth ?? DEFAULT_RERANKER_DEPTH,
+    turnId: options.turnId,
+  };
+}
+
+/** Guidance thrown by a synchronous `search` on a catalog with a reranker. @internal */
+export const RERANKER_NEEDS_ASYNC =
+  "this catalog has a reranker, which runs off the event loop; use searchAsync()";
+
+/** Guidance thrown by a synchronous `search` on a `"custom"` catalog. @internal */
+export const CUSTOM_NEEDS_ASYNC =
+  'this catalog ranks with its retrieveFn (method "custom"), which may be async; use searchAsync()';
 
 type EmbeddingConfigKey =
   | "huggingface"
@@ -404,6 +619,38 @@ export interface ToolCatalogOptions {
    * artifact is missing one or more ids from the catalog's current corpus.
    */
   experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
+  /**
+   * Re-score the first stage's top candidates with another built-in method —
+   * see {@link RerankerConfig}. Applies to `searchAsync` (and the capability
+   * tools, which use it); a synchronous `search` on a catalog with a reranker
+   * throws. **Experimental.**
+   */
+  reranker?: RerankerConfig;
+  /**
+   * Rank the whole catalog with your own function — a model you call, such as
+   * Jev via {@link ratelJevPlugin}. Needs `method: "custom"`. See
+   * {@link RankFn}. **Experimental.**
+   *
+   * @example
+   * ```ts
+   * const jev = ratelJevPlugin();
+   * new ToolCatalog({ method: "custom", retrieveFn: jev.retrieve });
+   * ```
+   */
+  retrieveFn?: RankFn;
+  /**
+   * Rerank the first stage's top `rerankerDepth` candidates with your own
+   * function. Not combinable with `reranker` or `method: "custom"`. See
+   * {@link RankFn}. **Experimental.**
+   *
+   * @example
+   * ```ts
+   * new ToolCatalog({ method: "bm25", rerankerFn: ratelJevPlugin().rerank });
+   * ```
+   */
+  rerankerFn?: RankFn;
+  /** How many first-stage candidates `rerankerFn` sees (default 50; raised to `topK` when lower). */
+  rerankerDepth?: number;
 }
 
 /**
@@ -447,6 +694,7 @@ export class ToolCatalog {
   private overrideSearchableDescriptions = new Map<string, string>();
   private readonly warnedShadowIds = new Set<string>();
   private readonly method: SearchMethod;
+  private readonly ranking: RankingOptions;
   private readonly embeddingArtifact: ExperimentalEmbeddingArtifact | undefined;
 
   /**
@@ -456,12 +704,19 @@ export class ToolCatalog {
    *   Construction validates configuration but never loads a model.
    */
   constructor(options: ToolCatalogOptions = {}) {
-    this.method = options.method ?? "bm25";
+    this.method = assertValidRanking("ToolCatalog", options);
+    this.ranking = {
+      reranker: options.reranker,
+      retrieveFn: options.retrieveFn,
+      rerankerFn: options.rerankerFn,
+      rerankerDepth: options.rerankerDepth,
+    };
     this.registry = new ToolRegistry(
       options.embedding,
       this.method,
       options.experimentalDenseWeight,
       options.experimentalBm25,
+      { reranker: options.reranker },
     );
     this.embeddingArtifact = options.experimentalEmbeddingArtifact;
     if (options.trace) {
@@ -596,33 +851,57 @@ export class ToolCatalog {
     method?: SearchMethod,
     turnId?: string,
   ): SearchHit[] {
+    const resolved = method ?? this.method;
+    if (resolved === "custom") throw new Error(CUSTOM_NEEDS_ASYNC);
+    if (this.ranking.reranker || this.ranking.rerankerFn) throw new Error(RERANKER_NEEDS_ASYNC);
     return traceSearch(
       SearchTarget.Tool,
       query,
       topK,
       origin,
-      (projection) =>
-        this.registry.searchWithMethod(query, topK, origin, method ?? this.method, projection),
+      (projection) => this.registry.searchWithMethod(query, topK, origin, resolved, projection),
       turnId,
     );
   }
 
-  /** Search with any retrieval method without blocking the Node.js event loop. */
+  /**
+   * Search with any retrieval method — and the catalog's reranker, if any —
+   * without blocking the Node.js event loop. Takes either positional
+   * `(origin, method, turnId)` or one {@link SearchAsyncOptions} object, whose
+   * `reranker` (or `null`) overrides the catalog's for this call.
+   */
+  searchAsync(query: string, topK: number, options: SearchAsyncOptions): Promise<SearchHit[]>;
   searchAsync(
     query: string,
     topK: number,
-    origin: SearchOrigin = "direct",
+    origin?: SearchOrigin,
+    method?: SearchMethod,
+    turnId?: string,
+  ): Promise<SearchHit[]>;
+  searchAsync(
+    query: string,
+    topK: number,
+    originOrOptions?: SearchOrigin | SearchAsyncOptions,
     method?: SearchMethod,
     turnId?: string,
   ): Promise<SearchHit[]> {
+    let args: ResolvedSearch;
+    try {
+      args = resolveSearchAsyncArgs(originOrOptions, method, turnId, {
+        ...this.ranking,
+        method: this.method,
+      });
+    } catch (error) {
+      return Promise.reject(error);
+    }
     return traceSearchAsync(
       SearchTarget.Tool,
       query,
       topK,
-      origin,
+      args.origin,
       (projection) =>
-        this.registry.searchWithMethodAsync(query, topK, origin, method ?? this.method, projection),
-      turnId,
+        this.registry.rankAsync(query, topK, args, this.ranking.retrieveFn, projection),
+      args.turnId,
     );
   }
 

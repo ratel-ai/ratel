@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.11] - 2026-10-05
+
+### Added
+
+- Rank with your own function ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)): `method: "custom"` with `retrieveFn` ranks the whole catalog, and `rerankerFn` (with `rerankerDepth`, default 50) reranks the first stage's top candidates. The function gets `(query, candidates: { id, kind, text }[], topK)` and returns `{ id, score }[]`, sync or async; unknown ids are dropped, each id counts once, and scores are clamped to `[0, 1]`. Works on `ToolCatalog`, `SkillCatalog` and `ratel()` (facts rank with BM25 when `method` is `"custom"`); `searchAsync` only. New types: `RankFn`, `RankCandidate`, `RankCandidateKind`, `RankedId`, `BuiltInSearchMethod`.
+- `RetrieverError` (`code`, `transient`, `status`, `retryAfterSecs`). A `rerankerFn` that throws one with `transient: true` keeps the first stage's order and records a `rerank_fallback:<code>` trace stage; anything else fails the search.
+- `ratelJevPlugin({ url?, apiKeyEnv?, model? })` returns `{ retrieve, rerank }` for Jev (TypeSafe AI; key in `TYPESAFE_API_KEY`). Above 150 candidates it judges groups in parallel and fills a final question with their winners, and it drops picks below probability 0.01 (keeping the best one). It sends the query and each candidate's searchable text to TypeSafe AI.
+- Built-in two-stage reranker: `reranker: { method, depth }` re-scores the first stage's top `depth` (default 50) with another of `"bm25"`, `"semantic"` or `"hybrid"`, and never adds a tool the first stage missed. A catalog with a reranker or `rerankerFn` makes synchronous `search` throw.
+- `searchAsync(query, topK, options)` also accepts one options object, `{ origin, method, reranker, turnId }`. `reranker: null` turns the catalog's `reranker` or `rerankerFn` off for that call.
+
 ## [0.13.0-rc.10] - 2026-10-01
 
 ### Added

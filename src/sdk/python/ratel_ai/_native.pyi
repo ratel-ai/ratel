@@ -193,6 +193,54 @@ class ToolRegistry:
         identical to `search`.
         """
 
+    def rank_candidates(self) -> list[tuple[str, str]]:
+        """Every tool as an ``(id, text)`` candidate for a ranking function (ADR-0027)."""
+
+    def _complete_custom_search(
+        self,
+        query: str,
+        top_k: int,
+        origin: str,
+        ranked: list[tuple[str, float]],
+        took_ms: int,
+        context: object | None = ...,
+    ) -> list[SearchHit]:
+        """Private: complete a search a ranking function ranked; records it."""
+
+    def _stage_one(
+        self,
+        query: str,
+        top_k: int,
+        depth: int,
+        method: str,
+        turn_id: str | None = ...,
+    ) -> ToolStageOne:
+        """Private GIL-releasing first stage for a Python reranker; records nothing."""
+
+    def _complete_rerank(
+        self,
+        query: str,
+        origin: str,
+        stage_one: ToolStageOne,
+        ranked: list[tuple[str, float]] | None,
+        fallback_code: str | None,
+        took_ms: int,
+        context: object | None = ...,
+    ) -> list[SearchHit]:
+        """Private: complete a `_stage_one` search with a ranking or a fallback code."""
+
+    def _search_with_options(
+        self,
+        query: str,
+        top_k: int,
+        origin: str,
+        method: str,
+        reranker_method: str | None = ...,
+        reranker_depth: int | None = ...,
+        context: object | None = ...,
+    ) -> list[SearchHit]:
+        """Private worker-thread two-stage search primitive (ADR-0027)."""
+
     def _search_with_method(
         self,
         query: str,
@@ -347,6 +395,46 @@ class ArtifactError(RuntimeError):
 class IncompatibleMergeError(ArtifactError):
     """Valid RAT1 parts that cannot be merged."""
 
+class JevError(RuntimeError):
+    """A Jev ranking failed; the Jev plugin re-raises it as `RetrieverError`.
+
+    Attributes:
+        code: ``"Config"`` | ``"Unauthorized"`` | ``"InvalidRequest"`` |
+            ``"RateLimited"`` | ``"Overloaded"`` | ``"Timeout"`` | ``"Unreachable"`` |
+            ``"Http"`` | ``"Malformed"``.
+        status: the HTTP status, when Jev sent one.
+        retry_after_secs: Jev's ``Retry-After`` for ``"RateLimited"``, else ``None``.
+        transient: whether a retry may succeed.
+    """
+
+    code: str
+    status: int | None
+    retry_after_secs: int | None
+    transient: bool
+
+class JevRanker:
+    """The Jev client behind the Jev plugin (ADR-0027)."""
+
+    def __init__(
+        self, url: str | None = ..., api_key_env: str | None = ..., model: str | None = ...
+    ) -> None: ...
+    def rank(
+        self, query: str, candidates: list[tuple[str, str]], top_k: int, kind: str
+    ) -> list[tuple[str, float]]:
+        """Rank ``(id, text)`` candidates with the GIL released; raises `JevError`."""
+
+class ToolStageOne:
+    """Private: stage 1 of a tool search whose reranker runs in Python."""
+
+    @property
+    def candidates(self) -> list[tuple[str, str]]: ...
+
+class SkillStageOne:
+    """Private: stage 1 of a skill search whose reranker runs in Python."""
+
+    @property
+    def candidates(self) -> list[tuple[str, str]]: ...
+
 class ArtifactWarmError(RuntimeError):
     """Warming the dense cache from an embedding artifact failed.
 
@@ -479,6 +567,54 @@ class SkillRegistry:
         context: object | None = ...,
     ) -> list[SkillHit]:
         """BM25 search tagged with who initiated it — see `ToolRegistry.search_with_origin`."""
+
+    def rank_candidates(self) -> list[tuple[str, str]]:
+        """Every skill as an ``(id, text)`` candidate for a ranking function (ADR-0027)."""
+
+    def _complete_custom_search(
+        self,
+        query: str,
+        top_k: int,
+        origin: str,
+        ranked: list[tuple[str, float]],
+        took_ms: int,
+        context: object | None = ...,
+    ) -> list[SkillHit]:
+        """Private: complete a search a ranking function ranked; records it."""
+
+    def _stage_one(
+        self,
+        query: str,
+        top_k: int,
+        depth: int,
+        method: str,
+        turn_id: str | None = ...,
+    ) -> SkillStageOne:
+        """Private GIL-releasing first stage for a Python reranker; records nothing."""
+
+    def _complete_rerank(
+        self,
+        query: str,
+        origin: str,
+        stage_one: SkillStageOne,
+        ranked: list[tuple[str, float]] | None,
+        fallback_code: str | None,
+        took_ms: int,
+        context: object | None = ...,
+    ) -> list[SkillHit]:
+        """Private: complete a `_stage_one` search with a ranking or a fallback code."""
+
+    def _search_with_options(
+        self,
+        query: str,
+        top_k: int,
+        origin: str,
+        method: str,
+        reranker_method: str | None = ...,
+        reranker_depth: int | None = ...,
+        context: object | None = ...,
+    ) -> list[SkillHit]:
+        """Private worker-thread two-stage search primitive (ADR-0027)."""
 
     def _search_with_method(
         self,

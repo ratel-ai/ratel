@@ -14,14 +14,19 @@ import {
   type Tool,
 } from "../native/index.cjs";
 import { assertNotArtifactBusy } from "./artifact-source-warm.js";
-import type {
-  EmbeddingSpec,
-  ExperimentalBm25Params,
-  ObservationPolicyOptions,
-  SearchMethod,
-  SearchOrigin,
-  TraceSinkConfig,
+import {
+  type EmbeddingSpec,
+  type ExperimentalBm25Params,
+  type ObservationPolicyOptions,
+  type RankFn,
+  type RerankerConfig,
+  type ResolvedSearch,
+  type SearchMethod,
+  type SearchOrigin,
+  type TraceSinkConfig,
+  usesDense,
 } from "./catalog.js";
+import { customRerank, customSearch } from "./custom-ranking.js";
 import { mapArtifactBuildError, mapArtifactWarmError, mapEmbedderError } from "./errors.js";
 import { assertValidFact, type Fact } from "./grounding.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
@@ -37,6 +42,12 @@ function toNativeEmbedding(
 ): NativeEmbeddingConfig | undefined {
   if (embedding === undefined) return undefined;
   return typeof embedding === "string" ? { spec: embedding } : embedding;
+}
+
+/** Two-stage settings shared by the tool and skill registries. */
+export interface RegistryRankingOptions {
+  /** Catalog-default reranker; decides whether registration embeds. */
+  reranker?: RerankerConfig;
 }
 
 /**
@@ -68,15 +79,18 @@ export class ToolRegistry {
    *   `"hybrid"` only. Throws outside `[0, 1]`.
    * @param experimentalBm25 - BM25 `k1`/`b` override. See
    *   {@link ExperimentalBm25Params}.
+   * @param ranking - Catalog-default reranker (a semantic/hybrid one also
+   *   makes registration embed).
    */
   constructor(
     embedding?: EmbeddingSpec,
     method: SearchMethod = "bm25",
     experimentalDenseWeight?: number,
     experimentalBm25?: ExperimentalBm25Params,
+    ranking: RegistryRankingOptions = {},
   ) {
     this.native = new NativeToolRegistry(toNativeEmbedding(embedding));
-    this.eager = method === "semantic" || method === "hybrid";
+    this.eager = usesDense(method, ranking.reranker);
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
     }
@@ -210,7 +224,7 @@ export class ToolRegistry {
     return this.native.searchWithMethod(query, topK, origin, method, withTurnContext(projection));
   }
 
-  /** Search on a libuv worker; supports `"bm25"`, `"semantic"`, and `"hybrid"`. */
+  /** Search on a libuv worker; supports every method. */
   async searchWithMethodAsync(
     query: string,
     topK: number,
@@ -218,23 +232,79 @@ export class ToolRegistry {
     method: SearchMethod,
     projection?: RuntimeEventProjection,
   ): Promise<SearchHit[]> {
+    return this.searchWithOptionsAsync(query, topK, origin, method, undefined, projection);
+  }
+
+  /** Search on a libuv worker with an optional second-stage `reranker` (ADR-0027). */
+  async searchWithOptionsAsync(
+    query: string,
+    topK: number,
+    origin: SearchOrigin,
+    method: SearchMethod,
+    reranker: RerankerConfig | undefined,
+    projection?: RuntimeEventProjection,
+  ): Promise<SearchHit[]> {
     try {
       // Guard the await behind the flag so the default path stays synchronous
       // up to the native call — the pending-dense counter must increment before
       // control yields, or a following register() would slip past serialization.
-      if (method !== "bm25" && this.#rebuildOnModelChange) {
+      if (usesDense(method, reranker) && this.#rebuildOnModelChange) {
         await this.#maybeRebuildOnModelChange();
       }
-      return await this.native.searchWithMethodAsync(
+      return await this.native.searchWithOptionsAsync(
         query,
         topK,
         origin,
         method,
+        reranker,
         withTurnContext(projection),
       );
     } catch (error) {
       throw mapEmbedderError(error);
     }
+  }
+
+  /**
+   * Run one resolved `searchAsync`: a `"custom"` first stage through
+   * `retrieveFn`, a `rerankerFn` over a built-in first stage, or a built-in
+   * search with an optional built-in reranker (ADR-0027). @internal
+   */
+  async rankAsync(
+    query: string,
+    topK: number,
+    search: ResolvedSearch,
+    retrieveFn: RankFn | undefined,
+    projection?: RuntimeEventProjection,
+  ): Promise<SearchHit[]> {
+    if (search.method === "custom") {
+      if (!retrieveFn) throw new Error('method "custom" needs a retrieveFn');
+      const context = withTurnContext(projection);
+      return customSearch(this.native, "tool", retrieveFn, query, topK, search.origin, context);
+    }
+    if (search.rerankerFn) {
+      if (usesDense(search.method) && this.#rebuildOnModelChange) {
+        await this.#maybeRebuildOnModelChange();
+      }
+      return customRerank(
+        this.native,
+        "tool",
+        search.rerankerFn,
+        query,
+        topK,
+        search.origin,
+        search.method,
+        search.rerankerDepth,
+        withTurnContext(projection),
+      );
+    }
+    return this.searchWithOptionsAsync(
+      query,
+      topK,
+      search.origin,
+      search.method,
+      search.reranker,
+      projection,
+    );
   }
 
   /**
@@ -456,15 +526,18 @@ export class SkillRegistry {
    *   `"hybrid"` only. Throws outside `[0, 1]`.
    * @param experimentalBm25 - BM25 `k1`/`b` override. See
    *   {@link ExperimentalBm25Params}.
+   * @param ranking - Catalog-default reranker (a semantic/hybrid one also
+   *   makes registration embed).
    */
   constructor(
     embedding?: EmbeddingSpec,
     method: SearchMethod = "bm25",
     experimentalDenseWeight?: number,
     experimentalBm25?: ExperimentalBm25Params,
+    ranking: RegistryRankingOptions = {},
   ) {
     this.native = new NativeSkillRegistry(toNativeEmbedding(embedding));
-    this.eager = method === "semantic" || method === "hybrid";
+    this.eager = usesDense(method, ranking.reranker);
     if (experimentalDenseWeight !== undefined) {
       this.native.setExperimentalDenseWeight(experimentalDenseWeight);
     }
@@ -607,23 +680,71 @@ export class SkillRegistry {
     method: SearchMethod,
     projection?: RuntimeEventProjection,
   ): Promise<SkillHit[]> {
+    return this.searchWithOptionsAsync(query, topK, origin, method, undefined, projection);
+  }
+
+  /** Search with an optional reranker — see `ToolRegistry.searchWithOptionsAsync`. */
+  async searchWithOptionsAsync(
+    query: string,
+    topK: number,
+    origin: SearchOrigin,
+    method: SearchMethod,
+    reranker: RerankerConfig | undefined,
+    projection?: RuntimeEventProjection,
+  ): Promise<SkillHit[]> {
     try {
-      // Guard the await behind the flag so the default path stays synchronous
-      // up to the native call — the pending-dense counter must increment before
-      // control yields, or a following register() would slip past serialization.
-      if (method !== "bm25" && this.#rebuildOnModelChange) {
+      if (usesDense(method, reranker) && this.#rebuildOnModelChange) {
         await this.#maybeRebuildOnModelChange();
       }
-      return await this.native.searchWithMethodAsync(
+      return await this.native.searchWithOptionsAsync(
         query,
         topK,
         origin,
         method,
+        reranker,
         withTurnContext(projection),
       );
     } catch (error) {
       throw mapEmbedderError(error);
     }
+  }
+  /** Run one resolved `searchAsync` — see `ToolRegistry.rankAsync`. @internal */
+  async rankAsync(
+    query: string,
+    topK: number,
+    search: ResolvedSearch,
+    retrieveFn: RankFn | undefined,
+    projection?: RuntimeEventProjection,
+  ): Promise<SkillHit[]> {
+    if (search.method === "custom") {
+      if (!retrieveFn) throw new Error('method "custom" needs a retrieveFn');
+      const context = withTurnContext(projection);
+      return customSearch(this.native, "skill", retrieveFn, query, topK, search.origin, context);
+    }
+    if (search.rerankerFn) {
+      if (usesDense(search.method) && this.#rebuildOnModelChange) {
+        await this.#maybeRebuildOnModelChange();
+      }
+      return customRerank(
+        this.native,
+        "skill",
+        search.rerankerFn,
+        query,
+        topK,
+        search.origin,
+        search.method,
+        search.rerankerDepth,
+        withTurnContext(projection),
+      );
+    }
+    return this.searchWithOptionsAsync(
+      query,
+      topK,
+      search.origin,
+      search.method,
+      search.reranker,
+      projection,
+    );
   }
 
   /** Record a custom event on the local trace stream (ADR-0007). */
