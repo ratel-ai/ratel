@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use bm25::{DefaultTokenizer, Document, Language, SearchEngine, SearchEngineBuilder, Tokenizer};
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Shipped `k1`, unless a caller overrides it via [`Bm25Params`].
 ///
@@ -134,43 +135,25 @@ fn distinct_terms(query: &str) -> Vec<String> {
 /// [`Bm25Index::query_ceiling`] counts each distinct term once (see
 /// [`distinct_terms`]): the result tokenizes to exactly `distinct_terms(query)`.
 ///
-/// A whitespace piece is kept whole when all of its stems are new. One that
-/// repeats a stem already seen ("deploy deploy-service") falls back to its
-/// alphanumeric sub-words, so only the new ones are kept.
+/// Built at the tokenizer's own granularity: normalize and split exactly as
+/// it does (deunicode, lowercase, UAX#29 words), then keep each word whose
+/// single stem is unseen. Every kept word tokenizes back to that one stem, so
+/// the invariant holds by construction, including for words the tokenizer
+/// keeps whole (`read_file`, `v1.2`) or splits further (a CJK run).
 fn engine_query(query: &str) -> String {
-    /// Keep `piece` when every stem it yields is distinct and unseen; report
-    /// whether it was kept, so a mixed piece can be retried word by word.
-    fn keep_if_new<'q>(
-        tk: &DefaultTokenizer,
-        seen: &mut HashSet<String>,
-        kept: &mut Vec<&'q str>,
-        piece: &'q str,
-    ) -> bool {
-        let stems = tk.tokenize(piece);
-        if stems.is_empty() {
-            // A stopword or punctuation: the engine would drop it anyway.
-            return true;
-        }
-        let unique: HashSet<&String> = stems.iter().collect();
-        if unique.len() != stems.len() || stems.iter().any(|stem| seen.contains(stem)) {
-            return false;
-        }
-        seen.extend(stems);
-        kept.push(piece);
-        true
-    }
-
     let tk = tokenizer();
+    // Mirrors `DefaultTokenizer`'s normalizer, tofu marker included.
+    let normalized = deunicode::deunicode_with_tofu_cow(query, "[?]").to_lowercase();
     let mut seen = HashSet::new();
-    let mut kept = Vec::new();
-    for piece in query.split_whitespace() {
-        if !keep_if_new(&tk, &mut seen, &mut kept, piece) {
-            for word in piece.split(|c: char| !c.is_alphanumeric()) {
-                keep_if_new(&tk, &mut seen, &mut kept, word);
-            }
-        }
-    }
-    kept.join(" ")
+    normalized
+        .unicode_words()
+        .filter(|word| match tk.tokenize(word).as_slice() {
+            [stem] => seen.insert(stem.clone()),
+            // A stopword: the engine would drop it anyway.
+            _ => false,
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 impl Bm25Index {
@@ -489,11 +472,33 @@ mod tests {
             "read_file read a file",
             "",
             "the a an",
+            // A repeat inside a word the tokenizer keeps whole (`_`, a dot
+            // between letters or digits) or splits further (a CJK run).
+            "read_file read_file",
+            "deploy deploy-config.yaml",
+            "v1.2 v1.2",
+            "日本日本",
         ] {
             let mut sent = tokenizer().tokenize(&engine_query(q));
             sent.sort_unstable();
             assert_eq!(sent, distinct_terms(q), "for {q:?}");
         }
+    }
+
+    #[test]
+    fn a_repeated_identifier_or_cjk_word_scores_exactly_as_once() {
+        let docs = vec![
+            ("a".to_string(), "read_file".to_string()),
+            ("b".to_string(), "read a file from disk".to_string()),
+            ("d".to_string(), "日本語 docs".to_string()),
+        ];
+        let index = Bm25Index::build(docs);
+        assert_eq!(
+            index.search("read_file read_file", 5),
+            index.search("read_file", 5)
+        );
+        assert_eq!(index.search("日本日本", 5), index.search("日本", 5));
+        assert!(!index.search("日本日本", 5).is_empty());
     }
 
     #[test]
