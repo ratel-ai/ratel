@@ -846,7 +846,8 @@ async def test_usage_ranking_status_inactive_on_disable_has_no_rev_or_graph_key(
     tools.experimental_disable_adaptive_ranking()
     await subscription.flush()
 
-    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    # The first status is the replay to this late subscriber; the last is the disable.
+    status = [e for e in received if e["type"] == "usage_ranking_status"][-1]
     assert status["status"] == "inactive"
     assert status["reason"] == "disabled"
     assert "rev" not in status
@@ -975,4 +976,75 @@ async def test_usage_ranking_status_on_skill_catalog_for_enable_and_disable() ->
     assert disabled["reason"] == "disabled"
     assert "rev" not in disabled
     assert "graph_key" not in disabled
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_is_replayed_to_a_subscriber_attached_after_enable() -> None:
+    tools = await _gh_run_list_catalog()
+    graph = _known_cluster_graph()
+    tools.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+
+    # Subscribed only now: the enable-time event is long gone.
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await subscription.flush()
+
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert status["status"] == "active"
+    assert status["reason"] == "enabled"
+    assert status["rev"] == graph.rev
+    assert status["graph_key"] == "cloud"
+    assert status["learn"] is False
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_replay_on_skill_catalog_keeps_the_last_reason(
+    delayed_embedding_endpoint: str,
+) -> None:
+    skills = SkillCatalog(embedding={"url": delayed_embedding_endpoint, "model": "test-model"})
+    await skills.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    skills.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+    await skills.experimental_rebuild_intent_graph()
+
+    events = RuntimeEvents([skills])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await subscription.flush()
+
+    statuses = [e for e in received if e["type"] == "usage_ranking_status"]
+    assert len(statuses) == 1
+    assert statuses[0]["reason"] == "rebuilt"
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_is_replayed_into_a_trace_sink_installed_after_enable() -> None:
+    tools = await _gh_run_list_catalog()
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+
+    tools._registry.set_trace_sink("memory", "late")
+
+    statuses = [e for e in tools.drain_trace_events() if e["type"] == "usage_ranking_status"]
+    assert len(statuses) == 1
+    assert statuses[0]["reason"] == "enabled"
+    assert statuses[0]["learn"] is False
+
+
+@pytest.mark.asyncio
+async def test_no_usage_ranking_status_is_replayed_when_no_graph_is_attached() -> None:
+    tools = await _gh_run_list_catalog()
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph())
+    tools.experimental_disable_adaptive_ranking()
+
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await subscription.flush()
+
+    assert [e for e in received if e["type"] == "usage_ranking_status"] == []
     subscription.unsubscribe()

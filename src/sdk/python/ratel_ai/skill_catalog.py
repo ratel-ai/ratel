@@ -253,6 +253,9 @@ class SkillRegistry:
         self._learn = True
         self._graph: IntentGraph | None = None
         self._graph_key: str | None = None
+        # What last triggered a status report; a late sink or subscriber is
+        # told the current state under this reason (`_replay_ranking_status`).
+        self._status_reason = "enabled"
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
@@ -475,13 +478,15 @@ class SkillRegistry:
         """Attach one public batched runtime-event subscriber."""
         with self._dense_state:
             self._raise_if_busy()
-            return self._native.subscribe_trace_events(
+            subscription = self._native.subscribe_trace_events(
                 handler,
                 session_id,
                 source_id,
                 queue_capacity,
                 batch_size,
             )
+        self._replay_ranking_status()
+        return subscription
 
     def set_trace_sink(
         self, kind: str, session_id: str | None = None, path: str | None = None
@@ -490,6 +495,7 @@ class SkillRegistry:
         with self._dense_state:
             self._raise_if_busy()
             self._native.set_trace_sink(kind, session_id, path)
+        self._replay_ranking_status()
 
     def experimental_enable_catalog_definitions(self) -> None:
         """Enable experimental complete catalog-definition events."""
@@ -675,9 +681,22 @@ class SkillRegistry:
         since the caller (enable, rebuild) just fetched it for
         ``_maybe_warn_model_mismatch``.
         """
+        self._status_reason = reason
         self.record_event(
             _ranking_status_event(reason, native_status, self._graph, self._graph_key, self._learn)
         )
+
+    def _replay_ranking_status(self) -> None:
+        """Re-report the attached graph's status once a sink or subscriber is installed.
+
+        ``usage_ranking_status`` is otherwise emitted only at enable and
+        rebuild, so a consumer attached later would never learn the state
+        (ADR-0020). Subscribers already attached receive the repeat too, which
+        is harmless for a state snapshot. Nothing attached, nothing to report.
+        """
+        if self._graph is None:
+            return
+        self._emit_ranking_status(self._status_reason, self._native.adaptive_ranking_status())
 
     def drain_trace_events(self) -> list[dict[str, Any]]:
         """Drain captured native trace events."""

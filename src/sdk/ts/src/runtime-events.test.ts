@@ -888,7 +888,8 @@ describe("public runtime events", () => {
     runtime.tools.catalog.experimentalDisableAdaptiveRanking();
     await subscription.flush();
 
-    const status = received.find((e) => e.type === "usage_ranking_status");
+    // The first status is the replay to this late subscriber; the last is the disable.
+    const status = received.filter((e) => e.type === "usage_ranking_status").at(-1);
     expect(status?.status).toBe("inactive");
     expect(status?.reason).toBe("disabled");
     expect("rev" in (status as object)).toBe(false);
@@ -1039,6 +1040,78 @@ describe("public runtime events", () => {
     expect(disabled?.reason).toBe("disabled");
     expect("rev" in (disabled as object)).toBe(false);
     expect("graph_key" in (disabled as object)).toBe(false);
+    subscription.unsubscribe();
+  });
+
+  it("replays usage_ranking_status to a subscriber attached after enable", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      description: "List CI workflow runs and whether the build passed",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const graph = knownClusterGraph();
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph, {
+      learn: false,
+      graphKey: "cloud",
+    });
+
+    // Subscribed only now: the enable-time event is long gone.
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    await subscription.flush();
+
+    const status = received.find((e) => e.type === "usage_ranking_status");
+    expect(status?.status).toBe("active");
+    expect(status?.reason).toBe("enabled");
+    expect(status?.rev).toBe(graph.rev);
+    expect(status?.graph_key).toBe("cloud");
+    expect(status?.learn).toBe(false);
+    subscription.unsubscribe();
+  });
+
+  it("replays usage_ranking_status on the skill catalog, keeping the last reason", async () => {
+    const server = await startDelayedEmbeddingServer(1);
+    const runtime = ratel({ embedding: { url: server.url, model: "test-model" } });
+    try {
+      await runtime.skills.register({
+        id: "s",
+        name: "s",
+        description: "a skill",
+        tags: [],
+        tools: [],
+        metadata: {},
+        body: "# steps",
+      });
+      runtime.skills.experimentalEnableAdaptiveRanking(knownClusterGraph(), { learn: false });
+      await runtime.skills.experimentalRebuildIntentGraph();
+
+      const received: RuntimeEvent[] = [];
+      const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+      await subscription.flush();
+
+      const statuses = received.filter((e) => e.type === "usage_ranking_status");
+      expect(statuses).toHaveLength(1);
+      expect(statuses[0]?.reason).toBe("rebuilt");
+      subscription.unsubscribe();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("replays nothing to a late subscriber when no graph is attached", async () => {
+    const runtime = ratel();
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph());
+    runtime.tools.catalog.experimentalDisableAdaptiveRanking();
+
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    await subscription.flush();
+
+    expect(received.filter((e) => e.type === "usage_ranking_status")).toEqual([]);
     subscription.unsubscribe();
   });
 });

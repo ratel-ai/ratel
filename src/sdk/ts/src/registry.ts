@@ -160,6 +160,9 @@ export class ToolRegistry {
   #learn = true;
   #graph?: IntentGraph;
   #graphKey?: string;
+  /** What last triggered a status report; a late sink or subscriber is told
+   * the current state under this reason (see {@link #replayRankingStatus}). */
+  #statusReason: "enabled" | "rebuilt" = "enabled";
   private readonly eager: boolean;
   private readonly emittedDefinitionHashes = new Map<string, string>();
   private useDefinitionOverrides = false;
@@ -358,9 +361,10 @@ export class ToolRegistry {
     // so it routes to its own binding rather than through `setTraceSink`.
     if (config.kind === "callback") {
       this.native.setTraceSinkCallback(config.sessionId, config.onEvent);
-      return;
+    } else {
+      this.native.setTraceSink(config);
     }
-    this.native.setTraceSink(config);
+    this.#replayRankingStatus();
   }
 
   /** @internal Enable experimental complete catalog-definition events. */
@@ -373,7 +377,9 @@ export class ToolRegistry {
     handler: (batch: RuntimeEvent[]) => void,
     options: Required<RuntimeEventsOptions>,
   ): NativeEventSubscription {
-    return this.native.subscribeTraceEvents(handler, options);
+    const subscription = this.native.subscribeTraceEvents(handler, options);
+    this.#replayRankingStatus();
+    return subscription;
   }
 
   /**
@@ -573,9 +579,20 @@ export class ToolRegistry {
     reason: "enabled" | "rebuilt",
     nativeStatus: AdaptiveRankingStatus,
   ): void {
+    this.#statusReason = reason;
     this.recordEvent(
       rankingStatusEvent(reason, nativeStatus, this.#graph, this.#graphKey, this.#learn),
     );
+  }
+
+  /** Re-report the attached graph's status once a sink or subscriber is
+   * installed. `usage_ranking_status` is otherwise emitted only at enable and
+   * rebuild, so a consumer attached later would never learn the state
+   * (ADR-0020). Subscribers already attached receive the repeat too, which is
+   * harmless for a state snapshot. Nothing attached, nothing to report. */
+  #replayRankingStatus(): void {
+    if (!this.#graph) return;
+    this.#emitRankingStatusEvent(this.#statusReason, this.native.adaptiveRankingStatus());
   }
 
   /**
@@ -612,6 +629,9 @@ export class SkillRegistry {
   #learn = true;
   #graph?: IntentGraph;
   #graphKey?: string;
+  /** What last triggered a status report; a late sink or subscriber is told
+   * the current state under this reason (see {@link #replayRankingStatus}). */
+  #statusReason: "enabled" | "rebuilt" = "enabled";
   private readonly eager: boolean;
   private readonly emittedDefinitionHashes = new Map<string, string>();
   private useDefinitionOverrides = false;
@@ -807,9 +827,10 @@ export class SkillRegistry {
     // so it routes to its own binding rather than through `setTraceSink`.
     if (config.kind === "callback") {
       this.native.setTraceSinkCallback(config.sessionId, config.onEvent);
-      return;
+    } else {
+      this.native.setTraceSink(config);
     }
-    this.native.setTraceSink(config);
+    this.#replayRankingStatus();
   }
 
   /** @internal Enable experimental complete catalog-definition events. */
@@ -822,7 +843,9 @@ export class SkillRegistry {
     handler: (batch: RuntimeEvent[]) => void,
     options: Required<RuntimeEventsOptions>,
   ): NativeEventSubscription {
-    return this.native.subscribeTraceEvents(handler, options);
+    const subscription = this.native.subscribeTraceEvents(handler, options);
+    this.#replayRankingStatus();
+    return subscription;
   }
 
   /**
@@ -987,9 +1010,20 @@ export class SkillRegistry {
     reason: "enabled" | "rebuilt",
     nativeStatus: AdaptiveRankingStatus,
   ): void {
+    this.#statusReason = reason;
     this.recordEvent(
       rankingStatusEvent(reason, nativeStatus, this.#graph, this.#graphKey, this.#learn),
     );
+  }
+
+  /** Re-report the attached graph's status once a sink or subscriber is
+   * installed. `usage_ranking_status` is otherwise emitted only at enable and
+   * rebuild, so a consumer attached later would never learn the state
+   * (ADR-0020). Subscribers already attached receive the repeat too, which is
+   * harmless for a state snapshot. Nothing attached, nothing to report. */
+  #replayRankingStatus(): void {
+    if (!this.#graph) return;
+    this.#emitRankingStatusEvent(this.#statusReason, this.native.adaptiveRankingStatus());
   }
 
   /**

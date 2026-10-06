@@ -550,6 +550,20 @@ describe("learn: false", () => {
     expect(graph.rev).toBe(revBefore);
   });
 
+  it("replays usage_ranking_status into a trace sink installed after enable", async () => {
+    const catalog = await buildCatalog();
+    catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), { learn: false });
+
+    const registry = (catalog as unknown as { registry: ToolRegistry }).registry;
+    registry.setTraceSink({ kind: "memory", sessionId: "late" });
+
+    const statuses = (registry.drainTraceEvents() as Array<Record<string, unknown>>).filter(
+      (e) => e.type === "usage_ranking_status",
+    );
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toMatchObject({ status: "active", reason: "enabled", learn: false });
+  });
+
   it("keeps learning off when a learn: true re-enable is rejected as registry busy", async () => {
     const server = await startDelayedEmbeddingServer();
     try {
