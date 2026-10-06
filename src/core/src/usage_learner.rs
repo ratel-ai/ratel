@@ -851,7 +851,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         }
     }
 
@@ -934,7 +934,7 @@ mod tests {
                 .collect(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         }
     }
 
@@ -953,7 +953,7 @@ mod tests {
                 .collect(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         }
     }
 
@@ -1205,7 +1205,7 @@ mod tests {
             }],
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         });
         l.record(invoke("gh_run_list"));
 
@@ -1228,7 +1228,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         });
         l.record(invoke("gh_release_create"));
 
@@ -1727,7 +1727,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         });
         l.record(invoke("gh_run_list"));
         l.record(TraceEvent::SkillInvoke {
@@ -1764,7 +1764,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         });
         // The agent uses a tool AND a skill for the one question.
         tools.record(invoke("gh_run_list"));
@@ -2156,7 +2156,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         });
         l.record(TraceEvent::SkillInvoke {
             skill_id: "ci-triage".into(),
@@ -2231,7 +2231,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         }
     }
 
@@ -2380,7 +2380,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
-            base_hits: Vec::new(),
+            base_hits: None,
         });
         l.record(TraceEvent::SkillInvoke {
             skill_id: "ci-triage".into(),

@@ -581,7 +581,7 @@ fn usage_learner_subscriber_learns_and_preserves_fanout_identity() {
         hits: vec![],
         stages: vec![],
         took_ms: 1,
-        base_hits: Vec::new(),
+        base_hits: None,
     });
     fanout.record(TraceEvent::InvokeStart {
         tool_id: "logs".into(),
@@ -829,7 +829,7 @@ fn fn_sink_lines_match_jsonl_modulo_per_record_identity() {
         hits: Vec::new(),
         stages: Vec::new(),
         took_ms: 0,
-        base_hits: Vec::new(),
+        base_hits: None,
     };
 
     let jsonl = JsonlSink::new("session-fn-2", &path).expect("open sink");
@@ -884,10 +884,10 @@ fn trace_event_round_trips_through_json() {
                 top_score: Some(1.5),
             }],
             took_ms: 1,
-            base_hits: vec![ratel_ai_core::SearchHitTrace {
+            base_hits: Some(vec![ratel_ai_core::SearchHitTrace {
                 tool_id: "u".into(),
                 score: 0.5,
-            }],
+            }]),
         },
         TraceEvent::InvokeStart {
             tool_id: "x".into(),

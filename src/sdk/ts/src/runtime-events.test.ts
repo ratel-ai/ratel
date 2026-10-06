@@ -137,6 +137,22 @@ describe("public runtime events", () => {
     expect(event.hits).toHaveLength(RUNTIME_EVENT_MAX_HITS);
   });
 
+  it("keeps an empty base_hits through oversize trimming", () => {
+    const padding = Object.fromEntries(
+      Array.from({ length: 16 }, (_, index) => [
+        `padding_${index.toString().padStart(2, "0")}`,
+        "x".repeat(4_096),
+      ]),
+    );
+
+    // `[]` means "a graph matched, the base ranking was empty"; it must not
+    // collapse into "no graph matched" (absent).
+    const event = deliverRuntimeEvent(runtimeEvent({ hits: [], base_hits: [], ...padding }));
+
+    expect(event.payload_truncated).toBe(true);
+    expect(event.base_hits).toEqual([]);
+  });
+
   it("keeps turn_id through ordinary oversize trimming", () => {
     const padding = Object.fromEntries(
       Array.from({ length: 16 }, (_, index) => [
@@ -679,6 +695,33 @@ describe("public runtime events", () => {
     // A matched graph also ships the ranking it would have returned without the arm.
     const search = received.find((e) => e.type === "search");
     expect(search?.base_hits).toEqual([expect.objectContaining({ tool_id: "gh_run_list" })]);
+    subscription.unsubscribe();
+  });
+
+  it("delivers an empty base_hits when the arm matched a query the base ranker missed", async () => {
+    const runtime = ratel();
+    await runtime.tools.register({
+      id: "gh_run_list",
+      name: "gh_run_list",
+      // No term in common with the query: BM25 alone returns nothing.
+      description: "List CI workflow runs",
+      inputSchema: {},
+      outputSchema: {},
+      execute: async () => "ok",
+    });
+    const received: RuntimeEvent[] = [];
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
+      learn: false,
+    });
+
+    runtime.tools.search("why is the build broken", 5);
+    await subscription.flush();
+
+    expect(received.find((e) => e.type === "usage_boost")?.promoted).toBe(1);
+    const search = received.find((e) => e.type === "search");
+    expect(search?.hits).toEqual([expect.objectContaining({ tool_id: "gh_run_list" })]);
+    expect(search?.base_hits).toEqual([]);
     subscription.unsubscribe();
   });
 

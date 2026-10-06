@@ -149,7 +149,8 @@ similarity, support, and promoted/dropped counts — and it is remotely publisha
 ADR-0020, so a consumer of a served graph can observe whether it is doing anything. When a
 cluster matched, the `Search` / `SkillSearch` event also carries `base_hits`: the top-k the
 search would have returned without the usage arm, so a consumer can compare boosted and
-unboosted rankings on real traffic rather than replaying it.
+unboosted rankings on real traffic rather than replaying it. It is `[]`, not absent, when the
+base ranking was empty: the arm rescued a query the base ranker missed entirely.
 
 ### Which capability the arm promotes first
 

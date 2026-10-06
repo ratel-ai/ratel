@@ -822,7 +822,7 @@ impl SkillRegistry {
                 origin,
                 top_k,
                 &hits,
-                &[],
+                None,
                 vec![SearchStage {
                     name: "bm25".into(),
                     took_ms,
@@ -861,7 +861,7 @@ impl SkillRegistry {
             origin,
             top_k,
             &hits,
-            &base_hits,
+            Some(&base_hits),
             vec![bm25_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
             context,
@@ -878,7 +878,7 @@ impl SkillRegistry {
     ) -> Result<Vec<SkillHit>, EmbedderError> {
         let started = Instant::now();
         if self.skills.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], &[], Vec::new(), 0, context);
+            self.record_search(query, origin, top_k, &[], None, Vec::new(), 0, context);
             return Ok(Vec::new());
         }
         // Retrieve deeper only when a graph is attached; without one the depth,
@@ -917,7 +917,7 @@ impl SkillRegistry {
                 origin,
                 top_k,
                 &hits,
-                &[],
+                None,
                 vec![SearchStage {
                     name: "dense".into(),
                     took_ms: stage_ms,
@@ -945,7 +945,7 @@ impl SkillRegistry {
             origin,
             top_k,
             &hits,
-            &base_hits,
+            Some(&base_hits),
             vec![dense_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
             took_ms,
             context,
@@ -962,7 +962,7 @@ impl SkillRegistry {
     ) -> Result<Vec<SkillHit>, EmbedderError> {
         let started = Instant::now();
         if self.skills.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], &[], Vec::new(), 0, context);
+            self.record_search(query, origin, top_k, &[], None, Vec::new(), 0, context);
             return Ok(Vec::new());
         }
         let depth = RETRIEVE_DEPTH.max(top_k);
@@ -1017,8 +1017,7 @@ impl SkillRegistry {
 
         // What the no-arm path would have returned: the same fusion, without
         // the usage arm. Computed only when the arm fired.
-        let mut base_hits = Vec::new();
-        if arm.is_some() {
+        let base_hits = arm.as_ref().map(|_| {
             let unboosted = score_fuse(
                 &bm25_ranked,
                 ceiling,
@@ -1026,9 +1025,10 @@ impl SkillRegistry {
                 None,
                 self.dense_weight,
             );
-            base_hits = to_skill_hits(unboosted, Scale::Fused);
+            let mut base_hits = to_skill_hits(unboosted, Scale::Fused);
             base_hits.truncate(top_k);
-        }
+            base_hits
+        });
 
         let mut stages = vec![bm25_stage, dense_stage];
         if let Some(arm) = &arm {
@@ -1038,7 +1038,14 @@ impl SkillRegistry {
 
         let took_ms = started.elapsed().as_millis() as u64;
         self.record_search(
-            query, origin, top_k, &hits, &base_hits, stages, took_ms, context,
+            query,
+            origin,
+            top_k,
+            &hits,
+            base_hits.as_deref(),
+            stages,
+            took_ms,
+            context,
         );
         Ok(hits)
     }
@@ -1050,7 +1057,7 @@ impl SkillRegistry {
         origin: Origin,
         top_k: usize,
         hits: &[SkillHit],
-        base_hits: &[SkillHit],
+        base_hits: Option<&[SkillHit]>,
         stages: Vec<SearchStage>,
         took_ms: u64,
         context: TraceEventContext,
@@ -1071,7 +1078,7 @@ impl SkillRegistry {
                 hits: traces(hits),
                 stages,
                 took_ms,
-                base_hits: traces(base_hits),
+                base_hits: base_hits.map(traces),
             },
             context,
         );
@@ -2034,7 +2041,12 @@ mod tests {
         method: SearchMethod,
         query: &str,
         graph: Option<Arc<RwLock<IntentGraph>>>,
-    ) -> (Vec<SkillHitTrace>, Vec<String>, Vec<SkillHitTrace>, String) {
+    ) -> (
+        Vec<SkillHitTrace>,
+        Vec<String>,
+        Option<Vec<SkillHitTrace>>,
+        String,
+    ) {
         let sink = Arc::new(MemorySink::new("s"));
         let mut reg = mismatch_registry(sink.clone());
         reg.register(skill("api-docs", "api-docs", "rest api docs", &[]));
@@ -2075,6 +2087,7 @@ mod tests {
                 stages.contains(&"usage".to_string()),
                 "{method:?}: arm must fire"
             );
+            let base_hits = base_hits.expect("the arm fired");
             assert!(!base_hits.is_empty(), "{method:?}");
             // See the tool-side twin: hybrid's score fusion may not reorder.
             if method != SearchMethod::Hybrid {
@@ -2096,7 +2109,7 @@ mod tests {
             SearchMethod::Hybrid,
         ] {
             let (_, _, base_hits, json) = skill_search_event(method, "rest api design", None);
-            assert!(base_hits.is_empty());
+            assert!(base_hits.is_none());
             assert!(!json.contains("base_hits"), "{method:?}: {json}");
 
             let (_, stages, _, json) =
@@ -2106,6 +2119,35 @@ mod tests {
                 "{method:?}: arm must miss"
             );
             assert!(!json.contains("base_hits"), "{method:?}: {json}");
+        }
+    }
+
+    #[test]
+    fn skill_base_hits_are_present_when_the_arm_fires_on_an_empty_base_ranking() {
+        // No BM25 term in common with the skill, but a lexical and ("rest"
+        // inside "prestige") dense match on the cluster: see the tool-side twin.
+        let graph = || {
+            let json = r#"{"v":1,"built_from_ts":1,
+                 "intents":[{"id":"i0","label":"l","terms":[],
+                 "members":["prestige pricing"],"centroid":[1.0,0.0,0.0],
+                 "support":9,"tools":{},"skills":{"api-docs":1.0}}]}"#;
+            Some(Arc::new(RwLock::new(
+                IntentGraph::from_json(json).expect("valid"),
+            )))
+        };
+        let (hits, stages, base_hits, json) =
+            skill_search_event(SearchMethod::Bm25, "prestige pricing", graph());
+        assert!(stages.contains(&"usage".to_string()), "arm must fire");
+        assert_eq!(hits.first().map(|h| h.skill_id.as_str()), Some("api-docs"));
+        assert_eq!(base_hits, Some(Vec::new()));
+        assert!(json.contains(r#""base_hits":[]"#), "{json}");
+
+        for method in [SearchMethod::Semantic, SearchMethod::Hybrid] {
+            let (_, stages, base_hits, json) =
+                skill_search_event(method, "prestige pricing", graph());
+            assert!(stages.contains(&"usage".to_string()), "{method:?}");
+            assert!(base_hits.is_some(), "{method:?}");
+            assert!(json.contains(r#""base_hits":"#), "{method:?}: {json}");
         }
     }
 

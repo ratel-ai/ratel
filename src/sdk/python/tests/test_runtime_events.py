@@ -513,6 +513,27 @@ def test_base_hits_survive_oversize_trimming_capped_like_hits() -> None:
     assert len(trimmed["hits"]) == RUNTIME_EVENT_MAX_HITS  # type: ignore[arg-type]
 
 
+def test_an_empty_base_hits_survives_oversize_trimming() -> None:
+    event: dict[str, object] = {
+        "v": 2,
+        "event_id": "01K2KB4QN2A9XJY5VKQCN8ZM1P",
+        "ts": 1_755_000_000_000,
+        "session_id": "session-test",
+        "source_id": "source-test",
+        "type": "search",
+        # `[]` means "a graph matched, the base ranking was empty"; it must not
+        # collapse into "no graph matched" (absent).
+        "hits": [],
+        "base_hits": [],
+        **{f"padding_{index:02d}": "x" * 4_096 for index in range(16)},
+    }
+
+    trimmed = _normalize_runtime_event(event)  # type: ignore[arg-type]
+
+    assert trimmed.get("payload_truncated") is True
+    assert trimmed["base_hits"] == []
+
+
 @pytest.mark.asyncio
 async def test_turn_id_survives_oversize_trimming_of_a_search_event() -> None:
     tools = ToolCatalog()
@@ -673,6 +694,36 @@ async def test_usage_boost_reports_the_matched_cluster_and_promoted_count_on_a_h
     base_hits = search["base_hits"]
     assert isinstance(base_hits, list)
     assert [hit["tool_id"] for hit in base_hits] == ["gh_run_list"]
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_an_empty_base_hits_ships_when_the_arm_matched_a_query_the_base_ranker_missed() -> (
+    None
+):
+    tools = ToolCatalog()
+    await tools.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            # No term in common with the query: BM25 alone returns nothing.
+            description="List CI workflow runs",
+            execute=lambda _a: "ok",
+        )
+    )
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+
+    tools.search("why is the build broken", 5)
+    await subscription.flush()
+
+    boost = next(e for e in received if e["type"] == "usage_boost")
+    assert boost["promoted"] == 1
+    search = next(e for e in received if e["type"] == "search")
+    assert [hit["tool_id"] for hit in search["hits"]] == ["gh_run_list"]  # type: ignore[attr-defined]
+    assert search["base_hits"] == []
     subscription.unsubscribe()
 
 

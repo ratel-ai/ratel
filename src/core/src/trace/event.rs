@@ -264,10 +264,11 @@ pub enum TraceEvent {
         /// Total search wall time, in milliseconds.
         took_ms: u64,
         /// The top-k the search would have returned without the usage arm,
-        /// same shape as `hits`. Present only when an intent graph matched the
-        /// query; empty (and absent on the wire) otherwise.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        base_hits: Vec<SearchHitTrace>,
+        /// same shape as `hits`. `Some` whenever an intent graph matched the
+        /// query, even when that ranking is empty (`[]` on the wire: the arm
+        /// rescued a query the base ranker missed); `None` (absent) otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base_hits: Option<Vec<SearchHitTrace>>,
     },
     /// The tool corpus changed: [`crate::ToolRegistry::register`] emits this
     /// with [`ChurnKind::Add`] for both a fresh registration and a
@@ -294,8 +295,8 @@ pub enum TraceEvent {
         /// Total search wall time, in milliseconds.
         took_ms: u64,
         /// The top-k without the usage arm — see [`TraceEvent::Search`].
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        base_hits: Vec<SkillHitTrace>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base_hits: Option<Vec<SkillHitTrace>>,
     },
     /// The skill corpus changed — the skill-side twin of
     /// [`TraceEvent::IndexChurn`]. [`crate::SkillRegistry::register`] emits

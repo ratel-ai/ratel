@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- `TraceEvent::Search` / `TraceEvent::SkillSearch` carry `base_hits`: the top-k the search would have returned without the usage arm, same shape as `hits`. Present only when an intent graph matched the query; absent from the JSON otherwise. Ranking is unchanged (ADR-0014)
+- `TraceEvent::Search` / `TraceEvent::SkillSearch` carry `base_hits`: the top-k the search would have returned without the usage arm, same shape as `hits`. Present whenever an intent graph matched the query, as `[]` if the base ranking was empty; absent from the JSON otherwise. Ranking is unchanged (ADR-0014)
 
 ### Changed
 
