@@ -776,14 +776,29 @@ impl EmbeddingModel {
         }
     }
 
-    /// Human-readable model name for telemetry (the `model` field of load
-    /// events). Friendlier than the fingerprint.
-    pub(crate) fn display_name(&self) -> String {
+    /// The model's name as published events may carry it: the repo, a local
+    /// model's directory name, or an endpoint's model, never its URL or path.
+    pub(crate) fn public_name(&self) -> String {
         match self {
             EmbeddingModel::Default => DEFAULT_REPO.to_string(),
             EmbeddingModel::HuggingFace { repo, .. } => repo.clone(),
-            EmbeddingModel::Local { path, .. } => path.display().to_string(),
-            EmbeddingModel::Endpoint { url, model, .. } => format!("{model} @ {url}"),
+            EmbeddingModel::Local { path, .. } => {
+                last_path_segment(&path.display().to_string()).to_string()
+            }
+            EmbeddingModel::Endpoint { model, .. } => model.clone(),
+        }
+    }
+
+    /// `text` (an error message bound for an event) with this model's endpoint
+    /// URL or local path replaced, so a published `reason` cannot carry them.
+    pub(crate) fn scrub(&self, text: &str) -> String {
+        match self {
+            EmbeddingModel::Endpoint { url, .. } => text.replace(url.as_str(), "<endpoint>"),
+            EmbeddingModel::Local { path, .. } => text.replace(
+                &path.display().to_string(),
+                &format!("<local>/{}", self.public_name()),
+            ),
+            _ => text.to_string(),
         }
     }
 
@@ -842,6 +857,84 @@ fn fingerprint(kind: &str, fields: &[(&str, &str)]) -> String {
 
 fn push_fingerprint_field(fingerprint: &mut String, name: &str, value: &str) {
     fingerprint.push_str(&format!("|{name}={}:{}", value.len(), value));
+}
+
+/// What a published event may say about a model: `name#hash`, never the raw
+/// fingerprint, which carries the full endpoint URL (query-string secrets
+/// included) or the local model path.
+///
+/// `name` is the endpoint's model, the HuggingFace repo, or a local model's
+/// directory name. `hash` is the first 8 hex digits of SHA-256 over the
+/// fingerprint with the endpoint URL cut to `scheme://host[:port]/path` and a
+/// local path cut to its directory name, so two configs that embed differently
+/// still read differently while nothing secret reaches the hash. A string that
+/// does not parse as a fingerprint (a hand-written graph `model`) becomes a
+/// bare `#hash`.
+pub fn public_model_identity(fingerprint: &str) -> String {
+    let Some((kind, fields)) = parse_fingerprint(fingerprint) else {
+        return format!("#{}", short_hash(fingerprint));
+    };
+    let mut name = String::new();
+    let mut stripped = kind.to_string();
+    for (field, value) in fields {
+        let value = match (kind, field) {
+            ("endpoint", "url") => strip_url(value),
+            ("local", "path") => last_path_segment(value).to_string(),
+            _ => value.to_string(),
+        };
+        if matches!(
+            (kind, field),
+            ("endpoint", "model") | ("hf", "repo") | ("local", "path")
+        ) {
+            name.clone_from(&value);
+        }
+        push_fingerprint_field(&mut stripped, field, &value);
+    }
+    format!("{name}#{}", short_hash(&stripped))
+}
+
+/// `kind|name=len:value|...` back into its parts; `None` if malformed.
+fn parse_fingerprint(fingerprint: &str) -> Option<(&str, Vec<(&str, &str)>)> {
+    let (kind, mut rest) = fingerprint.split_once('|')?;
+    let mut fields = Vec::new();
+    while !rest.is_empty() {
+        let (name, after) = rest.split_once('=')?;
+        let (len, after) = after.split_once(':')?;
+        let len: usize = len.parse().ok()?;
+        fields.push((name, after.get(..len)?));
+        rest = &after[len..];
+        if !rest.is_empty() {
+            rest = rest.strip_prefix('|')?;
+        }
+    }
+    Some((kind, fields))
+}
+
+/// `scheme://host[:port]/path`: drops userinfo, query and fragment.
+fn strip_url(url: &str) -> String {
+    let url = url.split(['?', '#']).next().unwrap_or_default();
+    let (scheme, rest) = match url.split_once("://") {
+        Some((scheme, rest)) => (format!("{scheme}://"), rest),
+        None => (String::new(), url),
+    };
+    let (authority, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    format!("{scheme}{host}{path}")
+}
+
+fn last_path_segment(path: &str) -> &str {
+    path.trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or_default()
+}
+
+fn short_hash(text: &str) -> String {
+    let mut hex = hex_lower(Sha256::digest(text.as_bytes()));
+    hex.truncate(8);
+    hex
 }
 
 fn validate_nonblank(name: &str, value: &str) -> Result<(), EmbedderError> {
@@ -1795,5 +1888,97 @@ mod tests {
                 .contains("before this process established its artifact identity"),
             "identity must remain unestablished after a discarded in-flight digest; got {err}"
         );
+    }
+
+    // ---- public_model_identity / public_name: what events may publish ------
+
+    /// `name#8hex`, or `#8hex` when there is no name.
+    fn assert_identity_shape(id: &str, name: &str) {
+        let (n, hash) = id.split_once('#').unwrap_or_else(|| panic!("no '#': {id}"));
+        assert_eq!(n, name, "{id}");
+        assert_eq!(hash.len(), 8, "{id}");
+        assert!(hash.bytes().all(|b| b.is_ascii_hexdigit()), "{id}");
+    }
+
+    #[test]
+    fn public_identity_of_an_endpoint_drops_query_userinfo_and_fragment() {
+        let secret = endpoint_fingerprint(
+            "https://user:pw@embed.example.com:8443/v1/embeddings?api-key=SECRET123#frag",
+            "nomic",
+        );
+        let id = public_model_identity(&secret);
+        assert_identity_shape(&id, "nomic");
+        for leak in [
+            "SECRET123",
+            "api-key",
+            "user",
+            "pw",
+            "frag",
+            "url=",
+            "example",
+        ] {
+            assert!(!id.contains(leak), "{leak} leaked: {id}");
+        }
+        // Only the stripped URL feeds the hash: secrets do not move it.
+        let clean = endpoint_fingerprint("https://embed.example.com:8443/v1/embeddings", "nomic");
+        assert_eq!(id, public_model_identity(&clean));
+    }
+
+    #[test]
+    fn public_identity_tells_apart_what_changes_the_vectors() {
+        let a = endpoint_fingerprint("https://a.example.com/v1/embeddings", "nomic");
+        let b = endpoint_fingerprint("https://b.example.com/v1/embeddings", "nomic");
+        assert_ne!(public_model_identity(&a), public_model_identity(&b));
+        let pooled = format!("{a}{}", fingerprint_suffix(Some(Pooling::Cls), "q: ", ""));
+        assert_ne!(public_model_identity(&a), public_model_identity(&pooled));
+        assert_eq!(public_model_identity(&a), public_model_identity(&a));
+    }
+
+    #[test]
+    fn public_identity_of_a_local_model_keeps_only_the_directory_name() {
+        let fp = format!(
+            "{}{}",
+            local_fingerprint("/Users/alice/models/bge-small"),
+            fingerprint_suffix(Some(Pooling::Mean), "", "")
+        );
+        let id = public_model_identity(&fp);
+        assert_identity_shape(&id, "bge-small");
+        assert!(!id.contains("alice") && !id.contains("path="), "{id}");
+        // Same model directory elsewhere on disk: same identity.
+        let moved = format!(
+            "{}{}",
+            local_fingerprint("/opt/models/bge-small"),
+            fingerprint_suffix(Some(Pooling::Mean), "", "")
+        );
+        assert_eq!(id, public_model_identity(&moved));
+    }
+
+    #[test]
+    fn public_identity_of_a_huggingface_model_is_its_repo() {
+        let id = public_model_identity(&huggingface_fingerprint(DEFAULT_REPO, DEFAULT_REVISION));
+        assert_identity_shape(&id, DEFAULT_REPO);
+    }
+
+    #[test]
+    fn public_identity_of_an_unparseable_string_is_a_bare_hash() {
+        for raw in ["bge-small", "", "endpoint|url=99:short", "a|b"] {
+            let id = public_model_identity(raw);
+            assert_identity_shape(&id, "");
+            assert!(raw.is_empty() || !id.contains(raw), "{id}");
+        }
+    }
+
+    #[test]
+    fn public_name_never_carries_an_endpoint_url_or_a_local_path() {
+        let endpoint = EmbeddingModel::resolve(EmbeddingSpec {
+            url: Some("https://embed.example.com/v1/embeddings?api-key=SECRET123".into()),
+            model: Some("nomic".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(endpoint.public_name(), "nomic");
+        let local = from_str("/Users/alice/models/bge-small").unwrap();
+        assert_eq!(local.public_name(), "bge-small");
+        assert_eq!(EmbeddingModel::Default.public_name(), DEFAULT_REPO);
     }
 }

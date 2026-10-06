@@ -372,6 +372,12 @@ class ArtifactWarmError(RuntimeError):
 def merge_embedding_artifacts(parts: list[bytes]) -> bytes:
     """Merge valid RAT1 parts into one mixed Tool+Skill artifact."""
 
+def public_model_identity(fingerprint: str) -> str:
+    """Redact a model fingerprint for a published event.
+
+    Returns ``name#hash``, never the endpoint URL or local path.
+    """
+
 class SkillHit:
     """A single skill search result: the matched skill id and its relevance score.
 

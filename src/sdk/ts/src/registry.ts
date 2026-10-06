@@ -7,6 +7,7 @@ import {
   FactRegistry as NativeFactRegistry,
   SkillRegistry as NativeSkillRegistry,
   ToolRegistry as NativeToolRegistry,
+  publicModelIdentity,
   type ReplaceOutcome,
   type SearchHit,
   type Skill,
@@ -120,7 +121,9 @@ function rankingStatusEvent(
     ...(graph ? { rev: graph.rev } : {}),
     ...(graphKey === undefined ? {} : { graph_key: graphKey }),
     learn,
-    ...(graph?.model != null ? { model: graph.model } : {}),
+    // The raw fingerprint carries the endpoint URL or local path; publish only
+    // its redacted identity.
+    ...(graph?.model != null ? { model: publicModelIdentity(graph.model) } : {}),
   };
 }
 

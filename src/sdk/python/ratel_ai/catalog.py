@@ -21,7 +21,7 @@ from types import TracebackType
 from typing import Any, Literal, TypedDict, TypeVar, Union, overload
 
 from ._native import IntentGraph as IntentGraph  # re-exported for `ratel_ai.IntentGraph`
-from ._native import NativeEventSubscription, SearchHit
+from ._native import NativeEventSubscription, SearchHit, public_model_identity
 from ._native import ToolRegistry as _NativeToolRegistry
 from .embedding_artifact import (
     ExperimentalEmbeddingArtifact,
@@ -249,7 +249,9 @@ def _ranking_status_event(
     if graph is not None:
         event["rev"] = graph.rev
         if graph.model is not None:
-            event["model"] = graph.model
+            # The raw fingerprint carries the endpoint URL or local path;
+            # publish only its redacted identity.
+            event["model"] = public_model_identity(graph.model)
     if graph_key is not None:
         event["graph_key"] = graph_key
     return event

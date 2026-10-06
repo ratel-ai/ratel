@@ -47,15 +47,19 @@ The remotely publishable v1 event set is:
 | Auth | `auth_refresh`, `auth_needs`, `auth_flow_start`, `auth_flow_end` | upstream id and outcome; never credentials |
 | Experiments | `experiment_selection`, `experiment_results`, `experiment_comparison`, `experiment_skip`, `experiment_fallback`, `experiment_drop`, `experiment_invocation`, `experiment_outcome` | `selection_id`; served/shadow arm data; agreement metrics; result ids/scores; attribution, drop/fallback reason, and labelled outcome as applicable |
 | Delivery | `events_dropped` | dropped count, reason, and observation window |
-| Adaptive ranking | `usage_boost`, `usage_model_mismatch`, `usage_cluster_policy_changed`, `usage_ranking_status` | matched cluster id or none, similarity, support, promoted and dropped counts; built vs active model fingerprint and dimension flag; built vs active cluster policy; SDK-reported status/reason/rev/graph_key/learn/model |
+| Adaptive ranking | `usage_boost`, `usage_model_mismatch`, `usage_cluster_policy_changed`, `usage_ranking_status` | matched cluster id or none, similarity, support, promoted and dropped counts; built vs active redacted model identity and dimension flag; built vs active cluster policy; SDK-reported status/reason/rev/graph_key/learn/model |
 
 For search events, the envelope `event_id` identifies the search. A hit's zero-based rank is its
 position in the ordered `hits[]` array rather than a repeated field on each hit.
 
 The adaptive-ranking events (ADR-0014) let a consumer of a served graph, such as Ratel Cloud
 ranking a runtime with `learn: false`, observe its health and state without waiting for a
-search. They carry no user content: cluster ids, similarities, counts, model fingerprints, and
-the status report. `usage_ranking_status` is emitted by the SDK wrappers, not core, on enable,
+search. They carry no user content: cluster ids, similarities, counts, redacted model identities, and
+the status report. A model identity is `name#hash` (`public_model_identity`): the endpoint's
+model, HuggingFace repo, or local directory name, plus a short hash of the fingerprint with
+the URL cut to `scheme://host/path` and a local path cut to its directory name — never the
+raw fingerprint, which carries the endpoint URL (query-string secrets included) or the local
+path. The `embedder_*` events follow the same rule. `usage_ranking_status` is emitted by the SDK wrappers, not core, on enable,
 disable, and rebuild; it reports whether ranking is on, off, unknown, or paused, the attached
 graph's revision and model, whether the registry learns or only ranks, and an optional
 caller-supplied `graph_key` that tells a runtime's own graph apart from one it was served (see

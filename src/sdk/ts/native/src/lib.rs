@@ -539,6 +539,13 @@ fn map_artifact_build_error(error: ArtifactError) -> napi::Error {
     }
 }
 
+/// What a published event may say about a model fingerprint: `name#hash`,
+/// never the endpoint URL or local path (see core `public_model_identity`).
+#[napi]
+pub fn public_model_identity(fingerprint: String) -> String {
+    core::public_model_identity(&fingerprint)
+}
+
 /// Merge valid RAT1 parts into one mixed artifact (see core
 /// `merge_embedding_artifacts`).
 #[napi]

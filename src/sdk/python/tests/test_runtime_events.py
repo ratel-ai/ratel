@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -874,6 +875,42 @@ async def test_usage_ranking_status_reports_learn_true_on_rebuild_after_consumer
 
 
 @pytest.mark.asyncio
+async def test_no_event_publishes_the_embedder_url_its_secrets_or_the_raw_fingerprint(
+    delayed_embedding_endpoint: str,
+) -> None:
+    tools = ToolCatalog(
+        method="semantic",
+        embedding={"url": f"{delayed_embedding_endpoint}?api-key=SECRET123", "model": "test-model"},
+    )
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await tools.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="List CI workflow runs and whether the build passed",
+            execute=lambda _a: "ok",
+        )
+    )
+    tools.experimental_enable_adaptive_ranking(
+        _known_cluster_graph(), learn=False, graph_key="cloud"
+    )
+    # The rebuild stamps the graph with the endpoint embedder's fingerprint.
+    await tools.experimental_rebuild_intent_graph()
+    await tools.search_async("why is the build broken", 5)
+    await subscription.flush()
+
+    wire = json.dumps(received)
+    for leak in ("SECRET123", "api-key", "url=", "path=", delayed_embedding_endpoint):
+        assert leak not in wire
+    status = [e for e in received if e["type"] == "usage_ranking_status"][-1]
+    assert status["reason"] == "rebuilt"
+    assert re.fullmatch(r"test-model#[0-9a-f]{8}", str(status["model"]))
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
 async def test_usage_ranking_status_carries_the_graphs_model_when_present() -> None:
     tools = await _gh_run_list_catalog()
     graph = IntentGraph.from_json(
@@ -904,8 +941,9 @@ async def test_usage_ranking_status_carries_the_graphs_model_when_present() -> N
     tools.experimental_enable_adaptive_ranking(graph, learn=False)
     await subscription.flush()
 
+    # A hand-written model string is not a fingerprint: only its hash ships.
     status = next(e for e in received if e["type"] == "usage_ranking_status")
-    assert status["model"] == "bge-small"
+    assert re.fullmatch(r"#[0-9a-f]{8}", str(status["model"]))
     subscription.unsubscribe()
 
 

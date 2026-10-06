@@ -495,8 +495,9 @@ pub enum TraceEvent {
     /// flags a slow load (possibly underpowered machine) or a failed one;
     /// `reason` carries the hint / error. See `embedding.rs` and ADR-0011.
     EmbedderLoad {
-        /// Resolved model display name: repo id, local path, or endpoint model
-        /// and URL.
+        /// The model's public name: repo id, a local model's directory name, or
+        /// an endpoint's model. Never an endpoint URL or local path, and
+        /// `reason` has them scrubbed.
         model: String,
         /// Load outcome: ok, slow, or failed.
         status: EmbedderLoadStatus,
@@ -510,7 +511,8 @@ pub enum TraceEvent {
     /// the HuggingFace cache (a cold fetch), carrying the real byte size — so a
     /// multi-second first-run download is never a silent surprise. See ADR-0012.
     EmbedderDownload {
-        /// The model that was downloaded.
+        /// The model that was downloaded (its public name, as for
+        /// [`Self::EmbedderLoad`]).
         model: String,
         /// Real download size, in bytes.
         bytes: u64,
@@ -520,9 +522,11 @@ pub enum TraceEvent {
     /// rather than mixing vector spaces; the caller must rebuild the complete
     /// embedding cache. See `dense_cache.rs` and ADR-0012.
     EmbedderModelMismatch {
-        /// The model the existing embeddings were built with.
+        /// The model the existing embeddings were built with, as its redacted
+        /// identity ([`crate::public_model_identity`]: `name#hash`, never the
+        /// raw fingerprint).
         built: String,
-        /// The model now configured.
+        /// The model now configured, redacted the same way.
         active: String,
     },
     /// The graph's clusters were drawn under a different [`crate::ClusterPolicy`]
@@ -556,7 +560,8 @@ pub enum TraceEvent {
     /// **pauses** — base ranking is unaffected — until the graph is rebuilt. See
     /// `usage.rs` and ADR-0014.
     UsageModelMismatch {
-        /// The graph's model — its fingerprint, or its centroid width when the
+        /// The graph's model — its redacted identity
+        /// ([`crate::public_model_identity`]), or its centroid width when the
         /// mismatch is dimensional.
         built: String,
         /// The active model, in the same units as `built`.
@@ -631,8 +636,10 @@ pub enum TraceEvent {
         /// Whether the registry learns into the graph or only ranks from it.
         #[serde(default = "default_true")]
         learn: bool,
-        /// The graph's embedding model fingerprint; absent for a lexical graph or
-        /// when `status` is `inactive`.
+        /// The graph's embedding model as its redacted identity
+        /// ([`crate::public_model_identity`]: `name#hash`, never the raw
+        /// fingerprint); absent for a lexical graph or when `status` is
+        /// `inactive`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         model: Option<String>,
     },

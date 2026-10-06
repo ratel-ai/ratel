@@ -7,7 +7,7 @@ use crate::artifact_warm::{ArtifactWarmError, OnArtifactMiss};
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
 use crate::embedding_artifact::{ArtifactEntryKind, ArtifactError};
-use crate::embedding_config::EmbeddingModel;
+use crate::embedding_config::{EmbeddingModel, public_model_identity};
 use crate::fusion::{
     DenseWeight, RETRIEVE_DEPTH, RRF_K, Scale, WeightedArm, normalize, rrf_fuse_weighted,
     score_fuse,
@@ -386,9 +386,18 @@ impl SkillRegistry {
             });
         }
         if let Some((built, active, dim_mismatch)) = mismatch {
+            // Widths are published as-is; model fingerprints carry endpoint
+            // URLs or local paths, so only their redacted identity is.
+            let public = |fp: String| {
+                if dim_mismatch {
+                    fp
+                } else {
+                    public_model_identity(&fp)
+                }
+            };
             self.sink.record(TraceEvent::UsageModelMismatch {
-                built,
-                active,
+                built: public(built),
+                active: public(active),
                 dim_mismatch,
             });
         }
@@ -2149,6 +2158,34 @@ mod tests {
             assert!(base_hits.is_some(), "{method:?}");
             assert!(json.contains(r#""base_hits":"#), "{method:?}: {json}");
         }
+    }
+
+    #[test]
+    fn a_model_mismatch_publishes_redacted_identities_never_the_fingerprint() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = mismatch_registry(sink.clone());
+
+        let secret = crate::embedding_config::endpoint_fingerprint(
+            "https://embed.example.com/v1/embeddings?api-key=SECRET123",
+            "nomic",
+        );
+        reg.set_intent_graph(Some(graph_with_model(
+            "frontend",
+            vec![1.0, 0.0, 0.0],
+            &secret,
+        )));
+        reg.search_with_method("api", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        let events = model_mismatch_events(&sink);
+        assert_eq!(events.len(), 1);
+        let (built, active, _) = &events[0];
+        assert_eq!(built, &crate::public_model_identity(&secret));
+        assert!(
+            !built.contains("SECRET123") && !built.contains("url="),
+            "{built}"
+        );
+        assert!(active.contains('#'), "active is redacted too: {active}");
     }
 
     #[test]

@@ -26,6 +26,7 @@ import {
   ratel,
 } from "./index.js";
 import { PRODUCT_FACT_FIELDS, PRODUCT_FACT_SUFFIXES } from "./runtime-events.js";
+import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
 
 interface RuntimeEventsFixture {
   runtime_events: {
@@ -958,9 +959,49 @@ describe("public runtime events", () => {
     runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph, { learn: false });
     await subscription.flush();
 
+    // A hand-written model string is not a fingerprint: only its hash ships.
     const status = received.find((e) => e.type === "usage_ranking_status");
-    expect(status?.model).toBe("bge-small");
+    expect(status?.model).toMatch(/^#[0-9a-f]{8}$/);
     subscription.unsubscribe();
+  });
+
+  it("never publishes the embedder's URL, its query-string secrets, or the raw fingerprint", async () => {
+    const server = await startDelayedEmbeddingServer(1);
+    const received: RuntimeEvent[] = [];
+    const runtime = ratel({
+      method: "semantic",
+      embedding: { url: `${server.url}?api-key=SECRET123`, model: "test-model" },
+    });
+    const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+    try {
+      await runtime.tools.register({
+        id: "gh_run_list",
+        name: "gh_run_list",
+        description: "List CI workflow runs and whether the build passed",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      });
+      runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
+        learn: false,
+        graphKey: "cloud",
+      });
+      // The rebuild stamps the graph with the endpoint embedder's fingerprint.
+      await runtime.tools.catalog.experimentalRebuildIntentGraph();
+      await runtime.tools.searchAsync("why is the build broken", 5);
+      await subscription.flush();
+
+      const wire = JSON.stringify(received);
+      for (const leak of ["SECRET123", "api-key", "url=", "path=", server.url]) {
+        expect(wire).not.toContain(leak);
+      }
+      const status = received.filter((e) => e.type === "usage_ranking_status").at(-1);
+      expect(status?.reason).toBe("rebuilt");
+      expect(status?.model).toMatch(/^test-model#[0-9a-f]{8}$/);
+    } finally {
+      subscription.unsubscribe();
+      await server.close();
+    }
   });
 
   it("delivers usage_ranking_status on the skill catalog for enable, defaults, and disable", async () => {

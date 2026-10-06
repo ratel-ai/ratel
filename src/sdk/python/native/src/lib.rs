@@ -493,6 +493,13 @@ fn parse_on_artifact_miss(on_miss: &str) -> PyResult<OnArtifactMiss> {
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
+/// What a published event may say about a model fingerprint: `name#hash`,
+/// never the endpoint URL or local path (see core `public_model_identity`).
+#[pyfunction]
+fn public_model_identity(fingerprint: &str) -> String {
+    core::public_model_identity(fingerprint)
+}
+
 /// Merge valid RAT1 parts into one mixed Tool+Skill artifact.
 #[pyfunction]
 fn merge_embedding_artifacts(py: Python<'_>, parts: Vec<Vec<u8>>) -> PyResult<Py<PyBytes>> {
@@ -2249,6 +2256,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SkillRegistry>()?;
     m.add_class::<SkillHit>()?;
     m.add_function(wrap_pyfunction!(merge_embedding_artifacts, m)?)?;
+    m.add_function(wrap_pyfunction!(public_model_identity, m)?)?;
     m.add_class::<FactRegistry>()?;
     m.add_class::<FactHit>()?;
     m.add("EmbedderError", m.py().get_type::<EmbedderError>())?;

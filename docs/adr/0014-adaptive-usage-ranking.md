@@ -341,7 +341,8 @@ embeddings, but the usage arm has a valid fall-through (no boost), so breaking s
 stale *enhancement* would be worse than the problem.
 
 The mismatch is surfaced three ways: a `TraceEvent::UsageModelMismatch` (structured, always,
-remotely publishable per ADR-0020), a one-time SDK stderr warning
+remotely publishable per ADR-0020, so it carries redacted `name#hash` identities, never raw
+fingerprints), a one-time SDK stderr warning
 (default on, `warnOnModelMismatch: false` to suppress), and an
 `experimentalAdaptiveRankingStatus` the app can gate on. `experimentalRebuildIntentGraph()` re-embeds the graph's
 members under the current model and restamps — members, support, and edges are
@@ -431,7 +432,8 @@ stops being enough — Ratel Cloud's dashboard needs to know whether ranking is 
 or paused *before* any search happens, and which graph revision a runtime is running: its own,
 or one served by cloud. The enable, disable, and rebuild entry points therefore emit a
 `usage_ranking_status` trace event (`status`, `reason`, `rev`, an optional caller-supplied
-`graph_key` label, `learn`, and the graph's `model`) — see
+`graph_key` label, `learn`, and the graph's `model` as a redacted `name#hash` identity, never
+the raw fingerprint) — see
 [ADR-0020](0020-runtime-events-lane.md).
 
 This is emitted by the **SDK wrappers**, not core: core has no notion of `graph_key` or of
