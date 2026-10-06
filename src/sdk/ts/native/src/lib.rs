@@ -1759,9 +1759,14 @@ impl ToolRegistry {
         learn: Option<bool>,
     ) -> napi::Result<()> {
         let cluster_policy = parse_cluster_policy(&options)?;
-        self.usage_policy = parse_policy(options, core::OriginFilter::Any, core::Provenance::Live)?;
-        self.learn = learn.unwrap_or(true);
+        let usage_policy = parse_policy(options, core::OriginFilter::Any, core::Provenance::Live)?;
+        let learn = learn.unwrap_or(true);
         let handle = graph.inner.clone();
+        // Take the registry before touching any state: a "registry busy"
+        // rejection must leave this registry and the graph exactly as they
+        // were, or the next sink install would wrap the old graph under the
+        // rejected call's `learn`.
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         // Sets what FUTURE admissions are measured against. Existing boundaries
         // stay as they are — nothing can redraw them in place — and the graph
         // keeps reporting the policy it was clustered under, so the difference
@@ -1774,13 +1779,14 @@ impl ToolRegistry {
             &self.base_sink,
             Some(&handle),
             &self.event_stream,
-            self.usage_policy,
-            self.learn,
+            usage_policy,
+            learn,
         );
-        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
         registry.set_intent_graph(Some(handle.clone()));
         drop(registry);
+        self.usage_policy = usage_policy;
+        self.learn = learn;
         self.graph = Some(handle);
         Ok(())
     }
@@ -2765,9 +2771,14 @@ impl SkillRegistry {
         learn: Option<bool>,
     ) -> napi::Result<()> {
         let cluster_policy = parse_cluster_policy(&options)?;
-        self.usage_policy = parse_policy(options, core::OriginFilter::Any, core::Provenance::Live)?;
-        self.learn = learn.unwrap_or(true);
+        let usage_policy = parse_policy(options, core::OriginFilter::Any, core::Provenance::Live)?;
+        let learn = learn.unwrap_or(true);
         let handle = graph.inner.clone();
+        // Take the registry before touching any state: a "registry busy"
+        // rejection must leave this registry and the graph exactly as they
+        // were, or the next sink install would wrap the old graph under the
+        // rejected call's `learn`.
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         // Sets what FUTURE admissions are measured against. Existing boundaries
         // stay as they are — nothing can redraw them in place — and the graph
         // keeps reporting the policy it was clustered under, so the difference
@@ -2780,13 +2791,14 @@ impl SkillRegistry {
             &self.base_sink,
             Some(&handle),
             &self.event_stream,
-            self.usage_policy,
-            self.learn,
+            usage_policy,
+            learn,
         );
-        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
         registry.set_intent_graph(Some(handle.clone()));
         drop(registry);
+        self.usage_policy = usage_policy;
+        self.learn = learn;
         self.graph = Some(handle);
         Ok(())
     }

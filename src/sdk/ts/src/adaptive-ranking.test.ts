@@ -14,6 +14,7 @@ import {
   ToolRegistry,
   type TraceSinkConfig,
 } from "./index.js";
+import { startDelayedEmbeddingServer } from "./test-support/delayed-embedding-server.js";
 
 /**
  * A catalog where lexical retrieval is confidently wrong: "why is the build
@@ -547,6 +548,42 @@ describe("learn: false", () => {
     await useIt(catalog, "why is the build broken", "gh_run_list");
 
     expect(graph.rev).toBe(revBefore);
+  });
+
+  it("keeps learning off when a learn: true re-enable is rejected as registry busy", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const registry = new ToolRegistry({ url: server.url, model: "test-model" }, "bm25");
+      registry.registerItems({
+        id: "gh_run_list",
+        name: "gh_run_list",
+        description: "List CI workflow runs and whether the build passed",
+        inputSchema: {},
+        outputSchema: {},
+      });
+      const graph = new IntentGraph();
+      registry.experimentalEnableAdaptiveRanking(graph, { learn: false });
+
+      // A pending dense op makes the native registry refuse the re-enable.
+      await server.armBatchHold(1);
+      const building = registry.experimentalBuildEmbeddingArtifact();
+      await server.waitForHeld();
+      expect(() => registry.experimentalEnableAdaptiveRanking(graph, { learn: true })).toThrow(
+        /registry busy/,
+      );
+      server.releaseHeld();
+      await building;
+
+      // The next sink install must still wrap the graph as a consumer.
+      registry.setTraceSink({ kind: "memory", sessionId: "s" });
+      for (let i = 0; i < 3; i++) {
+        registry.search("why is the build broken", 5);
+        registry.recordEvent({ type: "invoke_start", tool_id: "gh_run_list", args_size_bytes: 0 });
+      }
+      expect(graph.clusterCount).toBe(0);
+    } finally {
+      await server.close();
+    }
   });
 
   it("resumes learning after disable and a plain re-enable", async () => {

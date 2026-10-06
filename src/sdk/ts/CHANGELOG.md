@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **A rejected `experimentalEnableAdaptiveRanking` leaves `learn` untouched.** A re-enable refused as "registry busy" used to store its `learn` and usage policy anyway, so the next trace-sink install could start learning into a `learn: false` consumer graph
 - **Runtime events never carry the raw embedder fingerprint, endpoint URL or local model path.** `usage_ranking_status.model`, `usage_model_mismatch` and `embedder_model_mismatch` carry a redacted `name#hash` identity, and the `embedder_*` events carry the model's public name. Before, an endpoint URL with a query-string API key reached every event subscriber (core fix, surfaced through this SDK)
 
 ## [0.13.0-rc.9] - 2026-10-01
