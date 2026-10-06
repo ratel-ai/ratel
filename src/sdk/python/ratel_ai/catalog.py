@@ -895,7 +895,8 @@ class ToolRegistry:
             self._native.disable_adaptive_ranking()
         if self._graph is not None:
             _forget_graph_learn(self._graph, self)
-        self.record_event(dict(_DISABLED_RANKING_STATUS))
+            # Report only a real change: disabling with nothing attached changes nothing.
+            self.record_event(dict(_DISABLED_RANKING_STATUS))
         self._learn = True
         self._graph = None
         self._graph_key = None
@@ -930,6 +931,9 @@ class ToolRegistry:
         """
         await self._run_dense(self._native._rebuild_intent_graph)
         self._adaptive_warned = False
+        # Nothing attached: native's rebuild was a no-op, so there is nothing to report.
+        if self._graph is None:
+            return
         native_status = self._native.adaptive_ranking_status()
         self._maybe_warn_model_mismatch(native_status)
         self._emit_ranking_status("rebuilt", native_status)

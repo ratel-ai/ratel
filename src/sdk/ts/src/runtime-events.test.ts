@@ -897,7 +897,7 @@ describe("public runtime events", () => {
     subscription.unsubscribe();
   });
 
-  it("reports learn true on a rebuild after disabling a consumer-only graph", async () => {
+  it("reports no usage_ranking_status for a disable or rebuild with nothing attached", async () => {
     const runtime = ratel();
     await runtime.tools.register({
       id: "gh_run_list",
@@ -907,6 +907,16 @@ describe("public runtime events", () => {
       outputSchema: {},
       execute: async () => "ok",
     });
+    await runtime.skills.register({
+      id: "s",
+      name: "s",
+      description: "a skill",
+      tags: [],
+      tools: [],
+      metadata: {},
+      body: "# steps",
+    });
+    // Attached once and detached, so only the no-op calls below can report.
     runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
       learn: false,
     });
@@ -914,14 +924,14 @@ describe("public runtime events", () => {
     const received: RuntimeEvent[] = [];
     const subscription = runtime.events.subscribe((batch) => received.push(...batch));
 
-    // No graph attached: the rebuild is a no-op, but it still reports status.
+    // Nothing attached: these change nothing, so they report nothing.
+    runtime.tools.catalog.experimentalDisableAdaptiveRanking();
     await runtime.tools.catalog.experimentalRebuildIntentGraph();
+    runtime.skills.experimentalDisableAdaptiveRanking();
+    await runtime.skills.experimentalRebuildIntentGraph();
     await subscription.flush();
 
-    const status = received.find((e) => e.type === "usage_ranking_status");
-    expect(status?.reason).toBe("rebuilt");
-    expect(status?.status).toBe("inactive");
-    expect(status?.learn).toBe(true);
+    expect(received.filter((e) => e.type === "usage_ranking_status")).toEqual([]);
     subscription.unsubscribe();
   });
 

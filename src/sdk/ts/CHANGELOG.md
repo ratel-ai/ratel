@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **A `experimentalDisableAdaptiveRanking` / `experimentalRebuildIntentGraph` with no graph attached emits no `usage_ranking_status`.** It used to report `inactive` with reason `disabled` / `rebuilt` for a change that never happened
 - **A trace sink or event subscriber attached after enable now receives `usage_ranking_status`.** The current status (with the last trigger's `reason`) is re-reported whenever one is installed while a graph is attached, so a consumer no longer has to subscribe before `experimentalEnableAdaptiveRanking` to see it
 - **A rejected `experimentalEnableAdaptiveRanking` leaves `learn` untouched.** A re-enable refused as "registry busy" used to store its `learn` and usage policy anyway, so the next trace-sink install could start learning into a `learn: false` consumer graph
 - **Runtime events never carry the raw embedder fingerprint, endpoint URL or local model path.** `usage_ranking_status.model`, `usage_model_mismatch` and `embedder_model_mismatch` carry a redacted `name#hash` identity, and the `embedder_*` events carry the model's public name. Before, an endpoint URL with a query-string API key reached every event subscriber (core fix, surfaced through this SDK)

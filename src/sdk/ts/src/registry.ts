@@ -481,6 +481,8 @@ export class ToolRegistry {
       throw mapEmbedderError(error);
     }
     this.#adaptiveWarned = false;
+    // Nothing attached: native's rebuild was a no-op, so there is nothing to report.
+    if (!this.#graph) return;
     const status = this.native.adaptiveRankingStatus();
     this.#maybeWarnModelMismatch(status);
     this.#emitRankingStatusEvent("rebuilt", status);
@@ -603,7 +605,8 @@ export class ToolRegistry {
   experimentalDisableAdaptiveRanking(): void {
     this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
-    this.recordEvent(DISABLED_RANKING_STATUS);
+    // Report only a real change: disabling with nothing attached changes nothing.
+    if (this.#graph) this.recordEvent(DISABLED_RANKING_STATUS);
     if (this.#graph) forgetGraphLearn(this.#graph, this);
     this.#learn = true;
     this.#graph = undefined;
@@ -947,6 +950,8 @@ export class SkillRegistry {
       throw mapEmbedderError(error);
     }
     this.#adaptiveWarned = false;
+    // Nothing attached: native's rebuild was a no-op, so there is nothing to report.
+    if (!this.#graph) return;
     const status = this.native.adaptiveRankingStatus();
     this.#maybeWarnModelMismatch(status);
     this.#emitRankingStatusEvent("rebuilt", status);
@@ -1034,7 +1039,8 @@ export class SkillRegistry {
   experimentalDisableAdaptiveRanking(): void {
     this.#rebuildOnModelChange = false;
     this.native.disableAdaptiveRanking();
-    this.recordEvent(DISABLED_RANKING_STATUS);
+    // Report only a real change: disabling with nothing attached changes nothing.
+    if (this.#graph) this.recordEvent(DISABLED_RANKING_STATUS);
     if (this.#graph) forgetGraphLearn(this.#graph, this);
     this.#learn = true;
     this.#graph = undefined;

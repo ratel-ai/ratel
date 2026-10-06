@@ -856,22 +856,27 @@ async def test_usage_ranking_status_inactive_on_disable_has_no_rev_or_graph_key(
 
 
 @pytest.mark.asyncio
-async def test_usage_ranking_status_reports_learn_true_on_rebuild_after_consumer_disable() -> None:
+async def test_no_usage_ranking_status_for_a_disable_or_rebuild_with_nothing_attached() -> None:
     tools = await _gh_run_list_catalog()
+    skills = SkillCatalog()
+    await skills.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    # Attached once and detached, so only the no-op calls below can report.
     tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
     tools.experimental_disable_adaptive_ranking()
-    events = RuntimeEvents([tools])
+    events = RuntimeEvents([tools, skills])
     received: list[dict[str, object]] = []
     subscription = events.subscribe(lambda batch: received.extend(batch))
 
-    # No graph attached: the rebuild is a no-op, but it still reports status.
+    # Nothing attached: these change nothing, so they report nothing.
+    tools.experimental_disable_adaptive_ranking()
     await tools.experimental_rebuild_intent_graph()
+    skills.experimental_disable_adaptive_ranking()
+    await skills.experimental_rebuild_intent_graph()
     await subscription.flush()
 
-    status = next(e for e in received if e["type"] == "usage_ranking_status")
-    assert status["reason"] == "rebuilt"
-    assert status["status"] == "inactive"
-    assert status["learn"] is True
+    assert [e for e in received if e["type"] == "usage_ranking_status"] == []
     subscription.unsubscribe()
 
 
