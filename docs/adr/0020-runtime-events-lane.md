@@ -38,7 +38,7 @@ The remotely publishable v1 event set is:
 
 | Family | Event types | Required product facts |
 |---|---|---|
-| Search | `search`, `skill_search`, `gateway_search` | query, target/origin, `top_k`, duration, and ordered `hits[]` of target id and score; when an intent graph matched, `base_hits[]` of the same shape — the ranking without the usage arm |
+| Search | `search`, `skill_search`, `gateway_search` | query, target/origin, `top_k`, duration, and ordered `hits[]` of target id and score; on `search`/`skill_search`, when an intent graph matched, `base_hits[]` of the same shape — the ranking without the usage arm |
 | Tool invocation | `invoke_start`, `invoke_end`, `invoke_error`, `gateway_invoke`, `gateway_error` | tool id, `invocation_id`, outcome/error class, and duration where known |
 | Skill use | `skill_invoke` | skill id, outcome, and duration |
 | Catalog churn | `index_churn`, `skill_churn` | add/remove, target id, and catalog version where known |
