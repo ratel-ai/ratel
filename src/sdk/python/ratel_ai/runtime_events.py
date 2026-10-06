@@ -28,6 +28,7 @@ RuntimeEventHandler = Callable[[list[RuntimeEvent]], Optional[Awaitable[None]]]
 
 RUNTIME_EVENT_TYPES = (
     "catalog_definition",
+    "turn_start",
     "search",
     "skill_search",
     "gateway_search",
@@ -358,8 +359,23 @@ def _finish_async_handler(
     task.exception()
 
 
+_INVOKE_EVENT_TYPES = frozenset(("invoke_start", "invoke_end", "invoke_error"))
+
+
+def _stamp_external_origin(event: RuntimeEvent) -> RuntimeEvent:
+    # Core invocation events carry no `origin`; a tool the host ran itself and
+    # reported through `record_tool_call` is marked by invocation id (ADR-0026).
+    from .turns import is_external_invocation
+
+    if event.get("type") in _INVOKE_EVENT_TYPES and is_external_invocation(
+        event.get("invocation_id")
+    ):
+        return {**event, "origin": "external"}
+    return event
+
+
 def _normalize_runtime_event(event: RuntimeEvent) -> RuntimeEvent:
-    normalized = cast(RuntimeEvent, _sanitize_value(event))
+    normalized = cast(RuntimeEvent, _sanitize_value(_stamp_external_origin(event)))
     if _serialized_size(normalized) <= RUNTIME_EVENT_MAX_PAYLOAD_BYTES:
         return normalized
 

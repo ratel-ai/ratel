@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, Literal, Optional, TypedDict, TypeVar, Union, overload
 
+from ._custom_ranking import RankFn, custom_rerank, custom_search
 from ._native import IntentGraph as IntentGraph  # re-exported for `ratel_ai.IntentGraph`
 from ._native import NativeEventSubscription, SearchHit, public_model_identity
 from ._native import ToolRegistry as _NativeToolRegistry
@@ -38,6 +39,7 @@ from .telemetry import (
     trace_search,
     trace_search_async,
 )
+from .turns import Turn, record_external_tool_call, with_turn_context
 
 Executor = Callable[..., Union[Awaitable[Any], Any]]
 """A tool handler: takes the tool's arguments dict, returns the result.
@@ -59,7 +61,9 @@ unaffected.
 
 SearchMethod = str
 """Retrieval engine: ``"bm25"`` (lexical, model-free, the default),
-``"semantic"`` (dense embeddings) or ``"hybrid"`` (both, fused).
+``"semantic"`` (dense embeddings), ``"hybrid"`` (both, fused), or
+``"custom"`` (your own ``retrieve_fn``, e.g. Jev via `ratel_jev_plugin`; see
+ADR-0027).
 """
 
 OriginFilterOption = Literal["any", "agent", "baseline"]
@@ -141,6 +145,115 @@ EmbeddingModelConfig = Union[
 
 EmbeddingSpec = Union[str, EmbeddingModelConfig]
 """Embedding selection; a bare string is a local model directory path."""
+
+class _RerankerOptions(TypedDict, total=False):
+    depth: int
+
+
+class RerankerConfig(_RerankerOptions):
+    """A second stage over the first stage's candidates (ADR-0027).
+
+    A built-in ``method`` (``"bm25"``, ``"semantic"`` or ``"hybrid"``) re-scores
+    the top ``depth`` (default 50, raised to ``top_k`` when lower) hits of the
+    catalog's ``method`` and never adds a tool the first stage did not return.
+    It may not use the first stage's own method. For a model you call yourself,
+    use ``reranker_fn`` instead. **Experimental** — may change without a major
+    version bump.
+    """
+
+    method: str
+
+
+_BUILT_IN_METHODS = ("bm25", "semantic", "hybrid")
+_METHODS = (*_BUILT_IN_METHODS, "custom")
+_DENSE_METHODS = ("semantic", "hybrid")
+_DEFAULT_RERANKER_DEPTH = 50
+_RERANKER_NEEDS_ASYNC = (
+    "this catalog has a reranker, which runs off the event loop; "
+    "use `await catalog.search_async(...)`"
+)
+_CUSTOM_NEEDS_ASYNC = (
+    'this catalog ranks with its retrieve_fn (method "custom"), which may be async; '
+    "use `await catalog.search_async(...)`"
+)
+
+
+def _validate_method(method: str) -> None:
+    if method not in _METHODS:
+        raise ValueError(f"unknown search method: {method}")
+
+
+def _uses_dense(method: str, reranker: RerankerConfig | None) -> bool:
+    """Whether either stage ranks against embeddings, so registration must embed."""
+    return method in _DENSE_METHODS or (
+        reranker is not None and reranker["method"] in _DENSE_METHODS
+    )
+
+
+def _validate_depth(name: str, depth: object) -> None:
+    if depth is not None and (isinstance(depth, bool) or not isinstance(depth, int) or depth < 1):
+        raise ValueError(f"{name} must be a positive integer, got {depth!r}")
+
+
+def _validate_reranker(method: str, reranker: RerankerConfig | None) -> None:
+    """Reject a reranker the core would refuse, before the first search."""
+    if reranker is None:
+        return
+    if "method" not in reranker:
+        raise ValueError('a reranker needs a "method" ("bm25", "semantic", or "hybrid")')
+    if reranker["method"] not in _BUILT_IN_METHODS:
+        raise ValueError(
+            f'unknown search method "{reranker["method"]}" for the reranker '
+            '(expected "bm25", "semantic", or "hybrid"; for your own model use reranker_fn)'
+        )
+    if method == "custom":
+        raise ValueError('a reranker needs a "bm25", "semantic" or "hybrid" first stage')
+    if reranker["method"] == method:
+        raise ValueError(
+            f'reranker method "{method}" is the same as the first-stage method; '
+            "a reranker must use a different method"
+        )
+    _validate_depth("reranker depth", reranker.get("depth"))
+
+
+def _validate_ranking(
+    owner: str,
+    method: str,
+    reranker: RerankerConfig | None,
+    retrieve_fn: RankFn | None,
+    reranker_fn: RankFn | None,
+    reranker_depth: int | None,
+) -> None:
+    """Reject ranking options that contradict each other, at construction."""
+    _validate_method(method)
+    if retrieve_fn is not None and not callable(retrieve_fn):
+        raise ValueError(f"{owner}: retrieve_fn must be callable")
+    if reranker_fn is not None and not callable(reranker_fn):
+        raise ValueError(f"{owner}: reranker_fn must be callable")
+    if method == "custom" and retrieve_fn is None:
+        raise ValueError(f'{owner}: method "custom" needs a retrieve_fn')
+    if retrieve_fn is not None and method != "custom":
+        raise ValueError(f'{owner}: retrieve_fn needs method "custom"')
+    if reranker_fn is not None and reranker is not None:
+        raise ValueError(f"{owner}: pass either reranker or reranker_fn, not both")
+    if reranker_fn is not None and method == "custom":
+        raise ValueError(
+            f'{owner}: reranker_fn needs a "bm25", "semantic" or "hybrid" first stage'
+        )
+    if reranker_depth is not None and reranker_fn is None:
+        raise ValueError(f"{owner}: reranker_depth needs a reranker_fn")
+    _validate_depth("reranker_depth", reranker_depth)
+    _validate_reranker(method, reranker)
+
+
+def _resolve_reranker(
+    override: RerankerConfig | Literal[False] | None, default: RerankerConfig | None
+) -> RerankerConfig | None:
+    """A per-call ``reranker``: ``None`` inherits the catalog's, ``False`` turns it off."""
+    if override is False:
+        return None
+    return default if override is None else override
+
 
 _DenseResult = TypeVar("_DenseResult")
 
@@ -437,6 +550,7 @@ class ToolRegistry:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
     ) -> None: ...
 
     @overload
@@ -505,6 +619,7 @@ class ToolRegistry:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
         spec: str | None = None,
         huggingface: str | None = None,
         local: str | None = None,
@@ -545,7 +660,7 @@ class ToolRegistry:
             self._native.set_experimental_dense_weight(experimental_dense_weight)
         if experimental_bm25_k1 is not None or experimental_bm25_b is not None:
             self._native.set_experimental_bm25_params(experimental_bm25_k1, experimental_bm25_b)
-        self._eager = method in ("semantic", "hybrid")
+        self._eager = _uses_dense(method, reranker)
         self._embedding_artifact = experimental_embedding_artifact
         self._warn_on_model_mismatch = True
         self._adaptive_warned = False
@@ -632,14 +747,15 @@ class ToolRegistry:
         projection: RuntimeEventProjection | None = None,
     ) -> list[SearchHit]:
         """Run BM25 retrieval with an explicit trace origin."""
-        return self._native.search_with_origin(query, top_k, origin, projection)
+        return self._native.search_with_origin(
+            query, top_k, origin, with_turn_context(projection)
+        )
 
     def search_with_method(
         self, query: str, top_k: int, origin: SearchOrigin, method: SearchMethod
     ) -> list[SearchHit]:
-        """Run BM25 synchronously; dense retrieval is async-only."""
-        if method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {method}")
+        """Run BM25 synchronously; dense and custom retrieval are async-only."""
+        _validate_method(method)
         if method != "bm25":
             raise RuntimeError(
                 f"{method} search is asynchronous; use `await registry.search_async(..., "
@@ -733,17 +849,67 @@ class ToolRegistry:
         origin: SearchOrigin = "direct",
         method: SearchMethod = "bm25",
         projection: RuntimeEventProjection | None = None,
+        *,
+        reranker: RerankerConfig | None = None,
+        retrieve_fn: RankFn | None = None,
+        reranker_fn: RankFn | None = None,
+        reranker_depth: int = _DEFAULT_RERANKER_DEPTH,
     ) -> list[SearchHit]:
-        """Search immediately with BM25 or run dense retrieval on a worker thread."""
-        if method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {method}")
-        if method == "bm25":
+        """Search immediately with plain BM25; run anything else on a worker thread.
+
+        ``reranker`` re-scores the first stage's candidates with a built-in
+        method; ``retrieve_fn`` (with ``method="custom"``) and ``reranker_fn``
+        rank with your own function (ADR-0027).
+        """
+        _validate_method(method)
+        _validate_reranker(method, reranker)
+        ambient = with_turn_context(projection)
+        if method == "custom":
+            if retrieve_fn is None:
+                raise ValueError('method "custom" needs a retrieve_fn')
+            return await custom_search(
+                self._native, "tool", retrieve_fn, query, top_k, origin, ambient
+            )
+        if reranker_fn is not None:
+            return await custom_rerank(
+                self._native,
+                lambda: self._stage_one(query, top_k, reranker_depth, method, ambient),
+                "tool",
+                reranker_fn,
+                query,
+                top_k,
+                origin,
+                ambient,
+            )
+        if method == "bm25" and reranker is None:
             return self.search_with_origin(query, top_k, origin, projection)
         if self._undriven_builds > 0:
             raise RuntimeError(_UNAWAITED_REGISTER)
         await self._maybe_rebuild_on_model_change()
+        reranker_method = reranker["method"] if reranker is not None else None
+        reranker_depth_opt = reranker.get("depth") if reranker is not None else None
         return await self._run_dense(
-            lambda: self._native._search_with_method(query, top_k, origin, method, projection)
+            lambda: self._native._search_with_options(
+                query, top_k, origin, method, reranker_method, reranker_depth_opt, ambient
+            )
+        )
+
+    async def _stage_one(
+        self,
+        query: str,
+        top_k: int,
+        depth: int,
+        method: str,
+        ambient: RuntimeEventProjection | None,
+    ) -> Any:
+        turn_id = (ambient or {}).get("turn_id")
+        if method not in _DENSE_METHODS:
+            return self._native._stage_one(query, top_k, depth, method, turn_id)
+        if self._undriven_builds > 0:
+            raise RuntimeError(_UNAWAITED_REGISTER)
+        await self._maybe_rebuild_on_model_change()
+        return await self._run_dense(
+            lambda: self._native._stage_one(query, top_k, depth, method, turn_id)
         )
 
     def record_event(
@@ -752,6 +918,7 @@ class ToolRegistry:
         projection: RuntimeEventProjection | None = None,
     ) -> None:
         """Record an SDK-layer trace event."""
+        projection = with_turn_context(projection)
         if projection is None:
             self._native.record_event(event)
         else:
@@ -1198,6 +1365,10 @@ class ToolCatalog:
         experimental_bm25_k1: float | None = None,
         experimental_bm25_b: float | None = None,
         experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+        reranker: RerankerConfig | None = None,
+        retrieve_fn: RankFn | None = None,
+        reranker_fn: RankFn | None = None,
+        reranker_depth: int | None = None,
     ) -> None:
         """Create an empty catalog.
 
@@ -1250,10 +1421,31 @@ class ToolCatalog:
                 is a mixed artifact built via
                 ``experimental_build_embedding_artifact``; the runtime remedy
                 for uncovered current-kind entries is ``on_miss="embed"``.
+            reranker: re-score the first stage's top candidates with another
+                built-in method — see `RerankerConfig`. Applies to
+                `search_async` (and the capability tools, which use it); a
+                synchronous `search` on a catalog with a reranker raises.
+                **Experimental.**
+            retrieve_fn: rank the whole catalog with your own function — a
+                model you call, such as Jev via `ratel_jev_plugin`. Needs
+                ``method="custom"``; see `RankFn`. **Experimental.**
+            reranker_fn: rerank the first stage's top ``reranker_depth``
+                candidates with your own function. Not combinable with
+                ``reranker`` or ``method="custom"``; see `RankFn`.
+                **Experimental.**
+            reranker_depth: how many first-stage candidates ``reranker_fn``
+                sees (default 50; raised to ``top_k`` when lower).
         """
+        _validate_ranking(
+            "ToolCatalog", method, reranker, retrieve_fn, reranker_fn, reranker_depth
+        )
         self._executors: dict[str, Executor] = {}
         self._tools: dict[str, Tool] = {}
         self._method: SearchMethod = method
+        self._reranker = reranker
+        self._retrieve_fn = retrieve_fn
+        self._reranker_fn = reranker_fn
+        self._reranker_depth = reranker_depth or _DEFAULT_RERANKER_DEPTH
         self._registry = ToolRegistry(
             embedding,
             method=method,
@@ -1261,6 +1453,7 @@ class ToolCatalog:
             experimental_bm25_k1=experimental_bm25_k1,
             experimental_bm25_b=experimental_bm25_b,
             experimental_embedding_artifact=experimental_embedding_artifact,
+            reranker=reranker,
         )
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
@@ -1338,13 +1531,16 @@ class ToolCatalog:
             Up to `top_k` `SearchHit`s, best first.
 
         Raises:
-            ValueError: if `method` is not "bm25", "semantic" or "hybrid".
-            RuntimeError: if the resolved method is semantic/hybrid; use
-                `search_async` for dense retrieval.
+            ValueError: if `method` is not a known method.
+            RuntimeError: if the resolved method is not "bm25", or the catalog
+                has a reranker; use `search_async` for those.
         """
         resolved_method = method or self._method
-        if resolved_method not in ("bm25", "semantic", "hybrid"):
-            raise ValueError(f"unknown search method: {resolved_method}")
+        _validate_method(resolved_method)
+        if resolved_method == "custom":
+            raise RuntimeError(_CUSTOM_NEEDS_ASYNC)
+        if self._reranker is not None or self._reranker_fn is not None:
+            raise RuntimeError(_RERANKER_NEEDS_ASYNC)
         if resolved_method != "bm25":
             raise RuntimeError(
                 f"{resolved_method} search is asynchronous; use `await catalog.search_async(..., "
@@ -1366,20 +1562,54 @@ class ToolCatalog:
         origin: SearchOrigin = "direct",
         method: SearchMethod | None = None,
         turn_id: str | None = None,
+        reranker: RerankerConfig | Literal[False] | None = None,
     ) -> list[SearchHit]:
-        """Rank tools asynchronously with BM25, semantic, or hybrid retrieval.
+        """Rank tools asynchronously with any method and the catalog's reranker.
 
         Dense methods require the corpus to have been embedded by `register` on a
         semantic/hybrid catalog; searching never embeds missing corpus vectors.
+
+        Args:
+            query: what the caller wants to do.
+            top_k: max hits to return.
+            origin: who initiated the search — labels the trace event only.
+            method: per-call override of the catalog's default method;
+                ``"custom"`` needs the catalog's ``retrieve_fn``.
+            turn_id: correlates this search with the invoke(s) that follow it
+                (ADR-0014) — see `search`.
+            reranker: per-call built-in reranker, replacing the catalog's
+                ``reranker`` or ``reranker_fn``; ``None`` (default) keeps the
+                catalog's, ``False`` turns both off for this call.
+
+        Raises:
+            ValueError: invalid ranking options.
+            RetrieverError: re-raised from ``retrieve_fn``, or a non-transient
+                one from ``reranker_fn``; anything else they raise propagates.
         """
         resolved_method = method or self._method
+        _validate_method(resolved_method)
+        if resolved_method == "custom" and self._retrieve_fn is None:
+            raise ValueError('method "custom" needs a catalog constructed with a retrieve_fn')
+        resolved_reranker = _resolve_reranker(reranker, self._reranker)
+        reranker_fn = self._reranker_fn if reranker is None else None
+        if resolved_method == "custom":
+            resolved_reranker, reranker_fn = None, None
+        _validate_reranker(resolved_method, resolved_reranker)
         return await trace_search_async(
             SEARCH_TARGET_TOOL,
             query,
             top_k,
             origin,
             lambda projection: self._registry.search_async(
-                query, top_k, origin, resolved_method, projection
+                query,
+                top_k,
+                origin,
+                resolved_method,
+                projection,
+                reranker=resolved_reranker,
+                retrieve_fn=self._retrieve_fn,
+                reranker_fn=reranker_fn,
+                reranker_depth=self._reranker_depth,
             ),
             turn_id,
         )
@@ -1436,6 +1666,58 @@ class ToolCatalog:
             ValueError: if the dict doesn't match any known event shape.
         """
         self._registry.record_event(event, projection)
+
+    def turn(
+        self,
+        id: str | None = None,
+        *,
+        user_message: str | None = None,
+        end_user_id: str | None = None,
+    ) -> Turn:
+        """Mark one user request as one turn: ``with catalog.turn(...):`` or ``async with``.
+
+        Every search, skill load, and tool call made inside it, across ``await``
+        and the tasks it starts, carries the turn's ``turn_id`` (and
+        ``end_user_id`` when given), and a ``turn_start`` event opens it once.
+        An explicit ``turn_id`` argument on a call still wins, and a nested turn
+        wins over its outer one.
+
+        Args:
+            id: your request or message id; a fresh ULID when omitted. Reusing
+                an id that already started joins that turn without a second
+                ``turn_start``.
+            user_message: what the end user asked, sent on ``turn_start`` only
+                when you pass it (passing it is the consent). Capped at 4 KiB.
+            end_user_id: your pseudonymous id for the end user, stamped on
+                every event in the turn.
+        """
+        return Turn(self, id=id, user_message=user_message, end_user_id=end_user_id)
+
+    def record_tool_call(
+        self,
+        tool_id: str,
+        *,
+        took_ms: float | None = None,
+        error: object = None,
+        turn_id: str | None = None,
+    ) -> None:
+        """Record a tool call your framework ran itself (not through :meth:`invoke`).
+
+        Emits ``invoke_start`` plus ``invoke_end``, or ``invoke_error`` when
+        ``error`` is set (an exception or a message), in the current turn,
+        marked ``origin: "external"`` on the runtime-event stream. Adaptive
+        ranking learns from it like an invoke. No OTel span is opened: the
+        framework owns that.
+
+        Args:
+            tool_id: id (name) of the tool that ran.
+            took_ms: wall time in milliseconds; ``0`` when omitted.
+            error: set when the call failed.
+            turn_id: turn to record it in; defaults to the current turn scope.
+        """
+        record_external_tool_call(
+            self, tool_id, took_ms=took_ms, error=error, turn_id=turn_id
+        )
 
     def subscribe_events(
         self,

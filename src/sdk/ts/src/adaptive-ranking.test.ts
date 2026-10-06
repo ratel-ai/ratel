@@ -688,6 +688,7 @@ function fakeNative(state: { status: string }) {
     searchWithMethodAsync: async () => [],
     recordEvent: () => {},
     recordEventWithContext: () => {},
+    searchWithOptionsAsync: async () => [],
   };
 }
 

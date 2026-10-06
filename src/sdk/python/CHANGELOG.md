@@ -12,6 +12,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **A trace sink or event subscriber attached after enable now receives `usage_ranking_status`.** The current status (with the last trigger's `reason`) is re-reported whenever one is installed while a graph is attached, so a consumer no longer has to subscribe before `experimental_enable_adaptive_ranking` to see it
 - **Runtime events never carry the raw embedder fingerprint, endpoint URL or local model path.** `usage_ranking_status.model`, `usage_model_mismatch` and `embedder_model_mismatch` carry a redacted `name#hash` identity, and the `embedder_*` events carry the model's public name. Before, an endpoint URL with a query-string API key reached every event subscriber (core fix, surfaced through this SDK)
 
+## [0.13.0-rc.11] - 2026-10-05
+
+### Added
+
+- Rank with your own function ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)): `method="custom"` with `retrieve_fn` ranks the whole catalog, and `reranker_fn` (with `reranker_depth`, default 50) reranks the first stage's top candidates. The function gets `(query, candidates: list[RankCandidate], top_k)` and returns a list of `{"id", "score"}`, sync or async; unknown ids are dropped, each id counts once, and scores are clamped to `[0, 1]`. Works on `ToolCatalog` and `SkillCatalog`; `search_async` only. New: `RankFn`, `RankCandidate` (`.id`, `.kind`, `.text`), `RankCandidateKind`, `RankedId`.
+- `RetrieverError(message, code, *, transient=False, status=None, retry_after_secs=None)`, a `RuntimeError`. A `reranker_fn` that raises one with `transient=True` keeps the first stage's order and records `rerank_fallback:<code>` on the trace; anything else fails the search.
+- `ratel_jev_plugin(url=None, api_key_env=None, model=None)` returns a `RetrieverPlugin` with `.retrieve` and `.rerank` for Jev (TypeSafe AI; key in `TYPESAFE_API_KEY`), calling Jev on a worker thread. Above 150 candidates it judges groups in parallel and fills a final question with their winners, and it drops picks below probability 0.01 (keeping the best one). It sends the query and each candidate's searchable text to TypeSafe AI.
+- Built-in two-stage reranker: `reranker={"method": ..., "depth": ...}` re-scores the first stage's top `depth` (default 50) with another of `"bm25"`, `"semantic"` or `"hybrid"`, and never adds a tool the first stage missed. A catalog with a reranker or `reranker_fn` makes synchronous `search` raise.
+- `search_async(..., reranker=...)`: a `RerankerConfig` replaces the catalog's reranker for one call, and `False` turns its `reranker` or `reranker_fn` off.
+
+## [0.13.0-rc.10] - 2026-10-01
+
+### Added
+
+- Turn scope ([ADR 0026](../../../docs/adr/0026-turn-scope.md)): `with catalog.turn(id=None, *, user_message=None, end_user_id=None):` (or `async with`) marks one user request. Every search, skill load, and tool call inside it, across `await` and the tasks it starts, carries the turn's `turn_id` (and `end_user_id`), and one `turn_start` event opens it, with `user_message` only when you pass it (capped at 4 KiB). An explicit `turn_id` argument still wins; nested turns win over outer ones. `ratel_ai.current_turn_id()` reads the active id.
+- `ToolCatalog.record_tool_call(tool_id, *, took_ms=None, error=None, turn_id=None)` records a tool your framework ran itself as `invoke_start` plus `invoke_end`/`invoke_error`, marked `origin: "external"` on the runtime-event stream. Adaptive ranking learns from it like an invoke.
+- `turn_start` joins `RUNTIME_EVENT_TYPES`.
+- Intent graph storage plugins ([ADR 0025](../../../docs/adr/0025-intent-graph-storage-plugins.md)): `LocalFileIntentGraphStorage` and `S3IntentGraphStorage`, the two ready-made backends for persisting adaptive ranking's `IntentGraph`. Both expose `load()`/`save()`, skip the write when `rev` is unchanged, and raise `StaleIntentGraphError` rather than clobber a concurrent writer. The local backend writes atomically via temp file + rename at `0600`; the S3 backend uses conditional writes (`If-Match`/`If-None-Match`) and needs no `boto3` — it signs with a built-in SigV4 client (#168)
+- `endpoint` and `force_path_style` on `S3IntentGraphStorage` for MinIO and other S3-compatible services; `force_path_style` defaults to `True` once `endpoint` is set (#168)
+- `idle_timeout_s` (default 60s) bounds both S3 calls on an idle clock — time with no data moving, not total elapsed — so a slow transfer completes but a wedged endpoint fails instead of hanging. `None` means the default (#168)
+
+### Fixed
+
+- **Adaptive ranking pairs an invoke with the search that offered the tool** (core fix, surfaced through this SDK). A turn that searched twice before invoking anything credited both invokes to the later query and discarded the earlier one; now each search keeps the evidence for the capability it returned. No API change — `turn_id` still means one per user message, and the README now says so.
+
 ## [0.13.0-rc.9] - 2026-10-01
 
 ### Fixed

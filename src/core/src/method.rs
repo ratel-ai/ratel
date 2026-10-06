@@ -19,7 +19,7 @@ pub enum SearchMethod {
     Bm25,
     /// Dense cosine similarity over embedded tool/skill text.
     Semantic,
-    /// BM25 and dense arms fused by Reciprocal Rank Fusion (no reranker).
+    /// BM25 and dense arms fused on normalised scores (ADR-0024).
     Hybrid,
 }
 

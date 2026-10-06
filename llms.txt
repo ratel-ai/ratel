@@ -234,6 +234,19 @@ codes, SKUs, or internal jargon gives BM25 purchase those corpora do not have an
 lower value. If exact-name queries are missing their obvious match, lower it; if paraphrases are
 missing, raise it.
 
+**Experimental: your own retriever or reranker, and two-stage ranking.** A catalog (or `ratel()`)
+can rank with a function the user supplies: `method: "custom"` with `retrieveFn` ranks the whole
+catalog, and `rerankerFn` reranks the first stage's top `rerankerDepth` (default 50). The function
+gets `(query, candidates: { id, kind, text }[], topK)` and returns `{ id, score }[]`; the SDK knows
+nothing about the model behind it. `ratelJevPlugin()` (Python `ratel_jev_plugin`) wraps Jev
+(TypeSafe AI, the user's own `TYPESAFE_API_KEY`) into `{ retrieve, rerank }`; it **sends the query
+and candidate text off-process**, so do not recommend it to a user whose tool descriptions cannot
+leave their network. A built-in `reranker: { method, depth }` re-scores the first stage's top
+candidates with a different local method (`bm25`, `semantic`, `hybrid`). Neither reranker ever adds
+a tool the first stage missed
+([ADR-0027](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-custom-retriever-and-reranker-functions.md)).
+The Ratel Cloud Tool Picker is not part of this SDK.
+
 ### `replace` vs `suggest` mode
 
 Tool injection runs in two modes ([ADR-0004](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md)):
@@ -249,6 +262,7 @@ If you're not sure which one your user wants, default to `replace` — it's the 
 - [ADR-0004 — Retrieval and tool selection](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md): Retrieval over semantic tokens (names, descriptions, parameter names, enum values; JSON Schema structure stripped); replace by default, suggest opt-in.
 - [ADR-0006 — Native FFI bindings](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-native-ffi-bindings.md): Why the SDKs ship pre-built natives (NAPI-RS / PyO3).
 - [ADR-0011 — Selectable retrieval methods](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0011-selectable-retrieval-methods.md): BM25 (default), semantic, and hybrid ranking, chosen per catalog or per call.
+- [ADR-0027 — Custom retriever and reranker functions](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-custom-retriever-and-reranker-functions.md): `retrieveFn` / `rerankerFn` rank with a function the user supplies (Jev ships as a plugin over them); a built-in two-stage reranker (experimental, proposed).
 - [ADR-0012 — Configurable embedding models](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models.md): Dense embeddings use a configurable in-process HuggingFace/local model, Ollama, or OpenAI-compatible endpoint.
 - [ADR-0014 — Adaptive usage ranking](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0014-adaptive-usage-ranking.md): A third RRF arm learned online from search-then-invoke pairs, plus the offline path that seeds it from a captured baseline before ranking is switched on.
 - [ADR-0019 — Retrieval experiments](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0019-retrieval-experiments.md): The TypeScript-only experimental surface for deterministic assignment, bounded shadow evaluation, lifecycle, comparison, and OpenTelemetry semantics.

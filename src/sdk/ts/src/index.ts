@@ -45,6 +45,7 @@ export {
 } from "./capabilities.js";
 export type {
   BaselineTurn,
+  BuiltInSearchMethod,
   EmbeddingModelConfig,
   EmbeddingSpec,
   ExecutableTool,
@@ -55,6 +56,12 @@ export type {
   ObservationPolicyOptions,
   OriginFilterOption,
   ProvenanceOption,
+  RankCandidate,
+  RankCandidateKind,
+  RankedId,
+  RankFn,
+  RerankerConfig,
+  SearchAsyncOptions,
   SearchMethod,
   SearchOrigin,
   ToolCatalogOptions,
@@ -83,6 +90,7 @@ export {
   DimensionMismatchError,
   EmbedderError,
   IncompatibleMergeError,
+  RetrieverError,
 } from "./errors.js";
 export { experimentalDefineExperiment } from "./experiment.js";
 export type {
@@ -116,6 +124,8 @@ export {
   S3IntentGraphStorage,
   StaleIntentGraphError,
 } from "./intent-graph-storage.js";
+export type { JevPluginConfig, RetrieverPlugin } from "./jev.js";
+export { ratelJevPlugin } from "./jev.js";
 export type { McpServerHandle, McpToolsListErrorCode, RegisterMcpServerOptions } from "./mcp.js";
 export { McpToolsListError, registerMcpServer } from "./mcp.js";
 // The framework-adapter SPI and factory (ADR-0013): `ratel(config).adaptTo(adapter)`.
@@ -133,6 +143,7 @@ export type {
 } from "./ratel.js";
 export { ratel } from "./ratel.js";
 /** Adaptive usage ranking: the shared read model of what users invoke (ADR-0014). */
+export type { RegistryRankingOptions } from "./registry.js";
 export { IntentGraph, SkillRegistry, ToolRegistry } from "./registry.js";
 export type {
   CatalogSnapshot,
@@ -169,3 +180,6 @@ export type { RuntimeEventProjection } from "./telemetry.js";
 // `clearContentCapture` (re-exported from @ratel-ai/telemetry) control the message/tool
 // content-capture gate programmatically.
 export { ContentCapture, clearContentCapture, setContentCapture } from "./telemetry.js";
+/** Turn scope: mark one user request once, and everything inside it carries its turn id (ADR-0026). */
+export type { ExternalToolCall, TurnOptions } from "./turn.js";
+export { currentTurnId, TURN_USER_MESSAGE_MAX_BYTES } from "./turn.js";

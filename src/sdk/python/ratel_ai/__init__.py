@@ -9,6 +9,8 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `search_capabilities_tool` / `invoke_tool_tool` / `get_skill_content_tool` —
   framework-neutral capability tools.
 - `register_mcp_server` — ingest an upstream MCP server's tools (extra: mcp).
+- `ToolCatalog.turn` / `current_turn_id`: mark one user request as one turn
+  so everything inside carries its `turn_id` (ADR-0026).
 - `RuntimeEvents` / `RuntimeCatalog` — subscribe to runtime facts and snapshot
   executor-free tool/skill state (ADR-0020; no Python Cloud transport).
 
@@ -19,6 +21,7 @@ analogue: constant content injected into the context, gated by the pure
 version bump.
 """
 
+from ._custom_ranking import RankCandidate, RankCandidateKind, RankedId, RankFn
 from ._native import SearchHit, SkillHit
 from .capabilities import (
     INVOKE_TOOL_ID,
@@ -43,6 +46,7 @@ from .catalog import (
     OllamaEmbeddingConfig,
     OriginFilterOption,
     ProvenanceOption,
+    RerankerConfig,
     SearchMethod,
     SearchOrigin,
     Tool,
@@ -64,6 +68,7 @@ from .exceptions import (
     DimensionMismatchError,
     EmbedderError,
     IncompatibleMergeError,
+    RetrieverError,
 )
 from .intent_graph_storage import (
     IntentGraphStorage,
@@ -75,6 +80,7 @@ from .intent_graph_storage import (
     S3Transport,
     StaleIntentGraphError,
 )
+from .jev import RetrieverPlugin, ratel_jev_plugin
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
 from .runtime_events import (
     OPTIONAL_ENVELOPE_FIELDS,
@@ -96,6 +102,7 @@ from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 # configure_telemetry is optional sugar that installs a Ratel-owned OTLP exporter
 # (needs the [otlp] extra).
 from .telemetry import configure_telemetry
+from .turns import TURN_USER_MESSAGE_MAX_BYTES, Turn, current_turn_id
 
 __all__ = [
     "AdaptiveRankingStatus",
@@ -127,6 +134,13 @@ __all__ = [
     "OllamaEmbeddingConfig",
     "PendingReplace",
     "ReplaceOutcome",
+    "RankCandidate",
+    "RankCandidateKind",
+    "RankedId",
+    "RankFn",
+    "RerankerConfig",
+    "RetrieverError",
+    "RetrieverPlugin",
     "RuntimeCatalog",
     "RuntimeEvent",
     "RuntimeEventHandler",
@@ -155,9 +169,13 @@ __all__ = [
     "ToolCatalog",
     "ToolRegistry",
     "TraceSinkConfig",
+    "Turn",
+    "TURN_USER_MESSAGE_MAX_BYTES",
     "UpstreamServerInfo",
     "configure_telemetry",
+    "current_turn_id",
     "experimental_build_embedding_artifact",
+    "ratel_jev_plugin",
     "format_upstream_line",
     "get_skill_content_tool",
     "invoke_tool_tool",

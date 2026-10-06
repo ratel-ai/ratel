@@ -1,5 +1,9 @@
 import type { MastraDBMessage, ToolsInput } from "@mastra/core/agent";
-import type { InputProcessor, ProcessInputArgs } from "@mastra/core/processors";
+import type {
+  InputProcessor,
+  ProcessInputArgs,
+  ProcessInputStepArgs,
+} from "@mastra/core/processors";
 import { createTool, type ToolExecutionContext } from "@mastra/core/tools";
 import type {
   CatalogRegistration,
@@ -10,6 +14,7 @@ import type {
 } from "@ratel-ai/sdk";
 import { GET_SKILL_CONTENT_ID, INVOKE_TOOL_ID, SEARCH_CAPABILITIES_ID } from "@ratel-ai/sdk";
 import { z } from "zod";
+import { MastraTurns, type TurnCapableBase } from "./turns.js";
 
 interface MastraValidationError {
   error: true;
@@ -60,6 +65,16 @@ const CATALOG_CONTEXT = {
   },
 };
 
+/** Options for {@link mastra}. */
+export interface MastraOptions {
+  /**
+   * Send the user's last message as `user_message` on each turn's `turn_start`
+   * event. Off by default: turning it on is your consent to record what users
+   * ask. Capped at 4 KiB.
+   */
+  captureUserMessage?: boolean;
+}
+
 /**
  * The Mastra adapter: `ratel(config).adaptTo(mastra())` gives the
  * framework-neutral core `@mastra/core`'s native {@link MastraTool} (from
@@ -68,9 +83,19 @@ const CATALOG_CONTEXT = {
  * the adapter is just the three codecs — `ingest` / `expose` / `recallMessages`
  * — plus the {@link MastraExt} recall processor.
  *
+ * Each generation is one Ratel turn, with no wiring beyond the recall
+ * processor: it opens the turn (or joins the host's own `r.turn(...)`), and the
+ * generation's searches and tool calls carry its id. Tools the Agent holds
+ * beside Ratel's are recorded as they complete. Needs an `@ratel-ai/sdk` with
+ * the turn scope; on an older one the adapter behaves exactly as before.
+ *
+ * @param options - Opt-ins; see {@link MastraOptions}.
  * @returns A {@link RatelAdapter} over Mastra's tool and message types.
  */
-export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
+export function mastra(
+  options: MastraOptions = {},
+): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
+  const turns = new MastraTurns(options.captureUserMessage === true);
   return {
     name: "mastra",
 
@@ -130,9 +155,11 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
         // symbol lets any Mastra view over this catalog recover it, while a
         // different adapter's carrier can never be mistaken for Mastra's.
         execute: async (input, context) =>
-          tool.execute(input as Record<string, unknown>, {
-            [MASTRA_CONTEXT_KEY]: context,
-          }),
+          turns.run(context?.requestContext, () =>
+            tool.execute(input as Record<string, unknown>, {
+              [MASTRA_CONTEXT_KEY]: context,
+            }),
+          ),
       }) as MastraTool;
     },
 
@@ -166,6 +193,7 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
     },
 
     extend(base) {
+      const turnBase = base as typeof base & TurnCapableBase;
       return {
         recallProcessor(): InputProcessor {
           return {
@@ -175,9 +203,18 @@ export function mastra(): RatelAdapter<MastraTool, MastraDBMessage, MastraExt> {
               if (!query) return args.messages;
               // base.recall mints the id and returns [] on no hits (spending none).
               // Mastra recall is a single message (unlike the AI SDK adapter's pair).
-              const recalled = await base.recall(query);
+              const recalled = await turns.recall(turnBase, args.requestContext, query, () =>
+                base.recall(query),
+              );
               if (recalled.length === 0) return args.messages;
               return [...args.messages, ...recalled];
+            },
+            // Observation only: records the Agent's own tool calls as they
+            // complete and never changes the messages, so recall is still
+            // injected exactly once per generation.
+            processInputStep(args: ProcessInputStepArgs) {
+              turns.observe(turnBase, args);
+              return undefined;
             },
           };
         },

@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { NativeEventSubscription } from "../native/index.cjs";
 import type { ToolDefinition } from "./catalog.js";
 import type { SkillDefinition } from "./skill-catalog.js";
+import { activeTurn, isExternalInvocation } from "./turn.js";
 
 const DEFAULT_SOURCE_ID = "ratel";
 const REQUIRED_ENVELOPE_FIELDS = new Set([
@@ -37,9 +38,10 @@ const CATALOG_DEFINITION_FIELDS = new Set([
   "searchable_description_overridden",
 ]);
 
-/** Frozen remotely publishable v1 event names from ADR-0020. */
+/** Remotely publishable event names: the ADR-0020 v1 set plus ADR-0026's `turn_start`. */
 export const RUNTIME_EVENT_TYPES = [
   "catalog_definition",
+  "turn_start",
   "search",
   "skill_search",
   "gateway_search",
@@ -100,15 +102,15 @@ export interface RuntimeEvent {
   readonly catalog_version?: string;
   /** Optional deployment environment. */
   readonly environment?: string;
-  /** Optional pseudonymous application user identity. */
+  /** Optional pseudonymous application user identity, from the active turn scope. */
   readonly end_user_id?: string;
+  /** The application turn this event belongs to (ADR-0026); also correlates
+   * a turn's search with the invoke(s) that confirm it. */
+  readonly turn_id?: string;
   /** Active OTel trace identity when a recording span exists. */
   readonly trace_id?: string;
   /** Active OTel span identity when a recording span exists. */
   readonly span_id?: string;
-  /** Correlates one turn's search with the invoke(s) that confirm it; supplied
-   * by the host, never minted by the SDK. */
-  readonly turn_id?: string;
   readonly [field: string]: unknown;
 }
 
@@ -291,7 +293,10 @@ export class RuntimeEvents {
   subscribe(handler: RuntimeEventHandler): RuntimeEventSubscription {
     const sdkSubscriber: SdkSubscriber = { handler, pending: new Set() };
     const deliver = (batch: RuntimeEvent[]): void => {
-      trackHandlerWork(sdkSubscriber, batch.map(normalizeRuntimeEvent));
+      trackHandlerWork(
+        sdkSubscriber,
+        batch.map((event) => normalizeRuntimeEvent(stampExternalOrigin(event))),
+      );
     };
     const subscriptions: NativeEventSubscription[] = [];
     try {
@@ -324,7 +329,14 @@ export class RuntimeEvents {
   /** @internal Merge an SDK-owned fact (experiments) into every public subscriber. */
   emit(event: Record<string, unknown>): RuntimeEvent {
     const eventId = typeof event.event_id === "string" ? event.event_id : newRuntimeEventId();
+    const turn = activeTurn();
     const envelope = normalizeRuntimeEvent({
+      ...(turn === undefined
+        ? {}
+        : {
+            turn_id: turn.id,
+            ...(turn.endUserId === undefined ? {} : { end_user_id: turn.endUserId }),
+          }),
       ...event,
       v: 2,
       event_id: eventId,
@@ -348,6 +360,21 @@ export class RuntimeEvents {
     }
     return envelope;
   }
+}
+
+// Core invocation events carry no `origin`; a tool the host ran itself and
+// reported through `recordToolCall` is marked by invocation id and stamped here,
+// where events leave the SDK (ADR-0026).
+function stampExternalOrigin(event: RuntimeEvent): RuntimeEvent {
+  if (
+    (event.type === "invoke_start" ||
+      event.type === "invoke_end" ||
+      event.type === "invoke_error") &&
+    isExternalInvocation(event.invocation_id)
+  ) {
+    return { ...event, origin: "external" };
+  }
+  return event;
 }
 
 function trackHandlerWork(subscriber: SdkSubscriber, batch: readonly RuntimeEvent[]): void {

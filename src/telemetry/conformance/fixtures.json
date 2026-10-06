@@ -19,6 +19,7 @@
     ],
     "event_types": [
       "catalog_definition",
+      "turn_start",
       "search",
       "skill_search",
       "gateway_search",

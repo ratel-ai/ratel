@@ -34,6 +34,12 @@ Amended 2026-08-27: a cluster **records what its searches surfaced** — see [Im
 recorded, not consumed](#impressions-are-recorded-not-consumed). Edges still come from
 invocations only; the decision below is unchanged and nothing reads the new map.
 
+Amended 2026-10-01: the SDKs' turn scope ([ADR-0026](0026-turn-scope.md)) stamps `turn_id` on
+everything inside it and mints one when the caller gives none, and the framework adapters open a
+scope per agent call. The caller still decides where a turn starts; it no longer has to thread the
+id through each call. A tool the host ran itself, reported through `recordToolCall`, pairs like
+an invoke.
+
 Amended 2026-09-25: **the attribution unit is the search, not the turn.** `turn_id` bounds which
 searches an invoke may attribute to; *which* one it attributes to is decided by what each search
 returned. A turn keeps every search it made, and an invoke pairs with the newest one that offered
@@ -150,7 +156,9 @@ ADR-0020, so a consumer of a served graph can observe whether it is doing anythi
 cluster matched, the `Search` / `SkillSearch` event also carries `base_hits`: the top-k the
 search would have returned without the usage arm, so a consumer can compare boosted and
 unboosted rankings on real traffic rather than replaying it. It is `[]`, not absent, when the
-base ranking was empty: the arm rescued a query the base ranker missed entirely.
+base ranking was empty: the arm rescued a query the base ranker missed entirely. A reranked or
+custom-ranked search ([ADR-0027](0027-custom-retriever-and-reranker-functions.md)) carries no
+`base_hits`: its no-arm counterfactual would need the ranking function run a second time.
 
 ### Which capability the arm promotes first
 

@@ -29,6 +29,7 @@ from typing import Any, TypedDict, TypeVar
 import rfc8785
 
 from .runtime_events import new_runtime_event_id
+from .turns import with_turn_context
 
 try:
     import ratel_ai_telemetry as _telemetry_vocabulary
@@ -145,9 +146,11 @@ class RuntimeEventProjection(TypedDict, total=False):
     span_id: str
     #: Correlates one turn's search with the invoke(s) that confirm it, for
     #: adaptive ranking's pairing (ADR-0014) - distinct from the trace-stream
-    #: session id fixed when the sink was configured. Caller-supplied only;
-    #: never minted here.
+    #: session id fixed when the sink was configured. An explicit argument
+    #: wins; otherwise the innermost turn scope supplies it (see turns.py).
     turn_id: str
+    #: Application-provided end-user id, from the active turn scope.
+    end_user_id: str
 
 
 def record_catalog_definitions(
@@ -273,14 +276,36 @@ def _event_projection(
         projection["invocation_id"] = invocation_id
     if turn_id is not None:
         projection["turn_id"] = turn_id
-    if span is None:
-        return projection
-    span.set_attribute(RATEL_EVENT_ID, projection["event_id"])
+    if span is not None:
+        span.set_attribute(RATEL_EVENT_ID, projection["event_id"])
+        _set_span_correlation(projection, span)
+    return with_turn_context(projection)  # type: ignore[return-value]
+
+
+def _set_span_correlation(projection: RuntimeEventProjection, span: Any) -> None:
     context = span.get_span_context()
-    if context.is_valid:
+    if context.is_valid and not context.is_remote:
         projection["trace_id"] = f"{context.trace_id:032x}"
         projection["span_id"] = f"{context.span_id:016x}"
-    return projection
+
+
+def ambient_projection(
+    invocation_id: str | None = None,
+    turn_id: str | None = None,
+) -> RuntimeEventProjection:
+    """Correlation for an event recorded without a span of its own (internal).
+
+    A turn start or a tool the host ran: the active turn scope plus the caller's
+    current OTel span, so the event joins the host's trace.
+    """
+    projection = RuntimeEventProjection(event_id=new_runtime_event_id())
+    if invocation_id is not None:
+        projection["invocation_id"] = invocation_id
+    if turn_id is not None:
+        projection["turn_id"] = turn_id
+    if _ENABLED:
+        _set_span_correlation(projection, _otel_trace.get_current_span())
+    return with_turn_context(projection)  # type: ignore[return-value]
 
 
 def _add_tool_content_event(

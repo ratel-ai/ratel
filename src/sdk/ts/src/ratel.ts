@@ -14,6 +14,8 @@ import {
   type EmbeddingSpec,
   type ExecutableTool,
   type InputValidator,
+  type RankFn,
+  type RerankerConfig,
   runToolInvocation,
   type SearchMethod,
   ToolCatalog,
@@ -36,6 +38,7 @@ import {
 } from "./runtime-events.js";
 import { SkillCatalog } from "./skill-catalog.js";
 import { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";
+import { currentTurnId, type ExternalToolCall, type TurnOptions } from "./turn.js";
 
 /** Construction options for {@link ratel}. Shared by every adapter view of the core. */
 export interface RatelConfig {
@@ -63,6 +66,18 @@ export interface RatelConfig {
    * - Or set `onMiss: "embed"` to infer uncovered current-kind entries at runtime.
    */
   experimentalEmbeddingArtifact?: ExperimentalEmbeddingArtifact;
+  /** Second-stage reranker forwarded to the tool and skill catalogs — see
+   * {@link ToolCatalogOptions.reranker}. Facts are not reranked. **Experimental.** */
+  reranker?: RerankerConfig;
+  /** Your own ranking function, with `method: "custom"`, forwarded to the tool and
+   * skill catalogs — see {@link ToolCatalogOptions.retrieveFn}. Facts have no
+   * custom path; with `method: "custom"` they rank with BM25. **Experimental.** */
+  retrieveFn?: RankFn;
+  /** Your own reranking function, forwarded to the tool and skill catalogs — see
+   * {@link ToolCatalogOptions.rerankerFn}. **Experimental.** */
+  rerankerFn?: RankFn;
+  /** How many first-stage candidates `rerankerFn` sees (default 50). */
+  rerankerDepth?: number;
   /** Max tools each host-driven `recall` returns: capped at 50; 0, negative, or
    * non-integer values fall back to the default 5. */
   recallTopK?: number;
@@ -328,6 +343,22 @@ export interface AdaptedBase<TTool, TMessage> {
    * nothing persisted. See `experimental.FactCatalog.groundSnapshot`.
    */
   groundSnapshot(query: string, opts?: GroundOptions): Promise<GroundingSnapshotItem[]>;
+  /**
+   * Run `fn` as one turn (one user request): every search, skill load, and tool
+   * call inside it carries the turn's `turn_id`, across awaits, and a
+   * `turn_start` event opens it once. Returns `fn`'s result. Pass `userMessage`
+   * only if you want what the user asked sent with `turn_start`, and
+   * `endUserId` to stamp your user id on every event in the turn.
+   */
+  turn<T>(fn: () => T, options?: TurnOptions): T;
+  /**
+   * Record a tool call your framework ran itself, in the current turn
+   * (`invoke_start` plus `invoke_end`, or `invoke_error` when `error` is set,
+   * marked `origin: "external"`).
+   */
+  recordToolCall(call: ExternalToolCall): void;
+  /** The id of the turn the caller is running inside, or `undefined`. */
+  currentTurnId(): string | undefined;
 }
 
 /**
@@ -414,6 +445,22 @@ export interface Ratel {
    * Render into a per-call message override (e.g. a `prepareStep`) and discard.
    */
   groundSnapshot(query: string, opts?: GroundOptions): Promise<GroundingSnapshotItem[]>;
+  /**
+   * Run `fn` as one turn (one user request): every search, skill load, and tool
+   * call inside it carries the turn's `turn_id`, across awaits, and a
+   * `turn_start` event opens it once. Returns `fn`'s result. Pass `userMessage`
+   * only if you want what the user asked sent with `turn_start`, and
+   * `endUserId` to stamp your user id on every event in the turn.
+   */
+  turn<T>(fn: () => T, options?: TurnOptions): T;
+  /**
+   * Record a tool call your framework ran itself, in the current turn
+   * (`invoke_start` plus `invoke_end`, or `invoke_error` when `error` is set,
+   * marked `origin: "external"`).
+   */
+  recordToolCall(call: ExternalToolCall): void;
+  /** The id of the turn the caller is running inside, or `undefined`. */
+  currentTurnId(): string | undefined;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
   adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A>;
 }
@@ -468,14 +515,21 @@ const KNOWN_FRAMEWORKS: readonly {
 export function ratel(config: RatelConfig = {}): Ratel {
   const catalogMethod: SearchMethod = config.method ?? "bm25";
   const embeddingArtifact = config.experimentalEmbeddingArtifact;
-  const catalog = new ToolCatalog({
+  const ranking = {
     method: config.method,
+    reranker: config.reranker,
+    retrieveFn: config.retrieveFn,
+    rerankerFn: config.rerankerFn,
+    rerankerDepth: config.rerankerDepth,
+  };
+  const catalog = new ToolCatalog({
+    ...ranking,
     embedding: config.embedding,
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
   });
   const skills = new SkillCatalog({
-    method: config.method,
+    ...ranking,
     embedding: config.embedding,
     trace: config.trace,
     experimentalEmbeddingArtifact: embeddingArtifact,
@@ -587,7 +641,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
   const facts = (): FactCatalog => {
     if (factsCatalog === undefined) {
       factsCatalog = new FactCatalog({
-        method: config.method,
+        // Facts have no custom path; rank them lexically instead.
+        method: config.method === "custom" ? "bm25" : config.method,
         embedding: config.embedding,
         trace: config.trace,
         factsTopK: config.factsTopK,
@@ -616,8 +671,8 @@ export function ratel(config: RatelConfig = {}): Ratel {
     const effective = method ?? catalogMethod;
     if (effective !== "bm25") {
       throw new Error(
-        `ratel: tools.search() is synchronous and ranks BM25 only; "${effective}" ranks against ` +
-          "prebuilt embeddings — use tools.searchAsync().",
+        `ratel: tools.search() is synchronous and ranks BM25 only; "${effective}" runs off ` +
+          "the event loop — use tools.searchAsync().",
       );
     }
     return catalog.search(query, clampTopK(topK, DEFAULT_TOP_K_TOOLS), "direct", "bm25", turnId);
@@ -678,6 +733,11 @@ export function ratel(config: RatelConfig = {}): Ratel {
     });
     return result.tools.groups.length === 0 && result.skills.length === 0 ? null : result;
   }
+
+  // One turn scope and one external-call recorder for every view of this core:
+  // both record on the shared tool catalog, so a view's turn is the core's turn.
+  const turn = <T>(fn: () => T, options?: TurnOptions): T => catalog.turn(fn, options);
+  const recordToolCall = (call: ExternalToolCall): void => catalog.recordToolCall(call);
 
   // Grounding lives on the fact catalog (it owns the fact state); the core just
   // forwards to it, so `r.ground`/`r.groundSnapshot` and the catalog methods
@@ -749,6 +809,9 @@ export function ratel(config: RatelConfig = {}): Ratel {
       catalog: runtimeCatalog,
       ground,
       groundSnapshot,
+      turn,
+      recordToolCall,
+      currentTurnId,
       modelTools() {
         const out: Record<string, unknown> = {};
         for (const [id, tool] of passthrough) {
@@ -787,6 +850,9 @@ export function ratel(config: RatelConfig = {}): Ratel {
     recall,
     ground,
     groundSnapshot,
+    turn,
+    recordToolCall,
+    currentTurnId,
     adaptTo,
   });
 }

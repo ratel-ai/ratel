@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - `TraceEvent::Search` / `TraceEvent::SkillSearch` carry `base_hits`: the top-k the search would have returned without the usage arm, same shape as `hits`. Present whenever an intent graph matched the query, as `[]` if the base ranking was empty; absent from the JSON otherwise. Ranking is unchanged (ADR-0014)
+- `TraceEvent::TurnStart` (wire `turn_start`): one marker per application turn, carrying an optional `user_message` the application passed explicitly. The SDKs' turn scope emits it with the turn's `turn_id` and `end_user_id` on the envelope. The usage learner ignores it. Additive: `TraceEvent` is `#[non_exhaustive]`.
 
 ### Changed
 
