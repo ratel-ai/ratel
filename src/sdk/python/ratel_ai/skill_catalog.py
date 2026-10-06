@@ -31,8 +31,10 @@ from .catalog import (
     SearchOrigin,
     TraceSinkConfig,
     _forget_graph_learn,
+    _NativeRankingStatus,
     _note_graph_learn,
     _ranking_status_event,
+    _RankingStatusReason,
     _registry_embedding_kwargs,
     _warn_on_adaptive_misconfiguration,
 )
@@ -255,7 +257,7 @@ class SkillRegistry:
         self._graph_key: str | None = None
         # What last triggered a status report; a late sink or subscriber is
         # told the current state under this reason (`_replay_ranking_status`).
-        self._status_reason = "enabled"
+        self._status_reason: _RankingStatusReason = "enabled"
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
@@ -634,19 +636,15 @@ class SkillRegistry:
         status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
         return AdaptiveRankingStatus(status, built, active, dim_mismatch)
 
-    def _maybe_warn_model_mismatch(
-        self, native_status: tuple[str, str | None, str | None, bool | None] | None = None
-    ) -> None:
-        """Accepts an already-read ``native_status``.
+    def _maybe_warn_model_mismatch(self, native_status: _NativeRankingStatus) -> None:
+        """Warn once when the attached graph no longer matches the catalog model.
 
-        So a caller that just fetched it (enable, rebuild) does not pay for a
-        second native round-trip.
+        Takes the ``native_status`` the caller (enable, rebuild) just read, so
+        it costs no second native round-trip.
         """
         if self._adaptive_warned or not self._warn_on_model_mismatch:
             return
-        status, built, active, dim_mismatch = (
-            native_status if native_status is not None else self._native.adaptive_ranking_status()
-        )
+        status, built, active, dim_mismatch = native_status
         if status == "active: policy drift":
             self._adaptive_warned = True
             warnings.warn(
@@ -673,7 +671,7 @@ class SkillRegistry:
         )
 
     def _emit_ranking_status(
-        self, reason: str, native_status: tuple[str, str | None, str | None, bool | None]
+        self, reason: _RankingStatusReason, native_status: _NativeRankingStatus
     ) -> None:
         """Report the current status (see ``_ranking_status_event``).
 

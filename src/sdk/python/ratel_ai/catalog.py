@@ -18,7 +18,7 @@ import weakref
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, Literal, TypedDict, TypeVar, Union, overload
+from typing import Any, Literal, Optional, TypedDict, TypeVar, Union, overload
 
 from ._native import IntentGraph as IntentGraph  # re-exported for `ratel_ai.IntentGraph`
 from ._native import NativeEventSubscription, SearchHit, public_model_identity
@@ -217,9 +217,16 @@ def _warn_on_adaptive_misconfiguration(
         )
 
 
+# What native `adaptive_ranking_status()` returns: `(status, built, active,
+# dim_mismatch)`.
+_NativeRankingStatus = tuple[str, Optional[str], Optional[str], Optional[bool]]
+# What triggers a `usage_ranking_status` report with a graph attached.
+_RankingStatusReason = Literal["enabled", "rebuilt"]
+
+
 def _ranking_status_event(
-    reason: str,
-    native_status: tuple[str, str | None, str | None, bool | None],
+    reason: _RankingStatusReason,
+    native_status: _NativeRankingStatus,
     graph: IntentGraph | None,
     graph_key: str | None,
     learn: bool,
@@ -548,7 +555,7 @@ class ToolRegistry:
         self._graph_key: str | None = None
         # What last triggered a status report; a late sink or subscriber is
         # told the current state under this reason (`_replay_ranking_status`).
-        self._status_reason = "enabled"
+        self._status_reason: _RankingStatusReason = "enabled"
         self._dense_gate = threading.Lock()
         self._dense_state = threading.Lock()
         self._dense_pending = 0
@@ -972,19 +979,15 @@ class ToolRegistry:
         status, built, active, dim_mismatch = self._native.adaptive_ranking_status()
         return AdaptiveRankingStatus(status, built, active, dim_mismatch)
 
-    def _maybe_warn_model_mismatch(
-        self, native_status: tuple[str, str | None, str | None, bool | None] | None = None
-    ) -> None:
-        """Accepts an already-read ``native_status``.
+    def _maybe_warn_model_mismatch(self, native_status: _NativeRankingStatus) -> None:
+        """Warn once when the attached graph no longer matches the catalog model.
 
-        So a caller that just fetched it (enable, rebuild) does not pay for a
-        second native round-trip.
+        Takes the ``native_status`` the caller (enable, rebuild) just read, so
+        it costs no second native round-trip.
         """
         if self._adaptive_warned or not self._warn_on_model_mismatch:
             return
-        status, built, active, dim_mismatch = (
-            native_status if native_status is not None else self._native.adaptive_ranking_status()
-        )
+        status, built, active, dim_mismatch = native_status
         if status == "active: policy drift":
             self._adaptive_warned = True
             warnings.warn(
@@ -1011,7 +1014,7 @@ class ToolRegistry:
         )
 
     def _emit_ranking_status(
-        self, reason: str, native_status: tuple[str, str | None, str | None, bool | None]
+        self, reason: _RankingStatusReason, native_status: _NativeRankingStatus
     ) -> None:
         """Report the current status (see ``_ranking_status_event``).
 
