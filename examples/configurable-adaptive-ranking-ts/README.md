@@ -152,7 +152,7 @@ From here the live learner keeps adding to the same graph. `support` grows while
 serving.experimentalEnableAdaptiveRanking(cloudGraph, { learn: false, graphKey: "cloud" });
 ```
 
-The graph's `rev` and content stay exactly what was handed in; re-installing a trace sink for an unrelated reason later does not silently resume learning.
+The graph is never learned into (a rebuild still re-embeds its centroids and bumps `rev`); re-installing a trace sink for an unrelated reason later does not silently resume learning.
 
 ### E. The same capture, distributed
 

@@ -409,7 +409,8 @@ to activate it, so they gate all use on their own.
 **Ranking without learning (`learn: false`).** The enable entry points take an optional `learn`
 flag, default `true` (rank and learn). With
 `learn: false` the registry still ranks against the attached graph but its trace sink is never
-decorated with a learner, so the graph's `rev` and content are exactly what was handed in. This
+decorated with a learner, so the graph is never learned into. An explicit or
+`rebuildOnModelChange` rebuild still re-embeds its centroids and bumps `rev`. This
 is the shape a runtime needs to consume a graph produced elsewhere — Ratel Cloud, the second
 producer named in [What is open source](#what-is-open-source), replaying a project's stored
 runtime events through this same learner and serving one graph per project — without a
