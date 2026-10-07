@@ -1690,7 +1690,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-ai-core"
-version = "0.12.0-rc.5"
+version = "0.12.0-rc.6"
 dependencies = [
  "bm25",
  "candle-core",

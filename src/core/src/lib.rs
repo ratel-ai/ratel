@@ -123,7 +123,7 @@ pub use artifact_warm::{ArtifactWarmError, OnArtifactMiss, ParseOnArtifactMissEr
 pub use dense_cache::WarmError;
 pub use embedding::EmbedderError;
 pub use embedding_artifact::{ArtifactError, merge_embedding_artifacts};
-pub use embedding_config::{EmbeddingModel, EmbeddingSpec, Pooling};
+pub use embedding_config::{EmbeddingModel, EmbeddingSpec, Pooling, public_model_identity};
 pub use fact::{Fact, ParsePinModeError, PinMode};
 pub use fact_registry::{FactHit, FactRegistry};
 pub use fusion::{DenseWeight, InvalidDenseWeight};
@@ -142,6 +142,7 @@ pub use trace::{
     CatalogKind, ChurnKind, EmbedderLoadStatus, FactHitTrace, FactInjectReason, FanoutSink,
     FanoutSubscription, FnSink, JsonlSink, MemorySink, NoopSink, Origin, SearchHitTrace,
     SearchStage, SkillHitTrace, TraceEnvelope, TraceEvent, TraceEventContext, TraceSink,
+    UsageRankingReason, UsageRankingState,
 };
 pub use usage::{ClusterPolicy, Intent, IntentGraph, IntentGraphError};
 pub use usage_learner::{ObservationPolicy, OriginFilter, Provenance, UsageLearner};

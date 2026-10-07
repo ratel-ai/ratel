@@ -89,6 +89,38 @@ pub enum EmbedderLoadStatus {
     Failed,
 }
 
+/// Adaptive-ranking state reported by [`TraceEvent::UsageRankingStatus`]: the
+/// four-value contract the SDKs collapse [`crate::AdaptiveRankingStatus`] to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageRankingState {
+    /// A graph is attached and ranking from it, policy drift included. Wire
+    /// value `active`.
+    Active,
+    /// No graph is attached. Wire value `inactive`.
+    Inactive,
+    /// A graph is attached but the active model is not known yet (embeddings
+    /// not built), so a model mismatch cannot be ruled out. Wire value
+    /// `unknown`.
+    Unknown,
+    /// A graph is attached but the usage arm is paused, e.g. on an embedding
+    /// model mismatch. Wire value `paused`.
+    Paused,
+}
+
+/// What triggered a [`TraceEvent::UsageRankingStatus`] report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageRankingReason {
+    /// Adaptive ranking was enabled. Wire value `enabled`.
+    Enabled,
+    /// Adaptive ranking was disabled. Wire value `disabled`.
+    Disabled,
+    /// The intent graph was rebuilt under the current model. Wire value
+    /// `rebuilt`.
+    Rebuilt,
+}
+
 /// One ranked tool hit inside a [`TraceEvent::Search`] event.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchHitTrace {
@@ -243,6 +275,14 @@ pub enum TraceEvent {
         stages: Vec<SearchStage>,
         /// Total search wall time, in milliseconds.
         took_ms: u64,
+        /// The top-k the search would have returned without the usage arm,
+        /// same shape as `hits`. `Some` whenever an intent graph matched the
+        /// query, even when that ranking is empty (`[]` on the wire: the arm
+        /// rescued a query the base ranker missed); `None` (absent) otherwise,
+        /// and on a reranked or custom-ranked search (ADR-0027), whose no-arm
+        /// counterfactual would need the ranking function run a second time.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base_hits: Option<Vec<SearchHitTrace>>,
     },
     /// The tool corpus changed: [`crate::ToolRegistry::register`] emits this
     /// with [`ChurnKind::Add`] for both a fresh registration and a
@@ -268,6 +308,9 @@ pub enum TraceEvent {
         stages: Vec<SearchStage>,
         /// Total search wall time, in milliseconds.
         took_ms: u64,
+        /// The top-k without the usage arm — see [`TraceEvent::Search`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base_hits: Option<Vec<SkillHitTrace>>,
     },
     /// The skill corpus changed — the skill-side twin of
     /// [`TraceEvent::IndexChurn`]. [`crate::SkillRegistry::register`] emits
@@ -466,8 +509,9 @@ pub enum TraceEvent {
     /// flags a slow load (possibly underpowered machine) or a failed one;
     /// `reason` carries the hint / error. See `embedding.rs` and ADR-0011.
     EmbedderLoad {
-        /// Resolved model display name: repo id, local path, or endpoint model
-        /// and URL.
+        /// The model's public name: repo id, a local model's directory name, or
+        /// an endpoint's model. Never an endpoint URL or local path, and
+        /// `reason` has them scrubbed.
         model: String,
         /// Load outcome: ok, slow, or failed.
         status: EmbedderLoadStatus,
@@ -481,7 +525,8 @@ pub enum TraceEvent {
     /// the HuggingFace cache (a cold fetch), carrying the real byte size — so a
     /// multi-second first-run download is never a silent surprise. See ADR-0012.
     EmbedderDownload {
-        /// The model that was downloaded.
+        /// The model that was downloaded (its public name, as for
+        /// [`Self::EmbedderLoad`]).
         model: String,
         /// Real download size, in bytes.
         bytes: u64,
@@ -491,9 +536,11 @@ pub enum TraceEvent {
     /// rather than mixing vector spaces; the caller must rebuild the complete
     /// embedding cache. See `dense_cache.rs` and ADR-0012.
     EmbedderModelMismatch {
-        /// The model the existing embeddings were built with.
+        /// The model the existing embeddings were built with, as its redacted
+        /// identity ([`crate::public_model_identity`]: `name#hash`, never the
+        /// raw fingerprint).
         built: String,
-        /// The model now configured.
+        /// The model now configured, redacted the same way.
         active: String,
     },
     /// The graph's clusters were drawn under a different [`crate::ClusterPolicy`]
@@ -527,7 +574,8 @@ pub enum TraceEvent {
     /// **pauses** — base ranking is unaffected — until the graph is rebuilt. See
     /// `usage.rs` and ADR-0014.
     UsageModelMismatch {
-        /// The graph's model — its fingerprint, or its centroid width when the
+        /// The graph's model — its redacted identity
+        /// ([`crate::public_model_identity`]), or its centroid width when the
         /// mismatch is dimensional.
         built: String,
         /// The active model, in the same units as `built`.
@@ -584,6 +632,31 @@ pub enum TraceEvent {
         #[serde(default)]
         dropped: u32,
     },
+    /// The SDK reports the state of adaptive usage ranking on this registry
+    /// (ADR-0014). Emitted by the SDK wrappers on enable, disable and rebuild,
+    /// never by the core itself; the core cannot know where a graph came from.
+    UsageRankingStatus {
+        /// Whether ranking is on, off, unknown, or paused.
+        status: UsageRankingState,
+        /// What triggered the report.
+        reason: UsageRankingReason,
+        /// The attached graph's revision; absent when `status` is `inactive`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rev: Option<u64>,
+        /// Caller-supplied name of the graph, so a consumer can tell the runtime's
+        /// own graph from one served by Ratel Cloud. Absent when not given.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        graph_key: Option<String>,
+        /// Whether the registry learns into the graph or only ranks from it.
+        #[serde(default = "default_true")]
+        learn: bool,
+        /// The graph's embedding model as its redacted identity
+        /// ([`crate::public_model_identity`]: `name#hash`, never the raw
+        /// fingerprint); absent for a lexical graph or when `status` is
+        /// `inactive`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+    },
     /// Emitted once when an in-process model's pooling could not be detected
     /// (no `1_Pooling/config.json`) and no override was given, so a mode was
     /// assumed. A non-silent guess: set `pooling` to correct it. See ADR-0012.
@@ -593,6 +666,12 @@ pub enum TraceEvent {
         /// The pooling mode that was assumed (`"cls"` or `"mean"`).
         pooling: String,
     },
+}
+
+/// Default for [`TraceEvent::UsageRankingStatus::learn`]: an older recorded line
+/// with no `learn` field predates the flag, when learning was always on.
+fn default_true() -> bool {
+    true
 }
 
 impl TraceEvent {
@@ -789,4 +868,123 @@ pub struct TraceEnvelope {
     /// The event itself, flattened into the envelope on the wire.
     #[serde(flatten)]
     pub event: TraceEvent,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn usage_ranking_status_serializes_with_the_wire_tag_and_omits_absent_optionals() {
+        let event = TraceEvent::UsageRankingStatus {
+            status: UsageRankingState::Active,
+            reason: UsageRankingReason::Enabled,
+            rev: None,
+            graph_key: None,
+            learn: true,
+            model: None,
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+
+        assert!(json.contains(r#""type":"usage_ranking_status""#));
+        assert!(json.contains(r#""status":"active""#));
+        assert!(json.contains(r#""reason":"enabled""#));
+        assert!(json.contains(r#""learn":true"#));
+        assert!(
+            !json.contains("rev"),
+            "absent rev must be omitted, not null"
+        );
+        assert!(
+            !json.contains("graph_key"),
+            "absent graph_key must be omitted, not null"
+        );
+        assert!(
+            !json.contains("model"),
+            "absent model must be omitted, not null"
+        );
+
+        let round_tripped: TraceEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(round_tripped, event);
+    }
+
+    #[test]
+    fn usage_ranking_status_carries_rev_graph_key_and_model_when_present() {
+        let json = serde_json::json!({
+            "type": "usage_ranking_status",
+            "status": "paused",
+            "reason": "rebuilt",
+            "rev": 3,
+            "graph_key": "cloud",
+            "learn": false,
+            "model": "bge-small",
+        })
+        .to_string();
+
+        let event: TraceEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            event,
+            TraceEvent::UsageRankingStatus {
+                status: UsageRankingState::Paused,
+                reason: UsageRankingReason::Rebuilt,
+                rev: Some(3),
+                graph_key: Some("cloud".to_string()),
+                learn: false,
+                model: Some("bge-small".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn usage_ranking_status_rejects_a_status_or_reason_outside_the_contract() {
+        for (status, reason) in [("activ", "enabled"), ("active", "toggled")] {
+            let json = serde_json::json!({
+                "type": "usage_ranking_status",
+                "status": status,
+                "reason": reason,
+            })
+            .to_string();
+            assert!(
+                serde_json::from_str::<TraceEvent>(&json).is_err(),
+                "{status}/{reason} must not deserialize"
+            );
+        }
+    }
+
+    #[test]
+    fn usage_ranking_state_and_reason_use_snake_case_wire_values() {
+        for (state, value) in [
+            (UsageRankingState::Active, "active"),
+            (UsageRankingState::Inactive, "inactive"),
+            (UsageRankingState::Unknown, "unknown"),
+            (UsageRankingState::Paused, "paused"),
+        ] {
+            assert_eq!(serde_json::to_value(state).unwrap(), value);
+        }
+        for (reason, value) in [
+            (UsageRankingReason::Enabled, "enabled"),
+            (UsageRankingReason::Disabled, "disabled"),
+            (UsageRankingReason::Rebuilt, "rebuilt"),
+        ] {
+            assert_eq!(serde_json::to_value(reason).unwrap(), value);
+        }
+    }
+
+    #[test]
+    fn usage_ranking_status_learn_defaults_to_true_when_absent_from_the_wire() {
+        // A log line written before `learn` existed predates the flag, when
+        // learning was always on.
+        let json = serde_json::json!({
+            "type": "usage_ranking_status",
+            "status": "active",
+            "reason": "enabled",
+        })
+        .to_string();
+
+        let event: TraceEvent = serde_json::from_str(&json).unwrap();
+        match event {
+            TraceEvent::UsageRankingStatus { learn, .. } => assert!(learn),
+            other => panic!("expected UsageRankingStatus, got {other:?}"),
+        }
+    }
 }

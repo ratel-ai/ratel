@@ -74,6 +74,8 @@ loader boundary.
 Tool and skill activity stay distinguishable on the trace stream: `gateway_search` (tool
 hits), `skill_search` (the skills bucket), `skill_invoke` (`get_skill_content`); the
 offered-to-loaded funnel is derivable ([ADR-0007](0007-telemetry-two-streams.md)).
+`gateway_search` carries the `turn_id` of the discovery call when the caller supplies one, so
+it can be joined to its inner `search` and the invokes that follow ([ADR-0020](0020-runtime-events-lane.md)).
 
 ## Consequences
 

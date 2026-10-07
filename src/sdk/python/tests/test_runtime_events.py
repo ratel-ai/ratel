@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -11,16 +12,24 @@ from pathlib import Path
 import pytest
 
 from ratel_ai import (
+    OPTIONAL_ENVELOPE_FIELDS,
     RUNTIME_EVENT_MAX_HITS,
     RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
     RUNTIME_EVENT_MAX_QUERY_BYTES,
     RUNTIME_EVENT_TYPES,
     ExecutableTool,
+    IntentGraph,
     RuntimeCatalog,
     RuntimeEvents,
     Skill,
     SkillCatalog,
     ToolCatalog,
+)
+from ratel_ai.catalog import _ranking_status_event
+from ratel_ai.runtime_events import (
+    _PRODUCT_FACT_FIELDS,
+    _PRODUCT_FACT_SUFFIXES,
+    _normalize_runtime_event,
 )
 
 
@@ -166,7 +175,10 @@ def test_matches_frozen_cross_language_event_vocabulary() -> None:
             "source_id",
             "type",
         ],
+        "optional_envelope_fields": list(OPTIONAL_ENVELOPE_FIELDS),
         "event_types": list(RUNTIME_EVENT_TYPES),
+        "product_fact_fields": list(_PRODUCT_FACT_FIELDS),
+        "product_fact_suffixes": list(_PRODUCT_FACT_SUFFIXES),
     }
 
 
@@ -423,6 +435,167 @@ async def test_bounds_query_hits_and_payload_before_delivery() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stamps_matching_turn_id_on_search_invoke_start_and_invoke_end() -> None:
+    tools = ToolCatalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await tools.register(
+        ExecutableTool(id="t", name="t", description="a tool", execute=lambda _args: "ok")
+    )
+    received.clear()  # discard registration churn
+
+    tools.search("do the thing", 5, turn_id="turn-xyz")
+    await tools.invoke("t", {}, turn_id="turn-xyz")
+    await subscription.flush()
+
+    by_type = {event["type"]: event for event in received}
+    assert by_type["search"]["turn_id"] == "turn-xyz"
+    assert by_type["invoke_start"]["turn_id"] == "turn-xyz"
+    assert by_type["invoke_end"]["turn_id"] == "turn-xyz"
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_stamps_matching_turn_id_on_skill_search_and_skill_invoke() -> None:
+    skills = SkillCatalog()
+    events = RuntimeEvents([skills])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await skills.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    received.clear()  # discard registration churn
+
+    skills.search("do the thing", 5, turn_id="turn-xyz")
+    skills.invoke("s", turn_id="turn-xyz")
+    await subscription.flush()
+
+    by_type = {event["type"]: event for event in received}
+    assert by_type["skill_search"]["turn_id"] == "turn-xyz"
+    assert by_type["skill_invoke"]["turn_id"] == "turn-xyz"
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_omits_turn_id_entirely_when_none_is_supplied() -> None:
+    tools = ToolCatalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.search("do the thing", 5)
+    await subscription.flush()
+
+    search = next(event for event in received if event["type"] == "search")
+    assert "turn_id" not in search
+    subscription.unsubscribe()
+
+
+def test_base_hits_survive_oversize_trimming_capped_like_hits() -> None:
+    ranked = [{"tool_id": f"tool-{rank}", "score": 1.0} for rank in range(120)]
+    event: dict[str, object] = {
+        "v": 2,
+        "event_id": "01K2KB4QN2A9XJY5VKQCN8ZM1P",
+        "ts": 1_755_000_000_000,
+        "session_id": "session-test",
+        "source_id": "source-test",
+        "type": "search",
+        # base_hits precedes the padding, so it is trimmed first unless allow-listed.
+        "hits": ranked,
+        "base_hits": ranked,
+        **{f"padding_{index:02d}": "x" * 4_096 for index in range(16)},
+    }
+
+    trimmed = _normalize_runtime_event(event)  # type: ignore[arg-type]
+
+    assert trimmed.get("payload_truncated") is True
+    assert "padding_00" not in trimmed
+    assert len(trimmed["base_hits"]) == RUNTIME_EVENT_MAX_HITS  # type: ignore[arg-type]
+    assert len(trimmed["hits"]) == RUNTIME_EVENT_MAX_HITS  # type: ignore[arg-type]
+
+
+def test_an_empty_base_hits_survives_oversize_trimming() -> None:
+    event: dict[str, object] = {
+        "v": 2,
+        "event_id": "01K2KB4QN2A9XJY5VKQCN8ZM1P",
+        "ts": 1_755_000_000_000,
+        "session_id": "session-test",
+        "source_id": "source-test",
+        "type": "search",
+        # `[]` means "a graph matched, the base ranking was empty"; it must not
+        # collapse into "no graph matched" (absent).
+        "hits": [],
+        "base_hits": [],
+        **{f"padding_{index:02d}": "x" * 4_096 for index in range(16)},
+    }
+
+    trimmed = _normalize_runtime_event(event)  # type: ignore[arg-type]
+
+    assert trimmed.get("payload_truncated") is True
+    assert trimmed["base_hits"] == []
+
+
+@pytest.mark.parametrize("field", ["turn_id", "invocation_id"])
+def test_correlation_id_is_seeded_into_the_bounded_fallback_ahead_of_id_facts(
+    field: str,
+) -> None:
+    # 17 `_id` facts of 4 KB ahead of the correlation id, which is just as
+    # large: once one of them no longer fits, neither would the id, so it
+    # survives only because it is seeded before any product fact is added.
+    correlation_id = "c" * 4_096
+    event: dict[str, object] = {
+        "v": 2,
+        "event_id": "01K2KB4QN2A9XJY5VKQCN8ZM1P",
+        "ts": 1_755_000_000_000,
+        "session_id": "session-test",
+        "source_id": "source-test",
+        "type": "search",
+        **{f"f{index:02d}_id": "x" * 4_096 for index in range(17)},
+        field: correlation_id,
+    }
+
+    trimmed = _normalize_runtime_event(event)  # type: ignore[arg-type]
+
+    assert trimmed.get("payload_truncated") is True
+    assert trimmed[field] == correlation_id
+    encoded = json.dumps(trimmed, separators=(",", ":")).encode()
+    assert len(encoded) <= RUNTIME_EVENT_MAX_PAYLOAD_BYTES
+
+
+@pytest.mark.asyncio
+async def test_turn_id_survives_oversize_trimming_of_a_search_event() -> None:
+    tools = ToolCatalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    # 100 hits with long ids push the search event's serialized size well past the
+    # payload cap even after query/hit-count bounding, forcing real trimming.
+    await tools.register(
+        [
+            ExecutableTool(
+                id=f"tool-{index:03d}-" + "x" * 1_500,
+                name=f"tool-{index:03d}",
+                description="padding",
+                execute=lambda _args: "ok",
+            )
+            for index in range(100)
+        ]
+    )
+    received.clear()  # discard registration churn
+
+    tools.search("padding", 100, turn_id="turn-abc")
+    await subscription.flush()
+
+    search = next(event for event in received if event["type"] == "search")
+    assert search["turn_id"] == "turn-abc"
+    assert search.get("payload_truncated") is True
+    encoded = json.dumps(search, separators=(",", ":")).encode()
+    assert len(encoded) <= RUNTIME_EVENT_MAX_PAYLOAD_BYTES
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
 async def test_marshals_async_handlers_to_the_subscribing_event_loop() -> None:
     tools = ToolCatalog()
     skills = SkillCatalog()
@@ -489,4 +662,533 @@ async def test_marshals_handlers_that_return_an_awaitable_to_the_event_loop() ->
 
     assert [event["type"] for event in received] == ["search"]
     assert handler_threads == [event_loop_thread]
+    subscription.unsubscribe()
+
+
+def _known_cluster_graph() -> IntentGraph:
+    """A lexical (no-centroid) graph with one cluster already fully supported,
+    so adaptive ranking boosts on the first search without needing to learn
+    first."""
+    return IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "intents": [
+                    {
+                        "id": "i0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+
+
+async def _gh_run_list_catalog() -> ToolCatalog:
+    catalog = ToolCatalog()
+    await catalog.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="List CI workflow runs and whether the build passed",
+            execute=lambda _a: "ok",
+        )
+    )
+    return catalog
+
+
+@pytest.mark.asyncio
+async def test_usage_boost_reports_the_matched_cluster_and_promoted_count_on_a_hit() -> None:
+    tools = await _gh_run_list_catalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+
+    tools.search("why is the build broken", 5)
+    await subscription.flush()
+
+    boost = next(e for e in received if e["type"] == "usage_boost")
+    assert boost["intent"] == "i0"
+    assert boost["promoted"] == 1
+    assert boost["dropped"] == 0
+    # A matched graph also ships the ranking it would have returned without the arm.
+    search = next(e for e in received if e["type"] == "search")
+    base_hits = search["base_hits"]
+    assert isinstance(base_hits, list)
+    assert [hit["tool_id"] for hit in base_hits] == ["gh_run_list"]
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_an_empty_base_hits_ships_when_the_arm_matched_a_query_the_base_ranker_missed() -> (
+    None
+):
+    tools = ToolCatalog()
+    await tools.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            # No term in common with the query: BM25 alone returns nothing.
+            description="List CI workflow runs",
+            execute=lambda _a: "ok",
+        )
+    )
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+
+    tools.search("why is the build broken", 5)
+    await subscription.flush()
+
+    boost = next(e for e in received if e["type"] == "usage_boost")
+    assert boost["promoted"] == 1
+    search = next(e for e in received if e["type"] == "search")
+    assert [hit["tool_id"] for hit in search["hits"]] == ["gh_run_list"]  # type: ignore[attr-defined]
+    assert search["base_hits"] == []
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_boost_reports_a_null_intent_and_no_promotion_on_a_miss() -> None:
+    tools = await _gh_run_list_catalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+
+    tools.search("read a file from disk", 5)
+    await subscription.flush()
+
+    boost = next(e for e in received if e["type"] == "usage_boost")
+    assert boost["intent"] is None
+    assert boost["promoted"] == 0
+    search = next(e for e in received if e["type"] == "search")
+    assert "base_hits" not in search
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_no_usage_boost_is_delivered_without_a_graph_attached() -> None:
+    tools = await _gh_run_list_catalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.search("why is the build broken", 5)
+    await subscription.flush()
+
+    assert not any(e["type"] == "usage_boost" for e in received)
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_cluster_policy_changed_reports_built_vs_active_similarity() -> None:
+    tools = await _gh_run_list_catalog()
+    graph = IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "cluster_policy": {"similarity": 0.7, "coverage": 0.5},
+                "intents": [
+                    {
+                        "id": "i0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    tools.experimental_enable_adaptive_ranking(graph, learn=False, cluster_similarity=0.9)
+
+    tools.search("anything", 5)
+    await subscription.flush()
+
+    drift = next(e for e in received if e["type"] == "usage_cluster_policy_changed")
+    assert drift["built_similarity"] == pytest.approx(0.7)
+    assert drift["active_similarity"] == pytest.approx(0.9)
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_native_policy_drift_is_reported_as_usage_ranking_status_active(
+    delayed_embedding_endpoint: str,
+) -> None:
+    tools = ToolCatalog(
+        method="semantic",
+        embedding={"url": delayed_embedding_endpoint, "model": "test-model"},
+    )
+    await tools.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="List CI workflow runs and whether the build passed",
+            execute=lambda _a: "ok",
+        )
+    )
+    # Clustered at the default similarity (0.7), now served under 0.9. The
+    # rebuild stamps centroids from this model, so only the policy differs.
+    tools.experimental_enable_adaptive_ranking(
+        _known_cluster_graph(), learn=False, cluster_similarity=0.9
+    )
+    await tools.experimental_rebuild_intent_graph()
+    assert tools.experimental_adaptive_ranking_status == "active: policy drift"
+
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await subscription.flush()
+
+    # Ranking still runs under drift, so the event reports "active".
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert status["status"] == "active"
+    subscription.unsubscribe()
+
+
+@pytest.mark.parametrize(
+    ("native", "expected"),
+    [
+        ("active", "active"),
+        ("active: policy drift", "active"),
+        ("paused: model mismatch", "paused"),
+        ("paused: dim mismatch", "paused"),
+        ("unknown", "unknown"),
+        ("inactive", "inactive"),
+    ],
+)
+def test_usage_ranking_status_collapses_the_native_status_string(
+    native: str, expected: str
+) -> None:
+    event = _ranking_status_event("enabled", (native, None, None, None), None, None, True)
+    assert event["status"] == expected
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_on_enable_carries_rev_and_graph_key() -> None:
+    tools = await _gh_run_list_catalog()
+    graph = _known_cluster_graph()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    await subscription.flush()
+
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert status["status"] == "active"
+    assert status["reason"] == "enabled"
+    assert status["rev"] == graph.rev
+    assert status["graph_key"] == "cloud"
+    assert status["learn"] is False
+    assert "model" not in status
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_omits_graph_key_and_defaults_learn_true() -> None:
+    tools = await _gh_run_list_catalog()
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph())
+    await subscription.flush()
+
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert "graph_key" not in status
+    assert status["learn"] is True
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_inactive_on_disable_has_no_rev_or_graph_key() -> None:
+    tools = await _gh_run_list_catalog()
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), graph_key="cloud")
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.experimental_disable_adaptive_ranking()
+    await subscription.flush()
+
+    # The first status is the replay to this late subscriber; the last is the disable.
+    status = [e for e in received if e["type"] == "usage_ranking_status"][-1]
+    assert status["status"] == "inactive"
+    assert status["reason"] == "disabled"
+    assert "rev" not in status
+    assert "graph_key" not in status
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_no_usage_ranking_status_for_a_disable_or_rebuild_with_nothing_attached() -> None:
+    tools = await _gh_run_list_catalog()
+    skills = SkillCatalog()
+    await skills.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    # Attached once and detached, so only the no-op calls below can report.
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+    tools.experimental_disable_adaptive_ranking()
+    events = RuntimeEvents([tools, skills])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    # Nothing attached: these change nothing, so they report nothing.
+    tools.experimental_disable_adaptive_ranking()
+    await tools.experimental_rebuild_intent_graph()
+    skills.experimental_disable_adaptive_ranking()
+    await skills.experimental_rebuild_intent_graph()
+    await subscription.flush()
+
+    assert [e for e in received if e["type"] == "usage_ranking_status"] == []
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_no_event_publishes_the_embedder_url_its_secrets_or_the_raw_fingerprint(
+    delayed_embedding_endpoint: str,
+) -> None:
+    tools = ToolCatalog(
+        method="semantic",
+        embedding={"url": f"{delayed_embedding_endpoint}?api-key=SECRET123", "model": "test-model"},
+    )
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await tools.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="List CI workflow runs and whether the build passed",
+            execute=lambda _a: "ok",
+        )
+    )
+    tools.experimental_enable_adaptive_ranking(
+        _known_cluster_graph(), learn=False, graph_key="cloud"
+    )
+    # The rebuild stamps the graph with the endpoint embedder's fingerprint.
+    await tools.experimental_rebuild_intent_graph()
+    await tools.search_async("why is the build broken", 5)
+    await subscription.flush()
+
+    wire = json.dumps(received)
+    for leak in ("SECRET123", "api-key", "url=", "path=", delayed_embedding_endpoint):
+        assert leak not in wire
+    status = [e for e in received if e["type"] == "usage_ranking_status"][-1]
+    assert status["reason"] == "rebuilt"
+    assert re.fullmatch(r"test-model#[0-9a-f]{8}", str(status["model"]))
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_carries_the_graphs_model_when_present() -> None:
+    tools = await _gh_run_list_catalog()
+    graph = IntentGraph.from_json(
+        json.dumps(
+            {
+                "v": 1,
+                "built_from_ts": 1,
+                "model": "bge-small",
+                "intents": [
+                    {
+                        "id": "i0",
+                        "label": "l",
+                        "terms": [],
+                        "members": ["why is the build broken"],
+                        "centroid": [1.0, 0.0, 0.0],
+                        "support": 9,
+                        "tools": {"gh_run_list": 1.0},
+                        "skills": {},
+                    }
+                ],
+            }
+        )
+    )
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    tools.experimental_enable_adaptive_ranking(graph, learn=False)
+    await subscription.flush()
+
+    # A hand-written model string is not a fingerprint: only its hash ships.
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert re.fullmatch(r"#[0-9a-f]{8}", str(status["model"]))
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_on_skill_catalog_for_enable_and_disable() -> None:
+    skills = SkillCatalog()
+    await skills.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    graph = _known_cluster_graph()
+    events = RuntimeEvents([skills])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    skills.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    await subscription.flush()
+    enabled = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert enabled["status"] == "active"
+    assert enabled["reason"] == "enabled"
+    assert enabled["rev"] == graph.rev
+    assert enabled["graph_key"] == "cloud"
+    assert enabled["learn"] is False
+    received.clear()
+
+    skills.experimental_disable_adaptive_ranking()
+    await subscription.flush()
+    disabled = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert disabled["status"] == "inactive"
+    assert disabled["reason"] == "disabled"
+    assert "rev" not in disabled
+    assert "graph_key" not in disabled
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_is_replayed_to_a_subscriber_attached_after_enable() -> None:
+    tools = await _gh_run_list_catalog()
+    graph = _known_cluster_graph()
+    tools.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+
+    # Subscribed only now: the enable-time event is long gone.
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await subscription.flush()
+
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert status["status"] == "active"
+    assert status["reason"] == "enabled"
+    assert status["rev"] == graph.rev
+    assert status["graph_key"] == "cloud"
+    assert status["learn"] is False
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_replay_on_skill_catalog_keeps_the_last_reason(
+    delayed_embedding_endpoint: str,
+) -> None:
+    skills = SkillCatalog(embedding={"url": delayed_embedding_endpoint, "model": "test-model"})
+    await skills.register(
+        Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")
+    )
+    skills.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+    await skills.experimental_rebuild_intent_graph()
+
+    events = RuntimeEvents([skills])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await subscription.flush()
+
+    statuses = [e for e in received if e["type"] == "usage_ranking_status"]
+    assert len(statuses) == 1
+    assert statuses[0]["reason"] == "rebuilt"
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_usage_ranking_status_is_replayed_into_a_trace_sink_installed_after_enable() -> None:
+    tools = await _gh_run_list_catalog()
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), learn=False)
+
+    tools._registry.set_trace_sink("memory", "late")
+
+    statuses = [e for e in tools.drain_trace_events() if e["type"] == "usage_ranking_status"]
+    assert len(statuses) == 1
+    assert statuses[0]["reason"] == "enabled"
+    assert statuses[0]["learn"] is False
+
+
+@pytest.mark.asyncio
+async def test_no_usage_ranking_status_is_replayed_when_no_graph_is_attached() -> None:
+    tools = await _gh_run_list_catalog()
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph())
+    tools.experimental_disable_adaptive_ranking()
+
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await subscription.flush()
+
+    assert [e for e in received if e["type"] == "usage_ranking_status"] == []
+    subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["tool", "skill"])
+async def test_a_disable_racing_an_enable_leaves_wrapper_and_native_in_agreement(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ratel_ai.catalog as tool_module
+    import ratel_ai.skill_catalog as skill_module
+
+    if kind == "tool":
+        catalog: ToolCatalog | SkillCatalog = await _gh_run_list_catalog()
+        module: object = tool_module
+    else:
+        catalog = SkillCatalog()
+        module = skill_module
+    registry = catalog._registry
+    catalog.experimental_enable_adaptive_ranking(_known_cluster_graph())
+    events = RuntimeEvents([catalog])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    # Hold the disabling thread inside its bookkeeping, after the native
+    # disable, so an enable from another thread can try to land in between.
+    paused, resume = threading.Event(), threading.Event()
+    real_forget = module._forget_graph_learn  # type: ignore[attr-defined]
+
+    def forget_and_pause(graph: IntentGraph, owner: object) -> None:
+        real_forget(graph, owner)
+        if threading.current_thread().name == "disable":
+            paused.set()
+            resume.wait(5)
+
+    monkeypatch.setattr(module, "_forget_graph_learn", forget_and_pause)
+    g2 = _known_cluster_graph()
+    disable = threading.Thread(target=catalog.experimental_disable_adaptive_ranking, name="disable")
+    enable = threading.Thread(
+        target=lambda: catalog.experimental_enable_adaptive_ranking(
+            g2, learn=False, graph_key="cloud"
+        ),
+        name="enable",
+    )
+    disable.start()
+    assert paused.wait(5)
+    enable.start()
+    enable.join(0.5)  # lands now if the gap is open; otherwise waits for the lock
+    resume.set()
+    disable.join(5)
+    enable.join(5)
+    await subscription.flush()
+
+    # Native ended with g2 attached; the wrapper and the last event must agree.
+    assert registry._graph is g2
+    assert registry._learn is False
+    assert registry._graph_key == "cloud"
+    status = [e for e in received if e["type"] == "usage_ranking_status"][-1]
+    assert (status["reason"], status["graph_key"]) == ("enabled", "cloud")
     subscription.unsubscribe()

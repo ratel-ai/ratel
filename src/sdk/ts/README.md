@@ -214,7 +214,8 @@ argument as the turn id, so a framework adapter passes one per model turn.
 
 It scopes, it does not attribute: within a turn, an invoke is paired with the search that actually
 returned that capability, so several searches before any invoke each keep their own evidence
-(ADR-0014). What the id buys is separation — two conversations sharing one catalog must not pair
+(ADR-0014), whether the graph is learned in-process or by Ratel Cloud replaying your runtime
+events. What the id buys is separation — two conversations sharing one catalog must not pair
 each other's searches and invokes. Omit it and every caller shares a single scope, which is fine
 for one conversation at a time and wrong for concurrent ones.
 

@@ -25,7 +25,7 @@ use crate::embedding_artifact::{
     ArtifactEntry, ArtifactEntryKind, ArtifactError, build_empty_artifact, hash_projection_text,
     load_and_validate, projection_version,
 };
-use crate::embedding_config::EmbeddingModel;
+use crate::embedding_config::{EmbeddingModel, public_model_identity};
 use crate::trace::{TraceEvent, TraceSink};
 
 /// Single-input placeholder for the Endpoint identity probe.
@@ -350,8 +350,8 @@ impl DenseCache {
         if active_artifact != header.model_fingerprint {
             let artifact = header.model_fingerprint.clone();
             sink.record(TraceEvent::EmbedderModelMismatch {
-                built: artifact.clone(),
-                active: active_artifact.clone(),
+                built: public_model_identity(&artifact),
+                active: public_model_identity(&active_artifact),
             });
             return Err(WarmError::ArtifactModelMismatch {
                 artifact,
@@ -375,8 +375,8 @@ impl DenseCache {
             let built = built.clone();
             let active = runtime_identity.clone();
             sink.record(TraceEvent::EmbedderModelMismatch {
-                built: built.clone(),
-                active: active.clone(),
+                built: public_model_identity(&built),
+                active: public_model_identity(&active),
             });
             return Err(WarmError::Embedder(EmbedderError::ModelMismatch {
                 built,
@@ -464,8 +464,8 @@ impl DenseCache {
             let built = built.clone();
             let active = embedded.fingerprint;
             sink.record(TraceEvent::EmbedderModelMismatch {
-                built: built.clone(),
-                active: active.clone(),
+                built: public_model_identity(&built),
+                active: public_model_identity(&active),
             });
             return Err(EmbedderError::ModelMismatch { built, active });
         }
@@ -584,8 +584,8 @@ impl DenseCache {
         let embedded = embedder.embed_query_with_identity(query)?;
         if let Some((built, active)) = model_drift(built.as_deref(), &embedded.fingerprint) {
             sink.record(TraceEvent::EmbedderModelMismatch {
-                built: built.clone(),
-                active: active.clone(),
+                built: public_model_identity(&built),
+                active: public_model_identity(&active),
             });
             return Err(EmbedderError::ModelMismatch { built, active });
         }
@@ -1550,8 +1550,11 @@ mod tests {
             .collect();
         assert_eq!(
             mismatch,
-            vec![("fp-probed-X".into(), "fp-static-Y".into())],
-            "second guard must emit exactly one EmbedderModelMismatch"
+            vec![(
+                crate::public_model_identity("fp-probed-X"),
+                crate::public_model_identity("fp-static-Y")
+            )],
+            "second guard must emit exactly one EmbedderModelMismatch, redacted"
         );
         assert_eq!(cache.dim(), Some(2));
         assert_eq!(cache.built_fingerprint().as_deref(), Some("fp-probed-X"));

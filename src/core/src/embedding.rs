@@ -479,7 +479,8 @@ pub(crate) fn embedder_with_telemetry(
     model: &EmbeddingModel,
     sink: &dyn TraceSink,
 ) -> Result<Arc<dyn Embedder>, EmbedderError> {
-    let display = model.display_name();
+    // Events carry only the public name: never an endpoint URL or local path.
+    let public = model.public_name();
     let (result, load_ms, notices) = match embedder_for(model) {
         Ok((emb, ms, notices)) => (Ok(emb), ms, notices),
         Err(e) => (Err(e), None, LoadNotices::default()),
@@ -487,7 +488,10 @@ pub(crate) fn embedder_with_telemetry(
     if let Some(DownloadNotice { model, bytes }) = notices.download {
         let mb = bytes as f64 / 1_048_576.0;
         eprintln!("ratel: downloaded embedding model {model} ({mb:.0} MB, one-time)");
-        sink.record(TraceEvent::EmbedderDownload { model, bytes });
+        sink.record(TraceEvent::EmbedderDownload {
+            model: public.clone(),
+            bytes,
+        });
     }
     if let Some(model) = notices.pooling_assumed {
         eprintln!(
@@ -495,23 +499,28 @@ pub(crate) fn embedder_with_telemetry(
              set pooling=\"cls\"|\"mean\" to override"
         );
         sink.record(TraceEvent::EmbedderPoolingAssumed {
-            model,
+            model: public.clone(),
             pooling: "mean".to_string(),
         });
     }
-    if let Some(event) = embedder_load_event(&display, load_ms, result.as_ref().err()) {
+    if let Some(mut event) = embedder_load_event(&public, load_ms, result.as_ref().err()) {
         if let TraceEvent::EmbedderLoad {
             status,
             took_ms,
             reason,
             ..
-        } = &event
-            && !matches!(status, EmbedderLoadStatus::Ok)
+        } = &mut event
         {
-            eprintln!(
-                "ratel: embedding model load {status:?} ({took_ms}ms): {}",
-                reason.as_deref().unwrap_or("")
-            );
+            if !matches!(status, EmbedderLoadStatus::Ok) {
+                // Local stderr keeps the full reason; the event gets it scrubbed.
+                eprintln!(
+                    "ratel: embedding model load {status:?} ({took_ms}ms): {}",
+                    reason.as_deref().unwrap_or("")
+                );
+            }
+            if let Some(reason) = reason {
+                *reason = model.scrub(reason);
+            }
         }
         sink.record(event);
     }
@@ -1712,6 +1721,42 @@ mod tests {
             "load must run exactly once per key"
         );
         assert_eq!(reported, 1, "exactly one caller reports the load latency");
+    }
+
+    #[test]
+    fn load_events_never_carry_a_local_path() {
+        let dir = "/nonexistent/alice-private/bge-small";
+        let model = EmbeddingModel::resolve(crate::EmbeddingSpec {
+            local: Some(dir.into()),
+            ..Default::default()
+        })
+        .unwrap();
+        let sink = crate::trace::MemorySink::new("s");
+        assert!(embedder_with_telemetry(&model, &sink).is_err());
+        let events = sink.drain();
+        assert!(!events.is_empty(), "a failed load must still be reported");
+        for event in events {
+            let json = serde_json::to_string(&event.event).unwrap();
+            assert!(!json.contains("alice-private"), "{json}");
+            if let TraceEvent::EmbedderLoad { model, .. } = &event.event {
+                assert_eq!(model, "bge-small");
+            }
+        }
+    }
+
+    #[test]
+    fn scrubbing_replaces_the_endpoint_url_and_the_local_path() {
+        let endpoint = EmbeddingModel::resolve(crate::EmbeddingSpec {
+            url: Some("https://embed.example.com/v1/embeddings?api-key=SECRET123".into()),
+            model: Some("nomic".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        let scrubbed = endpoint.scrub(
+            "could not reach https://embed.example.com/v1/embeddings?api-key=SECRET123 (refused)",
+        );
+        assert!(!scrubbed.contains("SECRET123"), "{scrubbed}");
+        assert!(scrubbed.contains("(refused)"), "{scrubbed}");
     }
 
     #[test]

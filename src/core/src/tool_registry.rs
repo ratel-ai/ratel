@@ -8,7 +8,7 @@ use crate::artifact_warm::{ArtifactWarmError, OnArtifactMiss};
 use crate::dense_cache::{DenseCache, Embeddable};
 use crate::embedding::EmbedderError;
 use crate::embedding_artifact::{ArtifactEntryKind, ArtifactError};
-use crate::embedding_config::EmbeddingModel;
+use crate::embedding_config::{EmbeddingModel, public_model_identity};
 use crate::fusion::{
     DenseWeight, RETRIEVE_DEPTH, RRF_K, Scale, WeightedArm, normalize, rrf_fuse_weighted,
     score_fuse,
@@ -27,6 +27,11 @@ use crate::trace::{
 };
 use crate::usage::{ArmOutcome, Capability, IntentGraph, UsageArm};
 use crate::usage_learner::{self, ObservationPolicy};
+
+/// What a `*_ranked` helper returns: the hits, their stages, and the ranking
+/// the search would have returned without the usage arm (`Some` exactly when
+/// the arm fired), for the search event's `base_hits`.
+pub(crate) type Ranked<H> = (Vec<H>, Vec<SearchStage>, Option<Vec<H>>);
 
 /// Whether adaptive usage ranking is currently contributing to a registry's
 /// results — the SDK-facing view of the compatibility checks (ADR-0014).
@@ -620,9 +625,18 @@ impl ToolRegistry {
             });
         }
         if let Some((built, active, dim_mismatch)) = mismatch {
+            // Widths are published as-is; model fingerprints carry endpoint
+            // URLs or local paths, so only their redacted identity is.
+            let public = |fp: String| {
+                if dim_mismatch {
+                    fp
+                } else {
+                    public_model_identity(&fp)
+                }
+            };
             self.sink.record(TraceEvent::UsageModelMismatch {
-                built,
-                active,
+                built: public(built),
+                active: public(active),
                 dim_mismatch,
             });
         }
@@ -913,7 +927,16 @@ impl ToolRegistry {
             took_ms,
             top_score: hits.first().map(|h| h.score as f64),
         };
-        self.record_search(query, origin, top_k, &hits, vec![stage], took_ms, context);
+        self.record_search(
+            query,
+            origin,
+            top_k,
+            &hits,
+            None,
+            vec![stage],
+            took_ms,
+            context,
+        );
         hits
     }
 
@@ -934,8 +957,10 @@ impl ToolRegistry {
         turn_id: Option<&str>,
     ) -> Result<StageOne<SearchHit>, SearchError> {
         let started = Instant::now();
-        let (hits, stages) = if self.tools.is_empty() || top_k == 0 {
-            (Vec::new(), Vec::new())
+        // Stage 1's no-arm ranking is dropped: the reranker reorders it, so it is
+        // not what the search would have returned without the arm.
+        let (hits, stages, _) = if self.tools.is_empty() || top_k == 0 {
+            (Vec::new(), Vec::new(), None)
         } else {
             let depth = depth.max(top_k);
             match method {
@@ -1016,7 +1041,7 @@ impl ToolRegistry {
             });
         }
         let total_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, total_ms, context);
+        self.record_search(query, origin, top_k, &hits, None, stages, total_ms, context);
         hits
     }
 
@@ -1226,20 +1251,24 @@ impl ToolRegistry {
         context: TraceEventContext,
     ) -> Vec<SearchHit> {
         let started = Instant::now();
-        let (hits, stages) = self.bm25_ranked(query, top_k, context.turn_id.as_deref());
+        let (hits, stages, base_hits) = self.bm25_ranked(query, top_k, context.turn_id.as_deref());
         let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        self.record_search(
+            query,
+            origin,
+            top_k,
+            &hits,
+            base_hits.as_deref(),
+            stages,
+            took_ms,
+            context,
+        );
         hits
     }
 
     /// The BM25 ranking and its stages, without recording the search — the
     /// traced wrapper and the reranker's first stage both build on it.
-    fn bm25_ranked(
-        &self,
-        query: &str,
-        top_k: usize,
-        turn_key: Option<&str>,
-    ) -> (Vec<SearchHit>, Vec<SearchStage>) {
+    fn bm25_ranked(&self, query: &str, top_k: usize, turn_key: Option<&str>) -> Ranked<SearchHit> {
         let started = Instant::now();
         let t = Instant::now();
         let arm = self.usage_arm(turn_key, query, None);
@@ -1262,7 +1291,7 @@ impl ToolRegistry {
                 took_ms: started.elapsed().as_millis() as u64,
                 top_score,
             };
-            return (hits, vec![stage]);
+            return (hits, vec![stage], None);
         };
 
         // Matched: retrieve deeper than `top_k` so a tool the usage arm favors
@@ -1270,12 +1299,21 @@ impl ToolRegistry {
         // scores — the opt-in cost documented on `set_intent_graph`.
         let depth = RETRIEVE_DEPTH.max(top_k);
         let t = Instant::now();
-        let bm25_ranked = self.bm25_index().search(query, depth);
+        let index = self.bm25_index();
+        let bm25_ranked = index.search(query, depth);
         let bm25_stage = SearchStage {
             name: "bm25".into(),
             took_ms: t.elapsed().as_millis() as u64,
             top_score: bm25_ranked.first().map(|(_, s)| *s as f64),
         };
+        // What the no-arm path would have returned: `search` ranks the full
+        // corpus before truncating, so this prefix is `search(query, top_k)`.
+        let base_hits = to_search_hits(
+            bm25_ranked.iter().take(top_k).cloned().collect(),
+            Scale::Bm25 {
+                ceiling: index.query_ceiling(query),
+            },
+        );
         let bm25_ids: Vec<String> = bm25_ranked.into_iter().map(|(id, _)| id).collect();
 
         let (hits, rrf_stage) =
@@ -1283,6 +1321,7 @@ impl ToolRegistry {
         (
             hits,
             vec![bm25_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
+            Some(base_hits),
         )
     }
 
@@ -1295,12 +1334,22 @@ impl ToolRegistry {
     ) -> Result<Vec<SearchHit>, EmbedderError> {
         let started = Instant::now();
         if self.tools.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            self.record_search(query, origin, top_k, &[], None, Vec::new(), 0, context);
             return Ok(Vec::new());
         }
-        let (hits, stages) = self.semantic_ranked(query, top_k, context.turn_id.as_deref())?;
+        let (hits, stages, base_hits) =
+            self.semantic_ranked(query, top_k, context.turn_id.as_deref())?;
         let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        self.record_search(
+            query,
+            origin,
+            top_k,
+            &hits,
+            base_hits.as_deref(),
+            stages,
+            took_ms,
+            context,
+        );
         Ok(hits)
     }
 
@@ -1311,7 +1360,7 @@ impl ToolRegistry {
         query: &str,
         top_k: usize,
         turn_key: Option<&str>,
-    ) -> Result<(Vec<SearchHit>, Vec<SearchStage>), EmbedderError> {
+    ) -> Result<Ranked<SearchHit>, EmbedderError> {
         // Retrieve deeper than `top_k` only when a graph is attached; without
         // one the depth, scores, and stages stay exactly as they were.
         let depth = if self.graph.is_some() {
@@ -1346,7 +1395,7 @@ impl ToolRegistry {
                 took_ms: stage_ms,
                 top_score,
             };
-            return Ok((hits, vec![stage]));
+            return Ok((hits, vec![stage], None));
         };
 
         let dense_stage = SearchStage {
@@ -1354,12 +1403,15 @@ impl ToolRegistry {
             took_ms: stage_ms,
             top_score: ranked.first().map(|(_, s)| *s as f64),
         };
+        // What the no-arm path would have returned (raw cosine, top_k).
+        let base_hits = to_search_hits(ranked.iter().take(top_k).cloned().collect(), Scale::Cosine);
         let dense_ids: Vec<String> = ranked.into_iter().map(|(id, _)| id).collect();
         let (hits, rrf_stage) =
             Self::fuse_arms(&[(&dense_ids, 1.0), (&arm.ids, arm.weight())], top_k);
         Ok((
             hits,
             vec![dense_stage, Self::usage_stage(&arm, usage_ms), rrf_stage],
+            Some(base_hits),
         ))
     }
 
@@ -1375,12 +1427,22 @@ impl ToolRegistry {
     ) -> Result<Vec<SearchHit>, EmbedderError> {
         let started = Instant::now();
         if self.tools.is_empty() || top_k == 0 {
-            self.record_search(query, origin, top_k, &[], Vec::new(), 0, context);
+            self.record_search(query, origin, top_k, &[], None, Vec::new(), 0, context);
             return Ok(Vec::new());
         }
-        let (hits, stages) = self.hybrid_ranked(query, top_k, context.turn_id.as_deref())?;
+        let (hits, stages, base_hits) =
+            self.hybrid_ranked(query, top_k, context.turn_id.as_deref())?;
         let took_ms = started.elapsed().as_millis() as u64;
-        self.record_search(query, origin, top_k, &hits, stages, took_ms, context);
+        self.record_search(
+            query,
+            origin,
+            top_k,
+            &hits,
+            base_hits.as_deref(),
+            stages,
+            took_ms,
+            context,
+        );
         Ok(hits)
     }
 
@@ -1391,7 +1453,7 @@ impl ToolRegistry {
         query: &str,
         top_k: usize,
         turn_key: Option<&str>,
-    ) -> Result<(Vec<SearchHit>, Vec<SearchStage>), EmbedderError> {
+    ) -> Result<Ranked<SearchHit>, EmbedderError> {
         // Retrieve deeper than `top_k` so a tool ranked low by one arm but high
         // by the other still has rank signal to fuse.
         let depth = RETRIEVE_DEPTH.max(top_k);
@@ -1429,9 +1491,10 @@ impl ToolRegistry {
         // 4. Score fusion → final top_k. The arms are normalised onto one
         //    absolute scale and added, rather than fused on rank position.
         let t = Instant::now();
+        let ceiling = index.query_ceiling(query);
         let fused = score_fuse(
             &bm25_ranked,
-            index.query_ceiling(query),
+            ceiling,
             &dense_ranked,
             arm.as_ref().map(|a| (a.ids.as_slice(), a.weight())),
             self.dense_weight,
@@ -1444,12 +1507,27 @@ impl ToolRegistry {
         let mut hits = to_search_hits(fused, Scale::Fused);
         hits.truncate(top_k);
 
+        // What the no-arm path would have returned: the same fusion, without
+        // the usage arm. Computed only when the arm fired.
+        let base_hits = arm.as_ref().map(|_| {
+            let unboosted = score_fuse(
+                &bm25_ranked,
+                ceiling,
+                &dense_ranked,
+                None,
+                self.dense_weight,
+            );
+            let mut base_hits = to_search_hits(unboosted, Scale::Fused);
+            base_hits.truncate(top_k);
+            base_hits
+        });
+
         let mut stages = vec![bm25_stage, dense_stage];
         if let Some(arm) = &arm {
             stages.push(Self::usage_stage(arm, usage_ms));
         }
         stages.push(fusion_stage);
-        Ok((hits, stages))
+        Ok((hits, stages, base_hits))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1459,24 +1537,28 @@ impl ToolRegistry {
         origin: Origin,
         top_k: usize,
         hits: &[SearchHit],
+        base_hits: Option<&[SearchHit]>,
         stages: Vec<SearchStage>,
         took_ms: u64,
         context: TraceEventContext,
     ) {
+        let traces = |hits: &[SearchHit]| -> Vec<SearchHitTrace> {
+            hits.iter()
+                .map(|h| SearchHitTrace {
+                    tool_id: h.tool_id.clone(),
+                    score: h.score as f64,
+                })
+                .collect()
+        };
         self.sink.record_with_context(
             TraceEvent::Search {
                 query: query.to_string(),
                 origin,
                 top_k: top_k as u32,
-                hits: hits
-                    .iter()
-                    .map(|h| SearchHitTrace {
-                        tool_id: h.tool_id.clone(),
-                        score: h.score as f64,
-                    })
-                    .collect(),
+                hits: traces(hits),
                 stages,
                 took_ms,
+                base_hits: base_hits.map(traces),
             },
             context,
         );
@@ -2380,6 +2462,7 @@ mod tests {
             hits: Vec::new(),
             stages: Vec::new(),
             took_ms: 0,
+            base_hits: None,
         }
     }
 
@@ -2476,6 +2559,7 @@ mod tests {
                     hits: Vec::new(),
                     stages: Vec::new(),
                     took_ms: 0,
+                    base_hits: None,
                 },
             ),
             env(3, "s1", started("read_file")),
@@ -2656,6 +2740,7 @@ mod tests {
                     hits: Vec::new(),
                     stages: Vec::new(),
                     took_ms: 0,
+                    base_hits: None,
                 },
             ),
             env(3, "A", started("read_file")),
@@ -2872,6 +2957,38 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn a_model_mismatch_publishes_redacted_identities_never_the_fingerprint() {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a path"));
+        reg.build_embeddings().unwrap();
+
+        let secret = crate::embedding_config::endpoint_fingerprint(
+            "https://embed.example.com/v1/embeddings?api-key=SECRET123",
+            "nomic",
+        );
+        reg.set_intent_graph(Some(graph_with_model(
+            "delete_file",
+            vec![1.0, 0.0, 0.0],
+            &secret,
+        )));
+        reg.search_with_method("read", 5, Origin::Direct, SearchMethod::Semantic)
+            .unwrap();
+
+        let events = model_mismatch_events(&sink);
+        assert_eq!(events.len(), 1);
+        let (built, active, _) = &events[0];
+        assert_eq!(built, &crate::public_model_identity(&secret));
+        assert!(
+            !built.contains("SECRET123") && !built.contains("url="),
+            "{built}"
+        );
+        assert!(active.contains('#'), "active is redacted too: {active}");
     }
 
     #[test]
@@ -3111,6 +3228,70 @@ mod tests {
         }
     }
 
+    fn cluster_policy_changed_events(sink: &MemorySink) -> Vec<(f64, f64, f64, f64)> {
+        sink.drain()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                TraceEvent::UsageClusterPolicyChanged {
+                    built_similarity,
+                    built_coverage,
+                    active_similarity,
+                    active_coverage,
+                } => Some((
+                    built_similarity,
+                    built_coverage,
+                    active_similarity,
+                    active_coverage,
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_policy_drift_is_recorded_as_a_trace_event_on_search() {
+        use crate::usage::ClusterPolicy;
+
+        // `policy_drift_is_reported_as_active_not_paused` above proves the status
+        // read; this proves the notice actually reaches the sink as a trace
+        // event, remotely publishable per ADR-0020.
+        // Purely lexical — the drift check runs independent of any embedder.
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = ToolRegistry::new();
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+
+        let graph = Arc::new(RwLock::new(
+            IntentGraph::from_json(
+                r#"{"v":1,"built_from_ts":1,
+                    "intents":[{"id":"i0","label":"l","terms":[],
+                    "members":["read a file"],"support":9,
+                    "tools":{"read_file":1.0},"skills":{}}]}"#,
+            )
+            .expect("valid"),
+        ));
+        graph
+            .write()
+            .unwrap()
+            .set_cluster_policy(ClusterPolicy::default().with_similarity(0.9));
+        reg.set_intent_graph(Some(graph));
+
+        reg.search("read a file", 5);
+
+        let events = cluster_policy_changed_events(&sink);
+        assert_eq!(events.len(), 1);
+        assert!(
+            (events[0].0 - 0.70).abs() < 1e-6,
+            "built: the graph's own default, got {}",
+            events[0].0
+        );
+        assert!(
+            (events[0].2 - 0.9).abs() < 1e-6,
+            "active: what was just set, got {}",
+            events[0].2
+        );
+    }
+
     #[test]
     fn rebuild_intent_graph_restores_the_arm_after_a_model_change() {
         let sink = Arc::new(MemorySink::new("s"));
@@ -3277,6 +3458,135 @@ mod tests {
             .map(|s| s.name)
             .collect();
         assert_eq!(stages, vec!["bm25", "dense", "fusion"]);
+    }
+
+    // ---- base_hits: the ranking without the usage arm ----------------------
+
+    /// Run one search on a fresh registry and return its `Search` event's
+    /// `(hits, stages, base_hits)` plus the event's JSON.
+    fn search_event(
+        method: SearchMethod,
+        query: &str,
+        graph: Option<Arc<RwLock<IntentGraph>>>,
+    ) -> (
+        Vec<SearchHitTrace>,
+        Vec<String>,
+        Option<Vec<SearchHitTrace>>,
+        String,
+    ) {
+        let sink = Arc::new(MemorySink::new("s"));
+        let mut reg = with_embedder(Arc::new(StubEmbedder));
+        reg.set_trace_sink(sink.clone());
+        reg.register(tool("read_file", "read a file"));
+        reg.register(tool("delete_file", "delete a path"));
+        reg.register(tool("read_dir", "read a directory listing"));
+        reg.build_embeddings().unwrap();
+        reg.set_intent_graph(graph);
+        reg.search_with_method(query, 2, Origin::Direct, method)
+            .unwrap();
+        sink.drain()
+            .into_iter()
+            .find_map(|e| match e.event {
+                ref ev @ TraceEvent::Search {
+                    ref hits,
+                    ref stages,
+                    ref base_hits,
+                    ..
+                } => Some((
+                    hits.clone(),
+                    stages.iter().map(|s| s.name.clone()).collect(),
+                    base_hits.clone(),
+                    serde_json::to_string(ev).unwrap(),
+                )),
+                _ => None,
+            })
+            .expect("a search event")
+    }
+
+    #[test]
+    fn base_hits_equal_the_no_graph_ranking_when_the_arm_fires() {
+        for method in [
+            SearchMethod::Bm25,
+            SearchMethod::Semantic,
+            SearchMethod::Hybrid,
+        ] {
+            let (baseline, _, _, _) = search_event(method, "read a file", None);
+            let (hits, stages, base_hits, _) =
+                search_event(method, "read a file", Some(read_graph("delete_file", 9)));
+            assert!(
+                stages.contains(&"usage".to_string()),
+                "{method:?}: arm must fire"
+            );
+            let base_hits = base_hits.expect("the arm fired");
+            assert!(!base_hits.is_empty(), "{method:?}");
+            // Rank fusion lets the arm's tool climb into this top-2; hybrid's
+            // score fusion weights it too lightly to, so only the equality
+            // below is checked there.
+            if method != SearchMethod::Hybrid {
+                assert_ne!(hits, base_hits, "{method:?}: the arm should reorder");
+            }
+            assert_eq!(
+                serde_json::to_string(&base_hits).unwrap(),
+                serde_json::to_string(&baseline).unwrap(),
+                "{method:?}: base_hits must match a no-graph search byte for byte"
+            );
+        }
+    }
+
+    #[test]
+    fn base_hits_are_absent_without_a_match() {
+        for method in [
+            SearchMethod::Bm25,
+            SearchMethod::Semantic,
+            SearchMethod::Hybrid,
+        ] {
+            let (_, _, base_hits, json) = search_event(method, "read a file", None);
+            assert!(base_hits.is_none());
+            assert!(!json.contains("base_hits"), "{method:?}: {json}");
+
+            let (_, stages, _, json) =
+                search_event(method, "delete", Some(read_graph("read_file", 9)));
+            assert!(
+                !stages.contains(&"usage".to_string()),
+                "{method:?}: arm must miss"
+            );
+            assert!(!json.contains("base_hits"), "{method:?}: {json}");
+        }
+    }
+
+    #[test]
+    fn base_hits_are_present_when_the_arm_fires_on_an_empty_base_ranking() {
+        // The query shares no BM25 term with any tool, but matches the
+        // cluster's member lexically and ("read" inside "unread") its centroid
+        // densely: the arm rescues a query the base ranker missed entirely. A
+        // matched search must still say so, with `base_hits: []`.
+        let graph = || {
+            let json = r#"{"v":1,"built_from_ts":1,
+                 "intents":[{"id":"i0","label":"l","terms":[],
+                 "members":["unread inbox"],"centroid":[1.0,0.0,0.0],
+                 "support":9,"tools":{"delete_file":1.0},"skills":{}}]}"#;
+            Some(Arc::new(RwLock::new(
+                IntentGraph::from_json(json).expect("valid"),
+            )))
+        };
+        let (hits, stages, base_hits, json) =
+            search_event(SearchMethod::Bm25, "unread inbox", graph());
+        assert!(stages.contains(&"usage".to_string()), "arm must fire");
+        assert_eq!(
+            hits.first().map(|h| h.tool_id.as_str()),
+            Some("delete_file")
+        );
+        assert_eq!(base_hits, Some(Vec::new()));
+        assert!(json.contains(r#""base_hits":[]"#), "{json}");
+
+        // The dense and hybrid paths rank the whole corpus, so their base
+        // ranking is never empty, but the field is present all the same.
+        for method in [SearchMethod::Semantic, SearchMethod::Hybrid] {
+            let (_, stages, base_hits, json) = search_event(method, "unread inbox", graph());
+            assert!(stages.contains(&"usage".to_string()), "{method:?}");
+            assert!(base_hits.is_some(), "{method:?}");
+            assert!(json.contains(r#""base_hits":"#), "{method:?}: {json}");
+        }
     }
 
     #[test]

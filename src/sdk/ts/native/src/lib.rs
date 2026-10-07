@@ -926,6 +926,13 @@ fn map_artifact_build_error(error: ArtifactError) -> napi::Error {
     }
 }
 
+/// What a published event may say about a model fingerprint: `name#hash`,
+/// never the endpoint URL or local path (see core `public_model_identity`).
+#[napi]
+pub fn public_model_identity(fingerprint: String) -> String {
+    core::public_model_identity(&fingerprint)
+}
+
 /// Merge valid RAT1 parts into one mixed artifact (see core
 /// `merge_embedding_artifacts`).
 #[napi]
@@ -1364,10 +1371,11 @@ fn wrap_learner(
     sink: Arc<dyn core::TraceSink>,
     graph: Option<&Arc<RwLock<core::IntentGraph>>>,
     policy: core::ObservationPolicy,
+    learn: bool,
 ) -> Arc<dyn core::TraceSink> {
     match graph {
-        Some(graph) => Arc::new(UsageLearner::with_policy(graph.clone(), sink, policy)),
-        None => sink,
+        Some(graph) if learn => Arc::new(UsageLearner::with_policy(graph.clone(), sink, policy)),
+        _ => sink,
     }
 }
 
@@ -1383,6 +1391,7 @@ fn active_trace_sink(
     graph: Option<&Arc<RwLock<core::IntentGraph>>>,
     event_stream: &Option<EventStream>,
     policy: core::ObservationPolicy,
+    learn: bool,
 ) -> Arc<dyn core::TraceSink> {
     let sink: Arc<dyn core::TraceSink> = match event_stream {
         Some(stream) => Arc::new(RuntimeEventSink {
@@ -1391,7 +1400,7 @@ fn active_trace_sink(
         }),
         None => base_sink.clone(),
     };
-    wrap_learner(sink, graph, policy)
+    wrap_learner(sink, graph, policy, learn)
 }
 
 /// Wrap a JS callback as a trace sink. Shared by both registries'
@@ -1697,6 +1706,17 @@ impl IntentGraph {
             .map_err(|_| napi::Error::from_reason("intent graph lock poisoned"))?;
         Ok(guard.rev() as f64)
     }
+
+    /// The embedding model the graph's centroids were built with, or `null` for
+    /// a lexically-grown graph that has none.
+    #[napi(getter)]
+    pub fn model(&self) -> napi::Result<Option<String>> {
+        let guard = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("intent graph lock poisoned"))?;
+        Ok(guard.model.clone())
+    }
 }
 
 /// Node binding over the `ratel-ai-core` tool registry: an in-process index
@@ -1720,6 +1740,11 @@ pub struct ToolRegistry {
     /// the same reason: a sink change re-wraps the learner, and rebuilding it at
     /// the default would silently drop a configured policy.
     usage_policy: core::ObservationPolicy,
+    /// Whether an attached graph should be learned into, not just ranked from.
+    /// Retained beside `graph` for the same reason as `usage_policy`: every sink
+    /// install goes through `active_trace_sink`, and rebuilding it without this
+    /// flag would silently resume learning on a consumer-only registry.
+    learn: bool,
     /// Created lazily by the private native subscription seam. The fan-out
     /// remains the registry's root sink while callbacks and base sinks change.
     event_stream: Option<EventStream>,
@@ -1744,6 +1769,7 @@ impl ToolRegistry {
             base_sink: Arc::new(NoopSink),
             graph: None,
             usage_policy: core::ObservationPolicy::default(),
+            learn: true,
             event_stream: None,
         })
     }
@@ -2104,6 +2130,7 @@ impl ToolRegistry {
             self.graph.as_ref(),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         registry.set_trace_sink(sink);
         Ok(subscription)
@@ -2126,6 +2153,7 @@ impl ToolRegistry {
             self.graph.as_ref(),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         registry.set_trace_sink(sink);
         drop(registry);
@@ -2176,6 +2204,7 @@ impl ToolRegistry {
             self.graph.as_ref(),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
@@ -2193,6 +2222,14 @@ impl ToolRegistry {
     /// search-then-invoke pairs. Pass the same `IntentGraph` to the tool and
     /// skill registries so both learn into one set of clusters.
     ///
+    /// Pass `learn: false` to rank from `graph` without learning into it — the
+    /// consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+    /// The flag is stored on the registry, not just applied at this call: every
+    /// later sink install (`setTraceSink`, `setTraceSinkCallback`,
+    /// `subscribeTraceEvents`) re-derives its sink through the same flag, so
+    /// re-installing a sink for an unrelated reason cannot silently resume
+    /// learning. Defaults to `true`, reproducing today's behavior.
+    ///
     /// Ranking changes only where the graph has evidence: a query matching no
     /// cluster returns exactly what it would have without one. Note that with a
     /// graph attached `SearchHit.score` becomes a fusion score rather than a raw
@@ -2202,10 +2239,17 @@ impl ToolRegistry {
         &mut self,
         graph: &IntentGraph,
         options: Option<ObservationPolicyOptions>,
+        learn: Option<bool>,
     ) -> napi::Result<()> {
         let cluster_policy = parse_cluster_policy(&options)?;
-        self.usage_policy = parse_policy(options, core::OriginFilter::Any, core::Provenance::Live)?;
+        let usage_policy = parse_policy(options, core::OriginFilter::Any, core::Provenance::Live)?;
+        let learn = learn.unwrap_or(true);
         let handle = graph.inner.clone();
+        // Take the registry before touching any state: a "registry busy"
+        // rejection must leave this registry and the graph exactly as they
+        // were, or the next sink install would wrap the old graph under the
+        // rejected call's `learn`.
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         // Sets what FUTURE admissions are measured against. Existing boundaries
         // stay as they are — nothing can redraw them in place — and the graph
         // keeps reporting the policy it was clustered under, so the difference
@@ -2218,12 +2262,14 @@ impl ToolRegistry {
             &self.base_sink,
             Some(&handle),
             &self.event_stream,
-            self.usage_policy,
+            usage_policy,
+            learn,
         );
-        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
         registry.set_intent_graph(Some(handle.clone()));
         drop(registry);
+        self.usage_policy = usage_policy;
+        self.learn = learn;
         self.graph = Some(handle);
         Ok(())
     }
@@ -2271,13 +2317,20 @@ impl ToolRegistry {
     /// resumes from what it already learned.
     #[napi]
     pub fn disable_adaptive_ranking(&mut self) -> napi::Result<()> {
-        let sink = active_trace_sink(&self.base_sink, None, &self.event_stream, self.usage_policy);
+        let sink = active_trace_sink(
+            &self.base_sink,
+            None,
+            &self.event_stream,
+            self.usage_policy,
+            true,
+        );
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
         registry.set_intent_graph(None);
         drop(registry);
         self.graph = None;
         self.usage_policy = core::ObservationPolicy::default();
+        self.learn = true;
         Ok(())
     }
 
@@ -2815,6 +2868,9 @@ pub struct SkillRegistry {
     /// the same reason: a sink change re-wraps the learner, and rebuilding it at
     /// the default would silently drop a configured policy.
     usage_policy: core::ObservationPolicy,
+    /// Whether an attached graph should be learned into, not just ranked from.
+    /// See `ToolRegistry::learn`.
+    learn: bool,
     event_stream: Option<EventStream>,
 }
 
@@ -2835,6 +2891,7 @@ impl SkillRegistry {
             base_sink: Arc::new(NoopSink),
             graph: None,
             usage_policy: core::ObservationPolicy::default(),
+            learn: true,
             event_stream: None,
         })
     }
@@ -3215,6 +3272,7 @@ impl SkillRegistry {
             self.graph.as_ref(),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         registry.set_trace_sink(sink);
         Ok(subscription)
@@ -3238,6 +3296,7 @@ impl SkillRegistry {
             self.graph.as_ref(),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
@@ -3261,6 +3320,7 @@ impl SkillRegistry {
             self.graph.as_ref(),
             &self.event_stream,
             self.usage_policy,
+            self.learn,
         );
         registry.set_trace_sink(sink);
         drop(registry);
@@ -3282,6 +3342,14 @@ impl SkillRegistry {
     /// search-then-invoke pairs. Pass the same `IntentGraph` to the tool and
     /// skill registries so both learn into one set of clusters.
     ///
+    /// Pass `learn: false` to rank from `graph` without learning into it — the
+    /// consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+    /// The flag is stored on the registry, not just applied at this call: every
+    /// later sink install (`setTraceSink`, `setTraceSinkCallback`,
+    /// `subscribeTraceEvents`) re-derives its sink through the same flag, so
+    /// re-installing a sink for an unrelated reason cannot silently resume
+    /// learning. Defaults to `true`, reproducing today's behavior.
+    ///
     /// Ranking changes only where the graph has evidence: a query matching no
     /// cluster returns exactly what it would have without one. Note that with a
     /// graph attached `SearchHit.score` becomes a fusion score rather than a raw
@@ -3291,10 +3359,17 @@ impl SkillRegistry {
         &mut self,
         graph: &IntentGraph,
         options: Option<ObservationPolicyOptions>,
+        learn: Option<bool>,
     ) -> napi::Result<()> {
         let cluster_policy = parse_cluster_policy(&options)?;
-        self.usage_policy = parse_policy(options, core::OriginFilter::Any, core::Provenance::Live)?;
+        let usage_policy = parse_policy(options, core::OriginFilter::Any, core::Provenance::Live)?;
+        let learn = learn.unwrap_or(true);
         let handle = graph.inner.clone();
+        // Take the registry before touching any state: a "registry busy"
+        // rejection must leave this registry and the graph exactly as they
+        // were, or the next sink install would wrap the old graph under the
+        // rejected call's `learn`.
+        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         // Sets what FUTURE admissions are measured against. Existing boundaries
         // stay as they are — nothing can redraw them in place — and the graph
         // keeps reporting the policy it was clustered under, so the difference
@@ -3307,12 +3382,14 @@ impl SkillRegistry {
             &self.base_sink,
             Some(&handle),
             &self.event_stream,
-            self.usage_policy,
+            usage_policy,
+            learn,
         );
-        let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
         registry.set_intent_graph(Some(handle.clone()));
         drop(registry);
+        self.usage_policy = usage_policy;
+        self.learn = learn;
         self.graph = Some(handle);
         Ok(())
     }
@@ -3360,13 +3437,20 @@ impl SkillRegistry {
     /// resumes from what it already learned.
     #[napi]
     pub fn disable_adaptive_ranking(&mut self) -> napi::Result<()> {
-        let sink = active_trace_sink(&self.base_sink, None, &self.event_stream, self.usage_policy);
+        let sink = active_trace_sink(
+            &self.base_sink,
+            None,
+            &self.event_stream,
+            self.usage_policy,
+            true,
+        );
         let mut registry = write_registry(&self.inner, &self.pending_dense)?;
         registry.set_trace_sink(sink);
         registry.set_intent_graph(None);
         drop(registry);
         self.graph = None;
         self.usage_policy = core::ObservationPolicy::default();
+        self.learn = true;
         Ok(())
     }
 

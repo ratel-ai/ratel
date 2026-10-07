@@ -130,6 +130,35 @@ async def test_search_capabilities_records_gateway_search_event() -> None:
     assert events and events[0]["origin"] == "agent" and events[0]["top_k"] == 3
 
 
+async def test_search_capabilities_stamps_gateway_search_with_turn_id() -> None:
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
+    await catalog.register(_tool("local_read", "Read a file from disk."))
+    catalog.drain_trace_events()
+    search = search_capabilities_tool(catalog)
+
+    await search.execute({"query": "read", "topKTools": 3}, turn_id="turn-gw")
+
+    events = catalog.drain_trace_events()
+    inner_search = next(e for e in events if e["type"] == "search")
+    gateway_search = next(e for e in events if e["type"] == "gateway_search")
+    assert inner_search["turn_id"] == "turn-gw"
+    assert gateway_search["turn_id"] == "turn-gw"
+    assert gateway_search["hits"] == 1  # still a plain count, not the inner search's hit array
+
+
+async def test_search_capabilities_omits_turn_id_when_none_supplied() -> None:
+    catalog = ToolCatalog(trace=TraceSinkConfig(kind="memory", session_id="s"))
+    await catalog.register(_tool("local_read", "Read a file from disk."))
+    catalog.drain_trace_events()
+    search = search_capabilities_tool(catalog)
+
+    await search.execute({"query": "read", "topKTools": 3})
+
+    events = catalog.drain_trace_events()
+    gateway_search = next(e for e in events if e["type"] == "gateway_search")
+    assert "turn_id" not in gateway_search
+
+
 def test_search_description_lists_upstreams() -> None:
     catalog = ToolCatalog()
     search = search_capabilities_tool(

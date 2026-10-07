@@ -332,17 +332,25 @@ function canonicalJson(value: unknown): string {
   return canonical;
 }
 
+/**
+ * @internal The base correlation for a recorded event: a fresh `eventId`, plus
+ * `turnId` only when the caller supplied one (never an `undefined` key). The
+ * span-aware helpers below build on it.
+ */
+export function runtimeEventProjection(turnId?: string): RuntimeEventProjection {
+  return { eventId: newRuntimeEventId(), ...(turnId === undefined ? {} : { turnId }) };
+}
+
 function eventProjection(
   span: Span,
   invocationId?: string,
   turnId?: string,
 ): RuntimeEventProjection {
-  const eventId = newRuntimeEventId();
-  span.setAttribute(RATEL_EVENT_ID, eventId);
+  const base = runtimeEventProjection(turnId);
+  span.setAttribute(RATEL_EVENT_ID, base.eventId);
   return withTurnContext({
-    eventId,
+    ...base,
     ...(invocationId === undefined ? {} : { invocationId }),
-    ...(turnId === undefined ? {} : { turnId }),
     ...spanCorrelation(span),
   }) as RuntimeEventProjection;
 }
@@ -364,9 +372,8 @@ export function ambientProjection(
   options: { invocationId?: string; turnId?: string } = {},
 ): RuntimeEventProjection {
   return withTurnContext({
-    eventId: newRuntimeEventId(),
+    ...runtimeEventProjection(options.turnId),
     ...(options.invocationId === undefined ? {} : { invocationId: options.invocationId }),
-    ...(options.turnId === undefined ? {} : { turnId: options.turnId }),
     ...spanCorrelation(trace.getActiveSpan()),
   }) as RuntimeEventProjection;
 }

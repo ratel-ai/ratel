@@ -38,7 +38,7 @@ The remotely publishable v1 event set is:
 
 | Family | Event types | Required product facts |
 |---|---|---|
-| Search | `search`, `skill_search`, `gateway_search` | query, target/origin, `top_k`, duration, and ordered `hits[]` of target id and score |
+| Search | `search`, `skill_search`, `gateway_search` | query, target/origin, `top_k`, duration, and ordered `hits[]` of target id and score; on `search`/`skill_search`, when an intent graph matched, `base_hits[]` of the same shape — the ranking without the usage arm |
 | Tool invocation | `invoke_start`, `invoke_end`, `invoke_error`, `gateway_invoke`, `gateway_error` | tool id, `invocation_id`, outcome/error class, and duration where known |
 | Skill use | `skill_invoke` | skill id, outcome, and duration |
 | Catalog churn | `index_churn`, `skill_churn` | add/remove, target id, and catalog version where known |
@@ -47,17 +47,38 @@ The remotely publishable v1 event set is:
 | Auth | `auth_refresh`, `auth_needs`, `auth_flow_start`, `auth_flow_end` | upstream id and outcome; never credentials |
 | Experiments | `experiment_selection`, `experiment_results`, `experiment_comparison`, `experiment_skip`, `experiment_fallback`, `experiment_drop`, `experiment_invocation`, `experiment_outcome` | `selection_id`; served/shadow arm data; agreement metrics; result ids/scores; attribution, drop/fallback reason, and labelled outcome as applicable |
 | Delivery | `events_dropped` | dropped count, reason, and observation window |
+| Adaptive ranking | `usage_boost`, `usage_model_mismatch`, `usage_cluster_policy_changed`, `usage_ranking_status` | matched cluster id or none, similarity, support, promoted and dropped counts; built vs active redacted model identity and dimension flag; built vs active cluster policy; SDK-reported status/reason/rev/graph_key/learn/model |
 | Turn | `turn_start` | `turn_id` and `end_user_id` on the envelope; `user_message` only when the application passed it ([ADR-0026](0026-turn-scope.md)) |
 
 For search events, the envelope `event_id` identifies the search. A hit's zero-based rank is its
 position in the ordered `hits[]` array rather than a repeated field on each hit.
+
+The adaptive-ranking events (ADR-0014) let a consumer of a served graph, such as Ratel Cloud
+ranking a runtime with `learn: false`, observe its health and state without waiting for a
+search. They carry no user content: cluster ids, similarities, counts, redacted model
+identities, and the status report. A model identity is `name#hash` (`public_model_identity`): the endpoint's
+model, HuggingFace repo, or local directory name, plus a short hash of the fingerprint with
+the URL cut to `scheme://host/path` and a local path cut to its directory name — never the
+raw fingerprint, which carries the endpoint URL (query-string secrets included) or the local
+path. The `embedder_*` events follow the same rule.
+
+`usage_ranking_status` is emitted by the SDK wrappers, not core, on enable, and on a disable or
+rebuild that changes something (one with no graph attached reports nothing). It is re-reported,
+under the last trigger's `reason`, whenever a trace sink or event subscriber is installed while
+a graph is attached, so a consumer attached late still sees it. It reports whether ranking is
+on, off, unknown, or paused, the attached graph's revision and model, whether the registry
+learns or only ranks, and an optional caller-supplied `graph_key` that tells a runtime's own graph apart from one it was served (see
+[ADR-0014's "Opt-in, per registry"](0014-adaptive-usage-ranking.md#opt-in-per-registry)).
 
 Newer SDKs may emit additive types before every receiver understands them; the receiver stores
 the unknown envelope rather than rejecting the batch. Core diagnostic variants that are not in
 the table remain local until deliberately added to the remotely publishable set.
 
 Search query text, hit ids/scores, and catalog-definition fields are part of the facts contract.
-A query is at most 4 KiB and `hits[]` at most 100 entries. Enabling the experimental
+A query is at most 4 KiB and `hits[]` (and `base_hits[]`) at most 100 entries. An event over the
+64 KiB payload cap is trimmed and marked `payload_truncated`: other fields go first, then any
+product fact (pinned in `src/telemetry/conformance/fixtures.json`) that still does not fit. The
+envelope and the correlation ids (`invocation_id`, `turn_id`) always survive. Enabling the experimental
 catalog-definition option is explicit consent to publish those definition fields. This lane is independent
 of `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`; that setting governs only the OTel
 projection. Inference messages, tool arguments/results, executors, tokens, cost, model details,
@@ -100,6 +121,7 @@ Every event is flattened into this v2 envelope:
 | `end_user_id` | optional application-provided subject id |
 | `turn_id` | optional application turn id; the SDK turn scope stamps it ([ADR-0026](0026-turn-scope.md)) |
 | `trace_id`, `span_id` | optional active OTel correlation ids |
+| `turn_id` | optional, host-supplied; correlates a search with the invoke(s) of the same agent turn (pairs with the ADR-0014 credit slot) — the key Ratel Cloud uses to pair events when building the intent graph server-side |
 | `type` and payload | flattened event tag and fields |
 
 `event_id` is the canonical deduplication and join key. The same value survives fan-out,

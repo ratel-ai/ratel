@@ -26,7 +26,7 @@ import {
   setContentCapture,
   ToolCatalog,
 } from "./index.js";
-import { recordAuthNeeded } from "./telemetry.js";
+import { recordAuthNeeded, runtimeEventProjection } from "./telemetry.js";
 
 /**
  * Instrumentation is verified through the public OTel API: register an in-memory
@@ -156,6 +156,19 @@ function eventNamed(span: ReadableSpan, name: string) {
 
 const INFERENCE_DETAILS = "gen_ai.client.inference.operation.details";
 const SEARCH_RESULTS = "ratel.search.results";
+
+describe("runtimeEventProjection", () => {
+  it("mints a fresh event id and carries turnId only when one is given", () => {
+    const first = runtimeEventProjection();
+    const second = runtimeEventProjection("turn-1");
+
+    expect(first.eventId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(second.eventId).not.toBe(first.eventId);
+    expect(first).toEqual({ eventId: first.eventId });
+    expect("turnId" in first).toBe(false);
+    expect(second).toEqual({ eventId: second.eventId, turnId: "turn-1" });
+  });
+});
 
 describe("execute_tool span", () => {
   it("wraps a tool invocation with gen_ai + ratel attributes", async () => {

@@ -17,7 +17,7 @@ from typing import Any, Callable, Union
 
 from .catalog import ExecutableTool, ToolCatalog
 from .skill_catalog import SkillCatalog
-from .telemetry import record_auth_needed
+from .telemetry import _event_projection, record_auth_needed
 
 SEARCH_CAPABILITIES_ID = "search_capabilities"
 """Id (and name) of the discovery tool built by `search_capabilities_tool`."""
@@ -177,7 +177,8 @@ def search_capabilities_tool(
                 "top_k": k_tools,
                 "hits": len(tool_hits),
                 "took_ms": int((time.monotonic() - started_at) * 1000),
-            }
+            },
+            _event_projection(turn_id=turn_id),
         )
         order: list[str] = []
         groups: dict[str, dict[str, Any]] = {}
