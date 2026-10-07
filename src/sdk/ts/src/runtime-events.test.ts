@@ -189,6 +189,30 @@ describe("public runtime events", () => {
     );
   });
 
+  it.each([
+    "turn_id",
+    "invocation_id",
+  ])("seeds %s into the bounded fallback ahead of other _id product facts", (field) => {
+    // 17 `_id` facts of 4 KB ahead of the correlation id, which is just as
+    // large: once one of them no longer fits, neither would the id, so it
+    // survives only because it is seeded before any product fact is added.
+    const facts = Object.fromEntries(
+      Array.from({ length: 17 }, (_, index) => [
+        `f${index.toString().padStart(2, "0")}_id`,
+        "x".repeat(4_096),
+      ]),
+    );
+    const id = "c".repeat(4_096);
+
+    const event = deliverRuntimeEvent(runtimeEvent({ ...facts, [field]: id }));
+
+    expect(event.payload_truncated).toBe(true);
+    expect(event[field]).toBe(id);
+    expect(Buffer.byteLength(JSON.stringify(event), "utf8")).toBeLessThanOrEqual(
+      RUNTIME_EVENT_MAX_PAYLOAD_BYTES,
+    );
+  });
+
   it("enforces public query, hit, and payload bounds before delivery", async () => {
     const runtime = ratel();
     const received: RuntimeEvent[] = [];

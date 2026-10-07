@@ -536,6 +536,33 @@ def test_an_empty_base_hits_survives_oversize_trimming() -> None:
     assert trimmed["base_hits"] == []
 
 
+@pytest.mark.parametrize("field", ["turn_id", "invocation_id"])
+def test_correlation_id_is_seeded_into_the_bounded_fallback_ahead_of_id_facts(
+    field: str,
+) -> None:
+    # 17 `_id` facts of 4 KB ahead of the correlation id, which is just as
+    # large: once one of them no longer fits, neither would the id, so it
+    # survives only because it is seeded before any product fact is added.
+    correlation_id = "c" * 4_096
+    event: dict[str, object] = {
+        "v": 2,
+        "event_id": "01K2KB4QN2A9XJY5VKQCN8ZM1P",
+        "ts": 1_755_000_000_000,
+        "session_id": "session-test",
+        "source_id": "source-test",
+        "type": "search",
+        **{f"f{index:02d}_id": "x" * 4_096 for index in range(17)},
+        field: correlation_id,
+    }
+
+    trimmed = _normalize_runtime_event(event)  # type: ignore[arg-type]
+
+    assert trimmed.get("payload_truncated") is True
+    assert trimmed[field] == correlation_id
+    encoded = json.dumps(trimmed, separators=(",", ":")).encode()
+    assert len(encoded) <= RUNTIME_EVENT_MAX_PAYLOAD_BYTES
+
+
 @pytest.mark.asyncio
 async def test_turn_id_survives_oversize_trimming_of_a_search_event() -> None:
     tools = ToolCatalog()

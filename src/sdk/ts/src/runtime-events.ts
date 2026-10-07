@@ -25,7 +25,9 @@ export const OPTIONAL_ENVELOPE_FIELDS = [
 ] as const;
 /** Correlation ids that must survive truncation intact — dropping one breaks pairing
  * (ADR-0014's search/invoke and invocation-lifecycle grouping) rather than merely
- * losing a nice-to-have fact. */
+ * losing a nice-to-have fact. Both end in `_id`, so ordinary trimming already keeps
+ * them as product facts; this set seeds them into the bounded fallback ahead of
+ * every other product fact. */
 const CORRELATION_FIELDS = new Set(["invocation_id", "turn_id"]);
 const CATALOG_CRITICAL_FIELDS = ["kind", "id", "name", "content_hash"] as const;
 const CATALOG_SCHEMA_FIELDS = ["input_schema", "output_schema"] as const;
@@ -444,11 +446,7 @@ function normalizeRuntimeEvent(input: Record<string, unknown>): RuntimeEvent {
   }
 
   for (const key of Object.keys(normalized)) {
-    if (
-      !REQUIRED_ENVELOPE_FIELDS.has(key) &&
-      !CORRELATION_FIELDS.has(key) &&
-      !isProductFactField(key)
-    ) {
+    if (!REQUIRED_ENVELOPE_FIELDS.has(key) && !isProductFactField(key)) {
       normalizedSize = sizeAfterDeletingProperty(normalized, key, normalizedSize);
       delete normalized[key];
       normalizedSize = sizeAfterSettingProperty(
