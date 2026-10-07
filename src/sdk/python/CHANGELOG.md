@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **A disable racing an enable on another thread no longer leaves the catalog's state out of step with native.** The bookkeeping, status read and `usage_ranking_status` emit now run under the same lock as the native call, so a concurrent enable can't be overwritten by a disable's resets
 - **`experimental_enable_adaptive_ranking`'s warnings point at your line, not inside `ratel_ai`.** Through `ToolCatalog` / `SkillCatalog` every misconfiguration and learn-mismatch warning was attributed to one line in the package, so Python's default filter showed only the first of each kind per process
 - **A `experimental_disable_adaptive_ranking` / `experimental_rebuild_intent_graph` with no graph attached emits no `usage_ranking_status`.** It used to report `inactive` with reason `disabled` / `rebuilt` for a change that never happened
 - **A trace sink or event subscriber attached after enable now receives `usage_ranking_status`.** The current status (with the last trigger's `reason`) is re-reported whenever one is installed while a graph is attached, so a consumer no longer has to subscribe before `experimental_enable_adaptive_ranking` to see it

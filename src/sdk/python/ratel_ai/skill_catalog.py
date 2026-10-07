@@ -655,10 +655,13 @@ class SkillRegistry:
             self._learn = learn
             self._graph = graph
             self._graph_key = graph_key
-        native_status = self._native.adaptive_ranking_status()
-        self._maybe_warn_model_mismatch(native_status)
-        self._emit_ranking_status("enabled", native_status)
-        _note_graph_learn(graph, self, learn, warn_on_model_mismatch, _stacklevel)
+            # Still under the lock: an enable or disable on another thread must
+            # not land between native's change and this report of it. Neither
+            # the status read nor `record_event` takes `_dense_state`.
+            native_status = self._native.adaptive_ranking_status()
+            self._maybe_warn_model_mismatch(native_status)
+            self._emit_ranking_status("enabled", native_status)
+            _note_graph_learn(graph, self, learn, warn_on_model_mismatch, _stacklevel)
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -666,13 +669,15 @@ class SkillRegistry:
             self._raise_if_busy()
             self._rebuild_on_model_change = False
             self._native.disable_adaptive_ranking()
-        if self._graph is not None:
-            _forget_graph_learn(self._graph, self)
-            # Report only a real change: disabling with nothing attached changes nothing.
-            self.record_event(dict(_DISABLED_RANKING_STATUS))
-        self._learn = True
-        self._graph = None
-        self._graph_key = None
+            # Under the same lock as the native call, so a racing enable cannot
+            # be overwritten by these resets (see `experimental_enable_adaptive_ranking`).
+            if self._graph is not None:
+                _forget_graph_learn(self._graph, self)
+                # Report only a real change: disabling with nothing attached changes nothing.
+                self.record_event(dict(_DISABLED_RANKING_STATUS))
+            self._learn = True
+            self._graph = None
+            self._graph_key = None
 
     async def _maybe_rebuild_on_model_change(self) -> None:
         """Auto-recover a model-mismatched graph before a dense search, opt-in.

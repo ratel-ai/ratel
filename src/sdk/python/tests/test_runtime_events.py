@@ -1134,3 +1134,61 @@ async def test_no_usage_ranking_status_is_replayed_when_no_graph_is_attached() -
 
     assert [e for e in received if e["type"] == "usage_ranking_status"] == []
     subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["tool", "skill"])
+async def test_a_disable_racing_an_enable_leaves_wrapper_and_native_in_agreement(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ratel_ai.catalog as tool_module
+    import ratel_ai.skill_catalog as skill_module
+
+    if kind == "tool":
+        catalog: ToolCatalog | SkillCatalog = await _gh_run_list_catalog()
+        module: object = tool_module
+    else:
+        catalog = SkillCatalog()
+        module = skill_module
+    registry = catalog._registry
+    catalog.experimental_enable_adaptive_ranking(_known_cluster_graph())
+    events = RuntimeEvents([catalog])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+
+    # Hold the disabling thread inside its bookkeeping, after the native
+    # disable, so an enable from another thread can try to land in between.
+    paused, resume = threading.Event(), threading.Event()
+    real_forget = module._forget_graph_learn  # type: ignore[attr-defined]
+
+    def forget_and_pause(graph: IntentGraph, owner: object) -> None:
+        real_forget(graph, owner)
+        if threading.current_thread().name == "disable":
+            paused.set()
+            resume.wait(5)
+
+    monkeypatch.setattr(module, "_forget_graph_learn", forget_and_pause)
+    g2 = _known_cluster_graph()
+    disable = threading.Thread(target=catalog.experimental_disable_adaptive_ranking, name="disable")
+    enable = threading.Thread(
+        target=lambda: catalog.experimental_enable_adaptive_ranking(
+            g2, learn=False, graph_key="cloud"
+        ),
+        name="enable",
+    )
+    disable.start()
+    assert paused.wait(5)
+    enable.start()
+    enable.join(0.5)  # lands now if the gap is open; otherwise waits for the lock
+    resume.set()
+    disable.join(5)
+    enable.join(5)
+    await subscription.flush()
+
+    # Native ended with g2 attached; the wrapper and the last event must agree.
+    assert registry._graph is g2
+    assert registry._learn is False
+    assert registry._graph_key == "cloud"
+    status = [e for e in received if e["type"] == "usage_ranking_status"][-1]
+    assert (status["reason"], status["graph_key"]) == ("enabled", "cloud")
+    subscription.unsubscribe()
