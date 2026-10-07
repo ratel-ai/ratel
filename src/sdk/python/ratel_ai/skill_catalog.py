@@ -581,6 +581,7 @@ class SkillRegistry:
         cluster_coverage: float | None = None,
         learn: bool = True,
         graph_key: str | None = None,
+        _stacklevel: int = 3,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
@@ -634,7 +635,7 @@ class SkillRegistry:
             self._raise_if_busy()
             if warn_on_model_mismatch:
                 _warn_on_adaptive_misconfiguration(
-                    learn, rebuild_on_model_change, origins, graph_key
+                    learn, rebuild_on_model_change, origins, graph_key, _stacklevel
                 )
             self._native.enable_adaptive_ranking(
                 graph, origins, provenance, cluster_similarity, cluster_coverage, learn
@@ -657,7 +658,7 @@ class SkillRegistry:
         native_status = self._native.adaptive_ranking_status()
         self._maybe_warn_model_mismatch(native_status)
         self._emit_ranking_status("enabled", native_status)
-        _note_graph_learn(graph, self, learn, warn_on_model_mismatch)
+        _note_graph_learn(graph, self, learn, warn_on_model_mismatch, _stacklevel)
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -1215,6 +1216,8 @@ class SkillCatalog:
             cluster_coverage=cluster_coverage,
             learn=learn,
             graph_key=graph_key,
+            # This facade is one more frame between the warning and the caller.
+            _stacklevel=4,
         )
 
     async def experimental_rebuild_intent_graph(self) -> None:

@@ -268,23 +268,25 @@ _graph_learn: weakref.WeakKeyDictionary[IntentGraph, weakref.WeakKeyDictionary[A
 )
 
 
-def _note_graph_learn(graph: IntentGraph, registry: object, learn: bool, warn: bool) -> None:
+def _note_graph_learn(
+    graph: IntentGraph, registry: object, learn: bool, warn: bool, stacklevel: int
+) -> None:
     """Record ``registry`` enabling ``graph`` with ``learn``.
 
     When ``warn`` is set, warns if another registry sharing ``graph`` was
-    enabled with a different value.
+    enabled with a different value. ``stacklevel`` is the registry method's
+    ``_stacklevel``, so the warning points at the line that enabled.
     """
     by_registry = _graph_learn.setdefault(graph, weakref.WeakKeyDictionary())
     by_registry.pop(registry, None)
     mismatch = any(other != learn for other in by_registry.values())
     by_registry[registry] = learn
     if warn and mismatch:
-        # stacklevel 3: past this helper and the registry method, to its caller.
         warnings.warn(
             "ratel: this intent graph is enabled with learn=True on one catalog "
             "and learn=False on the other; it will still change. Use the same "
             "learn value on both catalogs.",
-            stacklevel=3,
+            stacklevel=stacklevel,
         )
 
 
@@ -300,11 +302,13 @@ def _warn_on_adaptive_misconfiguration(
     rebuild_on_model_change: bool,
     origins: OriginFilterOption | None,
     graph_key: str | None,
+    stacklevel: int,
 ) -> None:
     """The enable-time misconfiguration warnings that depend only on the options.
 
-    See either registry's ``experimental_enable_adaptive_ranking``. Uses
-    ``stacklevel=3``: past this helper and the registry method, to its caller.
+    See either registry's ``experimental_enable_adaptive_ranking``.
+    ``stacklevel`` is that method's ``_stacklevel``, so each warning points at
+    the line that enabled rather than at a fixed line in this package.
     """
     if learn is False and rebuild_on_model_change:
         warnings.warn(
@@ -312,21 +316,21 @@ def _warn_on_adaptive_misconfiguration(
             "will still re-embed this graph and bump its rev. Call "
             "experimental_rebuild_intent_graph() yourself if you want that, or "
             "drop rebuild_on_model_change.",
-            stacklevel=3,
+            stacklevel=stacklevel,
         )
     if origins == "baseline":
         warnings.warn(
             'ratel: origins "baseline" only accepts captured baseline turns; '
             "live searches never carry that origin, so this graph will not "
             'learn from this catalog. Use "any" or "agent" here.',
-            stacklevel=3,
+            stacklevel=stacklevel,
         )
     if graph_key is not None and learn:
         warnings.warn(
             f'ratel: graph_key "{graph_key}" marks this graph as produced '
             "elsewhere, but learn is on; local turns will fork it and be "
             "overwritten on the next adoption. Pass learn=False to consume it.",
-            stacklevel=3,
+            stacklevel=stacklevel,
         )
 
 
@@ -973,6 +977,7 @@ class ToolRegistry:
         cluster_coverage: float | None = None,
         learn: bool = True,
         graph_key: str | None = None,
+        _stacklevel: int = 3,
     ) -> None:
         """Turn on adaptive usage ranking against ``graph`` (ADR-0014).
 
@@ -1029,7 +1034,7 @@ class ToolRegistry:
             self._raise_if_busy()
             if warn_on_model_mismatch:
                 _warn_on_adaptive_misconfiguration(
-                    learn, rebuild_on_model_change, origins, graph_key
+                    learn, rebuild_on_model_change, origins, graph_key, _stacklevel
                 )
             self._native.enable_adaptive_ranking(
                 graph, origins, provenance, cluster_similarity, cluster_coverage, learn
@@ -1052,7 +1057,7 @@ class ToolRegistry:
         native_status = self._native.adaptive_ranking_status()
         self._maybe_warn_model_mismatch(native_status)
         self._emit_ranking_status("enabled", native_status)
-        _note_graph_learn(graph, self, learn, warn_on_model_mismatch)
+        _note_graph_learn(graph, self, learn, warn_on_model_mismatch, _stacklevel)
 
     def experimental_disable_adaptive_ranking(self) -> None:
         """Turn adaptive usage ranking off; the graph keeps what it learned."""
@@ -1790,6 +1795,8 @@ class ToolCatalog:
             cluster_coverage=cluster_coverage,
             learn=learn,
             graph_key=graph_key,
+            # This facade is one more frame between the warning and the caller.
+            _stacklevel=4,
         )
 
     async def experimental_rebuild_intent_graph(self) -> None:

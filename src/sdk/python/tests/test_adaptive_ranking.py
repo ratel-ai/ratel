@@ -1314,6 +1314,36 @@ async def test_a_well_formed_consumer_enable_does_not_warn() -> None:
         assert not caught
 
 
+async def test_enable_warnings_point_at_the_callers_line_through_either_catalog() -> None:
+    # Python's default filter shows a warning once per (text, line): pointing
+    # every warning at one line inside ratel_ai hides all but the first.
+    tool_catalog = await build_catalog()
+    skill_catalog = SkillCatalog()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tool_catalog.experimental_enable_adaptive_ranking(
+            IntentGraph(), learn=False, rebuild_on_model_change=True
+        )
+        skill_catalog.experimental_enable_adaptive_ranking(IntentGraph(), origins="baseline")
+        tool_catalog._registry.experimental_enable_adaptive_ranking(
+            IntentGraph(), graph_key="cloud"
+        )
+    assert len(caught) == 3
+    assert [w.filename for w in caught] == [__file__] * 3
+
+
+async def test_learn_mismatch_warning_points_at_the_callers_line_through_either_catalog() -> None:
+    tool_catalog = await build_catalog()
+    skill_catalog = SkillCatalog()
+    graph = IntentGraph()
+    tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        skill_catalog.experimental_enable_adaptive_ranking(graph)
+    matches = [w for w in caught if "learn=True on one catalog" in str(w.message)]
+    assert [w.filename for w in matches] == [__file__]
+
+
 async def test_one_graph_with_mismatched_learn_across_catalogs_warns() -> None:
     tool_catalog = await build_catalog()
     skill_catalog = SkillCatalog()
