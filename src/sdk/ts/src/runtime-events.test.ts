@@ -817,6 +817,45 @@ describe("public runtime events", () => {
     subscription.unsubscribe();
   });
 
+  it("reports native policy drift as usage_ranking_status active", async () => {
+    const server = await startDelayedEmbeddingServer(1);
+    const runtime = ratel({
+      method: "semantic",
+      embedding: { url: server.url, model: "test-model" },
+    });
+    try {
+      await runtime.tools.register({
+        id: "gh_run_list",
+        name: "gh_run_list",
+        description: "List CI workflow runs and whether the build passed",
+        inputSchema: {},
+        outputSchema: {},
+        execute: async () => "ok",
+      });
+      // Clustered at the default similarity (0.7), now served under 0.9. The
+      // rebuild stamps centroids from this model, so only the policy differs.
+      runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
+        learn: false,
+        clusterSimilarity: 0.9,
+      });
+      await runtime.tools.catalog.experimentalRebuildIntentGraph();
+      expect(runtime.tools.catalog.experimentalAdaptiveRankingStatus.status).toBe(
+        "active: policy drift",
+      );
+
+      const received: RuntimeEvent[] = [];
+      const subscription = runtime.events.subscribe((batch) => received.push(...batch));
+      await subscription.flush();
+
+      // Ranking still runs under drift, so the event reports "active".
+      const status = received.find((e) => e.type === "usage_ranking_status");
+      expect(status?.status).toBe("active");
+      subscription.unsubscribe();
+    } finally {
+      await server.close();
+    }
+  });
+
   it("delivers usage_ranking_status on enable with the graph's rev and the caller's graphKey", async () => {
     const runtime = ratel();
     await runtime.tools.register({

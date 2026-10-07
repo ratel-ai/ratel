@@ -25,6 +25,7 @@ from ratel_ai import (
     SkillCatalog,
     ToolCatalog,
 )
+from ratel_ai.catalog import _ranking_status_event
 from ratel_ai.runtime_events import (
     _PRODUCT_FACT_FIELDS,
     _PRODUCT_FACT_SUFFIXES,
@@ -796,6 +797,59 @@ async def test_usage_cluster_policy_changed_reports_built_vs_active_similarity()
     assert drift["built_similarity"] == pytest.approx(0.7)
     assert drift["active_similarity"] == pytest.approx(0.9)
     subscription.unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_native_policy_drift_is_reported_as_usage_ranking_status_active(
+    delayed_embedding_endpoint: str,
+) -> None:
+    tools = ToolCatalog(
+        method="semantic",
+        embedding={"url": delayed_embedding_endpoint, "model": "test-model"},
+    )
+    await tools.register(
+        ExecutableTool(
+            id="gh_run_list",
+            name="gh_run_list",
+            description="List CI workflow runs and whether the build passed",
+            execute=lambda _a: "ok",
+        )
+    )
+    # Clustered at the default similarity (0.7), now served under 0.9. The
+    # rebuild stamps centroids from this model, so only the policy differs.
+    tools.experimental_enable_adaptive_ranking(
+        _known_cluster_graph(), learn=False, cluster_similarity=0.9
+    )
+    await tools.experimental_rebuild_intent_graph()
+    assert tools.experimental_adaptive_ranking_status == "active: policy drift"
+
+    events = RuntimeEvents([tools])
+    received: list[dict[str, object]] = []
+    subscription = events.subscribe(lambda batch: received.extend(batch))
+    await subscription.flush()
+
+    # Ranking still runs under drift, so the event reports "active".
+    status = next(e for e in received if e["type"] == "usage_ranking_status")
+    assert status["status"] == "active"
+    subscription.unsubscribe()
+
+
+@pytest.mark.parametrize(
+    ("native", "expected"),
+    [
+        ("active", "active"),
+        ("active: policy drift", "active"),
+        ("paused: model mismatch", "paused"),
+        ("paused: dim mismatch", "paused"),
+        ("unknown", "unknown"),
+        ("inactive", "inactive"),
+    ],
+)
+def test_usage_ranking_status_collapses_the_native_status_string(
+    native: str, expected: str
+) -> None:
+    event = _ranking_status_event("enabled", (native, None, None, None), None, None, True)
+    assert event["status"] == expected
 
 
 @pytest.mark.asyncio

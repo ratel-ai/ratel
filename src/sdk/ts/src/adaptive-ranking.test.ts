@@ -692,6 +692,28 @@ function fakeNative(state: { status: string }) {
   };
 }
 
+describe("usage_ranking_status collapses the native status string", () => {
+  it.each([
+    ["active", "active"],
+    ["active: policy drift", "active"],
+    ["paused: model mismatch", "paused"],
+    ["paused: dim mismatch", "paused"],
+    ["unknown", "unknown"],
+    ["inactive", "inactive"],
+  ])("native %j reports %j", (native, expected) => {
+    const reg = new ToolRegistry();
+    const recorded: Array<Record<string, unknown>> = [];
+    (reg as unknown as { native: unknown }).native = {
+      ...fakeNative({ status: native }),
+      recordEvent: (event: Record<string, unknown>) => recorded.push(event),
+    };
+    reg.experimentalEnableAdaptiveRanking(new IntentGraph(), { warnOnModelMismatch: false });
+
+    const status = recorded.find((e) => e.type === "usage_ranking_status");
+    expect(status?.status).toBe(expected);
+  });
+});
+
 describe("rebuildOnModelChange", () => {
   it("recovers a paused graph on the next dense search when enabled", async () => {
     const reg = new ToolRegistry();
