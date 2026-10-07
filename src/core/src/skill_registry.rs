@@ -2151,6 +2151,36 @@ mod tests {
         )));
     }
 
+    /// Regression: the query was stemmed twice, so a word whose stem is not
+    /// stable under a second pass ("codebase", "database") never matched. The
+    /// skill-side twin of the tool registry's test; `a-mail` wins the id
+    /// tiebreak in hybrid unless BM25 lifts the target.
+    #[test]
+    fn a_stem_unstable_word_matches_skills_in_bm25_and_hybrid() {
+        for word in ["codebase", "database"] {
+            let mut reg = with_embedder(Arc::new(StubEmbedder));
+            reg.register(skill("a-mail", "a-mail", "send an email", &[]));
+            reg.register(skill(
+                "z-target",
+                "z-target",
+                &format!("{word} {word} {word}"),
+                &[],
+            ));
+            reg.build_embeddings().unwrap();
+            for method in [SearchMethod::Bm25, SearchMethod::Hybrid] {
+                let hits = reg
+                    .search_with_method(word, 5, Origin::Direct, method)
+                    .unwrap();
+                assert_eq!(
+                    hits.first().map(|h| h.skill_id.as_str()),
+                    Some("z-target"),
+                    "{word:?} via {method:?}: {:?}",
+                    hits.iter().map(|h| &h.skill_id).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
     // ---- usage ranking on the dense paths (ADR-0014) -----------------------
     // Twins of the ToolRegistry battery: the skill registry runs its own copy of
     // `usage_arm`/`semantic_search_traced`/`rebuild_intent_graph`, so the

@@ -14,6 +14,10 @@ categories = ["text-processing", "algorithms"]
 
 [dependencies]
 bm25 = "2.3"
+# The BM25 tokenizer's own normalization and word splitting, reused so
+# `engine_query` hands the engine words at exactly its granularity.
+deunicode = "1.6"
+unicode-segmentation = "1.13"
 # Id-keyed, insertion-ordered corpus storage: `register` replaces in place so a
 # re-registered id never duplicates (see ToolRegistry/DenseCache, RAT-378).
 indexmap = "2"
