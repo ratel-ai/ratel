@@ -1696,6 +1696,7 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "candle-transformers",
+ "deunicode",
  "hf-hub",
  "indexmap",
  "serde",
@@ -1705,6 +1706,7 @@ dependencies = [
  "tempfile",
  "tokenizers",
  "ulid",
+ "unicode-segmentation",
  "ureq",
 ]
 
