@@ -6,9 +6,8 @@ import type {
   ToolCatalog,
 } from "./catalog.js";
 import { compactDescription } from "./compact.js";
-import { newRuntimeEventId } from "./runtime-events.js";
 import type { SkillCatalog } from "./skill-catalog.js";
-import { recordAuthNeeded, upstreamFromToolId } from "./telemetry.js";
+import { recordAuthNeeded, runtimeEventProjection, upstreamFromToolId } from "./telemetry.js";
 
 /**
  * Wire id (`"search_capabilities"`) of the discovery capability tool built by
@@ -372,7 +371,7 @@ export async function runCapabilitiesSearch(
       hits: toolHits.length,
       took_ms: Date.now() - startedAt,
     },
-    { eventId: newRuntimeEventId(), ...(turnId === undefined ? {} : { turnId }) },
+    runtimeEventProjection(turnId),
   );
 
   const order: string[] = [];

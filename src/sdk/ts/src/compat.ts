@@ -14,7 +14,7 @@
 
 import { formatUpstreamLine, type UpstreamServerInfo } from "./capabilities.js";
 import type { ExecutableTool, ToolCatalog } from "./catalog.js";
-import { newRuntimeEventId } from "./runtime-events.js";
+import { runtimeEventProjection } from "./telemetry.js";
 
 /** @deprecated Use `SEARCH_CAPABILITIES_ID` (`"search_capabilities"`). */
 export const SEARCH_TOOLS_ID = "search_tools" as const;
@@ -155,7 +155,7 @@ export function searchToolsTool(
           hits: hits.length,
           took_ms: Date.now() - startedAt,
         },
-        { eventId: newRuntimeEventId(), ...(turnId === undefined ? {} : { turnId }) },
+        runtimeEventProjection(turnId),
       );
       const order: string[] = [];
       const groups = new Map<string, SearchToolsGroup>();
