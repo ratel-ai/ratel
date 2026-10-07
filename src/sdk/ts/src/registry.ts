@@ -36,25 +36,36 @@ import { withTurnContext } from "./turn.js";
 
 export { IntentGraph };
 
+/** One registry's `learn` for a graph, held weakly so a catalog dropped without
+ * disable can still be collected. */
+interface RegistryLearn {
+  readonly registry: WeakRef<object>;
+  readonly learn: boolean;
+}
+
 /** The `learn` value each registry enabled an `IntentGraph` with, per graph
  * (ADR-0014's "same graph on the tool and skill catalog" pattern). Keyed by
  * registry so re-enabling one registry is never compared against itself, and
- * one registry's disable never forgets another's entry. Weakly keyed by graph
- * so an unreferenced graph is never pinned alive by this bookkeeping. */
-const graphLearnByRegistry = new WeakMap<IntentGraph, Map<object, boolean>>();
+ * one registry's disable never forgets another's entry. Weak on both levels, as
+ * in Python: an unreferenced graph or registry is never pinned alive by this
+ * bookkeeping, and a collected registry's `learn` no longer counts. */
+const graphLearnByRegistry = new WeakMap<IntentGraph, RegistryLearn[]>();
+
+/** The live entries for `graph`, other than `registry`'s own. */
+function otherLiveEntries(graph: IntentGraph, registry: object): RegistryLearn[] {
+  return (graphLearnByRegistry.get(graph) ?? []).filter((entry) => {
+    const other = entry.registry.deref();
+    return other !== undefined && other !== registry;
+  });
+}
 
 /** Record `registry` enabling `graph` with `learn`, and when `warn` is set,
- * warn once if another registry sharing `graph` was enabled with a different
- * value. */
+ * warn once if another live registry sharing `graph` was enabled with a
+ * different value. */
 function noteGraphLearn(graph: IntentGraph, registry: object, learn: boolean, warn: boolean): void {
-  let byRegistry = graphLearnByRegistry.get(graph);
-  if (!byRegistry) {
-    byRegistry = new Map();
-    graphLearnByRegistry.set(graph, byRegistry);
-  }
-  byRegistry.delete(registry);
-  const mismatch = [...byRegistry.values()].some((other) => other !== learn);
-  byRegistry.set(registry, learn);
+  const others = otherLiveEntries(graph, registry);
+  const mismatch = others.some((other) => other.learn !== learn);
+  graphLearnByRegistry.set(graph, [...others, { registry: new WeakRef(registry), learn }]);
   if (warn && mismatch) {
     console.warn(
       "ratel: this intent graph is enabled with learn: true on one catalog and " +
@@ -66,7 +77,9 @@ function noteGraphLearn(graph: IntentGraph, registry: object, learn: boolean, wa
 
 /** Drop `registry`'s entry for `graph`, leaving other registries' intact. */
 function forgetGraphLearn(graph: IntentGraph, registry: object): void {
-  graphLearnByRegistry.get(graph)?.delete(registry);
+  if (graphLearnByRegistry.has(graph)) {
+    graphLearnByRegistry.set(graph, otherLiveEntries(graph, registry));
+  }
 }
 
 /** The enable-time misconfiguration warnings that depend only on the options

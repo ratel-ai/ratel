@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **A catalog dropped without `experimentalDisableAdaptiveRanking` no longer stays in memory or triggers a false learn-mismatch warning.** The per-graph `learn` bookkeeping held each registry strongly while its graph lived; it now holds them weakly, as the Python SDK does
 - **A `experimentalDisableAdaptiveRanking` / `experimentalRebuildIntentGraph` with no graph attached emits no `usage_ranking_status`.** It used to report `inactive` with reason `disabled` / `rebuilt` for a change that never happened
 - **A trace sink or event subscriber attached after enable now receives `usage_ranking_status`.** The current status (with the last trigger's `reason`) is re-reported whenever one is installed while a graph is attached, so a consumer no longer has to subscribe before `experimentalEnableAdaptiveRanking` to see it
 - **A rejected `experimentalEnableAdaptiveRanking` leaves `learn` untouched.** A re-enable refused as "registry busy" used to store its `learn` and usage policy anyway, so the next trace-sink install could start learning into a `learn: false` consumer graph

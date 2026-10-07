@@ -1,5 +1,7 @@
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import {
   EmbedderError,
@@ -691,6 +693,37 @@ function fakeNative(state: { status: string }) {
     searchWithOptionsAsync: async () => [],
   };
 }
+
+/** A full garbage collection, without launching Node with `--expose-gc`. */
+function collectGarbage(): () => void {
+  setFlagsFromString("--expose-gc");
+  return runInNewContext("gc") as () => void;
+}
+
+describe("learn-mismatch bookkeeping", () => {
+  it("forgets a catalog dropped without disable once it is collected", async () => {
+    const gc = collectGarbage();
+    const graph = new IntentGraph();
+    (() => {
+      new ToolRegistry().experimentalEnableAdaptiveRanking(graph, { learn: true });
+    })();
+    // A WeakRef is kept alive for the rest of the job that created it.
+    for (let i = 0; i < 3; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      gc();
+    }
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      new SkillRegistry().experimentalEnableAdaptiveRanking(graph, { learn: false });
+      const mismatch = warn.mock.calls.filter(([message]) =>
+        String(message).includes("learn: true on one catalog"),
+      );
+      expect(mismatch).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
 
 describe("usage_ranking_status collapses the native status string", () => {
   it.each([
