@@ -38,7 +38,8 @@
 //! in between two phases instead: [`ToolRegistry::rank_candidates`] /
 //! [`ToolRegistry::complete_custom_search`] to rank the whole catalog, and
 //! [`ToolRegistry::stage_one`] / [`ToolRegistry::complete_rerank`] to rerank
-//! (ADR-0027). [`JevRanker`] is the Jev client the SDKs wrap into such a
+//! (ADR-0027). [`JevRanker`] (Jev) and [`OpenAIDecisionRanker`] (OpenAI's
+//! Decisions API) are the decision-model clients the SDKs wrap into such a
 //! function.
 //!
 //! Semantic and hybrid searches rank against an embedding cache built by
@@ -91,6 +92,7 @@
 #![warn(missing_docs)]
 
 mod artifact_warm;
+mod choice_ranker;
 mod dense_cache;
 mod dense_search;
 mod embedding;
@@ -103,6 +105,7 @@ mod fusion;
 mod indexing;
 mod jev;
 mod method;
+mod openai_decision;
 mod rerank;
 mod search;
 mod skill;
@@ -120,6 +123,7 @@ mod harness;
 mod test_support;
 
 pub use artifact_warm::{ArtifactWarmError, OnArtifactMiss, ParseOnArtifactMissError};
+pub use choice_ranker::{CandidateKind, RankerError};
 pub use dense_cache::WarmError;
 pub use embedding::EmbedderError;
 pub use embedding_artifact::{ArtifactError, merge_embedding_artifacts};
@@ -128,10 +132,13 @@ pub use fact::{Fact, ParsePinModeError, PinMode};
 pub use fact_registry::{FactHit, FactRegistry};
 pub use fusion::{DenseWeight, InvalidDenseWeight};
 pub use jev::{
-    CandidateKind, DEFAULT_JEV_API_KEY_ENV, DEFAULT_JEV_MODEL, DEFAULT_JEV_URL, JevConfig,
-    JevError, JevRanker,
+    DEFAULT_JEV_API_KEY_ENV, DEFAULT_JEV_MODEL, DEFAULT_JEV_URL, JevConfig, JevError, JevRanker,
 };
 pub use method::{ParseSearchMethodError, SearchMethod};
+pub use openai_decision::{
+    DEFAULT_OPENAI_DECISION_API_KEY_ENV, DEFAULT_OPENAI_DECISION_MODEL,
+    DEFAULT_OPENAI_DECISION_URL, OpenAIDecisionConfig, OpenAIDecisionRanker,
+};
 pub use rerank::{RankCandidate, RerankOutcome, Reranker, SearchError, SearchOptions, StageOne};
 pub use search::Bm25Params;
 pub use skill::Skill;

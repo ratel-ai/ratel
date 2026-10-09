@@ -313,16 +313,18 @@ export function mapArtifactBuildError(error: unknown): unknown {
 /**
  * A retrieve or rerank function failed (ADR-0027). Throw it from your own
  * `retrieveFn` / `rerankerFn` to control what a search does with the failure;
- * the Jev plugin ({@link ratelJevPlugin}) throws it for every Jev failure.
+ * the Jev plugin ({@link ratelJevPlugin}) and the OpenAI Decisions plugin
+ * ({@link ratelOpenAIDecisionPlugin}) throw it for every failure.
  *
  * As a **reranker**, a `RetrieverError` with `transient: true` does not fail
  * the search: it returns the first stage's order and records
  * `rerank_fallback:<code>` on the trace. Anything else a function throws —
  * including a non-transient `RetrieverError` — fails the search.
  *
- * Jev's codes: `"Config"`, `"Unauthorized"`, `"InvalidRequest"` (not
+ * The plugins' codes: `"Config"`, `"Unauthorized"`, `"InvalidRequest"` (not
  * transient); `"RateLimited"`, `"Overloaded"`, `"Timeout"`, `"Unreachable"`,
- * `"Http"`, `"Malformed"` (transient).
+ * `"Http"`, `"Malformed"`, and `"Refused"` (the Decisions model declined to
+ * answer) (transient).
  */
 export class RetrieverError extends Error {
   /** Stable machine-readable discriminant; prefer it over parsing `message`. */

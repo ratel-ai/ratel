@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `ratel_openai_decision_plugin(url=None, api_key_env=None, model=None)` returns a `RetrieverPlugin` for OpenAI's Decisions API (public beta; key in `OPENAI_API_KEY`, model `gpt-6-luna`). It ranks tools and skills like the Jev plugin, with the same limits, and adds the `RetrieverError` code `"Refused"` (transient) for a model refusal. The first plugin made emits a one-time `ExperimentalWarning` (`RATEL_EXPERIMENTAL_SILENCE=1` silences it). It sends the query and each candidate's searchable text to OpenAI.
+
 ### Fixed
 
 - **A disable racing an enable on another thread no longer leaves the catalog's state out of step with native.** The bookkeeping, status read and `usage_ranking_status` emit now run under the same lock as the native call, so a concurrent enable can't be overwritten by a disable's resets
