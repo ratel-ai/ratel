@@ -20,6 +20,7 @@ from ratel_ai import (
     ToolCatalog,
     ratel_jev_plugin,
 )
+from ratel_ai._native import JevError, RankerError
 
 KEY_ENV = "RATEL_SDK_PY_JEV_TEST_KEY"
 
@@ -230,3 +231,15 @@ async def test_an_unset_key_fails_before_any_request(mock: MockJev) -> None:
         await catalog.search_async("q", 2)
     assert (caught.value.code, caught.value.transient) == ("Config", False)
     assert mock.seen == []
+
+
+async def test_the_native_error_is_still_a_jev_error_and_a_ranker_error(mock: MockJev) -> None:
+    mock.reply(401, {"error": {"message": "bad key"}})
+    catalog = ToolCatalog(method="custom", retrieve_fn=_jev(mock).retrieve)
+    await catalog.register(TOOLS)
+    with pytest.raises(RetrieverError) as caught:
+        await catalog.search_async("q", 2)
+    cause = caught.value.__cause__
+    assert isinstance(cause, JevError), "code catching JevError keeps working"
+    assert isinstance(cause, RankerError)
+    assert str(cause).startswith("jev rejected the key (401)")
