@@ -135,6 +135,25 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  examples/parallel-search:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
+      '@ratel-ai/sdk':
+        specifier: workspace:*
+        version: link:../../src/sdk/ts
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.2
+      tsx:
+        specifier: ^4.20.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   examples/s3-support-adaptive-ranking:
     dependencies:
       '@ratel-ai/sdk':
