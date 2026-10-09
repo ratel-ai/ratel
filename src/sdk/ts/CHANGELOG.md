@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `ratelOpenAIDecisionPlugin({ url?, apiKeyEnv?, model? })` returns `{ retrieve, rerank }` for OpenAI's Decisions API (public beta; key in `OPENAI_API_KEY`, model `gpt-6-luna`). It ranks tools and skills like the Jev plugin, with the same limits, and adds the `RetrieverError` code `"Refused"` (transient) for a model refusal. The first plugin made prints a one-time beta warning (`RATEL_EXPERIMENTAL_SILENCE=1` silences it). It sends the query and each candidate's searchable text to OpenAI.
+
 ### Fixed
 
 - **A catalog dropped without `experimentalDisableAdaptiveRanking` no longer stays in memory or triggers a false learn-mismatch warning.** The per-graph `learn` bookkeeping held each registry strongly while its graph lived; it now holds them weakly, as the Python SDK does

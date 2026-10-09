@@ -241,7 +241,9 @@ gets `(query, candidates: { id, kind, text }[], topK)` and returns `{ id, score 
 nothing about the model behind it. `ratelJevPlugin()` (Python `ratel_jev_plugin`) wraps Jev
 (TypeSafe AI, the user's own `TYPESAFE_API_KEY`) into `{ retrieve, rerank }`; it **sends the query
 and candidate text off-process**, so do not recommend it to a user whose tool descriptions cannot
-leave their network. A built-in `reranker: { method, depth }` re-scores the first stage's top
+leave their network. `ratelOpenAIDecisionPlugin()` (Python `ratel_openai_decision_plugin`) does the
+same for OpenAI's Decisions API (public beta, `gpt-6-luna`, the user's own `OPENAI_API_KEY`) and
+sends the same data to OpenAI. A built-in `reranker: { method, depth }` re-scores the first stage's top
 candidates with a different local method (`bm25`, `semantic`, `hybrid`). Neither reranker ever adds
 a tool the first stage missed
 ([ADR-0027](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-custom-retriever-and-reranker-functions.md)).

@@ -2,18 +2,17 @@
 //! (ADR-0027).
 //!
 //! Jev answers a `choice` question over named options with a probability per
-//! option, so one call ranks up to [`MAX_OPTIONS`] candidates. A larger
-//! candidate set runs as a tournament: groups that fit one question are ranked
-//! in parallel, their winners advance, and the last round fits one question.
+//! option. Only that wire format lives here; the limits, the tournament for
+//! large candidate sets and the error type are shared with the other
+//! decision-model clients in [`crate::choice_ranker`].
 //!
 //! Nothing in the registries calls this: search knows only caller-supplied
 //! ranking functions ([`crate::RankCandidate`]). The SDKs wrap [`JevRanker`]
 //! into such a function, so a change to Jev's interface stays in this file.
 
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::time::Duration;
+use std::collections::HashMap;
 
+use crate::choice_ranker::{self, AskChoice, CandidateKind, RankerError, from_probabilities};
 use crate::rerank::RankCandidate as Candidate;
 
 use serde::Deserialize;
@@ -27,63 +26,8 @@ pub const DEFAULT_JEV_API_KEY_ENV: &str = "TYPESAFE_API_KEY";
 /// The Jev model unless overridden.
 pub const DEFAULT_JEV_MODEL: &str = "jev-latest";
 
-/// Options per question. Jev accepts 255; 150 keeps each question well inside
-/// its token budget.
-const MAX_OPTIONS: usize = 150;
-
-/// Characters of option text per question, and per option. A question's
-/// options and the query must fit Jev's 32k-token budget.
-const MAX_QUESTION_CHARS: usize = 80_000;
-const MAX_OPTION_CHARS: usize = 2_000;
-
-/// Below this probability Jev is saying "not this one": such options pad
-/// `top_k` as filler rather than being picks, so a ranking drops them (the
-/// best pick always stays).
-const MIN_PROBABILITY: f32 = 0.01;
-
-/// How many tournament groups run at once.
-const TOURNAMENT_CONCURRENCY: usize = 6;
-
-/// Jev answers one question in ~100–300 ms; a call that takes this long is
-/// broken, not slow.
-const JEV_TIMEOUT_SECS: u64 = 15;
-
-/// A Jev answer is a probability map; anything near this size is not one.
-const JEV_RESPONSE_LIMIT_BYTES: u64 = 4 * 1024 * 1024;
-
-/// What kind of catalog item a Jev question picks among. It sets the
-/// question's wording, so the model judges a tool, a skill or a fact as what
-/// it is, and the question's id in Jev's request and answer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum CandidateKind {
-    /// A callable tool: the model picks the one to call.
-    Tool,
-    /// A skill: the model picks the playbook whose instructions help most.
-    Skill,
-    /// A fact: the model picks the piece of grounding most relevant.
-    Fact,
-}
-
-impl CandidateKind {
-    /// The singular noun: `"tool"`, `"skill"`, `"fact"`. Also the question id.
-    #[must_use]
-    pub fn noun(&self) -> &'static str {
-        match self {
-            CandidateKind::Tool => "tool",
-            CandidateKind::Skill => "skill",
-            CandidateKind::Fact => "fact",
-        }
-    }
-
-    fn instructions(&self) -> &'static str {
-        match self {
-            CandidateKind::Tool => "Which tool should be called to handle this request?",
-            CandidateKind::Skill => "Which skill's instructions best help with this request?",
-            CandidateKind::Fact => "Which fact is most relevant to this request?",
-        }
-    }
-}
+/// A Jev ranking failed: the error every decision-model client shares.
+pub type JevError = RankerError;
 
 /// Which Jev endpoint, key and model a registry uses.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,136 +90,6 @@ impl JevConfig {
     }
 }
 
-/// A Jev ranking failed. [`code`](Self::code) is the stable name the
-/// SDKs expose; [`is_transient`](Self::is_transient) splits failures a retry
-/// may cure from misconfiguration that will fail every time.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum JevError {
-    /// Misconfigured before any request was sent — e.g. the key's
-    /// environment variable is not set.
-    Config {
-        /// What is wrong.
-        message: String,
-    },
-    /// Jev rejected the key (401/403).
-    Unauthorized {
-        /// The HTTP status.
-        status: u16,
-    },
-    /// Jev refused the request itself (400/404/413/422): an unknown model,
-    /// options too long, a malformed question. Retrying sends the same thing.
-    InvalidRequest {
-        /// The HTTP status.
-        status: u16,
-        /// Jev's explanation, when it gave one.
-        message: String,
-    },
-    /// Jev is rate limiting (429).
-    RateLimited {
-        /// Seconds to wait, from `Retry-After`, when Jev sent one.
-        retry_after_secs: Option<u64>,
-    },
-    /// Jev is up but cannot take the request now (503/529).
-    Overloaded {
-        /// The HTTP status.
-        status: u16,
-    },
-    /// The request timed out, locally or at a gateway (504).
-    Timeout,
-    /// Jev could not be reached: DNS, TLS, connection refused, a bad gateway
-    /// (502).
-    Unreachable {
-        /// The underlying error.
-        source: String,
-    },
-    /// Jev answered with another non-success status.
-    Http {
-        /// The HTTP status.
-        status: u16,
-        /// Jev's explanation, when it gave one.
-        message: String,
-    },
-    /// Jev answered success with something that is not a ranking.
-    Malformed {
-        /// What could not be read.
-        source: String,
-    },
-}
-
-impl JevError {
-    /// A stable, machine-readable discriminant for the SDKs.
-    #[must_use]
-    pub fn code(&self) -> &'static str {
-        match self {
-            JevError::Config { .. } => "Config",
-            JevError::Unauthorized { .. } => "Unauthorized",
-            JevError::InvalidRequest { .. } => "InvalidRequest",
-            JevError::RateLimited { .. } => "RateLimited",
-            JevError::Overloaded { .. } => "Overloaded",
-            JevError::Timeout => "Timeout",
-            JevError::Unreachable { .. } => "Unreachable",
-            JevError::Http { .. } => "Http",
-            JevError::Malformed { .. } => "Malformed",
-        }
-    }
-
-    /// Whether a later attempt may succeed. `Config`, `Unauthorized` and
-    /// `InvalidRequest` fail the same way every time, so a reranker raises
-    /// them instead of silently falling back on every search.
-    #[must_use]
-    pub fn is_transient(&self) -> bool {
-        !matches!(
-            self,
-            JevError::Config { .. }
-                | JevError::Unauthorized { .. }
-                | JevError::InvalidRequest { .. }
-        )
-    }
-
-    /// The HTTP status, when Jev answered with one.
-    #[must_use]
-    pub fn status(&self) -> Option<u16> {
-        match self {
-            JevError::Unauthorized { status }
-            | JevError::InvalidRequest { status, .. }
-            | JevError::Overloaded { status }
-            | JevError::Http { status, .. } => Some(*status),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for JevError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            JevError::Config { message } => write!(f, "jev config: {message}"),
-            JevError::Unauthorized { status } => write!(
-                f,
-                "jev rejected the key ({status}); check the key its env var holds"
-            ),
-            JevError::InvalidRequest { status, message } => {
-                write!(f, "jev refused the request ({status}): {message}")
-            }
-            JevError::RateLimited { retry_after_secs } => match retry_after_secs {
-                Some(secs) => write!(f, "jev is rate limiting (429); retry in {secs}s"),
-                None => write!(f, "jev is rate limiting (429); retry later"),
-            },
-            JevError::Overloaded { status } => {
-                write!(f, "jev is overloaded ({status}); retry later")
-            }
-            JevError::Timeout => write!(f, "jev request timed out"),
-            JevError::Unreachable { source } => write!(f, "could not reach jev: {source}"),
-            JevError::Http { status, message } => {
-                write!(f, "jev returned HTTP {status}: {message}")
-            }
-            JevError::Malformed { source } => write!(f, "malformed jev response: {source}"),
-        }
-    }
-}
-
-impl std::error::Error for JevError {}
-
 #[derive(Deserialize)]
 struct JevResponse {
     answers: HashMap<String, JevChoice>,
@@ -299,16 +113,9 @@ impl JevRanker {
     /// A ranker for `config`; the key is read from its env var at call time.
     #[must_use]
     pub fn new(config: JevConfig) -> Self {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(Duration::from_secs(JEV_TIMEOUT_SECS)))
-            // Read the status ourselves: error bodies carry Jev's explanation
-            // and 429 carries Retry-After.
-            .http_status_as_error(false)
-            .build()
-            .into();
         Self {
             config,
-            agent,
+            agent: choice_ranker::agent(),
             key_override: None,
         }
     }
@@ -320,199 +127,10 @@ impl JevRanker {
         self
     }
 
-    /// Read the key at call time; an unset variable is a clear `Config` error,
-    /// not a downstream 401.
-    fn api_key(&self) -> Result<String, JevError> {
-        if let Some(key) = &self.key_override {
-            return Ok(key.clone());
-        }
-        let var = &self.config.api_key_env;
-        std::env::var(var).map_err(|_| JevError::Config {
-            message: format!("{var} is not set; put the Jev key in it"),
-        })
-    }
-
-    /// A transport failure: no HTTP status to read.
-    fn classify_transport(e: ureq::Error) -> JevError {
-        match e {
-            ureq::Error::Timeout(_) => JevError::Timeout,
-            other => JevError::Unreachable {
-                source: other.to_string(),
-            },
-        }
-    }
-
-    /// One `choice` question over `candidates` (which fit one question):
-    /// every candidate with its probability, best first, ties in input order.
-    fn ask(
-        &self,
-        key: &str,
-        query: &str,
-        candidates: &[&Candidate],
-        kind: CandidateKind,
-    ) -> Result<Vec<(String, f32)>, JevError> {
-        // Index keys (`t0`…) rather than ids: an id may be long or odd, and the
-        // option name is part of what Jev reads.
-        let criteria: serde_json::Map<String, serde_json::Value> = candidates
-            .iter()
-            .enumerate()
-            .map(|(i, c)| (format!("t{i}"), option_text(c).into()))
-            .collect();
-        let body = serde_json::json!({
-            "model": self.config.model,
-            "state": query,
-            "questions": {
-                kind.noun(): {
-                    "type": "choice",
-                    "instructions": kind.instructions(),
-                    "criteria": criteria
-                }
-            }
-        });
-        let url = format!("{}/v1/systemone", self.config.url);
-        let mut resp = self
-            .agent
-            .post(&url)
-            .header("content-type", "application/json")
-            .header("authorization", &format!("Bearer {key}"))
-            .send_json(&body)
-            .map_err(Self::classify_transport)?;
-        let status = resp.status().as_u16();
-        let retry_after = retry_after_secs(resp.headers());
-        let text = resp
-            .body_mut()
-            .with_config()
-            .limit(JEV_RESPONSE_LIMIT_BYTES)
-            .read_to_string();
-        if !(200..300).contains(&status) {
-            // The status decides the error; an unreadable error body only
-            // costs the explanation.
-            let message = text.map(|t| error_message(&t)).unwrap_or_default();
-            return Err(classify_status(status, message, retry_after));
-        }
-        let text = text.map_err(|e| match e {
-            ureq::Error::Timeout(_) => JevError::Timeout,
-            other => JevError::Malformed {
-                source: format!("unreadable response body: {other}"),
-            },
-        })?;
-        let parsed: JevResponse = serde_json::from_str(&text).map_err(|e| JevError::Malformed {
-            source: e.to_string(),
-        })?;
-        let answer = parsed
-            .answers
-            .get(kind.noun())
-            .ok_or_else(|| JevError::Malformed {
-                source: format!("no answer to the \"{}\" question", kind.noun()),
-            })?;
-        Ok(from_probabilities(&answer.probabilities, candidates))
-    }
-
-    /// Rank more candidates than one question holds: rank groups in parallel,
-    /// advance the best of each, and repeat until the field fits one question.
-    ///
-    /// Winners are drawn round-robin by rank — every group's best, then every
-    /// group's second, … — until one question is full (`MAX_OPTIONS` options,
-    /// `MAX_QUESTION_CHARS` characters), so room a small group cannot use goes
-    /// to the others and the final question holds as many contenders as it
-    /// can. A group advances at most `keep` (the caller's `top_k`: a group's
-    /// `keep + 1`-th cannot make the final cut) and at most all but one of its
-    /// members, so every round shrinks the field. When even one winner per
-    /// group would not fit one question, each group advances only its best and
-    /// another round runs.
-    fn tournament(
-        &self,
-        key: &str,
-        query: &str,
-        candidates: Vec<&Candidate>,
-        keep: usize,
-        kind: CandidateKind,
-    ) -> Result<Vec<(String, f32)>, JevError> {
-        let mut field = candidates;
-        loop {
-            if fits_one_question(&field) {
-                return self.ask(key, query, &field, kind);
-            }
-            let groups = split_into_questions(&field);
-            let mut ranked_groups: Vec<Vec<&Candidate>> = Vec::with_capacity(groups.len());
-            for batch in groups.chunks(TOURNAMENT_CONCURRENCY) {
-                let results: Vec<Result<Vec<(String, f32)>, JevError>> =
-                    std::thread::scope(|scope| {
-                        let handles: Vec<_> = batch
-                            .iter()
-                            .map(|group| scope.spawn(|| self.ask(key, query, group, kind)))
-                            .collect();
-                        handles
-                            .into_iter()
-                            .map(|h| {
-                                h.join().unwrap_or_else(|_| {
-                                    Err(JevError::Malformed {
-                                        source: "a tournament round panicked".into(),
-                                    })
-                                })
-                            })
-                            .collect()
-                    });
-                for (group, result) in batch.iter().zip(results) {
-                    let by_id: HashMap<&str, &Candidate> =
-                        group.iter().map(|c| (c.id.as_str(), *c)).collect();
-                    let cap = keep.min(group.len().saturating_sub(1)).max(1);
-                    let best: Vec<&Candidate> = result?
-                        .iter()
-                        .filter_map(|(id, _)| by_id.get(id.as_str()).copied())
-                        .take(cap)
-                        .collect();
-                    ranked_groups.push(best);
-                }
-            }
-            let winners = advance(&ranked_groups);
-            // Every group of two or more lost at least one member, and a field
-            // that needs a tournament has such a group, so this cannot trigger;
-            // it guards the loop against a future change to `advance`.
-            if winners.len() >= field.len() {
-                return Err(JevError::Malformed {
-                    source: "tournament made no progress".into(),
-                });
-            }
-            field = winners;
-        }
-    }
-}
-
-/// The candidates that go on to the next round, from each group's ranked,
-/// capped contenders: round-robin by rank while one question has room, or just
-/// each group's best when even those do not fit one question.
-fn advance<'a>(ranked_groups: &[Vec<&'a Candidate>]) -> Vec<&'a Candidate> {
-    let firsts: Vec<&Candidate> = ranked_groups
-        .iter()
-        .filter_map(|g| g.first().copied())
-        .collect();
-    if !fits_one_question(&firsts) {
-        return firsts;
-    }
-    let (mut winners, mut chars) = (Vec::new(), 0);
-    let depth = ranked_groups.iter().map(Vec::len).max().unwrap_or(0);
-    for rank in 0..depth {
-        for group in ranked_groups {
-            let Some(c) = group.get(rank).copied() else {
-                continue;
-            };
-            let len = option_chars(c);
-            if winners.len() == MAX_OPTIONS || chars + len > MAX_QUESTION_CHARS {
-                return winners;
-            }
-            winners.push(c);
-            chars += len;
-        }
-    }
-    winners
-}
-
-impl JevRanker {
     /// Rank `candidates` for `query`: `(id, probability)` best first, every id
-    /// one of `candidates`, at most `top_k`. Picks below [`MIN_PROBABILITY`]
-    /// are dropped, except the best one. `kind` is what the candidates
-    /// are; Jev is asked about tools or skills accordingly.
+    /// one of `candidates`, at most `top_k`. Picks below probability 0.01 are
+    /// dropped, except the best one. `kind` is what the candidates are; Jev is
+    /// asked about tools or skills accordingly.
     ///
     /// # Errors
     /// [`JevError`] when the key is unset, Jev refuses the request, or it
@@ -527,129 +145,55 @@ impl JevRanker {
         if candidates.is_empty() || top_k == 0 {
             return Ok(Vec::new());
         }
-        let key = self.api_key()?;
-        let mut seen = HashSet::new();
-        let unique: Vec<&Candidate> = candidates
+        let key = choice_ranker::api_key(
+            self.key_override.as_deref(),
+            &self.config.api_key_env,
+            "Jev",
+        )?;
+        choice_ranker::rank(self, &key, query, candidates, top_k, kind)
+    }
+}
+
+impl AskChoice for JevRanker {
+    fn ask(
+        &self,
+        key: &str,
+        query: &str,
+        candidates: &[&Candidate],
+        kind: CandidateKind,
+    ) -> Result<Vec<(String, f32)>, RankerError> {
+        // Index keys (`t0`…) rather than ids: an id may be long or odd, and the
+        // option name is part of what Jev reads.
+        let criteria: serde_json::Map<String, serde_json::Value> = candidates
             .iter()
-            .filter(|c| seen.insert(c.id.as_str()))
+            .enumerate()
+            .map(|(i, c)| (format!("t{i}"), choice_ranker::option_text(c).into()))
             .collect();
-        let mut ranked = self.tournament(&key, query, unique, top_k.max(1), kind)?;
-        // Keep the best pick even when every probability is low (a large,
-        // uncertain field spreads probability thin), and drop the near-zero tail.
-        let mut position = 0;
-        ranked.retain(|(_, p)| {
-            position += 1;
-            position == 1 || *p >= MIN_PROBABILITY
+        let body = serde_json::json!({
+            "model": self.config.model,
+            "state": query,
+            "questions": {
+                kind.noun(): {
+                    "type": "choice",
+                    "instructions": kind.instructions(),
+                    "criteria": criteria
+                }
+            }
         });
-        ranked.truncate(top_k);
-        Ok(ranked)
+        let url = format!("{}/v1/systemone", self.config.url);
+        let text = choice_ranker::post_json(&self.agent, &url, key, &body)?;
+        let parsed: JevResponse =
+            serde_json::from_str(&text).map_err(|e| RankerError::Malformed {
+                source: e.to_string(),
+            })?;
+        let answer = parsed
+            .answers
+            .get(kind.noun())
+            .ok_or_else(|| RankerError::Malformed {
+                source: format!("no answer to the \"{}\" question", kind.noun()),
+            })?;
+        Ok(from_probabilities(&answer.probabilities, candidates))
     }
-}
-
-/// Map a non-2xx Jev status to its error.
-fn classify_status(status: u16, message: String, retry_after: Option<u64>) -> JevError {
-    match status {
-        401 | 403 => JevError::Unauthorized { status },
-        400 | 404 | 413 | 422 => JevError::InvalidRequest { status, message },
-        429 => JevError::RateLimited {
-            retry_after_secs: retry_after,
-        },
-        503 | 529 => JevError::Overloaded { status },
-        504 => JevError::Timeout,
-        502 => JevError::Unreachable {
-            source: format!("bad gateway (502): {message}"),
-        },
-        _ => JevError::Http { status, message },
-    }
-}
-
-/// `Retry-After` in seconds, when sent in that form.
-pub(crate) fn retry_after_secs(headers: &ureq::http::HeaderMap) -> Option<u64> {
-    headers
-        .get("retry-after")?
-        .to_str()
-        .ok()?
-        .trim()
-        .parse::<u64>()
-        .ok()
-}
-
-/// An error body's explanation: `{"error":{"message"}}`, `{"error":"…"}`,
-/// `{"detail":"…"}` or `{"message":"…"}`, else the start of the raw body.
-pub(crate) fn error_message(body: &str) -> String {
-    let parsed: Option<serde_json::Value> = serde_json::from_str(body).ok();
-    parsed
-        .as_ref()
-        .and_then(|v| {
-            v["error"]["message"]
-                .as_str()
-                .or_else(|| v["error"].as_str())
-                .or_else(|| v["detail"].as_str())
-                .or_else(|| v["message"].as_str())
-        })
-        .map(str::to_string)
-        .unwrap_or_else(|| body.chars().take(500).collect())
-}
-
-fn option_text(c: &Candidate) -> String {
-    c.text.chars().take(MAX_OPTION_CHARS).collect()
-}
-
-fn option_chars(c: &Candidate) -> usize {
-    c.text.chars().count().min(MAX_OPTION_CHARS)
-}
-
-fn fits_one_question(field: &[&Candidate]) -> bool {
-    field.len() <= MAX_OPTIONS
-        && field.iter().map(|c| option_chars(c)).sum::<usize>() <= MAX_QUESTION_CHARS
-}
-
-/// Cut `field` into consecutive groups that each fit one question.
-fn split_into_questions<'a>(field: &[&'a Candidate]) -> Vec<Vec<&'a Candidate>> {
-    let mut groups: Vec<Vec<&Candidate>> = Vec::new();
-    let mut current: Vec<&Candidate> = Vec::new();
-    let mut chars = 0;
-    for c in field {
-        let len = option_chars(c);
-        if !current.is_empty() && (current.len() == MAX_OPTIONS || chars + len > MAX_QUESTION_CHARS)
-        {
-            groups.push(std::mem::take(&mut current));
-            chars = 0;
-        }
-        current.push(c);
-        chars += len;
-    }
-    if !current.is_empty() {
-        groups.push(current);
-    }
-    groups
-}
-
-/// Map Jev's `t{i}` probabilities back to candidate ids: best first, ties in
-/// input order, non-finite values dropped, the rest clamped to `[0, 1]`.
-/// Options Jev did not score rank last at `0`.
-fn from_probabilities(
-    probs: &HashMap<String, f32>,
-    candidates: &[&Candidate],
-) -> Vec<(String, f32)> {
-    let mut ranked: Vec<(usize, f32)> = candidates
-        .iter()
-        .enumerate()
-        .filter_map(|(i, _)| match probs.get(&format!("t{i}")) {
-            Some(p) if p.is_finite() => Some((i, p.clamp(0.0, 1.0))),
-            Some(_) => None,
-            None => Some((i, 0.0)),
-        })
-        .collect();
-    ranked.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
-    ranked
-        .into_iter()
-        .map(|(i, p)| (candidates[i].id.clone(), p))
-        .collect()
 }
 
 #[cfg(test)]
@@ -657,9 +201,10 @@ mod tests {
     use std::io::Write;
     use std::net::TcpListener;
     use std::sync::{Arc, Mutex};
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     use super::*;
+    use crate::choice_ranker::{MAX_OPTION_CHARS, MAX_OPTIONS};
     use crate::test_support::{MockHttpRequest, read_http_request_full};
 
     /// An environment variable no test sets: tests inject the key instead.
@@ -1043,69 +588,6 @@ mod tests {
     }
 
     #[test]
-    fn codes_and_transience_split_misconfiguration_from_outages() {
-        let cases = [
-            (
-                JevError::Config {
-                    message: String::new(),
-                },
-                "Config",
-                false,
-            ),
-            (
-                JevError::Unauthorized { status: 401 },
-                "Unauthorized",
-                false,
-            ),
-            (
-                JevError::InvalidRequest {
-                    status: 422,
-                    message: String::new(),
-                },
-                "InvalidRequest",
-                false,
-            ),
-            (
-                JevError::RateLimited {
-                    retry_after_secs: None,
-                },
-                "RateLimited",
-                true,
-            ),
-            (JevError::Overloaded { status: 529 }, "Overloaded", true),
-            (JevError::Timeout, "Timeout", true),
-            (
-                JevError::Unreachable {
-                    source: String::new(),
-                },
-                "Unreachable",
-                true,
-            ),
-            (
-                JevError::Http {
-                    status: 500,
-                    message: String::new(),
-                },
-                "Http",
-                true,
-            ),
-            (
-                JevError::Malformed {
-                    source: String::new(),
-                },
-                "Malformed",
-                true,
-            ),
-        ];
-        for (error, code, transient) in cases {
-            assert_eq!(error.code(), code);
-            assert_eq!(error.is_transient(), transient, "{code}");
-        }
-        assert_eq!(JevError::Overloaded { status: 529 }.status(), Some(529));
-        assert_eq!(JevError::Timeout.status(), None);
-    }
-
-    #[test]
     fn a_non_ranking_answer_is_malformed() {
         let (url, _seen) = mock(
             Box::new(|_| (200, String::new(), r#"{"nope":true}"#.into())),
@@ -1147,23 +629,5 @@ mod tests {
     fn no_candidates_means_no_request() {
         let c = client("http://127.0.0.1:9");
         assert!(c.rank("q", &[], 5, CandidateKind::Tool).unwrap().is_empty());
-    }
-
-    #[test]
-    fn long_option_text_is_capped() {
-        let long = Candidate {
-            id: "a".into(),
-            text: "x".repeat(5_000),
-        };
-        assert_eq!(option_text(&long).len(), MAX_OPTION_CHARS);
-        let many: Vec<Candidate> = (0..60)
-            .map(|i| Candidate {
-                id: format!("c{i}"),
-                text: "y".repeat(MAX_OPTION_CHARS),
-            })
-            .collect();
-        let refs: Vec<&Candidate> = many.iter().collect();
-        assert!(!fits_one_question(&refs), "60 × 2,000 chars exceeds 80,000");
-        assert_eq!(split_into_questions(&refs).len(), 2);
     }
 }

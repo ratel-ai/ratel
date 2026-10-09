@@ -11,6 +11,8 @@ configurable-adaptive-ranking-ts/ Seed an intent graph from a baseline capture, 
 configurable-adaptive-ranking-python/ Seeding — the Python mirror
 jev-retriever-ts/ Jev as a retriever and reranker through retrieveFn / rerankerFn (TS)
 jev-retriever-python/ Jev retriever and reranker — the Python mirror
+openai-decision-retriever-ts/ OpenAI's Decisions API (beta) as a retriever and reranker (TS)
+openai-decision-retriever-python/ OpenAI Decisions retriever and reranker — the Python mirror
 s3-support-adaptive-ranking/ Live S3 intent graph storage smoke test (real AWS, manual-only) (TS)
 s3-support-adaptive-ranking-python/ Live S3 intent graph storage smoke test — the Python mirror
 ai-sdk/           Ratel + Vercel AI SDK — top-K filtering + capability tools in ToolLoopAgent.generate

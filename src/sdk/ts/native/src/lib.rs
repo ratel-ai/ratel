@@ -287,21 +287,43 @@ fn skill_hits(hits: Vec<core::SkillHit>) -> Vec<SkillHit> {
         .collect()
 }
 
-/// A Jev failure travels in a private envelope so TS can raise a typed
-/// `RetrieverError` without parsing prose.
-fn map_jev_error(error: core::JevError) -> napi::Error {
+/// A decision-model failure travels in a private envelope so TS can raise a
+/// typed `RetrieverError` without parsing prose. `service` names it in the
+/// message (`"jev"`, `"openai decisions"`).
+fn map_ranker_error(error: core::RankerError, service: &str) -> napi::Error {
     let retry_after = match &error {
-        core::JevError::RateLimited { retry_after_secs } => *retry_after_secs,
+        core::RankerError::RateLimited { retry_after_secs } => *retry_after_secs,
         _ => None,
     };
     let payload = json!({
         "code": error.code(),
-        "message": error.to_string(),
+        "message": error.describe(service),
         "status": error.status(),
         "retryAfterSecs": retry_after,
         "transient": error.is_transient(),
     });
     napi::Error::from_reason(format!("{RETRIEVER_ERROR_PREFIX}{payload}"))
+}
+
+/// The candidate kind a plugin passes: `"tool"` or `"skill"`.
+fn parse_candidate_kind(kind: &str) -> napi::Result<core::CandidateKind> {
+    match kind {
+        "tool" => Ok(core::CandidateKind::Tool),
+        "skill" => Ok(core::CandidateKind::Skill),
+        other => Err(napi::Error::from_reason(format!(
+            "unknown candidate kind {other:?} (expected \"tool\" or \"skill\")"
+        ))),
+    }
+}
+
+fn core_candidates(candidates: Vec<RankCandidate>) -> Vec<core::RankCandidate> {
+    candidates
+        .into_iter()
+        .map(|c| core::RankCandidate {
+            id: c.id,
+            text: c.text,
+        })
+        .collect()
 }
 
 /// Where the Jev ranker sends requests; unset fields keep the defaults
@@ -350,48 +372,103 @@ impl JevRanker {
         candidates: Vec<RankCandidate>,
         top_k: u32,
         kind: String,
-    ) -> napi::Result<AsyncTask<JevRankTask>> {
-        let kind = match kind.as_str() {
-            "tool" => core::CandidateKind::Tool,
-            "skill" => core::CandidateKind::Skill,
-            other => {
-                return Err(napi::Error::from_reason(format!(
-                    "unknown candidate kind {other:?} (expected \"tool\" or \"skill\")"
-                )));
-            }
-        };
-        Ok(AsyncTask::new(JevRankTask {
-            ranker: self.inner.clone(),
+    ) -> napi::Result<AsyncTask<ChoiceRankTask>> {
+        Ok(AsyncTask::new(ChoiceRankTask {
+            ranker: ChoiceRanker::Jev(self.inner.clone()),
             query,
-            candidates: candidates
-                .into_iter()
-                .map(|c| core::RankCandidate {
-                    id: c.id,
-                    text: c.text,
-                })
-                .collect(),
+            candidates: core_candidates(candidates),
             top_k: top_k as usize,
-            kind,
+            kind: parse_candidate_kind(&kind)?,
         }))
     }
 }
 
-pub struct JevRankTask {
-    ranker: Arc<core::JevRanker>,
+/// Where the OpenAI Decisions ranker sends requests; unset fields keep the
+/// defaults (`https://api.openai.com`, `OPENAI_API_KEY`, `gpt-6-luna`).
+#[napi(object)]
+pub struct OpenAIDecisionRankerConfig {
+    pub url: Option<String>,
+    pub api_key_env: Option<String>,
+    pub model: Option<String>,
+}
+
+/// The OpenAI Decisions API client behind the SDK's OpenAI Decisions plugin
+/// (ADR-0027). Search never calls it; the plugin wraps `rankAsync` into a
+/// retrieve/rerank function.
+#[napi]
+pub struct OpenAIDecisionRanker {
+    inner: Arc<core::OpenAIDecisionRanker>,
+}
+
+#[napi]
+impl OpenAIDecisionRanker {
+    #[napi(constructor)]
+    pub fn new(config: Option<OpenAIDecisionRankerConfig>) -> Self {
+        let mut c = core::OpenAIDecisionConfig::default();
+        if let Some(config) = config {
+            if let Some(url) = config.url {
+                c = c.with_url(url);
+            }
+            if let Some(name) = config.api_key_env {
+                c = c.with_api_key_env(name);
+            }
+            if let Some(model) = config.model {
+                c = c.with_model(model);
+            }
+        }
+        Self {
+            inner: Arc::new(core::OpenAIDecisionRanker::new(c)),
+        }
+    }
+
+    /// Rank `candidates` for `query` on a libuv worker: `(id, probability)`
+    /// best first, at most `topK`. `kind` is `"tool"` or `"skill"`.
+    #[napi(ts_return_type = "Promise<Array<RankedId>>")]
+    pub fn rank_async(
+        &self,
+        query: String,
+        candidates: Vec<RankCandidate>,
+        top_k: u32,
+        kind: String,
+    ) -> napi::Result<AsyncTask<ChoiceRankTask>> {
+        Ok(AsyncTask::new(ChoiceRankTask {
+            ranker: ChoiceRanker::OpenAIDecision(self.inner.clone()),
+            query,
+            candidates: core_candidates(candidates),
+            top_k: top_k as usize,
+            kind: parse_candidate_kind(&kind)?,
+        }))
+    }
+}
+
+enum ChoiceRanker {
+    Jev(Arc<core::JevRanker>),
+    OpenAIDecision(Arc<core::OpenAIDecisionRanker>),
+}
+
+pub struct ChoiceRankTask {
+    ranker: ChoiceRanker,
     query: String,
     candidates: Vec<core::RankCandidate>,
     top_k: usize,
     kind: core::CandidateKind,
 }
 
-impl Task for JevRankTask {
+impl Task for ChoiceRankTask {
     type Output = Vec<(String, f32)>;
     type JsValue = Vec<RankedId>;
 
     fn compute(&mut self) -> napi::Result<Self::Output> {
-        self.ranker
-            .rank(&self.query, &self.candidates, self.top_k, self.kind)
-            .map_err(map_jev_error)
+        let (query, candidates, top_k, kind) =
+            (&self.query, &self.candidates, self.top_k, self.kind);
+        match &self.ranker {
+            ChoiceRanker::Jev(r) => r
+                .rank(query, candidates, top_k, kind)
+                .map_err(|e| map_ranker_error(e, "jev")),
+            ChoiceRanker::OpenAIDecision(r) => r
+                .rank(query, candidates, top_k, kind)
+                .map_err(|e| map_ranker_error(e, "openai decisions")),
+        }
     }
 
     fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {

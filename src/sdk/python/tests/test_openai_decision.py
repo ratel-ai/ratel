@@ -1,11 +1,11 @@
-"""The Jev plugin (ADR-0027) against a local stand-in for Jev's
-``POST /v1/systemone``."""
+"""The OpenAI Decisions plugin (ADR-0027) against a local stand-in for
+OpenAI's ``POST /v1/decisions``."""
 
 from __future__ import annotations
 
 import json
-import os
 import threading
+import warnings
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -18,17 +18,19 @@ from ratel_ai import (
     Skill,
     SkillCatalog,
     ToolCatalog,
-    ratel_jev_plugin,
+    openai_decision,
+    ratel_openai_decision_plugin,
 )
-from ratel_ai._native import JevError, RankerError
+from ratel_ai.experimental import ExperimentalWarning
 
-KEY_ENV = "RATEL_SDK_PY_JEV_TEST_KEY"
+KEY_ENV = "RATEL_SDK_PY_OPENAI_DECISION_TEST_KEY"
 
 
-class MockJev:
-    """A Jev stand-in. Answers each request with the next scripted reply, or —
-    when none is queued — with probabilities that rank the options in reverse
-    (``tN`` highest), or favour one preferred id; records what it was sent."""
+class MockDecisions:
+    """A Decisions stand-in. Answers each request with the next scripted reply,
+    or — when none is queued — with probabilities that rank the choices in
+    reverse (``tN`` highest), or favour one preferred id; records what it was
+    sent."""
 
     def __init__(self) -> None:
         self.seen: list[dict[str, Any]] = []
@@ -51,22 +53,27 @@ class MockJev:
                 if mock.replies:
                     status, payload, headers = mock.replies.pop(0)
                 else:
-                    # The question id is the kind being ranked: "tool", "skill", ….
-                    kind, question = next(iter(body["questions"].items()))
-                    criteria = question["criteria"]
-                    keys = list(criteria)
-                    probs = {}
-                    for i, key in enumerate(keys):
+                    question = body["questions"][0]
+                    choices = question["choices"]
+                    probabilities = []
+                    for i, choice in enumerate(choices):
                         if mock.preferred is None:
-                            probs[key] = (i + 1) / (len(keys) + 1)
+                            p = (i + 1) / (len(choices) + 1)
                         else:
-                            pid, p = mock.preferred
-                            probs[key] = p if criteria[key].split(" ")[0] == pid else 0.0
+                            pid, pp = mock.preferred
+                            p = pp if choice["description"].split(" ")[0] == pid else 0.0
+                        probabilities.append({"value": choice["value"], "probability": p})
                     status, payload = (
                         200,
                         {
-                            "model": "jev-1.13.0",
-                            "answers": {kind: {"type": "choice", "probabilities": probs}},
+                            "answers": [
+                                {
+                                    "type": "choice",
+                                    "name": question["name"],
+                                    "probabilities": probabilities,
+                                    "confidence": 0.9,
+                                }
+                            ]
                         },
                     )
                 data = json.dumps(payload).encode()
@@ -95,11 +102,8 @@ class MockJev:
         self.replies.append((status, payload or {}, headers or {}))
 
     def offered(self, call: int = 0) -> list[str]:
-        # A candidate's searchable text starts with its full name, and these
-        # fixtures name every item after its id.
-        question = next(iter(self.seen[call]["body"]["questions"].values()))
-        criteria = question["criteria"]
-        return [text.split(" ")[0] for text in criteria.values()]
+        choices = self.seen[call]["body"]["questions"][0]["choices"]
+        return [c["description"].split(" ")[0] for c in choices]
 
     def close(self) -> None:
         self.server.shutdown()
@@ -107,9 +111,10 @@ class MockJev:
 
 
 @pytest.fixture
-def mock() -> Iterator[MockJev]:
-    os.environ[KEY_ENV] = "jev-token"
-    server = MockJev()
+def mock(monkeypatch: pytest.MonkeyPatch) -> Iterator[MockDecisions]:
+    monkeypatch.setenv(KEY_ENV, "sk-test")
+    monkeypatch.setenv("RATEL_EXPERIMENTAL_SILENCE", "1")
+    server = MockDecisions()
     yield server
     server.close()
 
@@ -134,13 +139,15 @@ async def _bm25_order(query: str, top_k: int) -> list[str]:
     return [h.tool_id for h in plain.search(query, top_k)]
 
 
-def _jev(mock: MockJev) -> Any:
-    return ratel_jev_plugin(url=mock.url, api_key_env=KEY_ENV)
+def _decision(mock: MockDecisions) -> Any:
+    return ratel_openai_decision_plugin(url=mock.url, api_key_env=KEY_ENV)
 
 
-async def test_retrieve_asks_one_tool_question_over_every_tool(mock: MockJev) -> None:
+async def test_retrieve_asks_one_tool_choice_question_over_every_tool(
+    mock: MockDecisions,
+) -> None:
     mock.preferred = ("send_email", 0.93)
-    catalog = ToolCatalog(method="custom", retrieve_fn=_jev(mock).retrieve)
+    catalog = ToolCatalog(method="custom", retrieve_fn=_decision(mock).retrieve)
     await catalog.register(TOOLS)
 
     hits = await catalog.search_async("tell my boss I'm late", 1)
@@ -148,18 +155,19 @@ async def test_retrieve_asks_one_tool_question_over_every_tool(mock: MockJev) ->
     assert [h.tool_id for h in hits] == ["send_email"]
     assert hits[0].score == pytest.approx(0.93)
     [request] = mock.seen
-    assert request["path"] == "/v1/systemone"
-    assert request["authorization"] == "Bearer jev-token"
-    assert request["body"]["model"] == "jev-latest"
-    assert list(request["body"]["questions"]) == ["tool"]
+    assert request["path"] == "/v1/decisions"
+    assert request["authorization"] == "Bearer sk-test"
+    assert request["body"]["model"] == "gpt-6-luna"
+    assert request["body"]["input"] == "tell my boss I'm late"
+    assert [(q["type"], q["name"]) for q in request["body"]["questions"]] == [("choice", "tool")]
     assert sorted(mock.offered()) == sorted(t.id for t in TOOLS)
 
 
-async def test_rerank_sees_only_stage_one_candidates(mock: MockJev) -> None:
+async def test_rerank_sees_only_stage_one_candidates(mock: MockDecisions) -> None:
     query = "read a file from disk"
     stage_one = await _bm25_order(query, 50)
     mock.preferred = (stage_one[-1], 0.9)
-    catalog = ToolCatalog(reranker_fn=_jev(mock).rerank)
+    catalog = ToolCatalog(reranker_fn=_decision(mock).rerank, reranker_depth=20)
     await catalog.register(TOOLS)
 
     hits = await catalog.search_async(query, 2)
@@ -168,9 +176,9 @@ async def test_rerank_sees_only_stage_one_candidates(mock: MockJev) -> None:
     assert mock.offered() == stage_one
 
 
-async def test_skills_get_a_skill_question(mock: MockJev) -> None:
+async def test_skills_get_a_skill_question(mock: MockDecisions) -> None:
     mock.preferred = ("api_design", 0.8)
-    skills = SkillCatalog(method="custom", retrieve_fn=_jev(mock).retrieve)
+    skills = SkillCatalog(method="custom", retrieve_fn=_decision(mock).retrieve)
     await skills.register(
         [
             Skill(
@@ -181,12 +189,12 @@ async def test_skills_get_a_skill_question(mock: MockJev) -> None:
     )
     hits = await skills.search_async("design an api", 1)
     assert hits[0].skill_id == "api_design"
-    assert list(mock.seen[0]["body"]["questions"]) == ["skill"]
+    assert mock.seen[0]["body"]["questions"][0]["name"] == "skill"
 
 
-async def test_a_rejected_key_raises_even_as_a_reranker(mock: MockJev) -> None:
+async def test_a_rejected_key_raises_even_as_a_reranker(mock: MockDecisions) -> None:
     mock.reply(401, {"error": {"message": "bad key"}})
-    catalog = ToolCatalog(reranker_fn=_jev(mock).rerank)
+    catalog = ToolCatalog(reranker_fn=_decision(mock).rerank)
     await catalog.register(TOOLS)
     with pytest.raises(RetrieverError) as caught:
         await catalog.search_async("file", 2)
@@ -195,36 +203,40 @@ async def test_a_rejected_key_raises_even_as_a_reranker(mock: MockJev) -> None:
         401,
         False,
     )
+    assert "openai decisions" in str(caught.value)
 
 
-async def test_overloaded_falls_back_as_a_reranker_and_raises_as_a_retriever(
-    mock: MockJev,
+async def test_a_refusal_falls_back_as_a_reranker_and_raises_as_a_retriever(
+    mock: MockDecisions,
 ) -> None:
-    mock.reply(503, {"error": {"message": "busy"}})
-    reranked = ToolCatalog(reranker_fn=_jev(mock).rerank)
+    refusal = {"answers": [{"type": "refusal", "name": "tool"}]}
+    mock.reply(200, refusal)
+    reranked = ToolCatalog(reranker_fn=_decision(mock).rerank)
     await reranked.register(TOOLS)
     hits = await reranked.search_async("delete a file", 3)
     assert [h.tool_id for h in hits] == await _bm25_order("delete a file", 3)
 
-    mock.reply(503, {"error": {"message": "busy"}})
-    custom = ToolCatalog(method="custom", retrieve_fn=_jev(mock).retrieve)
+    mock.reply(200, refusal)
+    custom = ToolCatalog(method="custom", retrieve_fn=_decision(mock).retrieve)
     await custom.register(TOOLS)
     with pytest.raises(RetrieverError) as caught:
         await custom.search_async("delete a file", 3)
-    assert (caught.value.code, caught.value.transient) == ("Overloaded", True)
+    assert (caught.value.code, caught.value.transient) == ("Refused", True)
 
 
-async def test_a_rate_limit_carries_retry_after(mock: MockJev) -> None:
+async def test_a_rate_limit_carries_retry_after(mock: MockDecisions) -> None:
     mock.reply(429, {}, {"retry-after": "7"})
-    catalog = ToolCatalog(method="custom", retrieve_fn=_jev(mock).retrieve)
+    catalog = ToolCatalog(method="custom", retrieve_fn=_decision(mock).retrieve)
     await catalog.register(TOOLS)
     with pytest.raises(RetrieverError) as caught:
         await catalog.search_async("q", 2)
     assert (caught.value.code, caught.value.retry_after_secs) == ("RateLimited", 7)
 
 
-async def test_an_unset_key_fails_before_any_request(mock: MockJev) -> None:
-    plugin = ratel_jev_plugin(url=mock.url, api_key_env="RATEL_SDK_PY_JEV_UNSET_KEY")
+async def test_an_unset_key_fails_before_any_request(mock: MockDecisions) -> None:
+    plugin = ratel_openai_decision_plugin(
+        url=mock.url, api_key_env="RATEL_SDK_PY_OPENAI_DECISION_UNSET_KEY"
+    )
     catalog = ToolCatalog(method="custom", retrieve_fn=plugin.retrieve)
     await catalog.register(TOOLS)
     with pytest.raises(RetrieverError) as caught:
@@ -233,13 +245,30 @@ async def test_an_unset_key_fails_before_any_request(mock: MockJev) -> None:
     assert mock.seen == []
 
 
-async def test_the_native_error_is_still_a_jev_error_and_a_ranker_error(mock: MockJev) -> None:
-    mock.reply(401, {"error": {"message": "bad key"}})
-    catalog = ToolCatalog(method="custom", retrieve_fn=_jev(mock).retrieve)
-    await catalog.register(TOOLS)
-    with pytest.raises(RetrieverError) as caught:
-        await catalog.search_async("q", 2)
-    cause = caught.value.__cause__
-    assert isinstance(cause, JevError), "code catching JevError keeps working"
-    assert isinstance(cause, RankerError)
-    assert str(cause).startswith("jev rejected the key (401)")
+def test_the_beta_warning_prints_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("RATEL_EXPERIMENTAL_SILENCE", raising=False)
+    monkeypatch.setattr(openai_decision, "_warned", False)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        ratel_openai_decision_plugin()
+        ratel_openai_decision_plugin()
+    beta = [w for w in caught if issubclass(w.category, ExperimentalWarning)]
+    assert len(beta) == 1
+    message = str(beta[0].message)
+    for part in ("beta", "gpt-6-luna", "sent to OpenAI", "RATEL_EXPERIMENTAL_SILENCE"):
+        assert part in message
+
+
+def test_the_beta_warning_names_an_overridden_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("RATEL_EXPERIMENTAL_SILENCE", raising=False)
+    monkeypatch.setattr(openai_decision, "_warned", False)
+    with pytest.warns(ExperimentalWarning, match="gpt-6-luna-preview"):
+        ratel_openai_decision_plugin(model="gpt-6-luna-preview")
+
+
+def test_the_beta_warning_stays_quiet_when_silenced(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RATEL_EXPERIMENTAL_SILENCE", "1")
+    monkeypatch.setattr(openai_decision, "_warned", False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        ratel_openai_decision_plugin()

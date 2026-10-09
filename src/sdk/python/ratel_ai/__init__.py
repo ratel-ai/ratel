@@ -82,6 +82,7 @@ from .intent_graph_storage import (
 )
 from .jev import RetrieverPlugin, ratel_jev_plugin
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
+from .openai_decision import ratel_openai_decision_plugin
 from .runtime_events import (
     OPTIONAL_ENVELOPE_FIELDS,
     RUNTIME_EVENT_MAX_HITS,
@@ -176,6 +177,7 @@ __all__ = [
     "current_turn_id",
     "experimental_build_embedding_artifact",
     "ratel_jev_plugin",
+    "ratel_openai_decision_plugin",
     "format_upstream_line",
     "get_skill_content_tool",
     "invoke_tool_tool",

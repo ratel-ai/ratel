@@ -19,8 +19,8 @@ cosine, or the two fused. Nothing reorders their output; the only re-ranking is 
 "System-one" decision models pick the right option for a query from a closed set in a few
 hundred milliseconds. Jev (TypeSafe AI) returns a probability per option for up to 255 options;
 on a payments catalog it picks the refund tool BM25 ranks sixth, at ~0.9, in ~0.4 s. OpenAI's
-Decisions API is in limited preview and returns a single pick; open-source decision models are
-appearing.
+Decisions API (public beta, `gpt-6-luna`) answers the same kind of `choice` question with a
+probability per choice; open-source decision models are appearing.
 
 Unlike embeddings, these models share no wire format. The OpenAI-compatible embeddings API is a
 de facto standard many servers speak, so `embedding: { url }` can stay generic. Jev's request
@@ -80,6 +80,15 @@ map to `RetrieverError` codes: `Config`, `Unauthorized`, `InvalidRequest` (not t
 `RateLimited` (with `Retry-After`), `Overloaded`, `Timeout`, `Unreachable`, `Http`, `Malformed`
 (transient). A change to Jev's API touches the plugin only.
 
+OpenAI's Decisions API ships the same way: `ratelOpenAIDecisionPlugin({ url?, apiKeyEnv?, model? })`
+(Python `ratel_openai_decision_plugin`), client `OpenAIDecisionRanker` in core's
+`openai_decision.rs`, defaults `https://api.openai.com`, `OPENAI_API_KEY` and `gpt-6-luna`. It
+asks one `choice` question (name `tool` or `skill`, text only) per call. OpenAI documents no
+limits, so it uses Jev's. A `refusal` answer is a new code, `Refused`, transient: a reranker keeps
+stage 1's order. The API is in public beta, so the first plugin made prints a one-time warning.
+The two clients share the limits, tournament, status mapping and error type in core's
+`choice_ranker.rs`; each file holds only its own wire format.
+
 **6. The Cloud Tool Picker is not in this SDK.** It belongs in `@ratel-ai/cloud-sdk` (for
 example `ratelCloud({ apiKey }).toolPicker` as a `retrieveFn`), as Cloud features will until the
 SDKs merge.
@@ -89,7 +98,8 @@ SDKs merge.
 - No model's wire format reaches the search path. A new model is a function, or a plugin like
   Jev's; neither needs a change to the catalogs.
 - **A function sends whatever it sends.** The Jev plugin sends the query and each candidate's
-  searchable text to TypeSafe AI; the built-in methods never leave the process.
+  searchable text to TypeSafe AI, and the OpenAI Decisions plugin to OpenAI; the built-in methods
+  never leave the process.
 - Each custom search costs the function's latency; a reranker's cost grows with `depth`, not
   catalog size.
 - Rejected: `systemOne: { url, apiKeyEnv, model }` and `method: "systemOne"` (the first cut of

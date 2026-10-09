@@ -172,12 +172,15 @@ Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capab
 A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
 
 ```python
-from ratel_ai import RankCandidate, RankedId, ToolCatalog, ratel_jev_plugin
+from ratel_ai import RankCandidate, RankedId, ToolCatalog, ratel_jev_plugin, ratel_openai_decision_plugin
 
 jev = ratel_jev_plugin()                                     # Jev (TypeSafe AI); key in TYPESAFE_API_KEY
 ToolCatalog(method="custom", retrieve_fn=jev.retrieve)       # Jev ranks every tool
 ToolCatalog(method="bm25", reranker_fn=jev.rerank)           # BM25, then Jev over its top 50
 ToolCatalog(method="bm25", reranker_fn=jev.rerank, reranker_depth=20)
+
+decision = ratel_openai_decision_plugin()                    # OpenAI's Decisions API (beta); key in OPENAI_API_KEY
+ToolCatalog(method="bm25", reranker_fn=decision.rerank, reranker_depth=20)
 
 
 async def mine(query: str, candidates: list[RankCandidate], top_k: int) -> list[RankedId]:
@@ -191,7 +194,8 @@ async def mine(query: str, candidates: list[RankCandidate], top_k: int) -> list[
   - A search that fails records no `search` event on the local trace stream, the same as a failed built-in search. The error reaches your `search_async` call and, with telemetry on, marks the `ratel.search` span as an error.
 - **Rules:** both need `search_async` (synchronous `search` raises). `reranker_fn` can't be combined with `reranker`, nor with `method="custom"`. `search_async(q, k, reranker=False)` turns either reranker off for one call. `SkillCatalog` takes the same arguments.
 - **The Jev plugin:** `ratel_jev_plugin(url=None, api_key_env=None, model=None)` defaults to `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`, and calls Jev on a worker thread. Above 150 candidates (or 80,000 characters) it judges groups in parallel and fills a final question with their winners. It returns only real picks: probabilities below 0.01 are dropped, except the best one. Its `RetrieverError.code` is `"Config"`, `"Unauthorized"` or `"InvalidRequest"` (not transient), or `"RateLimited"` (with `.retry_after_secs`), `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"` or `"Malformed"` (transient).
-- **Privacy:** **the Jev plugin sends the query and each candidate's searchable text to TypeSafe AI.** The built-in methods never leave the process.
+- **The OpenAI Decisions plugin (beta):** `ratel_openai_decision_plugin(url=None, api_key_env=None, model=None)` defaults to `https://api.openai.com`, `OPENAI_API_KEY` and `gpt-6-luna`, the only model OpenAI's beta supports. It works like the Jev plugin, with the same limits (OpenAI documents none), for tools and skills, text only. It adds one code, `"Refused"` (transient), when the model declines to answer. The first plugin made emits a one-time `ExperimentalWarning`; `RATEL_EXPERIMENTAL_SILENCE=1` silences it.
+- **Privacy:** **the Jev plugin sends the query and each candidate's searchable text to TypeSafe AI, and the OpenAI Decisions plugin sends them to OpenAI.** The built-in methods never leave the process.
 
 ## Reranking (experimental)
 
