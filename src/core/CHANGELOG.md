@@ -10,9 +10,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - `TraceEvent::Search` / `TraceEvent::SkillSearch` carry `base_hits`: the top-k the search would have returned without the usage arm, same shape as `hits`. Present whenever an intent graph matched the query, as `[]` if the base ranking was empty; absent from the JSON otherwise. Ranking is unchanged (ADR-0014)
 - `TraceEvent::TurnStart` (wire `turn_start`): one marker per application turn, carrying an optional `user_message` the application passed explicitly. The SDKs' turn scope emits it with the turn's `turn_id` and `end_user_id` on the envelope. The usage learner ignores it. Additive: `TraceEvent` is `#[non_exhaustive]`.
+- `OpenAIDecisionRanker` / `OpenAIDecisionConfig`: a client for OpenAI's Decisions API (public beta; defaults `https://api.openai.com`, `OPENAI_API_KEY`, `gpt-6-luna`), the ranker behind the SDKs' OpenAI Decisions plugin. Same limits and tournament as `JevRanker` (ADR-0027)
+- `RankerError`, the error every decision-model client shares, with a new `Refused` variant (transient) for a model that declines to answer
 
 ### Changed
 
+- `JevError` is now an alias of `RankerError`, so it gains the `Refused` variant (additive: the enum is `#[non_exhaustive]`). Its `Display` names no service ("decision model config: …" instead of "jev config: …"); `describe("jev")` gives the old wording. `CandidateKind` moved to the shared module but is still exported from the crate root
 - `TraceEvent::UsageRankingStatus`'s `status` and `reason` are typed enums, `UsageRankingState` (`active`/`inactive`/`unknown`/`paused`) and `UsageRankingReason` (`enabled`/`disabled`/`rebuilt`), instead of free strings. The wire values are unchanged; a value outside the contract no longer deserializes. Rust code constructing the variant must use the enums
 
 ### Fixed
