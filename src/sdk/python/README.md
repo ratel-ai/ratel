@@ -39,7 +39,9 @@ await storage.save(graph)
 For MinIO or another self-hosted S3-compatible service, pass `endpoint`; `force_path_style` defaults to `True` once `endpoint` is set (what MinIO and most self-hosted services require):
 
 ```python
-S3IntentGraphStorage(bucket="my-bucket", key="intent-graph.json", endpoint="http://localhost:9000")
+S3IntentGraphStorage(
+    bucket="my-bucket", key="intent-graph.json", endpoint="http://localhost:9000"
+)
 ```
 
 Both S3 calls are bounded by an idle timeout (`idle_timeout_s`, default 60s): it measures time with **no data moving** rather than total elapsed time, so a slow transfer still completes but a wedged endpoint fails instead of hanging.
@@ -51,7 +53,7 @@ For semantic or hybrid retrieval, `register()` folds embedding in: it accepts on
 ```python
 async def retrieve(tools):
     catalog = ToolCatalog(method="semantic", embedding={"ollama": "nomic-embed-text"})
-    await catalog.register(tools)  # embeds the batch here
+    await catalog.register(tools)                              # embeds the batch here
     return await catalog.search_async("deploy the service", 5)
 ```
 
@@ -92,7 +94,6 @@ Save as `quickstart.py`, then run `python quickstart.py`:
 ```python
 import asyncio
 from ratel_ai import ExecutableTool, ToolCatalog
-
 
 async def main():
     catalog = ToolCatalog()
@@ -171,20 +172,14 @@ Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capab
 A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
 
 ```python
-from ratel_ai import (
-    RankCandidate,
-    RankedId,
-    ToolCatalog,
-    ratel_jev_plugin,
-    ratel_openai_decision_plugin,
-)
+from ratel_ai import RankCandidate, RankedId, ToolCatalog, ratel_jev_plugin, ratel_openai_decision_plugin
 
-jev = ratel_jev_plugin()  # Jev (TypeSafe AI); key in TYPESAFE_API_KEY
-ToolCatalog(method="custom", retrieve_fn=jev.retrieve)  # Jev ranks every tool
-ToolCatalog(method="bm25", reranker_fn=jev.rerank)  # BM25, then Jev over its top 50
+jev = ratel_jev_plugin()                                     # Jev (TypeSafe AI); key in TYPESAFE_API_KEY
+ToolCatalog(method="custom", retrieve_fn=jev.retrieve)       # Jev ranks every tool
+ToolCatalog(method="bm25", reranker_fn=jev.rerank)           # BM25, then Jev over its top 50
 ToolCatalog(method="bm25", reranker_fn=jev.rerank, reranker_depth=20)
 
-decision = ratel_openai_decision_plugin()  # OpenAI's Decisions API (beta); key in OPENAI_API_KEY
+decision = ratel_openai_decision_plugin()                    # OpenAI's Decisions API (beta); key in OPENAI_API_KEY
 ToolCatalog(method="bm25", reranker_fn=decision.rerank, reranker_depth=20)
 
 
@@ -208,9 +203,9 @@ A catalog can rank in two stages with built-in methods ([ADR 0027](../../../docs
 
 ```python
 catalog = ToolCatalog(method="bm25", reranker={"method": "semantic", "depth": 30})
-await catalog.register(tools)  # a semantic reranker makes register() build embeddings
+await catalog.register(tools)    # a semantic reranker makes register() build embeddings
 hits = await catalog.search_async("deploy the service", 5)
-plain = await catalog.search_async("deploy the service", 5, reranker=False)  # off for one call
+plain = await catalog.search_async("deploy the service", 5, reranker=False)   # off for one call
 ```
 
 A reranker needs `search_async`; synchronous `search` raises on a catalog that has one. `SkillCatalog` takes the same `reranker` argument.
@@ -234,10 +229,8 @@ events = RuntimeEvents(
 )
 catalog = RuntimeCatalog(tools, skills, source_id=events.source_id)
 
-
 async def publish(batch):
     await send_runtime_facts(batch)
-
 
 subscription = events.subscribe(publish)  # call from the target asyncio event loop
 # Register, search, and invoke through tools / skills as usual.
@@ -265,24 +258,22 @@ Facts live in the opt-in `ratel_ai.experimental` namespace and may change withou
 from ratel_ai.experimental import Fact, FactCatalog, Pin
 
 facts = FactCatalog()
-await facts.register(
-    [
-        Fact(
-            id="shop-address",
-            name="shop address & hours",
-            description="where the shop is and when it's open",
-            body="Fade & Blade — 12 Baker Street, London. Open Mon–Sat 9am–7pm.",
-            pin=Pin.ALWAYS,  # every turn, regardless of the query
-        ),
-        Fact(
-            id="cancellation",
-            name="cancellation policy",
-            description="cancelling or rescheduling a booking, and refunds",
-            body="Cancel at least 24h ahead for a full refund; same-day is a 50% fee.",
-            pin=Pin.RETRIEVED,  # only when the turn's query ranks it in (default)
-        ),
-    ]
-)
+await facts.register([
+    Fact(
+        id="shop-address",
+        name="shop address & hours",
+        description="where the shop is and when it's open",
+        body="Fade & Blade — 12 Baker Street, London. Open Mon–Sat 9am–7pm.",
+        pin=Pin.ALWAYS,       # every turn, regardless of the query
+    ),
+    Fact(
+        id="cancellation",
+        name="cancellation policy",
+        description="cancelling or rescheduling a booking, and refunds",
+        body="Cancel at least 24h ahead for a full refund; same-day is a 50% fee.",
+        pin=Pin.RETRIEVED,    # only when the turn's query ranks it in (default)
+    ),
+])
 ```
 
 Then pick **one** of two injection modes per turn.
@@ -295,7 +286,6 @@ def text_of(message: dict) -> str:
     if isinstance(content, str):
         return content
     return "\n".join(part.get("text", "") for part in content)  # multi-part content
-
 
 result = await facts.ground(user_text, [text_of(m) for m in messages])
 for item in result.inject:

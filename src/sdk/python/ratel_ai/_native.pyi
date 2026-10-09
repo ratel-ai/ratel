@@ -370,7 +370,9 @@ class ToolRegistry:
         ValueError outside [0, 1] rather than clamping.
         """
 
-    def set_experimental_bm25_params(self, k1: float | None = None, b: float | None = None) -> None:
+    def set_experimental_bm25_params(
+        self, k1: float | None = None, b: float | None = None
+    ) -> None:
         """Set BM25 k1/b; unset fields keep their current value.
 
         Raises ValueError if the result is outside its mathematically valid
@@ -735,7 +737,9 @@ class SkillRegistry:
         ValueError outside [0, 1] rather than clamping.
         """
 
-    def set_experimental_bm25_params(self, k1: float | None = None, b: float | None = None) -> None:
+    def set_experimental_bm25_params(
+        self, k1: float | None = None, b: float | None = None
+    ) -> None:
         """Set BM25 k1/b; unset fields keep their current value.
 
         Raises ValueError if the result is outside its mathematically valid
