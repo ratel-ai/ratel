@@ -89,7 +89,7 @@ export type ExperimentEvaluationReference =
   | {
       kind: "invocation";
       window: { turns?: number; maxAgeMs?: number };
-      attribution?: "last-selection" | "all-in-window";
+      attribution?: "last-selection" | "last-offering-selection" | "all-in-window";
     };
 
 export interface ExperimentSelection<Result, Arm extends string = string> {
@@ -332,7 +332,7 @@ type ExperimentEvaluationReference =
   | {
       kind: "invocation";
       window: { turns?: number; maxAgeMs?: number };
-      attribution?: "last-selection" | "all-in-window";
+      attribution?: "last-selection" | "last-offering-selection" | "all-in-window";
     };
 ```
 
@@ -355,8 +355,13 @@ most one invocation entry; duplicates are configuration errors. An invocation wi
 least one bound.
 `turns` is a positive safe integer, `maxAgeMs` is a positive finite number, and attribution
 defaults to `"last-selection"`. With no invocation reference, `reportInvocation` is a no-op. With
-`"last-selection"` it emits one record for the newest match; with `"all-in-window"` it emits one
-record per match; either mode emits one unattributed record when there is no match.
+`"last-selection"` it emits one record for the newest windowed selection, whose rank is `-1` when
+that selection did not offer the tool; with `"last-offering-selection"` it emits one record for the
+newest windowed selection whose ranking contains the tool, so an intervening unrelated selection is
+skipped instead of absorbing a `-1`; with `"all-in-window"` it emits one record per windowed
+selection; every mode emits one unattributed record when there is no match. Hosts whose agents
+pick from a search several turns back should prefer `"last-offering-selection"` over widening
+the unit to one selection and re-deriving the offering selection themselves.
 
 When `evaluation.outcome` is true, `reportOutcome` accepts the exact `selectionId` returned by
 `select`. `label` is a free, non-empty string, `score` is a finite number, and at least one is
