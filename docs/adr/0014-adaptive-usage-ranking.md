@@ -34,6 +34,10 @@ Amended 2026-08-27: a cluster **records what its searches surfaced** — see [Im
 recorded, not consumed](#impressions-are-recorded-not-consumed). Edges still come from
 invocations only; the decision below is unchanged and nothing reads the new map.
 
+Amended 2026-10-12 by [ADR-0028](0028-tool-transition-graph.md) (proposed): the rejected
+"Tool↔tool co-usage" alternative is taken up as ordered per-turn transitions, global and per
+cluster, served as next-tool hints rather than as a fourth fusion arm.
+
 Amended 2026-10-01: the SDKs' turn scope ([ADR-0026](0026-turn-scope.md)) stamps `turn_id` on
 everything inside it and mints one when the caller gives none, and the framework adapters open a
 scope per agent call. The caller still decides where a turn starts; it no longer has to thread the
