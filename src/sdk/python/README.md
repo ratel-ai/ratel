@@ -167,6 +167,21 @@ await catalog.invoke("create_linear_task", {}, turn_id)  # pairs with the second
 
 Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel/tree/main/examples/pydantic-ai).
 
+## Next-tool hints (experimental)
+
+With adaptive ranking on, the intent graph also learns which tool follows which inside a turn, globally and per intent ([ADR 0028](../../../docs/adr/0028-tool-transition-graph.md)). `search_capabilities_tool(catalog, experimental_next_tools=True)` then adds `experimentalNext` to results: `chain`, the reliable sequence from where the turn is, and `after`, what tends to follow each tool, with a probability `p` over `n` past turns. A chain step the hits do not already carry includes its `inputSchema`, so the agent can call it through `invoke_tool` without searching again.
+
+```python
+tool = search_capabilities_tool(catalog, experimental_next_tools=True)
+with catalog.turn():
+    result = await tool.execute({"query": "assign task to developer"})
+# result["experimentalNext"] -> {"chain": [find_task, assign_task], "after": [{"toolId": "assign_task", "next": [{"toolId": "notify", "p": 0.18, "n": 10}]}]}
+```
+
+Transitions are learned only inside a turn, from Ratel invokes and `record_tool_call`. `catalog.experimental_predict_next_tools(query=..., ids=[...])` returns the raw prediction. A hint the agent follows is recorded as followed and left out of the probabilities, so hints cannot reinforce themselves; a graph enabled with `learn=False` is never written to.
+
+A host whose framework emits OpenTelemetry `execute_tool` spans and does not already report host tools through `record_tool_call` can add `experimental_tool_sequence_span_processor(catalog)` to its tracer provider (needs `opentelemetry-sdk`): it reports tool spans that start inside a turn as external calls, reads nothing but the span's tool name and outcome, and never changes a span.
+
 ## Your own retriever or reranker (experimental)
 
 A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
@@ -303,4 +318,4 @@ Facts are **host-driven**: the model-facing `search_capabilities` tool is unchan
 
 Telemetry export is optional. With the `otlp` extra installed, `configure_telemetry()` reads `RATEL_OTLP_ENDPOINT` (falling back to the superseded `RATEL_URL`, which warns) and `RATEL_API_KEY`, wires trace and Logs exporters, and returns a shutdown handle. It exports only `gen_ai.*`/`ratel.*` signal spans and EventRecords by default — `export_all_spans=True` widens spans only. Message and tool content stays off by default; opt in with `capture_content`/`include_span_and_events` (see the [telemetry guide](https://docs.ratel.sh/docs/telemetry) for the capture modes and their privacy implications). Experimental catalog-definition export additionally requires `RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS=true`. Changed definitions then emit one `ratel.catalog.definition` EventRecord per registry-local content hash. Hosts that already own OpenTelemetry providers add both `ratel_span_processor` and `ratel_log_record_processor` instead.
 
-Package layout: `ratel_ai/` is the Python surface (including `embedding_artifact.py` for build/warm helpers), `native/` contains the PyO3 binding, and `tests/` exercises both. For local development, create `.venv` with `uv`, install `maturin`, `pytest`, `pytest-asyncio`, `ruff`, and `mypy`, then run `.venv/bin/maturin develop` and `.venv/bin/pytest`.
+Package layout: `ratel_ai/` is the Python surface (including `embedding_artifact.py` for build/warm helpers and `otel_sequence.py` for the experimental tool-sequence span processor), `native/` contains the PyO3 binding, and `tests/` exercises both. For local development, create `.venv` with `uv`, install `maturin`, `pytest`, `pytest-asyncio`, `ruff`, and `mypy`, then run `.venv/bin/maturin develop` and `.venv/bin/pytest`.

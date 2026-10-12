@@ -227,6 +227,24 @@ await catalog.invoke("read_github_issues", {}, undefined, turnId); // pairs with
 await catalog.invoke("create_linear_task", {}, undefined, turnId); // pairs with the second
 ```
 
+## Next-tool hints (experimental)
+
+With adaptive ranking on, the intent graph also learns which tool follows which inside a turn, globally and per intent ([ADR 0028](../../../docs/adr/0028-tool-transition-graph.md)). `searchCapabilitiesTool(catalog, skills, { experimentalNextTools: true })` then adds `experimentalNext` to results: `chain`, the reliable sequence from where the turn is, and `after`, what tends to follow each tool, with a probability `p` over `n` past turns. A chain step the hits do not already carry includes its `inputSchema`, so the agent can call it through `invoke_tool` without searching again.
+
+```ts
+const result = await catalog.turn(() =>
+  searchCapabilitiesTool(catalog, undefined, { experimentalNextTools: true }).execute(
+    { query: "assign task to developer" },
+    {},
+  ),
+);
+// result.experimentalNext → { chain: [find_task, assign_task], after: [{ toolId: "assign_task", next: [{ toolId: "notify", p: 0.18, n: 10 }] }] }
+```
+
+Transitions are learned only inside a turn (`catalog.turn(...)` or a framework adapter), from Ratel invokes and `recordToolCall`. `catalog.experimentalPredictNextTools({ query, ids })` returns the raw prediction. A hint the agent follows is recorded as followed and left out of the probabilities, so hints cannot reinforce themselves; a graph enabled with `learn: false` is never written to.
+
+A host with no Ratel adapter whose framework emits OpenTelemetry `execute_tool` spans can register `experimentalToolSequenceSpanProcessor(catalog)` on its tracer provider: it reports tool spans that start inside a turn as external calls, reads nothing but the span's tool name and outcome, and never changes a span. Do not combine it with the AI SDK or Mastra adapter, which already record host tools.
+
 ## Your own retriever or reranker (experimental)
 
 A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
@@ -610,4 +628,4 @@ Message and tool content is off by default; opt in with the `OTEL_INSTRUMENTATIO
 
 ## Package layout
 
-`src/` is the TypeScript surface (including `embedding-artifact.ts` for build/warm helpers), `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, build with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk... build`; test with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk test`.
+`src/` is the TypeScript surface (including `embedding-artifact.ts` for build/warm helpers and `otel-sequence.ts` for the experimental tool-sequence span processor), `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, build with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk... build`; test with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk test`.
