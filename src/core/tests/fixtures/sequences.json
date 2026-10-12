@@ -1,0 +1,1418 @@
+{
+  "note": "Synthetic multi-step turns for the tool transition graph (ADR-0028). Each turn is one search followed by its tool sequence; optional tails fire with a fixed probability (notify after assign 20%, add_comment after close 40%, notify after deploy 50%). Generated deterministically (seed 28); every 5th turn is held out for evaluation.",
+  "turns": [
+    {
+      "turn": "t000",
+      "intent": "assign",
+      "query": "assign a task to carol",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t001",
+      "intent": "report",
+      "query": "send the weekly task report",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t002",
+      "intent": "close",
+      "query": "close the ticket for the bug",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t003",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t004",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t005",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t006",
+      "intent": "assign",
+      "query": "assign task to developer",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t007",
+      "intent": "assign",
+      "query": "assign this task to bob",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t008",
+      "intent": "close",
+      "query": "close ticket after review",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t009",
+      "intent": "report",
+      "query": "send the weekly task report",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t010",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t011",
+      "intent": "close",
+      "query": "close ticket after review",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t012",
+      "intent": "deploy",
+      "query": "deploy the build now",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t013",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t014",
+      "intent": "close",
+      "query": "close the ticket",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t015",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t016",
+      "intent": "deploy",
+      "query": "deploy the build now",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t017",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t018",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t019",
+      "intent": "report",
+      "query": "weekly report for my tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t020",
+      "intent": "assign",
+      "query": "assign task to developer",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t021",
+      "intent": "deploy",
+      "query": "deploy build to staging",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t022",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t023",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t024",
+      "intent": "report",
+      "query": "weekly report for my tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t025",
+      "intent": "report",
+      "query": "weekly report for my tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t026",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t027",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t028",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t029",
+      "intent": "close",
+      "query": "close the ticket",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t030",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t031",
+      "intent": "report",
+      "query": "weekly tasks report email",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t032",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t033",
+      "intent": "report",
+      "query": "weekly report of tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t034",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t035",
+      "intent": "deploy",
+      "query": "deploy build to staging",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t036",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t037",
+      "intent": "assign",
+      "query": "assign this task to bob",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t038",
+      "intent": "report",
+      "query": "weekly report for my tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t039",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t040",
+      "intent": "close",
+      "query": "close the ticket",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t041",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t042",
+      "intent": "report",
+      "query": "weekly report for my tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t043",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t044",
+      "intent": "ci",
+      "query": "why is the build broken",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t045",
+      "intent": "deploy",
+      "query": "deploy the build now",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t046",
+      "intent": "report",
+      "query": "weekly tasks report email",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t047",
+      "intent": "report",
+      "query": "weekly report of tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t048",
+      "intent": "deploy",
+      "query": "deploy the latest build",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t049",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t050",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t051",
+      "intent": "close",
+      "query": "close the ticket",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t052",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t053",
+      "intent": "assign",
+      "query": "assign task to the on-call developer",
+      "tools": [
+        "find_task",
+        "assign_task",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t054",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t055",
+      "intent": "report",
+      "query": "weekly report for my tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t056",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t057",
+      "intent": "assign",
+      "query": "assign task to the on-call developer",
+      "tools": [
+        "find_task",
+        "assign_task",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t058",
+      "intent": "assign",
+      "query": "assign this task to bob",
+      "tools": [
+        "find_task",
+        "assign_task",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t059",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t060",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t061",
+      "intent": "assign",
+      "query": "assign this task to bob",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t062",
+      "intent": "report",
+      "query": "send the weekly task report",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t063",
+      "intent": "assign",
+      "query": "assign a task to carol",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t064",
+      "intent": "assign",
+      "query": "assign task to developer",
+      "tools": [
+        "find_task",
+        "assign_task",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t065",
+      "intent": "assign",
+      "query": "assign a task to carol",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t066",
+      "intent": "close",
+      "query": "close the ticket for the bug",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t067",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t068",
+      "intent": "report",
+      "query": "send the weekly task report",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t069",
+      "intent": "close",
+      "query": "close the ticket for the bug",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t070",
+      "intent": "report",
+      "query": "weekly tasks report email",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t071",
+      "intent": "close",
+      "query": "close ticket after review",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t072",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t073",
+      "intent": "deploy",
+      "query": "deploy the build now",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t074",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t075",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t076",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t077",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t078",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t079",
+      "intent": "deploy",
+      "query": "deploy build to staging",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t080",
+      "intent": "assign",
+      "query": "assign task to developer",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t081",
+      "intent": "assign",
+      "query": "assign a task to carol",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t082",
+      "intent": "assign",
+      "query": "assign this task to bob",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t083",
+      "intent": "report",
+      "query": "weekly tasks report email",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t084",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t085",
+      "intent": "assign",
+      "query": "assign task to the on-call developer",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t086",
+      "intent": "close",
+      "query": "close the ticket for the bug",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t087",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t088",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t089",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t090",
+      "intent": "report",
+      "query": "weekly report for my tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t091",
+      "intent": "assign",
+      "query": "assign task to the on-call developer",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t092",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t093",
+      "intent": "report",
+      "query": "weekly tasks report email",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t094",
+      "intent": "close",
+      "query": "close the ticket for the bug",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t095",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t096",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t097",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t098",
+      "intent": "close",
+      "query": "close the ticket",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t099",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t100",
+      "intent": "close",
+      "query": "close the ticket for the bug",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t101",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t102",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t103",
+      "intent": "assign",
+      "query": "assign this task to bob",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t104",
+      "intent": "deploy",
+      "query": "deploy the latest build",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t105",
+      "intent": "deploy",
+      "query": "deploy the latest build",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t106",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t107",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t108",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t109",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t110",
+      "intent": "close",
+      "query": "close ticket after review",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t111",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t112",
+      "intent": "assign",
+      "query": "assign a task to carol",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t113",
+      "intent": "close",
+      "query": "close the ticket",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t114",
+      "intent": "close",
+      "query": "close the ticket",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t115",
+      "intent": "deploy",
+      "query": "deploy the latest build",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t116",
+      "intent": "deploy",
+      "query": "deploy the build now",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t117",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t118",
+      "intent": "deploy",
+      "query": "deploy build to staging",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t119",
+      "intent": "close",
+      "query": "close the ticket",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t120",
+      "intent": "deploy",
+      "query": "deploy the latest build",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t121",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t122",
+      "intent": "ci",
+      "query": "why did the build fail",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t123",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t124",
+      "intent": "assign",
+      "query": "assign this task to bob",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t125",
+      "intent": "close",
+      "query": "close ticket after review",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t126",
+      "intent": "deploy",
+      "query": "deploy the build now",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t127",
+      "intent": "report",
+      "query": "weekly tasks report email",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t128",
+      "intent": "report",
+      "query": "weekly report of tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t129",
+      "intent": "report",
+      "query": "weekly report of tasks",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t130",
+      "intent": "assign",
+      "query": "assign task to developer",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t131",
+      "intent": "report",
+      "query": "send the weekly task report",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t132",
+      "intent": "ci",
+      "query": "why is the build broken",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t133",
+      "intent": "assign",
+      "query": "assign task to the on-call developer",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t134",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t135",
+      "intent": "report",
+      "query": "send the weekly task report",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t136",
+      "intent": "assign",
+      "query": "assign task to developer",
+      "tools": [
+        "find_task",
+        "assign_task",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t137",
+      "intent": "deploy",
+      "query": "deploy latest build to production",
+      "tools": [
+        "gh_run_list",
+        "deploy"
+      ]
+    },
+    {
+      "turn": "t138",
+      "intent": "ci",
+      "query": "is the build broken again",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t139",
+      "intent": "assign",
+      "query": "assign task to developer",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t140",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t141",
+      "intent": "report",
+      "query": "weekly tasks report email",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    },
+    {
+      "turn": "t142",
+      "intent": "assign",
+      "query": "assign the task to alice",
+      "tools": [
+        "find_task",
+        "assign_task"
+      ]
+    },
+    {
+      "turn": "t143",
+      "intent": "ci",
+      "query": "build broken on main why",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t144",
+      "intent": "ci",
+      "query": "why is the build broken",
+      "tools": [
+        "gh_run_list",
+        "get_logs"
+      ]
+    },
+    {
+      "turn": "t145",
+      "intent": "deploy",
+      "query": "deploy the build now",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t146",
+      "intent": "close",
+      "query": "close this ticket as done",
+      "tools": [
+        "find_task",
+        "update_status"
+      ]
+    },
+    {
+      "turn": "t147",
+      "intent": "deploy",
+      "query": "deploy the latest build",
+      "tools": [
+        "gh_run_list",
+        "deploy",
+        "notify"
+      ]
+    },
+    {
+      "turn": "t148",
+      "intent": "close",
+      "query": "close ticket after review",
+      "tools": [
+        "find_task",
+        "update_status",
+        "add_comment"
+      ]
+    },
+    {
+      "turn": "t149",
+      "intent": "report",
+      "query": "weekly tasks report email",
+      "tools": [
+        "list_tasks",
+        "summarize",
+        "send_email"
+      ]
+    }
+  ]
+}
