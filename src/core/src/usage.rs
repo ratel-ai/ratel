@@ -35,7 +35,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::fusion::sort_and_truncate;
-use crate::transitions::Transitions;
+use crate::transitions::{START, Transitions};
 
 /// Fraction of the usage arm's full weight granted per unit of support, capped
 /// at 1.0 once `SUPPORT_FULL` observations agree. One confirmed observation
@@ -690,6 +690,49 @@ impl PartialEq for CreditSlot {
     }
 }
 
+/// Where one turn is in its tool sequence (ADR-0028).
+#[derive(Debug, Default)]
+struct TurnTrail {
+    /// The intent the turn's first acted-on search was attributed to; the
+    /// turn's transitions are counted under it.
+    anchor: Option<String>,
+    /// The tool the turn invoked last, the `prev` of its next transition.
+    last: Option<String>,
+    /// `(prev, next)` edges a hint offered this turn, so the transition that
+    /// follows one is recorded as followed rather than organic.
+    offered: std::collections::BTreeSet<(String, String)>,
+}
+
+/// Per-turn trails, keyed by `turn_id`. Transient scratch like
+/// [`PendingQuery`]: never serialized, empty after a clone, ignored by
+/// equality. A `Mutex` because offering a hint happens on the search path,
+/// under a read lock.
+#[derive(Debug, Default)]
+struct Trails(Mutex<BoundedMap<TurnTrail>>);
+
+impl Clone for Trails {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for Trails {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Trails {
+    /// Run `f` on `turn_key`'s trail, creating it first.
+    fn with<R>(&self, turn_key: &str, f: impl FnOnce(&mut TurnTrail) -> R) -> Option<R> {
+        let mut map = self.0.lock().ok()?;
+        if map.get(Some(turn_key)).is_none() {
+            map.insert(Some(turn_key), TurnTrail::default());
+        }
+        map.get_mut(Some(turn_key)).map(f)
+    }
+}
+
 impl CreditSlot {
     /// Arm `query` for a support credit under `turn_key`. Called on every
     /// search; re-arming the same key with the same text before any invoke is
@@ -1297,6 +1340,9 @@ pub struct IntentGraph {
     /// learners so one fanned-out question counts once. Never serialized.
     #[serde(skip)]
     credit: CreditSlot,
+    /// Each turn's place in its tool sequence (ADR-0028). Never serialized.
+    #[serde(skip)]
+    trails: Trails,
 }
 
 /// Whether an [`IntentGraph`]'s centroids can be trusted against the currently
@@ -1515,6 +1561,7 @@ impl IntentGraph {
             active_policy: ClusterPolicy::default(),
             pending: PendingQuery::default(),
             credit: CreditSlot::default(),
+            trails: Trails::default(),
         }
     }
 
@@ -1705,6 +1752,15 @@ impl IntentGraph {
             self.cluster_policy = self.active_policy;
         }
 
+        // A turn's transitions are counted under the intent its first acted-on
+        // search landed in (ADR-0028). By id, since eviction below renumbers.
+        if let Some(turn_key) = turn_key {
+            let id = &self.intents[idx].id;
+            self.trails.with(turn_key, |t| {
+                t.anchor.get_or_insert_with(|| id.clone());
+            });
+        }
+
         // Evict clusters decayed past the floor — last, since it renumbers
         // `intents`. The just-touched cluster has `last_ts == built_from_ts`, so
         // it is never evicted here.
@@ -1722,6 +1778,34 @@ impl IntentGraph {
     /// later value means unsaved learning, or another writer moved ahead of you.
     pub fn rev(&self) -> u64 {
         self.rev
+    }
+
+    /// Fold one tool invoke of turn `turn_key` into the transition tables
+    /// (ADR-0028): globally, and under the turn's anchor intent when it has
+    /// one. Independent of search attribution, so an invoke before any search
+    /// still counts globally.
+    pub(crate) fn observe_transition(&mut self, turn_key: &str, tool_id: &str) {
+        let Some((prev, anchor, followed)) = self.trails.with(turn_key, |t| {
+            let prev = t.last.replace(tool_id.to_string());
+            let state = prev.as_deref().unwrap_or(START);
+            let followed = t
+                .offered
+                .contains(&(state.to_string(), tool_id.to_string()));
+            (prev, t.anchor.clone(), followed)
+        }) else {
+            return;
+        };
+        let state = prev.as_deref().unwrap_or(START);
+        let anchored = anchor.and_then(|a| self.intents.iter_mut().find(|it| it.id == a));
+        for table in
+            std::iter::once(&mut self.transitions).chain(anchored.map(|it| &mut it.transitions))
+        {
+            if prev.is_none() {
+                table.enter(START);
+            }
+            table.step(state, tool_id, followed);
+        }
+        self.rev += 1;
     }
 
     /// Whether this graph's boundaries were drawn under the policy now in force.
@@ -2474,7 +2558,6 @@ const STOPWORDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transitions::START;
 
     fn intent(id: &str, members: &[&str], tools: &[(&str, f32)]) -> Intent {
         let mut it = Intent {
@@ -2514,6 +2597,7 @@ mod tests {
             active_policy: ClusterPolicy::default(),
             pending: PendingQuery::default(),
             credit: CreditSlot::default(),
+            trails: Trails::default(),
         }
     }
 
@@ -3112,7 +3196,10 @@ mod tests {
         let mut g = IntentGraph::empty();
         g.observe_live("why is the build broken", Capability::Tool, "t", T0, true);
         let json = serde_json::to_string(&g).unwrap();
-        assert!(!json.contains("transitions"), "absent means none; got {json}");
+        assert!(
+            !json.contains("transitions"),
+            "absent means none; got {json}"
+        );
     }
 
     #[test]
@@ -3149,7 +3236,10 @@ mod tests {
             "tools":{"t":1.0},"skills":{},"transitions":{"a":{"n":0}}}]}"#;
         for json in [global, per_intent] {
             assert!(
-                matches!(IntentGraph::from_json(json), Err(IntentGraphError::Malformed(_))),
+                matches!(
+                    IntentGraph::from_json(json),
+                    Err(IntentGraphError::Malformed(_))
+                ),
                 "{json}"
             );
         }

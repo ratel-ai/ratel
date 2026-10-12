@@ -438,64 +438,71 @@ pub(crate) fn replay_log_into(
             Step::Ignore => continue,
         };
 
-        let Some(windows) = pending.get_mut(&key) else {
-            continue; // an invoke with no accepted search before it proves nothing
-        };
-        // The same rule as the live path, and it must stay the same: the newest
-        // window that offered this id, else the newest that ranked nothing for
-        // this kind (a baseline capture serves no retrieval, so it cannot rule
-        // the invoke out), else the newest window — an invoke of something no
-        // search returned says retrieval missed, which is the observation that
-        // repairs the miss.
-        let picked = windows
-            .iter()
-            .rposition(|w| slot_of(w, kind).0.contains(&capability_id))
-            .or_else(|| windows.iter().rposition(|w| slot_of(w, kind).0.is_empty()))
-            .or(windows.len().checked_sub(1));
-        let Some(picked) = picked else {
-            continue; // no search in this turn at all
-        };
-        let entry = &mut windows[picked];
-        if entry.query.is_empty() {
-            continue; // a slot created by `or_default` that no search ever filled
+        'attr: {
+            let Some(windows) = pending.get_mut(&key) else {
+                break 'attr; // an invoke with no accepted search before it proves nothing
+            };
+            // The same rule as the live path, and it must stay the same: the newest
+            // window that offered this id, else the newest that ranked nothing for
+            // this kind (a baseline capture serves no retrieval, so it cannot rule
+            // the invoke out), else the newest window — an invoke of something no
+            // search returned says retrieval missed, which is the observation that
+            // repairs the miss.
+            let picked = windows
+                .iter()
+                .rposition(|w| slot_of(w, kind).0.contains(&capability_id))
+                .or_else(|| windows.iter().rposition(|w| slot_of(w, kind).0.is_empty()))
+                .or(windows.len().checked_sub(1));
+            let Some(picked) = picked else {
+                break 'attr; // no search in this turn at all
+            };
+            let entry = &mut windows[picked];
+            if entry.query.is_empty() {
+                break 'attr; // a slot created by `or_default` that no search ever filled
+            }
+            let query = entry.query;
+            // The first confirming invoke of THIS turn's question is what makes it
+            // an observation; later ones add edges for the same question.
+            let first_confirmation = !entry.credited;
+            entry.credited = true;
+            // Impressions belong to the search, not to each invoke that follows it,
+            // to the id space the invoke is in, and only to the ids at or above the
+            // invoked one — the ones plausibly weighed.
+            let slot = match kind {
+                Capability::Tool => &mut entry.tools,
+                Capability::Skill => &mut entry.skills,
+            };
+            let surfaced: Vec<String> = if slot.1 {
+                Vec::new()
+            } else {
+                let all: Vec<String> = slot.0.iter().map(|id| (*id).to_string()).collect();
+                let considered = considered(&all, capability_id);
+                slot.1 = !considered.is_empty();
+                considered
+            };
+            // Stash this query's vector right before the observation reads it,
+            // under this turn's key: replay walks the log sequentially, one
+            // envelope at a time, so nothing else under the same key can clobber it
+            // between the set and this same iteration's read.
+            if let (Some(vector), Some(fp)) = (embeddings.get(query), fingerprint) {
+                graph.note_query_vector(turn_key, query, vector, fp);
+            }
+            graph.observe(Observation {
+                turn_key,
+                query,
+                kind,
+                capability_id,
+                ts_ms: env.ts,
+                first_confirmation,
+                seeded: policy.provenance == Provenance::Seeded,
+                surfaced: &surfaced,
+            });
         }
-        let query = entry.query;
-        // The first confirming invoke of THIS turn's question is what makes it
-        // an observation; later ones add edges for the same question.
-        let first_confirmation = !entry.credited;
-        entry.credited = true;
-        // Impressions belong to the search, not to each invoke that follows it,
-        // to the id space the invoke is in, and only to the ids at or above the
-        // invoked one — the ones plausibly weighed.
-        let slot = match kind {
-            Capability::Tool => &mut entry.tools,
-            Capability::Skill => &mut entry.skills,
-        };
-        let surfaced: Vec<String> = if slot.1 {
-            Vec::new()
-        } else {
-            let all: Vec<String> = slot.0.iter().map(|id| (*id).to_string()).collect();
-            let considered = considered(&all, capability_id);
-            slot.1 = !considered.is_empty();
-            considered
-        };
-        // Stash this query's vector right before the observation reads it,
-        // under this turn's key: replay walks the log sequentially, one
-        // envelope at a time, so nothing else under the same key can clobber it
-        // between the set and this same iteration's read.
-        if let (Some(vector), Some(fp)) = (embeddings.get(query), fingerprint) {
-            graph.note_query_vector(turn_key, query, vector, fp);
+        // After attribution, which may anchor the turn on an intent; and
+        // regardless of it, as the live path does (ADR-0028).
+        if let (Capability::Tool, Some(turn_key)) = (kind, turn_key) {
+            graph.observe_transition(turn_key, capability_id);
         }
-        graph.observe(Observation {
-            turn_key,
-            query,
-            kind,
-            capability_id,
-            ts_ms: env.ts,
-            first_confirmation,
-            seeded: policy.provenance == Provenance::Seeded,
-            surfaced: &surfaced,
-        });
     }
 }
 
@@ -794,7 +801,13 @@ impl UsageLearner {
                 surfaced,
             } => self.remember_query(turn_key, query, kind, &surfaced),
             Step::Confirm(kind, capability_id) => {
-                self.confirm(turn_key, kind, capability_id, ts_ms)
+                self.confirm(turn_key, kind, capability_id, ts_ms);
+                // After `confirm`, which may anchor the turn on an intent.
+                if let (Capability::Tool, Some(turn_key)) = (kind, turn_key)
+                    && let Ok(mut graph) = self.graph.write()
+                {
+                    graph.observe_transition(turn_key, capability_id);
+                }
             }
             Step::Ignore => {}
         }
@@ -835,6 +848,7 @@ fn now_ms() -> u64 {
 mod tests {
     use super::*;
     use crate::trace::{MemorySink, NoopSink, Origin};
+    use crate::transitions::START;
     use crate::usage::PENDING_CAP;
 
     fn learner() -> (Arc<UsageLearner>, Arc<RwLock<IntentGraph>>) {
@@ -2416,5 +2430,159 @@ mod tests {
             upstream: "gh".into(),
         });
         assert!(graph.read().unwrap().is_empty());
+    }
+
+    // ---- tool transitions (ADR-0028) ----
+
+    fn next_count(t: &crate::transitions::Transitions, prev: &str, next: &str) -> u32 {
+        t.row(prev)
+            .and_then(|r| r.next.get(next).copied())
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn a_turn_learns_its_tool_sequence_globally_and_under_its_intent() {
+        let (l, graph) = learner();
+        turn_search(
+            &l,
+            "t1",
+            "assign task to developer",
+            &["find_task", "assign_task"],
+        );
+        turn_invoke(&l, "t1", "find_task");
+        turn_invoke(&l, "t1", "assign_task");
+        turn_invoke(&l, "t1", "notify");
+
+        let g = graph.read().unwrap();
+        for t in [&g.transitions, &g.intents[0].transitions] {
+            assert_eq!(next_count(t, START, "find_task"), 1);
+            assert_eq!(next_count(t, "find_task", "assign_task"), 1);
+            assert_eq!(next_count(t, "assign_task", "notify"), 1);
+            assert_eq!(t.row("notify").unwrap().n, 1);
+        }
+    }
+
+    #[test]
+    fn an_invoke_without_a_turn_id_learns_no_transition() {
+        // Every opted-out caller shares one key, so interleaved sessions would
+        // invent transitions nobody made.
+        let (l, graph) = learner();
+        l.record(search("assign task to developer"));
+        l.record(invoke("find_task"));
+        l.record(invoke("assign_task"));
+        assert!(graph.read().unwrap().transitions.is_empty());
+    }
+
+    #[test]
+    fn invokes_before_any_search_still_count_globally() {
+        let (l, graph) = learner();
+        turn_invoke(&l, "t1", "find_task");
+        turn_invoke(&l, "t1", "assign_task");
+        let g = graph.read().unwrap();
+        assert!(g.is_empty(), "no search, so no cluster");
+        assert_eq!(next_count(&g.transitions, START, "find_task"), 1);
+        assert_eq!(next_count(&g.transitions, "find_task", "assign_task"), 1);
+    }
+
+    #[test]
+    fn separate_turns_do_not_chain_into_each_other() {
+        let (l, graph) = learner();
+        turn_invoke(&l, "t1", "find_task");
+        turn_invoke(&l, "t2", "notify");
+        let g = graph.read().unwrap();
+        assert_eq!(next_count(&g.transitions, START, "find_task"), 1);
+        assert_eq!(next_count(&g.transitions, START, "notify"), 1);
+        assert_eq!(next_count(&g.transitions, "find_task", "notify"), 0);
+    }
+
+    #[test]
+    fn a_turn_stays_on_the_intent_of_its_first_acted_on_search() {
+        let (l, graph) = learner();
+        turn_search(&l, "t1", "assign task to developer", &["find_task"]);
+        turn_invoke(&l, "t1", "find_task");
+        turn_search(&l, "t1", "send a slack message", &["notify"]);
+        turn_invoke(&l, "t1", "notify");
+
+        let g = graph.read().unwrap();
+        assert_eq!(g.len(), 2, "two clusters");
+        let first = g
+            .intents
+            .iter()
+            .find(|i| i.members.iter().any(|m| m == "assign task to developer"))
+            .unwrap();
+        assert_eq!(next_count(&first.transitions, "find_task", "notify"), 1);
+        let second = g.intents.iter().find(|i| i.id != first.id).unwrap();
+        assert!(second.transitions.is_empty());
+    }
+
+    #[test]
+    fn a_skill_invoke_is_not_a_tool_transition() {
+        let (l, graph) = learner();
+        turn_invoke(&l, "t1", "find_task");
+        l.record_with_context(
+            TraceEvent::SkillInvoke {
+                skill_id: "triage".into(),
+                took_ms: 0,
+            },
+            TraceEventContext {
+                turn_id: Some("t1".into()),
+                ..TraceEventContext::default()
+            },
+        );
+        assert!(graph.read().unwrap().transitions.row("triage").is_none());
+    }
+
+    #[test]
+    fn a_transition_bumps_rev_so_it_is_saved() {
+        let (l, graph) = learner();
+        turn_invoke(&l, "t1", "find_task");
+        assert!(graph.read().unwrap().rev() > 0);
+    }
+
+    #[test]
+    fn replay_learns_the_same_transitions_as_the_live_path() {
+        let events = [
+            (
+                Some("t1"),
+                search_showing("assign task to developer", &["find_task"]),
+            ),
+            (Some("t1"), invoke("find_task")),
+            (Some("t2"), invoke("find_task")),
+            (Some("t1"), invoke("assign_task")),
+            (Some("t2"), invoke("notify")),
+            (None, invoke("x")),
+        ];
+        let (l, live) = learner();
+        for (turn, ev) in events.clone() {
+            match turn {
+                Some(t) => l.record_with_context(
+                    ev,
+                    TraceEventContext {
+                        turn_id: Some(t.into()),
+                        ..TraceEventContext::default()
+                    },
+                ),
+                None => l.record(ev),
+            }
+        }
+        let envelopes: Vec<_> = events
+            .into_iter()
+            .map(|(turn, ev)| envelope(1_753_000_000_000, "s", turn, ev))
+            .collect();
+        let mut replayed = IntentGraph::empty();
+        replay_log_into(
+            &mut replayed,
+            &envelopes,
+            ObservationPolicy::default(),
+            &HashMap::new(),
+            None,
+        );
+        let live = live.read().unwrap();
+        assert_eq!(replayed.transitions, live.transitions);
+        assert_eq!(replayed.intents[0].transitions, live.intents[0].transitions);
+        assert_eq!(
+            next_count(&replayed.transitions, "find_task", "assign_task"),
+            1
+        );
     }
 }
