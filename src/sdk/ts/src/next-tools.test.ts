@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { IntentGraph, ToolCatalog } from "./index.js";
+import {
+  IntentGraph,
+  type SearchCapabilitiesResult,
+  searchCapabilitiesTool,
+  ToolCatalog,
+} from "./index.js";
 
 const tool = (id: string) => ({
   id,
@@ -74,5 +79,50 @@ describe("experimentalPredictNextTools", () => {
     });
     expect(chain).toEqual(["assign_task"]);
     expect(graph.toJson()).toBe(before);
+  });
+});
+
+describe("search_capabilities experimentalNextTools", () => {
+  const run = (catalog: ToolCatalog, input: Record<string, unknown>, enabled = true) =>
+    searchCapabilitiesTool(catalog, undefined, { experimentalNextTools: enabled }).execute(
+      input,
+      {},
+    ) as Promise<SearchCapabilitiesResult>;
+
+  it("returns the chain, with a schema only for tools the hits do not carry", async () => {
+    const { catalog } = await trained();
+    const result = await catalog.turn(() => run(catalog, { query: QUERY, topKTools: 1 }));
+    const hitIds = result.tools.groups.flatMap((g) => g.hits.map((h) => h.toolId));
+    const next = result.experimentalNext;
+    expect(next?.chain.map((c) => c.toolId)).toEqual(["find_task", "assign_task"]);
+    for (const step of next?.chain ?? []) {
+      expect(step.inputSchema !== undefined).toBe(!hitIds.includes(step.toolId));
+    }
+    const after = next?.after.find((a) => a.toolId === "assign_task");
+    expect(after?.next).toEqual([{ toolId: "notify", p: 0.18, n: 10 }]);
+  });
+
+  it("is absent unless enabled", async () => {
+    const { catalog } = await trained();
+    const result = await catalog.turn(() => run(catalog, { query: QUERY }, false));
+    expect(result).not.toHaveProperty("experimentalNext");
+  });
+
+  it("tells the agent what the hints mean only when enabled", async () => {
+    const { catalog } = await trained();
+    const on = searchCapabilitiesTool(catalog, undefined, { experimentalNextTools: true });
+    const off = searchCapabilitiesTool(catalog);
+    expect(on.description).toContain("experimentalNext");
+    expect(off.description).not.toContain("experimentalNext");
+  });
+
+  it("records a followed hint so it never counts as organic", async () => {
+    const { catalog, graph } = await trained();
+    await catalog.turn(async () => {
+      await run(catalog, { query: QUERY });
+      catalog.recordToolCall({ toolId: "find_task" });
+    });
+    const start = JSON.parse(graph.toJson()).transitions["<start>"];
+    expect(start.hinted.find_task).toEqual({ offered: 1, followed: 1 });
   });
 });

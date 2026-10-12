@@ -53,6 +53,13 @@ _SEARCH_INTRO = (
     "natural-language query describing what you want to do."
 )
 _RESULT_TOOLS_ONLY = " You get back a `tools` bucket (executable) — run one via invoke_tool."
+_RESULT_NEXT_TOOLS = (
+    " A result may also carry `experimentalNext`: tools usually invoked next in this "
+    "kind of task, learned from past usage. `chain` is the likely sequence from where "
+    "you are; a step that carries an `inputSchema` can be run via invoke_tool without "
+    "searching again. `after` lists what tends to follow a tool, with probability `p` "
+    "over `n` past uses — a low `p` is a possibility, not an instruction."
+)
 _RESULT_TOOLS_AND_SKILLS = (
     " You get back two independent buckets: `tools` (run one via invoke_tool) and "
     "`skills` (reusable playbooks — load one's instructions via get_skill_content, "
@@ -124,12 +131,101 @@ def _compact_description(s: str) -> str:
     return f"{head.rstrip()}…"
 
 
-def _build_search_description(has_skills: bool, upstreams: Sequence[UpstreamServerInfo]) -> str:
-    base = _SEARCH_INTRO + (_RESULT_TOOLS_AND_SKILLS if has_skills else _RESULT_TOOLS_ONLY)
+def _build_search_description(
+    has_skills: bool, upstreams: Sequence[UpstreamServerInfo], next_tools: bool = False
+) -> str:
+    base = (
+        _SEARCH_INTRO
+        + (_RESULT_TOOLS_AND_SKILLS if has_skills else _RESULT_TOOLS_ONLY)
+        + (_RESULT_NEXT_TOOLS if next_tools else "")
+    )
     if not upstreams:
         return base
     listing = "\n".join(format_upstream_line(u) for u in upstreams)
     return f"{base}\n\nThis catalog aggregates tools from these upstream MCP servers:\n{listing}"
+
+
+_NEXT_TOOLS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "chain": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "string"},
+                    "toolId": {"type": "string"},
+                    "p": {"type": "number"},
+                    "n": {"type": "integer"},
+                    "description": {"type": "string"},
+                    "inputSchema": {"type": "object"},
+                },
+                "required": ["from", "toolId", "p", "n"],
+            },
+        },
+        "after": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "toolId": {"type": "string"},
+                    "next": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "toolId": {"type": "string"},
+                                "p": {"type": "number"},
+                                "n": {"type": "integer"},
+                            },
+                            "required": ["toolId", "p", "n"],
+                        },
+                    },
+                },
+                "required": ["toolId", "next"],
+            },
+        },
+    },
+    "required": ["chain", "after"],
+}
+
+
+def _next_tools(
+    catalog: ToolCatalog, query: str, turn_id: str | None, hit_ids: set[str]
+) -> dict[str, Any] | None:
+    """The ``experimentalNext`` hints for one search (ADR-0028), or ``None``.
+
+    A chain step carries its definition only when the hits do not already, so the
+    agent can invoke it without another search. Probabilities go out at two
+    decimals. The final prediction is recorded as offered: it reaches the agent.
+    """
+    # The chain is known only after predicting, and `after` should cover it too.
+    first = catalog.experimental_predict_next_tools(turn_id=turn_id, query=query, offer=False)
+    ids = list(dict.fromkeys([*hit_ids, *(c["tool_id"] for c in first["chain"])]))
+    prediction = catalog.experimental_predict_next_tools(turn_id=turn_id, query=query, ids=ids)
+    chain: list[dict[str, Any]] = []
+    for c in prediction["chain"]:
+        step: dict[str, Any] = {
+            "from": c["from"],
+            "toolId": c["tool_id"],
+            "p": round(c["p"], 2),
+            "n": c["n"],
+        }
+        tool = None if c["tool_id"] in hit_ids else catalog.get(c["tool_id"])
+        if tool is not None:
+            step["description"] = tool.description
+            step["inputSchema"] = tool.input_schema
+        chain.append(step)
+    after = [
+        {
+            "toolId": a["tool_id"],
+            "next": [
+                {"toolId": t["tool_id"], "p": round(t["p"], 2), "n": t["n"]} for t in a["next"]
+            ],
+        }
+        for a in prediction["after"]
+    ]
+    return {"chain": chain, "after": after} if chain or after else None
 
 
 def search_capabilities_tool(
@@ -137,6 +233,7 @@ def search_capabilities_tool(
     skill_catalog: SkillCatalog | None = None,
     *,
     upstream_servers: Sequence[UpstreamServerInfo] | None = None,
+    experimental_next_tools: bool = False,
 ) -> ExecutableTool:
     """Build the `search_capabilities` tool: unified discovery over tools AND skills.
 
@@ -155,6 +252,10 @@ def search_capabilities_tool(
             in its own bucket.
         upstream_servers: upstream MCP servers to advertise in the tool
             description and to enrich result server groups with.
+        experimental_next_tools: ⚠️ experimental. Attach ``experimentalNext`` to
+            results: the tools the turn is likely to invoke next, learned by
+            adaptive ranking from past turns (ADR-0028), so the agent can skip
+            searches. Needs ``experimental_enable_adaptive_ranking`` and a turn.
 
     Returns:
         An `ExecutableTool` to put in the agent's direct tool list.
@@ -241,12 +342,20 @@ def search_capabilities_tool(
                 for tool_id in sk.tools if sk else []:
                     add_tool(tool_id, 0)
 
-        return {"tools": {"groups": [groups[n] for n in order]}, "skills": skills}
+        result: dict[str, Any] = {
+            "tools": {"groups": [groups[n] for n in order]},
+            "skills": skills,
+        }
+        if experimental_next_tools:
+            nxt = _next_tools(catalog, query, turn_id, seen_tools)
+            if nxt is not None:
+                result["experimentalNext"] = nxt
+        return result
 
     return ExecutableTool(
         id=SEARCH_CAPABILITIES_ID,
         name=SEARCH_CAPABILITIES_ID,
-        description=_build_search_description(has_skills, upstreams),
+        description=_build_search_description(has_skills, upstreams, experimental_next_tools),
         input_schema={
             "type": "object",
             "properties": {
@@ -315,6 +424,7 @@ def search_capabilities_tool(
                         "required": ["skillId", "score", "description"],
                     },
                 },
+                "experimentalNext": _NEXT_TOOLS_SCHEMA,
             },
             "required": ["tools", "skills"],
         },

@@ -28,6 +28,9 @@ export type {
 } from "../native/index.cjs";
 export type {
   CapabilitiesSearchOptions,
+  CapabilityNextAfter,
+  CapabilityNextStep,
+  CapabilityNextTools,
   CapabilitySkillHit,
   CapabilityToolGroup,
   CapabilityToolHit,

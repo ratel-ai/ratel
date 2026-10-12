@@ -3,11 +3,12 @@ mirror of next-tools.test.ts."""
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
-from ratel_ai import ExecutableTool, IntentGraph, ToolCatalog
+from ratel_ai import ExecutableTool, IntentGraph, ToolCatalog, search_capabilities_tool
 
 QUERY = "assign task to developer"
 IDS = ("find_task", "assign_task", "notify")
@@ -81,3 +82,45 @@ async def test_follows_the_turn_with_learn_false_and_never_changes_the_graph() -
         p = consumer.experimental_predict_next_tools(query=QUERY)
     assert [c["tool_id"] for c in p["chain"]] == ["assign_task"]
     assert graph.to_json() == before
+
+
+async def _search(catalog: ToolCatalog, *, enabled: bool = True, **input: Any) -> dict[str, Any]:
+    tool = search_capabilities_tool(catalog, experimental_next_tools=enabled)
+    result: dict[str, Any] = await tool.execute({"query": QUERY, **input})
+    return result
+
+
+async def test_search_returns_the_chain_with_a_schema_only_for_tools_the_hits_lack() -> None:
+    catalog, _ = await _trained()
+    with catalog.turn():
+        result = await _search(catalog, topKTools=1)
+    hit_ids = {h["toolId"] for g in result["tools"]["groups"] for h in g["hits"]}
+    nxt = result["experimentalNext"]
+    assert [c["toolId"] for c in nxt["chain"]] == ["find_task", "assign_task"]
+    for step in nxt["chain"]:
+        assert ("inputSchema" in step) is (step["toolId"] not in hit_ids)
+    (after,) = [a for a in nxt["after"] if a["toolId"] == "assign_task"]
+    assert after["next"] == [{"toolId": "notify", "p": 0.18, "n": 10}]
+
+
+async def test_search_hints_are_absent_unless_enabled() -> None:
+    catalog, _ = await _trained()
+    with catalog.turn():
+        result = await _search(catalog, enabled=False)
+    assert "experimentalNext" not in result
+
+
+async def test_search_description_explains_hints_only_when_enabled() -> None:
+    catalog, _ = await _trained()
+    on = search_capabilities_tool(catalog, experimental_next_tools=True)
+    assert "experimentalNext" in on.description
+    assert "experimentalNext" not in search_capabilities_tool(catalog).description
+
+
+async def test_a_followed_search_hint_never_counts_as_organic() -> None:
+    catalog, graph = await _trained()
+    with catalog.turn():
+        await _search(catalog)
+        catalog.record_tool_call("find_task")
+    start = json.loads(graph.to_json())["transitions"]["<start>"]
+    assert start["hinted"]["find_task"] == {"offered": 1, "followed": 1}

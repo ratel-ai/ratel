@@ -48,6 +48,11 @@ const SEARCH_INTRO =
   "a multi-step task: a purpose-built capability may be in the catalog but not pre-loaded. Pass a " +
   "natural-language query describing what you want to do.";
 const RESULT_TOOLS_ONLY = " You get back a `tools` bucket (executable) — run one via invoke_tool.";
+const RESULT_NEXT_TOOLS =
+  " A result may also carry `experimentalNext`: tools usually invoked next in this kind of task, " +
+  "learned from past usage. `chain` is the likely sequence from where you are; a step that carries an " +
+  "`inputSchema` can be run via invoke_tool without searching again. `after` lists what tends to follow " +
+  "a tool, with probability `p` over `n` past uses — a low `p` is a possibility, not an instruction.";
 const RESULT_TOOLS_AND_SKILLS =
   " You get back two independent buckets: `tools` (run one via invoke_tool) and `skills` (reusable " +
   "playbooks — load one's instructions via get_skill_content, then follow it). Skills have their own " +
@@ -87,6 +92,52 @@ export interface SearchCapabilitiesOptions {
    * byte-identical regardless of when the first skill registers.
    */
   advertiseSkills?: boolean;
+  /**
+   * ⚠️ Experimental. Attach `experimentalNext` to results: the tools the turn is
+   * likely to invoke next, learned by adaptive ranking from past turns
+   * (ADR-0028), so the agent can skip searches. Needs
+   * `experimentalEnableAdaptiveRanking` and a turn scope. Default `false`.
+   */
+  experimentalNextTools?: boolean;
+}
+
+/** One step of {@link CapabilityNextTools.chain}. */
+export interface CapabilityNextStep {
+  /** The state the step leaves: a tool id, or `"<start>"`. */
+  from: string;
+  /** Tool to pass to `invoke_tool`. */
+  toolId: string;
+  /** Probability it follows `from`, from past turns (two decimals). */
+  p: number;
+  /** Past uses behind `p`. */
+  n: number;
+  /** The tool's description; absent when the tool is already in the hits. */
+  description?: string;
+  /** The tool's input schema; absent when the tool is already in the hits. */
+  inputSchema?: Record<string, unknown>;
+}
+
+/** Likely successors of one tool, in {@link CapabilityNextTools.after}. */
+export interface CapabilityNextAfter {
+  /** The tool the successors follow. */
+  toolId: string;
+  /** Successors, likeliest first. */
+  next: {
+    /** Tool id. */
+    toolId: string;
+    /** Probability it comes next (two decimals). */
+    p: number;
+    /** Past uses behind `p`. */
+    n: number;
+  }[];
+}
+
+/** ⚠️ Experimental next-tool hints (ADR-0028). */
+export interface CapabilityNextTools {
+  /** The likely sequence from where the turn is now; every step is reliable. */
+  chain: CapabilityNextStep[];
+  /** What tends to follow each hit and chain tool. */
+  after: CapabilityNextAfter[];
 }
 
 /** One ranked tool in the `tools` bucket of {@link SearchCapabilitiesResult}. */
@@ -148,6 +199,8 @@ export interface SearchCapabilitiesResult {
   };
   /** Skill hits — playbooks to load via `get_skill_content`. */
   skills: CapabilitySkillHit[];
+  /** ⚠️ Experimental next-tool hints, when enabled and learned (ADR-0028). */
+  experimentalNext?: CapabilityNextTools;
 }
 
 /**
@@ -168,7 +221,10 @@ export function formatUpstreamLine(s: UpstreamServerInfo): string {
 }
 
 function buildSearchDescription(hasSkills: boolean, opts?: SearchCapabilitiesOptions): string {
-  const base = SEARCH_INTRO + (hasSkills ? RESULT_TOOLS_AND_SKILLS : RESULT_TOOLS_ONLY);
+  const base =
+    SEARCH_INTRO +
+    (hasSkills ? RESULT_TOOLS_AND_SKILLS : RESULT_TOOLS_ONLY) +
+    (opts?.experimentalNextTools ? RESULT_NEXT_TOOLS : "");
   const upstreams = opts?.upstreamServers ?? [];
   if (upstreams.length === 0) return base;
   const list = upstreams.map(formatUpstreamLine).join("\n");
@@ -287,6 +343,49 @@ export function searchCapabilitiesTool(
             required: ["skillId", "score", "description"],
           },
         },
+        experimentalNext: {
+          type: "object",
+          properties: {
+            chain: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  from: { type: "string" },
+                  toolId: { type: "string" },
+                  p: { type: "number" },
+                  n: { type: "integer" },
+                  description: { type: "string" },
+                  inputSchema: { type: "object" },
+                },
+                required: ["from", "toolId", "p", "n"],
+              },
+            },
+            after: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  toolId: { type: "string" },
+                  next: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        toolId: { type: "string" },
+                        p: { type: "number" },
+                        n: { type: "integer" },
+                      },
+                      required: ["toolId", "p", "n"],
+                    },
+                  },
+                },
+                required: ["toolId", "next"],
+              },
+            },
+          },
+          required: ["chain", "after"],
+        },
       },
       required: ["tools", "skills"],
     },
@@ -303,6 +402,7 @@ export function searchCapabilitiesTool(
         origin: "agent",
         upstreamServers: upstreams,
         turnId,
+        experimentalNextTools: opts?.experimentalNextTools,
       });
     },
   };
@@ -331,6 +431,8 @@ export interface CapabilitiesSearchOptions {
    * share this catalog's graph.
    */
   turnId?: string;
+  /** Attach `experimentalNext` hints — see {@link SearchCapabilitiesOptions.experimentalNextTools}. */
+  experimentalNextTools?: boolean;
 }
 
 /**
@@ -432,11 +534,51 @@ export async function runCapabilitiesSearch(
     }
   }
 
-  return {
+  const result: SearchCapabilitiesResult = {
     // biome-ignore lint/style/noNonNullAssertion: order entries are guaranteed by construction
     tools: { groups: order.map((n) => groups.get(n)!) },
     skills,
   };
+  if (opts.experimentalNextTools) {
+    const next = nextTools(toolCatalog, query, turnId, seenTools);
+    if (next) result.experimentalNext = next;
+  }
+  return result;
+}
+
+/** Probabilities go to the agent at two decimals: more is noise, and tokens. */
+const round2 = (p: number): number => Math.round(p * 100) / 100;
+
+/**
+ * The `experimentalNext` hints for one search (ADR-0028), or `undefined` when
+ * there is nothing to say. A chain step carries its definition only when the
+ * hits do not already, so the agent can invoke it without another search.
+ * The final prediction is recorded as offered to the turn: it reaches the agent.
+ */
+function nextTools(
+  catalog: ToolCatalog,
+  query: string,
+  turnId: string | undefined,
+  hitIds: ReadonlySet<string>,
+): CapabilityNextTools | undefined {
+  // The chain is known only after predicting, and `after` should cover it too.
+  const { chain: chainIds } = catalog.experimentalPredictNextTools({ turnId, query, offer: false });
+  const ids = [...new Set([...hitIds, ...chainIds.map((c) => c.toolId)])];
+  const prediction = catalog.experimentalPredictNextTools({ turnId, query, ids });
+  const chain = prediction.chain.map((c): CapabilityNextStep => {
+    const step: CapabilityNextStep = { from: c.from, toolId: c.toolId, p: round2(c.p), n: c.n };
+    const tool = hitIds.has(c.toolId) ? undefined : catalog.get(c.toolId);
+    if (tool) {
+      step.description = tool.description ?? "";
+      step.inputSchema = (tool.inputSchema ?? {}) as Record<string, unknown>;
+    }
+    return step;
+  });
+  const after = prediction.after.map((a) => ({
+    toolId: a.toolId,
+    next: a.next.map((t) => ({ toolId: t.toolId, p: round2(t.p), n: t.n })),
+  }));
+  return chain.length > 0 || after.length > 0 ? { chain, after } : undefined;
 }
 
 /** Options for {@link invokeToolTool}. */
