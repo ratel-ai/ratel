@@ -36,6 +36,13 @@ const STRONG_LOWER_BOUND: f32 = 0.6;
 /// Fewest organic entries into a row before any of its edges can be strong.
 const STRONG_MIN_N: u32 = 5;
 
+/// Fewest organic entries into an intent's row before it is trusted over the
+/// global one. Below it, the prediction backs off to the global table.
+pub(crate) const MIN_SUPPORT: u32 = 5;
+
+/// Longest chain a prediction walks.
+pub(crate) const CHAIN_DEPTH: usize = 3;
+
 /// How often a hint offered an edge, and how often the agent then took it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HintCount {
@@ -64,7 +71,7 @@ impl Row {
     }
 
     /// Entries that did not end in a followed hint.
-    fn organic_n(&self) -> u32 {
+    pub(crate) fn organic_n(&self) -> u32 {
         self.n.saturating_sub(self.followed_total())
     }
 
@@ -78,6 +85,7 @@ impl Row {
 /// A predicted next tool.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NextTool {
+    /// The tool id.
     pub id: String,
     /// Smoothed organic probability that `id` comes next.
     pub p: f32,
@@ -85,6 +93,27 @@ pub struct NextTool {
     pub n: u32,
     /// Whether the edge clears the strength bar.
     pub strong: bool,
+}
+
+/// One link of a predicted chain: `tool` is expected right after `from`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChainStep {
+    /// The state the step leaves: a tool id, or `<start>`.
+    pub from: String,
+    /// The tool expected next.
+    pub tool: NextTool,
+}
+
+/// What a turn is likely to invoke next (ADR-0028).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct NextPrediction {
+    /// The intent the prediction was drawn from: the turn's anchor, else the
+    /// cluster the query matched. `None` predicts from the global table alone.
+    pub intent: Option<String>,
+    /// The strong chain from where the turn is now, at most [`CHAIN_DEPTH`].
+    pub chain: Vec<ChainStep>,
+    /// For each requested tool, the likeliest tools after it, strong or not.
+    pub after: Vec<(String, Vec<NextTool>)>,
 }
 
 /// A transition table: state → [`Row`].
@@ -124,10 +153,8 @@ impl Transitions {
     pub(crate) fn step(&mut self, prev: &str, next: &str, followed: bool) {
         if let Some(row) = self.0.get_mut(prev) {
             *row.next.entry(next.to_string()).or_default() += 1;
-            if followed {
-                if let Some(h) = row.hinted.get_mut(next) {
-                    h.followed = (h.followed + 1).min(h.offered);
-                }
+            if followed && let Some(h) = row.hinted.get_mut(next) {
+                h.followed = (h.followed + 1).min(h.offered);
             }
             if row.next.len() > NEXT_CAP {
                 // Spare the tool just recorded, for the same reason as rows.

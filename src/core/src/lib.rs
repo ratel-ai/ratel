@@ -145,5 +145,6 @@ pub use trace::{
     SearchStage, SkillHitTrace, TraceEnvelope, TraceEvent, TraceEventContext, TraceSink,
     UsageRankingReason, UsageRankingState,
 };
+pub use transitions::{ChainStep, NextPrediction, NextTool};
 pub use usage::{ClusterPolicy, Intent, IntentGraph, IntentGraphError};
-pub use usage_learner::{ObservationPolicy, OriginFilter, Provenance, UsageLearner};
+pub use usage_learner::{ObservationPolicy, OriginFilter, Provenance, TrailTracker, UsageLearner};

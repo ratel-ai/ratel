@@ -25,6 +25,7 @@ use crate::trace::{
     ChurnKind, NoopSink, Origin, SearchHitTrace, SearchStage, TraceEnvelope, TraceEvent,
     TraceEventContext, TraceSink,
 };
+use crate::transitions::NextPrediction;
 use crate::usage::{ArmOutcome, Capability, IntentGraph, UsageArm};
 use crate::usage_learner::{self, ObservationPolicy};
 
@@ -343,6 +344,39 @@ impl ToolRegistry {
     /// searches read it.
     pub fn set_intent_graph(&mut self, graph: Option<Arc<RwLock<IntentGraph>>>) {
         self.graph = graph;
+    }
+
+    /// What turn `turn_key` is likely to invoke next, and what tends to follow
+    /// each of `ids` (ADR-0028). Empty without an intent graph.
+    ///
+    /// **Experimental.** `query` places a turn with no anchor yet on an intent;
+    /// pass the search text. Only registered tools are predicted. With `offer`,
+    /// the prediction is recorded as shown to the turn, so a transition the
+    /// agent then takes along it is counted as followed rather than organic —
+    /// pass `true` whenever the result reaches the agent, or hints would
+    /// reinforce themselves.
+    pub fn experimental_predict_next(
+        &self,
+        turn_key: Option<&str>,
+        query: Option<&str>,
+        ids: &[&str],
+        k: usize,
+        offer: bool,
+    ) -> NextPrediction {
+        let Some(graph) = self.graph.as_ref() else {
+            return NextPrediction::default();
+        };
+        let known = |id: &str| self.tools.contains_key(id);
+        let prediction = match graph.read() {
+            Ok(g) => g.predict_next(turn_key, query, ids, k, &known),
+            Err(_) => return NextPrediction::default(),
+        };
+        if let (true, Some(turn_key)) = (offer, turn_key)
+            && let Ok(mut g) = graph.write()
+        {
+            g.note_offered(turn_key, &prediction);
+        }
+        prediction
     }
 
     /// Set the share of the hybrid content score the dense arm carries; BM25
@@ -2341,6 +2375,118 @@ mod tests {
             &e.event,
             TraceEvent::Search { origin: Origin::Agent, hits, .. } if !hits.is_empty()
         )));
+    }
+
+    // ---- next-tool prediction (ADR-0028) ----
+
+    fn in_turn(turn: &str) -> TraceEventContext {
+        TraceEventContext {
+            turn_id: Some(turn.into()),
+            ..TraceEventContext::default()
+        }
+    }
+
+    /// A registry learning into a graph, with ten assign turns already behind it.
+    fn assign_registry() -> (ToolRegistry, Arc<RwLock<IntentGraph>>) {
+        let graph = Arc::new(RwLock::new(IntentGraph::empty()));
+        let mut reg = ToolRegistry::new();
+        reg.set_trace_sink(Arc::new(crate::UsageLearner::new(
+            graph.clone(),
+            Arc::new(NoopSink),
+        )));
+        reg.set_intent_graph(Some(graph.clone()));
+        for id in ["find_task", "assign_task", "notify"] {
+            reg.register(tool(id, id));
+        }
+        for i in 0..10 {
+            let turn = format!("t{i}");
+            reg.search_with_method_and_context(
+                "assign task to developer",
+                5,
+                Origin::Agent,
+                SearchMethod::Bm25,
+                in_turn(&turn),
+            )
+            .unwrap();
+            for id in ["find_task", "assign_task"] {
+                reg.record_event_with_context(
+                    TraceEvent::InvokeStart {
+                        tool_id: id.into(),
+                        args_size_bytes: 0,
+                    },
+                    in_turn(&turn),
+                );
+            }
+        }
+        (reg, graph)
+    }
+
+    #[test]
+    fn a_registry_predicts_the_chain_and_records_the_offer() {
+        let (reg, graph) = assign_registry();
+        let p = reg.experimental_predict_next(
+            Some("live"),
+            Some("assign task to developer"),
+            &[],
+            3,
+            true,
+        );
+        let ids: Vec<_> = p.chain.iter().map(|c| c.tool.id.as_str()).collect();
+        assert_eq!(ids, ["find_task", "assign_task"]);
+        let g = graph.read().unwrap();
+        let row = g.transitions.row(crate::transitions::START).unwrap();
+        assert_eq!(row.hinted["find_task"].offered, 1);
+    }
+
+    #[test]
+    fn a_prediction_not_offered_records_nothing() {
+        let (reg, graph) = assign_registry();
+        let rev = graph.read().unwrap().rev();
+        reg.experimental_predict_next(
+            Some("live"),
+            Some("assign task to developer"),
+            &[],
+            3,
+            false,
+        );
+        assert_eq!(graph.read().unwrap().rev(), rev);
+    }
+
+    #[test]
+    fn a_registry_without_a_graph_predicts_nothing() {
+        let reg = ToolRegistry::new();
+        let p = reg.experimental_predict_next(Some("live"), Some("anything"), &["x"], 3, true);
+        assert_eq!(p, crate::NextPrediction::default());
+    }
+
+    #[test]
+    fn a_trail_tracker_follows_the_turn_without_learning() {
+        let (_, graph) = assign_registry();
+        let snapshot = serde_json::to_string(&*graph.read().unwrap()).unwrap();
+        let mut reg = ToolRegistry::new();
+        for id in ["find_task", "assign_task", "notify"] {
+            reg.register(tool(id, id));
+        }
+        reg.set_trace_sink(Arc::new(crate::TrailTracker::new(
+            graph.clone(),
+            Arc::new(NoopSink),
+        )));
+        reg.set_intent_graph(Some(graph.clone()));
+        reg.record_event_with_context(
+            TraceEvent::InvokeStart {
+                tool_id: "find_task".into(),
+                args_size_bytes: 0,
+            },
+            in_turn("live"),
+        );
+        let p = reg.experimental_predict_next(Some("live"), None, &[], 3, false);
+        let ids: Vec<_> = p.chain.iter().map(|c| c.tool.id.as_str()).collect();
+        assert_eq!(ids, ["assign_task"], "predicted from the turn's last tool");
+        assert_eq!(
+            serde_json::to_string(&*graph.read().unwrap()).unwrap(),
+            snapshot,
+            "nothing was counted"
+        );
     }
 
     #[test]

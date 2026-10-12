@@ -837,6 +837,52 @@ impl TraceSink for UsageLearner {
     }
 }
 
+/// Follows each turn's tool sequence without learning (ADR-0028).
+///
+/// A registry ranking from a graph it must not change (`learn: false`) still
+/// needs to know which tool a turn invoked last, or every next-tool prediction
+/// starts from the beginning of the turn. This tracks exactly that, in scratch
+/// that is never serialized, and forwards every event to `inner`.
+pub struct TrailTracker {
+    inner: Arc<dyn TraceSink>,
+    graph: Arc<RwLock<IntentGraph>>,
+}
+
+impl TrailTracker {
+    /// Wrap `inner`, following turns on `graph`.
+    pub fn new(graph: Arc<RwLock<IntentGraph>>, inner: Arc<dyn TraceSink>) -> Self {
+        Self { inner, graph }
+    }
+
+    fn follow(&self, event: &TraceEvent, turn_key: Option<&str>) {
+        if let (TraceEvent::InvokeStart { tool_id, .. }, Some(turn_key)) = (event, turn_key)
+            && let Ok(graph) = self.graph.read()
+        {
+            graph.advance_trail(turn_key, tool_id);
+        }
+    }
+}
+
+impl TraceSink for TrailTracker {
+    fn record(&self, event: TraceEvent) {
+        self.inner.record(event);
+    }
+
+    fn record_with_context(&self, event: TraceEvent, context: TraceEventContext) {
+        self.follow(&event, context.turn_id.as_deref());
+        self.inner.record_with_context(event, context);
+    }
+
+    fn record_envelope(&self, envelope: TraceEnvelope) {
+        self.follow(&envelope.event, envelope.turn_id.as_deref());
+        self.inner.record_envelope(envelope);
+    }
+
+    fn sample_rate(&self) -> f64 {
+        self.inner.sample_rate()
+    }
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

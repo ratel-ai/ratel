@@ -35,7 +35,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::fusion::sort_and_truncate;
-use crate::transitions::{START, Transitions};
+use crate::transitions::{CHAIN_DEPTH, ChainStep, MIN_SUPPORT, NextPrediction, START, Transitions};
 
 /// Fraction of the usage arm's full weight granted per unit of support, capped
 /// at 1.0 once `SUPPORT_FULL` observations agree. One confirmed observation
@@ -723,6 +723,11 @@ impl PartialEq for Trails {
 }
 
 impl Trails {
+    /// Read `turn_key`'s trail, if it has one.
+    fn peek<R>(&self, turn_key: &str, f: impl FnOnce(&TurnTrail) -> R) -> Option<R> {
+        self.0.lock().ok()?.get(Some(turn_key)).map(f)
+    }
+
     /// Run `f` on `turn_key`'s trail, creating it first.
     fn with<R>(&self, turn_key: &str, f: impl FnOnce(&mut TurnTrail) -> R) -> Option<R> {
         let mut map = self.0.lock().ok()?;
@@ -1778,6 +1783,128 @@ impl IntentGraph {
     /// later value means unsaved learning, or another writer moved ahead of you.
     pub fn rev(&self) -> u64 {
         self.rev
+    }
+
+    /// What turn `turn_key` is likely to invoke next, and what tends to follow
+    /// each of `ids` (ADR-0028). Tools `known` rejects are never predicted.
+    ///
+    /// The intent is the turn's anchor, else the cluster `query` matches (at
+    /// the dense tier when the search stashed its vector). Each state reads the
+    /// intent's row when it has [`MIN_SUPPORT`] organic entries, else the
+    /// global row.
+    pub(crate) fn predict_next(
+        &self,
+        turn_key: Option<&str>,
+        query: Option<&str>,
+        ids: &[&str],
+        k: usize,
+        known: &dyn Fn(&str) -> bool,
+    ) -> NextPrediction {
+        let (anchor, last) = turn_key
+            .and_then(|t| {
+                self.trails
+                    .peek(t, |tr| (tr.anchor.clone(), tr.last.clone()))
+            })
+            .unwrap_or_default();
+        let intent = anchor
+            .and_then(|a| self.intents.iter().find(|it| it.id == a))
+            .or_else(|| {
+                let query = query?;
+                let vector = self
+                    .pending
+                    .vector_for(turn_key, query)
+                    .filter(|(_, fp)| self.model.as_deref().is_none_or(|m| m == fp))
+                    .map(|(v, _)| v);
+                self.best_match(query, vector.as_deref())
+                    .map(|i| &self.intents[i])
+            });
+        let predict = |state: &str| -> Vec<_> {
+            let table = match intent {
+                Some(it)
+                    if it
+                        .transitions
+                        .row(state)
+                        .is_some_and(|r| r.organic_n() >= MIN_SUPPORT) =>
+                {
+                    &it.transitions
+                }
+                _ => &self.transitions,
+            };
+            table
+                .predict(state, usize::MAX)
+                .into_iter()
+                .filter(|n| known(&n.id))
+                .collect()
+        };
+
+        let mut chain = Vec::new();
+        let mut state = last.unwrap_or_else(|| START.to_string());
+        let mut seen = std::collections::HashSet::from([state.clone()]);
+        while chain.len() < CHAIN_DEPTH {
+            let Some(next) = predict(&state).into_iter().find(|n| !seen.contains(&n.id)) else {
+                break;
+            };
+            if !next.strong {
+                break;
+            }
+            seen.insert(next.id.clone());
+            let from = std::mem::replace(&mut state, next.id.clone());
+            chain.push(ChainStep { from, tool: next });
+        }
+
+        let after = ids
+            .iter()
+            .filter(|id| known(id))
+            .filter_map(|id| {
+                let mut next = predict(id);
+                next.truncate(k);
+                (!next.is_empty()).then(|| ((*id).to_string(), next))
+            })
+            .collect();
+
+        NextPrediction {
+            intent: intent.map(|it| it.id.clone()),
+            chain,
+            after,
+        }
+    }
+
+    /// Record that `prediction` was shown to turn `turn_key`, so a transition
+    /// the agent then takes along it counts as followed, not organic.
+    pub(crate) fn note_offered(&mut self, turn_key: &str, prediction: &NextPrediction) {
+        let edges: Vec<(String, String)> =
+            prediction
+                .chain
+                .iter()
+                .map(|c| (c.from.clone(), c.tool.id.clone()))
+                .chain(prediction.after.iter().flat_map(|(from, next)| {
+                    next.iter().map(move |n| (from.clone(), n.id.clone()))
+                }))
+                .collect();
+        if edges.is_empty() {
+            return;
+        }
+        self.trails
+            .with(turn_key, |t| t.offered.extend(edges.iter().cloned()));
+        let intent = prediction
+            .intent
+            .as_ref()
+            .and_then(|id| self.intents.iter().position(|it| &it.id == id));
+        for (from, to) in &edges {
+            self.transitions.offer(from, to);
+            if let Some(i) = intent {
+                self.intents[i].transitions.offer(from, to);
+            }
+        }
+        self.rev += 1;
+    }
+
+    /// Move turn `turn_key`'s trail to `tool_id` without counting anything —
+    /// what a consumer that does not learn needs to predict from the turn's
+    /// last tool.
+    pub(crate) fn advance_trail(&self, turn_key: &str, tool_id: &str) {
+        self.trails
+            .with(turn_key, |t| t.last = Some(tool_id.to_string()));
     }
 
     /// Fold one tool invoke of turn `turn_key` into the transition tables
@@ -3187,6 +3314,169 @@ mod tests {
             IntentGraph::from_json(&json),
             Err(IntentGraphError::Malformed(_))
         ));
+    }
+
+    // ---- next-tool prediction (ADR-0028) ----
+
+    /// One turn: a search for `query` acted on by `tools[0]`, then `tools` in order.
+    fn learn_turn(g: &mut IntentGraph, turn: &str, query: &str, tools: &[&str]) {
+        g.observe(Observation {
+            turn_key: Some(turn),
+            query,
+            kind: Capability::Tool,
+            capability_id: tools[0],
+            ts_ms: T0,
+            first_confirmation: true,
+            seeded: false,
+            surfaced: &[],
+        });
+        for tool in tools {
+            g.observe_transition(turn, tool);
+        }
+    }
+
+    fn assign_graph() -> IntentGraph {
+        let mut g = IntentGraph::empty();
+        for i in 0..10 {
+            let tools: &[&str] = if i < 2 {
+                &["find_task", "assign_task", "notify"]
+            } else {
+                &["find_task", "assign_task"]
+            };
+            learn_turn(&mut g, &format!("t{i}"), "assign task to developer", tools);
+        }
+        g
+    }
+
+    fn chain_ids(p: &NextPrediction) -> Vec<&str> {
+        p.chain.iter().map(|c| c.tool.id.as_str()).collect()
+    }
+
+    #[test]
+    fn a_new_turn_is_predicted_the_strong_chain_of_its_intent() {
+        let g = assign_graph();
+        let p = g.predict_next(
+            None,
+            Some("assign task to developer"),
+            &["assign_task"],
+            3,
+            &all_known,
+        );
+        assert_eq!(p.intent.as_deref(), Some(g.intents[0].id.as_str()));
+        assert_eq!(chain_ids(&p), ["find_task", "assign_task"]);
+        assert_eq!(p.chain[0].from, START);
+        assert_eq!(p.chain[1].from, "find_task");
+        assert!(p.chain.iter().all(|c| c.tool.strong));
+        let (after, next) = &p.after[0];
+        assert_eq!(after, "assign_task");
+        assert_eq!(next[0].id, "notify");
+        assert!((next[0].p - 2.0 / 11.0).abs() < 1e-6);
+        assert!(!next[0].strong);
+    }
+
+    #[test]
+    fn a_turn_in_progress_is_predicted_from_its_last_tool() {
+        let mut g = assign_graph();
+        learn_turn(&mut g, "live", "assign task to developer", &["find_task"]);
+        let p = g.predict_next(Some("live"), None, &[], 3, &all_known);
+        assert_eq!(p.intent.as_deref(), Some(g.intents[0].id.as_str()));
+        assert_eq!(chain_ids(&p), ["assign_task"]);
+    }
+
+    #[test]
+    fn a_thin_intent_backs_off_to_the_global_table() {
+        let mut g = IntentGraph::empty();
+        for i in 0..6 {
+            learn_turn(
+                &mut g,
+                &format!("a{i}"),
+                "assign task to developer",
+                &["find_task", "assign_task"],
+            );
+        }
+        learn_turn(
+            &mut g,
+            "b0",
+            "close the ticket",
+            &["find_task", "close_ticket"],
+        );
+        let p = g.predict_next(None, Some("close the ticket"), &[], 3, &all_known);
+        assert_eq!(g.len(), 2);
+        // The thin intent saw one turn; the global table makes find_task strong.
+        assert_eq!(chain_ids(&p), ["find_task"]);
+    }
+
+    #[test]
+    fn a_tool_the_registry_does_not_define_is_never_predicted() {
+        let g = assign_graph();
+        let known = |id: &str| id != "find_task";
+        let p = g.predict_next(
+            None,
+            Some("assign task to developer"),
+            &["assign_task"],
+            3,
+            &known,
+        );
+        assert!(
+            p.chain.is_empty(),
+            "the chain cannot start without find_task"
+        );
+        assert_eq!(p.after[0].1[0].id, "notify");
+        let p = g.predict_next(
+            None,
+            Some("assign task to developer"),
+            &["find_task"],
+            3,
+            &known,
+        );
+        assert!(p.after.is_empty(), "no hints after an unknown tool");
+    }
+
+    #[test]
+    fn a_chain_never_revisits_a_tool() {
+        let mut g = IntentGraph::empty();
+        for i in 0..10 {
+            learn_turn(
+                &mut g,
+                &format!("t{i}"),
+                "sync the mirror",
+                &["pull", "push", "pull", "push"],
+            );
+        }
+        let p = g.predict_next(None, Some("sync the mirror"), &[], 3, &all_known);
+        assert_eq!(chain_ids(&p), ["pull", "push"]);
+    }
+
+    #[test]
+    fn nothing_matched_predicts_from_the_global_start() {
+        let g = assign_graph();
+        let p = g.predict_next(None, Some("zzz qqq"), &[], 3, &all_known);
+        assert_eq!(p.intent, None);
+        assert_eq!(chain_ids(&p), ["find_task", "assign_task"]);
+    }
+
+    #[test]
+    fn an_offered_edge_the_agent_takes_is_recorded_as_followed() {
+        let mut g = assign_graph();
+        let p = g.predict_next(
+            Some("live"),
+            Some("assign task to developer"),
+            &[],
+            3,
+            &all_known,
+        );
+        let rev = g.rev();
+        g.note_offered("live", &p);
+        assert!(g.rev() > rev, "an offer is persisted state");
+        learn_turn(&mut g, "live", "assign task to developer", &["find_task"]);
+        let row = g.transitions.row(START).unwrap();
+        assert_eq!(row.hinted["find_task"].offered, 1);
+        assert_eq!(row.hinted["find_task"].followed, 1);
+        let row = g.intents[0].transitions.row(START).unwrap();
+        assert_eq!(row.hinted["find_task"].followed, 1);
+        // Organic evidence is unchanged by the followed hint.
+        let again = g.predict_next(None, Some("assign task to developer"), &[], 3, &all_known);
+        assert_eq!(again.chain[0].tool.n, 10);
     }
 
     // ---- transitions on the wire (ADR-0028) ----
