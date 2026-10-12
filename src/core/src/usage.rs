@@ -35,6 +35,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::fusion::sort_and_truncate;
+use crate::transitions::Transitions;
 
 /// Fraction of the usage arm's full weight granted per unit of support, capped
 /// at 1.0 once `SUPPORT_FULL` observations agree. One confirmed observation
@@ -818,6 +819,11 @@ pub struct Intent {
     /// the count means and why nothing in ranking treats it as an edge.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub surfaced_skills: BTreeMap<String, u32>,
+    /// Tool→tool transitions in turns anchored on this cluster (ADR-0028).
+    /// Lives on the cluster so it is evicted with it. Not part of identity:
+    /// like the impression maps, nothing in ranking reads it.
+    #[serde(default, skip_serializing_if = "Transitions::is_empty")]
+    pub(crate) transitions: Transitions,
     /// Tokens of each member, positionally parallel to `members`.
     ///
     /// Matching scores a query against **individual members**, not their union:
@@ -1273,6 +1279,10 @@ pub struct IntentGraph {
     /// serializes byte-identically to one written before the field existed.
     #[serde(default, skip_serializing_if = "ClusterPolicy::is_default")]
     pub cluster_policy: ClusterPolicy,
+    /// Tool→tool transitions across every turn, whatever its intent
+    /// (ADR-0028). The backoff when a cluster's own table is too thin.
+    #[serde(default)]
+    pub(crate) transitions: Transitions,
     /// The policy in force now — what every admission decision is measured
     /// against. Comes from configuration, never from the wire: it describes how
     /// *this process* is clustering, not how the loaded graph was clustered.
@@ -1327,8 +1337,10 @@ impl GraphModelStatus {
 impl Serialize for IntentGraph {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let len =
-            4 + usize::from(self.model.is_some()) + usize::from(!self.cluster_policy.is_default());
+        let len = 4
+            + usize::from(self.model.is_some())
+            + usize::from(!self.cluster_policy.is_default())
+            + usize::from(!self.transitions.is_empty());
         let mut out = serializer.serialize_struct("IntentGraph", len)?;
         out.serialize_field("v", &self.v)?;
         out.serialize_field("built_from_ts", &self.built_from_ts)?;
@@ -1338,6 +1350,9 @@ impl Serialize for IntentGraph {
         }
         if !self.cluster_policy.is_default() {
             out.serialize_field("cluster_policy", &self.cluster_policy)?;
+        }
+        if !self.transitions.is_empty() {
+            out.serialize_field("transitions", &self.transitions)?;
         }
         out.serialize_field("intents", &self.labeled())?;
         out.end()
@@ -1395,6 +1410,9 @@ impl IntentGraph {
                 self.cluster_policy.similarity, self.cluster_policy.coverage
             )));
         }
+        self.transitions
+            .validate()
+            .map_err(IntentGraphError::Malformed)?;
         let mut seen = std::collections::HashSet::with_capacity(self.intents.len());
         for it in &self.intents {
             if !seen.insert(it.id.as_str()) {
@@ -1467,6 +1485,9 @@ impl IntentGraph {
                     it.id
                 )));
             }
+            it.transitions
+                .validate()
+                .map_err(|e| IntentGraphError::Malformed(format!("intent {:?}: {e}", it.id)))?;
         }
         Ok(())
     }
@@ -1490,6 +1511,7 @@ impl IntentGraph {
             intents: Vec::new(),
             model: None,
             cluster_policy: ClusterPolicy::default(),
+            transitions: Transitions::default(),
             active_policy: ClusterPolicy::default(),
             pending: PendingQuery::default(),
             credit: CreditSlot::default(),
@@ -1614,6 +1636,7 @@ impl IntentGraph {
                     skills: BTreeMap::new(),
                     surfaced_tools: BTreeMap::new(),
                     surfaced_skills: BTreeMap::new(),
+                    transitions: Transitions::default(),
                     bag: std::collections::HashSet::new(),
                     member_bags: Vec::new(),
                     vector_n: 0,
@@ -2451,6 +2474,7 @@ const STOPWORDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transitions::START;
 
     fn intent(id: &str, members: &[&str], tools: &[(&str, f32)]) -> Intent {
         let mut it = Intent {
@@ -2466,6 +2490,7 @@ mod tests {
             skills: BTreeMap::new(),
             surfaced_tools: BTreeMap::new(),
             surfaced_skills: BTreeMap::new(),
+            transitions: Transitions::default(),
             bag: std::collections::HashSet::new(),
             member_bags: Vec::new(),
             vector_n: 0,
@@ -2485,6 +2510,7 @@ mod tests {
             intents,
             model: None,
             cluster_policy: ClusterPolicy::default(),
+            transitions: Transitions::default(),
             active_policy: ClusterPolicy::default(),
             pending: PendingQuery::default(),
             credit: CreditSlot::default(),
@@ -3077,6 +3103,56 @@ mod tests {
             IntentGraph::from_json(&json),
             Err(IntentGraphError::Malformed(_))
         ));
+    }
+
+    // ---- transitions on the wire (ADR-0028) ----
+
+    #[test]
+    fn a_graph_that_saw_no_transitions_omits_both_fields() {
+        let mut g = IntentGraph::empty();
+        g.observe_live("why is the build broken", Capability::Tool, "t", T0, true);
+        let json = serde_json::to_string(&g).unwrap();
+        assert!(!json.contains("transitions"), "absent means none; got {json}");
+    }
+
+    #[test]
+    fn transitions_round_trip_through_the_wire_form() {
+        let mut g = IntentGraph::empty();
+        g.observe_live("why is the build broken", Capability::Tool, "t", T0, true);
+        g.transitions.enter(START);
+        g.transitions.step(START, "find", false);
+        g.intents[0].transitions.enter(START);
+        g.intents[0].transitions.step(START, "find", false);
+        let json = serde_json::to_string(&g).unwrap();
+        let back = IntentGraph::from_json(&json).expect("round trip");
+        assert_eq!(back.transitions, g.transitions);
+        assert_eq!(back.intents[0].transitions, g.intents[0].transitions);
+        assert_eq!(back.transitions.row(START).unwrap().next["find"], 1);
+    }
+
+    #[test]
+    fn a_graph_without_transitions_loads_with_none() {
+        let json = r#"{"v":1,"built_from_ts":1,
+            "intents":[{"id":"i0","label":"l","members":["q"],"support":2,
+            "tools":{"t":1.0},"skills":{}}]}"#;
+        let g = IntentGraph::from_json(json).expect("valid graph");
+        assert!(g.transitions.is_empty());
+        assert!(g.intents[0].transitions.is_empty());
+    }
+
+    #[test]
+    fn a_graph_with_invalid_transitions_is_rejected() {
+        let global = r#"{"v":1,"built_from_ts":1,"intents":[],
+            "transitions":{"a":{"n":1,"next":{"b":2}}}}"#;
+        let per_intent = r#"{"v":1,"built_from_ts":1,
+            "intents":[{"id":"i0","label":"l","members":["q"],"support":2,
+            "tools":{"t":1.0},"skills":{},"transitions":{"a":{"n":0}}}]}"#;
+        for json in [global, per_intent] {
+            assert!(
+                matches!(IntentGraph::from_json(json), Err(IntentGraphError::Malformed(_))),
+                "{json}"
+            );
+        }
     }
 
     #[test]

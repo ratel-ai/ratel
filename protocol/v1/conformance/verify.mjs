@@ -114,6 +114,40 @@ export function ifNoneMatchMatches(headerValue, currentEtag) {
 // Hand-rolled rather than run through a JSON Schema library so this file keeps its
 // node-builtins-only property; the schema remains normative and this mirrors it.
 // Returns a list of human-readable violations (empty === valid).
+// Optional tool->tool transition table (ADR-0028): state -> { n, next, hinted }.
+// Counts are integers >= 1 (absence already means "never"); a state cannot
+// continue more often than it was entered; a hint cannot be followed more often
+// than it was offered or than the edge was taken.
+function validateTransitions(t, at, errs) {
+  const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x);
+  const isPos = (x) => typeof x === 'number' && Number.isInteger(x) && x >= 1;
+  if (!isObj(t)) { errs.push(`${at}, when present, must be an object`); return; }
+  for (const [state, row] of Object.entries(t)) {
+    const r = `${at}["${state}"]`;
+    if (state.length === 0) errs.push(`${at} has an empty state`);
+    if (!isObj(row)) { errs.push(`${r} must be an object`); continue; }
+    if (!isPos(row.n)) errs.push(`${r}.n must be an integer >= 1, got ${JSON.stringify(row.n)}`);
+    const next = row.next ?? {};
+    if (!isObj(next)) { errs.push(`${r}.next, when present, must be an object`); continue; }
+    let sum = 0;
+    for (const [id, c] of Object.entries(next)) {
+      if (!isPos(c)) errs.push(`${r}.next["${id}"] must be an integer >= 1, got ${JSON.stringify(c)}`);
+      else sum += c;
+    }
+    if (isPos(row.n) && sum > row.n) errs.push(`${r} continues ${sum} times but was entered ${row.n}`);
+    const hinted = row.hinted ?? {};
+    if (!isObj(hinted)) { errs.push(`${r}.hinted, when present, must be an object`); continue; }
+    for (const [id, h] of Object.entries(hinted)) {
+      const followed = h?.followed ?? 0;
+      if (!isObj(h) || !isPos(h.offered)) {
+        errs.push(`${r}.hinted["${id}"].offered must be an integer >= 1`);
+      } else if (!(Number.isInteger(followed) && followed >= 0 && followed <= h.offered && followed <= (next[id] ?? 0))) {
+        errs.push(`${r}.hinted["${id}"].followed exceeds what was offered or taken`);
+      }
+    }
+  }
+}
+
 export function validateGraph(doc) {
   const errs = [];
   const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -147,6 +181,7 @@ export function validateGraph(doc) {
       }
     }
   }
+  if (doc.transitions !== undefined) validateTransitions(doc.transitions, 'transitions', errs);
   if (!Array.isArray(doc.intents)) return errs.concat('intents must be an array');
 
   const seen = new Set();
@@ -220,6 +255,7 @@ export function validateGraph(doc) {
         }
       }
     }
+    if (it.transitions !== undefined) validateTransitions(it.transitions, `${at}.transitions`, errs);
     for (const key of ['tools', 'skills']) {
       const edges = it[key];
       if (!isObj(edges)) { errs.push(`${at}.${key} must be an object`); continue; }

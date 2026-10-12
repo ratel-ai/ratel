@@ -40,6 +40,10 @@
       "minimum": 0,
       "description": "OPTIONAL monotonic write counter, bumped once per mutation of the graph (a confirmed observation, a centroid rebuild). Never read during ranking \u2014 it is a primitive for the caller's storage layer, which owns persistence. Two uses: save-when-changed (persist only when `rev` differs from the last saved value) and stale-base detection (before overwriting a stored graph, compare its `rev` to the one you loaded; a higher value means another writer moved ahead \u2014 single-writer is the supported model, so this makes a clobber detectable, not merged). Absent means treat as 0; the counter continues up from there. See ADR-0014."
     },
+    "transitions": {
+      "$ref": "#/$defs/transitions",
+      "description": "OPTIONAL global transition table across every turn, whatever its intent. The backoff when a cluster's own table is too thin."
+    },
     "intents": {
       "type": "array",
       "description": "The clusters. Order is not significant; consumers MUST NOT rely on it.",
@@ -138,6 +142,37 @@
           "additionalProperties": { "type": "integer", "minimum": 1 },
           "description": "OPTIONAL map of skill id -> how many of this cluster's searches put that skill in front of the caller, counting only searches the caller then acted on. It is the denominator `skills` has never had: a skill shown twelve times and invoked once is indistinguishable from one shown once and invoked once when only invocations are counted. The skill-side twin of `surfaced_tools`; the two id spaces are why there are two maps. RANKING INPUT, unlike `seeded_support`: this is the denominator half of an edge weight, so a consumer MAY let it damp ranking — that is what it is for. Ratel multiplies each edge by `min(1, (invoked + 3) / (considered + 3))`, so a skill shown constantly and taken rarely falls behind one shown rarely and always taken; the pseudo-counts stop a single unlucky impression halving an edge, and the clamp means an impression can only ever cost an edge, never promote one. A consumer that does not understand it MUST ignore it, which ranks exactly as before impressions existed. An id present here but absent from `skills` has NO edge and MUST NOT be promoted \u2014 recording what a search returned is not the same as making it evidence. Absent means none were recorded.",
           "$comment": "Counts are >= 1: absence already means \"surfaced no times\", so a stored zero is a second spelling of the same state."
+        },
+        "transitions": {
+          "$ref": "#/$defs/transitions",
+          "description": "OPTIONAL transition table for turns anchored on this cluster (the cluster the turn's first acted-on search was attributed to). Evicted with the cluster."
+        }
+      }
+    },
+    "transitions": {
+      "type": "object",
+      "description": "OPTIONAL tool->tool transition table (ADR-0028): state -> counts. A state is a tool id or the pseudo-state `<start>` (a turn that has invoked nothing yet). `n` counts entries into the state, `next` how often each tool came right after it; the turns that ended there are `n - sum(next)`, so no end marker is stored. `hinted` records, per next tool, how often a next-tool hint offered the edge and how often the agent then took it; a followed transition is also in `next`, and a consumer MUST subtract it before deriving probabilities, so hints cannot reinforce themselves. Counts stay integers so tables from different producers add. Learned only from turns with a `turn_id`. Absent means none were recorded.",
+      "$comment": "Value rules the shape cannot express: sum(next) <= n; followed <= offered and followed <= next[id].",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["n"],
+        "additionalProperties": true,
+        "properties": {
+          "n": { "type": "integer", "minimum": 1 },
+          "next": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
+          "hinted": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["offered"],
+              "additionalProperties": true,
+              "properties": {
+                "offered": { "type": "integer", "minimum": 1 },
+                "followed": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
         }
       }
     },

@@ -223,7 +223,13 @@ to delegate:
 - **Additive evolution.** Within `v: 1`, new fields are optional and a consumer **MUST ignore
   fields it does not recognize** (the schema is `additionalProperties: true`). An older
   consumer reads a newer graph; a graph missing a newer field (`model`, `last_ts`, `rev`,
-  `cohesion`, `vector_n`, `cluster_policy`, `surfaced_tools`, `surfaced_skills`) loads with a safe default.
+  `cohesion`, `vector_n`, `cluster_policy`, `surfaced_tools`, `surfaced_skills`, `transitions`) loads with a safe default.
+- **Transitions are counts, not probabilities.** `transitions` (graph-level, and per intent)
+  maps a state — a tool id, or `<start>` before a turn's first tool — to how often it was
+  entered (`n`) and how often each tool came next (`next`). Turns that ended at a state are
+  `n − Σnext`. A consumer MUST subtract `hinted[id].followed` from `next[id]` (and from `n`)
+  before deriving a probability, so a next-tool hint the agent followed never inflates the
+  edge that produced it (ADR-0028).
 - **Impressions are a denominator, not an edge.** `surfaced_tools` and `surfaced_skills` count
   how many of a cluster's searches put each capability in front of the caller, counting only
   searches the caller then acted on. Without them a capability shown twelve times and invoked

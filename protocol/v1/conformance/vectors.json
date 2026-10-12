@@ -484,6 +484,7 @@
   "graph": {
     "note": "Conformance fixtures for the intent-graph read model (ADR-0014, schema/intent-graph.schema.json). Unlike the catalog vectors these pin STRUCTURE, not ETags: the graph is not a synced wire artifact in v1. Both producers — the in-process local learner and the Ratel Cloud builder — MUST emit graphs that validate, and every consumer MUST reject the `invalid` set.",
     "consumerRules": [
+      "`transitions` holds raw counts. A consumer MUST derive probabilities from organic transitions only — `next[id] − hinted[id].followed` over `n − Σ followed` — so a next-tool hint the agent followed never inflates its own edge (ADR-0028). A state's end count is `n − Σ next`; no end marker is stored.",
       "An edge naming a capability absent from the consumer's registry MUST be dropped, never ranked — the catalog may have changed since the graph was grown.",
       "`centroid` MAY be absent; a consumer without an embedder matches lexically over `members`, and one with an embedder MAY derive a centroid from `members`.",
       "A consumer MUST NOT mix centroids produced by different embedding models; on a model change, discard the centroids and re-derive from `members`.",
@@ -1011,6 +1012,91 @@
             }
           ]
         }
+      },
+      {
+        "name": "transitions-global-and-per-intent",
+        "why": "Tool->tool transitions (ADR-0028) live globally and on the cluster a turn was anchored on. `assign_task` was entered 6 times and continued once, so 5 turns ended there: the end is derived, never stored. One `notify` was taken from a hint, and a consumer subtracts it before deriving probabilities.",
+        "doc": {
+          "v": 1,
+          "built_from_ts": 1753000000000,
+          "transitions": {
+            "<start>": {
+              "n": 6,
+              "next": {
+                "find_task": 6
+              }
+            },
+            "find_task": {
+              "n": 6,
+              "next": {
+                "assign_task": 6
+              }
+            },
+            "assign_task": {
+              "n": 6,
+              "next": {
+                "notify": 1
+              },
+              "hinted": {
+                "notify": {
+                  "offered": 2,
+                  "followed": 1
+                }
+              }
+            },
+            "notify": {
+              "n": 1
+            }
+          },
+          "intents": [
+            {
+              "id": "intent_0",
+              "label": "assign a task",
+              "terms": [
+                "assign",
+                "task"
+              ],
+              "members": [
+                "assign task to developer"
+              ],
+              "support": 6,
+              "skills": {},
+              "tools": {
+                "find_task": 6.0,
+                "assign_task": 6.0
+              },
+              "transitions": {
+                "<start>": {
+                  "n": 6,
+                  "next": {
+                    "find_task": 6
+                  }
+                },
+                "find_task": {
+                  "n": 6,
+                  "next": {
+                    "assign_task": 6
+                  }
+                },
+                "assign_task": {
+                  "n": 6,
+                  "next": {
+                    "notify": 1
+                  },
+                  "hinted": {
+                    "notify": {
+                      "offered": 2,
+                      "followed": 1
+                    }
+                  }
+                },
+                "notify": {
+                  "n": 1
+                }
+              }
+            }
+          ]
+        }
       }
     ],
     "invalid": [
@@ -1447,6 +1533,114 @@
               },
               "skills": {
                 "triage-ci": 3.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "transition-continues-more-than-entered",
+        "because": "A state cannot be followed more often than it was entered: sum(next) <= n.",
+        "doc": {
+          "v": 1,
+          "built_from_ts": 1753000000000,
+          "transitions": {
+            "find_task": {
+              "n": 1,
+              "next": {
+                "assign_task": 2
+              }
+            }
+          },
+          "intents": [
+            {
+              "id": "intent_0",
+              "label": "assign a task",
+              "terms": [
+                "assign",
+                "task"
+              ],
+              "members": [
+                "assign task to developer"
+              ],
+              "support": 6,
+              "skills": {},
+              "tools": {
+                "find_task": 6.0,
+                "assign_task": 6.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "transition-state-never-entered",
+        "because": "n counts entries; zero is what absence already says, so a stored zero is a second spelling of one state.",
+        "doc": {
+          "v": 1,
+          "built_from_ts": 1753000000000,
+          "intents": [
+            {
+              "id": "intent_0",
+              "label": "assign a task",
+              "terms": [
+                "assign",
+                "task"
+              ],
+              "members": [
+                "assign task to developer"
+              ],
+              "support": 6,
+              "skills": {},
+              "tools": {
+                "find_task": 6.0,
+                "assign_task": 6.0
+              },
+              "transitions": {
+                "find_task": {
+                  "n": 0
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "transition-hint-followed-more-than-taken",
+        "because": "A followed hint is also a taken transition, so `followed` cannot exceed `next[id]`, nor `offered`.",
+        "doc": {
+          "v": 1,
+          "built_from_ts": 1753000000000,
+          "transitions": {
+            "find_task": {
+              "n": 3,
+              "next": {
+                "assign_task": 1
+              },
+              "hinted": {
+                "assign_task": {
+                  "offered": 3,
+                  "followed": 2
+                }
+              }
+            }
+          },
+          "intents": [
+            {
+              "id": "intent_0",
+              "label": "assign a task",
+              "terms": [
+                "assign",
+                "task"
+              ],
+              "members": [
+                "assign task to developer"
+              ],
+              "support": 6,
+              "skills": {},
+              "tools": {
+                "find_task": 6.0,
+                "assign_task": 6.0
               }
             }
           ]

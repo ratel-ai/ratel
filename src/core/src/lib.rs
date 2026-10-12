@@ -111,6 +111,7 @@ mod skill_registry;
 mod tool;
 mod tool_registry;
 mod trace;
+mod transitions;
 mod usage;
 mod usage_learner;
 
