@@ -43,8 +43,12 @@ from .catalog import (
     HuggingFaceEmbeddingConfig,
     IntentGraph,
     LocalEmbeddingConfig,
+    NextToolPrediction,
     OllamaEmbeddingConfig,
     OriginFilterOption,
+    PredictedAfter,
+    PredictedChainStep,
+    PredictedTool,
     ProvenanceOption,
     RerankerConfig,
     SearchMethod,
@@ -106,6 +110,10 @@ from .turns import TURN_USER_MESSAGE_MAX_BYTES, Turn, current_turn_id
 
 __all__ = [
     "AdaptiveRankingStatus",
+    "NextToolPrediction",
+    "PredictedAfter",
+    "PredictedChainStep",
+    "PredictedTool",
     "ArtifactError",
     "ArtifactWarmError",
     "ExperimentalEmbeddingArtifact",

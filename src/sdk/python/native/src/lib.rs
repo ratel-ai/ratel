@@ -19,7 +19,7 @@ use ratel_ai_core::{
     ArtifactError as CoreArtifactError, ArtifactWarmError as CoreArtifactWarmError, JsonlSink,
     MemorySink, NoopSink, OnArtifactMiss, Origin, TraceEnvelope, TraceEvent, UsageLearner,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// Map a `SearchOrigin` wire string to its core variant.
 ///
@@ -970,7 +970,10 @@ fn wrap_learner(
 ) -> Arc<dyn core::TraceSink> {
     match graph {
         Some(graph) if learn => Arc::new(UsageLearner::with_policy(graph.clone(), sink, policy)),
-        _ => sink,
+        // Not learning still follows each turn's last tool, or next-tool
+        // predictions would always start from the top of the turn (ADR-0028).
+        Some(graph) => Arc::new(core::TrailTracker::new(graph.clone(), sink)),
+        None => sink,
     }
 }
 
@@ -1518,6 +1521,48 @@ impl ToolRegistry {
             .allow_threads(|| self.inner.build_intent_graph(envelopes, policy))
             .map_err(map_embedder_err)?;
         serde_json::to_string(&graph).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// What turn `turn_id` is likely to invoke next, and what tends to follow
+    /// each of `ids` (ADR-0028), as `{"intent", "chain": [{"from", "tool_id",
+    /// "p", "n", "strong"}], "after": [{"tool_id", "next": [{"tool_id", "p",
+    /// "n", "strong"}]}]}`. Empty without adaptive ranking enabled.
+    ///
+    /// With `offer` (default `True`) the prediction is recorded as shown to the
+    /// turn, so a transition the agent then takes along it never counts as
+    /// organic. A registry enabled with `learn=False` never records an offer.
+    #[pyo3(signature = (turn_id=None, query=None, ids=None, k=3, offer=true))]
+    fn experimental_predict_next_tools<'py>(
+        &self,
+        py: Python<'py>,
+        turn_id: Option<String>,
+        query: Option<String>,
+        ids: Option<Vec<String>>,
+        k: usize,
+        offer: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let ids = ids.unwrap_or_default();
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let p = self.inner.experimental_predict_next(
+            turn_id.as_deref(),
+            query.as_deref(),
+            &ids,
+            k,
+            offer && self.learn,
+        );
+        let tool =
+            |t: &core::NextTool| json!({ "tool_id": t.id, "p": t.p, "n": t.n, "strong": t.strong });
+        let value = json!({
+            "intent": p.intent,
+            "chain": p.chain.iter().map(|c| json!({
+                "from": c.from, "tool_id": c.tool.id, "p": c.tool.p, "n": c.tool.n, "strong": c.tool.strong,
+            })).collect::<Vec<_>>(),
+            "after": p.after.iter().map(|(id, next)| json!({
+                "tool_id": id, "next": next.iter().map(tool).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+        });
+        pythonize::pythonize(py, &value)
+            .map_err(|e| PyValueError::new_err(format!("serialize prediction: {e}")))
     }
 
     /// `(status, built, active, dim_mismatch)` — whether adaptive usage ranking

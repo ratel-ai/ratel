@@ -1,5 +1,10 @@
 import { SearchTarget } from "@ratel-ai/telemetry";
-import type { NativeEventSubscription, SearchHit, Tool } from "../native/index.cjs";
+import type {
+  NativeEventSubscription,
+  NextToolPrediction,
+  SearchHit,
+  Tool,
+} from "../native/index.cjs";
 import { warmFromEmbeddingArtifactSource } from "./artifact-source-warm.js";
 import { isAsyncIterable, isPromiseLike } from "./async.js";
 import {
@@ -11,7 +16,7 @@ import {
   type ExperimentalEmbeddingArtifact,
   resolveEmbeddingArtifact,
 } from "./embedding-artifact.js";
-import { type IntentGraph, ToolRegistry } from "./registry.js";
+import { type IntentGraph, type PredictNextToolsOptions, ToolRegistry } from "./registry.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
 import { newRuntimeEventId } from "./runtime-events.js";
 import {
@@ -1202,6 +1207,14 @@ export class ToolCatalog {
     options: ObservationPolicyOptions = {},
   ): Promise<IntentGraph> {
     return this.registry.experimentalBuildIntentGraph(jsonl, options);
+  }
+
+  /**
+   * What a turn is likely to invoke next. See
+   * {@link ToolRegistry.experimentalPredictNextTools} (ADR-0028).
+   */
+  experimentalPredictNextTools(options: PredictNextToolsOptions = {}): NextToolPrediction {
+    return this.registry.experimentalPredictNextTools(options);
   }
 
   /** Whether adaptive usage ranking is active, inactive, or paused by a model

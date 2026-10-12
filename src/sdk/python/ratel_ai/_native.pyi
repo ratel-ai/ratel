@@ -334,6 +334,16 @@ class ToolRegistry:
     def _rebuild_intent_graph(self) -> None:
         """Re-embed the intent graph's members under the current model (worker)."""
 
+    def experimental_predict_next_tools(
+        self,
+        turn_id: str | None = None,
+        query: str | None = None,
+        ids: list[str] | None = None,
+        k: int = 3,
+        offer: bool = True,
+    ) -> Any:
+        """Next-tool prediction (ADR-0028) as ``{"intent", "chain", "after"}``."""
+
     def adaptive_ranking_status(
         self,
     ) -> tuple[str, str | None, str | None, bool | None]:

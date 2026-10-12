@@ -7,6 +7,7 @@ import {
   FactRegistry as NativeFactRegistry,
   SkillRegistry as NativeSkillRegistry,
   ToolRegistry as NativeToolRegistry,
+  type NextToolPrediction,
   publicModelIdentity,
   type ReplaceOutcome,
   type SearchHit,
@@ -32,7 +33,21 @@ import { mapArtifactBuildError, mapArtifactWarmError, mapEmbedderError } from ".
 import { assertValidFact, type Fact } from "./grounding.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
 import { type RuntimeEventProjection, recordCatalogDefinitions } from "./telemetry.js";
-import { withTurnContext } from "./turn.js";
+import { currentTurnId, withTurnContext } from "./turn.js";
+
+/** Options for {@link ToolRegistry.experimentalPredictNextTools}. */
+export interface PredictNextToolsOptions {
+  /** The turn to predict for. Defaults to the current turn, if any. */
+  turnId?: string;
+  /** The search text, to place a turn not yet tied to an intent. */
+  query?: string;
+  /** Tools to list likely successors for. */
+  ids?: readonly string[];
+  /** Successors listed per id. Default 3. */
+  k?: number;
+  /** Record the prediction as shown to the turn. Default `true`. */
+  offer?: boolean;
+}
 
 export { IntentGraph };
 
@@ -577,6 +592,27 @@ export class ToolRegistry {
     const status = this.native.adaptiveRankingStatus();
     this.#maybeWarnModelMismatch(status);
     this.#emitRankingStatusEvent("rebuilt", status);
+  }
+
+  /**
+   * What a turn is likely to invoke next, and what tends to follow each of
+   * `ids` (ADR-0028). Empty until adaptive ranking is enabled.
+   *
+   * `turnId` defaults to the current turn. `query` places a turn not yet tied
+   * to an intent — pass the search text. With `offer` (default `true`) the
+   * prediction is recorded as shown to the turn, so a transition the agent then
+   * takes along it is not counted as organic evidence; pass `false` only when
+   * the result never reaches the agent. A graph enabled with `learn: false` is
+   * never written to.
+   */
+  experimentalPredictNextTools(options: PredictNextToolsOptions = {}): NextToolPrediction {
+    return this.native.experimentalPredictNextTools(
+      options.turnId ?? currentTurnId(),
+      options.query,
+      options.ids ? [...options.ids] : undefined,
+      options.k,
+      options.offer,
+    );
   }
 
   /**

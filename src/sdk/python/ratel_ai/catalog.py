@@ -39,7 +39,7 @@ from .telemetry import (
     trace_search,
     trace_search_async,
 )
-from .turns import Turn, record_external_tool_call, with_turn_context
+from .turns import Turn, current_turn_id, record_external_tool_call, with_turn_context
 
 Executor = Callable[..., Union[Awaitable[Any], Any]]
 """A tool handler: takes the tool's arguments dict, returns the result.
@@ -509,6 +509,42 @@ class TraceSinkConfig:
     kind: str
     session_id: str | None = None
     path: str | None = None
+
+
+class PredictedTool(TypedDict):
+    """A tool predicted next (ADR-0028).
+
+    ``p`` is smoothed over organic transitions only; ``strong`` marks an edge
+    reliable enough to hand the agent a callable definition for.
+    """
+
+    tool_id: str
+    p: float
+    n: int
+    strong: bool
+
+
+PredictedChainStep = TypedDict(
+    "PredictedChainStep",
+    {"from": str, "tool_id": str, "p": float, "n": int, "strong": bool},
+)
+"""One link of a predicted chain: ``tool_id`` is expected right after ``from``
+(a tool id, or ``"<start>"``)."""
+
+
+class PredictedAfter(TypedDict):
+    """The tools likeliest to follow ``tool_id``."""
+
+    tool_id: str
+    next: list[PredictedTool]
+
+
+class NextToolPrediction(TypedDict):
+    """What a turn is likely to invoke next (ADR-0028)."""
+
+    intent: str | None
+    chain: list[PredictedChainStep]
+    after: list[PredictedAfter]
 
 
 class AdaptiveRankingStatus(str):
@@ -1153,6 +1189,33 @@ class ToolRegistry:
             lambda: self._native._build_intent_graph(jsonl, origins, provenance)
         )
         return IntentGraph.from_json(json)
+
+    def experimental_predict_next_tools(
+        self,
+        *,
+        turn_id: str | None = None,
+        query: str | None = None,
+        ids: Sequence[str] | None = None,
+        k: int = 3,
+        offer: bool = True,
+    ) -> NextToolPrediction:
+        """What a turn is likely to invoke next, and what follows each of ``ids`` (ADR-0028).
+
+        Empty until adaptive ranking is enabled. ``turn_id`` defaults to the current
+        turn; ``query`` places a turn not yet tied to an intent. With ``offer`` the
+        prediction is recorded as shown to the turn, so a transition the agent then
+        takes along it is not counted as organic evidence; pass ``False`` only when
+        the result never reaches the agent. A graph enabled with ``learn=False`` is
+        never written to.
+        """
+        result: NextToolPrediction = self._native.experimental_predict_next_tools(
+            turn_id if turn_id is not None else current_turn_id(),
+            query,
+            list(ids) if ids is not None else None,
+            k,
+            offer,
+        )
+        return result
 
     @property
     def experimental_adaptive_ranking_status(self) -> AdaptiveRankingStatus:
@@ -1891,6 +1954,23 @@ class ToolCatalog:
         """
         return await self._registry.experimental_build_intent_graph(
             jsonl, origins=origins, provenance=provenance
+        )
+
+    def experimental_predict_next_tools(
+        self,
+        *,
+        turn_id: str | None = None,
+        query: str | None = None,
+        ids: Sequence[str] | None = None,
+        k: int = 3,
+        offer: bool = True,
+    ) -> NextToolPrediction:
+        """What a turn is likely to invoke next (ADR-0028).
+
+        See :meth:`ToolRegistry.experimental_predict_next_tools`.
+        """
+        return self._registry.experimental_predict_next_tools(
+            turn_id=turn_id, query=query, ids=ids, k=k, offer=offer
         )
 
     @property

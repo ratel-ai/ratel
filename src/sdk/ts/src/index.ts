@@ -16,6 +16,10 @@
 export type { JSONSchema7 } from "json-schema";
 export type {
   AdaptiveRankingStatus,
+  NextToolPrediction,
+  PredictedAfter,
+  PredictedChainStep,
+  PredictedTool,
   ReplaceOutcome,
   SearchHit,
   Skill,
@@ -143,7 +147,7 @@ export type {
 } from "./ratel.js";
 export { ratel } from "./ratel.js";
 /** Adaptive usage ranking: the shared read model of what users invoke (ADR-0014). */
-export type { RegistryRankingOptions } from "./registry.js";
+export type { PredictNextToolsOptions, RegistryRankingOptions } from "./registry.js";
 export { IntentGraph, SkillRegistry, ToolRegistry } from "./registry.js";
 export type {
   CatalogSnapshot,

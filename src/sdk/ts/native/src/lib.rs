@@ -1375,7 +1375,10 @@ fn wrap_learner(
 ) -> Arc<dyn core::TraceSink> {
     match graph {
         Some(graph) if learn => Arc::new(UsageLearner::with_policy(graph.clone(), sink, policy)),
-        _ => sink,
+        // Not learning still follows each turn's last tool, or next-tool
+        // predictions would always start from the top of the turn (ADR-0028).
+        Some(graph) => Arc::new(core::TrailTracker::new(graph.clone(), sink)),
+        None => sink,
     }
 }
 
@@ -1531,6 +1534,90 @@ fn resolve_embedding(config: Option<EmbeddingConfig>) -> napi::Result<Option<Emb
     EmbeddingModel::resolve(spec)
         .map(Some)
         .map_err(|e| napi::Error::from_reason(e.to_string()))
+}
+
+/// A tool predicted next (ADR-0028).
+#[napi(object)]
+pub struct PredictedTool {
+    /// The predicted tool.
+    pub tool_id: String,
+    /// Smoothed probability, from organic transitions only.
+    pub p: f64,
+    /// Organic observations behind it.
+    pub n: u32,
+    /// Whether the edge is reliable enough to hand the agent a callable
+    /// definition for.
+    pub strong: bool,
+}
+
+/// One link of a predicted chain: `toolId` is expected right after `from`
+/// (a tool id, or `"<start>"`).
+#[napi(object)]
+pub struct PredictedChainStep {
+    /// The state the step leaves: a tool id, or `"<start>"`.
+    pub from: String,
+    /// The tool expected next.
+    pub tool_id: String,
+    /// Smoothed probability, from organic transitions only.
+    pub p: f64,
+    /// Organic observations behind it.
+    pub n: u32,
+    /// Always `true` in a chain: a chain walks strong edges only.
+    pub strong: bool,
+}
+
+/// The tools likeliest to follow `toolId`.
+#[napi(object)]
+pub struct PredictedAfter {
+    /// The tool the predictions follow.
+    pub tool_id: String,
+    /// Likeliest successors, best first.
+    pub next: Vec<PredictedTool>,
+}
+
+/// What a turn is likely to invoke next (ADR-0028).
+#[napi(object)]
+pub struct NextToolPrediction {
+    /// The intent cluster the prediction came from, if any.
+    pub intent: Option<String>,
+    /// The strong chain from where the turn is now.
+    pub chain: Vec<PredictedChainStep>,
+    /// For each requested tool, the likeliest tools after it.
+    pub after: Vec<PredictedAfter>,
+}
+
+fn map_next_tool(t: core::NextTool) -> PredictedTool {
+    PredictedTool {
+        tool_id: t.id,
+        p: f64::from(t.p),
+        n: t.n,
+        strong: t.strong,
+    }
+}
+
+fn map_prediction(p: core::NextPrediction) -> NextToolPrediction {
+    NextToolPrediction {
+        intent: p.intent,
+        chain: p
+            .chain
+            .into_iter()
+            .map(|c| PredictedChainStep {
+                from: c.from,
+                tool_id: c.tool.id,
+                p: f64::from(c.tool.p),
+                n: c.tool.n,
+                strong: c.tool.strong,
+            })
+            .collect(),
+        after: p
+            .after
+            .into_iter()
+            .map(|(tool_id, next)| PredictedAfter {
+                tool_id,
+                next: next.into_iter().map(map_next_tool).collect(),
+            })
+            .collect(),
+    }
 }
 
 /// SDK-facing view of whether adaptive usage ranking is contributing. `status`
@@ -2272,6 +2359,39 @@ impl ToolRegistry {
         self.learn = learn;
         self.graph = Some(handle);
         Ok(())
+    }
+
+    /// What turn `turnId` is likely to invoke next, and what tends to follow
+    /// each of `ids` (ADR-0028). Empty without adaptive ranking enabled.
+    ///
+    /// `query` places a turn not yet anchored on an intent. With `offer`
+    /// (default `true`) the prediction is recorded as shown to the turn, so a
+    /// transition the agent then takes along it never counts as organic. A
+    /// registry enabled with `learn: false` never records an offer: the graph is
+    /// not its to change.
+    #[napi]
+    pub fn experimental_predict_next_tools(
+        &self,
+        turn_id: Option<String>,
+        query: Option<String>,
+        ids: Option<Vec<String>>,
+        k: Option<u32>,
+        offer: Option<bool>,
+    ) -> napi::Result<NextToolPrediction> {
+        let ids = ids.unwrap_or_default();
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let prediction = self
+            .inner
+            .read()
+            .map_err(|_| napi::Error::from_reason("tool registry lock poisoned"))?
+            .experimental_predict_next(
+                turn_id.as_deref(),
+                query.as_deref(),
+                &ids,
+                k.unwrap_or(3) as usize,
+                offer.unwrap_or(true) && self.learn,
+            );
+        Ok(map_prediction(prediction))
     }
 
     /// Set the share of the hybrid content score the dense arm carries; BM25
