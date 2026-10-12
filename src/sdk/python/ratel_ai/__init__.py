@@ -86,6 +86,13 @@ from .intent_graph_storage import (
 )
 from .jev import RetrieverPlugin, ratel_jev_plugin
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
+
+# ⚠️ Experimental: learn tool sequences from a host framework's OTel tool spans
+# (ADR-0028). Duck-typed, so importing it needs no OpenTelemetry install.
+from .otel_sequence import (
+    ExperimentalToolSequenceSpanProcessor,
+    experimental_tool_sequence_span_processor,
+)
 from .runtime_events import (
     OPTIONAL_ENVELOPE_FIELDS,
     RUNTIME_EVENT_MAX_HITS,
@@ -110,6 +117,8 @@ from .turns import TURN_USER_MESSAGE_MAX_BYTES, Turn, current_turn_id
 
 __all__ = [
     "AdaptiveRankingStatus",
+    "ExperimentalToolSequenceSpanProcessor",
+    "experimental_tool_sequence_span_processor",
     "NextToolPrediction",
     "PredictedAfter",
     "PredictedChainStep",

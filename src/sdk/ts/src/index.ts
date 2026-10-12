@@ -135,6 +135,11 @@ export type { JevPluginConfig, RetrieverPlugin } from "./jev.js";
 export { ratelJevPlugin } from "./jev.js";
 export type { McpServerHandle, McpToolsListErrorCode, RegisterMcpServerOptions } from "./mcp.js";
 export { McpToolsListError, registerMcpServer } from "./mcp.js";
+export {
+  type ExperimentalObservedSpan,
+  type ExperimentalToolSequenceSpanProcessor,
+  experimentalToolSequenceSpanProcessor,
+} from "./otel-sequence.js";
 // The framework-adapter SPI and factory (ADR-0013): `ratel(config).adaptTo(adapter)`.
 export type {
   AdaptedBase,
