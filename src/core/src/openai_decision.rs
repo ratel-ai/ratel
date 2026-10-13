@@ -250,7 +250,8 @@ mod tests {
     type Answer = Box<dyn Fn(&serde_json::Value) -> (u16, String, String) + Send>;
 
     /// A Decisions stand-in: `answer` maps each request's first question to a
-    /// reply; every request is recorded.
+    /// reply; every request is recorded. Like the real API, it refuses a
+    /// question with fewer than 2 or more than 255 choices.
     fn mock(answer: Answer, expected: usize) -> (String, Arc<Mutex<Vec<MockHttpRequest>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -266,7 +267,17 @@ mod tests {
                         stream.set_nonblocking(false).unwrap();
                         let request = read_http_request_full(&mut stream);
                         let question = request.body["questions"][0].clone();
-                        let (status, headers, body) = answer(&question);
+                        let n = question["choices"].as_array().map_or(0, Vec::len);
+                        let (status, headers, body) = if (2..=255).contains(&n) {
+                            answer(&question)
+                        } else {
+                            let msg = format!("a choice question takes 2 to 255 choices, got {n}");
+                            (
+                                400,
+                                String::new(),
+                                serde_json::json!({"error": {"message": msg}}).to_string(),
+                            )
+                        };
                         log.lock().unwrap().push(request);
                         let response = format!(
                             "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\n{headers}\
@@ -443,7 +454,7 @@ mod tests {
         let c = client(&url);
         for _ in 0..n {
             assert!(matches!(
-                c.rank("q", &cands(&["a"]), 1, CandidateKind::Tool),
+                c.rank("q", &cands(&["a", "b"]), 1, CandidateKind::Tool),
                 Err(RankerError::Malformed { .. })
             ));
         }
@@ -470,7 +481,7 @@ mod tests {
         );
         let c = client(&url);
         let call = || {
-            c.rank("q", &cands(&["a"]), 1, CandidateKind::Tool)
+            c.rank("q", &cands(&["a", "b"]), 1, CandidateKind::Tool)
                 .unwrap_err()
         };
         assert_eq!(
@@ -531,6 +542,35 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, RankerError::Config { .. }));
         assert!(err.to_string().contains("OpenAI key"), "{err}");
+    }
+
+    #[test]
+    fn a_lone_candidate_ranks_without_a_request() {
+        // Decisions refuses a one-choice question; the only candidate is the pick.
+        let c = client("http://127.0.0.1:9");
+        let ranked = c
+            .rank("q", &cands(&["a", "a"]), 5, CandidateKind::Tool)
+            .unwrap();
+        assert_eq!(ranked, vec![("a".into(), 1.0)]);
+    }
+
+    #[test]
+    fn a_catalog_one_over_a_question_leaves_no_one_choice_group() {
+        // 151 candidates would split [150, 1]; every question must offer 2+.
+        let ids: Vec<String> = (0..151).map(|i| format!("tool{i:03}")).collect();
+        let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let scores = HashMap::from([("text of tool150".to_string(), 0.9)]);
+        let (url, seen) = mock(by_text(scores), 3);
+        let ranked = client(&url)
+            .rank("q", &cands(&id_refs), 3, CandidateKind::Tool)
+            .unwrap();
+        assert_eq!(ranked[0].0, "tool150");
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 3, "two groups and a final round");
+        assert!(seen.iter().all(|r| {
+            let n = r.body["questions"][0]["choices"].as_array().unwrap().len();
+            (2..=MAX_OPTIONS).contains(&n)
+        }));
     }
 
     #[test]

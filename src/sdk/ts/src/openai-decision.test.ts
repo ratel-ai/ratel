@@ -27,7 +27,9 @@ interface SeenRequest {
 
 /** A stand-in for OpenAI's `POST /v1/decisions`: answers each request with the
  * next scripted reply, or — when none is queued — with probabilities that rank
- * the choices in reverse (`tN` highest), and records what it was sent. */
+ * the choices in reverse (`tN` highest), and records what it was sent. Like
+ * the real API, it refuses a question with fewer than 2 or more than 255
+ * choices. */
 class MockDecisions {
   readonly seen: SeenRequest[] = [];
   private preferred: { id: string; p: number } | undefined;
@@ -48,7 +50,13 @@ class MockDecisions {
         const id = c.description.split(" ")[0];
         return { value: c.value, probability: id === preferred.id ? preferred.p : 0 };
       });
-      const reply = this.replies.shift() ?? {
+      const n = question.choices.length;
+      const outOfRange = n < 2 || n > 255;
+      const refusal = {
+        status: 400,
+        body: { error: { message: `a choice question takes 2 to 255 choices, got ${n}` } },
+      };
+      const reply = (outOfRange ? refusal : this.replies.shift()) ?? {
         status: 200,
         body: {
           answers: [{ type: "choice", name: question.name, probabilities, confidence: 0.9 }],
@@ -171,6 +179,22 @@ describe("ratelOpenAIDecisionPlugin", () => {
 
     expect(hits[0].toolId).toBe(stageOne[stageOne.length - 1]);
     expect(mock.offered()).toEqual(stageOne);
+  });
+
+  it("ranks a lone candidate without asking, as a reranker or a retriever", async () => {
+    mock.reset();
+    const reranked = new ToolCatalog({ rerankerFn: decision().rerank });
+    await reranked.register(TOOLS);
+    const query = "send an email message";
+    const stageOne = await bm25Order(query, 50);
+    expect(stageOne).toEqual(["send_email"]);
+    expect((await reranked.searchAsync(query, 3)).map((h) => h.toolId)).toEqual(["send_email"]);
+
+    const custom = new ToolCatalog({ method: "custom", retrieveFn: decision().retrieve });
+    await custom.register([TOOLS[0]]);
+    const hits = await custom.searchAsync("anything", 3);
+    expect(hits.map((h) => [h.toolId, h.score])).toEqual([["read_file", 1]]);
+    expect(mock.seen).toHaveLength(0);
   });
 
   it("asks a skill question for skills", async () => {

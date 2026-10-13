@@ -220,7 +220,9 @@ mod tests {
     }
 
     /// A Jev stand-in. `answer` maps the criteria a request carries to the
-    /// probabilities it returns; every request is recorded.
+    /// probabilities it returns; every request is recorded. It refuses a
+    /// question with fewer than 2 or more than 255 options, the range
+    /// `choice_ranker` keeps every question in.
     /// `(status, extra header lines, body)` for one request.
     type Answer =
         Box<dyn Fn(&serde_json::Map<String, serde_json::Value>) -> (u16, String, String) + Send>;
@@ -246,7 +248,17 @@ mod tests {
                             .and_then(|q| q["criteria"].as_object())
                             .cloned()
                             .unwrap_or_default();
-                        let (status, headers, body) = answer(&criteria);
+                        let n = criteria.len();
+                        let (status, headers, body) = if (2..=255).contains(&n) {
+                            answer(&criteria)
+                        } else {
+                            let msg = format!("a choice question takes 2 to 255 options, got {n}");
+                            (
+                                400,
+                                String::new(),
+                                serde_json::json!({"error": {"message": msg}}).to_string(),
+                            )
+                        };
                         log.lock().unwrap().push(request);
                         let response = format!(
                             "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\n{headers}\
@@ -549,7 +561,7 @@ mod tests {
         let (url, _seen) = mock(answer, n);
         let c = client(&url);
         let call = || {
-            c.rank("q", &cands(&["a"]), 1, CandidateKind::Tool)
+            c.rank("q", &cands(&["a", "b"]), 1, CandidateKind::Tool)
                 .unwrap_err()
         };
         let invalid = |status, message: &str| JevError::InvalidRequest {
@@ -594,7 +606,7 @@ mod tests {
             1,
         );
         assert!(matches!(
-            client(&url).rank("q", &cands(&["a"]), 1, CandidateKind::Tool),
+            client(&url).rank("q", &cands(&["a", "b"]), 1, CandidateKind::Tool),
             Err(JevError::Malformed { .. })
         ));
     }
@@ -620,7 +632,7 @@ mod tests {
             .unwrap()
             .port();
         let err = client(&format!("http://127.0.0.1:{port}"))
-            .rank("q", &cands(&["a"]), 1, CandidateKind::Tool)
+            .rank("q", &cands(&["a", "b"]), 1, CandidateKind::Tool)
             .unwrap_err();
         assert!(matches!(err, JevError::Unreachable { .. }), "{err}");
     }

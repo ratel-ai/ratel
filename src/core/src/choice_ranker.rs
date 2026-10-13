@@ -19,6 +19,10 @@ use crate::rerank::RankCandidate as Candidate;
 /// its token budget. OpenAI documents no limit, so it gets the same.
 pub(crate) const MAX_OPTIONS: usize = 150;
 
+/// The fewest options a question may offer: OpenAI refuses a one-choice
+/// question. A lone candidate is the pick without asking.
+pub(crate) const MIN_OPTIONS: usize = 2;
+
 /// Characters of option text per question, and per option. A question's
 /// options and the query must fit Jev's 32k-token budget.
 pub(crate) const MAX_QUESTION_CHARS: usize = 80_000;
@@ -341,7 +345,7 @@ fn tournament(
     let mut field = candidates;
     loop {
         if fits_one_question(&field) {
-            return asker.ask(key, query, &field, kind);
+            return ask(asker, key, query, &field, kind);
         }
         let groups = split_into_questions(&field);
         let mut ranked_groups: Vec<Vec<&Candidate>> = Vec::with_capacity(groups.len());
@@ -350,7 +354,7 @@ fn tournament(
                 std::thread::scope(|scope| {
                     let handles: Vec<_> = batch
                         .iter()
-                        .map(|group| scope.spawn(|| asker.ask(key, query, group, kind)))
+                        .map(|group| scope.spawn(|| ask(asker, key, query, group, kind)))
                         .collect();
                     handles
                         .into_iter()
@@ -386,6 +390,26 @@ fn tournament(
         }
         field = winners;
     }
+}
+
+/// Ask one question over `field`, which fits one: a lone candidate is the
+/// pick at probability 1 without a request.
+fn ask(
+    asker: &impl AskChoice,
+    key: &str,
+    query: &str,
+    field: &[&Candidate],
+    kind: CandidateKind,
+) -> Result<Vec<(String, f32)>, RankerError> {
+    if let [only] = field {
+        return Ok(vec![(only.id.clone(), 1.0)]);
+    }
+    debug_assert!(
+        (MIN_OPTIONS..=MAX_OPTIONS).contains(&field.len()),
+        "a question offers {} options",
+        field.len()
+    );
+    asker.ask(key, query, field, kind)
 }
 
 /// The candidates that go on to the next round, from each group's ranked,
@@ -486,7 +510,8 @@ pub(crate) fn fits_one_question(field: &[&Candidate]) -> bool {
         && field.iter().map(|c| option_chars(c)).sum::<usize>() <= MAX_QUESTION_CHARS
 }
 
-/// Cut `field` into consecutive groups that each fit one question.
+/// Cut `field` into consecutive groups that each fit one question, none a
+/// lone option ([`MIN_OPTIONS`]).
 pub(crate) fn split_into_questions<'a>(field: &[&'a Candidate]) -> Vec<Vec<&'a Candidate>> {
     let mut groups: Vec<Vec<&Candidate>> = Vec::new();
     let mut current: Vec<&Candidate> = Vec::new();
@@ -500,6 +525,14 @@ pub(crate) fn split_into_questions<'a>(field: &[&'a Candidate]) -> Vec<Vec<&'a C
         }
         current.push(c);
         chars += len;
+    }
+    // Only the last group can be a lone option: an earlier one closed full,
+    // and a full group holds at least `MAX_QUESTION_CHARS / MAX_OPTION_CHARS`
+    // (40) options. Its predecessor lends it one, and both still fit.
+    if current.len() == 1
+        && let Some(lent) = groups.last_mut().and_then(Vec::pop)
+    {
+        current.insert(0, lent);
     }
     if !current.is_empty() {
         groups.push(current);
@@ -635,5 +668,25 @@ mod tests {
         let refs: Vec<&Candidate> = many.iter().collect();
         assert!(!fits_one_question(&refs), "60 × 2,000 chars exceeds 80,000");
         assert_eq!(split_into_questions(&refs).len(), 2);
+    }
+
+    #[test]
+    fn a_split_leaves_no_one_option_group() {
+        let many: Vec<Candidate> = (0..151)
+            .map(|i| Candidate {
+                id: format!("c{i}"),
+                text: "y".into(),
+            })
+            .collect();
+        let refs: Vec<&Candidate> = many.iter().collect();
+        let sizes: Vec<usize> = split_into_questions(&refs).iter().map(Vec::len).collect();
+        assert_eq!(sizes, vec![149, 2]);
+        let order: Vec<&str> = split_into_questions(&refs)
+            .concat()
+            .iter()
+            .map(|c| c.id.as_str())
+            .collect();
+        let ids: Vec<&str> = many.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(order, ids, "rebalancing keeps the field's order");
     }
 }

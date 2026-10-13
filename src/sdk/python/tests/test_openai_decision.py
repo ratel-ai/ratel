@@ -30,7 +30,8 @@ class MockDecisions:
     """A Decisions stand-in. Answers each request with the next scripted reply,
     or — when none is queued — with probabilities that rank the choices in
     reverse (``tN`` highest), or favour one preferred id; records what it was
-    sent."""
+    sent. Like the real API, it refuses a question with fewer than 2 or more
+    than 255 choices."""
 
     def __init__(self) -> None:
         self.seen: list[dict[str, Any]] = []
@@ -50,7 +51,11 @@ class MockDecisions:
                     }
                 )
                 headers: dict[str, str] = {}
-                if mock.replies:
+                n = len(body["questions"][0]["choices"])
+                if not 2 <= n <= 255:
+                    message = f"a choice question takes 2 to 255 choices, got {n}"
+                    status, payload = 400, {"error": {"message": message}}
+                elif mock.replies:
                     status, payload, headers = mock.replies.pop(0)
                 else:
                     question = body["questions"][0]
@@ -174,6 +179,20 @@ async def test_rerank_sees_only_stage_one_candidates(mock: MockDecisions) -> Non
 
     assert hits[0].tool_id == stage_one[-1]
     assert mock.offered() == stage_one
+
+
+async def test_a_lone_candidate_ranks_without_a_request(mock: MockDecisions) -> None:
+    query = "send an email message"
+    assert await _bm25_order(query, 50) == ["send_email"]
+    reranked = ToolCatalog(reranker_fn=_decision(mock).rerank)
+    await reranked.register(TOOLS)
+    assert [h.tool_id for h in await reranked.search_async(query, 3)] == ["send_email"]
+
+    custom = ToolCatalog(method="custom", retrieve_fn=_decision(mock).retrieve)
+    await custom.register(TOOLS[:1])
+    hits = await custom.search_async("anything", 3)
+    assert [(h.tool_id, h.score) for h in hits] == [("read_file", 1.0)]
+    assert mock.seen == []
 
 
 async def test_skills_get_a_skill_question(mock: MockDecisions) -> None:
