@@ -4,10 +4,8 @@
 // client, so a change to OpenAI's beta API never reaches the catalogs.
 
 import { OpenAiDecisionRanker } from "../native/index.cjs";
-import type { RankFn } from "./catalog.js";
-import { mapRetrieverError } from "./errors.js";
+import { choiceRankerPlugin, type RetrieverPlugin } from "./choice-ranker-plugin.js";
 import { warnOpenAIDecisionBetaOnce } from "./experimental-warning.js";
-import type { RetrieverPlugin } from "./jev.js";
 
 /** Where the OpenAI Decisions plugin sends requests. */
 export interface OpenAIDecisionPluginConfig {
@@ -42,20 +40,5 @@ export function ratelOpenAIDecisionPlugin(
   config: OpenAIDecisionPluginConfig = {},
 ): RetrieverPlugin {
   warnOpenAIDecisionBetaOnce(config.model);
-  const ranker = new OpenAiDecisionRanker(config);
-  const rank: RankFn = async (query, candidates, topK) => {
-    if (candidates.length === 0 || topK <= 0) return [];
-    const kind = candidates[0]?.kind ?? "tool";
-    try {
-      return await ranker.rankAsync(
-        query,
-        candidates.map(({ id, text }) => ({ id, text })),
-        topK,
-        kind,
-      );
-    } catch (error) {
-      throw mapRetrieverError(error);
-    }
-  };
-  return { retrieve: rank, rerank: rank };
+  return choiceRankerPlugin(new OpenAiDecisionRanker(config));
 }

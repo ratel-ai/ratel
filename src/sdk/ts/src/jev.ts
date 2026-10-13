@@ -4,8 +4,9 @@
 // change to Jev's interface never reaches the catalogs.
 
 import { JevRanker } from "../native/index.cjs";
-import type { RankFn } from "./catalog.js";
-import { mapRetrieverError } from "./errors.js";
+import { choiceRankerPlugin, type RetrieverPlugin } from "./choice-ranker-plugin.js";
+
+export type { RetrieverPlugin } from "./choice-ranker-plugin.js";
 
 /** Where the Jev plugin sends requests. */
 export interface JevPluginConfig {
@@ -15,14 +16,6 @@ export interface JevPluginConfig {
   apiKeyEnv?: string;
   /** Jev model. Default `"jev-latest"`. */
   model?: string;
-}
-
-/** A model's two ranking functions, for `retrieveFn` and `rerankerFn`. */
-export interface RetrieverPlugin {
-  /** Rank the whole catalog: pass as `retrieveFn` with `method: "custom"`. */
-  retrieve: RankFn;
-  /** Rerank the first stage's top candidates: pass as `rerankerFn`. */
-  rerank: RankFn;
 }
 
 /**
@@ -41,20 +34,5 @@ export interface RetrieverPlugin {
  * ```
  */
 export function ratelJevPlugin(config: JevPluginConfig = {}): RetrieverPlugin {
-  const ranker = new JevRanker(config);
-  const rank: RankFn = async (query, candidates, topK) => {
-    if (candidates.length === 0 || topK <= 0) return [];
-    const kind = candidates[0]?.kind ?? "tool";
-    try {
-      return await ranker.rankAsync(
-        query,
-        candidates.map(({ id, text }) => ({ id, text })),
-        topK,
-        kind,
-      );
-    } catch (error) {
-      throw mapRetrieverError(error);
-    }
-  };
-  return { retrieve: rank, rerank: rank };
+  return choiceRankerPlugin(new JevRanker(config));
 }

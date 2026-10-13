@@ -8,16 +8,12 @@ beta API never reaches the catalogs.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import warnings
-from collections.abc import Sequence
 
-from ._custom_ranking import RankCandidate, RankedId
-from ._native import OpenAIDecisionRanker, RankerError
-from .exceptions import RetrieverError
+from ._choice_ranker_plugin import RetrieverPlugin, choice_ranker_plugin
+from ._native import OpenAIDecisionRanker
 from .fact_catalog import ExperimentalWarning
-from .jev import RetrieverPlugin
 
 _DEFAULT_MODEL = "gpt-6-luna"
 
@@ -80,22 +76,4 @@ def ratel_openai_decision_plugin(
         ToolCatalog(method="bm25", reranker_fn=decision.rerank, reranker_depth=20)
     """
     _warn_beta_once(model)
-    ranker = OpenAIDecisionRanker(url, api_key_env, model)
-
-    async def rank(query: str, candidates: list[RankCandidate], top_k: int) -> Sequence[RankedId]:
-        if not candidates or top_k <= 0:
-            return []
-        pairs = [(c.id, c.text) for c in candidates]
-        try:
-            ranked = await asyncio.to_thread(ranker.rank, query, pairs, top_k, candidates[0].kind)
-        except RankerError as error:
-            raise RetrieverError(
-                str(error),
-                error.code,
-                transient=error.transient,
-                status=error.status,
-                retry_after_secs=error.retry_after_secs,
-            ) from error
-        return [{"id": id_, "score": score} for id_, score in ranked]
-
-    return RetrieverPlugin(retrieve=rank, rerank=rank)
+    return choice_ranker_plugin(OpenAIDecisionRanker(url, api_key_env, model))
