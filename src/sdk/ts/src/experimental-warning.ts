@@ -51,7 +51,7 @@ export function warnOpenAIDecisionBetaOnce(model?: string): void {
   globalRef.console?.warn?.(
     "ratel: the OpenAI Decisions plugin is beta. OpenAI's Decisions API is in public beta and " +
       `may change; ${modelLine} It ranks tools and skills only (no facts, text only). Ratel caps ` +
-      "each question at 150 choices / 80,000 characters (OpenAI documents no limits). The query " +
+      "each question at 150 choices / 80,000 characters (OpenAI allows 2 to 255 choices). The query " +
       "and each candidate's text are sent to OpenAI. " +
       "Set RATEL_EXPERIMENTAL_SILENCE=1 to silence this warning.",
   );

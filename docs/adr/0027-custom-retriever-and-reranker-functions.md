@@ -83,9 +83,9 @@ map to `RetrieverError` codes: `Config`, `Unauthorized`, `InvalidRequest` (not t
 OpenAI's Decisions API ships the same way: `ratelOpenAIDecisionPlugin({ url?, apiKeyEnv?, model? })`
 (Python `ratel_openai_decision_plugin`), client `OpenAIDecisionRanker` in core's
 `openai_decision.rs`, defaults `https://api.openai.com`, `OPENAI_API_KEY` and `gpt-6-luna`. It
-asks one `choice` question (name `tool` or `skill`, text only) per call. OpenAI documents no
-limits, so it uses Jev's. A `refusal` answer is a new code, `Refused`, transient: a reranker keeps
-stage 1's order. The API is in public beta, so the first plugin made prints a one-time warning.
+asks one `choice` question (name `tool` or `skill`, text only) per call. OpenAI allows 2 to
+255 choices per question, as Jev does, so it uses Jev's limits. A `refusal` answer is a new
+code, `Refused`, transient: a reranker keeps stage 1's order. The API is in public beta, so the first plugin made prints a one-time warning.
 The two clients share the limits, tournament, status mapping and error type in core's
 `choice_ranker.rs`; each file holds only its own wire format.
 

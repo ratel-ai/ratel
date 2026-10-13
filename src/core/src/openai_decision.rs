@@ -3,8 +3,9 @@
 //!
 //! Decisions answers a `choice` question over `{value, description}` choices
 //! with a probability per choice. Only that wire format lives here; the
-//! limits (OpenAI documents none, so Jev's are used), the tournament for large
-//! candidate sets and the error type are shared in [`crate::choice_ranker`].
+//! limits (OpenAI allows 2 to 255 choices; Ratel caps at 150), the tournament
+//! for large candidate sets and the error type are shared in
+//! [`crate::choice_ranker`].
 //! The API is in public beta: a change to it stays in this file.
 //!
 //! Text only: the query is sent as a plain string, never images.

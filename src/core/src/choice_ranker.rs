@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use crate::rerank::RankCandidate as Candidate;
 
-/// Options per question. Jev accepts 255; 150 keeps each question well inside
-/// its token budget. OpenAI documents no limit, so it gets the same.
+/// Options per question. Jev and OpenAI both accept 2 to 255; 150 keeps each
+/// question well inside Jev's token budget, and OpenAI gets the same.
 pub(crate) const MAX_OPTIONS: usize = 150;
 
 /// The fewest options a question may offer: OpenAI refuses a one-choice

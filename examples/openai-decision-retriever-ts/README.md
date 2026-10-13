@@ -52,6 +52,6 @@ src/index.ts                  entry — bm25, bm25 -> decisions, decisions alone
 ## The options it uses
 
 - `ratelOpenAIDecisionPlugin({ url?, apiKeyEnv?, model? })` returns `{ retrieve, rerank }`. The defaults are `https://api.openai.com`, `OPENAI_API_KEY` and `gpt-6-luna`, the only model the beta supports.
-- It asks one `choice` question per call. OpenAI documents no limits, so it uses Jev's: above 150 candidates (or 80,000 characters) it judges groups in parallel and a final round of their winners.
+- It asks one `choice` question per call. OpenAI allows 2 to 255 choices per question, as Jev does, so it uses Jev's limits: above 150 candidates (or 80,000 characters) it judges groups in parallel and a final round of their winners.
 - Tools and skills only: facts aren't ranked by the hooks yet. Text only: no images are sent.
 - **Failure:** a transient `RetrieverError` from `rerankerFn` keeps the first stage's order and records a `rerank_fallback:<code>` trace stage. That includes `code: "Refused"`, when the model declines to answer. Anything else, and any `retrieveFn` failure, throws.
