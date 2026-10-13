@@ -425,6 +425,9 @@ class RankerError(RuntimeError):
     retry_after_secs: int | None
     transient: bool
 
+DEFAULT_OPENAI_DECISION_MODEL: str
+"""The Decisions model the OpenAI Decisions plugin asks by default (the only one in the beta)."""
+
 class JevError(RankerError):
     """A Jev ranking failed; the Jev plugin re-raises it as `RetrieverError`."""
 

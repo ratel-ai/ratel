@@ -2808,6 +2808,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("JevError", m.py().get_type::<JevError>())?;
     m.add_class::<JevRanker>()?;
     m.add_class::<OpenAIDecisionRanker>()?;
+    m.add(
+        "DEFAULT_OPENAI_DECISION_MODEL",
+        core::DEFAULT_OPENAI_DECISION_MODEL,
+    )?;
     m.add_class::<ToolStageOne>()?;
     m.add_class::<SkillStageOne>()?;
     Ok(())

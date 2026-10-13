@@ -12,10 +12,9 @@ import os
 import warnings
 
 from ._choice_ranker_plugin import RetrieverPlugin, choice_ranker_plugin
+from ._native import DEFAULT_OPENAI_DECISION_MODEL as _DEFAULT_MODEL
 from ._native import OpenAIDecisionRanker
 from .fact_catalog import ExperimentalWarning
-
-_DEFAULT_MODEL = "gpt-6-luna"
 
 # One-time gate for the beta warning the first plugin emits. Module-level so a
 # test can reset it (the warning is once per process).

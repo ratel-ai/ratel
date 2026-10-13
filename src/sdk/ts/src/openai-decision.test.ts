@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { DEFAULT_OPENAI_DECISION_MODEL } from "../native/index.cjs";
 import { resetOpenAIDecisionWarningForTest } from "./experimental-warning.js";
 import {
   type ExecutableTool,
@@ -288,7 +289,8 @@ describe("the OpenAI Decisions beta warning", () => {
       expect(warn).toHaveBeenCalledTimes(1);
       const message = String(warn.mock.calls[0][0]);
       expect(message).toContain("beta");
-      expect(message).toContain("gpt-6-luna");
+      expect(DEFAULT_OPENAI_DECISION_MODEL).toBe("gpt-6-luna");
+      expect(message).toContain(`only ${DEFAULT_OPENAI_DECISION_MODEL} is supported.`);
       expect(message).toContain("sent to OpenAI");
       expect(message).toContain("RATEL_EXPERIMENTAL_SILENCE");
     } finally {

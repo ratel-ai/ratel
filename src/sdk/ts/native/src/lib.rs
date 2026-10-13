@@ -383,6 +383,11 @@ impl JevRanker {
     }
 }
 
+/// The Decisions model the OpenAI Decisions plugin asks by default, the only
+/// one the beta supports.
+#[napi]
+pub const DEFAULT_OPENAI_DECISION_MODEL: &str = core::DEFAULT_OPENAI_DECISION_MODEL;
+
 /// Where the OpenAI Decisions ranker sends requests; unset fields keep the
 /// defaults (`https://api.openai.com`, `OPENAI_API_KEY`, `gpt-6-luna`).
 #[napi(object)]

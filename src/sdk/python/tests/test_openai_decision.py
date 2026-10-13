@@ -21,6 +21,7 @@ from ratel_ai import (
     openai_decision,
     ratel_openai_decision_plugin,
 )
+from ratel_ai._native import DEFAULT_OPENAI_DECISION_MODEL
 from ratel_ai.experimental import ExperimentalWarning
 
 KEY_ENV = "RATEL_SDK_PY_OPENAI_DECISION_TEST_KEY"
@@ -274,7 +275,9 @@ def test_the_beta_warning_prints_once(monkeypatch: pytest.MonkeyPatch) -> None:
     beta = [w for w in caught if issubclass(w.category, ExperimentalWarning)]
     assert len(beta) == 1
     message = str(beta[0].message)
-    for part in ("beta", "gpt-6-luna", "sent to OpenAI", "RATEL_EXPERIMENTAL_SILENCE"):
+    assert DEFAULT_OPENAI_DECISION_MODEL == "gpt-6-luna"
+    assert f"only {DEFAULT_OPENAI_DECISION_MODEL} is supported." in message
+    for part in ("beta", "sent to OpenAI", "RATEL_EXPERIMENTAL_SILENCE"):
         assert part in message
 
 
