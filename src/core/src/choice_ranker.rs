@@ -36,8 +36,10 @@ pub(crate) const MIN_PROBABILITY: f32 = 0.01;
 /// How many tournament groups run at once.
 const TOURNAMENT_CONCURRENCY: usize = 6;
 
-/// A question is answered in well under a second; a call that takes this long
-/// is broken, not slow.
+/// Per request. Jev answers a question in well under a second and OpenAI
+/// Decisions in about 2 s (median); a call that takes this long is broken, not
+/// slow. A tournament runs its rounds back to back, so a large catalog's search
+/// takes a few calls' latency, each under this limit.
 const TIMEOUT_SECS: u64 = 15;
 
 /// An answer is a probability per option; anything near this size is not one.
