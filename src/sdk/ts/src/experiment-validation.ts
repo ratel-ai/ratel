@@ -87,10 +87,11 @@ function validateEvaluation<Result>(evaluation: {
     if (
       reference.attribution !== undefined &&
       reference.attribution !== "last-selection" &&
+      reference.attribution !== "last-offering-selection" &&
       reference.attribution !== "all-in-window"
     ) {
       throw new Error(
-        'experimentalDefineExperiment: invocation attribution must be "last-selection" or "all-in-window"',
+        'experimentalDefineExperiment: invocation attribution must be "last-selection", "last-offering-selection", or "all-in-window"',
       );
     }
     invocationReferences += 1;
