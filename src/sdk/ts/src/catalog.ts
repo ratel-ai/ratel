@@ -352,6 +352,47 @@ export type RankFn = (
   topK: number,
 ) => Promise<RankedId[]> | RankedId[];
 
+/**
+ * A model's two ranking functions (ADR-0027): `retrieve` for `retrieveFn`
+ * (`method: "custom"`), `rerank` for `rerankerFn`.
+ *
+ * **Experimental** — may change without a major version bump.
+ */
+export interface RetrieverPlugin {
+  /** Rank the whole catalog: pass as `retrieveFn` with `method: "custom"`. */
+  retrieve: RankFn;
+  /** Rerank the first stage's top candidates: pass as `rerankerFn`. */
+  rerank: RankFn;
+}
+
+/**
+ * Declare a ranking plugin: one or both {@link RankFn}s, checked to be
+ * functions. Returns `plugin` unchanged, typed, so a plugin author gets the
+ * {@link RankFn} signature enforced. Plugins with vendor clients live in
+ * `@ratel-ai/rankers-plugin`.
+ *
+ * **Experimental** — may change without a major version bump.
+ *
+ * @example
+ * ```ts
+ * export const myPlugin = definePlugin({ retrieve: rank, rerank: rank });
+ * ```
+ *
+ * @throws TypeError when neither function is given, or one is not a function.
+ */
+export function definePlugin<P extends Partial<RetrieverPlugin>>(plugin: P): P {
+  if (plugin.retrieve === undefined && plugin.rerank === undefined) {
+    throw new TypeError("definePlugin: give retrieve, rerank, or both");
+  }
+  for (const key of ["retrieve", "rerank"] as const) {
+    const fn = plugin[key];
+    if (fn !== undefined && typeof fn !== "function") {
+      throw new TypeError(`definePlugin: ${key} must be a function`);
+    }
+  }
+  return plugin;
+}
+
 /** Per-call options for `searchAsync`; each field overrides the catalog's default. */
 export interface SearchAsyncOptions {
   /** Who initiated the call (default `"direct"`); recorded, never affects ranking. */

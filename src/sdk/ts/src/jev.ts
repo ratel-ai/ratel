@@ -4,9 +4,8 @@
 // change to Jev's interface never reaches the catalogs.
 
 import { JevRanker } from "../native/index.cjs";
-import { choiceRankerPlugin, type RetrieverPlugin } from "./choice-ranker-plugin.js";
-
-export type { RetrieverPlugin } from "./choice-ranker-plugin.js";
+import type { RetrieverPlugin } from "./catalog.js";
+import { choiceRankerPlugin } from "./choice-ranker-plugin.js";
 
 /** Where the Jev plugin sends requests. */
 export interface JevPluginConfig {

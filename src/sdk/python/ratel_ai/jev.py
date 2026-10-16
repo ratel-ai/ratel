@@ -8,7 +8,8 @@ never reaches the catalogs.
 
 from __future__ import annotations
 
-from ._choice_ranker_plugin import RetrieverPlugin, choice_ranker_plugin
+from ._choice_ranker_plugin import choice_ranker_plugin
+from ._custom_ranking import RetrieverPlugin
 from ._native import JevRanker
 
 __all__ = ["RetrieverPlugin", "ratel_jev_plugin"]

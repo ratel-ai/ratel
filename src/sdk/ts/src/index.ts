@@ -61,13 +61,14 @@ export type {
   RankedId,
   RankFn,
   RerankerConfig,
+  RetrieverPlugin,
   SearchAsyncOptions,
   SearchMethod,
   SearchOrigin,
   ToolCatalogOptions,
   TraceSinkConfig,
 } from "./catalog.js";
-export { ToolCatalog } from "./catalog.js";
+export { definePlugin, ToolCatalog } from "./catalog.js";
 // Deprecated pre-0.2.0 surface (see compat.ts) — kept so `@ratel-ai/sdk@0.1.x`
 // callers keep compiling and running after upgrading to 0.2.0. Slated for removal (RAT-250).
 export type {
@@ -124,7 +125,7 @@ export {
   S3IntentGraphStorage,
   StaleIntentGraphError,
 } from "./intent-graph-storage.js";
-export type { JevPluginConfig, RetrieverPlugin } from "./jev.js";
+export type { JevPluginConfig } from "./jev.js";
 export { ratelJevPlugin } from "./jev.js";
 export type { McpServerHandle, McpToolsListErrorCode, RegisterMcpServerOptions } from "./mcp.js";
 export { McpToolsListError, registerMcpServer } from "./mcp.js";

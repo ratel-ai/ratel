@@ -11,7 +11,8 @@ from __future__ import annotations
 import os
 import warnings
 
-from ._choice_ranker_plugin import RetrieverPlugin, choice_ranker_plugin
+from ._choice_ranker_plugin import choice_ranker_plugin
+from ._custom_ranking import RetrieverPlugin
 from ._native import DEFAULT_OPENAI_DECISION_MODEL as _DEFAULT_MODEL
 from ._native import OpenAIDecisionRanker
 from .fact_catalog import ExperimentalWarning

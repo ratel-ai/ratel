@@ -4,7 +4,8 @@
 // client, so a change to OpenAI's beta API never reaches the catalogs.
 
 import { OpenAiDecisionRanker } from "../native/index.cjs";
-import { choiceRankerPlugin, type RetrieverPlugin } from "./choice-ranker-plugin.js";
+import type { RetrieverPlugin } from "./catalog.js";
+import { choiceRankerPlugin } from "./choice-ranker-plugin.js";
 import { warnOpenAIDecisionBetaOnce } from "./experimental-warning.js";
 
 /** Where the OpenAI Decisions plugin sends requests. */

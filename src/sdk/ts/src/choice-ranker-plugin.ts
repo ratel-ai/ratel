@@ -3,16 +3,8 @@
 // `retrieveFn` and `rerankerFn`. Each plugin only builds its native client.
 
 import type { RankCandidate as NativeRankCandidate, RankedId } from "../native/index.cjs";
-import type { RankFn } from "./catalog.js";
+import type { RankFn, RetrieverPlugin } from "./catalog.js";
 import { mapRetrieverError } from "./errors.js";
-
-/** A model's two ranking functions, for `retrieveFn` and `rerankerFn`. */
-export interface RetrieverPlugin {
-  /** Rank the whole catalog: pass as `retrieveFn` with `method: "custom"`. */
-  retrieve: RankFn;
-  /** Rerank the first stage's top candidates: pass as `rerankerFn`. */
-  rerank: RankFn;
-}
 
 /** A native choice ranker: `JevRanker`, `OpenAiDecisionRanker`. */
 export interface ChoiceRanker {

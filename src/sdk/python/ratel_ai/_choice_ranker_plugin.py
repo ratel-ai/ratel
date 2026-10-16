@@ -9,22 +9,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import Protocol
 
-from ._custom_ranking import RankCandidate, RankedId, RankFn
+from ._custom_ranking import RankCandidate, RankedId, RetrieverPlugin
 from ._native import RankerError
 from .exceptions import RetrieverError
-
-
-@dataclass(frozen=True)
-class RetrieverPlugin:
-    """A model's two ranking functions, for ``retrieve_fn`` and ``reranker_fn``."""
-
-    #: Rank the whole catalog: pass as ``retrieve_fn`` with ``method="custom"``.
-    retrieve: RankFn
-    #: Rerank the first stage's top candidates: pass as ``reranker_fn``.
-    rerank: RankFn
 
 
 class ChoiceRanker(Protocol):
