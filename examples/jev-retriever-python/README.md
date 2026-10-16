@@ -1,6 +1,6 @@
 # `examples/jev-retriever-python` — Jev as a retriever and reranker
 
-The Python mirror of [`examples/jev-retriever-ts`](../jev-retriever-ts/README.md); see that README for the walkthrough ([ADR-0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). `ratel_jev_plugin()` wraps [Jev](https://docs.typesafe.ai) into `retrieve` and `rerank` functions, used either as a reranker over BM25 or as the only stage, next to a plain function of the example's own.
+The Python mirror of [`examples/jev-retriever-ts`](../jev-retriever-ts/README.md); see that README for the walkthrough ([ADR-0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). `ratel_jev_plugin()` from [`ratel-ai-rankers-plugin`](../../src/rankers/python/README.md) wraps [Jev](https://docs.typesafe.ai) into `retrieve` and `rerank` functions, used either as a reranker over BM25 or as the only stage, next to a plain function of the example's own.
 
 With `TYPESAFE_API_KEY` set it calls Jev. Without it, it runs against `local_jev.py`, a local stand-in that speaks Jev's wire format and judges with a toy intent table.
 

@@ -88,3 +88,41 @@ test("throws when a platform subpackage version drifts from the loader", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// The rankers plugin is a second napi loader with the same layout (ADR-0028).
+test("injects another loader's platform packages when given its package dir", () => {
+  const root = makeRepo({ version: "0.13.0-rc.12" });
+  const write = (rel, obj) => {
+    const abs = join(root, rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, `${JSON.stringify(obj, null, 2)}\n`);
+  };
+  write("src/rankers/ts/package.json", {
+    name: "@ratel-ai/rankers-plugin",
+    version: "0.1.0-rc.1",
+    peerDependencies: { "@ratel-ai/sdk": "*" },
+    devDependencies: { "@ratel-ai/sdk": "workspace:^", vitest: "^4.1.5" },
+  });
+  for (const t of PLATFORMS) {
+    write(`src/rankers/ts/npm/${t}/package.json`, {
+      name: `@ratel-ai/rankers-plugin-${t}`,
+      version: "0.1.0-rc.1",
+    });
+  }
+  try {
+    injectSdkOptionalDeps(root, "src/rankers/ts");
+    const pkg = JSON.parse(readFileSync(join(root, "src/rankers/ts/package.json"), "utf8"));
+    assert.deepEqual(
+      Object.keys(pkg.optionalDependencies).sort(),
+      PLATFORMS.map((t) => `@ratel-ai/rankers-plugin-${t}`).sort(),
+    );
+    // The literal peer is kept; the dev dep's workspace: is pinned.
+    assert.equal(pkg.peerDependencies["@ratel-ai/sdk"], "*");
+    assert.equal(pkg.devDependencies["@ratel-ai/sdk"], "^0.13.0-rc.12");
+    assert.equal(JSON.stringify(pkg).includes("workspace:"), false);
+    // The SDK's own manifest is untouched.
+    assert.equal(loaderPkg(root).optionalDependencies, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

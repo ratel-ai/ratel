@@ -1,0 +1,25 @@
+[package]
+name = "ratel-ai-rankers"
+# Internal (ADR-0028): built into @ratel-ai/rankers-plugin and
+# ratel-ai-rankers-plugin from the workspace, never published on its own.
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+readme = "README.md"
+description = "Decision-model rankers (Jev, OpenAI Decisions) behind Ratel's rankers plugin packages."
+
+[features]
+default = ["jev", "openai-decision"]
+# Each vendor's wire format; a build ships only the vendors it enables.
+jev = []
+openai-decision = []
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+# Sync HTTP, rustls (no OpenSSL/native-tls), like core's embedding client.
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }

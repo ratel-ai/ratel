@@ -157,26 +157,11 @@ pub(crate) fn build_test_artifact<'a, T: Embeddable + 'a>(
     build_artifact(kind, items, &ArtifactBuildStub::new(fingerprint, vectors)).unwrap()
 }
 
-/// One request as a mock server saw it.
-pub(crate) struct MockHttpRequest {
-    /// `"POST /v1/systemone HTTP/1.1"`.
-    pub(crate) request_line: String,
-    pub(crate) body: serde_json::Value,
-    pub(crate) authorization: Option<String>,
-}
-
 /// Read one HTTP/1.1 request from a mock-server connection: the JSON body and
-/// the `authorization` header, if any. Shared by the endpoint-embedder and
-/// Jev client tests.
+/// the `authorization` header, if any. Used by the endpoint-embedder tests.
 pub(crate) fn read_http_request(
     stream: &mut std::net::TcpStream,
 ) -> (serde_json::Value, Option<String>) {
-    let request = read_http_request_full(stream);
-    (request.body, request.authorization)
-}
-
-/// [`read_http_request`], keeping the request line too.
-pub(crate) fn read_http_request_full(stream: &mut std::net::TcpStream) -> MockHttpRequest {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
@@ -205,11 +190,7 @@ pub(crate) fn read_http_request_full(stream: &mut std::net::TcpStream) -> MockHt
                 });
                 let body =
                     serde_json::from_slice(&request[body_start..body_start + content_len]).unwrap();
-                return MockHttpRequest {
-                    request_line: headers.lines().next().unwrap_or_default().to_string(),
-                    body,
-                    authorization,
-                };
+                return (body, authorization);
             }
         }
     }

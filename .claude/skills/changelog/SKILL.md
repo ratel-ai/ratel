@@ -18,7 +18,7 @@ Run it **once per unit** you're releasing.
 
 The units and their manifests/CHANGELOGs live in one registry —
 `scripts/release-units.mjs` — which every release tool reads. Run `node scripts/release-units.mjs --list`
-for the authoritative set; the current eight units are:
+for the authoritative set; the current ten units are:
 
 | Unit | Registry | CHANGELOG path |
 |---|---|---|
@@ -30,6 +30,8 @@ for the authoritative set; the current eight units are:
 | `telemetry-py` | `ratel-ai-telemetry` (PyPI) | `src/telemetry/python/CHANGELOG.md` |
 | `vercel-ai-sdk` | `@ratel-ai/vercel-ai-sdk` (npm) | `src/adapters/ts-vercel-ai-sdk/CHANGELOG.md` |
 | `mastra` | `@ratel-ai/mastra` (npm) | `src/adapters/ts-mastra/CHANGELOG.md` |
+| `rankers-ts` | `@ratel-ai/rankers-plugin` (npm) | `src/rankers/ts/CHANGELOG.md` |
+| `rankers-py` | `ratel-ai-rankers-plugin` (PyPI) | `src/rankers/python/CHANGELOG.md` |
 
 `@ratel-ai/mcp-server` lives in [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) and maintains its own CHANGELOG there.
 

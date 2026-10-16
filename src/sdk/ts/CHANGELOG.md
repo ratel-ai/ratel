@@ -6,9 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.12] - 2026-10-16
+
 ### Added
 
-- `ratelOpenAIDecisionPlugin({ url?, apiKeyEnv?, model? })` returns `{ retrieve, rerank }` for OpenAI's Decisions API (public beta; key in `OPENAI_API_KEY`, model `gpt-6-luna`). It ranks tools and skills like the Jev plugin, with the same limits, and adds the `RetrieverError` code `"Refused"` (transient) for a model refusal. The first plugin made prints a one-time beta warning (`RATEL_EXPERIMENTAL_SILENCE=1` silences it). It sends the query and each candidate's searchable text to OpenAI.
+- `definePlugin({ retrieve, rerank })` declares a ranking plugin: it checks both are functions and returns the plugin typed. A ranker for one stage is a plain `RankFn` passed to the catalog. `RetrieverPlugin` (`{ retrieve, rerank }`), the shape every plugin returns, is now exported from the SDK (ADR-0028).
+
+### Removed
+
+- **`ratelJevPlugin` moved to [`@ratel-ai/rankers-plugin`](../../rankers/ts/README.md)** (ADR-0028): `import { ratelJevPlugin } from "@ratel-ai/rankers-plugin"`. Same signature and behaviour. The SDK now carries no vendor code, so a new vendor ships without an SDK release. The OpenAI Decisions plugin ships only there, as `ratelOpenAIDecisionPlugin`. The plugin package re-exports `RankFn`, `RetrieverError`, `RetrieverPlugin` and `definePlugin` from this SDK.
 
 ### Fixed
 

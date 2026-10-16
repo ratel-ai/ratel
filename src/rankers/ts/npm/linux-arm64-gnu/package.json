@@ -1,0 +1,44 @@
+{
+  "name": "@ratel-ai/rankers-plugin-linux-arm64-gnu",
+  "version": "0.1.0-rc.1",
+  "cpu": [
+    "arm64"
+  ],
+  "main": "ratel-rankers.linux-arm64-gnu.node",
+  "files": [
+    "ratel-rankers.linux-arm64-gnu.node"
+  ],
+  "description": "Decision-model rankers (Jev, OpenAI Decisions) as retrieve/rerank plugins for the Ratel TypeScript SDK.",
+  "keywords": [
+    "ratel",
+    "reranker",
+    "retrieval",
+    "jev",
+    "openai",
+    "ai-agents",
+    "tool-calling"
+  ],
+  "author": "Agentified",
+  "homepage": "https://github.com/ratel-ai/ratel",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ratel-ai/ratel.git",
+    "directory": "src/rankers/ts"
+  },
+  "bugs": {
+    "url": "https://github.com/ratel-ai/ratel/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "glibc"
+  ]
+}

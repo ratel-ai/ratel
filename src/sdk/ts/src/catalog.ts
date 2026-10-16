@@ -330,7 +330,8 @@ export interface RankedId {
 
 /**
  * A caller-supplied ranking function (ADR-0027) — a model you call, such as
- * Jev via {@link ratelJevPlugin}. Returns `{ id, score }` pairs in any order.
+ * Jev via `ratelJevPlugin` from `@ratel-ai/rankers-plugin`. Returns
+ * `{ id, score }` pairs in any order.
  *
  * - As {@link ToolCatalogOptions.retrieveFn} (`method: "custom"`) it ranks the
  *   whole catalog; the search returns only the ids it returned, best first, at
@@ -351,6 +352,44 @@ export type RankFn = (
   candidates: RankCandidate[],
   topK: number,
 ) => Promise<RankedId[]> | RankedId[];
+
+/**
+ * A model's two ranking functions (ADR-0027): `retrieve` for `retrieveFn`
+ * (`method: "custom"`), `rerank` for `rerankerFn`.
+ *
+ * **Experimental** — may change without a major version bump.
+ */
+export interface RetrieverPlugin {
+  /** Rank the whole catalog: pass as `retrieveFn` with `method: "custom"`. */
+  retrieve: RankFn;
+  /** Rerank the first stage's top candidates: pass as `rerankerFn`. */
+  rerank: RankFn;
+}
+
+/**
+ * Declare a ranking plugin: both {@link RankFn}s, checked to be functions.
+ * Returns `plugin` unchanged, typed, so a plugin author gets the
+ * {@link RankFn} signature enforced. A ranker for one stage only is a plain
+ * {@link RankFn}, passed straight to the catalog; one function can serve both
+ * stages. Plugins with vendor clients live in `@ratel-ai/rankers-plugin`.
+ *
+ * **Experimental** — may change without a major version bump.
+ *
+ * @example
+ * ```ts
+ * export const myPlugin = definePlugin({ retrieve: rank, rerank: rank });
+ * ```
+ *
+ * @throws TypeError when either function is missing or not a function.
+ */
+export function definePlugin<P extends RetrieverPlugin>(plugin: P): P {
+  for (const key of ["retrieve", "rerank"] as const) {
+    if (typeof plugin[key] !== "function") {
+      throw new TypeError(`definePlugin: ${key} must be a function`);
+    }
+  }
+  return plugin;
+}
 
 /** Per-call options for `searchAsync`; each field overrides the catalog's default. */
 export interface SearchAsyncOptions {
@@ -628,11 +667,12 @@ export interface ToolCatalogOptions {
   reranker?: RerankerConfig;
   /**
    * Rank the whole catalog with your own function — a model you call, such as
-   * Jev via {@link ratelJevPlugin}. Needs `method: "custom"`. See
+   * Jev via `@ratel-ai/rankers-plugin`. Needs `method: "custom"`. See
    * {@link RankFn}. **Experimental.**
    *
    * @example
    * ```ts
+   * import { ratelJevPlugin } from "@ratel-ai/rankers-plugin";
    * const jev = ratelJevPlugin();
    * new ToolCatalog({ method: "custom", retrieveFn: jev.retrieve });
    * ```

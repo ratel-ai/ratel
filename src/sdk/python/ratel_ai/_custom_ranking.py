@@ -63,6 +63,40 @@ and the ``ratel.search`` span.
 """
 
 
+@dataclass(frozen=True)
+class RetrieverPlugin:
+    """A model's ranking functions (ADR-0027), for ``retrieve_fn`` and ``reranker_fn``.
+
+    **Experimental** — may change without a major version bump.
+    """
+
+    #: Rank the whole catalog: pass as ``retrieve_fn`` with ``method="custom"``.
+    retrieve: RankFn
+    #: Rerank the first stage's top candidates: pass as ``reranker_fn``.
+    rerank: RankFn
+
+
+def define_plugin(*, retrieve: RankFn, rerank: RankFn) -> RetrieverPlugin:
+    """Declare a ranking plugin from its two rank functions, checked to be callable.
+
+    A ranker for one stage only is a plain ``RankFn``, passed straight to the
+    catalog; one function can serve both stages. Plugins with vendor clients
+    live in ``ratel-ai-rankers-plugin``.
+    **Experimental** — may change without a major version bump.
+
+    Example::
+
+        my_plugin = define_plugin(retrieve=rank, rerank=rank)
+
+    Raises:
+        TypeError: either function is missing or not callable.
+    """
+    for name, fn in (("retrieve", retrieve), ("rerank", rerank)):
+        if not callable(fn):
+            raise TypeError(f"define_plugin: {name} must be callable")
+    return RetrieverPlugin(retrieve=retrieve, rerank=rerank)
+
+
 class _StageOne(Protocol):
     @property
     def candidates(self) -> list[tuple[str, str]]: ...

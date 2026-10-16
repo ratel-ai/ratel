@@ -69,6 +69,9 @@ jobs:
               - 'src/telemetry/core/**'
               - 'src/sdk/ts/native/**'
               - 'src/sdk/python/native/**'
+              - 'src/rankers/core/**'
+              - 'src/rankers/ts/native/**'
+              - 'src/rankers/python/native/**'
               # src/core/src/usage.rs include_str!s the protocol conformance vectors and
               # asserts the Rust parser accepts/rejects them, so `cargo test --workspace`
               # must re-run when they change (the protocol leg only runs the JS validator).
@@ -83,6 +86,8 @@ jobs:
             # re-run it. (ai-sdk-compat keys off this same filter.)
             ts:
               - 'src/sdk/ts/**'
+              - 'src/rankers/ts/**'
+              - 'src/rankers/core/**'
               - 'src/adapters/**'
               - 'src/telemetry/ts/**'
               # conformance.test.ts (run by `pnpm -r test`) asserts the TS emitter against
@@ -103,8 +108,12 @@ jobs:
               - '.github/workflows/verify-install.yml'
             # maturin builds the Python native binding from the Rust core; the SDK job
             # also installs the telemetry sibling and exercises the pydantic-ai example.
+            # Also gates `rankers-python`: the plugin package builds the rankers crate
+            # and installs the in-repo SDK, so a change to either re-runs it.
             python:
               - 'src/sdk/python/**'
+              - 'src/rankers/python/**'
+              - 'src/rankers/core/**'
               - 'src/telemetry/python/**'
               - 'examples/pydantic-ai/**'
               - 'src/core/**'
@@ -131,6 +140,7 @@ jobs:
             # compiled/packed. (On push/dispatch verify runs regardless — see `setup`.)
             release:
               - 'src/core/**'
+              - 'src/rankers/**'
               - 'src/sdk/ts/**'
               - 'src/sdk/python/**'
               - 'src/telemetry/ts/**'
@@ -455,6 +465,37 @@ jobs:
         working-directory: examples/pydantic-ai
         run: uv run pytest
 
+  # The rankers plugin's PyPI package (ADR-0028): a pyo3 build of the rankers
+  # crate that peers on the in-repo SDK. Installed with --no-deps because the
+  # SDK's version is bumped only at release, so the floor it pins may not be
+  # met in-repo yet; the SDK is installed from source first instead.
+  rankers-python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/rankers/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/rankers/python/native
+      - uses: astral-sh/setup-uv@v5
+      - name: Create venv + install the SDK, the plugin and dev tools
+        run: |
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy \
+            -e ../../telemetry/python -e ../../sdk/python
+          uv pip install --python .venv --no-deps -e .
+      - name: Lint
+        run: .venv/bin/ruff check .
+      - name: Typecheck
+        run: .venv/bin/mypy ratel_ai_rankers_plugin
+      - name: Test
+        run: .venv/bin/pytest
+
   # Pure-Python telemetry helper (ADR-0007): no Rust extension, so no maturin —
   # editable install + ruff/mypy/pytest. Separate job because the SDK job's build
   # is maturin-specific to src/sdk/python.
@@ -628,7 +669,7 @@ jobs:
 
       # Platform-independent packaging integrity — folded into the gate's linux leg so
       # it's one fewer check row; runs once (linux-x64 is always in both matrices).
-      - name: Packaging integrity (sdist + twine, crate dry-run, optionalDeps inject)
+      - name: Packaging integrity (sdists + twine, crate dry-run, optionalDeps inject)
         if: matrix.triple == 'linux-x64-gnu'
         run: |
           set -e
@@ -636,12 +677,15 @@ jobs:
           python -m pip install --upgrade twine 'packaging>=24.2'
           ( cd src/sdk/python && maturin sdist --out dist )
           twine check src/sdk/python/dist/*
+          ( cd src/rankers/python && maturin sdist --out dist )
+          twine check src/rankers/python/dist/*
           cargo publish -p ratel-ai-core --dry-run
           # Smoke the optionalDeps inject + assert loader/subpackage versions match.
           # NOTE: this rewrites src/sdk/ts/package.json's optionalDependencies in place
           # — harmless here, since it runs after the packs above and the checkout is
           # throwaway.
           node scripts/inject-sdk-optional-deps.mjs
+          node scripts/inject-sdk-optional-deps.mjs src/rankers/ts
 
   # THE single required status check for the `main` ruleset (scripts/setup-branch-ruleset.sh).
   # `if: always()` (plus the non-draft guard) makes it run regardless of upstream results —
@@ -656,7 +700,7 @@ jobs:
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, rust, ts, ai-sdk-compat, python, telemetry, protocol, setup, verify]
+    needs: [changes, rust, ts, ai-sdk-compat, python, rankers-python, telemetry, protocol, setup, verify]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -664,7 +708,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} ts=${{ needs.ts.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
+          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} ts=${{ needs.ts.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||

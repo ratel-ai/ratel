@@ -9,7 +9,8 @@
 // Making the first plugin prints a one-time beta warning. With OPENAI_API_KEY
 // set it calls OpenAI; without it, a local stand-in that speaks the Decisions
 // wire format.
-import { RetrieverError, ratelOpenAIDecisionPlugin, ToolCatalog } from "@ratel-ai/sdk";
+import { ratelOpenAIDecisionPlugin } from "@ratel-ai/rankers-plugin";
+import { RetrieverError, ToolCatalog } from "@ratel-ai/sdk";
 import { startLocalDecisions } from "./local-openai-decision.js";
 import { ids, QUERY, tools } from "./tools.js";
 

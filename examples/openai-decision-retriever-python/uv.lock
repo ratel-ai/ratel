@@ -2,6 +2,9 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 
+[manifest]
+overrides = [{ name = "ratel-ai", directory = "../../src/sdk/python" }]
+
 [[package]]
 name = "ratel-ai"
 version = "0.13.0rc11"
@@ -27,6 +30,25 @@ requires-dist = [
 provides-extras = ["mcp", "otlp", "dev"]
 
 [[package]]
+name = "ratel-ai-rankers-plugin"
+version = "0.1.0rc1"
+source = { directory = "../../src/rankers/python" }
+dependencies = [
+    { name = "ratel-ai" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.7,<2.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "ratel-ai", specifier = ">=0.13.0rc12,<1.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "ratel-ai-telemetry"
 version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -41,10 +63,14 @@ version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "ratel-ai" },
+    { name = "ratel-ai-rankers-plugin" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "ratel-ai", directory = "../../src/sdk/python" }]
+requires-dist = [
+    { name = "ratel-ai", directory = "../../src/sdk/python" },
+    { name = "ratel-ai-rankers-plugin", directory = "../../src/rankers/python" },
+]
 
 [[package]]
 name = "rfc8785"

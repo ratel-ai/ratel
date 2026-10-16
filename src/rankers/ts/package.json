@@ -1,0 +1,85 @@
+{
+  "name": "@ratel-ai/rankers-plugin",
+  "version": "0.1.0-rc.1",
+  "description": "Decision-model rankers (Jev, OpenAI Decisions) as retrieve/rerank plugins for the Ratel TypeScript SDK.",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "author": "Agentified",
+  "homepage": "https://github.com/ratel-ai/ratel",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ratel-ai/ratel.git",
+    "directory": "src/rankers/ts"
+  },
+  "bugs": {
+    "url": "https://github.com/ratel-ai/ratel/issues"
+  },
+  "keywords": [
+    "ratel",
+    "reranker",
+    "retrieval",
+    "jev",
+    "openai",
+    "ai-agents",
+    "tool-calling"
+  ],
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "files": [
+    "dist",
+    "native/index.cjs",
+    "native/index.d.cts",
+    "LICENSE.md",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build:native": "napi build --platform --release --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts",
+    "build:ts": "tsc",
+    "build": "pnpm build:native && pnpm build:ts",
+    "typecheck": "pnpm build:native && tsc --noEmit",
+    "docs:check": "typedoc",
+    "lint": "biome check src && pnpm docs:check",
+    "test": "pnpm build:native && vitest run"
+  },
+  "napi": {
+    "binaryName": "ratel-rankers",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "peerDependencies": {
+    "@ratel-ai/sdk": "*"
+  },
+  "ratel": {
+    "sdkFloor": "0.13.0-rc.12"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
+    "@napi-rs/cli": "^3.6.0",
+    "@ratel-ai/sdk": "workspace:^",
+    "@types/node": "^24.0.0",
+    "typedoc": "^0.28.20",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  }
+}

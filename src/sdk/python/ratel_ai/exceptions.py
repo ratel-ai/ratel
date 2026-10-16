@@ -12,8 +12,8 @@ API. ``ArtifactWarmError`` covers warm failures and carries ``code`` /
 ``missing`` attributes set by the native binding.
 
 ``RetrieverError`` is raised by, or for, a caller-supplied ranking function
-(``retrieve_fn`` / ``reranker_fn``, ADR-0027); the Jev and OpenAI Decisions plugins
-raise it for every failure.
+(``retrieve_fn`` / ``reranker_fn``, ADR-0027); the plugins in
+``ratel-ai-rankers-plugin`` raise it for every failure.
 """
 
 from __future__ import annotations
@@ -31,10 +31,9 @@ class RetrieverError(RuntimeError):
     """A retrieve or rerank function failed (ADR-0027).
 
     Raise it from your own ``retrieve_fn`` / ``reranker_fn`` to control what a
-    search does with the failure; the Jev plugin (`ratel_jev_plugin`) and the
-    OpenAI Decisions plugin (`ratel_openai_decision_plugin`) raise it for every
-    failure. As a **reranker**, one with ``transient=True`` does
-    not fail the search: it returns the first stage's order and records
+    search does with the failure; the plugins in ``ratel-ai-rankers-plugin``
+    (Jev, OpenAI Decisions) raise it for every failure. As a **reranker**, one
+    with ``transient=True`` does not fail the search: it returns the first stage's order and records
     ``rerank_fallback:<code>`` on the trace. Anything else a function raises,
     including a non-transient ``RetrieverError``, fails the search.
 

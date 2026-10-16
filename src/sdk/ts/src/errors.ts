@@ -313,15 +313,15 @@ export function mapArtifactBuildError(error: unknown): unknown {
 /**
  * A retrieve or rerank function failed (ADR-0027). Throw it from your own
  * `retrieveFn` / `rerankerFn` to control what a search does with the failure;
- * the Jev plugin ({@link ratelJevPlugin}) and the OpenAI Decisions plugin
- * ({@link ratelOpenAIDecisionPlugin}) throw it for every failure.
+ * the plugins in `@ratel-ai/rankers-plugin` (Jev, OpenAI Decisions) throw it
+ * for every failure.
  *
  * As a **reranker**, a `RetrieverError` with `transient: true` does not fail
  * the search: it returns the first stage's order and records
  * `rerank_fallback:<code>` on the trace. Anything else a function throws —
  * including a non-transient `RetrieverError` — fails the search.
  *
- * The plugins' codes: `"Config"`, `"Unauthorized"`, `"InvalidRequest"` (not
+ * Those plugins' codes: `"Config"`, `"Unauthorized"`, `"InvalidRequest"` (not
  * transient); `"RateLimited"`, `"Overloaded"`, `"Timeout"`, `"Unreachable"`,
  * `"Http"`, `"Malformed"`, and `"Refused"` (the Decisions model declined to
  * answer) (transient).
@@ -354,34 +354,4 @@ export class RetrieverError extends Error {
     if (details.status !== undefined) this.status = details.status;
     if (details.retryAfterSecs !== undefined) this.retryAfterSecs = details.retryAfterSecs;
   }
-}
-
-/** Private NAPI→TS transport prefix — must match native `RETRIEVER_ERROR_PREFIX`. */
-const RETRIEVER_ERROR_PREFIX = "RATEL_RETRIEVER_ERROR:";
-
-/**
- * Decode the private native ranker envelope into a typed
- * {@link RetrieverError}. Malformed envelopes and other errors are returned
- * unchanged.
- *
- * @param error - The error thrown by the native binding.
- * @returns The typed error, or `error` unchanged when it is not one.
- */
-export function mapRetrieverError(error: unknown): unknown {
-  if (!(error instanceof Error)) return error;
-  if (!error.message.startsWith(RETRIEVER_ERROR_PREFIX)) return error;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(error.message.slice(RETRIEVER_ERROR_PREFIX.length));
-  } catch {
-    return error;
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return error;
-  const record = parsed as Record<string, unknown>;
-  if (typeof record.code !== "string" || typeof record.message !== "string") return error;
-  return new RetrieverError(record.message, record.code, {
-    transient: record.transient === true,
-    status: typeof record.status === "number" ? record.status : undefined,
-    retryAfterSecs: typeof record.retryAfterSecs === "number" ? record.retryAfterSecs : undefined,
-  });
 }

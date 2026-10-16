@@ -21,7 +21,14 @@ analogue: constant content injected into the context, gated by the pure
 version bump.
 """
 
-from ._custom_ranking import RankCandidate, RankCandidateKind, RankedId, RankFn
+from ._custom_ranking import (
+    RankCandidate,
+    RankCandidateKind,
+    RankedId,
+    RankFn,
+    RetrieverPlugin,
+    define_plugin,
+)
 from ._native import SearchHit, SkillHit
 from .capabilities import (
     INVOKE_TOOL_ID,
@@ -80,9 +87,7 @@ from .intent_graph_storage import (
     S3Transport,
     StaleIntentGraphError,
 )
-from .jev import RetrieverPlugin, ratel_jev_plugin
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
-from .openai_decision import ratel_openai_decision_plugin
 from .runtime_events import (
     OPTIONAL_ENVELOPE_FIELDS,
     RUNTIME_EVENT_MAX_HITS,
@@ -176,8 +181,7 @@ __all__ = [
     "configure_telemetry",
     "current_turn_id",
     "experimental_build_embedding_artifact",
-    "ratel_jev_plugin",
-    "ratel_openai_decision_plugin",
+    "define_plugin",
     "format_upstream_line",
     "get_skill_content_tool",
     "invoke_tool_tool",

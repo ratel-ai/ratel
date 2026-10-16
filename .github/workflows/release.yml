@@ -15,6 +15,8 @@ name: Release
 #     same commit to ship together.
 #   mastra-v* -> @ratel-ai/mastra on npm (framework adapter, peers the SDK)
 #   vercel-ai-sdk-v* -> @ratel-ai/vercel-ai-sdk on npm (framework adapter, peers the SDK)
+#   rankers-ts-v* -> @ratel-ai/rankers-plugin loader + 5 platform packages (peers the SDK; ADR-0028)
+#   rankers-py-v* -> ratel-ai-rankers-plugin on PyPI (depends on ratel-ai by range; ADR-0028)
 
 on:
   push:
@@ -27,6 +29,8 @@ on:
       - 'telemetry-py-v*'
       - 'mastra-v*'
       - 'vercel-ai-sdk-v*'
+      - 'rankers-ts-v*'
+      - 'rankers-py-v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -703,6 +707,291 @@ jobs:
             (cd src/adapters/ts-vercel-ai-sdk && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
           fi
 
+  # The rankers plugin (ADR-0028): vendor rankers from the internal
+  # ratel-ai-rankers crate, bound for npm (rankers-ts) and PyPI (rankers-py).
+  # Same shape as sdk-ts / sdk-py, but with no ML deps.
+  build-rankers-ts:
+    name: build rankers-ts (${{ matrix.triple }})
+    needs: tag-version-check
+    if: needs.tag-version-check.outputs.unit == 'rankers-ts'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: darwin-arm64
+            target: aarch64-apple-darwin
+            runs-on: macos-14
+          - triple: darwin-x64
+            target: x86_64-apple-darwin
+            runs-on: macos-14
+          - triple: linux-x64-gnu
+            target: x86_64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+          - triple: linux-arm64-gnu
+            target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-24.04-arm
+          - triple: win32-x64-msvc
+            target: x86_64-pc-windows-msvc
+            runs-on: windows-latest
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/rankers/ts/native
+          key: rankers-${{ matrix.triple }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build native
+        run: pnpm --filter @ratel-ai/rankers-plugin exec napi build --release --platform --target ${{ matrix.target }} --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: rankers-bindings-${{ matrix.triple }}
+          path: |
+            src/rankers/ts/native/ratel-rankers.${{ matrix.triple }}.node
+            src/rankers/ts/native/index.cjs
+            src/rankers/ts/native/index.d.cts
+          if-no-files-found: error
+
+  publish-rankers-ts:
+    name: Publish @ratel-ai/rankers-plugin (loader + platform packages)
+    needs: [tag-version-check, build-rankers-ts]
+    if: needs.tag-version-check.outputs.unit == 'rankers-ts'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - name: Verify npm CLI version
+        shell: bash
+        run: |
+          set -e
+          npm --version
+          # Trusted Publishers requires npm CLI 11.5.1+
+          node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: src/rankers/ts/artifacts
+          pattern: rankers-bindings-*
+          merge-multiple: true
+      - name: Distribute binaries into npm/ subpackages
+        run: pnpm --filter @ratel-ai/rankers-plugin exec napi artifacts --output-dir artifacts --npm-dir npm
+      - name: Verify each subpackage has its binary
+        shell: bash
+        run: |
+          set -e
+          for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
+            f="src/rankers/ts/npm/$triple/ratel-rankers.$triple.node"
+            test -f "$f" || { echo "missing: $f" >&2; exit 1; }
+          done
+      - name: Place JS loader + types into native/
+        shell: bash
+        run: |
+          set -e
+          cp src/rankers/ts/artifacts/index.cjs src/rankers/ts/native/index.cjs
+          cp src/rankers/ts/artifacts/index.d.cts src/rankers/ts/native/index.d.cts
+      # The plugin imports @ratel-ai/sdk's types and RetrieverError, so tsc needs
+      # the SDK's dist/. The SDK's own native build is skipped: only its types and
+      # JS are read here.
+      - name: Build TS loader
+        run: |
+          pnpm --filter @ratel-ai/telemetry run build
+          pnpm --filter @ratel-ai/sdk run build:ts
+          pnpm --filter @ratel-ai/rankers-plugin run build:ts
+      - name: Inject optionalDependencies into the plugin loader package.json
+        run: node scripts/inject-sdk-optional-deps.mjs src/rankers/ts
+      # The peer is "*" so any newer SDK, prereleases included, installs; the
+      # floor is ratel.sdkFloor in package.json (ADR-0028). Nothing else checks
+      # it against the registry: a rankers-ts tag cut before that SDK release
+      # would publish a version no consumer can run. Release sdk-ts first.
+      - name: Verify the @ratel-ai/sdk floor is on npm
+        shell: bash
+        run: |
+          set -e
+          floor=$(node -p "require('./src/rankers/ts/package.json').ratel.sdkFloor")
+          npm view "@ratel-ai/sdk@${floor}" version >/dev/null 2>&1 \
+            || { echo "::error::@ratel-ai/sdk@${floor} is not on npm — publish sdk-ts before rankers-ts"; exit 1; }
+      - name: Preflight — dry-run all npm publishes
+        shell: bash
+        env:
+          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
+        run: |
+          set -e
+          for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
+            (cd src/rankers/ts/npm/$triple && npm publish --access public --tag "$DIST_TAG" --dry-run)
+          done
+          (cd src/rankers/ts && npm publish --access public --tag "$DIST_TAG" --dry-run)
+      - name: Publish plugin subpackages
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
+        run: |
+          set -e
+          for triple in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu win32-x64-msvc; do
+            dir="src/rankers/ts/npm/$triple"
+            name=$(node -p "require('./$dir/package.json').name")
+            ver=$(node -p "require('./$dir/package.json').version")
+            if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
+              echo "::notice::$name@$ver already published — skipping"
+              continue
+            fi
+            (cd "$dir" && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+          done
+      - name: Publish plugin loader
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+          DIST_TAG: ${{ needs.tag-version-check.outputs.dist_tag }}
+        run: |
+          set -e
+          name=$(node -p "require('./src/rankers/ts/package.json').name")
+          ver=$(node -p "require('./src/rankers/ts/package.json').version")
+          if [ -z "$DRY_RUN" ] && [ "$(npm view "$name@$ver" version 2>/dev/null)" = "$ver" ]; then
+            echo "::notice::$name@$ver already published — skipping"
+          else
+            (cd src/rankers/ts && npm publish --provenance --access public --tag "$DIST_TAG" $DRY_RUN)
+          fi
+
+  build-rankers-wheels:
+    name: build rankers wheel (${{ matrix.triple }})
+    needs: tag-version-check
+    if: needs.tag-version-check.outputs.unit == 'rankers-py'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: darwin-arm64
+            target: aarch64-apple-darwin
+            runs-on: macos-14
+            manylinux: ''
+          - triple: darwin-x64
+            target: x86_64-apple-darwin
+            runs-on: macos-14
+            manylinux: ''
+          - triple: linux-x64-gnu
+            target: x86_64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+            manylinux: auto
+          - triple: linux-arm64-gnu
+            target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-24.04-arm
+            manylinux: auto
+          - triple: win32-x64-msvc
+            target: x86_64-pc-windows-msvc
+            runs-on: windows-latest
+            manylinux: ''
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: src/rankers/python
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+          sccache: 'true'
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: rankers-wheels-${{ matrix.triple }}
+          path: src/rankers/python/dist/*.whl
+          if-no-files-found: error
+
+  build-rankers-sdist:
+    name: build rankers sdist
+    needs: tag-version-check
+    if: needs.tag-version-check.outputs.unit == 'rankers-py'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: src/rankers/python
+          command: sdist
+          args: --out dist
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: rankers-wheels-sdist
+          path: src/rankers/python/dist/*.tar.gz
+          if-no-files-found: error
+
+  publish-rankers-py:
+    name: Publish ratel-ai-rankers-plugin to PyPI
+    needs: [tag-version-check, build-rankers-wheels, build-rankers-sdist]
+    if: needs.tag-version-check.outputs.unit == 'rankers-py'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # The ratel-ai floor is a literal requirement in pyproject.toml; a
+      # rankers-py tag cut before the SDK release it names would publish a wheel
+      # no consumer can install. Release sdk-py first.
+      - name: Verify the ratel-ai requirement resolves on PyPI
+        shell: bash
+        run: |
+          set -e
+          req=$(python -c "import tomllib; d=tomllib.load(open('src/rankers/python/pyproject.toml','rb')); print(next(r for r in d['project']['dependencies'] if r.startswith('ratel-ai')))")
+          python -m pip download --no-deps --pre --only-binary=:all: --dest /tmp/ratel-ai-check "$req" >/dev/null \
+            || { echo "::error::no ratel-ai on PyPI satisfies ${req} — publish sdk-py before rankers-py"; exit 1; }
+      - name: Download wheels + sdist
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: rankers-wheels-*
+          merge-multiple: true
+      - name: List artifacts
+        run: ls -la dist/
+      - name: Validate packaging (metadata + README rendering)
+        run: |
+          python -m pip install --upgrade twine 'packaging>=24.2'
+          twine check dist/*
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+        if: ${{ !inputs.dry_run }}
+
   github-release:
     name: GitHub Release
     needs:
@@ -715,6 +1004,8 @@ jobs:
       - publish-telemetry-core
       - publish-mastra
       - publish-vercel-ai-sdk
+      - publish-rankers-ts
+      - publish-rankers-py
     # Exactly one unit's publish job runs; the rest are skipped. Run when the tag
     # was pushed and that one job succeeded. Every unit is single-registry now, so
     # any one publish job succeeding is enough.
@@ -728,7 +1019,9 @@ jobs:
               || needs.publish-telemetry-py.result == 'success'
               || needs.publish-telemetry-core.result == 'success'
               || needs.publish-mastra.result == 'success'
-              || needs.publish-vercel-ai-sdk.result == 'success') }}
+              || needs.publish-vercel-ai-sdk.result == 'success'
+              || needs.publish-rankers-ts.result == 'success'
+              || needs.publish-rankers-py.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

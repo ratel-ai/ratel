@@ -232,18 +232,21 @@ await catalog.invoke("create_linear_task", {}, undefined, turnId); // pairs with
 A catalog can rank with a function you supply, such as a decision model you call ([ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). The SDK hands the function the candidates and their searchable text, and knows nothing about the model behind it:
 
 ```ts
-import { ratel, ratelJevPlugin, ratelOpenAIDecisionPlugin, type RankFn } from "@ratel-ai/sdk";
-
-const jev = ratelJevPlugin();                                   // Jev (TypeSafe AI); key in TYPESAFE_API_KEY
-ratel({ method: "custom", retrieveFn: jev.retrieve });          // Jev ranks every tool and skill
-ratel({ method: "bm25", rerankerFn: jev.rerank });              // BM25, then Jev over its top 50
-ratel({ method: "bm25", rerankerFn: jev.rerank, rerankerDepth: 20 });
-
-const decision = ratelOpenAIDecisionPlugin();                  // OpenAI's Decisions API (beta); key in OPENAI_API_KEY
-ratel({ method: "bm25", rerankerFn: decision.rerank, rerankerDepth: 20 });
+import { definePlugin, ratel, type RankFn } from "@ratel-ai/sdk";
 
 const mine: RankFn = (query, candidates) =>                    // any model, your own call
   Promise.all(candidates.map(async (c) => ({ id: c.id, score: await myModel(query, c.text) })));
+ratel({ method: "custom", retrieveFn: mine });                  // your model ranks every tool and skill
+ratel({ method: "bm25", rerankerFn: mine, rerankerDepth: 20 }); // BM25, then your model over its top 20
+
+export const myPlugin = definePlugin({ retrieve: mine, rerank: mine }); // package it as a plugin
+```
+
+Ready-made plugins for decision models (Jev, OpenAI's Decisions API) live in [`@ratel-ai/rankers-plugin`](../../rankers/ts/README.md) ([ADR 0028](../../../docs/adr/0028-vendor-rankers-as-plugin-packages.md)), so this SDK carries no vendor code:
+
+```ts
+import { ratelJevPlugin } from "@ratel-ai/rankers-plugin";
+ratel({ method: "bm25", rerankerFn: ratelJevPlugin().rerank }); // key in TYPESAFE_API_KEY
 ```
 
 - **The contract:** `(query, candidates: { id, kind: "tool" | "skill", text }[], topK) => { id, score }[]`, sync or async. Unknown ids are dropped, each id counts once, and scores are clamped to `[0, 1]`.
@@ -252,9 +255,8 @@ const mine: RankFn = (query, candidates) =>                    // any model, you
 - **Failures:** whatever `retrieveFn` throws fails the search. A `rerankerFn` that throws a `RetrieverError` with `transient: true` keeps the first stage's order and records a `rerank_fallback:<code>` trace stage; anything else it throws fails the search.
   - A search that fails records no `search` event on the local trace stream, the same as a failed built-in search. The error reaches your `searchAsync` call and, with telemetry on, marks the `ratel.search` span as an error.
 - **Rules:** both are async-only (synchronous `search` throws). `rerankerFn` can't be combined with `reranker`, nor with `method: "custom"`. `searchAsync(q, k, { reranker: null })` turns either reranker off for one call. `SkillCatalog` takes the same options; facts don't, and `ratel()` ranks facts with BM25 when `method` is `"custom"`.
-- **The Jev plugin:** `ratelJevPlugin({ url?, apiKeyEnv?, model? })` defaults to `https://api.typesafe.ai`, `TYPESAFE_API_KEY` and `jev-latest`. Above 150 candidates (or 80,000 characters) it judges groups in parallel and fills a final question with their winners. It returns only real picks: probabilities below 0.01 are dropped, except the best one. Its `RetrieverError.code` is `"Config"`, `"Unauthorized"` or `"InvalidRequest"` (not transient), or `"RateLimited"` (with `retryAfterSecs`), `"Overloaded"`, `"Timeout"`, `"Unreachable"`, `"Http"` or `"Malformed"` (transient).
-- **The OpenAI Decisions plugin (beta):** `ratelOpenAIDecisionPlugin({ url?, apiKeyEnv?, model? })` defaults to `https://api.openai.com`, `OPENAI_API_KEY` and `gpt-6-luna`, the only model OpenAI's beta supports. It works like the Jev plugin, with the same limits (OpenAI allows 2 to 255 choices; Ratel caps at 150), for tools and skills, text only. It adds one code, `"Refused"` (transient), when the model declines to answer. The first plugin made prints a one-time beta warning; `RATEL_EXPERIMENTAL_SILENCE=1` silences it.
-- **Privacy:** **the Jev plugin sends the query and each candidate's searchable text to TypeSafe AI, and the OpenAI Decisions plugin sends them to OpenAI.** The built-in methods never leave the process.
+- **Plugins:** `definePlugin({ retrieve, rerank })` checks that both are functions and returns the plugin typed as `RetrieverPlugin`. That type is the shape every plugin returns. A ranker for one stage only is a plain `RankFn`; pass it to the catalog directly.
+- **Privacy:** a function sends whatever it sends. The built-in methods never leave the process.
 
 ## Reranking (experimental)
 

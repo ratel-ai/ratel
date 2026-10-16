@@ -2,7 +2,7 @@
 //!
 //! A first-stage [`SearchMethod`] picks candidates and an optional [`Reranker`]
 //! re-scores the top `depth` of them with another built-in method. A ranking
-//! function the caller supplies (a model the SDK calls, e.g. Jev) runs outside
+//! function the caller supplies (a model the SDK calls) runs outside
 //! the registry, between two phases: the registry hands out [`RankCandidate`]s
 //! (the whole catalog, or a [`StageOne`]) and completes the search with what the
 //! function returned.

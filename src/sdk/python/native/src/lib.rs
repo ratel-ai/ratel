@@ -430,60 +430,6 @@ create_exception!(
     PyRuntimeError,
     "Warming the dense cache from an embedding artifact failed (subclass of RuntimeError)."
 );
-create_exception!(
-    _native,
-    RankerError,
-    PyRuntimeError,
-    "A decision-model ranking (Jev, OpenAI Decisions) failed; carries `code`, `status`, `retry_after_secs` and `transient`. The Python plugins re-raise it as `RetrieverError`."
-);
-create_exception!(
-    _native,
-    JevError,
-    RankerError,
-    "A Jev ranking failed (subclass of RankerError); carries `code`, `status`, `retry_after_secs` and `transient`. The Python Jev plugin re-raises it as `RetrieverError`."
-);
-
-/// A decision-model failure as `exc` (`JevError` or `RankerError`), its
-/// message naming `service`, with the typed attributes set.
-fn ranker_pyerr<T: pyo3::PyTypeInfo>(e: core::RankerError, service: &str) -> PyErr {
-    let retry_after = match &e {
-        core::RankerError::RateLimited { retry_after_secs } => *retry_after_secs,
-        _ => None,
-    };
-    Python::with_gil(|py| {
-        let err = PyErr::from_type(py.get_type::<T>(), e.describe(service));
-        let value = err.value(py);
-        if let Err(attr_err) = value.setattr("code", e.code()) {
-            return attr_err;
-        }
-        if let Err(attr_err) = value.setattr("status", e.status()) {
-            return attr_err;
-        }
-        if let Err(attr_err) = value.setattr("retry_after_secs", retry_after) {
-            return attr_err;
-        }
-        if let Err(attr_err) = value.setattr("transient", e.is_transient()) {
-            return attr_err;
-        }
-        err
-    })
-}
-
-fn jev_pyerr(e: core::JevError) -> PyErr {
-    ranker_pyerr::<JevError>(e, "jev")
-}
-
-/// The candidate kind a plugin passes: `"tool"` or `"skill"`.
-fn parse_candidate_kind(kind: &str) -> PyResult<core::CandidateKind> {
-    match kind {
-        "tool" => Ok(core::CandidateKind::Tool),
-        "skill" => Ok(core::CandidateKind::Skill),
-        other => Err(PyValueError::new_err(format!(
-            "unknown candidate kind {other:?} (expected \"tool\" or \"skill\")"
-        ))),
-    }
-}
-
 /// Map a two-stage search failure: embedder errors keep their typed classes,
 /// bad options raise `ValueError`.
 fn map_search_err(e: core::SearchError) -> PyErr {
@@ -552,118 +498,6 @@ fn take_stage<H>(slot: &Mutex<Option<core::StageOne<H>>>) -> PyResult<core::Stag
         .map_err(|_| PyRuntimeError::new_err("stage-one lock poisoned"))?
         .take()
         .ok_or_else(|| PyRuntimeError::new_err("this stage-one result was already completed"))
-}
-
-/// The Jev client behind the Python Jev plugin (ADR-0027). Search never calls
-/// it; the plugin wraps `rank` into a retrieve/rerank function.
-#[pyclass(frozen)]
-pub struct JevRanker {
-    inner: core::JevRanker,
-}
-
-#[pymethods]
-impl JevRanker {
-    /// A Jev client; unset fields keep the defaults (`https://api.typesafe.ai`,
-    /// `TYPESAFE_API_KEY`, `jev-latest`). Opens no connection.
-    #[new]
-    #[pyo3(signature = (url=None, api_key_env=None, model=None))]
-    fn new(url: Option<String>, api_key_env: Option<String>, model: Option<String>) -> Self {
-        let mut config = core::JevConfig::default();
-        if let Some(url) = url {
-            config = config.with_url(url);
-        }
-        if let Some(name) = api_key_env {
-            config = config.with_api_key_env(name);
-        }
-        if let Some(model) = model {
-            config = config.with_model(model);
-        }
-        Self {
-            inner: core::JevRanker::new(config),
-        }
-    }
-
-    /// Rank `(id, text)` candidates for `query` with the GIL released:
-    /// `(id, probability)` best first, at most `top_k`. `kind` is `"tool"` or
-    /// `"skill"`. Failures raise `JevError`.
-    fn rank(
-        &self,
-        py: Python<'_>,
-        query: String,
-        candidates: Vec<(String, String)>,
-        top_k: u32,
-        kind: &str,
-    ) -> PyResult<Vec<(String, f64)>> {
-        let kind = parse_candidate_kind(kind)?;
-        let candidates: Vec<core::RankCandidate> = candidates
-            .into_iter()
-            .map(|(id, text)| core::RankCandidate { id, text })
-            .collect();
-        let ranked = py
-            .allow_threads(|| self.inner.rank(&query, &candidates, top_k as usize, kind))
-            .map_err(jev_pyerr)?;
-        Ok(ranked
-            .into_iter()
-            .map(|(id, score)| (id, f64::from(score)))
-            .collect())
-    }
-}
-
-/// The OpenAI Decisions API client behind the Python OpenAI Decisions plugin
-/// (ADR-0027). Search never calls it; the plugin wraps `rank` into a
-/// retrieve/rerank function.
-#[pyclass(frozen)]
-pub struct OpenAIDecisionRanker {
-    inner: core::OpenAIDecisionRanker,
-}
-
-#[pymethods]
-impl OpenAIDecisionRanker {
-    /// A Decisions client; unset fields keep the defaults
-    /// (`https://api.openai.com`, `OPENAI_API_KEY`, `gpt-6-luna`). Opens no
-    /// connection.
-    #[new]
-    #[pyo3(signature = (url=None, api_key_env=None, model=None))]
-    fn new(url: Option<String>, api_key_env: Option<String>, model: Option<String>) -> Self {
-        let mut config = core::OpenAIDecisionConfig::default();
-        if let Some(url) = url {
-            config = config.with_url(url);
-        }
-        if let Some(name) = api_key_env {
-            config = config.with_api_key_env(name);
-        }
-        if let Some(model) = model {
-            config = config.with_model(model);
-        }
-        Self {
-            inner: core::OpenAIDecisionRanker::new(config),
-        }
-    }
-
-    /// Rank `(id, text)` candidates for `query` with the GIL released:
-    /// `(id, probability)` best first, at most `top_k`. `kind` is `"tool"` or
-    /// `"skill"`. Failures raise `RankerError`.
-    fn rank(
-        &self,
-        py: Python<'_>,
-        query: String,
-        candidates: Vec<(String, String)>,
-        top_k: u32,
-        kind: &str,
-    ) -> PyResult<Vec<(String, f64)>> {
-        let kind = parse_candidate_kind(kind)?;
-        let candidates: Vec<core::RankCandidate> = candidates
-            .into_iter()
-            .map(|(id, text)| core::RankCandidate { id, text })
-            .collect();
-        let ranked = py
-            .allow_threads(|| self.inner.rank(&query, &candidates, top_k as usize, kind))
-            .map_err(|e| ranker_pyerr::<RankerError>(e, "openai decisions"))?;
-        Ok(ranked
-            .into_iter()
-            .map(|(id, score)| (id, f64::from(score)))
-            .collect())
-    }
 }
 
 /// Stage 1 of a tool search whose reranker runs in Python (ADR-0027). Hand it
@@ -2804,14 +2638,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.py().get_type::<IncompatibleMergeError>(),
     )?;
     m.add("ArtifactWarmError", m.py().get_type::<ArtifactWarmError>())?;
-    m.add("RankerError", m.py().get_type::<RankerError>())?;
-    m.add("JevError", m.py().get_type::<JevError>())?;
-    m.add_class::<JevRanker>()?;
-    m.add_class::<OpenAIDecisionRanker>()?;
-    m.add(
-        "DEFAULT_OPENAI_DECISION_MODEL",
-        core::DEFAULT_OPENAI_DECISION_MODEL,
-    )?;
     m.add_class::<ToolStageOne>()?;
     m.add_class::<SkillStageOne>()?;
     Ok(())

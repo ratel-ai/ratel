@@ -1,0 +1,74 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "ratel-ai-rankers-plugin"
+version = "0.1.0rc1"
+description = "Decision-model rankers (Jev, OpenAI Decisions) as retrieve/rerank plugins for the Ratel Python SDK."
+readme = "README.md"
+license = { file = "LICENSE.md" }
+authors = [{ name = "Agentified" }]
+requires-python = ">=3.9"
+keywords = ["ratel", "reranker", "retrieval", "jev", "openai", "ai-agents", "tool-calling"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# The plugin contract (RankFn, RetrieverError, RetrieverPlugin, define_plugin) is
+# owned by the SDK: catalogs catch RetrieverError by class, so this package uses
+# the SDK's and never the reverse (ADR-0028). The floor is the first SDK with
+# define_plugin.
+dependencies = ["ratel-ai>=0.13.0rc12,<1.0"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "maturin>=1.7,<2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ratel-ai/ratel"
+Repository = "https://github.com/ratel-ai/ratel"
+Issues = "https://github.com/ratel-ai/ratel/issues"
+
+[tool.maturin]
+# Mixed Rust/Python layout: the compiled extension is `ratel_ai_rankers_plugin._native`.
+manifest-path = "native/Cargo.toml"
+module-name = "ratel_ai_rankers_plugin._native"
+python-source = "."
+features = ["extension-module"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W", "D"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ratel_ai_rankers_plugin"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["ratel_ai_rankers_plugin._native", "ratel_ai._native"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

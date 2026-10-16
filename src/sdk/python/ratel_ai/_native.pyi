@@ -406,53 +406,6 @@ class ArtifactError(RuntimeError):
 class IncompatibleMergeError(ArtifactError):
     """Valid RAT1 parts that cannot be merged."""
 
-class RankerError(RuntimeError):
-    """A decision-model ranking (Jev, OpenAI Decisions) failed.
-
-    The plugins re-raise it as `RetrieverError`.
-
-    Attributes:
-        code: ``"Config"`` | ``"Unauthorized"`` | ``"InvalidRequest"`` |
-            ``"RateLimited"`` | ``"Overloaded"`` | ``"Timeout"`` | ``"Unreachable"`` |
-            ``"Http"`` | ``"Malformed"`` | ``"Refused"``.
-        status: the HTTP status, when the service sent one.
-        retry_after_secs: the service's ``Retry-After`` for ``"RateLimited"``, else ``None``.
-        transient: whether a retry may succeed.
-    """
-
-    code: str
-    status: int | None
-    retry_after_secs: int | None
-    transient: bool
-
-DEFAULT_OPENAI_DECISION_MODEL: str
-"""The Decisions model the OpenAI Decisions plugin asks by default (the only one in the beta)."""
-
-class JevError(RankerError):
-    """A Jev ranking failed; the Jev plugin re-raises it as `RetrieverError`."""
-
-class JevRanker:
-    """The Jev client behind the Jev plugin (ADR-0027)."""
-
-    def __init__(
-        self, url: str | None = ..., api_key_env: str | None = ..., model: str | None = ...
-    ) -> None: ...
-    def rank(
-        self, query: str, candidates: list[tuple[str, str]], top_k: int, kind: str
-    ) -> list[tuple[str, float]]:
-        """Rank ``(id, text)`` candidates with the GIL released; raises `JevError`."""
-
-class OpenAIDecisionRanker:
-    """The OpenAI Decisions API client behind the OpenAI Decisions plugin (ADR-0027)."""
-
-    def __init__(
-        self, url: str | None = ..., api_key_env: str | None = ..., model: str | None = ...
-    ) -> None: ...
-    def rank(
-        self, query: str, candidates: list[tuple[str, str]], top_k: int, kind: str
-    ) -> list[tuple[str, float]]:
-        """Rank ``(id, text)`` candidates with the GIL released; raises `RankerError`."""
-
 class ToolStageOne:
     """Private: stage 1 of a tool search whose reranker runs in Python."""
 

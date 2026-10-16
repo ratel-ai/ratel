@@ -37,12 +37,17 @@ build/
 *.tsbuildinfo
 src/sdk/ts/dist/
 src/telemetry/ts/dist/
+src/rankers/ts/dist/
 
 # NAPI native binding outputs
 src/sdk/ts/native/index.cjs
 src/sdk/ts/native/index.d.cts
 src/sdk/ts/native/*.node
 src/sdk/ts/npm/*/*.node
+src/rankers/ts/native/index.cjs
+src/rankers/ts/native/index.d.cts
+src/rankers/ts/native/*.node
+src/rankers/ts/npm/*/*.node
 
 # Logs
 *.log

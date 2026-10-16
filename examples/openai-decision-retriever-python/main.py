@@ -18,7 +18,8 @@ from __future__ import annotations
 import asyncio
 import os
 
-from ratel_ai import RetrieverError, ToolCatalog, ratel_openai_decision_plugin
+from ratel_ai import RetrieverError, ToolCatalog
+from ratel_ai_rankers_plugin import ratel_openai_decision_plugin
 
 from local_openai_decision import LocalDecisions
 from tools import QUERY, TOOLS, ids

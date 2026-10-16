@@ -1,18 +1,20 @@
 #!/usr/bin/env node
-// Prepare src/sdk/ts/package.json for `npm publish` of the SDK loader. Two rewrites,
-// both because `npm publish` (unlike `pnpm publish`) ships the manifest verbatim:
+// Prepare a napi loader's package.json for `npm publish`: the SDK
+// (src/sdk/ts, the default) or the rankers plugin (src/rankers/ts, passed as the
+// first argument). Two rewrites, both because `npm publish` (unlike `pnpm
+// publish`) ships the manifest verbatim:
 //
-//   1. `optionalDependencies` — the five committed src/sdk/ts/npm/<triple>/package.json
+//   1. `optionalDependencies` — the five committed <pkg>/npm/<triple>/package.json
 //      platform packages, injected at the loader's version (their source of truth).
-//   2. `workspace:` specifiers — the SDK depends on sibling workspace packages
-//      (today just @ratel-ai/telemetry). npm keeps `workspace:^` verbatim, which is
-//      uninstallable off-workspace, so pin each to a caret range on the sibling's
-//      current (published-in-lockstep) version.
+//   2. `workspace:` specifiers — a loader depends on sibling workspace packages
+//      (@ratel-ai/telemetry for the SDK; @ratel-ai/sdk as the plugin's dev dep).
+//      npm keeps `workspace:^` verbatim, which is uninstallable off-workspace, so
+//      pin each to a caret range on the sibling's current version.
 //
 // A final guard throws if ANY `workspace:` specifier survives, so a new workspace dep
 // can never silently ship a broken manifest again.
 //
-// Run this in CI right before `npm publish` for the SDK loader. Replaces
+// Run this in CI right before `npm publish` for a loader. Replaces
 // `napi pre-publish --skip-optional-publish`, which has a hidden dependency on git log
 // heuristics that breaks under shallow checkouts on non-tagged branches.
 
@@ -24,9 +26,10 @@ import { fileURLToPath } from "node:url";
 // version lives. A `workspace:` specifier for any other name is a hard error.
 const WORKSPACE_DEP_MANIFESTS = {
   "@ratel-ai/telemetry": "src/telemetry/ts/package.json",
+  "@ratel-ai/sdk": "src/sdk/ts/package.json",
 };
 
-const DEP_FIELDS = ["dependencies", "peerDependencies", "optionalDependencies"];
+const DEP_FIELDS = ["dependencies", "peerDependencies", "optionalDependencies", "devDependencies"];
 
 function readJson(root, rel) {
   return JSON.parse(readFileSync(join(root, rel), "utf8"));
@@ -47,9 +50,9 @@ function pinWorkspaceDeps(deps, root) {
   }
 }
 
-export function injectSdkOptionalDeps(root = process.cwd()) {
-  const mainRel = "src/sdk/ts/package.json";
-  const npmRel = "src/sdk/ts/npm";
+export function injectSdkOptionalDeps(root = process.cwd(), pkgDir = "src/sdk/ts") {
+  const mainRel = join(pkgDir, "package.json");
+  const npmRel = join(pkgDir, "npm");
   const pkg = readJson(root, mainRel);
 
   const optionalDependencies = {};
@@ -66,6 +69,7 @@ export function injectSdkOptionalDeps(root = process.cwd()) {
 
   pinWorkspaceDeps(pkg.dependencies, root);
   pinWorkspaceDeps(pkg.peerDependencies, root);
+  pinWorkspaceDeps(pkg.devDependencies, root);
 
   // Nothing may reach the registry still speaking `workspace:` — it is uninstallable.
   for (const field of DEP_FIELDS) {
@@ -87,8 +91,9 @@ export function injectSdkOptionalDeps(root = process.cwd()) {
 
 // Run as a script (not when imported by the test).
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const { version, optionalDependencies } = injectSdkOptionalDeps();
+  const pkgDir = process.argv[2] ?? "src/sdk/ts";
+  const { version, optionalDependencies } = injectSdkOptionalDeps(process.cwd(), pkgDir);
   console.log(
-    `injected ${Object.keys(optionalDependencies).length} optionalDependencies + pinned workspace deps into src/sdk/ts/package.json at version ${version}`,
+    `injected ${Object.keys(optionalDependencies).length} optionalDependencies + pinned workspace deps into ${pkgDir}/package.json at version ${version}`,
   );
 }

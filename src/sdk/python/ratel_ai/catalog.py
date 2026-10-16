@@ -62,8 +62,8 @@ unaffected.
 SearchMethod = str
 """Retrieval engine: ``"bm25"`` (lexical, model-free, the default),
 ``"semantic"`` (dense embeddings), ``"hybrid"`` (both, fused), or
-``"custom"`` (your own ``retrieve_fn``, e.g. Jev via `ratel_jev_plugin`; see
-ADR-0027).
+``"custom"`` (your own ``retrieve_fn``, e.g. Jev via ``ratel_jev_plugin`` from
+``ratel-ai-rankers-plugin``; see ADR-0027).
 """
 
 OriginFilterOption = Literal["any", "agent", "baseline"]
@@ -1437,7 +1437,7 @@ class ToolCatalog:
                 synchronous `search` on a catalog with a reranker raises.
                 **Experimental.**
             retrieve_fn: rank the whole catalog with your own function — a
-                model you call, such as Jev via `ratel_jev_plugin`. Needs
+                model you call, such as Jev via ``ratel-ai-rankers-plugin``. Needs
                 ``method="custom"``; see `RankFn`. **Experimental.**
             reranker_fn: rerank the first stage's top ``reranker_depth``
                 candidates with your own function. Not combinable with

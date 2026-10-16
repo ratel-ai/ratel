@@ -1,0 +1,22 @@
+[package]
+name = "ratel-rankers-python-native"
+version = "0.1.0-rc.1" # locked to ratel-ai-rankers-plugin (PyPI); ships in the rankers-py-v* unit (ADR-0008)
+edition.workspace = true
+license = "MIT"
+repository.workspace = true
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+# Exercised from the Python test suite; no Rust test binary linking libpython.
+test = false
+doctest = false
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["abi3-py39"] }
+ratel-ai-rankers = { workspace = true }
+
+[features]
+# Enabled by maturin for wheels so the cdylib does not link libpython.
+extension-module = ["pyo3/extension-module"]

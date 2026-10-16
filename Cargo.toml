@@ -5,6 +5,9 @@ members = [
     "src/telemetry/core",
     "src/sdk/ts/native",
     "src/sdk/python/native",
+    "src/rankers/core",
+    "src/rankers/ts/native",
+    "src/rankers/python/native",
 ]
 
 [workspace.package]
@@ -19,6 +22,7 @@ authors = ["Agentified"]
 
 [workspace.dependencies]
 ratel-ai-core = { path = "src/core" }
+ratel-ai-rankers = { path = "src/rankers/core" }
 
 # Release builds ship as native addons (SDK cdylibs) where binary size is user-
 # facing install weight. `strip` drops symbol/debug tables that serve no runtime
