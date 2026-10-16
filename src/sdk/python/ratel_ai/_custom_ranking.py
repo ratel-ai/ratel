@@ -71,17 +71,17 @@ class RetrieverPlugin:
     """
 
     #: Rank the whole catalog: pass as ``retrieve_fn`` with ``method="custom"``.
-    retrieve: RankFn | None = None
+    retrieve: RankFn
     #: Rerank the first stage's top candidates: pass as ``reranker_fn``.
-    rerank: RankFn | None = None
+    rerank: RankFn
 
 
-def define_plugin(
-    *, retrieve: RankFn | None = None, rerank: RankFn | None = None
-) -> RetrieverPlugin:
-    """Declare a ranking plugin from one or both rank functions, checked to be callable.
+def define_plugin(*, retrieve: RankFn, rerank: RankFn) -> RetrieverPlugin:
+    """Declare a ranking plugin from its two rank functions, checked to be callable.
 
-    Plugins with vendor clients live in ``ratel-ai-rankers-plugin``.
+    A ranker for one stage only is a plain ``RankFn``, passed straight to the
+    catalog; one function can serve both stages. Plugins with vendor clients
+    live in ``ratel-ai-rankers-plugin``.
     **Experimental** — may change without a major version bump.
 
     Example::
@@ -89,12 +89,10 @@ def define_plugin(
         my_plugin = define_plugin(retrieve=rank, rerank=rank)
 
     Raises:
-        TypeError: neither function is given, or one is not callable.
+        TypeError: either function is missing or not callable.
     """
-    if retrieve is None and rerank is None:
-        raise TypeError("define_plugin: give retrieve, rerank, or both")
     for name, fn in (("retrieve", retrieve), ("rerank", rerank)):
-        if fn is not None and not callable(fn):
+        if not callable(fn):
             raise TypeError(f"define_plugin: {name} must be callable")
     return RetrieverPlugin(retrieve=retrieve, rerank=rerank)
 

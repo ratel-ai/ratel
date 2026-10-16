@@ -367,10 +367,11 @@ export interface RetrieverPlugin {
 }
 
 /**
- * Declare a ranking plugin: one or both {@link RankFn}s, checked to be
- * functions. Returns `plugin` unchanged, typed, so a plugin author gets the
- * {@link RankFn} signature enforced. Plugins with vendor clients live in
- * `@ratel-ai/rankers-plugin`.
+ * Declare a ranking plugin: both {@link RankFn}s, checked to be functions.
+ * Returns `plugin` unchanged, typed, so a plugin author gets the
+ * {@link RankFn} signature enforced. A ranker for one stage only is a plain
+ * {@link RankFn}, passed straight to the catalog; one function can serve both
+ * stages. Plugins with vendor clients live in `@ratel-ai/rankers-plugin`.
  *
  * **Experimental** — may change without a major version bump.
  *
@@ -379,15 +380,11 @@ export interface RetrieverPlugin {
  * export const myPlugin = definePlugin({ retrieve: rank, rerank: rank });
  * ```
  *
- * @throws TypeError when neither function is given, or one is not a function.
+ * @throws TypeError when either function is missing or not a function.
  */
-export function definePlugin<P extends Partial<RetrieverPlugin>>(plugin: P): P {
-  if (plugin.retrieve === undefined && plugin.rerank === undefined) {
-    throw new TypeError("definePlugin: give retrieve, rerank, or both");
-  }
+export function definePlugin<P extends RetrieverPlugin>(plugin: P): P {
   for (const key of ["retrieve", "rerank"] as const) {
-    const fn = plugin[key];
-    if (fn !== undefined && typeof fn !== "function") {
+    if (typeof plugin[key] !== "function") {
       throw new TypeError(`definePlugin: ${key} must be a function`);
     }
   }

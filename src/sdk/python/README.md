@@ -197,7 +197,7 @@ ToolCatalog(method="bm25", reranker_fn=ratel_jev_plugin().rerank)  # key in TYPE
 - **Failures:** whatever `retrieve_fn` raises fails the search. A `reranker_fn` that raises a `RetrieverError` with `transient=True` keeps the first stage's order and records `rerank_fallback:<code>` on the trace; anything else it raises fails the search.
   - A search that fails records no `search` event on the local trace stream, the same as a failed built-in search. The error reaches your `search_async` call and, with telemetry on, marks the `ratel.search` span as an error.
 - **Rules:** both need `search_async` (synchronous `search` raises). `reranker_fn` can't be combined with `reranker`, nor with `method="custom"`. `search_async(q, k, reranker=False)` turns either reranker off for one call. `SkillCatalog` takes the same arguments.
-- **Plugins:** `define_plugin(retrieve=None, rerank=None)` checks that each given function is callable and returns a `RetrieverPlugin` with `.retrieve` and `.rerank`. That is the shape every plugin returns.
+- **Plugins:** `define_plugin(retrieve=, rerank=)` checks that both functions are callable and returns a `RetrieverPlugin` with `.retrieve` and `.rerank`. That is the shape every plugin returns. A ranker for one stage only is a plain `RankFn`; pass it to the catalog directly.
 - **Privacy:** a function sends whatever it sends. The built-in methods never leave the process.
 
 ## Reranking (experimental)

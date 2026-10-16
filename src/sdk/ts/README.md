@@ -255,7 +255,7 @@ ratel({ method: "bm25", rerankerFn: ratelJevPlugin().rerank }); // key in TYPESA
 - **Failures:** whatever `retrieveFn` throws fails the search. A `rerankerFn` that throws a `RetrieverError` with `transient: true` keeps the first stage's order and records a `rerank_fallback:<code>` trace stage; anything else it throws fails the search.
   - A search that fails records no `search` event on the local trace stream, the same as a failed built-in search. The error reaches your `searchAsync` call and, with telemetry on, marks the `ratel.search` span as an error.
 - **Rules:** both are async-only (synchronous `search` throws). `rerankerFn` can't be combined with `reranker`, nor with `method: "custom"`. `searchAsync(q, k, { reranker: null })` turns either reranker off for one call. `SkillCatalog` takes the same options; facts don't, and `ratel()` ranks facts with BM25 when `method` is `"custom"`.
-- **Plugins:** `definePlugin({ retrieve?, rerank? })` checks that each given function is a function and returns the plugin typed as `RetrieverPlugin`. That type is the shape every plugin returns.
+- **Plugins:** `definePlugin({ retrieve, rerank })` checks that both are functions and returns the plugin typed as `RetrieverPlugin`. That type is the shape every plugin returns. A ranker for one stage only is a plain `RankFn`; pass it to the catalog directly.
 - **Privacy:** a function sends whatever it sends. The built-in methods never leave the process.
 
 ## Reranking (experimental)

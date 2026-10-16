@@ -75,6 +75,8 @@ the Jev plugin change an import.
   plugin release, with no core or SDK release.
 - Plugin authors import from one package, and `definePlugin` makes the type checker enforce the
   `RankFn` signature. First- and third-party plugins use the same contract.
+- A plugin carries both functions in both SDKs (`RetrieverPlugin.retrieve` and `.rerank` are
+  required). A ranker for one stage is a plain `RankFn`, passed to the catalog directly.
 - Two more release units, with seven more registry names (the npm loader, its five platform
   packages, and the PyPI project), each needing a Trusted Publisher and a manual first publish.
 - A build of a plugin package still ships every enabled vendor. Splitting vendors into separate

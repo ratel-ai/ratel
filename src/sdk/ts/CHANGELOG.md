@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- `definePlugin({ retrieve?, rerank? })` declares a ranking plugin: it checks each given function and returns the plugin typed. `RetrieverPlugin` (`{ retrieve, rerank }`), the shape every plugin returns, is now exported from the SDK (ADR-0028).
+- `definePlugin({ retrieve, rerank })` declares a ranking plugin: it checks both are functions and returns the plugin typed. A ranker for one stage is a plain `RankFn` passed to the catalog. `RetrieverPlugin` (`{ retrieve, rerank }`), the shape every plugin returns, is now exported from the SDK (ADR-0028).
 
 ### Removed
 

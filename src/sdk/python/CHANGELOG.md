@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- `define_plugin(retrieve=None, rerank=None)` declares a ranking plugin: it checks each given function is callable and returns a `RetrieverPlugin` (ADR-0028). `RetrieverPlugin`'s fields are now optional, so a plugin can offer just one of the two.
+- `define_plugin(retrieve=, rerank=)` declares a ranking plugin: it checks both functions are callable and returns a `RetrieverPlugin` (ADR-0028). Both are required; a ranker for one stage is a plain `RankFn` passed to the catalog.
 
 ### Removed
 

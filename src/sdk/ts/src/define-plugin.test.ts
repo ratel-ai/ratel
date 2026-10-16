@@ -10,30 +10,29 @@ describe("definePlugin", () => {
     expect(definePlugin(plugin)).toBe(plugin);
   });
 
-  it("accepts a plugin with only one of the two functions", () => {
-    const rerankOnly = definePlugin({ rerank: rank });
-    expect(rerankOnly.rerank).toBe(rank);
-    const retrieveOnly = definePlugin({ retrieve: rank });
-    expect(retrieveOnly.retrieve).toBe(rank);
-  });
-
-  it("types a full plugin as a RetrieverPlugin", () => {
+  it("types the plugin as a RetrieverPlugin", () => {
     const plugin: RetrieverPlugin = definePlugin({ retrieve: rank, rerank: rank });
     expect(typeof plugin.retrieve).toBe("function");
   });
 
-  it("rejects a plugin with neither function", () => {
-    expect(() => definePlugin({})).toThrow(TypeError);
+  it("requires both functions: a one-stage ranker is a plain RankFn", () => {
+    expect(() => definePlugin({ retrieve: rank } as unknown as RetrieverPlugin)).toThrow(
+      /rerank must be a function/,
+    );
+    expect(() => definePlugin({ rerank: rank } as unknown as RetrieverPlugin)).toThrow(
+      /retrieve must be a function/,
+    );
+    expect(() => definePlugin({} as unknown as RetrieverPlugin)).toThrow(TypeError);
   });
 
   it("rejects a field that is not a function", () => {
-    expect(() => definePlugin({ retrieve: "bm25" as unknown as RankFn })).toThrow(
+    expect(() => definePlugin({ retrieve: "bm25" as unknown as RankFn, rerank: rank })).toThrow(
       /retrieve must be a function/,
     );
   });
 
   it("plugs straight into a catalog", async () => {
-    const plugin = definePlugin({ retrieve: rank });
+    const plugin = definePlugin({ retrieve: rank, rerank: rank });
     const catalog = new ToolCatalog({ method: "custom", retrieveFn: plugin.retrieve });
     await catalog.register([
       {
