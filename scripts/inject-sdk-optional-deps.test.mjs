@@ -100,7 +100,7 @@ test("injects another loader's platform packages when given its package dir", ()
   write("src/rankers/ts/package.json", {
     name: "@ratel-ai/rankers-plugin",
     version: "0.1.0-rc.1",
-    peerDependencies: { "@ratel-ai/sdk": ">=0.13.0-rc.12 <1.0.0" },
+    peerDependencies: { "@ratel-ai/sdk": "*" },
     devDependencies: { "@ratel-ai/sdk": "workspace:^", vitest: "^4.1.5" },
   });
   for (const t of PLATFORMS) {
@@ -116,8 +116,8 @@ test("injects another loader's platform packages when given its package dir", ()
       Object.keys(pkg.optionalDependencies).sort(),
       PLATFORMS.map((t) => `@ratel-ai/rankers-plugin-${t}`).sort(),
     );
-    // The literal peer range is kept; the dev dep's workspace: is pinned.
-    assert.equal(pkg.peerDependencies["@ratel-ai/sdk"], ">=0.13.0-rc.12 <1.0.0");
+    // The literal peer is kept; the dev dep's workspace: is pinned.
+    assert.equal(pkg.peerDependencies["@ratel-ai/sdk"], "*");
     assert.equal(pkg.devDependencies["@ratel-ai/sdk"], "^0.13.0-rc.12");
     assert.equal(JSON.stringify(pkg).includes("workspace:"), false);
     // The SDK's own manifest is untouched.

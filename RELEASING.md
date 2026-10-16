@@ -61,9 +61,10 @@ The **rankers plugin** units (`rankers-ts`, `rankers-py`;
 `ratel-ai-rankers` crate (`src/rankers/core`, `publish = false`, in both units' release paths).
 `rankers-ts` is internally lockstep like `sdk-ts`: the loader, its five platform packages
 (`@ratel-ai/rankers-plugin-<triple>`) and the `ratel-rankers-ts-native` crate move together.
-Each peers on its SDK by a literal range in its manifest (`@ratel-ai/sdk` peer /
-`ratel-ai` requirement), so release the SDK that floor names **first**. The publish jobs refuse
-to ship when no registry version satisfies it.
+Each depends on its SDK from a floor (`ratel.sdkFloor` in the TS `package.json`, whose
+`@ratel-ai/sdk` peer is `"*"` so newer SDK prereleases install; the `ratel-ai` requirement in
+`pyproject.toml`), so release the SDK that floor names **first**. The publish jobs refuse to ship
+when the registry has no SDK at the floor. Bump both floors together.
 
 `@ratel-ai/mcp-server` ships from a sibling repo, [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp), on its own cadence.
 

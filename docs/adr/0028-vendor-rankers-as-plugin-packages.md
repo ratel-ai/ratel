@@ -53,8 +53,12 @@ as a peer dependency, Python as a requirement.
 
 **4. Each plugin package is an independent release unit** (`rankers-ts-v*`, `rankers-py-v*`):
 
-- Each peers on its SDK by range (`>=0.13.0-rc.12 <1.0.0` / `ratel-ai>=0.13.0rc12,<1.0`). The
-  floor is the first SDK with `definePlugin`.
+- Each depends on its SDK from a floor, the first SDK with `definePlugin` (`0.13.0-rc.12`).
+  Python states it as a requirement, `ratel-ai>=0.13.0rc12,<1.0`, which admits later
+  prereleases. TS peers on `"*"` and records the floor as `ratel.sdkFloor` in `package.json`,
+  because npm only admits a prerelease when the range names one of the same version: a range
+  such as `>=0.13.0-rc.12 <1.0.0` would reject `0.14.0-rc.1`, and `"*"` is the only peer npm
+  treats as always satisfied.
 - The crate is in both units' release paths.
 - Publish order: the SDK, then the plugin. The release jobs check that the floor resolves on
   the registry before publishing.
@@ -77,5 +81,8 @@ the Jev plugin change an import.
   packages stays possible later without touching the SDKs.
 - Rejected: keeping the clients in core behind cargo features. Core's public API would still
   name vendors, and adding one would still need a core release.
+- npm does not check the TS floor at install. An SDK below it fails at import on the missing
+  `definePlugin` export, and a bare `npm install @ratel-ai/rankers-plugin` gets the SDK's
+  `latest` tag, which is below the floor until `0.13.0` is GA. Install both, as the README shows.
 - Rejected: lockstep versioning with the SDK. It brings back the coupled releases this ADR exists
   to remove.

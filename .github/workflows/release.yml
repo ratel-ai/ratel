@@ -824,17 +824,17 @@ jobs:
           pnpm --filter @ratel-ai/rankers-plugin run build:ts
       - name: Inject optionalDependencies into the plugin loader package.json
         run: node scripts/inject-sdk-optional-deps.mjs src/rankers/ts
-      # The SDK peer floor is a literal range in package.json. Nothing else
-      # checks it against the registry: a rankers-ts tag cut before the SDK
-      # release that floor names would publish a version no consumer can satisfy.
-      # Release sdk-ts first.
-      - name: Verify the @ratel-ai/sdk peer floor is on npm
+      # The peer is "*" so any newer SDK, prereleases included, installs; the
+      # floor is ratel.sdkFloor in package.json (ADR-0028). Nothing else checks
+      # it against the registry: a rankers-ts tag cut before that SDK release
+      # would publish a version no consumer can run. Release sdk-ts first.
+      - name: Verify the @ratel-ai/sdk floor is on npm
         shell: bash
         run: |
           set -e
-          range=$(node -p "require('./src/rankers/ts/package.json').peerDependencies['@ratel-ai/sdk']")
-          npm view "@ratel-ai/sdk@${range}" version >/dev/null 2>&1 \
-            || { echo "::error::no @ratel-ai/sdk on npm satisfies ${range} — publish sdk-ts before rankers-ts"; exit 1; }
+          floor=$(node -p "require('./src/rankers/ts/package.json').ratel.sdkFloor")
+          npm view "@ratel-ai/sdk@${floor}" version >/dev/null 2>&1 \
+            || { echo "::error::@ratel-ai/sdk@${floor} is not on npm — publish sdk-ts before rankers-ts"; exit 1; }
       - name: Preflight — dry-run all npm publishes
         shell: bash
         env:

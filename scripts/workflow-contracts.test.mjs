@@ -107,3 +107,29 @@ function jobBody(workflow, job) {
   const nextJob = rest.slice(1).search(/^  [a-z][a-z0-9-]*:\s*$/m);
   return nextJob === -1 ? rest : rest.slice(0, nextJob + 1);
 }
+
+// npm only admits a prerelease when the range names one of the same version, so
+// a range like ">=0.13.0-rc.12 <1.0.0" rejects 0.14.0-rc.1. The plugin peers on
+// "*" (npm treats it as always satisfied) and keeps its floor in ratel.sdkFloor,
+// which the release gate and the install smoke test read (ADR-0028).
+const rankersTsPkg = JSON.parse(
+  readFileSync(new URL("../src/rankers/ts/package.json", import.meta.url), "utf8"),
+);
+
+test("the rankers plugin peers on any SDK and records its floor in ratel.sdkFloor", () => {
+  assert.equal(rankersTsPkg.peerDependencies["@ratel-ai/sdk"], "*");
+  assert.match(rankersTsPkg.ratel?.sdkFloor ?? "", /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
+});
+
+test("publish-rankers-ts checks ratel.sdkFloor is on npm, not the peer range", () => {
+  const body = jobBody(releaseWorkflow, "publish-rankers-ts");
+  assert.match(body, /ratel\.sdkFloor/);
+  assert.doesNotMatch(body, /peerDependencies\['@ratel-ai\/sdk'\]/);
+});
+
+test("verify-rankers-ts co-installs the newest SDK at or above the floor, prereleases included", () => {
+  const body = jobBody(verifyInstallWorkflow, "verify-rankers-ts");
+  assert.doesNotMatch(body, /"@ratel-ai\/sdk@latest"/);
+  assert.match(body, /ratel\.sdkFloor/);
+  assert.match(body, /--include-prerelease/);
+});

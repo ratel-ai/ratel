@@ -287,9 +287,17 @@ jobs:
           tmp=$(mktemp -d)
           cd "$tmp"
           npm init -y >/dev/null
-          # Co-install the newest SDK: proves the plugin's peer range admits it.
-          npm install --no-audit --no-fund \
-            "@ratel-ai/rankers-plugin@${{ steps.ver.outputs.spec }}" "@ratel-ai/sdk@latest"
+          npm install --no-audit --no-fund "@ratel-ai/rankers-plugin@${{ steps.ver.outputs.spec }}"
+          # Co-install the newest SDK at or above the plugin's floor, prereleases
+          # included: proves the "*" peer admits a newer SDK RC, which a range
+          # would not (ADR-0028). @latest can sit below the floor.
+          floor=$(node -p "require('@ratel-ai/rankers-plugin/package.json').ratel.sdkFloor")
+          sdk=$(npx --yes semver@7.7.2 --include-prerelease --range ">=${floor}" \
+            $(npm view @ratel-ai/sdk versions --json | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).join(" ")') \
+            | tail -1) || true
+          [ -n "$sdk" ] || { echo "::error::no @ratel-ai/sdk on npm at or above ${floor}"; exit 1; }
+          echo "co-installing @ratel-ai/sdk@${sdk} (floor ${floor})"
+          npm install --no-audit --no-fund "@ratel-ai/sdk@${sdk}"
           RATEL_EXPERIMENTAL_SILENCE=1 node --input-type=module <<'EOF'
           import { RetrieverError } from "@ratel-ai/sdk";
           import { ratelJevPlugin, ratelOpenAIDecisionPlugin } from "@ratel-ai/rankers-plugin";

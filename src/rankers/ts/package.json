@@ -68,7 +68,10 @@
     "provenance": true
   },
   "peerDependencies": {
-    "@ratel-ai/sdk": ">=0.13.0-rc.12 <1.0.0"
+    "@ratel-ai/sdk": "*"
+  },
+  "ratel": {
+    "sdkFloor": "0.13.0-rc.12"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
