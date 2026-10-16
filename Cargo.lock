@@ -1744,7 +1744,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-sdk-python-native"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "pyo3",
  "pythonize",
@@ -1754,7 +1754,7 @@ dependencies = [
 
 [[package]]
 name = "ratel-sdk-ts-native"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "napi",
  "napi-build",

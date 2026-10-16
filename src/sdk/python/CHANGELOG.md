@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.12] - 2026-10-16
+
 ### Added
 
 - `define_plugin(retrieve=, rerank=)` declares a ranking plugin: it checks both functions are callable and returns a `RetrieverPlugin` (ADR-0028). Both are required; a ranker for one stage is a plain `RankFn` passed to the catalog.
