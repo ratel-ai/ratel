@@ -1,8 +1,8 @@
-"""What the decision-model plugins share (ADR-0027).
+"""The shared adapter (ADR-0027, ADR-0028).
 
-A native choice ranker (Jev, OpenAI Decisions) wrapped into the ranking
-functions a catalog takes, ``retrieve_fn`` and ``reranker_fn``. Each plugin
-only builds its native client.
+A native choice ranker wrapped into the ranking functions a catalog takes,
+``retrieve_fn`` and ``reranker_fn``. Each vendor plugin only builds its native
+ranker.
 """
 
 from __future__ import annotations
@@ -11,23 +11,27 @@ import asyncio
 from collections.abc import Sequence
 from typing import Protocol
 
-from ._custom_ranking import RankCandidate, RankedId, RetrieverPlugin
+from ratel_ai import RankCandidate, RankedId, RetrieverError, RetrieverPlugin
+
 from ._native import RankerError
-from .exceptions import RetrieverError
 
 
 class ChoiceRanker(Protocol):
-    """A native choice ranker: `JevRanker`, `OpenAIDecisionRanker`."""
+    """A ranker the adapter can wrap: the native `ChoiceRanker`, or your own object."""
 
     def rank(
         self, query: str, candidates: list[tuple[str, str]], top_k: int, kind: str
-    ) -> list[tuple[str, float]]: ...
+    ) -> list[tuple[str, float]]:
+        """Rank ``(id, text)`` candidates of one ``kind``: ``(id, score)`` best first."""
+        ...
 
 
 def choice_ranker_plugin(ranker: ChoiceRanker) -> RetrieverPlugin:
-    """``ranker`` as a plugin: one rank function for both stages.
+    """``ranker`` as a plugin: one rank function for both stages, run on a worker thread.
 
-    Its failures raise as `RetrieverError`s.
+    Native failures raise as the SDK's `RetrieverError`, so a catalog's
+    transient-fallback check sees them. **Experimental** — may change without a
+    major version bump.
     """
 
     async def rank(query: str, candidates: list[RankCandidate], top_k: int) -> Sequence[RankedId]:

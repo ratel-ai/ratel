@@ -1,9 +1,9 @@
-"""The OpenAI Decisions plugin (ADR-0027).
+"""The OpenAI Decisions plugin (ADR-0027, ADR-0028).
 
 OpenAI's Decisions API wrapped into the ranking functions a catalog takes,
 ``retrieve_fn`` and ``reranker_fn``. Search knows only those functions; the
-Decisions request format lives in the native client, so a change to OpenAI's
-beta API never reaches the catalogs.
+Decisions request format lives in the native ranker, so a change to OpenAI's
+beta API never reaches the SDK.
 """
 
 from __future__ import annotations
@@ -11,11 +11,14 @@ from __future__ import annotations
 import os
 import warnings
 
-from ._choice_ranker_plugin import choice_ranker_plugin
-from ._custom_ranking import RetrieverPlugin
+from ratel_ai import RetrieverPlugin
+from ratel_ai.experimental import ExperimentalWarning
+
+from ._adapter import choice_ranker_plugin
 from ._native import DEFAULT_OPENAI_DECISION_MODEL as _DEFAULT_MODEL
-from ._native import OpenAIDecisionRanker
-from .fact_catalog import ExperimentalWarning
+from ._native import ChoiceRanker
+
+__all__ = ["ratel_openai_decision_plugin"]
 
 # One-time gate for the beta warning the first plugin emits. Module-level so a
 # test can reset it (the warning is once per process).
@@ -76,4 +79,4 @@ def ratel_openai_decision_plugin(
         ToolCatalog(method="bm25", reranker_fn=decision.rerank, reranker_depth=20)
     """
     _warn_beta_once(model)
-    return choice_ranker_plugin(OpenAIDecisionRanker(url, api_key_env, model))
+    return choice_ranker_plugin(ChoiceRanker("openai-decision", url, api_key_env, model))

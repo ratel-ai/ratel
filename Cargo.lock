@@ -1724,6 +1724,14 @@ name = "ratel-ai-telemetry"
 version = "0.4.0"
 
 [[package]]
+name = "ratel-rankers-python-native"
+version = "0.1.0-rc.1"
+dependencies = [
+ "pyo3",
+ "ratel-ai-rankers",
+]
+
+[[package]]
 name = "ratel-rankers-ts-native"
 version = "0.1.0-rc.1"
 dependencies = [

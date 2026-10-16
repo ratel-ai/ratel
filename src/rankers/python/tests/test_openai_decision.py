@@ -11,18 +11,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import pytest
-
-from ratel_ai import (
-    ExecutableTool,
-    RetrieverError,
-    Skill,
-    SkillCatalog,
-    ToolCatalog,
-    openai_decision,
-    ratel_openai_decision_plugin,
-)
-from ratel_ai._native import DEFAULT_OPENAI_DECISION_MODEL
+from ratel_ai import ExecutableTool, Skill, SkillCatalog, ToolCatalog
 from ratel_ai.experimental import ExperimentalWarning
+
+from ratel_ai_rankers_plugin import RetrieverError, openai_decision, ratel_openai_decision_plugin
+from ratel_ai_rankers_plugin._native import DEFAULT_OPENAI_DECISION_MODEL
 
 KEY_ENV = "RATEL_SDK_PY_OPENAI_DECISION_TEST_KEY"
 

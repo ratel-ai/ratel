@@ -1,18 +1,19 @@
-"""The Jev plugin (ADR-0027).
+"""The Jev plugin (ADR-0027, ADR-0028).
 
 Jev (TypeSafe AI) wrapped into the ranking functions a catalog takes,
 ``retrieve_fn`` and ``reranker_fn``. Search knows only those functions; Jev's
-request format lives in the native Jev client, so a change to Jev's interface
-never reaches the catalogs.
+request format lives in the native ranker, so a change to Jev's interface
+never reaches the SDK.
 """
 
 from __future__ import annotations
 
-from ._choice_ranker_plugin import choice_ranker_plugin
-from ._custom_ranking import RetrieverPlugin
-from ._native import JevRanker
+from ratel_ai import RetrieverPlugin
 
-__all__ = ["RetrieverPlugin", "ratel_jev_plugin"]
+from ._adapter import choice_ranker_plugin
+from ._native import ChoiceRanker
+
+__all__ = ["ratel_jev_plugin"]
 
 
 def ratel_jev_plugin(
@@ -40,4 +41,4 @@ def ratel_jev_plugin(
         ToolCatalog(method="custom", retrieve_fn=jev.retrieve)   # Jev ranks every tool
         ToolCatalog(method="bm25", reranker_fn=jev.rerank)       # Jev reranks BM25's top 50
     """
-    return choice_ranker_plugin(JevRanker(url, api_key_env, model))
+    return choice_ranker_plugin(ChoiceRanker("jev", url, api_key_env, model))
