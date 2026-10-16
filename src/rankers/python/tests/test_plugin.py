@@ -8,7 +8,8 @@ import pytest
 import ratel_ai
 
 import ratel_ai_rankers_plugin as plugin
-from ratel_ai_rankers_plugin import RankCandidate, choice_ranker_plugin
+from ratel_ai_rankers_plugin import RankCandidate, RetrieverError, choice_ranker_plugin
+from ratel_ai_rankers_plugin._adapter import native_ranker
 from ratel_ai_rankers_plugin._native import ChoiceRanker, RankerError, vendors
 
 
@@ -65,3 +66,15 @@ def test_an_unknown_vendor_is_a_config_error() -> None:
 def test_an_unknown_kind_is_a_value_error() -> None:
     with pytest.raises(ValueError, match="widget"):
         ChoiceRanker("jev").rank("q", [("a", "A"), ("b", "B")], 1, "widget")
+
+
+def test_native_ranker_builds_a_vendors_ranker() -> None:
+    assert native_ranker("jev").service == "jev"
+
+
+def test_native_ranker_raises_an_unknown_vendor_as_the_sdks_retriever_error() -> None:
+    with pytest.raises(RetrieverError) as caught:
+        native_ranker("acme")
+    assert (caught.value.code, caught.value.transient) == ("Config", False)
+    assert '"acme"' in str(caught.value)
+    assert isinstance(caught.value.__cause__, RankerError)

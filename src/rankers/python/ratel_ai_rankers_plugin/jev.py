@@ -10,8 +10,7 @@ from __future__ import annotations
 
 from ratel_ai import RetrieverPlugin
 
-from ._adapter import choice_ranker_plugin
-from ._native import ChoiceRanker
+from ._adapter import choice_ranker_plugin, native_ranker
 
 __all__ = ["ratel_jev_plugin"]
 
@@ -41,4 +40,4 @@ def ratel_jev_plugin(
         ToolCatalog(method="custom", retrieve_fn=jev.retrieve)   # Jev ranks every tool
         ToolCatalog(method="bm25", reranker_fn=jev.rerank)       # Jev reranks BM25's top 50
     """
-    return choice_ranker_plugin(ChoiceRanker("jev", url, api_key_env, model))
+    return choice_ranker_plugin(native_ranker("jev", url, api_key_env, model))

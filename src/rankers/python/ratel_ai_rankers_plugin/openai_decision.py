@@ -14,9 +14,8 @@ import warnings
 from ratel_ai import RetrieverPlugin
 from ratel_ai.experimental import ExperimentalWarning
 
-from ._adapter import choice_ranker_plugin
+from ._adapter import choice_ranker_plugin, native_ranker
 from ._native import DEFAULT_OPENAI_DECISION_MODEL as _DEFAULT_MODEL
-from ._native import ChoiceRanker
 
 __all__ = ["ratel_openai_decision_plugin"]
 
@@ -79,4 +78,4 @@ def ratel_openai_decision_plugin(
         ToolCatalog(method="bm25", reranker_fn=decision.rerank, reranker_depth=20)
     """
     _warn_beta_once(model)
-    return choice_ranker_plugin(ChoiceRanker("openai-decision", url, api_key_env, model))
+    return choice_ranker_plugin(native_ranker("openai-decision", url, api_key_env, model))

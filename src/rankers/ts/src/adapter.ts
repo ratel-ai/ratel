@@ -3,13 +3,14 @@
 // vendor plugin only builds its native ranker.
 
 import { type RankedId, type RankFn, RetrieverError, type RetrieverPlugin } from "@ratel-ai/sdk";
+import { type ChoiceRankerConfig, ChoiceRanker as NativeChoiceRanker } from "../native/index.cjs";
 
 /**
  * A ranker the adapter can wrap: the native rankers this package ships, or
  * your own object with the same method.
  */
 export interface ChoiceRanker {
-  /** Rank `candidates` (one kind: `"tool"` or `"skill"`) for `query`, at most `topK`, best first. */
+  /** Rank `candidates` (one kind: `"tool"`, `"skill"` or `"fact"`) for `query`, at most `topK`, best first. */
   rankAsync(
     query: string,
     candidates: { id: string; text: string }[],
@@ -43,6 +44,18 @@ function mapRetrieverError(error: unknown): unknown {
     status: typeof record.status === "number" ? record.status : undefined,
     retryAfterSecs: typeof record.retryAfterSecs === "number" ? record.retryAfterSecs : undefined,
   });
+}
+
+/**
+ * The native ranker for `vendor`, its construction failures (an unknown
+ * vendor) raised as {@link RetrieverError}s like its ranking failures.
+ */
+export function nativeRanker(vendor: string, config?: ChoiceRankerConfig): NativeChoiceRanker {
+  try {
+    return new NativeChoiceRanker(vendor, config);
+  } catch (error) {
+    throw mapRetrieverError(error);
+  }
 }
 
 /**

@@ -5,8 +5,7 @@
 // the SDK.
 
 import type { RetrieverPlugin } from "@ratel-ai/sdk";
-import { ChoiceRanker } from "../native/index.cjs";
-import { choiceRankerPlugin } from "./adapter.js";
+import { choiceRankerPlugin, nativeRanker } from "./adapter.js";
 import { warnOpenAIDecisionBetaOnce } from "./experimental-warning.js";
 
 /** Where the OpenAI Decisions plugin sends requests. */
@@ -42,5 +41,5 @@ export function ratelOpenAIDecisionPlugin(
   config: OpenAIDecisionPluginConfig = {},
 ): RetrieverPlugin {
   warnOpenAIDecisionBetaOnce(config.model);
-  return choiceRankerPlugin(new ChoiceRanker("openai-decision", config));
+  return choiceRankerPlugin(nativeRanker("openai-decision", config));
 }

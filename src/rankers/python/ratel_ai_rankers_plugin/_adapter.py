@@ -13,6 +13,7 @@ from typing import Protocol
 
 from ratel_ai import RankCandidate, RankedId, RetrieverError, RetrieverPlugin
 
+from ._native import ChoiceRanker as _NativeChoiceRanker
 from ._native import RankerError
 
 
@@ -24,6 +25,30 @@ class ChoiceRanker(Protocol):
     ) -> list[tuple[str, float]]:
         """Rank ``(id, text)`` candidates of one ``kind``: ``(id, score)`` best first."""
         ...
+
+
+def _retriever_error(error: RankerError) -> RetrieverError:
+    """A native failure as the SDK's `RetrieverError`, keeping its typed fields."""
+    return RetrieverError(
+        str(error),
+        error.code,
+        transient=error.transient,
+        status=error.status,
+        retry_after_secs=error.retry_after_secs,
+    )
+
+
+def native_ranker(
+    vendor: str,
+    url: str | None = None,
+    api_key_env: str | None = None,
+    model: str | None = None,
+) -> _NativeChoiceRanker:
+    """The native ranker for ``vendor``; an unknown vendor raises `RetrieverError`."""
+    try:
+        return _NativeChoiceRanker(vendor, url, api_key_env, model)
+    except RankerError as error:
+        raise _retriever_error(error) from error
 
 
 def choice_ranker_plugin(ranker: ChoiceRanker) -> RetrieverPlugin:
@@ -41,13 +66,7 @@ def choice_ranker_plugin(ranker: ChoiceRanker) -> RetrieverPlugin:
         try:
             ranked = await asyncio.to_thread(ranker.rank, query, pairs, top_k, candidates[0].kind)
         except RankerError as error:
-            raise RetrieverError(
-                str(error),
-                error.code,
-                transient=error.transient,
-                status=error.status,
-                retry_after_secs=error.retry_after_secs,
-            ) from error
+            raise _retriever_error(error) from error
         return [{"id": id_, "score": score} for id_, score in ranked]
 
     return RetrieverPlugin(retrieve=rank, rerank=rank)

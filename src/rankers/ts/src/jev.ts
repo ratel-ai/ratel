@@ -4,8 +4,7 @@
 // ranker, so a change to Jev's interface never reaches the SDK.
 
 import type { RetrieverPlugin } from "@ratel-ai/sdk";
-import { ChoiceRanker } from "../native/index.cjs";
-import { choiceRankerPlugin } from "./adapter.js";
+import { choiceRankerPlugin, nativeRanker } from "./adapter.js";
 
 /** Where the Jev plugin sends requests. */
 export interface JevPluginConfig {
@@ -33,5 +32,5 @@ export interface JevPluginConfig {
  * ```
  */
 export function ratelJevPlugin(config: JevPluginConfig = {}): RetrieverPlugin {
-  return choiceRankerPlugin(new ChoiceRanker("jev", config));
+  return choiceRankerPlugin(nativeRanker("jev", config));
 }

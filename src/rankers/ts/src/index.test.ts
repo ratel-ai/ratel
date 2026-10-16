@@ -1,6 +1,7 @@
 import * as sdk from "@ratel-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { ChoiceRanker, vendors } from "../native/index.cjs";
+import { nativeRanker } from "./adapter.js";
 import {
   choiceRankerPlugin,
   definePlugin,
@@ -68,23 +69,23 @@ describe("the native ranker", () => {
     expect(vendors()).toEqual(["jev", "openai-decision"]);
   });
 
-  it("rejects an unknown vendor with a typed RetrieverError", async () => {
+  it("builds a vendor's ranker", () => {
+    expect(nativeRanker("jev")).toBeInstanceOf(ChoiceRanker);
+  });
+
+  it("rejects an unknown vendor at construction with a typed RetrieverError", () => {
     let error: unknown;
     try {
-      new ChoiceRanker("acme");
+      nativeRanker("acme");
     } catch (e) {
       error = e;
     }
-    const { retrieve } = choiceRankerPlugin({
-      rankAsync: async () => {
-        throw error;
-      },
-    });
-    await expect(retrieve("q", [{ id: "a", kind: "tool", text: "A" }], 1)).rejects.toMatchObject({
-      name: "RetrieverError",
+    expect(error).toBeInstanceOf(RetrieverError);
+    expect(error).toMatchObject({
       code: "Config",
       transient: false,
       message: expect.stringContaining('"acme"'),
     });
+    expect((error as Error).message).not.toContain("RATEL_RETRIEVER_ERROR:");
   });
 });
