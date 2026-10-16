@@ -1,19 +1,18 @@
-//! A client for Jev (TypeSafe AI), the ranker behind the SDKs' Jev plugin
-//! (ADR-0027).
+//! Jev (TypeSafe AI), the backend behind the rankers plugin's Jev plugin
+//! (ADR-0027, ADR-0028).
 //!
 //! Jev answers a `choice` question over named options with a probability per
-//! option. Only that wire format lives here; the limits, the tournament for
-//! large candidate sets and the error type are shared with the other
-//! decision-model clients in [`crate::choice_ranker`].
-//!
-//! Nothing in the registries calls this: search knows only caller-supplied
-//! ranking functions ([`crate::RankCandidate`]). The SDKs wrap [`JevRanker`]
-//! into such a function, so a change to Jev's interface stays in this file.
+//! option. Only that wire format lives here ([`JevConfig`] is the
+//! [`ChoiceBackend`]); the limits, the tournament for large candidate sets and
+//! the error type are shared in [`crate::choice`], so a change to Jev's
+//! interface stays in this file.
 
 use std::collections::HashMap;
 
-use crate::choice_ranker::{self, AskChoice, CandidateKind, RankerError, from_probabilities};
-use crate::rerank::RankCandidate as Candidate;
+use crate::choice::{
+    Candidate, CandidateKind, ChoiceBackend, ChoiceRanker, Http, RankerError, from_probabilities,
+    option_text,
+};
 
 use serde::Deserialize;
 
@@ -100,63 +99,25 @@ struct JevChoice {
     probabilities: HashMap<String, f32>,
 }
 
-/// Jev's `/v1/systemone`, called directly. Building one opens no connection.
-pub struct JevRanker {
-    config: JevConfig,
-    agent: ureq::Agent,
-    /// A key that bypasses the environment; tests set it rather than mutate
-    /// the process environment other threads are reading.
-    key_override: Option<String>,
-}
+/// Jev's `/v1/systemone`, called directly: [`ChoiceRanker`] over [`JevConfig`].
+pub type JevRanker = ChoiceRanker<JevConfig>;
 
-impl JevRanker {
-    /// A ranker for `config`; the key is read from its env var at call time.
-    #[must_use]
-    pub fn new(config: JevConfig) -> Self {
-        Self {
-            config,
-            agent: choice_ranker::agent(),
-            key_override: None,
-        }
+impl ChoiceBackend for JevConfig {
+    fn service(&self) -> &'static str {
+        "jev"
     }
 
-    /// Use `key` instead of reading the environment.
-    #[cfg(test)]
-    pub(crate) fn with_key(mut self, key: impl Into<String>) -> Self {
-        self.key_override = Some(key.into());
-        self
+    fn key_owner(&self) -> &'static str {
+        "Jev"
     }
 
-    /// Rank `candidates` for `query`: `(id, probability)` best first, every id
-    /// one of `candidates`, at most `top_k`. Picks below probability 0.01 are
-    /// dropped, except the best one. `kind` is what the candidates are; Jev is
-    /// asked about tools or skills accordingly.
-    ///
-    /// # Errors
-    /// [`JevError`] when the key is unset, Jev refuses the request, or it
-    /// cannot be reached or understood.
-    pub fn rank(
-        &self,
-        query: &str,
-        candidates: &[Candidate],
-        top_k: usize,
-        kind: CandidateKind,
-    ) -> Result<Vec<(String, f32)>, JevError> {
-        if candidates.is_empty() || top_k == 0 {
-            return Ok(Vec::new());
-        }
-        let key = choice_ranker::api_key(
-            self.key_override.as_deref(),
-            &self.config.api_key_env,
-            "Jev",
-        )?;
-        choice_ranker::rank(self, &key, query, candidates, top_k, kind)
+    fn key_env(&self) -> &str {
+        &self.api_key_env
     }
-}
 
-impl AskChoice for JevRanker {
     fn ask(
         &self,
+        http: &Http,
         key: &str,
         query: &str,
         candidates: &[&Candidate],
@@ -167,10 +128,10 @@ impl AskChoice for JevRanker {
         let criteria: serde_json::Map<String, serde_json::Value> = candidates
             .iter()
             .enumerate()
-            .map(|(i, c)| (format!("t{i}"), choice_ranker::option_text(c).into()))
+            .map(|(i, c)| (format!("t{i}"), option_text(c).into()))
             .collect();
         let body = serde_json::json!({
-            "model": self.config.model,
+            "model": self.model,
             "state": query,
             "questions": {
                 kind.noun(): {
@@ -180,8 +141,8 @@ impl AskChoice for JevRanker {
                 }
             }
         });
-        let url = format!("{}/v1/systemone", self.config.url);
-        let text = choice_ranker::post_json(&self.agent, &url, key, &body)?;
+        let url = format!("{}/v1/systemone", self.url);
+        let text = http.post_json(&url, key, &body)?;
         let parsed: JevResponse =
             serde_json::from_str(&text).map_err(|e| RankerError::Malformed {
                 source: e.to_string(),
@@ -204,7 +165,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
-    use crate::choice_ranker::{MAX_OPTION_CHARS, MAX_OPTIONS};
+    use crate::choice::{MAX_OPTION_CHARS, MAX_OPTIONS};
     use crate::test_support::{MockHttpRequest, read_http_request_full};
 
     /// An environment variable no test sets: tests inject the key instead.

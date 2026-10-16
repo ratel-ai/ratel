@@ -34,13 +34,12 @@
 //!
 //! [`ToolRegistry::search_with_options`] adds a second stage: a [`Reranker`]
 //! re-scores the first stage's top candidates with any other method. A ranking
-//! function the caller supplies (a model such as Jev, called by the SDK) plugs
+//! function the caller supplies (a model called by the SDK) plugs
 //! in between two phases instead: [`ToolRegistry::rank_candidates`] /
 //! [`ToolRegistry::complete_custom_search`] to rank the whole catalog, and
 //! [`ToolRegistry::stage_one`] / [`ToolRegistry::complete_rerank`] to rerank
-//! (ADR-0027). [`JevRanker`] (Jev) and [`OpenAIDecisionRanker`] (OpenAI's
-//! Decisions API) are the decision-model clients the SDKs wrap into such a
-//! function.
+//! (ADR-0027). Vendor clients for such functions live
+//! outside core, in the rankers plugin packages (ADR-0028).
 //!
 //! Semantic and hybrid searches rank against an embedding cache built by
 //! [`ToolRegistry::build_embeddings`] / [`SkillRegistry::build_embeddings`];
@@ -92,7 +91,6 @@
 #![warn(missing_docs)]
 
 mod artifact_warm;
-mod choice_ranker;
 mod dense_cache;
 mod dense_search;
 mod embedding;
@@ -103,9 +101,7 @@ mod fact_indexing;
 mod fact_registry;
 mod fusion;
 mod indexing;
-mod jev;
 mod method;
-mod openai_decision;
 mod rerank;
 mod search;
 mod skill;
@@ -123,7 +119,6 @@ mod harness;
 mod test_support;
 
 pub use artifact_warm::{ArtifactWarmError, OnArtifactMiss, ParseOnArtifactMissError};
-pub use choice_ranker::{CandidateKind, RankerError};
 pub use dense_cache::WarmError;
 pub use embedding::EmbedderError;
 pub use embedding_artifact::{ArtifactError, merge_embedding_artifacts};
@@ -131,14 +126,7 @@ pub use embedding_config::{EmbeddingModel, EmbeddingSpec, Pooling, public_model_
 pub use fact::{Fact, ParsePinModeError, PinMode};
 pub use fact_registry::{FactHit, FactRegistry};
 pub use fusion::{DenseWeight, InvalidDenseWeight};
-pub use jev::{
-    DEFAULT_JEV_API_KEY_ENV, DEFAULT_JEV_MODEL, DEFAULT_JEV_URL, JevConfig, JevError, JevRanker,
-};
 pub use method::{ParseSearchMethodError, SearchMethod};
-pub use openai_decision::{
-    DEFAULT_OPENAI_DECISION_API_KEY_ENV, DEFAULT_OPENAI_DECISION_MODEL,
-    DEFAULT_OPENAI_DECISION_URL, OpenAIDecisionConfig, OpenAIDecisionRanker,
-};
 pub use rerank::{RankCandidate, RerankOutcome, Reranker, SearchError, SearchOptions, StageOne};
 pub use search::Bm25Params;
 pub use skill::Skill;

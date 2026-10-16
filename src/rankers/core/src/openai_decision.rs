@@ -1,19 +1,21 @@
-//! A client for OpenAI's Decisions API, the ranker behind the SDKs' OpenAI
-//! Decisions plugin (ADR-0027).
+//! OpenAI's Decisions API, the backend behind the rankers plugin's OpenAI
+//! Decisions plugin (ADR-0027, ADR-0028).
 //!
 //! Decisions answers a `choice` question over `{value, description}` choices
-//! with a probability per choice. Only that wire format lives here; the
-//! limits (OpenAI allows 2 to 255 choices; Ratel caps at 150), the tournament
-//! for large candidate sets and the error type are shared in
-//! [`crate::choice_ranker`].
+//! with a probability per choice. Only that wire format lives here
+//! ([`OpenAIDecisionConfig`] is the [`ChoiceBackend`]); the limits (OpenAI
+//! allows 2 to 255 choices; Ratel caps at 150), the tournament for large
+//! candidate sets and the error type are shared in [`crate::choice`].
 //! The API is in public beta: a change to it stays in this file.
 //!
 //! Text only: the query is sent as a plain string, never images.
 
 use std::collections::HashMap;
 
-use crate::choice_ranker::{self, AskChoice, CandidateKind, RankerError, from_probabilities};
-use crate::rerank::RankCandidate as Candidate;
+use crate::choice::{
+    Candidate, CandidateKind, ChoiceBackend, ChoiceRanker, Http, RankerError, from_probabilities,
+    option_text,
+};
 
 use serde::Deserialize;
 
@@ -108,64 +110,26 @@ struct DecisionProbability {
     probability: f32,
 }
 
-/// OpenAI's `/v1/decisions`, called directly. Building one opens no connection.
-pub struct OpenAIDecisionRanker {
-    config: OpenAIDecisionConfig,
-    agent: ureq::Agent,
-    /// A key that bypasses the environment; tests set it rather than mutate
-    /// the process environment other threads are reading.
-    key_override: Option<String>,
-}
+/// OpenAI's `/v1/decisions`, called directly: [`ChoiceRanker`] over
+/// [`OpenAIDecisionConfig`].
+pub type OpenAIDecisionRanker = ChoiceRanker<OpenAIDecisionConfig>;
 
-impl OpenAIDecisionRanker {
-    /// A ranker for `config`; the key is read from its env var at call time.
-    #[must_use]
-    pub fn new(config: OpenAIDecisionConfig) -> Self {
-        Self {
-            config,
-            agent: choice_ranker::agent(),
-            key_override: None,
-        }
+impl ChoiceBackend for OpenAIDecisionConfig {
+    fn service(&self) -> &'static str {
+        "openai decisions"
     }
 
-    /// Use `key` instead of reading the environment.
-    #[cfg(test)]
-    pub(crate) fn with_key(mut self, key: impl Into<String>) -> Self {
-        self.key_override = Some(key.into());
-        self
+    fn key_owner(&self) -> &'static str {
+        "OpenAI"
     }
 
-    /// Rank `candidates` for `query`: `(id, probability)` best first, every id
-    /// one of `candidates`, at most `top_k`. Picks below probability 0.01 are
-    /// dropped, except the best one. `kind` is what the candidates are; the
-    /// model is asked about tools or skills accordingly.
-    ///
-    /// # Errors
-    /// [`RankerError`] when the key is unset, OpenAI refuses the request or the
-    /// model declines to answer (`Refused`), or it cannot be reached or
-    /// understood.
-    pub fn rank(
-        &self,
-        query: &str,
-        candidates: &[Candidate],
-        top_k: usize,
-        kind: CandidateKind,
-    ) -> Result<Vec<(String, f32)>, RankerError> {
-        if candidates.is_empty() || top_k == 0 {
-            return Ok(Vec::new());
-        }
-        let key = choice_ranker::api_key(
-            self.key_override.as_deref(),
-            &self.config.api_key_env,
-            "OpenAI",
-        )?;
-        choice_ranker::rank(self, &key, query, candidates, top_k, kind)
+    fn key_env(&self) -> &str {
+        &self.api_key_env
     }
-}
 
-impl AskChoice for OpenAIDecisionRanker {
     fn ask(
         &self,
+        http: &Http,
         key: &str,
         query: &str,
         candidates: &[&Candidate],
@@ -179,12 +143,12 @@ impl AskChoice for OpenAIDecisionRanker {
             .map(|(i, c)| {
                 serde_json::json!({
                     "value": format!("t{i}"),
-                    "description": choice_ranker::option_text(c),
+                    "description": option_text(c),
                 })
             })
             .collect();
         let body = serde_json::json!({
-            "model": self.config.model,
+            "model": self.model,
             "input": query,
             "questions": [{
                 "type": "choice",
@@ -193,8 +157,8 @@ impl AskChoice for OpenAIDecisionRanker {
                 "choices": choices
             }]
         });
-        let url = format!("{}/v1/decisions", self.config.url);
-        let text = choice_ranker::post_json(&self.agent, &url, key, &body)?;
+        let url = format!("{}/v1/decisions", self.url);
+        let text = http.post_json(&url, key, &body)?;
         let parsed: DecisionResponse =
             serde_json::from_str(&text).map_err(|e| RankerError::Malformed {
                 source: e.to_string(),
@@ -231,7 +195,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
-    use crate::choice_ranker::MAX_OPTIONS;
+    use crate::choice::MAX_OPTIONS;
     use crate::test_support::{MockHttpRequest, read_http_request_full};
 
     /// An environment variable no test sets: tests inject the key instead.
