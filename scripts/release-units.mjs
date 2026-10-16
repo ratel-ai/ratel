@@ -134,6 +134,43 @@ export const UNITS = {
       includePaths: ["src/adapters/ts-mastra/**"],
     },
   },
+  // The rankers plugin (ADR-0028): vendor rankers bound from the internal
+  // ratel-ai-rankers crate (src/rankers/core, publish = false). One unit per
+  // registry, each peering on its SDK by range, so a new vendor ships without
+  // an SDK release. The crate is in both units' srcPaths: a vendor change
+  // marks both releasable.
+  "rankers-ts": {
+    tagPrefix: "rankers-ts-v",
+    label: "@ratel-ai/rankers-plugin (loader + 5 platform packages) → npm",
+    // Internally lockstep like sdk-ts: loader + platform packages + native crate.
+    versionManifest: { path: "src/rankers/ts/package.json", kind: "json" },
+    manifests: [
+      { path: "src/rankers/ts/package.json", kind: "json" },
+      ...PLATFORMS.map((t) => ({ path: `src/rankers/ts/npm/${t}/package.json`, kind: "json" })),
+      { path: "src/rankers/ts/native/Cargo.toml", kind: "toml" },
+    ],
+    changelogs: ["src/rankers/ts/CHANGELOG.md"],
+    srcPaths: ["src/rankers/ts", "src/rankers/core"],
+    changelog: {
+      name: "@ratel-ai/rankers-plugin",
+      includePaths: ["src/rankers/ts/**", "src/rankers/core/**"],
+    },
+  },
+  "rankers-py": {
+    tagPrefix: "rankers-py-v",
+    label: "ratel-ai-rankers-plugin → PyPI",
+    versionManifest: { path: "src/rankers/python/pyproject.toml", kind: "toml", pep440: true },
+    manifests: [
+      { path: "src/rankers/python/pyproject.toml", kind: "toml", pep440: true },
+      { path: "src/rankers/python/native/Cargo.toml", kind: "toml" },
+    ],
+    changelogs: ["src/rankers/python/CHANGELOG.md"],
+    srcPaths: ["src/rankers/python", "src/rankers/core"],
+    changelog: {
+      name: "ratel-ai-rankers-plugin",
+      includePaths: ["src/rankers/python/**", "src/rankers/core/**"],
+    },
+  },
 };
 
 export const UNIT_IDS = Object.keys(UNITS);

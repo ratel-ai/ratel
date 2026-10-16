@@ -47,6 +47,17 @@ function makeRepo(version = "0.2.0", pyVersion = version) {
   // mastra: the Mastra framework adapter — an independent npm unit.
   write("src/adapters/ts-mastra/package.json", json("@ratel-ai/mastra"));
   write("src/adapters/ts-mastra/CHANGELOG.md", changelog(version));
+  // rankers plugin (ADR-0028): a napi loader + 5 platform packages + its native
+  // crate (rankers-ts), and a pyo3 wheel + its native crate (rankers-py).
+  write("src/rankers/ts/package.json", json("@ratel-ai/rankers-plugin"));
+  for (const t of ["darwin-arm64", "darwin-x64", "linux-x64-gnu", "linux-arm64-gnu", "win32-x64-msvc"]) {
+    write(`src/rankers/ts/npm/${t}/package.json`, json(`@ratel-ai/rankers-plugin-${t}`));
+  }
+  write("src/rankers/ts/native/Cargo.toml", cargo("ratel-rankers-ts-native"));
+  write("src/rankers/ts/CHANGELOG.md", changelog(version));
+  write("src/rankers/python/pyproject.toml", `[project]\nname = "ratel-ai-rankers-plugin"\nversion = "${pyVersion}"\n`);
+  write("src/rankers/python/native/Cargo.toml", cargo("ratel-rankers-python-native"));
+  write("src/rankers/python/CHANGELOG.md", changelog(version));
 
   return { root, write, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -61,6 +72,8 @@ test("parseTag splits prefix and version for every unit", () => {
   assert.deepEqual(parseTag("telemetry-py-v0.2.0-rc.2"), { unit: "telemetry-py", version: "0.2.0-rc.2" });
   assert.deepEqual(parseTag("vercel-ai-sdk-v0.1.0-rc.1"), { unit: "vercel-ai-sdk", version: "0.1.0-rc.1" });
   assert.deepEqual(parseTag("mastra-v0.1.0-rc.1"), { unit: "mastra", version: "0.1.0-rc.1" });
+  assert.deepEqual(parseTag("rankers-ts-v0.1.0-rc.1"), { unit: "rankers-ts", version: "0.1.0-rc.1" });
+  assert.deepEqual(parseTag("rankers-py-v0.1.0"), { unit: "rankers-py", version: "0.1.0" });
 });
 
 test("parseTag rejects the old lockstep tag and unknown prefixes", () => {
@@ -92,6 +105,36 @@ test("mastra rc tag passes when the adapter package + its changelog match", () =
     assert.equal(r.unit, "mastra");
     assert.equal(r.version, "0.1.0-rc.1");
     assert.equal(r.distTag, "rc");
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("rankers-ts rc tag gates the loader, every platform package and the native crate", () => {
+  const repo = makeRepo("0.1.0-rc.1");
+  try {
+    const r = checkReleaseTag("rankers-ts-v0.1.0-rc.1", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+    assert.equal(r.unit, "rankers-ts");
+    assert.equal(r.distTag, "rc");
+    repo.write(
+      "src/rankers/ts/npm/win32-x64-msvc/package.json",
+      JSON.stringify({ name: "@ratel-ai/rankers-plugin-win32-x64-msvc", version: "0.0.9" }),
+    );
+    const drifted = checkReleaseTag("rankers-ts-v0.1.0-rc.1", { root: repo.root });
+    assert.equal(drifted.ok, false);
+    assert.match(drifted.errors.join("; "), /win32-x64-msvc/);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test("rankers-py accepts the PEP 440 normalized form in pyproject", () => {
+  const repo = makeRepo("0.1.0-rc.1", "0.1.0rc1");
+  try {
+    const r = checkReleaseTag("rankers-py-v0.1.0-rc.1", { root: repo.root });
+    assert.equal(r.ok, true, r.errors.join("; "));
+    assert.equal(r.unit, "rankers-py");
   } finally {
     repo.cleanup();
   }

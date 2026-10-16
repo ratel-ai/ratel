@@ -2,7 +2,7 @@ name: Verify install
 
 # Per-unit install smoke tests (ADR-0008). Each release unit — core (crate),
 # sdk-ts (npm), sdk-py (PyPI), the framework adapters vercel-ai-sdk + mastra (npm),
-# and the three telemetry units (telemetry-core on crates.io, telemetry-ts on
+# the rankers plugin (rankers-ts on npm, rankers-py on PyPI), and the three telemetry units (telemetry-core on crates.io, telemetry-ts on
 # npm, telemetry-py on PyPI) — is verified from its public registry with no repo
 # checkout and no local toolchain state, so a broken publish surfaces here.
 #
@@ -16,7 +16,7 @@ on:
         description: Release unit to verify
         type: choice
         default: all
-        options: [all, core, sdk-ts, sdk-py, telemetry-core, telemetry-ts, telemetry-py, vercel-ai-sdk, mastra]
+        options: [all, core, sdk-ts, sdk-py, telemetry-core, telemetry-ts, telemetry-py, vercel-ai-sdk, mastra, rankers-ts, rankers-py]
       version:
         description: Version to verify (e.g. 0.2.0-rc.2 or 0.2.0). Only applied when a single unit is selected; ignored for `all`.
         required: false
@@ -257,6 +257,103 @@ jobs:
             throw new Error(`unexpected invoke_tool result: ${JSON.stringify(result)}`);
           }
           console.log("OK", result);
+          EOF
+
+  # The rankers plugin (ADR-0028). No vendor is called: a plugin whose key
+  # variable is unset must fail with the SDK's typed RetrieverError, which proves
+  # the native binding loads and its errors reach the SDK's class.
+  verify-rankers-ts:
+    name: verify rankers-ts (npm)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'rankers-ts'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.unit }}" = "rankers-ts" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "spec=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=${{ inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install + smoke-test the published plugin
+        shell: bash
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          # Co-install the newest SDK: proves the plugin's peer range admits it.
+          npm install --no-audit --no-fund \
+            "@ratel-ai/rankers-plugin@${{ steps.ver.outputs.spec }}" "@ratel-ai/sdk@latest"
+          RATEL_EXPERIMENTAL_SILENCE=1 node --input-type=module <<'EOF'
+          import { RetrieverError } from "@ratel-ai/sdk";
+          import { ratelJevPlugin, ratelOpenAIDecisionPlugin } from "@ratel-ai/rankers-plugin";
+
+          const candidates = [{ id: "a", kind: "tool", text: "a" }];
+          for (const plugin of [
+            ratelJevPlugin({ apiKeyEnv: "RATEL_VERIFY_UNSET_KEY" }),
+            ratelOpenAIDecisionPlugin({ apiKeyEnv: "RATEL_VERIFY_UNSET_KEY" }),
+          ]) {
+            try {
+              await plugin.retrieve("q", candidates, 1);
+              throw new Error("expected a Config RetrieverError");
+            } catch (error) {
+              if (!(error instanceof RetrieverError) || error.code !== "Config") throw error;
+            }
+          }
+          console.log("OK");
+          EOF
+
+  verify-rankers-py:
+    name: verify rankers-py (PyPI)
+    if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'rankers-py'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Resolve spec
+        id: ver
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.unit }}" = "rankers-py" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "spec===${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "spec=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install + smoke-test the wheel
+        shell: bash
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install "ratel-ai-rankers-plugin${{ steps.ver.outputs.spec }}"
+          RATEL_EXPERIMENTAL_SILENCE=1 python - <<'EOF'
+          import asyncio
+
+          from ratel_ai import RankCandidate, RetrieverError
+          from ratel_ai_rankers_plugin import ratel_jev_plugin, ratel_openai_decision_plugin
+
+          async def main() -> None:
+              candidates = [RankCandidate("a", "tool", "a")]
+              for plugin in (
+                  ratel_jev_plugin(api_key_env="RATEL_VERIFY_UNSET_KEY"),
+                  ratel_openai_decision_plugin(api_key_env="RATEL_VERIFY_UNSET_KEY"),
+              ):
+                  try:
+                      await plugin.retrieve("q", candidates, 1)
+                  except RetrieverError as error:
+                      assert error.code == "Config", error.code
+                  else:
+                      raise AssertionError("expected a Config RetrieverError")
+              print("OK")
+
+          asyncio.run(main())
           EOF
 
   verify-sdk-py:

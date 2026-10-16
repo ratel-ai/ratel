@@ -69,8 +69,9 @@ error surfaces to the caller and on the `ratel.search` span (status ERROR) when 
 Only the transient reranker fallback, which still returns hits, is recorded.
 
 **5. Jev ships as a plugin over the hooks.** `ratelJevPlugin({ url?, apiKeyEnv?, model? })`
-(Python `ratel_jev_plugin`) returns `{ retrieve, rerank }`. Its client lives in core's `jev.rs`
-(`JevRanker`) outside the search path, with the defaults `https://api.typesafe.ai`,
+(Python `ratel_jev_plugin`) returns `{ retrieve, rerank }`. Its client lives outside core and
+the SDKs, in the rankers plugin packages ([ADR-0028](0028-vendor-rankers-as-plugin-packages.md)),
+with the defaults `https://api.typesafe.ai`,
 `TYPESAFE_API_KEY` (read at call time) and `jev-latest`. It asks one `choice` question per call
 (question id `tool` or `skill`), above 150 options or 80,000 characters runs groups of that size
 in parallel (6 at a time) and fills a final question with their winners round-robin. It drops
@@ -81,13 +82,12 @@ map to `RetrieverError` codes: `Config`, `Unauthorized`, `InvalidRequest` (not t
 (transient). A change to Jev's API touches the plugin only.
 
 OpenAI's Decisions API ships the same way: `ratelOpenAIDecisionPlugin({ url?, apiKeyEnv?, model? })`
-(Python `ratel_openai_decision_plugin`), client `OpenAIDecisionRanker` in core's
-`openai_decision.rs`, defaults `https://api.openai.com`, `OPENAI_API_KEY` and `gpt-6-luna`. It
+(Python `ratel_openai_decision_plugin`), in the same plugin packages, defaults `https://api.openai.com`, `OPENAI_API_KEY` and `gpt-6-luna`. It
 asks one `choice` question (name `tool` or `skill`, text only) per call. OpenAI allows 2 to
 255 choices per question, as Jev does, so it uses Jev's limits. A `refusal` answer is a new
 code, `Refused`, transient: a reranker keeps stage 1's order. The API is in public beta, so the first plugin made prints a one-time warning.
-The two clients share the limits, tournament, status mapping and error type in core's
-`choice_ranker.rs`; each file holds only its own wire format.
+The two clients share the limits, tournament, status mapping and error type in the
+`ratel-ai-rankers` crate; each vendor's backend holds only its own wire format.
 
 **6. The Cloud Tool Picker is not in this SDK.** It belongs in `@ratel-ai/cloud-sdk` (for
 example `ratelCloud({ apiKey }).toolPicker` as a `retrieveFn`), as Cloud features will until the

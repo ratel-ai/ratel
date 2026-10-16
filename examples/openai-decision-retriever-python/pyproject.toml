@@ -5,8 +5,15 @@ description = "OpenAI's Decisions API as a retriever and reranker through Ratel'
 requires-python = ">=3.10"
 dependencies = [
     "ratel-ai",
+    "ratel-ai-rankers-plugin",
 ]
 
+[tool.uv]
+# The plugin pins the next SDK release, which the in-repo SDK only reaches when
+# it is released; take the local SDK whatever its version.
+override-dependencies = ["ratel-ai"]
+
 [tool.uv.sources]
-# Use the local SDK from this monorepo rather than PyPI.
+# Use the local SDK and rankers plugin from this monorepo rather than PyPI.
 ratel-ai = { path = "../../src/sdk/python" }
+ratel-ai-rankers-plugin = { path = "../../src/rankers/python" }

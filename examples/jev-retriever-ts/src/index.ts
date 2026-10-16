@@ -9,7 +9,8 @@
 //
 // With TYPESAFE_API_KEY set it calls Jev; without it, a local stand-in that
 // speaks Jev's wire format.
-import { type RankFn, RetrieverError, ratelJevPlugin, ToolCatalog } from "@ratel-ai/sdk";
+import { ratelJevPlugin } from "@ratel-ai/rankers-plugin";
+import { type RankFn, RetrieverError, ToolCatalog } from "@ratel-ai/sdk";
 import { startLocalJev } from "./local-jev.js";
 import { ids, QUERY, tools } from "./tools.js";
 

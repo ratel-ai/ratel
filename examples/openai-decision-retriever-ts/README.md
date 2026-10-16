@@ -1,6 +1,6 @@
 # `examples/openai-decision-retriever-ts` — OpenAI's Decisions API as a retriever and reranker
 
-This example shows [ADR-0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md) with OpenAI's [Decisions API](https://developers.openai.com/api/docs/guides/decisions). `ratelOpenAIDecisionPlugin()` wraps it into the two ranking functions a catalog takes. On a refund request, BM25 confidently picks the wrong tool. Decisions fixes it in one of two ways:
+This example shows [ADR-0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md) with OpenAI's [Decisions API](https://developers.openai.com/api/docs/guides/decisions). `ratelOpenAIDecisionPlugin()` from [`@ratel-ai/rankers-plugin`](../../src/rankers/ts/README.md) wraps it into the two ranking functions a catalog takes. On a refund request, BM25 confidently picks the wrong tool. Decisions fixes it in one of two ways:
 
 - **As a reranker:** BM25 retrieves candidates and `rerankerFn: decision.rerank` reorders them.
 - **On its own:** `method: "custom"` with `retrieveFn: decision.retrieve` ranks the whole catalog.

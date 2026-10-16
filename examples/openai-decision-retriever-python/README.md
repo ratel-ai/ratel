@@ -1,6 +1,6 @@
 # `examples/openai-decision-retriever-python` — OpenAI's Decisions API as a retriever and reranker
 
-The Python mirror of [`examples/openai-decision-retriever-ts`](../openai-decision-retriever-ts/README.md); see that README for the walkthrough ([ADR-0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). `ratel_openai_decision_plugin()` wraps OpenAI's [Decisions API](https://developers.openai.com/api/docs/guides/decisions) into `retrieve` and `rerank` functions, used either as a reranker over BM25 or as the only stage.
+The Python mirror of [`examples/openai-decision-retriever-ts`](../openai-decision-retriever-ts/README.md); see that README for the walkthrough ([ADR-0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). `ratel_openai_decision_plugin()` from [`ratel-ai-rankers-plugin`](../../src/rankers/python/README.md) wraps OpenAI's [Decisions API](https://developers.openai.com/api/docs/guides/decisions) into `retrieve` and `rerank` functions, used either as a reranker over BM25 or as the only stage.
 
 **The Decisions API is in public beta, so the plugin is too.** The first plugin made emits a one-time `ExperimentalWarning`. Set `RATEL_EXPERIMENTAL_SILENCE=1` to silence it.
 

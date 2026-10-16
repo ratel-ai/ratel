@@ -11,6 +11,9 @@
       "src/telemetry/**/*.ts",
       "src/telemetry/**/*.tsx",
       "src/telemetry/**/*.js",
+      "src/rankers/**/*.ts",
+      "src/rankers/**/*.tsx",
+      "src/rankers/**/*.js",
       "benchmark/agent/src/**/*.ts",
       "benchmark/agent/src/**/*.tsx"
     ]

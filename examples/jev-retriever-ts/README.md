@@ -1,6 +1,6 @@
 # `examples/jev-retriever-ts` — Jev as a retriever and reranker
 
-This example shows [ADR-0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md) end to end. A catalog ranks with functions it is given, and `ratelJevPlugin()` wraps [Jev](https://docs.typesafe.ai) (TypeSafe AI) into two of them. On a refund request, BM25 confidently picks the wrong tool. Jev fixes it in one of two ways:
+This example shows [ADR-0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md) end to end. A catalog ranks with functions it is given, and `ratelJevPlugin()` from [`@ratel-ai/rankers-plugin`](../../src/rankers/ts/README.md) wraps [Jev](https://docs.typesafe.ai) (TypeSafe AI) into two of them. On a refund request, BM25 confidently picks the wrong tool. Jev fixes it in one of two ways:
 
 - **As a reranker:** BM25 retrieves candidates and `rerankerFn: jev.rerank` reorders them.
 - **On its own:** `method: "custom"` with `retrieveFn: jev.retrieve` ranks the whole catalog.

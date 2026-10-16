@@ -49,6 +49,7 @@ Weak fit:
 - Mastra adapter: `pnpm add @ratel-ai/mastra` (peers `@ratel-ai/sdk`, `@mastra/core`, `zod`)
 - Local MCP distribution: `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk`
 - Rust engine: `cargo add ratel-ai-core`
+- Decision-model rankers (experimental; Jev, OpenAI Decisions): `pnpm add @ratel-ai/rankers-plugin` (peers `@ratel-ai/sdk`) / `pip install ratel-ai-rankers-plugin`
 - Telemetry vocabulary (rarely installed directly; the SDK depends on it): `pnpm add @ratel-ai/telemetry` / `pip install ratel-ai-telemetry`
 
 The Python SDK ships as **`ratel-ai`** (`pip install ratel-ai`) — PyO3-bound, full parity with the TypeScript SDK. Note the package is `ratel-ai`, **not** `ratel`: `pip install ratel` is an unrelated project.
@@ -61,6 +62,7 @@ There is **no server binary** — a standalone server is deferred (ADR-0003) —
 - [Python SDK (`ratel-ai`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/python/README.md): PyO3-bound wrapper, the mirror of the TypeScript SDK. Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, `search_capabilities_tool`, `invoke_tool_tool`, `get_skill_content_tool`, `register_mcp_server`. Ships pre-built abi3 wheels — no Rust toolchain required to install.
 - [Vercel AI SDK adapter (`@ratel-ai/vercel-ai-sdk`)](https://github.com/ratel-ai/ratel/blob/main/src/adapters/ts-vercel-ai-sdk/README.md): `ratel(config).adaptTo(aiSdk())` speaks the AI SDK's native `Tool` / `ModelMessage` shapes, with `appendRecall` / `prepareStep` recall idioms. Supports `ai` v5, v6, and v7. Its `/otel` subpath adds `RatelOtelIntegration`, an `ai@7`-only telemetry integration that stamps `ratel.origin` onto the AI SDK's `gen_ai.*` spans on a provider the host owns.
 - [Mastra adapter (`@ratel-ai/mastra`)](https://github.com/ratel-ai/ratel/blob/main/src/adapters/ts-mastra/README.md): `ratel(config).adaptTo(mastra())` over `@mastra/core`'s tool and message types, through the same adapter SPI.
+- [Rankers plugin (`@ratel-ai/rankers-plugin`, `ratel-ai-rankers-plugin`)](https://github.com/ratel-ai/ratel/blob/main/src/rankers/README.md): experimental retrieve/rerank plugins for decision models (Jev, OpenAI Decisions), kept out of the SDKs so neither carries vendor code (ADR-0028). They re-export the SDK's plugin contract (`RankFn`, `RetrieverError`, `definePlugin`).
 - [Telemetry vocabulary (`@ratel-ai/telemetry`, `ratel-ai-telemetry`)](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/README.md): the `ratel.*` / `gen_ai.*` constants pinned to OpenTelemetry semconv, shipped OTel-free for npm, PyPI, and crates.io. In TypeScript the **host owns the OpenTelemetry provider** — the SDK only emits onto whatever is registered. Python keeps turnkey `init()` sugar behind the `[otlp]` extra.
 - [ratel-local (`ratel-mcp` / `@ratel-ai/mcp-server`)](https://github.com/ratel-ai/ratel-mcp): the local distribution of Ratel, in the sibling `ratel-ai/ratel-mcp` repo. `createMcpServer(catalog, opts)` to expose a catalog over MCP; `buildGatewayFromConfig(config)` to spin up a gateway from a Claude-Code-shaped `mcpServers` config; OAuth 2.1 / PKCE for HTTP & SSE upstreams.
 
@@ -238,12 +240,17 @@ missing, raise it.
 can rank with a function the user supplies: `method: "custom"` with `retrieveFn` ranks the whole
 catalog, and `rerankerFn` reranks the first stage's top `rerankerDepth` (default 50). The function
 gets `(query, candidates: { id, kind, text }[], topK)` and returns `{ id, score }[]`; the SDK knows
-nothing about the model behind it. `ratelJevPlugin()` (Python `ratel_jev_plugin`) wraps Jev
-(TypeSafe AI, the user's own `TYPESAFE_API_KEY`) into `{ retrieve, rerank }`; it **sends the query
-and candidate text off-process**, so do not recommend it to a user whose tool descriptions cannot
-leave their network. `ratelOpenAIDecisionPlugin()` (Python `ratel_openai_decision_plugin`) does the
-same for OpenAI's Decisions API (public beta, `gpt-6-luna`, the user's own `OPENAI_API_KEY`) and
-sends the same data to OpenAI. A built-in `reranker: { method, depth }` re-scores the first stage's top
+nothing about the model behind it. `definePlugin({ retrieve, rerank })` (Python `define_plugin`)
+packages such functions as a plugin. Vendor plugins are **not in the SDK**: they ship in
+`@ratel-ai/rankers-plugin` / `ratel-ai-rankers-plugin`, so import them from there, never from
+`@ratel-ai/sdk` / `ratel_ai`
+([ADR-0028](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0028-vendor-rankers-as-plugin-packages.md)).
+`ratelJevPlugin()` (Python `ratel_jev_plugin`) wraps Jev (TypeSafe AI, the user's own
+`TYPESAFE_API_KEY`) into `{ retrieve, rerank }`; it **sends the query and candidate text
+off-process**, so do not recommend it to a user whose tool descriptions cannot leave their
+network. `ratelOpenAIDecisionPlugin()` (Python `ratel_openai_decision_plugin`) does the same for
+OpenAI's Decisions API (public beta, `gpt-6-luna`, the user's own `OPENAI_API_KEY`) and sends the
+same data to OpenAI. A built-in `reranker: { method, depth }` re-scores the first stage's top
 candidates with a different local method (`bm25`, `semantic`, `hybrid`). Neither reranker ever adds
 a tool the first stage missed
 ([ADR-0027](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-custom-retriever-and-reranker-functions.md)).
@@ -264,7 +271,8 @@ If you're not sure which one your user wants, default to `replace` — it's the 
 - [ADR-0004 — Retrieval and tool selection](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md): Retrieval over semantic tokens (names, descriptions, parameter names, enum values; JSON Schema structure stripped); replace by default, suggest opt-in.
 - [ADR-0006 — Native FFI bindings](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-native-ffi-bindings.md): Why the SDKs ship pre-built natives (NAPI-RS / PyO3).
 - [ADR-0011 — Selectable retrieval methods](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0011-selectable-retrieval-methods.md): BM25 (default), semantic, and hybrid ranking, chosen per catalog or per call.
-- [ADR-0027 — Custom retriever and reranker functions](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-custom-retriever-and-reranker-functions.md): `retrieveFn` / `rerankerFn` rank with a function the user supplies (Jev ships as a plugin over them); a built-in two-stage reranker (experimental, proposed).
+- [ADR-0027 — Custom retriever and reranker functions](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-custom-retriever-and-reranker-functions.md): `retrieveFn` / `rerankerFn` rank with a function the user supplies; a built-in two-stage reranker (experimental, proposed).
+- [ADR-0028 — Vendor rankers as plugin packages](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0028-vendor-rankers-as-plugin-packages.md): vendor clients (Jev, OpenAI Decisions) live in `@ratel-ai/rankers-plugin` / `ratel-ai-rankers-plugin`, which peer on the SDK and re-export its plugin contract; core and the SDKs stay vendor-free.
 - [ADR-0012 — Configurable embedding models](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models.md): Dense embeddings use a configurable in-process HuggingFace/local model, Ollama, or OpenAI-compatible endpoint.
 - [ADR-0014 — Adaptive usage ranking](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0014-adaptive-usage-ranking.md): A third RRF arm learned online from search-then-invoke pairs, plus the offline path that seeds it from a captured baseline before ranking is switched on.
 - [ADR-0019 — Retrieval experiments](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0019-retrieval-experiments.md): The TypeScript-only experimental surface for deterministic assignment, bounded shadow evaluation, lifecycle, comparison, and OpenTelemetry semantics.

@@ -22,6 +22,8 @@
 #   telemetry-py   -> ratel-ai-telemetry on PyPI           (twine upload, built locally)
 #   vercel-ai-sdk  -> @ratel-ai/vercel-ai-sdk on npm       (npm publish, pnpm-packed locally)
 #   mastra -> @ratel-ai/mastra on npm      (npm publish, pnpm-packed locally)
+#   rankers-ts     -> @ratel-ai/rankers-plugin + 5 platform pkgs, npm (npm publish, .node binaries)
+#   rankers-py     -> ratel-ai-rankers-plugin on PyPI      (twine upload, wheels + sdist)
 # Each unit's version is read from its own manifest via scripts/release-units.mjs
 # (the single source of truth) — units are NOT assumed to share a version.
 #
@@ -34,11 +36,16 @@
 #   scripts/publish-rc.sh --unit core                       [--dry-run]
 #   scripts/publish-rc.sh --unit telemetry-ts               [--dry-run]
 #   scripts/publish-rc.sh --unit vercel-ai-sdk [--tag rc|latest] [--dry-run]
+#   scripts/publish-rc.sh --unit rankers-ts --from-run <run-id> [--tag rc] [--dry-run]
+#   scripts/publish-rc.sh --unit rankers-py --from-run <run-id> [--dry-run]
+#     (the run: a dry-run `workflow_dispatch` of release.yml for the rankers tag,
+#     whose build jobs upload the binaries / wheels)
 #   scripts/publish-rc.sh --from-dir <path>                 # all units
 #
 # Options:
 #   --unit <id>        core | sdk-ts | sdk-py | telemetry-core | telemetry-ts |
-#                      telemetry-py | vercel-ai-sdk | mastra.
+#                      telemetry-py | vercel-ai-sdk | mastra | rankers-ts |
+#                      rankers-py.
 #                      Repeatable. Default: all.
 #   --from-run <id>    Download all artifacts from the given GH Actions run
 #                      (requires `gh auth login`); tarballs/wheels are found within.
@@ -63,7 +70,10 @@ declare -a SELECTED=()
 # them on EXIT (crash included). Guarded so a core/telemetry-only run cannot
 # clobber an unrelated uncommitted edit to those two files.
 PINNED_ADAPTERS=0
-trap '[[ $PINNED_ADAPTERS -eq 1 ]] && git -C "$REPO_ROOT" checkout -- src/adapters/ts-mastra/package.json src/adapters/ts-vercel-ai-sdk/package.json' EXIT
+# The rankers-ts publish injects optionalDependencies into its live manifest;
+# restored the same way.
+PINNED_RANKERS=0
+trap '[[ $PINNED_ADAPTERS -eq 1 ]] && git -C "$REPO_ROOT" checkout -- src/adapters/ts-mastra/package.json src/adapters/ts-vercel-ai-sdk/package.json; [[ $PINNED_RANKERS -eq 1 ]] && git -C "$REPO_ROOT" checkout -- src/rankers/ts/package.json; true' EXIT
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -72,7 +82,7 @@ while [[ $# -gt 0 ]]; do
     --from-dir) FROM_DIR="$2"; shift 2 ;;
     --tag)      TAG="$2"; shift 2 ;;
     --dry-run)  DRY_RUN=1; shift ;;
-    -h|--help)  sed -n '2,42p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,49p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -97,8 +107,10 @@ resolve_version() { node "$REPO_ROOT/scripts/release-units.mjs" --version "$1"; 
 NEEDS_ARTIFACTS=0
 selected sdk-ts && NEEDS_ARTIFACTS=1
 selected sdk-py && NEEDS_ARTIFACTS=1
+selected rankers-ts && NEEDS_ARTIFACTS=1
+selected rankers-py && NEEDS_ARTIFACTS=1
 if [[ $NEEDS_ARTIFACTS -eq 1 && -z "$FROM_DIR" && -z "$FROM_RUN" ]]; then
-  echo "error: sdk-ts/sdk-py need --from-run <id> or --from-dir <path>" >&2
+  echo "error: sdk-ts/sdk-py/rankers-ts/rankers-py need --from-run <id> or --from-dir <path>" >&2
   exit 2
 fi
 if [[ -n "$FROM_RUN" && -z "$FROM_DIR" ]]; then
@@ -376,6 +388,85 @@ publish_mastra() {
   echo "==> mastra publish complete"; echo
 }
 
+# ---------- rankers-ts: npm loader + 5 platform packages, from .node binaries ----------
+# FROM_DIR holds release.yml's `rankers-bindings-*` artifacts: one
+# ratel-rankers.<triple>.node per platform plus the generated index.cjs/.d.cts.
+# Mirrors the publish-rankers-ts job: distribute, build the TS loader, inject
+# optionalDependencies, then subpackages before the loader.
+publish_rankers_ts() {
+  local version; version="$(resolve_version rankers-ts)"
+  local pkg="$REPO_ROOT/src/rankers/ts"
+  echo "===== rankers-ts @ $version (npm) ====="
+  if [[ $DRY_RUN -eq 0 ]]; then
+    if ! npm whoami >/dev/null 2>&1; then
+      echo "error: not logged in to npm. run 'npm login' first." >&2; exit 1
+    fi
+    echo "    npm user: $(npm whoami)"
+  fi
+
+  local t found cand f
+  for t in "${PLATFORMS[@]}"; do
+    found=""
+    while IFS= read -r cand; do found="$cand"; break; done < <(find "$FROM_DIR" -name "ratel-rankers.$t.node")
+    if [[ -z "$found" ]]; then echo "missing binary: ratel-rankers.$t.node (in $FROM_DIR)" >&2; exit 1; fi
+    cp "$found" "$pkg/npm/$t/"
+  done
+  for f in index.cjs index.d.cts; do
+    found=""
+    while IFS= read -r cand; do found="$cand"; break; done < <(find "$FROM_DIR" -name "$f")
+    if [[ -z "$found" ]]; then echo "missing loader file: $f (in $FROM_DIR)" >&2; exit 1; fi
+    cp "$found" "$pkg/native/$f"
+  done
+
+  ( cd "$REPO_ROOT" \
+    && pnpm --filter @ratel-ai/telemetry run build \
+    && pnpm --filter @ratel-ai/sdk run build:ts \
+    && pnpm --filter @ratel-ai/rankers-plugin run build:ts )
+  PINNED_RANKERS=1
+  ( cd "$REPO_ROOT" && node scripts/inject-sdk-optional-deps.mjs src/rankers/ts )
+
+  local -a dirs=()
+  for t in "${PLATFORMS[@]}"; do dirs+=("$pkg/npm/$t"); done
+  dirs+=("$pkg")
+  local dir name enc_name status
+  for dir in "${dirs[@]}"; do
+    name="$(node -p "require('$dir/package.json').name")"
+    echo "----- $name@$version -----"
+    enc_name="${name//\//%2F}"
+    status="$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/${enc_name}/${version}" || echo 000)"
+    if [[ "$status" == "200" ]]; then echo "    already published, skipping"; continue; fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+      echo "    [dry-run] npm publish $dir --access public --tag $TAG --provenance=false"; continue
+    fi
+    publish_one_npm "$dir" || exit 1
+  done
+  echo "==> rankers-ts npm publishes complete"; echo
+}
+
+# ---------- rankers-py: PyPI wheels + sdist via twine ----------
+publish_rankers_py() {
+  local version; version="$(resolve_version rankers-py)"
+  echo "===== rankers-py @ $version (PyPI) ====="
+  if ! command -v twine >/dev/null 2>&1; then
+    echo "error: twine not found. 'pip install twine' (auth via TWINE_* env or ~/.pypirc)." >&2; exit 1
+  fi
+  local -a dists=()
+  local f
+  while IFS= read -r f; do dists+=("$f"); done < <(
+    find "$FROM_DIR" \( -name "ratel_ai_rankers_plugin-*.whl" -o -name "ratel_ai_rankers_plugin-*.tar.gz" \) | sort
+  )
+  if [[ ${#dists[@]} -eq 0 ]]; then
+    echo "missing: no ratel_ai_rankers_plugin wheels/sdist found in $FROM_DIR" >&2; exit 1
+  fi
+  echo "    artifacts:"; printf '      %s\n' "${dists[@]}"
+  twine check "${dists[@]}"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "    [dry-run] twine upload --skip-existing ${dists[*]}"; echo; return 0
+  fi
+  twine upload --skip-existing "${dists[@]}"
+  echo "==> rankers-py PyPI publish complete"; echo
+}
+
 # Publish in a stable order regardless of --unit argument order.
 selected core           && publish_core
 selected sdk-ts         && publish_sdk_ts
@@ -385,6 +476,9 @@ selected telemetry-ts   && publish_telemetry_ts
 selected telemetry-py   && publish_telemetry_py
 selected vercel-ai-sdk  && publish_vercel_ai_sdk
 selected mastra && publish_mastra
+# After the SDKs: the plugins peer on them.
+selected rankers-ts     && publish_rankers_ts
+selected rankers-py     && publish_rankers_py
 
 echo "==> done"
 echo

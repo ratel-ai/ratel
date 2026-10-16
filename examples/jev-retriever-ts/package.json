@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "pnpm -F @ratel-ai/sdk build && tsx src/index.ts",
+    "start": "pnpm -F @ratel-ai/sdk build && pnpm -F @ratel-ai/rankers-plugin build && tsx src/index.ts",
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@ratel-ai/rankers-plugin": "workspace:*",
     "@ratel-ai/sdk": "workspace:*"
   },
   "devDependencies": {

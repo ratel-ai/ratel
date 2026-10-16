@@ -71,6 +71,9 @@ importers:
 
   examples/jev-retriever-ts:
     dependencies:
+      '@ratel-ai/rankers-plugin':
+        specifier: workspace:*
+        version: link:../../src/rankers/ts
       '@ratel-ai/sdk':
         specifier: workspace:*
         version: link:../../src/sdk/ts
@@ -137,6 +140,9 @@ importers:
 
   examples/openai-decision-retriever-ts:
     dependencies:
+      '@ratel-ai/rankers-plugin':
+        specifier: workspace:*
+        version: link:../../src/rankers/ts
       '@ratel-ai/sdk':
         specifier: workspace:*
         version: link:../../src/sdk/ts

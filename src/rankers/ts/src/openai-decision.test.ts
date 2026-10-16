@@ -1,9 +1,9 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { type ExecutableTool, SkillCatalog, ToolCatalog } from "@ratel-ai/sdk";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { DEFAULT_OPENAI_DECISION_MODEL } from "../native/index.cjs";
 import { resetOpenAIDecisionWarningForTest } from "./experimental-warning.js";
-import { type ExecutableTool, SkillCatalog, ToolCatalog } from "@ratel-ai/sdk";
 import { RetrieverError, ratelOpenAIDecisionPlugin } from "./index.js";
 
 const KEY_ENV = "RATEL_SDK_TS_OPENAI_DECISION_TEST_KEY";

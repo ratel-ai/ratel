@@ -66,6 +66,39 @@ test("ts path filter lists verify-install.yml", () => {
   assert.ok(ciWorkflow.slice(ts, next).includes("- '.github/workflows/verify-install.yml'"));
 });
 
+// The rankers plugin (ADR-0028) peers on the SDK, so its npm loader must publish
+// after the SDK's and pin its own platform packages, not the SDK's.
+test("publish-rankers-ts injects the plugin's own platform packages", () => {
+  const body = jobBody(releaseWorkflow, "publish-rankers-ts");
+  assert.match(body, /node scripts\/inject-sdk-optional-deps\.mjs src\/rankers\/ts/);
+  assert.match(body, /npm publish/);
+});
+
+test("release.yml triggers on the rankers tags and the GitHub release waits for them", () => {
+  for (const prefix of ["rankers-ts-v", "rankers-py-v"]) {
+    assert.ok(releaseWorkflow.includes(`- '${prefix}*'`), `missing ${prefix}* trigger`);
+  }
+  const release = jobBody(releaseWorkflow, "github-release");
+  for (const job of ["publish-rankers-ts", "publish-rankers-py"]) {
+    assert.ok(release.includes(job), `github-release must wait for ${job}`);
+  }
+});
+
+for (const filter of ["rust", "ts", "python"]) {
+  test(`${filter} path filter lists the rankers packages`, () => {
+    const start = ciWorkflow.indexOf(`\n            ${filter}:`);
+    assert.notEqual(start, -1, `missing ${filter} filter`);
+    const rest = ciWorkflow.slice(start + 1);
+    const next = rest.slice(1).search(/^            [a-z]+:\s*$/m);
+    const body = next === -1 ? rest : rest.slice(0, next + 1);
+    assert.ok(body.includes("- 'src/rankers/"), `${filter} filter must list src/rankers`);
+  });
+}
+
+test("ci-gate needs the rankers python job", () => {
+  assert.ok(jobBody(ciWorkflow, "ci-gate").includes("rankers-python"));
+});
+
 function jobBody(workflow, job) {
   const start = workflow.indexOf(`\n  ${job}:`);
   assert.notEqual(start, -1, `missing ${job} job`);

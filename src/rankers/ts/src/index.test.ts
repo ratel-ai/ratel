@@ -1,7 +1,12 @@
 import * as sdk from "@ratel-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { ChoiceRanker, vendors } from "../native/index.cjs";
-import { type ChoiceRanker as Ranker, choiceRankerPlugin, definePlugin, RetrieverError } from "./index.js";
+import {
+  choiceRankerPlugin,
+  definePlugin,
+  type ChoiceRanker as Ranker,
+  RetrieverError,
+} from "./index.js";
 
 describe("the plugin contract", () => {
   it("is the SDK's own, so a catalog's instanceof check sees plugin errors", () => {

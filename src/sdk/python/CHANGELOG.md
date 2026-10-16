@@ -8,7 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- `ratel_openai_decision_plugin(url=None, api_key_env=None, model=None)` returns a `RetrieverPlugin` for OpenAI's Decisions API (public beta; key in `OPENAI_API_KEY`, model `gpt-6-luna`). It ranks tools and skills like the Jev plugin, with the same limits, and adds the `RetrieverError` code `"Refused"` (transient) for a model refusal. The first plugin made emits a one-time `ExperimentalWarning` (`RATEL_EXPERIMENTAL_SILENCE=1` silences it). It sends the query and each candidate's searchable text to OpenAI.
+- `define_plugin(retrieve=None, rerank=None)` declares a ranking plugin: it checks each given function is callable and returns a `RetrieverPlugin` (ADR-0028). `RetrieverPlugin`'s fields are now optional, so a plugin can offer just one of the two.
+
+### Removed
+
+- **`ratel_jev_plugin` moved to [`ratel-ai-rankers-plugin`](../../rankers/python/README.md)** (ADR-0028): `from ratel_ai_rankers_plugin import ratel_jev_plugin`. Same signature and behaviour. The SDK now carries no vendor code, so a new vendor ships without an SDK release. The OpenAI Decisions plugin ships only there, as `ratel_openai_decision_plugin`. `ratel_ai._native` no longer has `JevRanker`, `JevError` or `RankerError`. The plugin package raises `ratel_ai.RetrieverError`, as before.
 
 ### Fixed
 
