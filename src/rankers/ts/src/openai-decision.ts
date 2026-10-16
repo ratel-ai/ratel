@@ -1,11 +1,12 @@
-// The OpenAI Decisions plugin (ADR-0027): OpenAI's Decisions API wrapped into
-// the ranking functions a catalog takes, `retrieveFn` and `rerankerFn`. Search
-// knows only those functions; the Decisions request format lives in the native
-// client, so a change to OpenAI's beta API never reaches the catalogs.
+// The OpenAI Decisions plugin (ADR-0027, ADR-0028): OpenAI's Decisions API
+// wrapped into the ranking functions a catalog takes, `retrieveFn` and
+// `rerankerFn`. Search knows only those functions; the Decisions request format
+// lives in the native ranker, so a change to OpenAI's beta API never reaches
+// the SDK.
 
-import { OpenAiDecisionRanker } from "../native/index.cjs";
-import type { RetrieverPlugin } from "./catalog.js";
-import { choiceRankerPlugin } from "./choice-ranker-plugin.js";
+import type { RetrieverPlugin } from "@ratel-ai/sdk";
+import { ChoiceRanker } from "../native/index.cjs";
+import { choiceRankerPlugin } from "./adapter.js";
 import { warnOpenAIDecisionBetaOnce } from "./experimental-warning.js";
 
 /** Where the OpenAI Decisions plugin sends requests. */
@@ -21,7 +22,7 @@ export interface OpenAIDecisionPluginConfig {
 /**
  * OpenAI's Decisions API as a ranker or reranker (ADR-0027), for tools and
  * skills. The query and each candidate's searchable text are sent to OpenAI;
- * every failure throws a {@link RetrieverError} whose `transient` flag decides
+ * every failure throws a `RetrieverError` whose `transient` flag decides
  * whether a reranker falls back to the first stage's order. A refusal by the
  * model is `code: "Refused"`, transient.
  *
@@ -41,5 +42,5 @@ export function ratelOpenAIDecisionPlugin(
   config: OpenAIDecisionPluginConfig = {},
 ): RetrieverPlugin {
   warnOpenAIDecisionBetaOnce(config.model);
-  return choiceRankerPlugin(new OpenAiDecisionRanker(config));
+  return choiceRankerPlugin(new ChoiceRanker("openai-decision", config));
 }

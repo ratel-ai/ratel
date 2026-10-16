@@ -1,0 +1,19 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/index.ts"
+  ],
+  "readme": "none",
+  "emit": "none",
+  "excludeInternal": true,
+  "validation": {
+    "notDocumented": true
+  },
+  "treatValidationWarningsAsErrors": true,
+  "externalSymbolLinkMappings": {
+    "@ratel-ai/sdk": {
+      "ToolCatalogOptions.retrieveFn": "https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/src/catalog.ts",
+      "ToolCatalogOptions.rerankerFn": "https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/src/catalog.ts"
+    }
+  }
+}

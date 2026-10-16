@@ -89,6 +89,36 @@ impl CandidateKind {
     }
 }
 
+impl std::str::FromStr for CandidateKind {
+    type Err = ParseCandidateKindError;
+
+    /// From its [`noun`](Self::noun): `"tool"`, `"skill"`, `"fact"`.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "tool" => Ok(CandidateKind::Tool),
+            "skill" => Ok(CandidateKind::Skill),
+            "fact" => Ok(CandidateKind::Fact),
+            other => Err(ParseCandidateKindError(other.to_string())),
+        }
+    }
+}
+
+/// A string that names no [`CandidateKind`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseCandidateKindError(String);
+
+impl fmt::Display for ParseCandidateKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "unknown candidate kind {:?} (expected \"tool\", \"skill\" or \"fact\")",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for ParseCandidateKindError {}
+
 /// A decision-model ranking failed. [`code`](Self::code) is the stable name
 /// the SDKs expose; [`is_transient`](Self::is_transient) splits failures a
 /// retry may cure from misconfiguration that will fail every time.

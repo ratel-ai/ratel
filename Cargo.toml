@@ -6,6 +6,7 @@ members = [
     "src/sdk/ts/native",
     "src/sdk/python/native",
     "src/rankers/core",
+    "src/rankers/ts/native",
 ]
 
 [workspace.package]

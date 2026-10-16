@@ -1724,6 +1724,17 @@ name = "ratel-ai-telemetry"
 version = "0.4.0"
 
 [[package]]
+name = "ratel-rankers-ts-native"
+version = "0.1.0-rc.1"
+dependencies = [
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "ratel-ai-rankers",
+ "serde_json",
+]
+
+[[package]]
 name = "ratel-sdk-python-native"
 version = "0.13.0-rc.11"
 dependencies = [

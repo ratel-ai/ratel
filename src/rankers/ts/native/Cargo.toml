@@ -1,0 +1,19 @@
+[package]
+name = "ratel-rankers-ts-native"
+version = "0.1.0-rc.1" # locked to @ratel-ai/rankers-plugin; ships in the rankers-ts-v* unit (ADR-0008)
+edition.workspace = true
+license = "MIT"
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3", default-features = false, features = ["napi9"] }
+napi-derive = "3"
+ratel-ai-rankers = { workspace = true }
+serde_json = "1.0"
+
+[build-dependencies]
+napi-build = "2"

@@ -1,11 +1,11 @@
-// The Jev plugin (ADR-0027): Jev (TypeSafe AI) wrapped into the ranking
-// functions a catalog takes, `retrieveFn` and `rerankerFn`. Search knows only
-// those functions; Jev's request format lives in the native Jev client, so a
-// change to Jev's interface never reaches the catalogs.
+// The Jev plugin (ADR-0027, ADR-0028): Jev (TypeSafe AI) wrapped into the
+// ranking functions a catalog takes, `retrieveFn` and `rerankerFn`. Search
+// knows only those functions; Jev's request format lives in the native
+// ranker, so a change to Jev's interface never reaches the SDK.
 
-import { JevRanker } from "../native/index.cjs";
-import type { RetrieverPlugin } from "./catalog.js";
-import { choiceRankerPlugin } from "./choice-ranker-plugin.js";
+import type { RetrieverPlugin } from "@ratel-ai/sdk";
+import { ChoiceRanker } from "../native/index.cjs";
+import { choiceRankerPlugin } from "./adapter.js";
 
 /** Where the Jev plugin sends requests. */
 export interface JevPluginConfig {
@@ -20,7 +20,7 @@ export interface JevPluginConfig {
 /**
  * Jev as a ranker or reranker (ADR-0027). The query and each candidate's
  * searchable text are sent to Jev; every failure throws a
- * {@link RetrieverError} whose `transient` flag decides whether a reranker
+ * `RetrieverError` whose `transient` flag decides whether a reranker
  * falls back to the first stage's order.
  *
  * **Experimental** — may change without a major version bump.
@@ -33,5 +33,5 @@ export interface JevPluginConfig {
  * ```
  */
 export function ratelJevPlugin(config: JevPluginConfig = {}): RetrieverPlugin {
-  return choiceRankerPlugin(new JevRanker(config));
+  return choiceRankerPlugin(new ChoiceRanker("jev", config));
 }

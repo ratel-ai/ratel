@@ -330,7 +330,8 @@ export interface RankedId {
 
 /**
  * A caller-supplied ranking function (ADR-0027) — a model you call, such as
- * Jev via {@link ratelJevPlugin}. Returns `{ id, score }` pairs in any order.
+ * Jev via `ratelJevPlugin` from `@ratel-ai/rankers-plugin`. Returns
+ * `{ id, score }` pairs in any order.
  *
  * - As {@link ToolCatalogOptions.retrieveFn} (`method: "custom"`) it ranks the
  *   whole catalog; the search returns only the ids it returned, best first, at
@@ -669,11 +670,12 @@ export interface ToolCatalogOptions {
   reranker?: RerankerConfig;
   /**
    * Rank the whole catalog with your own function — a model you call, such as
-   * Jev via {@link ratelJevPlugin}. Needs `method: "custom"`. See
+   * Jev via `@ratel-ai/rankers-plugin`. Needs `method: "custom"`. See
    * {@link RankFn}. **Experimental.**
    *
    * @example
    * ```ts
+   * import { ratelJevPlugin } from "@ratel-ai/rankers-plugin";
    * const jev = ratelJevPlugin();
    * new ToolCatalog({ method: "custom", retrieveFn: jev.retrieve });
    * ```

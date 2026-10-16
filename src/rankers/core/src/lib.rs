@@ -20,12 +20,14 @@ mod choice;
 mod jev;
 #[cfg(feature = "openai-decision")]
 mod openai_decision;
-#[cfg(test)]
+#[cfg(all(test, any(feature = "jev", feature = "openai-decision")))]
 mod test_support;
+mod vendor;
 
 pub use choice::{
     Candidate, CandidateKind, ChoiceBackend, ChoiceRanker, Http, MAX_OPTION_CHARS, MAX_OPTIONS,
-    MAX_QUESTION_CHARS, MIN_OPTIONS, MIN_PROBABILITY, RankerError, from_probabilities, option_text,
+    MAX_QUESTION_CHARS, MIN_OPTIONS, MIN_PROBABILITY, ParseCandidateKindError, RankerError,
+    from_probabilities, option_text,
 };
 #[cfg(feature = "jev")]
 pub use jev::{
@@ -36,3 +38,4 @@ pub use openai_decision::{
     DEFAULT_OPENAI_DECISION_API_KEY_ENV, DEFAULT_OPENAI_DECISION_MODEL,
     DEFAULT_OPENAI_DECISION_URL, OpenAIDecisionConfig, OpenAIDecisionRanker,
 };
+pub use vendor::{AnyRanker, VendorConfig, ranker_for, vendors};
