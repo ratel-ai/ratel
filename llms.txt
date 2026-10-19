@@ -49,7 +49,7 @@ Weak fit:
 - Mastra adapter: `pnpm add @ratel-ai/mastra` (peers `@ratel-ai/sdk`, `@mastra/core`, `zod`)
 - Local MCP distribution: `pnpm add @ratel-ai/mcp-server @ratel-ai/sdk @modelcontextprotocol/sdk`
 - Rust engine: `cargo add ratel-ai-core`
-- Decision-model rankers (experimental; Jev, OpenAI Decisions): `pnpm add @ratel-ai/rankers-plugin` (peers `@ratel-ai/sdk`) / `pip install ratel-ai-rankers-plugin`
+- Decision-model rankers (experimental; Jev, OpenAI Decisions): `pnpm add @ratel-ai/sdk@rc @ratel-ai/rankers-plugin@rc` (keep the `@rc`: the SDK's `latest` is below the plugin's floor until `0.13.0` ships) / `pip install ratel-ai-rankers-plugin`
 - Telemetry vocabulary (rarely installed directly; the SDK depends on it): `pnpm add @ratel-ai/telemetry` / `pip install ratel-ai-telemetry`
 
 The Python SDK ships as **`ratel-ai`** (`pip install ratel-ai`) — PyO3-bound, full parity with the TypeScript SDK. Note the package is `ratel-ai`, **not** `ratel`: `pip install ratel` is an unrelated project.

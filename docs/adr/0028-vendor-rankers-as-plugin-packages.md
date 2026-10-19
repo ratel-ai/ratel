@@ -84,7 +84,8 @@ the Jev plugin change an import.
 - Rejected: keeping the clients in core behind cargo features. Core's public API would still
   name vendors, and adding one would still need a core release.
 - npm does not check the TS floor at install. An SDK below it fails at import on the missing
-  `definePlugin` export, and a bare `npm install @ratel-ai/rankers-plugin` gets the SDK's
-  `latest` tag, which is below the floor until `0.13.0` is GA. Install both, as the README shows.
+  `RetrieverError` export, and a bare `@ratel-ai/sdk` resolves to the SDK's `latest` tag, which
+  is below the floor until `0.13.0` is GA. While the floor is a prerelease, the documented install
+  pins both packages: `npm install @ratel-ai/sdk@rc @ratel-ai/rankers-plugin@rc`.
 - Rejected: lockstep versioning with the SDK. It brings back the coupled releases this ADR exists
   to remove.

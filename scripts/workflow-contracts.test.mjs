@@ -133,3 +133,12 @@ test("verify-rankers-ts co-installs the newest SDK at or above the floor, prerel
   assert.match(body, /ratel\.sdkFloor/);
   assert.match(body, /--include-prerelease/);
 });
+
+// The co-install above picks the SDK itself, so it never ran the command users
+// are told to run. This step does, read from the README, and checks the SDK it
+// lands on is at or above the floor.
+test("verify-rankers-ts runs the README's install command and checks the floor", () => {
+  const body = jobBody(verifyInstallWorkflow, "verify-rankers-ts");
+  assert.match(body, /src\/rankers\/ts\/README\.md/);
+  assert.match(body, /require\('@ratel-ai\/sdk\/package\.json'\)\.version/);
+});

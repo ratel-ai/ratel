@@ -65,6 +65,9 @@ Each depends on its SDK from a floor (`ratel.sdkFloor` in the TS `package.json`,
 `@ratel-ai/sdk` peer is `"*"` so newer SDK prereleases install; the `ratel-ai` requirement in
 `pyproject.toml`), so release the SDK that floor names **first**. The publish jobs refuse to ship
 when the registry has no SDK at the floor. Bump both floors together.
+While the TS floor is a prerelease, npm's `latest` SDK sits below it, so the plugin README and
+`llms.txt` install both packages at `@rc` (`scripts/rankers-sdk-floor.test.mjs` enforces it). Once
+the floor is GA and both packages hold `latest`, drop the `@rc` from those install lines.
 
 `@ratel-ai/mcp-server` ships from a sibling repo, [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp), on its own cadence.
 

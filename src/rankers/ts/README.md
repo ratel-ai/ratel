@@ -5,8 +5,10 @@ Decision-model rankers as retrieve/rerank plugins for [`@ratel-ai/sdk`](https://
 The SDK ranks through functions you give it (`retrieveFn`, `rerankerFn`; [ADR 0027](../../../docs/adr/0027-custom-retriever-and-reranker-functions.md)) and knows no vendor's API. This package holds the vendor clients, so the SDK stays vendor-free and a new vendor ships without an SDK release ([ADR 0028](../../../docs/adr/0028-vendor-rankers-as-plugin-packages.md)).
 
 ```bash
-npm install @ratel-ai/sdk @ratel-ai/rankers-plugin
+npm install @ratel-ai/sdk@rc @ratel-ai/rankers-plugin@rc
 ```
+
+Keep the `@rc` on the SDK: this package needs `@ratel-ai/sdk` `0.13.0-rc.12` or later, npm's `latest` SDK is older until `0.13.0` ships, and npm does not check the version for you.
 
 ## Plugins
 

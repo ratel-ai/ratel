@@ -316,6 +316,28 @@ jobs:
           }
           console.log("OK");
           EOF
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: src/rankers/ts/README.md
+          sparse-checkout-cone-mode: false
+      # The step above picks the SDK itself. This one runs the README's install
+      # line as written, so a doc that lands users below the floor fails here.
+      - name: Install as the README documents
+        shell: bash
+        run: |
+          set -e
+          cmd=$(grep -m1 -E '^npm install .*@ratel-ai/rankers-plugin' "$GITHUB_WORKSPACE/src/rankers/ts/README.md") \
+            || { echo "::error::no npm install line in src/rankers/ts/README.md"; exit 1; }
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          echo "running: $cmd"
+          $cmd --no-audit --no-fund
+          floor=$(node -p "require('@ratel-ai/rankers-plugin/package.json').ratel.sdkFloor")
+          sdk=$(node -p "require('@ratel-ai/sdk/package.json').version")
+          npx --yes semver@7.7.2 --include-prerelease --range ">=${floor}" "$sdk" >/dev/null \
+            || { echo "::error::the README install gives @ratel-ai/sdk@${sdk}, below the plugin's floor ${floor}"; exit 1; }
+          RATEL_EXPERIMENTAL_SILENCE=1 node --input-type=module -e 'await import("@ratel-ai/rankers-plugin"); console.log("OK")'
 
   verify-rankers-py:
     name: verify rankers-py (PyPI)

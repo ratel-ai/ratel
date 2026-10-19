@@ -87,3 +87,29 @@ test("a floor range would reject that prerelease, which is why the peer is \"*\"
   assert.equal(ok, false, "control: npm must reject a later prerelease under a range");
   assert.match(output, /ERESOLVE|peer/i);
 });
+
+// npm's `latest` SDK sits below a prerelease floor, and the "*" peer means npm
+// never says so: a bare install fails at import (ADR-0028). So while the floor
+// is a prerelease, every documented TS install pins both packages to `@rc`.
+const docs = {
+  "src/rankers/ts/README.md": readFileSync(
+    new URL("../src/rankers/ts/README.md", import.meta.url),
+    "utf8",
+  ),
+  "llms.txt": readFileSync(new URL("../llms.txt", import.meta.url), "utf8"),
+};
+
+for (const [path, text] of Object.entries(docs)) {
+  test(`${path} installs the TS plugin with an SDK at or above a prerelease floor`, {
+    skip: !floor.includes("-") && "floor is GA, so @latest satisfies it",
+  }, () => {
+    const installs = text
+      .split("\n")
+      .filter((line) => /(npm install|pnpm add) .*@ratel-ai\/rankers-plugin/.test(line));
+    assert.ok(installs.length > 0, `${path} must document the TS install`);
+    for (const line of installs) {
+      assert.match(line, /@ratel-ai\/sdk@rc\b/, `${path}: pin the SDK to @rc: ${line}`);
+      assert.match(line, /@ratel-ai\/rankers-plugin@rc\b/, `${path}: pin the plugin to @rc: ${line}`);
+    }
+  });
+}
