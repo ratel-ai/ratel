@@ -302,7 +302,9 @@ Publishers can't be configured for a package that doesn't exist yet. Do this per
      tag (e.g. `rankers-ts-v0.1.0-rc.1`, `dry_run: true`); its build jobs upload the
      `rankers-bindings-*` binaries / `rankers-wheels-*` wheels + sdist. As in step 5
      of cutting a release, its publish job is rejected by the `release` environment; that
-     failure is expected, and the CI publish path first runs on the next pushed tag.
+     failure is expected. The publish job's build (`scripts/build-rankers-ts.sh`) still runs on
+     every PR in ci.yml's `rankers-ts-publish-build`; the publish itself first runs on the next
+     pushed tag.
    - `telemetry-core` / `telemetry-ts` / `telemetry-py` / `mastra` / `vercel-ai-sdk` need no
      prebuilt artifact — they are pure-language, so `publish-rc.sh` builds the crate, npm
      package, wheel/sdist, or packed adapter locally.

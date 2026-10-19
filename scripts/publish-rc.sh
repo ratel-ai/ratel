@@ -418,10 +418,7 @@ publish_rankers_ts() {
     cp "$found" "$pkg/native/$f"
   done
 
-  # The SDK's tsc needs its gitignored native loader, so build it in full.
-  ( cd "$REPO_ROOT" \
-    && pnpm --filter "@ratel-ai/sdk..." run build \
-    && pnpm --filter @ratel-ai/rankers-plugin run build:ts )
+  "$REPO_ROOT/scripts/build-rankers-ts.sh"
   PINNED_RANKERS=1
   ( cd "$REPO_ROOT" && node scripts/inject-sdk-optional-deps.mjs src/rankers/ts )
 

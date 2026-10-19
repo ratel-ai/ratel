@@ -75,21 +75,37 @@ test("publish-rankers-ts injects the plugin's own platform packages", () => {
 });
 
 // The SDK's sources import its gitignored native loader (`../native/index.cjs`),
-// which only `build:native` generates. A bare `build:ts` of the SDK fails on a
-// clean checkout, so the rankers-ts publish builds the SDK's full closure.
-test("publish-rankers-ts builds the SDK natively before the plugin's tsc", () => {
-  const body = jobBody(releaseWorkflow, "publish-rankers-ts");
-  assert.match(body, /uses: dtolnay\/rust-toolchain@/);
-  assert.match(body, /pnpm --filter "@ratel-ai\/sdk\.\.\." run build\n/);
-  assert.doesNotMatch(body, /--filter @ratel-ai\/sdk run build:ts/);
-  assert.match(body, /pnpm --filter @ratel-ai\/rankers-plugin run build:ts/);
+// which only `build:native` generates, so a bare `build:ts` of the SDK fails on a
+// clean checkout. One script builds what the rankers-ts publish packs; the release
+// job, the bootstrap and a CI job all run it, so the publish build is exercised on
+// every PR rather than first on a release tag (the release env only admits tags).
+const buildRankersTs = readFileSync(new URL("./build-rankers-ts.sh", import.meta.url), "utf8");
+
+test("build-rankers-ts.sh builds the SDK natively, then only the plugin's tsc", () => {
+  assert.match(buildRankersTs, /pnpm --filter "@ratel-ai\/sdk\.\.\." run build\n/);
+  assert.match(buildRankersTs, /pnpm --filter @ratel-ai\/rankers-plugin run build:ts\n/);
+  assert.doesNotMatch(buildRankersTs, /--filter @ratel-ai\/sdk run build:ts/);
 });
 
-test("publish-rc.sh builds the SDK natively for the rankers-ts bootstrap", () => {
+test("publish-rankers-ts builds with build-rankers-ts.sh and has a Rust toolchain", () => {
+  const body = jobBody(releaseWorkflow, "publish-rankers-ts");
+  assert.match(body, /uses: dtolnay\/rust-toolchain@/);
+  assert.match(body, /run: scripts\/build-rankers-ts\.sh/);
+});
+
+test("publish-rc.sh builds the rankers-ts bootstrap with build-rankers-ts.sh", () => {
   const fn = publishRc.slice(publishRc.indexOf("publish_rankers_ts()"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
-  assert.match(body, /pnpm --filter "@ratel-ai\/sdk\.\.\." run build /);
+  assert.match(body, /scripts\/build-rankers-ts\.sh/);
   assert.doesNotMatch(body, /--filter @ratel-ai\/sdk run build:ts/);
+});
+
+test("ci runs build-rankers-ts.sh on a clean runner, gated by ci-gate", () => {
+  const body = jobBody(ciWorkflow, "rankers-ts-publish-build");
+  assert.match(body, /needs\.changes\.outputs\.ts == 'true'/);
+  assert.match(body, /run: scripts\/build-rankers-ts\.sh/);
+  assert.doesNotMatch(body, /pnpm -r build/);
+  assert.match(jobBody(ciWorkflow, "ci-gate"), /rankers-ts-publish-build/);
 });
 
 test("release.yml triggers on the rankers tags and the GitHub release waits for them", () => {

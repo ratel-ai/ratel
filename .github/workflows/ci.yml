@@ -496,6 +496,35 @@ jobs:
       - name: Test
         run: .venv/bin/pytest
 
+  # The rankers-ts publish build (scripts/build-rankers-ts.sh) on a clean runner.
+  # release.yml's publish-rankers-ts runs only on a tag (the release env admits
+  # nothing else), and the ts leg's `pnpm -r build` builds every native binding
+  # first, so neither would catch a publish build that needs an ungenerated file.
+  # The plugin's own native build stands in for the release's downloaded loader.
+  rankers-ts-publish-build:
+    needs: changes
+    if: needs.changes.outputs.ts == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src/sdk/ts/native
+            src/rankers/ts/native
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Generate the plugin's native loader
+        run: pnpm --filter @ratel-ai/rankers-plugin run build:native
+      - name: Build as publish-rankers-ts does
+        run: scripts/build-rankers-ts.sh
+
   # Pure-Python telemetry helper (ADR-0007): no Rust extension, so no maturin —
   # editable install + ruff/mypy/pytest. Separate job because the SDK job's build
   # is maturin-specific to src/sdk/python.
@@ -700,7 +729,7 @@ jobs:
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, rust, ts, ai-sdk-compat, python, rankers-python, telemetry, protocol, setup, verify]
+    needs: [changes, rust, ts, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, setup, verify]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -708,7 +737,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} ts=${{ needs.ts.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
+          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} ts=${{ needs.ts.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||

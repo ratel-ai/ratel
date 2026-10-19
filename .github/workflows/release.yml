@@ -792,7 +792,7 @@ jobs:
           node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
       - name: Install
         run: pnpm install --frozen-lockfile
-      # The SDK's build compiles its native crate (see Build TS loader).
+      # The SDK's build compiles its native crate (see scripts/build-rankers-ts.sh).
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -819,14 +819,10 @@ jobs:
           set -e
           cp src/rankers/ts/artifacts/index.cjs src/rankers/ts/native/index.cjs
           cp src/rankers/ts/artifacts/index.d.cts src/rankers/ts/native/index.d.cts
-      # The plugin imports @ratel-ai/sdk's types and RetrieverError, so tsc needs
-      # the SDK's dist/. The SDK's tsc needs its gitignored native loader, which
-      # only its native build generates, so build the SDK (and telemetry) in full.
-      # Only the plugin's tsc runs: its native loader is the downloaded one.
+      # Only the plugin's tsc runs: its native loader is the downloaded one. ci.yml
+      # runs the same script on every PR, since this job only runs on a tag.
       - name: Build TS loader
-        run: |
-          pnpm --filter "@ratel-ai/sdk..." run build
-          pnpm --filter @ratel-ai/rankers-plugin run build:ts
+        run: scripts/build-rankers-ts.sh
       - name: Inject optionalDependencies into the plugin loader package.json
         run: node scripts/inject-sdk-optional-deps.mjs src/rankers/ts
       # The peer is "*" so any newer SDK, prereleases included, installs; the
