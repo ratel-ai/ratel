@@ -250,8 +250,10 @@ therefore needs telemetry-py at **GA**, not at an RC.
    - `pnpm --filter "@ratel-ai/vercel-ai-sdk..." build && pnpm --filter @ratel-ai/vercel-ai-sdk test`
      (for a `vercel-ai-sdk` release)
 5. **(Optional dry-run, workflow-wired units only)** `workflow_dispatch` `release.yml` with
-   the tag (e.g. `sdk-py-v0.2.1-rc.1`) and `dry_run: true` to validate the auth + publish path
-   without consuming a version number.
+   the tag (e.g. `sdk-py-v0.2.1-rc.1`) and `dry_run: true` to validate the tag and the build
+   jobs without consuming a version number. It does not reach the publish jobs: the `release`
+   environment only admits release tags (and `v*` branches), so they are rejected before any
+   step runs.
 6. **Commit, tag, push:**
    ```
    git commit -am "release: <unit>-vX.Y.Z"
@@ -298,10 +300,9 @@ Publishers can't be configured for a package that doesn't exist yet. Do this per
    - `core` needs no prebuilt artifact — it publishes straight from the repo.
    - `rankers-ts` / `rankers-py` → a dry-run `workflow_dispatch` of `release.yml` with the unit's
      tag (e.g. `rankers-ts-v0.1.0-rc.1`, `dry_run: true`); its build jobs upload the
-     `rankers-bindings-*` binaries / `rankers-wheels-*` wheels + sdist. Dispatch it from
-     `main`: the `release` environment rejects other branches, so a dry run from a feature
-     branch builds the bindings but never runs the publish job's build. Check that
-     `publish-rankers-ts` gets to its `npm publish --dry-run` step before you bootstrap.
+     `rankers-bindings-*` binaries / `rankers-wheels-*` wheels + sdist. As in step 5
+     of cutting a release, its publish job is rejected by the `release` environment; that
+     failure is expected, and the CI publish path first runs on the next pushed tag.
    - `telemetry-core` / `telemetry-ts` / `telemetry-py` / `mastra` / `vercel-ai-sdk` need no
      prebuilt artifact — they are pure-language, so `publish-rc.sh` builds the crate, npm
      package, wheel/sdist, or packed adapter locally.
