@@ -74,6 +74,24 @@ test("publish-rankers-ts injects the plugin's own platform packages", () => {
   assert.match(body, /npm publish/);
 });
 
+// The SDK's sources import its gitignored native loader (`../native/index.cjs`),
+// which only `build:native` generates. A bare `build:ts` of the SDK fails on a
+// clean checkout, so the rankers-ts publish builds the SDK's full closure.
+test("publish-rankers-ts builds the SDK natively before the plugin's tsc", () => {
+  const body = jobBody(releaseWorkflow, "publish-rankers-ts");
+  assert.match(body, /uses: dtolnay\/rust-toolchain@/);
+  assert.match(body, /pnpm --filter "@ratel-ai\/sdk\.\.\." run build\n/);
+  assert.doesNotMatch(body, /--filter @ratel-ai\/sdk run build:ts/);
+  assert.match(body, /pnpm --filter @ratel-ai\/rankers-plugin run build:ts/);
+});
+
+test("publish-rc.sh builds the SDK natively for the rankers-ts bootstrap", () => {
+  const fn = publishRc.slice(publishRc.indexOf("publish_rankers_ts()"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /pnpm --filter "@ratel-ai\/sdk\.\.\." run build /);
+  assert.doesNotMatch(body, /--filter @ratel-ai\/sdk run build:ts/);
+});
+
 test("release.yml triggers on the rankers tags and the GitHub release waits for them", () => {
   for (const prefix of ["rankers-ts-v", "rankers-py-v"]) {
     assert.ok(releaseWorkflow.includes(`- '${prefix}*'`), `missing ${prefix}* trigger`);

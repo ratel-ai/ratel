@@ -298,7 +298,10 @@ Publishers can't be configured for a package that doesn't exist yet. Do this per
    - `core` needs no prebuilt artifact — it publishes straight from the repo.
    - `rankers-ts` / `rankers-py` → a dry-run `workflow_dispatch` of `release.yml` with the unit's
      tag (e.g. `rankers-ts-v0.1.0-rc.1`, `dry_run: true`); its build jobs upload the
-     `rankers-bindings-*` binaries / `rankers-wheels-*` wheels + sdist.
+     `rankers-bindings-*` binaries / `rankers-wheels-*` wheels + sdist. Dispatch it from
+     `main`: the `release` environment rejects other branches, so a dry run from a feature
+     branch builds the bindings but never runs the publish job's build. Check that
+     `publish-rankers-ts` gets to its `npm publish --dry-run` step before you bootstrap.
    - `telemetry-core` / `telemetry-ts` / `telemetry-py` / `mastra` / `vercel-ai-sdk` need no
      prebuilt artifact — they are pure-language, so `publish-rc.sh` builds the crate, npm
      package, wheel/sdist, or packed adapter locally.
