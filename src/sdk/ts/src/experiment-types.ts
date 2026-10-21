@@ -50,8 +50,11 @@ export type ExperimentEvaluationReference =
         /** Retain selections no older than this elapsed duration. */
         maxAgeMs?: number;
       };
-      /** Whether to attribute only the newest match or every match in the window. */
-      attribution?: "last-selection" | "all-in-window";
+      /**
+       * Which windowed selections an invocation attributes to: the newest one, the newest
+       * one whose ranking offered the tool, or every one. Defaults to `"last-selection"`.
+       */
+      attribution?: "last-selection" | "last-offering-selection" | "all-in-window";
     };
 
 /** The effective result and correlation data returned by a selection. */

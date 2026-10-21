@@ -11,7 +11,7 @@ export interface ExperimentInvocationPolicy {
     turns?: number;
     maxAgeMs?: number;
   };
-  attribution?: "last-selection" | "all-in-window";
+  attribution?: "last-selection" | "last-offering-selection" | "all-in-window";
 }
 
 /** @internal */
@@ -100,7 +100,7 @@ export function createExperimentInvocationBuffer<Arm extends string = string>(
           policy.window.maxAgeMs === undefined ||
           elapsedMs(nowMs, record.completedAtMs) <= policy.window.maxAgeMs,
       );
-      const matched = policy.attribution === "all-in-window" ? inWindow : inWindow.slice(-1);
+      const matched = matchSelections(policy.attribution, inWindow, toolId);
       if (matched.length === 0) {
         return [{ attributed: false }];
       }
@@ -147,6 +147,21 @@ function sweepExpiredSelections<Arm extends string>(
 
 function elapsedMs(nowMs: number, completedAtMs: number): number {
   return Math.max(0, nowMs - completedAtMs);
+}
+
+function matchSelections<Arm extends string>(
+  attribution: ExperimentInvocationPolicy["attribution"],
+  inWindow: readonly SelectionRecord<Arm>[],
+  toolId: string,
+): readonly SelectionRecord<Arm>[] {
+  switch (attribution) {
+    case "all-in-window":
+      return inWindow;
+    case "last-offering-selection":
+      return inWindow.filter((record) => record.ids.includes(toolId)).slice(-1);
+    default:
+      return inWindow.slice(-1);
+  }
 }
 
 function monotonicNow(): number {
