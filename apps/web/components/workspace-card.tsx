@@ -1,5 +1,5 @@
 import { Button } from "@ratel/brand/button";
-import type { Workspace } from "@/lib/runtime";
+import type { Workspace } from "@/lib/contracts/workspace";
 
 export type WorkspaceCardProps = {
   workspace: Workspace;

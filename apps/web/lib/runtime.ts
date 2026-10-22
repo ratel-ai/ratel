@@ -1,22 +1,28 @@
-export type Workspace = {
-  name: string;
-};
+import { composition } from "@/lib/composition";
+import type { Principal } from "@/lib/contracts/identity";
+import type { Workspace } from "@/lib/contracts/workspace";
 
 export type Runtime = {
   edition: string;
+  principal: Principal | null;
   workspace: Workspace;
   workspaces: Workspace[];
 };
 
 /**
- * UI contract: edition label + current workspace + available workspaces.
- * S3 replaces this body with the composition lookup; keep the signature stable.
+ * Single seam the UI reads. This is the only module that adapts ports to UI shape.
  */
-export function getRuntime(): Runtime {
-  const workspace: Workspace = { name: "Local workspace" };
+export async function getRuntime(): Promise<Runtime> {
+  const [principal, workspace, workspaces] = await Promise.all([
+    composition.identity.resolvePrincipal(),
+    composition.workspace.currentWorkspace(),
+    composition.workspace.listWorkspaces(),
+  ]);
+
   return {
-    edition: "Ratel OSS",
+    edition: composition.edition,
+    principal,
     workspace,
-    workspaces: [workspace],
+    workspaces,
   };
 }

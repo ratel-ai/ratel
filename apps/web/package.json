@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check app components lib"
+    "lint": "biome check app components ee lib",
+    "test": "tsx --test \"lib/**/*.test.ts\""
   },
   "dependencies": {
     "@ratel/brand": "workspace:*",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }
