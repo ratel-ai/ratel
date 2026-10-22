@@ -1,0 +1,8 @@
+**/node_modules
+**/.next
+target/
+.git
+.DS_Store
+docs/
+e2e/
+benchmark/
