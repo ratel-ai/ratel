@@ -6,7 +6,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "check:boundary": "node scripts/check-ee-boundary.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13"

@@ -23,6 +23,12 @@
       }
     ],
     "paths": {
+      "#ee-composition": [
+        "./lib/composition/ee-absent.ts"
+      ],
+      "@ee/*": [
+        "../../ee/*"
+      ],
       "@/*": [
         "./*"
       ]
@@ -32,6 +38,8 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "../../ee/**/*.ts",
+    "../../ee/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

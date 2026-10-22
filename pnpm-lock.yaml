@@ -40,6 +40,19 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  ee:
+    dependencies:
+      '@ratel/brand':
+        specifier: workspace:*
+        version: link:../packages/brand
+      react:
+        specifier: 19.2.4
+        version: 19.2.4
+    devDependencies:
+      '@types/react':
+        specifier: ^19
+        version: 19.3.0
+
   examples/adaptive-ranking-ts:
     dependencies:
       '@ratel-ai/sdk':

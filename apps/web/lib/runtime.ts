@@ -1,3 +1,4 @@
+import type { NavItem } from "@/lib/composition";
 import { composition } from "@/lib/composition";
 import type { Principal } from "@/lib/contracts/identity";
 import type { Workspace } from "@/lib/contracts/workspace";
@@ -7,6 +8,7 @@ export type Runtime = {
   principal: Principal | null;
   workspace: Workspace;
   workspaces: Workspace[];
+  nav: NavItem[];
 };
 
 /**
@@ -24,5 +26,6 @@ export async function getRuntime(): Promise<Runtime> {
     principal,
     workspace,
     workspaces,
+    nav: composition.nav,
   };
 }

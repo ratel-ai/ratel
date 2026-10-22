@@ -16,6 +16,8 @@
       "src/rankers/**/*.js",
       "benchmark/agent/src/**/*.ts",
       "benchmark/agent/src/**/*.tsx",
+      "ee/**/*.ts",
+      "ee/**/*.tsx",
       "apps/**/*.ts",
       "apps/**/*.tsx",
       "packages/**/*.ts",
