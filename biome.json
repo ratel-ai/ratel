@@ -15,7 +15,11 @@
       "src/rankers/**/*.tsx",
       "src/rankers/**/*.js",
       "benchmark/agent/src/**/*.ts",
-      "benchmark/agent/src/**/*.tsx"
+      "benchmark/agent/src/**/*.tsx",
+      "apps/**/*.ts",
+      "apps/**/*.tsx",
+      "packages/**/*.ts",
+      "packages/**/*.tsx"
     ]
   },
   "formatter": {

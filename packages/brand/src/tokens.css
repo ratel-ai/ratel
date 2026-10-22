@@ -1,0 +1,10 @@
+/* Single source of truth for Ratel brand tokens; import once in the consuming app. */
+:root {
+  --ratel-indigo: #140092;
+  --ratel-indigo-600: #2a16c4;
+  --ratel-cream: #eee3ce;
+  --ratel-ink: #111113;
+  --ratel-paper: #ffffff;
+  --ratel-radius: 10px;
+  --ratel-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
