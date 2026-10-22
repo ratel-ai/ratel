@@ -45,6 +45,7 @@ RUN pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/e
 FROM deps AS source
 COPY apps/web apps/web
 COPY packages/brand packages/brand
+COPY scripts/link-ee.mjs scripts/
 
 # --- build-oss: strip commercial routes, never had ee/ source -------------
 FROM source AS build-oss

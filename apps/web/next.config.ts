@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const eeCompositionTarget =
   process.env.RATEL_COMPOSITION === "cloud"
-    ? "../../ee/composition.ts"
+    ? "../../ee/src/composition.ts"
     : "./lib/composition/ee-absent.ts";
 
 const nextConfig: NextConfig = {

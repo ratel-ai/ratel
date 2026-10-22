@@ -1,7 +1,7 @@
 {
   "name": "@ratel/ee",
   "version": "0.1.0",
-  "description": "Commercial modules for the Ratel Cloud edition. Licensed separately from the rest of this repository; see ./LICENSE.",
+  "description": "Manifest for the commercial modules of the Ratel Cloud edition. Their source lives in a private repository, checked out at ee/src.",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -12,6 +12,6 @@
     "@types/react": "^19"
   },
   "scripts": {
-    "lint": "biome check ."
+    "lint": "biome check . --no-errors-on-unmatched"
   }
 }

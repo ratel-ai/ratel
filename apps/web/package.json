@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node ../../scripts/link-ee.mjs --auto && next dev",
+    "build": "node ../../scripts/link-ee.mjs --auto && next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/link-ee.mjs --auto && tsc --noEmit",
     "lint": "biome check app components lib",
     "test": "tsx --test \"lib/**/*.test.ts\""
   },

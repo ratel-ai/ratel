@@ -6,6 +6,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
+    "ee:link": "node scripts/link-ee.mjs",
+    "ee:unlink": "node scripts/link-ee.mjs --unlink",
     "test": "pnpm -r test",
     "check:boundary": "node scripts/check-ee-boundary.mjs"
   },
