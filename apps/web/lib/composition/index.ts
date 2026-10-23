@@ -74,11 +74,6 @@ export function createComposition(
   return composition as Composition;
 }
 
-const editionKey = process.env.RATEL_COMPOSITION;
-if (editionKey == null || editionKey === "") {
-  throw new Error(`RATEL_COMPOSITION is unset; valid values: ${VALID_EDITIONS}`);
-}
-
-export const composition = createComposition(editionKey);
+export const composition = createComposition(process.env.RATEL_COMPOSITION || "oss");
 
 export type { CompositionPorts } from "@/lib/contracts/composition";
