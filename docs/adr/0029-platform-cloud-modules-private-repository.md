@@ -46,9 +46,10 @@ Copied rather than symlinked, because Turbopack rejects symlinks leaving the pro
 `next dev` does not discover routes behind a symlink. With the checkout absent, every command
 builds Ratel OSS; nobody runs a step to get the right tree.
 
-**One boundary rule, checked mechanically** by `scripts/check-ee-boundary.mjs`, here and in the
-private repository's CI: nothing outside `ee/` imports from `ee/` (except the copied route stubs),
-and `ee/src` imports only `@/lib/contracts/*`, itself, and npm packages.
+**One boundary rule, checked mechanically** by `scripts/check-ee-boundary.mjs`, which the test
+suite runs, and the paired CI below will run in the private repository: nothing outside `ee/`
+imports from `ee/` (except the copied route stubs), and `ee/src` imports only
+`@/lib/contracts/*`, itself, and npm packages.
 
 **One Dockerfile, two targets** (`oss`, `cloud`). The Cloud adapters are reached through one
 build-time alias, `#ee-composition`, resolved to `ee/src/composition.ts` for Cloud and to an
