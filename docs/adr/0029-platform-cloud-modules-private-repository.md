@@ -4,13 +4,11 @@ Date: 2026-10-23
 
 ## Status
 
-Proposed
+Accepted
 
 Amends the repo-boundary rule of [ADR-0002](0002-product-split-engine-local-cloud.md) with one
 exception (the Cloud modules share source with the core rather than a protocol). Consistent with
-[ADR-0009](0009-licensing.md): no proprietary code enters this repository. Alternative to the
-one-repository option recorded on branch `feat/ratel-platform`; one of the two is accepted, the
-other dropped.
+[ADR-0009](0009-licensing.md): no proprietary code enters this repository.
 
 ## Context
 
@@ -21,9 +19,6 @@ the core has to stay unaware of which edition it is running as.
 
 Two further requirements: the Cloud code stays private, and this repository stays canonical — an
 outside contributor clones, installs, tests and opens a pull request with no extra step.
-Together they rule out a single repository: either the Cloud code is public, or the public
-repository is a generated mirror of a private one (GitLab's model), which contributors cannot
-work against directly.
 
 ## Decision
 
@@ -76,8 +71,6 @@ name, falling back to `main`, and a nightly job builds Cloud against the public 
 
 ## Rejected
 
-- **One repository with `ee/` under a commercial licence** (Langfuse, Metabase). Makes the Cloud
-  code public.
 - **A private canonical repository with a generated public mirror** (GitLab). Contributors would
   work against a mirror.
 - **A git submodule at `ee/src`.** A public commit for every Cloud change, and private hashes
