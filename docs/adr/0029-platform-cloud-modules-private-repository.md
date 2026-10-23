@@ -29,10 +29,10 @@ implementation in `apps/web/lib/adapters/oss/`. A composition root reads `RATEL_
 at startup if the set is incomplete — never "ready" and then failing on every request.
 
 **The Cloud modules live in a private repository, `ratel-ai/ratel-platform`, checked out at
-`ee/src`** — Mattermost's topology. `ee/src` is ignored by git here. `ee/package.json` stays
-public, so the lockfile and `pnpm install --frozen-lockfile` are identical with and without the
-checkout. The checkout is a plain clone, not a submodule: a submodule would put a pointer-bump
-commit here for every Cloud change and publish private commit hashes.
+`ee/src`**, which is ignored by git here. `ee/package.json` stays public, so the lockfile and
+`pnpm install --frozen-lockfile` are identical with and without the checkout. The checkout is a
+plain clone, not a submodule: a submodule would put a pointer-bump commit here for every Cloud
+change and publish private commit hashes.
 
 **Routes are copied, not committed.** The private repository holds one-line route stubs in
 `routes/`. `scripts/link-ee.mjs --auto` runs before `dev`, `build` and `typecheck`: it copies them
