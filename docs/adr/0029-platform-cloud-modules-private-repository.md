@@ -68,13 +68,3 @@ name, falling back to `main`, and a nightly job builds Cloud against the public 
   why `typecheck` runs `link-ee.mjs` as `dev` and `build` do.
 - The OSS image contains no Cloud code by construction; the image check still searches for
   strings unique to a Cloud page and a Cloud adapter, with the Cloud image as the control.
-
-## Rejected
-
-- **A private canonical repository with a generated public mirror** (GitLab). Contributors would
-  work against a mirror.
-- **A git submodule at `ee/src`.** A public commit for every Cloud change, and private hashes
-  published.
-- **Package shells with a symlinked `src`** (Novu). Turbopack resolves the symlink to its real
-  path and never sees the shell's dependencies.
-- **Symlinked route directories.** Work in `next build`, return 404 in `next dev`.
