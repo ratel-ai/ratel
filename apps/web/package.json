@@ -1,0 +1,26 @@
+{
+  "name": "@ratel/platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../scripts/link-ee.mjs --auto && next dev",
+    "build": "node ../../scripts/link-ee.mjs --auto && next build",
+    "start": "next start",
+    "typecheck": "node ../../scripts/link-ee.mjs --auto && tsc --noEmit",
+    "lint": "biome check app components lib",
+    "test": "tsx --test \"lib/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@ratel/brand": "workspace:*",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "tsx": "^4.20.6",
+    "typescript": "^5"
+  }
+}

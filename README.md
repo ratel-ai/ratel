@@ -159,6 +159,11 @@ src/
 ├── adapters/ts-mastra/ # @ratel-ai/mastra — Mastra adapter
 ├── rankers/           # @ratel-ai/rankers-plugin / ratel-ai-rankers-plugin — vendor rankers (Jev, OpenAI Decisions)
 └── telemetry/         # OTel conventions + helper packages
+apps/
+└── web/               # @ratel/platform — the Ratel Platform console
+packages/
+├── brand/             # @ratel/brand — shared design system
+└── sdk/               # @ratel/ratel — Ratel SDK
 protocol/              # catalog-source wire contract
 examples/              # End-to-end SDK examples
 docs/
@@ -174,6 +179,18 @@ Prerequisites: Rust stable, Node 24+, pnpm 10.28+. Python SDK: Python 3.9+ and [
 cargo build --workspace && cargo test --workspace   # Rust
 pnpm install && pnpm -r build && pnpm -r test       # TypeScript
 # Python: see src/sdk/python/README.md
+```
+
+### Ratel Platform (in development)
+
+```bash
+pnpm install
+pnpm --filter @ratel/platform dev  # http://localhost:3000
+pnpm --filter @ratel/platform typecheck
+pnpm --filter @ratel/platform test
+
+docker build -f apps/web/Dockerfile --target oss -t ratel-oss .
+docker run --rm -p 3000:3000 ratel-oss
 ```
 
 ## Contributing

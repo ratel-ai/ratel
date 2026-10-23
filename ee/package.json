@@ -1,0 +1,17 @@
+{
+  "name": "@ratel/ee",
+  "version": "0.1.0",
+  "description": "Manifest for Ratel Cloud edition modules. Source code lives in a private repository, checked out at ee/src.",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ratel/brand": "workspace:*",
+    "react": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19"
+  },
+  "scripts": {
+    "lint": "biome check . --no-errors-on-unmatched"
+  }
+}

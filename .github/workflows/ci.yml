@@ -94,6 +94,11 @@ jobs:
               # the shared cross-language pin, so a fixture edit must re-run this leg.
               - 'src/telemetry/conformance/**'
               - 'examples/**'
+              # The platform app, its design system and the Cloud modules manifest
+              # are workspace members, so `pnpm -r` builds, lints and tests them.
+              - 'apps/**'
+              - 'packages/**'
+              - 'ee/**'
               - 'scripts/**'
               - 'package.json'
               - 'pnpm-lock.yaml'

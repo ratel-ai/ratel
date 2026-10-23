@@ -39,6 +39,16 @@ src/sdk/ts/dist/
 src/telemetry/ts/dist/
 src/rankers/ts/dist/
 
+# Commercial source: the private repository is checked out at ee/src, and
+# scripts/link-ee.mjs copies its route stubs to apps/web/app/(ee)
+ee/src
+apps/web/app/(ee)
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
 # NAPI native binding outputs
 src/sdk/ts/native/index.cjs
 src/sdk/ts/native/index.d.cts

@@ -1,0 +1,21 @@
+{
+  "name": "@ratel/brand",
+  "version": "0.1.0",
+  "description": "Shared brand tokens and components for both Ratel editions.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./tokens.css": "./src/tokens.css",
+    "./button": "./src/button.tsx"
+  },
+  "peerDependencies": {
+    "react": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19"
+  },
+  "scripts": {
+    "lint": "biome check src"
+  }
+}
