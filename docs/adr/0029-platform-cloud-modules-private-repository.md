@@ -33,7 +33,7 @@ implementation in `apps/web/lib/adapters/oss/`. A composition root reads `RATEL_
 (`oss` or `cloud`; unset means `oss`), mounts one set of implementations, and exits the process
 at startup if the set is incomplete — never "ready" and then failing on every request.
 
-**The Cloud modules live in a private repository, `ratel-ai/ratel-platform-ee`, checked out at
+**The Cloud modules live in a private repository, `ratel-ai/ratel-platform`, checked out at
 `ee/src`** — Mattermost's topology. `ee/src` is ignored by git here. `ee/package.json` stays
 public, so the lockfile and `pnpm install --frozen-lockfile` are identical with and without the
 checkout. The checkout is a plain clone, not a submodule: a submodule would put a pointer-bump
