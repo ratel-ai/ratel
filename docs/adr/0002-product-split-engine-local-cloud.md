@@ -11,6 +11,10 @@ reframed by the catalog-source pivot ([ADR-0003](0003-catalog-source-interface.m
 standalone server product is deferred, not decided-and-coming. Git history holds the
 pre-compaction records.
 
+The repo-boundary rule is amended by
+[ADR-0029](0029-platform-cloud-modules-private-repository.md): the Cloud modules share source
+with the platform application rather than a protocol.
+
 ## Context
 
 Ratel is one engine that decides what enters an agent's context window. The real variable is
