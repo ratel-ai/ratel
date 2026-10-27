@@ -152,23 +152,23 @@ Related open-source projects extend and validate this repository:
 
 ```
 src/
-├── core/              # ratel-ai-core — Rust retrieval engine
-├── sdk/ts/            # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
-├── sdk/python/        # ratel-ai — Python SDK (PyO3-bound)
+├── core/                      # ratel-ai-core — Rust retrieval engine
+├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
+├── sdk/python/                # ratel-ai — Python SDK (PyO3-bound)
 ├── adapters/ts-vercel-ai-sdk/ # @ratel-ai/vercel-ai-sdk — Vercel AI SDK adapter
-├── adapters/ts-mastra/ # @ratel-ai/mastra — Mastra adapter
-├── rankers/           # @ratel-ai/rankers-plugin / ratel-ai-rankers-plugin — vendor rankers (Jev, OpenAI Decisions)
-└── telemetry/         # OTel conventions + helper packages
+├── adapters/ts-mastra/        # @ratel-ai/mastra — Mastra adapter
+├── rankers/                   # @ratel-ai/rankers-plugin / ratel-ai-rankers-plugin — vendor rankers (Jev, OpenAI Decisions)
+└── telemetry/                 # OTel conventions + helper packages
 apps/
-└── web/               # @ratel/platform — the Ratel Platform console
+└── web/                       # @ratel/platform — the Ratel Platform console
 packages/
-├── brand/             # @ratel/brand — shared design system
-└── sdk/               # @ratel/ratel — Ratel SDK
-protocol/              # catalog-source wire contract
-examples/              # End-to-end SDK examples
+├── brand/                     # @ratel/brand — shared design system
+└── sdk/                       # @ratel/ratel — Ratel SDK
+protocol/                      # catalog-source wire contract
+examples/                      # End-to-end SDK examples
 docs/
-├── adr/                # Architecture decision records
-└── assets/             # Images and other static assets
+├── adr/                       # Architecture decision records
+└── assets/                    # Images and other static assets
 ```
 
 ## Build & test
