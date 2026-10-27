@@ -2,24 +2,15 @@
   "name": "@ratel/brand",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared brand tokens and components for both Ratel editions.",
+  "description": "Ratel brand: palette, fonts and logo assets for both editions.",
   "type": "module",
+  "license": "MIT",
   "exports": {
     "./tokens.css": "./src/tokens.css",
     "./theme.css": "./src/theme.css",
     "./assets/*": "./assets/*"
   },
-  "peerDependencies": {
-    "react": "19.2.4"
-  },
-  "devDependencies": {
-    "@types/react": "^19"
-  },
   "scripts": {
     "lint": "biome check . --no-errors-on-unmatched"
-  },
-  "files": [
-    "src",
-    "assets"
-  ]
+  }
 }

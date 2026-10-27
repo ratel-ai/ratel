@@ -1,33 +1,38 @@
 # @ratel/brand
 
-Shared brand for Ratel's websites — one source of truth so `docs.ratel.sh` and
-`ratel.sh` stay visually consistent.
+Ratel's brand: palette, fonts and logo assets, shared by both editions. UI primitives and
+semantic tokens live in [`@ratel/design-system`](../design-system/README.md), which builds on
+this package.
 
-## Colors
+## Use
 
-Import the tokens into any app's global stylesheet:
+| Export | Contents | For |
+|---|---|---|
+| `@ratel/brand/theme.css` | Tailwind v4 `@theme`: palette (`--color-*`), data-viz colors (`--color-ctx-*`), font stacks, `@font-face` rules | Tailwind apps; `@ratel/design-system/styles.css` imports it |
+| `@ratel/brand/tokens.css` | Raw `--ratel-*` variables on `:root` | Stylesheets without Tailwind |
+| `@ratel/brand/assets/*` | Fonts and logos | Copying into an app |
 
 ```css
-@import "@ratel/brand/tokens.css";
+@import "tailwindcss";
+@import "@ratel/brand/theme.css";
 ```
 
-| Token | Value | Use |
-| --- | --- | --- |
-| `--ratel-indigo` | `#140092` | primary UI accent (links, buttons, active state) |
-| `--ratel-indigo-300` | `#9b8cff` | accent on dark surfaces |
-| `--ratel-cream` | `#eee3ce` | the badger mark / warm highlights |
-| `--ratel-forest` | `#023a2e` | logo tile, deep surfaces |
-| `--ratel-green` | `#239452` | success / positive |
-| `--ratel-coral` | `#c4431f` | bold marketing surfaces |
-| `--ratel-ink` | `#111113` | text on light |
+## Fonts
 
-Fonts: **Geist** (sans) and **Geist Mono** — same as ratel.sh.
+| Family | File | Role |
+|---|---|---|
+| Geist, Geist Mono | from the `geist` npm package | body and code; the app sets `--font-geist-sans` and `--font-geist-mono` |
+| Acid Grotesk (500, 700) | `assets/fonts/acid-grotesk-*.woff2` | display |
+| Geist Pixel Square | `assets/fonts/geist-pixel-square.woff2` | pixel accents |
+
+The `@font-face` rules load `/fonts/*.woff2`, so the app must serve a copy of `assets/fonts/`
+from `public/fonts/`.
 
 ## Assets
 
-`assets/ratel-mark.png` — the cream honey-badger mark on its forest-green tile
-(Ratel's shipped app icon). `assets/ratel-og.png` — social card.
-
-> **Replacing the logo:** these are the official raster marks pulled from ratel.sh.
-> If/when a vector (SVG) wordmark + mark is available, drop them in `assets/` and
-> point `apps/docs/components/logo.tsx` (and the future `apps/web`) at them.
+| File | Contents |
+|---|---|
+| `logo-vector.svg` | the badger mark, vector |
+| `ratel-badger.png`, `ratel-badger-{128,512,1024}.png` | the badger mark, raster sizes |
+| `ratel-mark.png` | the mark on its tile (app icon) |
+| `ratel-og.png` | social card |
