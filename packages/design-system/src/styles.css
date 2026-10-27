@@ -1,0 +1,188 @@
+/*
+ * Ratel design system: semantic tokens, utilities and the focus floor.
+ *
+ * Import from the app's global stylesheet, after Tailwind:
+ *
+ *   @import "tailwindcss";
+ *   @import "@ratel/design-system/styles.css";
+ *
+ * Components use only the semantic names (`bg-app`, `text-fg-muted`,
+ * `border-line`, `bg-accent`, ...). They are declared `inline` so each utility
+ * reads the `--ds-*` variable where it is used, which lets a subtree (or, later,
+ * a light theme) swap the values.
+ */
+@import "@ratel/brand/theme.css";
+
+/* Tailwind does not scan workspace packages: point it at the components. */
+@source "./components";
+
+@theme inline {
+  --color-app: var(--ds-app);
+  --color-rail: var(--ds-rail);
+  --color-raised: var(--ds-raised);
+  --color-overlay: var(--ds-overlay);
+  --color-hover: var(--ds-hover);
+  --color-selected: var(--ds-selected);
+  --color-line: var(--ds-line);
+  --color-line-strong: var(--ds-line-strong);
+  --color-line-active: var(--ds-line-active);
+  --color-fg: var(--ds-fg);
+  --color-fg-muted: var(--ds-fg-muted);
+  --color-fg-subtle: var(--ds-fg-subtle);
+  --color-fg-faint: var(--ds-fg-faint);
+  --color-accent: var(--ds-accent);
+  --color-accent-hover: var(--ds-accent-hover);
+  --color-accent-fg: var(--ds-accent-fg);
+  --color-accent-mark: var(--ds-accent-mark);
+  --color-accent-subtle: var(--ds-accent-subtle);
+  --color-focus: var(--ds-focus);
+  --color-scrim: var(--ds-scrim);
+  --color-brand-cream: var(--ds-brand-cream);
+  --color-success: var(--ds-success);
+  --color-success-subtle: var(--ds-success-subtle);
+  --color-warning: var(--ds-warning);
+  --color-warning-subtle: var(--ds-warning-subtle);
+  --color-danger: var(--ds-danger);
+  --color-danger-subtle: var(--ds-danger-subtle);
+  --color-danger-fill: var(--ds-danger-fill);
+  --color-info: var(--ds-info);
+  --color-info-subtle: var(--ds-info-subtle);
+  --color-chart-1: var(--ds-chart-1);
+  --color-chart-2: var(--ds-chart-2);
+  --color-chart-3: var(--ds-chart-3);
+  --color-chart-4: var(--ds-chart-4);
+  --color-chart-5: var(--ds-chart-5);
+  --color-chart-6: var(--ds-chart-6);
+
+  /* Dense UI size (rows, navigation, controls). Copy stays text-sm. */
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.125rem;
+
+  --shadow-overlay: 0 0 0 1px rgb(0 0 0 / 0.35), 0 4px 8px -2px rgb(0 0 0 / 0.35),
+    0 16px 32px -8px rgb(0 0 0 / 0.55);
+  --shadow-dialog: 0 0 0 1px rgb(0 0 0 / 0.4), 0 8px 16px -4px rgb(0 0 0 / 0.4),
+    0 32px 64px -12px rgb(0 0 0 / 0.65);
+
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/*
+ * Values (dark). Grays are OKLCH with a faint forest tint (hue 165, chroma
+ * 0.006 in the surfaces, less in the text grays so text stays neutral): the
+ * brand's green, barely there.
+ */
+:root {
+  color-scheme: dark;
+
+  --ds-rail: #060908;
+  --ds-app: #0b0e0d;
+  --ds-raised: #121614;
+  --ds-overlay: #121614;
+  --ds-hover: #181c1a;
+  --ds-selected: #1e2321;
+  --ds-line: #272b29;
+  --ds-line-strong: #343937;
+  --ds-line-active: #4c514f;
+  --ds-fg: #eef1ef;
+  --ds-fg-muted: #a9acaa;
+  --ds-fg-subtle: #898d8b;
+  --ds-fg-faint: #797d7b;
+
+  /* Coral-deep carries white text at 5.0:1 (5.7:1 on hover, which darkens);
+     brand coral marks focus and selection. */
+  --ds-accent: #c4431f;
+  --ds-accent-hover: #b83c1a;
+  --ds-accent-fg: #ffffff;
+  --ds-accent-mark: #ed5126;
+  --ds-accent-subtle: color-mix(in oklab, #ed5126 12%, transparent);
+  --ds-focus: #ed5126;
+  /* Behind dialogs. */
+  --ds-scrim: rgb(0 0 0 / 0.6);
+  /* The badger mark's own color: brand cream, not the UI's white. */
+  --ds-brand-cream: #eee3ce;
+
+  --ds-success: #5ac576;
+  --ds-success-subtle: color-mix(in oklab, #5ac576 12%, transparent);
+  --ds-warning: #edb345;
+  --ds-warning-subtle: color-mix(in oklab, #edb345 12%, transparent);
+  /* Rose red, kept away from coral's orange so an error never reads as the accent. */
+  --ds-danger: #f75b6b;
+  --ds-danger-subtle: color-mix(in oklab, #f75b6b 12%, transparent);
+  --ds-danger-fill: #d73246;
+  --ds-info: #5eaceb;
+  --ds-info-subtle: color-mix(in oklab, #5eaceb 12%, transparent);
+
+  /* Validated categorical order (dataviz checks against #0b0e0d, all pass). */
+  --ds-chart-1: #3987e5;
+  --ds-chart-2: #199e70;
+  --ds-chart-3: #9085e9;
+  --ds-chart-4: #c98500;
+  --ds-chart-5: #d55181;
+  --ds-chart-6: #008300;
+}
+
+/* Tailwind v4 drops the default button pointer cursor: restore it. */
+button:not(:disabled),
+[role="button"] {
+  cursor: pointer;
+}
+
+/* Keyboard focus is a coral ring everywhere: the floor for anything without its own style. */
+:focus-visible {
+  outline: 2px solid var(--ds-focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/*
+ * An element that draws its own focus (outline-none plus a focus-visible ring,
+ * surface or inset mark, as every primitive does) keeps it alone, and no element
+ * has its corners squared on focus. revert-layer hands both back to the utilities.
+ */
+:root :focus-visible {
+  border-radius: revert-layer;
+}
+:root .outline-none[class*="focus-visible:"]:focus-visible {
+  outline: revert-layer;
+}
+
+/*
+ * One z-index scale. Anchored overlays (popover, menu, select, tooltip) sit above
+ * panels and dialogs because they open from inside them; Base UI portals them
+ * beside, not inside, their parent.
+ */
+@utility z-sticky {
+  z-index: 10;
+}
+@utility z-rail {
+  z-index: 20;
+}
+@utility z-panel {
+  z-index: 50;
+}
+@utility z-dialog {
+  z-index: 60;
+}
+@utility z-popover {
+  z-index: 65;
+}
+@utility z-toast {
+  z-index: 70;
+}
+@utility z-tour {
+  z-index: 80;
+}
+
+/* The brand texture: a quiet dot grid on the 4 px rhythm for canvases, maps and empty areas. */
+@utility dot-grid {
+  background-image: radial-gradient(circle at center, var(--ds-line) 1px, transparent 1.25px);
+  background-size: 8px 8px;
+  background-position: 4px 4px;
+}
+@utility dot-grid-fade {
+  background-image: radial-gradient(circle at center, var(--ds-line) 1px, transparent 1.25px);
+  background-size: 8px 8px;
+  background-position: 4px 4px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}

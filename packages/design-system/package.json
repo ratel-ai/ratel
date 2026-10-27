@@ -1,0 +1,48 @@
+{
+  "name": "@ratel/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ratel design system: semantic tokens and UI primitives for both editions.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./styles.css": "./src/styles.css",
+    "./cn": "./src/cn.ts",
+    "./button-variants": "./src/components/button-variants.ts",
+    "./mask": "./src/components/mask.ts",
+    "./peek": "./src/components/peek.ts",
+    "./tab-model": "./src/components/tab-model.ts",
+    "./table-model": "./src/components/table-model.ts",
+    "./tree-model": "./src/components/tree-model.ts",
+    "./use-copy-to-clipboard": "./src/components/use-copy-to-clipboard.ts",
+    "./*": "./src/components/*.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src test",
+    "test": "tsx --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.6.0",
+    "@ratel/brand": "workspace:*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.22.0",
+    "tailwind-merge": "^3.6.0"
+  },
+  "peerDependencies": {
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5"
+  }
+}
