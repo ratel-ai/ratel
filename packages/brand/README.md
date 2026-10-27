@@ -27,6 +27,9 @@ this package.
 The `@font-face` rule loads `assets/fonts/` by relative URL, and the app's bundler emits the
 file as a static asset. Nothing to copy.
 
+The font files in `assets/fonts/` are licensed under the SIL Open Font License 1.1
+(see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt)), not under the repository's MIT licence.
+
 ## Assets
 
 | File | Contents |
