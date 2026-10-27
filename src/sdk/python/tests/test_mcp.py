@@ -39,6 +39,15 @@ def _mcp_major_version() -> int:
     return int(importlib.metadata.version("mcp").split(".", maxsplit=1)[0])
 
 
+# Given to the probe server's `alpha` so a real round trip can assert the
+# schema survived ingestion, not just that the tool registered.
+_PROBE_ALPHA_SCHEMA = {
+    "type": "object",
+    "properties": {"query": {"type": "string", "description": "What to search for."}},
+    "required": ["query"],
+}
+
+
 @asynccontextmanager
 async def _memory_client_session(server: Any) -> AsyncGenerator[Any, None]:
     """Yield an initialized ClientSession over in-memory transport (mcp 1.x and 2.x)."""
@@ -82,7 +91,7 @@ def _paginated_probe_server() -> Any:
         from mcp.server.lowlevel.server import Server
 
         tools = [
-            types.Tool(name="alpha", description="first page", inputSchema={"type": "object"}),
+            types.Tool(name="alpha", description="first page", inputSchema=_PROBE_ALPHA_SCHEMA),
             types.Tool(name="beta", description="first page", inputSchema={"type": "object"}),
             types.Tool(name="gamma", description="second page", inputSchema={"type": "object"}),
         ]
@@ -114,7 +123,7 @@ def _paginated_probe_server() -> Any:
 
     server = Server("ratel-pagination-probe")
     tools = [
-        types.Tool(name="alpha", description="first page", inputSchema={"type": "object"}),
+        types.Tool(name="alpha", description="first page", inputSchema=_PROBE_ALPHA_SCHEMA),
         types.Tool(name="beta", description="first page", inputSchema={"type": "object"}),
         types.Tool(name="gamma", description="second page", inputSchema={"type": "object"}),
     ]
@@ -178,11 +187,30 @@ def _failing_probe_server() -> Any:
 
 
 class _FakeTool:
-    def __init__(self, name, description, input_schema):
+    """An `mcp` 1.x tool: schemas exposed under camelCase attributes."""
+
+    def __init__(self, name, description, input_schema, output_schema=None):
         self.name = name
         self.description = description
         self.inputSchema = input_schema
-        self.outputSchema = None
+        self.outputSchema = output_schema
+
+
+class _SnakeCaseFakeTool:
+    """An `mcp` 2.x tool: schemas exposed under snake_case attributes only.
+
+    2.0 renamed `Tool.inputSchema` / `outputSchema` to `input_schema` /
+    `output_schema` and kept the camelCase names as serialization aliases. A
+    pydantic alias is not an attribute, so a camelCase-only read yields `None`
+    here. Hard-coded rather than built from `mcp.types` so this stays a guard
+    for the 2.x shape whichever `mcp` version the suite runs against.
+    """
+
+    def __init__(self, name, description, input_schema, output_schema=None):
+        self.name = name
+        self.description = description
+        self.input_schema = input_schema
+        self.output_schema = output_schema
 
 
 class _FakeListResult:
@@ -192,12 +220,15 @@ class _FakeListResult:
 
 
 class _FakeSession:
-    def __init__(self):
+    def __init__(self, tools=None):
         self.calls = []
+        self._tools = tools
 
     async def list_tools(self, cursor: str | None = None):
         return _FakeListResult(
-            [_FakeTool("create_issue", "Create a GitHub issue.", {"type": "object"})]
+            self._tools
+            if self._tools is not None
+            else [_FakeTool("create_issue", "Create a GitHub issue.", {"type": "object"})]
         )
 
     async def call_tool(self, name, args):
@@ -289,6 +320,65 @@ async def test_register_mcp_server_namespaces_and_wires(skip_mcp_import_check) -
     assert invoke_events[0]["tool_id"] == "github__create_issue"
 
     await handle.close()  # default no-op close is awaitable
+
+
+_ISSUE_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "description": "Issue title."},
+        "labels": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["title"],
+}
+_ISSUE_OUTPUT_SCHEMA = {"type": "object", "properties": {"url": {"type": "string"}}}
+
+
+@pytest.mark.parametrize("tool_cls", [_FakeTool, _SnakeCaseFakeTool], ids=["mcp1x", "mcp2x"])
+async def test_register_mcp_server_keeps_tool_schemas_under_either_spelling(
+    skip_mcp_import_check, tool_cls
+) -> None:
+    """Ingested tools keep their schemas whichever spelling the upstream exposes.
+
+    Reading only `inputSchema` drops every schema on `mcp>=2.0` (and only
+    `input_schema` drops them on 1.x): the tool still registers and still
+    invokes, so nothing raises — the model just stops being told what
+    arguments the tool takes, and retrieval loses the parameter tokens it
+    ranks over.
+    """
+    catalog = ToolCatalog()
+    session = _FakeSession(
+        [
+            tool_cls(
+                "create_issue",
+                "Create a GitHub issue.",
+                _ISSUE_INPUT_SCHEMA,
+                _ISSUE_OUTPUT_SCHEMA,
+            )
+        ]
+    )
+
+    await register_mcp_server(catalog, name="github", session=session)
+
+    tool = catalog.get("github__create_issue")
+    assert tool is not None
+    assert tool.input_schema == _ISSUE_INPUT_SCHEMA
+    assert tool.output_schema == _ISSUE_OUTPUT_SCHEMA
+
+
+@pytest.mark.parametrize("tool_cls", [_FakeTool, _SnakeCaseFakeTool], ids=["mcp1x", "mcp2x"])
+async def test_register_mcp_server_defaults_missing_schemas(
+    skip_mcp_import_check, tool_cls
+) -> None:
+    """A tool that declares no schemas still gets the documented defaults."""
+    catalog = ToolCatalog()
+    session = _FakeSession([tool_cls("ping", "Ping.", None, None)])
+
+    await register_mcp_server(catalog, name="ops", session=session)
+
+    tool = catalog.get("ops__ping")
+    assert tool is not None
+    assert tool.input_schema == {}
+    assert tool.output_schema == {"type": "object"}
 
 
 async def test_register_mcp_server_records_upstream_error(skip_mcp_import_check) -> None:
@@ -603,6 +693,25 @@ async def test_register_mcp_server_paginated_list_tools_real_client_session() ->
 
     register_events = [e for e in catalog.drain_trace_events() if e["type"] == "upstream_register"]
     assert register_events[0]["tool_count"] == 3
+
+
+async def test_register_mcp_server_keeps_tool_schemas_from_real_client_session() -> None:
+    """The schema survives a real round trip on whichever `mcp` is installed.
+
+    The fake-session guards pin both attribute spellings; this pins the one
+    the installed `mcp` actually serves, so the suite fails on the version
+    boundary rather than passing against a fake that models the wrong shape.
+    """
+    pytest.importorskip("mcp", reason="install ratel-ai[mcp] to run real MCP session tests")
+
+    server = _paginated_probe_server()
+    catalog = ToolCatalog()
+    async with _memory_client_session(server) as session:
+        await register_mcp_server(catalog, name="demo", session=session)
+
+    tool = catalog.get("demo__alpha")
+    assert tool is not None
+    assert tool.input_schema == _PROBE_ALPHA_SCHEMA
 
 
 async def test_invoke_emits_invoke_error_when_a_real_mcp_tool_reports_failure() -> None:
