@@ -6,7 +6,7 @@ const eeCompositionTarget =
     : "./lib/composition/ee-absent.ts";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@ratel/brand"],
+  transpilePackages: ["@ratel/brand", "@ratel/design-system"],
   output: "standalone",
   turbopack: {
     resolveAlias: {

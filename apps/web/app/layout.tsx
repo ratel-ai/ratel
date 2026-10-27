@@ -1,6 +1,8 @@
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import "@ratel/brand/tokens.css";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Ratel",
@@ -8,17 +10,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body
-        style={{
-          margin: 0,
-          backgroundColor: "var(--ratel-paper)",
-          color: "var(--ratel-ink)",
-          fontFamily: "var(--ratel-font)",
-        }}
-      >
-        {children}
-      </body>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className="m-0 bg-app font-sans text-fg antialiased">{children}</body>
     </html>
   );
 }

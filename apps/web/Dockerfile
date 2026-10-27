@@ -11,6 +11,7 @@ FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/web/package.json apps/web/
 COPY packages/brand/package.json packages/brand/
+COPY packages/design-system/package.json packages/design-system/
 COPY ee/package.json ee/
 
 COPY examples/adaptive-ranking-ts/package.json examples/adaptive-ranking-ts/
@@ -41,10 +42,11 @@ COPY src/telemetry/ts/package.json src/telemetry/ts/
 
 RUN pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
 
-# --- source: app + brand only (ee/ stays out until build-cloud) ------------
+# --- source: app + shared packages only (ee/ stays out until build-cloud) ---
 FROM deps AS source
 COPY apps/web apps/web
 COPY packages/brand packages/brand
+COPY packages/design-system packages/design-system
 COPY scripts/link-ee.mjs scripts/
 
 # --- build-oss: strip commercial routes, never had ee/ source -------------
