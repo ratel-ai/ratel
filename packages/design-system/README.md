@@ -15,8 +15,8 @@ In the app's global stylesheet, after Tailwind:
 
 `styles.css` imports the brand theme, defines the semantic tokens (`bg-app`, `text-fg-muted`,
 `border-line`, `bg-accent`, ...), the z-index scale and the focus floor, and registers the
-components with `@source`, so Tailwind generates their classes. The app must serve the brand
-fonts from `public/fonts/` (see `@ratel/brand`) and add the package to `transpilePackages`.
+components with `@source`, so Tailwind generates their classes. The app adds the package to
+`transpilePackages`.
 
 ```tsx
 import { Button } from "@ratel/design-system/button";

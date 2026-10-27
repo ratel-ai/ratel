@@ -25,8 +25,8 @@ this package.
 | Acid Grotesk (500, 700) | `assets/fonts/acid-grotesk-*.woff2` | display |
 | Geist Pixel Square | `assets/fonts/geist-pixel-square.woff2` | pixel accents |
 
-The `@font-face` rules load `/fonts/*.woff2`, so the app must serve a copy of `assets/fonts/`
-from `public/fonts/`.
+The `@font-face` rules load `assets/fonts/` by relative URL, and the app's bundler emits the
+files as static assets. Nothing to copy.
 
 ## Assets
 

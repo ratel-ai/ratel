@@ -7,10 +7,8 @@
  *   @import "tailwindcss";
  *   @import "@ratel/brand/theme.css";
  *
- * The @font-face rules reference absolute `/fonts/*.woff2` URLs, so the consuming
- * app must self-host the matching woff2 files under its own `public/fonts/`. The
- * canonical copies live in this package at `assets/fonts/` — copy them into the
- * app's `public/fonts/` (the same files power apps/web).
+ * The @font-face rules load the woff2 files in this package's `assets/fonts/` by
+ * relative URL; the app's bundler emits them as static assets.
  *
  * The raw `--ratel-*` brand variables remain in `tokens.css` for non-Tailwind
  * consumers; this file is the Tailwind-flavoured `@theme` mapping of the same
@@ -19,21 +17,21 @@
 
 @font-face {
   font-family: "Acid Grotesk";
-  src: url("/fonts/acid-grotesk-medium.woff2") format("woff2");
+  src: url("../assets/fonts/acid-grotesk-medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Acid Grotesk";
-  src: url("/fonts/acid-grotesk-bold.woff2") format("woff2");
+  src: url("../assets/fonts/acid-grotesk-bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Geist Pixel Square";
-  src: url("/fonts/geist-pixel-square.woff2") format("woff2");
+  src: url("../assets/fonts/geist-pixel-square.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
