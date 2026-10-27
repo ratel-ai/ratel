@@ -1,4 +1,9 @@
-import { Button } from "@ratel/brand/button";
+"use client";
+
+import { Badge } from "@ratel/design-system/badge";
+import { Button } from "@ratel/design-system/button";
+import { type Column, DataTable } from "@ratel/design-system/data-table";
+import { Section } from "@ratel/design-system/section";
 import type { Workspace } from "@/lib/contracts/workspace";
 
 export type WorkspaceCardProps = {
@@ -7,27 +12,33 @@ export type WorkspaceCardProps = {
 };
 
 export function WorkspaceCard({ workspace, workspaces }: WorkspaceCardProps) {
+  const columns: Column<Workspace>[] = [
+    { id: "name", header: "Name", cell: (row) => row.name },
+    {
+      id: "status",
+      header: "Status",
+      width: "8rem",
+      cell: (row) => (row.id === workspace.id ? <Badge tone="accent">Current</Badge> : null),
+    },
+  ];
+
   return (
-    <section
-      style={{
-        marginTop: 32,
-        padding: 24,
-        border: "1px solid var(--ratel-indigo)",
-        borderRadius: "var(--ratel-radius)",
-        maxWidth: 480,
-      }}
+    <Section
+      title="Workspaces"
+      description={`${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"} available`}
+      actions={
+        <>
+          <Button>Manage</Button>
+          <Button variant="primary">Switch workspace</Button>
+        </>
+      }
     >
-      <h2 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 600 }}>Workspace</h2>
-      <p style={{ margin: "0 0 4px" }}>
-        Current: <strong>{workspace.name}</strong>
-      </p>
-      <p style={{ margin: "0 0 20px", opacity: 0.8 }}>
-        {workspaces.length} workspace{workspaces.length === 1 ? "" : "s"} available
-      </p>
-      <div style={{ display: "flex", gap: 12 }}>
-        <Button>Switch workspace</Button>
-        <Button variant="secondary">Manage</Button>
-      </div>
-    </section>
+      <DataTable
+        caption="Workspaces"
+        columns={columns}
+        rows={workspaces}
+        rowKey={(row) => row.id}
+      />
+    </Section>
   );
 }

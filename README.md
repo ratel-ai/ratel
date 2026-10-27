@@ -162,8 +162,8 @@ src/
 apps/
 └── web/                       # @ratel/platform — the Ratel Platform console
 packages/
-├── brand/                     # @ratel/brand — shared design system
-└── sdk/                       # @ratel/ratel — Ratel SDK
+├── brand/                     # @ratel/brand: palette, fonts and logo assets
+└── design-system/             # @ratel/design-system: semantic tokens and UI primitives
 protocol/                      # catalog-source wire contract
 examples/                      # End-to-end SDK examples
 docs/

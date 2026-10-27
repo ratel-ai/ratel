@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@ratel/brand": "workspace:*",
+    "@ratel/design-system": "workspace:*",
     "react": "19.2.4"
   },
   "devDependencies": {
