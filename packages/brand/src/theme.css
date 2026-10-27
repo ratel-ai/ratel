@@ -1,13 +1,13 @@
 /*
  * Ratel shared Tailwind v4 theme — single source of truth for the brand palette,
- * the context-source data-viz colors, and the display/pixel webfonts.
+ * the context-source data-viz colors, and the pixel webfont.
  *
  * Consume from an app's globals.css, after the Tailwind import:
  *
  *   @import "tailwindcss";
  *   @import "@ratel/brand/theme.css";
  *
- * The @font-face rules load the woff2 files in this package's `assets/fonts/` by
+ * The @font-face rule loads the woff2 file in this package's `assets/fonts/` by
  * relative URL; the app's bundler emits them as static assets.
  *
  * The raw `--ratel-*` brand variables remain in `tokens.css` for non-Tailwind
@@ -15,20 +15,6 @@
  * palette plus app-surface shades and fonts.
  */
 
-@font-face {
-  font-family: "Acid Grotesk";
-  src: url("../assets/fonts/acid-grotesk-medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Acid Grotesk";
-  src: url("../assets/fonts/acid-grotesk-bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
 @font-face {
   font-family: "Geist Pixel Square";
   src: url("../assets/fonts/geist-pixel-square.woff2") format("woff2");
@@ -42,8 +28,7 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-display: "Acid Grotesk", var(--font-geist-sans), ui-sans-serif, system-ui,
-    sans-serif;
+  --font-display: var(--font-sans);
   --font-pixel: "Geist Pixel Square", var(--font-geist-mono), ui-monospace, monospace;
 
   /* Brand surfaces + palette (mirrors packages/brand/tokens.css, plus app shades) */

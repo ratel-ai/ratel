@@ -21,12 +21,11 @@ this package.
 
 | Family | File | Role |
 |---|---|---|
-| Geist, Geist Mono | from the `geist` npm package | body and code; the app sets `--font-geist-sans` and `--font-geist-mono` |
-| Acid Grotesk (500, 700) | `assets/fonts/acid-grotesk-*.woff2` | display |
+| Geist, Geist Mono | from the `geist` npm package | body, display and code; the app sets `--font-geist-sans` and `--font-geist-mono` |
 | Geist Pixel Square | `assets/fonts/geist-pixel-square.woff2` | pixel accents |
 
-The `@font-face` rules load `assets/fonts/` by relative URL, and the app's bundler emits the
-files as static assets. Nothing to copy.
+The `@font-face` rule loads `assets/fonts/` by relative URL, and the app's bundler emits the
+file as a static asset. Nothing to copy.
 
 ## Assets
 
