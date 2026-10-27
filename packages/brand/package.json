@@ -1,13 +1,13 @@
 {
   "name": "@ratel/brand",
   "version": "0.1.0",
-  "description": "Shared brand tokens and components for both Ratel editions.",
   "private": true,
+  "description": "Shared brand tokens and components for both Ratel editions.",
   "type": "module",
-  "license": "MIT",
   "exports": {
     "./tokens.css": "./src/tokens.css",
-    "./button": "./src/button.tsx"
+    "./theme.css": "./src/theme.css",
+    "./assets/*": "./assets/*"
   },
   "peerDependencies": {
     "react": "19.2.4"
@@ -16,6 +16,10 @@
     "@types/react": "^19"
   },
   "scripts": {
-    "lint": "biome check src"
-  }
+    "lint": "biome check . --no-errors-on-unmatched"
+  },
+  "files": [
+    "src",
+    "assets"
+  ]
 }
