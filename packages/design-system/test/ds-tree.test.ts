@@ -17,11 +17,11 @@ const NODES: readonly TreeModelNode[] = [
     label: "Tools",
     children: [
       {
-        id: "kestral",
-        label: "kestral",
+        id: "kanban",
+        label: "kanban",
         children: [
-          { id: "k1", label: "kestral_create_task" },
-          { id: "k2", label: "kestral_update_task" },
+          { id: "k1", label: "kanban_create_task" },
+          { id: "k2", label: "kanban_update_task" },
         ],
       },
       { id: "ripgrep", label: "ripgrep" },
@@ -35,10 +35,10 @@ const ids = (expanded: string[]) =>
 
 test("only the roots and the children of open nodes are visible, depth first", () => {
   assert.deepEqual(ids([]), ["tools", "skills"]);
-  assert.deepEqual(ids(["tools"]), ["tools", "kestral", "ripgrep", "skills"]);
-  assert.deepEqual(ids(["tools", "kestral", "skills"]), [
+  assert.deepEqual(ids(["tools"]), ["tools", "kanban", "ripgrep", "skills"]);
+  assert.deepEqual(ids(["tools", "kanban", "skills"]), [
     "tools",
-    "kestral",
+    "kanban",
     "k1",
     "k2",
     "ripgrep",
@@ -46,14 +46,14 @@ test("only the roots and the children of open nodes are visible, depth first", (
     "s1",
   ]);
   assert.deepEqual(
-    ids(["kestral"]),
+    ids(["kanban"]),
     ["tools", "skills"],
     "a child stays hidden while its parent is closed",
   );
 });
 
 test("each row knows its level, its place among its siblings and its parent", () => {
-  const rows = visibleTreeRows(NODES, new Set(["tools", "kestral"]));
+  const rows = visibleTreeRows(NODES, new Set(["tools", "kanban"]));
   const k2 = rows.find((row) => row.node.id === "k2");
   assert.deepEqual(
     k2 && {
@@ -63,7 +63,7 @@ test("each row knows its level, its place among its siblings and its parent", ()
       parentId: k2.parentId,
       expandable: k2.expandable,
     },
-    { level: 3, setSize: 2, posInSet: 2, parentId: "kestral", expandable: false },
+    { level: 3, setSize: 2, posInSet: 2, parentId: "kanban", expandable: false },
   );
   const tools = rows[0];
   assert.equal(tools.expanded, true);
@@ -71,8 +71,8 @@ test("each row knows its level, its place among its siblings and its parent", ()
 });
 
 test("up and down walk the visible rows and stop at both ends", () => {
-  const rows = visibleTreeRows(NODES, new Set(["tools", "kestral"]));
-  assert.deepEqual(treeKeyAction(rows, "kestral", "ArrowDown"), { type: "focus", id: "k1" });
+  const rows = visibleTreeRows(NODES, new Set(["tools", "kanban"]));
+  assert.deepEqual(treeKeyAction(rows, "kanban", "ArrowDown"), { type: "focus", id: "k1" });
   assert.deepEqual(treeKeyAction(rows, "ripgrep", "ArrowUp"), { type: "focus", id: "k2" });
   assert.equal(treeKeyAction(rows, "tools", "ArrowUp"), null);
   assert.equal(treeKeyAction(rows, "skills", "ArrowDown"), null);
@@ -80,32 +80,32 @@ test("up and down walk the visible rows and stop at both ends", () => {
 
 test("right opens a closed node, then steps to its first child; on a leaf it does nothing", () => {
   const closed = visibleTreeRows(NODES, new Set(["tools"]));
-  assert.deepEqual(treeKeyAction(closed, "kestral", "ArrowRight"), {
+  assert.deepEqual(treeKeyAction(closed, "kanban", "ArrowRight"), {
     type: "expand",
-    id: "kestral",
+    id: "kanban",
   });
-  const open = visibleTreeRows(NODES, new Set(["tools", "kestral"]));
-  assert.deepEqual(treeKeyAction(open, "kestral", "ArrowRight"), { type: "focus", id: "k1" });
+  const open = visibleTreeRows(NODES, new Set(["tools", "kanban"]));
+  assert.deepEqual(treeKeyAction(open, "kanban", "ArrowRight"), { type: "focus", id: "k1" });
   assert.equal(treeKeyAction(open, "k1", "ArrowRight"), null);
 });
 
 test("left closes an open node, otherwise steps out to the parent", () => {
-  const rows = visibleTreeRows(NODES, new Set(["tools", "kestral"]));
-  assert.deepEqual(treeKeyAction(rows, "kestral", "ArrowLeft"), {
+  const rows = visibleTreeRows(NODES, new Set(["tools", "kanban"]));
+  assert.deepEqual(treeKeyAction(rows, "kanban", "ArrowLeft"), {
     type: "collapse",
-    id: "kestral",
+    id: "kanban",
   });
-  assert.deepEqual(treeKeyAction(rows, "k2", "ArrowLeft"), { type: "focus", id: "kestral" });
+  assert.deepEqual(treeKeyAction(rows, "k2", "ArrowLeft"), { type: "focus", id: "kanban" });
   assert.deepEqual(treeKeyAction(rows, "ripgrep", "ArrowLeft"), { type: "focus", id: "tools" });
   assert.equal(treeKeyAction(rows, "skills", "ArrowLeft"), null, "a closed root has nowhere to go");
 });
 
 test("Home and End jump; Enter and Space select a leaf and toggle a parent", () => {
-  const rows = visibleTreeRows(NODES, new Set(["tools", "kestral"]));
+  const rows = visibleTreeRows(NODES, new Set(["tools", "kanban"]));
   assert.deepEqual(treeKeyAction(rows, "k2", "Home"), { type: "focus", id: "tools" });
   assert.deepEqual(treeKeyAction(rows, "k2", "End"), { type: "focus", id: "skills" });
   assert.deepEqual(treeKeyAction(rows, "k2", "Enter"), { type: "select", id: "k2" });
-  assert.deepEqual(treeKeyAction(rows, "kestral", "Enter"), { type: "toggle", id: "kestral" });
+  assert.deepEqual(treeKeyAction(rows, "kanban", "Enter"), { type: "toggle", id: "kanban" });
   assert.deepEqual(treeKeyAction(rows, "ripgrep", " "), { type: "select", id: "ripgrep" });
   assert.equal(treeKeyAction(rows, "k2", "x"), null, "letters belong to typeahead");
   assert.equal(treeKeyAction([], "k2", "ArrowDown"), null);
@@ -117,14 +117,14 @@ test("Home and End jump; Enter and Space select a leaf and toggle a parent", () 
 });
 
 test("typeahead finds the next row by its first letters and wraps around", () => {
-  const rows = visibleTreeRows(NODES, new Set(["tools", "kestral", "skills"]));
-  assert.equal(treeTypeahead(rows, "tools", "k"), "kestral");
-  assert.equal(treeTypeahead(rows, "kestral", "k"), "k1", "the same letter again moves on");
+  const rows = visibleTreeRows(NODES, new Set(["tools", "kanban", "skills"]));
+  assert.equal(treeTypeahead(rows, "tools", "k"), "kanban");
+  assert.equal(treeTypeahead(rows, "kanban", "k"), "k1", "the same letter again moves on");
   assert.equal(treeTypeahead(rows, "k1", "kk"), "k2", "a repeated letter cycles");
-  assert.equal(treeTypeahead(rows, "kestral", "kestral_u"), "k2");
+  assert.equal(treeTypeahead(rows, "kanban", "kanban_u"), "k2");
   assert.equal(
-    treeTypeahead(rows, "kestral", "kes"),
-    "kestral",
+    treeTypeahead(rows, "kanban", "kan"),
+    "kanban",
     "a longer word keeps a row that still matches",
   );
   assert.equal(treeTypeahead(rows, "s1", "t"), "tools", "wraps past the end");
@@ -149,12 +149,12 @@ test("the one tab stop follows focus, falls back to the selection, then to the f
 });
 
 test("paths, open sets and expandable ids", () => {
-  assert.deepEqual(treePath(NODES, "k2"), ["tools", "kestral"]);
+  assert.deepEqual(treePath(NODES, "k2"), ["tools", "kanban"]);
   assert.deepEqual(treePath(NODES, "tools"), []);
   assert.equal(treePath(NODES, "nope"), null);
-  assert.deepEqual(expandableIds(NODES), ["tools", "kestral", "skills"]);
+  assert.deepEqual(expandableIds(NODES), ["tools", "kanban", "skills"]);
   const open = new Set(["tools"]);
-  assert.deepEqual([...withExpanded(open, "kestral", true)], ["tools", "kestral"]);
+  assert.deepEqual([...withExpanded(open, "kanban", true)], ["tools", "kanban"]);
   assert.deepEqual([...withExpanded(open, "tools", false)], []);
   assert.deepEqual([...open], ["tools"], "the original set is left alone");
 });

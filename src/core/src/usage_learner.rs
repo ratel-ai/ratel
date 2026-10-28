@@ -692,7 +692,7 @@ impl UsageLearner {
     /// least: it says retrieval missed, and teaching that query→capability edge
     /// is how the usage arm repairs a miss. Dropping it would leave adaptive
     /// ranking able only to reinforce what retrieval already surfaces, which is
-    /// the opposite of why it exists. Measured on Kestral's 400 calibration
+    /// the opposite of why it exists. Measured on a design partner's 400 calibration
     /// turns, dropping cost 4.6% relative nDCG@5 — 10% of those turns invoke a
     /// tool BM25 did not return.
     ///
@@ -1388,7 +1388,7 @@ mod tests {
         // That is the one observation able to REPAIR a miss — teaching this
         // query -> capability edge is why ranking on usage exists at all — so it
         // attributes to the newest window rather than being dropped. Dropping it
-        // cost 4.6% relative nDCG@5 on Kestral's 400 calibration turns, 10% of
+        // cost 4.6% relative nDCG@5 on a design partner's 400 calibration turns, 10% of
         // which invoke a tool BM25 never returned.
         let (l, graph) = learner();
         turn_search(&l, "t1", "read issues on github", &["read_github_issues"]);

@@ -517,7 +517,7 @@ inspect it, and only then enable ranking.**
   the agent reached past everything retrieval offered, so attribute nothing — but it discards the
   single most valuable observation the arm can get: retrieval missed, and *this* is what the query
   wanted. That edge is how a miss gets repaired; without it the arm can only reinforce what
-  retrieval already surfaces, which inverts why this ADR exists. Measured on Kestral's 400
+  retrieval already surfaces, which inverts why this ADR exists. Measured on a design partner's 400
   calibration turns, where 10% invoke a tool BM25 did not return, dropping cost 4.6% relative
   nDCG@5 (0.592 → 0.565) and cut improved turns from 54 to 36. The fallback is a guess only when a
   turn has several windows and none offered the id; with one window it is not a guess at all.
