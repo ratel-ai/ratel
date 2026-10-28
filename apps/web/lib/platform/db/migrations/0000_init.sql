@@ -49,7 +49,6 @@ CREATE TABLE "api_keys" (
 	"name" text,
 	"key_hash" text NOT NULL,
 	"key_prefix" text NOT NULL,
-	"key_plaintext" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"last_used_at" timestamp with time zone,
 	"revoked_at" timestamp with time zone,

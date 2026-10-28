@@ -45,7 +45,6 @@ function key(plaintext: string, over: Partial<schema.NewApiKey> = {}): schema.Ne
     projectId: PROJECT_ID,
     keyHash: hashApiKey(plaintext),
     keyPrefix: plaintext.slice(0, 12),
-    keyPlaintext: plaintext,
     ...over,
   };
 }

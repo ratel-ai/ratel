@@ -56,9 +56,9 @@ export const apiKeys = pgTable(
     keyHash: text("key_hash").notNull(),
     // Human-recognizable prefix (e.g. "rtl_live_ab12") shown in the console.
     keyPrefix: text("key_prefix").notNull(),
-    // Full plaintext key, retained so the settings page can reveal it on demand. Nullable:
-    // keys issued before this column existed only have the hash and prefix.
-    keyPlaintext: text("key_plaintext"),
+    // No plaintext column: a key is shown once, at creation, and only its hash and prefix are
+    // stored, so a database dump or a read replica never holds a working key. Upstream kept
+    // the plaintext for a "reveal" affordance; here the settings page offers "regenerate".
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
