@@ -1,5 +1,4 @@
 [
   "runtime.ts:@/lib/composition",
-  "runtime.ts:@/lib/contracts/identity",
-  "runtime.ts:@/lib/contracts/workspace"
+  "runtime.ts:@/lib/contracts/session"
 ]

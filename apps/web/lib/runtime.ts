@@ -1,31 +1,24 @@
 import type { NavItem } from "@/lib/composition";
 import { composition } from "@/lib/composition";
-import type { Principal } from "@/lib/contracts/identity";
-import type { Workspace } from "@/lib/contracts/workspace";
+import type { Principal } from "@/lib/contracts/session";
 
 export type Runtime = {
   edition: string;
   principal: Principal | null;
-  workspace: Workspace;
-  workspaces: Workspace[];
+  planId: string | null;
   nav: NavItem[];
 };
 
 /**
- * Single seam the UI reads. This is the only module that adapts ports to UI shape.
+ * Single seam the spike UI reads. This is the only module that adapts ports to UI shape; the
+ * console pages that arrive from ratel-cloud read `lib/platform/session.ts` instead.
  */
 export async function getRuntime(): Promise<Runtime> {
-  const [principal, workspace, workspaces] = await Promise.all([
-    composition.identity.resolvePrincipal(),
-    composition.workspace.currentWorkspace(),
-    composition.workspace.listWorkspaces(),
-  ]);
-
+  const principal = await composition.session.resolvePrincipal();
   return {
     edition: composition.edition,
     principal,
-    workspace,
-    workspaces,
+    planId: principal ? composition.entitlements.planId({ id: "runtime" }) : null,
     nav: composition.nav,
   };
 }
