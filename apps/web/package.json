@@ -11,7 +11,11 @@
     "typecheck": "node ../../scripts/link-ee.mjs --auto && tsc --noEmit",
     "lint": "biome check app components lib scripts",
     "test": "tsx --test --test-force-exit ${TEST_SHARD:+--test-shard=$TEST_SHARD} \"lib/**/*.test.ts\" \"app/**/*.test.ts\" \"scripts/**/*.test.mjs\"",
-    "check:ds-tokens": "node scripts/check-ds-tokens.mjs"
+    "check:ds-tokens": "node scripts/check-ds-tokens.mjs",
+    "migrate": "tsx scripts/migrate.mts",
+    "db:regenerate": "node scripts/db-regenerate.mjs",
+    "db:check": "node scripts/db-regenerate.mjs --check",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",

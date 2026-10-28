@@ -33,7 +33,12 @@ describe("oss entitlements", () => {
   });
 
   it("keeps every metered feature available with unlimited remaining budget", () => {
-    const access = ossEntitlements.checkMeteredFeature(org, "matchQualityRunsPerMonth", 99, "Match quality");
+    const access = ossEntitlements.checkMeteredFeature(
+      org,
+      "matchQualityRunsPerMonth",
+      99,
+      "Match quality",
+    );
     assert.equal(access.ok, true);
     if (access.ok) assert.equal(access.remaining, Number.POSITIVE_INFINITY);
   });
@@ -77,7 +82,9 @@ describe("oss telemetry", () => {
   it("reports exceptions without throwing", () => {
     const { logger, lines } = capture();
     const telemetry = createOssTelemetry(logger);
-    assert.doesNotThrow(() => telemetry.reportException(new Error("boom"), "system:drain", { step: "x" }));
+    assert.doesNotThrow(() =>
+      telemetry.reportException(new Error("boom"), "system:drain", { step: "x" }),
+    );
     assert.equal(lines[0].msg, "exception");
     assert.equal(lines[0].distinct_id, "system:drain");
   });
@@ -90,7 +97,10 @@ describe("oss embedding provider", () => {
     const [a, b, empty] = await provider.embed(["refund my order", "my order refund", ""]);
     assert.equal(a.length, LOCAL_EMBEDDING_DIMENSIONS);
     assert.deepEqual(a, localEmbedding("refund my order"));
-    assert.deepEqual(a.map((v) => v.toFixed(6)), b.map((v) => v.toFixed(6)));
+    assert.deepEqual(
+      a.map((v) => v.toFixed(6)),
+      b.map((v) => v.toFixed(6)),
+    );
     assert.ok(empty.every((v) => v === 0));
   });
 
@@ -98,13 +108,26 @@ describe("oss embedding provider", () => {
     const calls: Array<{ url: string; body: unknown; auth: string | null }> = [];
     const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
-      calls.push({ url: String(url), body: JSON.parse(String(init?.body)), auth: headers.get("authorization") });
+      calls.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body)),
+        auth: headers.get("authorization"),
+      });
       return new Response(
-        JSON.stringify({ data: [{ index: 1, embedding: [2] }, { index: 0, embedding: [1] }] }),
+        JSON.stringify({
+          data: [
+            { index: 1, embedding: [2] },
+            { index: 0, embedding: [1] },
+          ],
+        }),
         { status: 200 },
       );
     }) as typeof fetch;
-    const provider = createOpenAiEmbeddingProvider({ apiKey: "sk-test", baseUrl: "https://gw.example/v1/", fetch: fakeFetch });
+    const provider = createOpenAiEmbeddingProvider({
+      apiKey: "sk-test",
+      baseUrl: "https://gw.example/v1/",
+      fetch: fakeFetch,
+    });
     assert.equal(provider.local, false);
     assert.deepEqual(await provider.embed(["a", "b"]), [[1], [2]]);
     assert.equal(calls[0].url, "https://gw.example/v1/embeddings");
@@ -113,7 +136,10 @@ describe("oss embedding provider", () => {
   });
 
   it("selects the OpenAI provider from the environment", () => {
-    const provider = embeddingProviderFromEnv({ OPENAI_API_KEY: "sk", OPENAI_EMBEDDING_MODEL: "m" });
+    const provider = embeddingProviderFromEnv({
+      OPENAI_API_KEY: "sk",
+      OPENAI_EMBEDDING_MODEL: "m",
+    });
     assert.equal(provider.local, false);
     assert.equal(provider.model, "m");
   });

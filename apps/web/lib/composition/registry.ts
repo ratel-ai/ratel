@@ -16,7 +16,9 @@ export function collectRegistrations(
 }
 
 /** Every job kind with its handler; a kind registered twice is a configuration error. */
-export function jobHandlers(registrations: Registration[] = collectRegistrations()): Record<string, JobHandler> {
+export function jobHandlers(
+  registrations: Registration[] = collectRegistrations(),
+): Record<string, JobHandler> {
   const out: Record<string, JobHandler> = {};
   for (const r of registrations) {
     for (const [kind, handler] of Object.entries(r.jobs ?? {})) {

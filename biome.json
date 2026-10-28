@@ -40,6 +40,16 @@
   },
   "overrides": [
     {
+      "includes": ["apps/web/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "warn"
+          }
+        }
+      }
+    },
+    {
       "includes": [
         "apps/web/lib/**",
         "apps/web/app/**",

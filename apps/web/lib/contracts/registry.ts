@@ -20,7 +20,7 @@ export type DrainStep = {
   phase: "before" | "after";
   /** Runs only when the operator has turned retention deletion on. */
   retentionOnly?: boolean;
-  run(): Promise<Record<string, unknown> | number | void>;
+  run(): Promise<Record<string, unknown> | number | undefined>;
 };
 
 export type Registration = {

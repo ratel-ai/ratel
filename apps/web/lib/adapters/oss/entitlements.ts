@@ -1,8 +1,4 @@
-import type {
-  EntitlementsPort,
-  OrgLimitView,
-  PlanLimits,
-} from "@/lib/contracts/entitlements";
+import type { EntitlementsPort, OrgLimitView, PlanLimits } from "@/lib/contracts/entitlements";
 
 export const OSS_PLAN_ID = "oss";
 

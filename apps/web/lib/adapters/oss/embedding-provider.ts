@@ -52,7 +52,9 @@ export type OpenAiEmbeddingOptions = {
   fetch?: typeof fetch;
 };
 
-export function createOpenAiEmbeddingProvider(options: OpenAiEmbeddingOptions): EmbeddingProviderPort {
+export function createOpenAiEmbeddingProvider(
+  options: OpenAiEmbeddingOptions,
+): EmbeddingProviderPort {
   const model = options.model ?? DEFAULT_OPENAI_EMBEDDING_MODEL;
   const baseUrl = (options.baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
   const doFetch = options.fetch ?? fetch;
@@ -73,10 +75,14 @@ export function createOpenAiEmbeddingProvider(options: OpenAiEmbeddingOptions): 
       if (!response.ok) {
         throw new Error(`embeddings endpoint answered ${response.status}`);
       }
-      const body = (await response.json()) as { data?: Array<{ index: number; embedding: number[] }> };
+      const body = (await response.json()) as {
+        data?: Array<{ index: number; embedding: number[] }>;
+      };
       const rows = [...(body.data ?? [])].sort((a, b) => a.index - b.index);
       if (rows.length !== texts.length) {
-        throw new Error(`embeddings endpoint returned ${rows.length} vectors for ${texts.length} texts`);
+        throw new Error(
+          `embeddings endpoint returned ${rows.length} vectors for ${texts.length} texts`,
+        );
       }
       return rows.map((row) => row.embedding);
     },

@@ -144,7 +144,10 @@ describe("registry root", () => {
       },
     ];
     const registrations = [...core, ...cloudPorts.registry.registrations()];
-    assert.deepEqual(Object.keys(jobHandlers(registrations)).sort(), ["cluster_intents", "grant_allowances"]);
+    assert.deepEqual(Object.keys(jobHandlers(registrations)).sort(), [
+      "cluster_intents",
+      "grant_allowances",
+    ]);
     assert.deepEqual(
       drainSteps(registrations).map((s) => s.name),
       ["enqueue_folds", "prune_spans", "stripe_sync"],

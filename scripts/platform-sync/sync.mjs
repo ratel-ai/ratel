@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findPrivateStrings, loadPatterns } from "./private-strings.mjs";
-import { buildRules, rewriteSpecifiers } from "./rewrite-imports.mjs";
+import { buildRules, rewriteSource } from "./rewrite-imports.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "..", "..");
@@ -47,14 +47,36 @@ function expand(entry, sourceRoot) {
   });
 }
 
+/** Format one file's content the way the repository's biome would, so a plan compares like with like. */
+export function formatWithBiome(repoRoot, path, content) {
+  try {
+    // `check --write` applies the safe fixes (import sorting) as well as formatting, which is what
+    // a committed file has been through.
+    return execFileSync("pnpm", ["exec", "biome", "check", "--write", "--stdin-file-path", path], {
+      cwd: repoRoot,
+      input: content,
+      stdio: ["pipe", "pipe", "ignore"],
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch {
+    return content; // biome refused the file (a parse error); the raw copy lands and lint reports it
+  }
+}
+
 /**
  * Plan a sync without touching the tree. Returns the actions and the report; `apply` writes them.
+ * With `format`, code is formatted before comparison, so a tree biome already formatted is in sync.
  */
-export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patterns = [], only = null }) {
+export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patterns = [], only = null, format = false }) {
   const entries = map.entries.filter((e) => !only || under(e.to ?? e.from, only) || under(e.from, only));
   const excluded = map.entries.filter((e) => e.mode === "excluded").map((e) => e.from);
   const ownedByTo = new Map(map.entries.filter((e) => e.mode === "owned").map((e) => [e.to, e]));
-  const rules = buildRules(map, rewrites);
+  const codemod = {
+    rules: buildRules(map, rewrites),
+    partitions: rewrites?.partitions ?? {},
+    identifiers: rewrites?.identifiers ?? {},
+    entries: map.entries,
+  };
 
   const writes = new Map(); // to -> { from, content }
   const report = { copied: [], updated: [], deleted: [], ownedBootstrapped: [], ownedKept: [], unmapped: [], privateHits: [] };
@@ -65,9 +87,10 @@ export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patt
     const src = join(sourceRoot, pair.from);
     let content = readFileSync(src);
     if (CODE.test(pair.from)) {
-      const { code, unmapped } = rewriteSpecifiers(content.toString("utf8"), rules);
+      const { code, unmapped } = rewriteSource(content.toString("utf8"), codemod, pair.from);
       content = Buffer.from(code, "utf8");
       for (const u of unmapped) report.unmapped.push({ path: pair.to, specifier: u });
+      if (format) content = Buffer.from(formatWithBiome(repoRoot, pair.to, content));
     }
     for (const h of findPrivateStrings(content.toString("utf8"), patterns)) {
       report.privateHits.push({ path: pair.to, from: pair.from, ...h });
@@ -143,14 +166,6 @@ export function ownedDrift({ sourceRoot, map, sinceCommit }) {
   return git(sourceRoot, ["diff", "--stat", `${sinceCommit}..HEAD`, "--", ...paths]) ?? "";
 }
 
-function formatFiles(repoRoot, files) {
-  if (files.length === 0) return;
-  execFileSync("pnpm", ["exec", "biome", "check", "--write", "--no-errors-on-unmatched", ...files], {
-    cwd: repoRoot,
-    stdio: "inherit",
-  });
-}
-
 function printReport(report, drift) {
   const list = (title, items) => {
     if (items.length === 0) return;
@@ -182,7 +197,7 @@ if (process.argv[1] != null && resolve(process.argv[1]) === fileURLToPath(import
   const sourcePath = join(SCRIPT_DIR, "source.json");
   const source = existsSync(sourcePath) ? JSON.parse(readFileSync(sourcePath, "utf8")) : {};
 
-  const { actions, report } = planSync({ sourceRoot, map, rewrites, patterns, only });
+  const { actions, report } = planSync({ sourceRoot, map, rewrites, patterns, only, format });
   const drift = ownedDrift({ sourceRoot, map, sinceCommit: source.commit });
   printReport(report, drift);
   if (report.privateHits.length > 0) process.exit(1);
@@ -195,7 +210,6 @@ if (process.argv[1] != null && resolve(process.argv[1]) === fileURLToPath(import
     process.exit(0);
   }
   applySync(actions);
-  if (format) formatFiles(REPO_ROOT, actions.filter((a) => a.kind === "write" && CODE.test(a.to)).map((a) => a.to));
   const commit = git(sourceRoot, ["rev-parse", "HEAD"]);
   if (commit && !only) {
     writeFileSync(sourcePath, `${JSON.stringify({ ...source, commit, syncedAt: new Date().toISOString().slice(0, 10) }, null, 2)}\n`);
