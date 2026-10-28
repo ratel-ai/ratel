@@ -10,14 +10,17 @@ export function createOssTelemetry(logger: Logger = defaultLogger()): TelemetryP
   return {
     async trackEvent(name, context, properties = {}) {
       try {
-        logger.info({ event: name, ...context, ...numericOnly(properties) }, "event");
+        logger.info({ event: name, ...safeFields(context), ...safeFields(properties) }, "event");
       } catch {
         // Never into the caller.
       }
     },
     reportException(error, distinctId, properties = {}) {
       try {
-        logger.error({ err: error, distinct_id: distinctId, ...properties }, "exception");
+        logger.error(
+          { err: error, ...safeFields({ distinct_id: distinctId, ...properties }) },
+          "exception",
+        );
       } catch {
         // Never into the caller.
       }
@@ -25,8 +28,12 @@ export function createOssTelemetry(logger: Logger = defaultLogger()): TelemetryP
   };
 }
 
-/** Keep the primitive properties; drop objects and strings that could carry content. */
-function numericOnly(properties: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Keep numbers, booleans and short id-like strings; drop objects and any string that could
+ * carry content. Applied to every input, context and exception properties included, because
+ * this filter is the guarantee the file header makes.
+ */
+function safeFields(properties: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(properties)) {
     if (typeof value === "number" || typeof value === "boolean") out[key] = value;

@@ -106,10 +106,16 @@ export async function runDrainTick(deps: DrainCronDeps = defaultDeps()): Promise
   return result;
 }
 
-/** GET /api/cron/drain: guarded by `CRON_SECRET` when set, then one tick. */
+/**
+ * GET /api/cron/drain: one tick for an external scheduler. Closed unless `CRON_SECRET` is set
+ * and presented as a bearer: an open route would let any caller drive background work,
+ * including jobs that spend the operator's model keys. The open-source edition never needs
+ * the route, its scheduler runs the tick in process.
+ */
 export async function drainCron(req: Request, deps?: DrainCronDeps): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) {
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) return new Response("CRON_SECRET is not configured", { status: 401 });
+  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
     return new Response("Unauthorized", { status: 401 });
   }
   const summary = await runDrainTick(deps);

@@ -149,13 +149,26 @@ test("the heartbeat event always fires, flat numbers included, and a drain failu
   assert.equal(second.events[0]?.properties.error, "database gone");
 });
 
-test("the route rejects a caller without the bearer when CRON_SECRET is set", async () => {
+test("the route is closed without a configured secret, and to a caller without the bearer", async () => {
   const previous = process.env.CRON_SECRET;
-  process.env.CRON_SECRET = "s3cret";
+  let ticks = 0;
+  const deps = tick([], {
+    observability: observability().deps,
+    drainProjectJobs: async () => {
+      ticks++;
+      return { done: 0, failed: 0 };
+    },
+  });
   try {
-    const deps = tick([], { observability: observability().deps });
+    delete process.env.CRON_SECRET;
+    const closed = await drainCron(new Request("http://localhost/api/cron/drain"), deps);
+    assert.equal(closed.status, 401);
+    assert.equal(ticks, 0, "no secret, no tick");
+
+    process.env.CRON_SECRET = "s3cret";
     const denied = await drainCron(new Request("http://localhost/api/cron/drain"), deps);
     assert.equal(denied.status, 401);
+    assert.equal(ticks, 0);
 
     const allowed = await drainCron(
       new Request("http://localhost/api/cron/drain", {
@@ -165,6 +178,7 @@ test("the route rejects a caller without the bearer when CRON_SECRET is set", as
     );
     assert.equal(allowed.status, 200);
     assert.equal(((await allowed.json()) as { ok: boolean }).ok, true);
+    assert.equal(ticks, 1);
   } finally {
     if (previous === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = previous;
@@ -173,10 +187,12 @@ test("the route rejects a caller without the bearer when CRON_SECRET is set", as
 
 test("a failed tick answers 500 so an external scheduler can alert on it", async () => {
   const previous = process.env.CRON_SECRET;
-  delete process.env.CRON_SECRET;
+  process.env.CRON_SECRET = "s3cret";
   try {
     const res = await drainCron(
-      new Request("http://localhost/api/cron/drain"),
+      new Request("http://localhost/api/cron/drain", {
+        headers: { authorization: "Bearer s3cret" },
+      }),
       tick([], {
         observability: observability().deps,
         drainProjectJobs: async () => {
@@ -186,7 +202,8 @@ test("a failed tick answers 500 so an external scheduler can alert on it", async
     );
     assert.equal(res.status, 500);
   } finally {
-    if (previous !== undefined) process.env.CRON_SECRET = previous;
+    if (previous === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previous;
   }
 });
 

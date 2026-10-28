@@ -1,4 +1,3 @@
-import { Badge } from "@ratel/design-system/badge";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { getRuntime } from "@/lib/runtime";
@@ -16,7 +15,7 @@ export default async function HomePage() {
       <PageHeader title={runtime.edition} description={principal?.name ?? undefined} />
       <PageBody>
         <Section title="Signed in" description={principal?.email ?? "No principal"}>
-          {runtime.planId ? <Badge tone="accent">{runtime.planId}</Badge> : null}
+          {principal?.username ?? "No session"}
         </Section>
       </PageBody>
     </Page>

@@ -90,6 +90,40 @@ describe("oss telemetry", () => {
   });
 });
 
+describe("oss telemetry content guard", () => {
+  function capture() {
+    const lines: Array<Record<string, unknown>> = [];
+    const logger = pino(
+      { level: "info" },
+      { write: (line: string) => void lines.push(JSON.parse(line)) },
+    );
+    return { logger, lines };
+  }
+
+  it("drops content-shaped strings from the context and from exception properties too", async () => {
+    const { logger, lines } = capture();
+    const telemetry = createOssTelemetry(logger);
+    await telemetry.trackEvent(
+      "query_intents_clustered",
+      { distinctId: "project:p1", orgId: "how do I cancel my order", projectId: "p1" },
+      { members: ["refund my order"], count: 2, label: "cancel an order" },
+    );
+    telemetry.reportException(new Error("boom"), "system:jobs", {
+      step: "prune",
+      query: "where is my refund",
+      nested: { prompt: "..." },
+    });
+    const [event, exception] = lines;
+    assert.equal(event.distinctId, "project:p1");
+    assert.equal(event.projectId, "p1");
+    assert.equal(event.count, 2);
+    for (const key of ["orgId", "members", "label"]) assert.ok(!(key in event), `${key} leaked`);
+    assert.equal(exception.distinct_id, "system:jobs");
+    assert.equal(exception.step, "prune");
+    for (const key of ["query", "nested"]) assert.ok(!(key in exception), `${key} leaked`);
+  });
+});
+
 describe("oss embedding provider", () => {
   it("falls back to the local hash without a key and labels it local", async () => {
     const provider = embeddingProviderFromEnv({});

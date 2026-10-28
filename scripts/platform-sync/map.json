@@ -59,7 +59,7 @@
     { "from": "apps/web/lib/db/jobs-claim-bound.integration.test.ts", "to": "apps/web/lib/jobs/claim-bound.integration.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/db/jobs-reaper.integration.test.ts", "to": "apps/web/lib/jobs/reaper.integration.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/db/jobs-fold-coalesce.integration.test.ts", "mode": "excluded", "$why": "needs the intent-graph fold enqueue; copy in slice 8" },
-    { "from": "apps/web/app/api/cron/drain/route.ts", "to": "apps/web/app/api/cron/drain/route.ts", "mode": "copy" },
+    { "from": "apps/web/app/api/cron/drain/route.ts", "to": "apps/web/app/api/cron/drain/route.ts", "mode": "owned", "$why": "documents the in-process scheduler, not EventBridge" },
     { "from": "apps/web/lib/stripe", "mode": "excluded" },
     { "from": "apps/web/lib/billing", "mode": "excluded" },
     { "from": "apps/web/lib/auth", "mode": "excluded" },

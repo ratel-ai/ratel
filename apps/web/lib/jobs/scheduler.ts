@@ -95,3 +95,14 @@ export function inProcessCronEnabled(
   if (mode === "external") return false;
   return (env.RATEL_COMPOSITION || "oss") === "oss";
 }
+
+/**
+ * An external scheduler can only reach the drain with `CRON_SECRET`, so a deployment that
+ * relies on one without a secret would never run a tick. Refuse to boot instead.
+ */
+export function assertCronConfig(env: Record<string, string | undefined> = process.env): void {
+  if (inProcessCronEnabled(env) || env.CRON_SECRET?.trim()) return;
+  throw new Error(
+    "RATEL_CRON=external needs CRON_SECRET: without it GET /api/cron/drain answers 401 and no tick ever runs",
+  );
+}

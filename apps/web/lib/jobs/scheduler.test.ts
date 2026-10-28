@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  assertCronConfig,
   createScheduler,
   DEFAULT_INTERVAL_MS,
   inProcessCronEnabled,
@@ -162,6 +163,18 @@ test("the process-global start is idempotent across module reloads", async () =>
     stopInProcessScheduler();
   }
   assert.equal(timers.cleared, 1);
+});
+
+test("an external scheduler without a secret is a boot error; in-process needs none", () => {
+  assert.throws(() => assertCronConfig({ RATEL_CRON: "external" }), /CRON_SECRET/);
+  assert.throws(() => assertCronConfig({ RATEL_COMPOSITION: "cloud" }), /CRON_SECRET/);
+  assert.throws(
+    () => assertCronConfig({ RATEL_CRON: "external", CRON_SECRET: "  " }),
+    /CRON_SECRET/,
+  );
+  assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "external", CRON_SECRET: "s" }));
+  assert.doesNotThrow(() => assertCronConfig({}));
+  assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "inprocess" }));
 });
 
 test("RATEL_CRON decides where the tick runs; unset means in process for the open-source edition", () => {
