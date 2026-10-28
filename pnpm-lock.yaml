@@ -201,13 +201,31 @@ importers:
       '@ratel/design-system':
         specifier: workspace:*
         version: link:../packages/design-system
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.4(@electric-sql/pglite@0.5.12)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.1)
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.1
       react:
         specifier: 19.2.4
         version: 19.2.4
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.3
+        version: 0.5.12
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
       '@types/react':
         specifier: ^19
         version: 19.3.0
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.11
+      tsx:
+        specifier: ^4.20.6
+        version: 4.21.0
 
   examples/adaptive-ranking-ts:
     dependencies:
