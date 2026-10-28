@@ -1,0 +1,12 @@
+{
+  "$comment": "Explicit import-specifier rules; apps/web/lib moves are derived from map.json. Longest `from` wins.",
+  "rules": [
+    {
+      "from": "@/components/ds/",
+      "to": "@ratel/design-system/",
+      "except": ["@/components/ds/entity", "@/components/ds/dot-loader"]
+    },
+    { "from": "@/lib/utils", "to": "@ratel/design-system/cn", "exact": true },
+    { "from": "@/lib/cn", "to": "@ratel/design-system/cn", "exact": true }
+  ]
+}

@@ -1,0 +1,16 @@
+# One regular expression per line (case-insensitive). A copied file matching any of these fails
+# the sync before anything is written, and CI greps apps/web and the OSS image with the same list.
+# Cloud-only vendors and products
+@clerk/
+\bclerk(Middleware|Client|_|Id)\b
+\bstripe\b
+\bposthog\b
+\bresend\b
+\bdeepinfra\b
+# Decision engines that stay private
+\bTYPESAFE_API_KEY\b
+\bSAGE_API_KEY\b
+\blevanto\b
+\bjev(-|_|\.)?(client|judge|1\.)
+# Customer data must never enter the public tree
+\bkestral\b

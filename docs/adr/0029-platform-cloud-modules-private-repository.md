@@ -10,6 +10,10 @@ Amends the repo-boundary rule of [ADR-0002](0002-product-split-engine-local-clou
 exception (the Cloud modules share source with the core rather than a protocol). Consistent with
 [ADR-0009](0009-licensing.md): no proprietary code enters this repository.
 
+Amended by [ADR-0030](0030-platform-oss-layered-core-and-cloud-sync.md): the two spike ports
+(identity, workspace) become five, the core is layered, and the application code arrives from
+`ratel-cloud` through a repeatable sync until that repository is retired.
+
 ## Context
 
 Ratel Cloud and a self-hostable Ratel OSS are to run on one core: the same application, the same
