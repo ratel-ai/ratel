@@ -1,0 +1,37 @@
+# Ratel Platform, open-source edition, with its Postgres.
+#   docker compose up --build    the app at http://localhost:3000
+#   docker compose up db         Postgres only, for `pnpm --filter @ratel/platform dev`
+# A local setup, not a production deployment: fixed credentials, no TLS.
+name: ratel
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ratel
+      POSTGRES_PASSWORD: ratel
+      POSTGRES_DB: ratel
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ratel -d ratel"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: oss
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://ratel:ratel@db:5432/ratel
+      DATABASE_SSL: disable
+      DATABASE_MIGRATE_ON_BOOT: "1"
+    ports: ["127.0.0.1:3000:3000"]
+
+volumes:
+  pgdata:

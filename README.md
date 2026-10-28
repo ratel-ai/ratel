@@ -189,9 +189,10 @@ pnpm --filter @ratel/platform dev  # http://localhost:3000
 pnpm --filter @ratel/platform typecheck
 pnpm --filter @ratel/platform test
 
-docker build -f apps/web/Dockerfile --target oss -t ratel-oss .
-docker run --rm -p 3000:3000 ratel-oss
+docker compose up --build          # the OSS edition with Postgres, http://localhost:3000
 ```
+
+Postgres alone for `dev`: `docker compose up db` (see [apps/web/README.md](apps/web/README.md)).
 
 ## Contributing
 

@@ -6,3 +6,5 @@ target/
 docs/
 e2e/
 benchmark/
+**/.env*
+!**/.env.example
