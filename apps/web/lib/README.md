@@ -26,3 +26,6 @@ layered. It only shrinks: a stale entry fails the check.
 
 Files maintained here rather than synced from `ratel-cloud` (`owned` in
 `scripts/platform-sync/map.json`) keep the upstream export names so call sites stay identical.
+In `jobs/` those are the runner (job kinds are open strings), the store (handlers from the
+registry), the drain (steps from the registry), the observability seam (telemetry port) and the
+scheduler, which has no upstream counterpart.

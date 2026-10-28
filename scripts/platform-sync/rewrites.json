@@ -19,7 +19,10 @@
     { "from": "@/lib/observability/report-exception", "to": "@/lib/platform/telemetry", "exact": true },
     { "from": "@/lib/observability/resilient-read", "to": "@/lib/platform/resilient-read", "exact": true },
     { "from": "@/lib/environment", "to": "@/lib/platform/environment", "exact": true },
-    { "from": "@/lib/scope/cookie", "to": "@/lib/console/scope/cookie", "exact": true }
+    { "from": "@/lib/scope/cookie", "to": "@/lib/console/scope/cookie", "exact": true },
+    { "from": "@/lib/cron/drain", "to": "@/lib/jobs/drain", "exact": true },
+    { "from": "@/lib/stripe/subscription", "to": "@/lib/platform/entitlements", "exact": true },
+    { "from": "@/lib/stripe/plans", "to": "@/lib/platform/entitlements", "exact": true }
   ],
   "partitions": {
     "@/lib/db/schema": {
@@ -39,7 +42,10 @@
         "Project": "@/lib/platform/projects/schema",
         "NewProject": "@/lib/platform/projects/schema",
         "ApiKey": "@/lib/platform/projects/schema",
-        "NewApiKey": "@/lib/platform/projects/schema"
+        "NewApiKey": "@/lib/platform/projects/schema",
+        "jobs": "@/lib/jobs/schema",
+        "Job": "@/lib/jobs/schema",
+        "NewJob": "@/lib/jobs/schema"
       }
     },
     "@/lib/db/queries": {
@@ -94,7 +100,18 @@
         "revokeApiKey": "@/lib/platform/projects/queries",
         "findActiveApiKeyByHash": "@/lib/platform/projects/queries",
         "touchApiKey": "@/lib/platform/projects/queries",
-        "isUniqueViolation": "@/lib/platform/db/errors"
+        "isUniqueViolation": "@/lib/platform/db/errors",
+        "JobsDb": "@/lib/jobs/queries",
+        "STALE_JOB_MS": "@/lib/jobs/queries",
+        "listInFlightJobs": "@/lib/jobs/queries",
+        "reapStaleRunningJobs": "@/lib/jobs/queries",
+        "enqueueJob": "@/lib/jobs/queries",
+        "findInFlightJob": "@/lib/jobs/queries",
+        "readJobQueueClock": "@/lib/jobs/queries",
+        "claimNextQueuedJob": "@/lib/jobs/queries",
+        "markJobDone": "@/lib/jobs/queries",
+        "markJobError": "@/lib/jobs/queries",
+        "getJobForProject": "@/lib/jobs/queries"
       }
     }
   },

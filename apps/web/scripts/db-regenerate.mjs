@@ -17,7 +17,8 @@ import { fileURLToPath } from "node:url";
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(APP_ROOT, "lib/platform/db/migrations");
-const SCHEMA = ["./lib/*/schema.ts", "./lib/*/*/schema.ts"];
+// One glob: the drizzle-kit CLI honours only the last --schema flag, so a list would drop files.
+const SCHEMA = ["./lib/**/schema.ts"];
 
 function generate(out) {
   rmSync(out, { recursive: true, force: true });

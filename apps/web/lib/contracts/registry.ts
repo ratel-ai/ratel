@@ -20,6 +20,14 @@ export type DrainStep = {
   phase: "before" | "after";
   /** Runs only when the operator has turned retention deletion on. */
   retentionOnly?: boolean;
+  /**
+   * The step's result lands in the drain summary under `name`, and its numeric and boolean
+   * fields (or a bare number, under `name`) land flat on the `cron_drain_completed` heartbeat;
+   * keep the upstream field names so dashboards keep joining. A step that did work emits its
+   * own typed event (`trace_summaries_refreshed`, `match_quality_runs_enqueued`, ...); the
+   * drain emits only the heartbeat. A throw is caught, reported under `name`, and never
+   * stops the tick.
+   */
   run(): Promise<Record<string, unknown> | number | undefined>;
 };
 
