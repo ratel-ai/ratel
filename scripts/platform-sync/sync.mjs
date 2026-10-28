@@ -14,7 +14,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findPrivateStrings, loadPatterns } from "./private-strings.mjs";
+import { findPrivateStrings, isHashEntry, loadPatterns } from "./private-strings.mjs";
 import { buildRules, rewriteSource } from "./rewrite-imports.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -79,10 +79,16 @@ export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patt
   };
 
   const writes = new Map(); // to -> { from, content }
-  const report = { copied: [], updated: [], deleted: [], ownedBootstrapped: [], ownedKept: [], unmapped: [], privateHits: [] };
+  const report = { copied: [], updated: [], deleted: [], ownedBootstrapped: [], ownedKept: [], unmapped: [], privateHits: [], privatePathsSkipped: 0 };
+  const confidential = patterns.filter(isHashEntry);
 
   const land = (pair, owned) => {
     if (excluded.some((x) => under(pair.from, x))) return;
+    // An upstream path naming confidential data is excluded implicitly, so the map never has to spell it.
+    if (findPrivateStrings(pair.from, confidential).length > 0) {
+      report.privatePathsSkipped++;
+      return;
+    }
     if (!owned && ownedByTo.has(pair.to)) return; // an owned file inside a copied folder stays ours
     const src = join(sourceRoot, pair.from);
     let content = readFileSync(src);
@@ -178,6 +184,7 @@ function printReport(report, drift) {
   list("owned, bootstrapped from upstream (now yours to maintain)", report.ownedBootstrapped);
   list("unmapped @/lib specifiers (add a map or rewrite rule)", report.unmapped);
   list("PRIVATE STRING HITS (nothing written)", report.privateHits);
+  if (report.privatePathsSkipped > 0) console.log(`skipped ${report.privatePathsSkipped} upstream path(s) naming confidential data`);
   if (drift) console.log(`\nowned files changed upstream since the last sync; port by hand:\n${drift}`);
 }
 

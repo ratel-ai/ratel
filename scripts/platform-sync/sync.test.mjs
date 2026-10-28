@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { findPrivateStrings } from "./private-strings.mjs";
+import { findPrivateStrings, hashToken, scanDir } from "./private-strings.mjs";
 import { absolutizeRelative, buildRules, partitionImports, renameIdentifiers, rewriteSource, rewriteSpecifiers } from "./rewrite-imports.mjs";
 import { applySync, planSync } from "./sync.mjs";
 
@@ -145,6 +145,34 @@ describe("partitions and identifiers", () => {
 });
 
 describe("private-strings", () => {
+  it("matches a hashed word by whole token, case-insensitively, in prose and in paths", () => {
+    const entry = { hash: hashToken("AcmeCorp") };
+    const hits = findPrivateStrings("fine\napps/web/lib/seed/acmecorp-replay.ts\nACMECORP's data\nacmecorporation", [entry]);
+    assert.deepEqual(hits.map((h) => h.line), [2, 3]);
+    assert.match(hits[0].pattern, /^sha256:[0-9a-f]{12}$/);
+  });
+
+  it("a hash entry never matches its own line in the list", () => {
+    const entry = { hash: hashToken("acmecorp") };
+    assert.deepEqual(findPrivateStrings(`sha256:${entry.hash}`, [entry]), []);
+  });
+
+  it("regex entries guard only the code root; hashed words guard the whole tree", () => {
+    const root = mkdtempSync(join(tmpdir(), "ratel-private-"));
+    try {
+      put(root, "apps/web/lib/x.ts", "import Stripe from 'stripe';\n");
+      put(root, "docs/adr/y.md", "Stripe stays in Cloud. AcmeCorp's data too.\n");
+      put(root, "node_modules/z/index.js", "stripe acmecorp\n");
+      const hits = scanDir(root, [/\bstripe\b/i, { hash: hashToken("acmecorp") }], { codeRoot: join(root, "apps/web") });
+      assert.deepEqual(hits.map((h) => [h.path, h.line, h.pattern.startsWith("sha256:")]).sort(), [
+        ["apps/web/lib/x.ts", 1, false],
+        ["docs/adr/y.md", 1, true],
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("finds matching lines by pattern", () => {
     const hits = findPrivateStrings("ok line\nimport Stripe from 'stripe'\nAcmeCorp dump", [/\bstripe\b/i, /acmecorp/i]);
     assert.deepEqual(hits, [
@@ -209,6 +237,14 @@ describe("sync", () => {
     const { report } = plan({ patterns: [/\bstripe_secret_key\b/i] });
     assert.deepEqual(report.privateHits.map((h) => [h.path, h.line]), [["apps/web/lib/ingest/otlp/c.ts", 2]]);
     assert.deepEqual(report.unmapped, [{ path: "apps/web/lib/ingest/otlp/c.ts", specifier: "@/lib/legacy/s" }]);
+  });
+
+  it("never lands an upstream path that names confidential data, and never prints it", () => {
+    put(source, "apps/web/lib/otlp/acmecorp-replay.ts", "export const replay = 1;\n");
+    const { actions, report } = plan({ patterns: [{ hash: hashToken("acmecorp") }] });
+    assert.equal(report.privatePathsSkipped, 1);
+    assert.deepEqual(report.privateHits, []);
+    assert.ok(!JSON.stringify(actions).includes("acmecorp"));
   });
 
   it("limits a run to one destination prefix with `only`", () => {

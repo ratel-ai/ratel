@@ -71,8 +71,9 @@ generated from the composed schema, regenerated as `0000_init` until the first O
 moves where in three modes: `copy` (mirrored on every sync, import specifiers rewritten to the
 layer paths and to `@ratel/design-system`), `owned` (bootstrapped once, then maintained here; the
 sync prints the upstream diff for a human to port), `excluded` (never lands). `private-strings.txt`
-names the Cloud-only vendors, the private decision engines and the customer whose data appears
-in Cloud fixtures; a landed file matching any pattern fails the sync before a byte is written,
+names the Cloud-only vendors and the private decision engines as patterns scoped to
+`apps/web`, and carries the customer whose data appears in Cloud fixtures only as a salted hash
+checked against the whole tree, so the name is never written in this repository; a landed file matching any pattern fails the sync before a byte is written,
 and CI greps `apps/web` and the OSS image with the same list. `source.json` records the commit
 synced. Owned files keep the upstream export names (`getSessionContext`, `trackServerEvent`,
 `reportServerException`, `getLimits`), so call sites stay byte-identical to upstream and the
