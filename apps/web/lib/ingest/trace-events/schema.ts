@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   doublePrecision,
   index,
   integer,
@@ -167,7 +168,7 @@ export const traceEvents = pgTable(
     // The turn-ledger builder's cursor scan (Agent health): the searches and
     // invocations of a project in received order, from the build cursor forward.
     // Partial so it skips churn, auth, catalog and upstream events. Keep the type
-    // list in step with TURN_EVENT_TYPES in lib/trace-signals/constants.ts.
+    // list in step with TURN_EVENT_TYPES in turns-schedule.ts.
     index("trace_events_project_received_turn_idx")
       .on(t.projectId, t.receivedAt, t.id)
       .where(
@@ -266,3 +267,37 @@ export type TraceEventReject = typeof traceEventRejects.$inferSelect;
 export type NewTraceEventReject = typeof traceEventRejects.$inferInsert;
 export type ToolUsageCounter = typeof toolUsageCounters.$inferSelect;
 export type NewToolUsageCounter = typeof toolUsageCounters.$inferInsert;
+
+/**
+ * The latest adaptive-ranking status each runtime source reported through a
+ * `usage_ranking_status` event: on, off, paused, which graph revision it holds
+ * and whether it learns into it. One row per (project, source), latest wins by
+ * `observed_at`, upserted at ingest so the dashboard reads one row per runtime
+ * instead of scanning events. Not pruned: it is current state, not a log.
+ */
+export const intentGraphRuntimeStatus = pgTable(
+  "intent_graph_runtime_status",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sourceId: text("source_id").notNull(),
+    // active | inactive | unknown | paused, verbatim from the event.
+    status: text("status").notNull(),
+    // enabled | disabled | rebuilt, verbatim from the event.
+    reason: text("reason").notNull(),
+    rev: bigint("rev", { mode: "number" }),
+    // The caller-supplied label on the graph the runtime ranks from, or last
+    // ranked from: a disable report carries no key, so the previous one is
+    // kept. "cloud" or "cloud/<source>" for a Cloud-built graph, the runtime's
+    // own key, or null when the app never passed one.
+    graphKey: text("graph_key"),
+    learn: boolean("learn").notNull().default(true),
+    model: text("model"),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.sourceId] })],
+);
+
+export type IntentGraphRuntimeStatusRow = typeof intentGraphRuntimeStatus.$inferSelect;
+export type NewIntentGraphRuntimeStatusRow = typeof intentGraphRuntimeStatus.$inferInsert;

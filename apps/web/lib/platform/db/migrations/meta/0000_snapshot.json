@@ -1,5 +1,5 @@
 {
-  "id": "08536ee6-fd10-44d3-8a15-352d36fdcab3",
+  "id": "10d40183-6841-4c91-b98e-7c65fb1b8099",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1866,6 +1866,96 @@
       "compositePrimaryKeys": {
         "runtime_event_sources_project_id_source_id_pk": {
           "name": "runtime_event_sources_project_id_source_id_pk",
+          "columns": [
+            "project_id",
+            "source_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.intent_graph_runtime_status": {
+      "name": "intent_graph_runtime_status",
+      "schema": "",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rev": {
+          "name": "rev",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "graph_key": {
+          "name": "graph_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "learn": {
+          "name": "learn",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observed_at": {
+          "name": "observed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "intent_graph_runtime_status_project_id_projects_id_fk": {
+          "name": "intent_graph_runtime_status_project_id_projects_id_fk",
+          "tableFrom": "intent_graph_runtime_status",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "intent_graph_runtime_status_project_id_source_id_pk": {
+          "name": "intent_graph_runtime_status_project_id_source_id_pk",
           "columns": [
             "project_id",
             "source_id"
