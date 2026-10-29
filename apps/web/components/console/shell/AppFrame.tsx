@@ -7,14 +7,15 @@ import { isTypingTarget } from "@ratel/design-system/peek";
 import { Toaster } from "@ratel/design-system/toast";
 import { TooltipProvider } from "@ratel/design-system/tooltip";
 import { Menu, Search } from "lucide-react";
-import { usePathname } from "next/navigation";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   activeNavItemId,
   commandEntries,
   consoleNav,
   findProject,
   projectIdFromPath,
+  shortcutHref,
 } from "@/lib/console/navigation";
 import { serializeSidebarCollapsedCookie } from "@/lib/console/sidebar-cookie";
 import { CommandMenu } from "./CommandMenu";
@@ -24,10 +25,16 @@ import type { ShellData } from "./types";
 
 /**
  * The console shell (DESIGN.md, Layout): rail on the left, the page on the right, no top bar.
- * Owns the global keyboard (⌘K, `[`, `?`), the mobile drawer and the app-wide overlays.
+ * Owns the global keyboard (⌘K, `[`, `?`, `g` then a letter), the mobile drawer and the
+ * app-wide overlays.
  */
+/** How long `g` waits for its second key. */
+const JUMP_WINDOW_MS = 1200;
+
 export function AppFrame({ data, children }: { data: ShellData; children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const jumpArmedAt = useRef(0);
   const [collapsed, setCollapsed] = useState(data.initiallyCollapsed);
   // The drawer remembers the page it was opened on, so any navigation closes it without an effect.
   const [mobileOpenOn, setMobileOpenOn] = useState<string | null>(null);
@@ -41,13 +48,24 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
 
   const project = findProject(data.projects, projectIdFromPath(pathname));
   const items = useMemo(
-    () => consoleNav({ projectId: project?.id, additions: data.editionNav }),
-    [project, data.editionNav],
+    () =>
+      consoleNav({
+        projectId: project?.id,
+        organizationSlug: data.organizationSlug ?? undefined,
+        additions: data.editionNav,
+      }),
+    [project, data.organizationSlug, data.editionNav],
   );
   const activeId = activeNavItemId(pathname, items);
   const entries = useMemo(
-    () => commandEntries({ items, projects: data.projects, pathname }),
-    [items, data.projects, pathname],
+    () =>
+      commandEntries({
+        items,
+        projects: data.projects,
+        pathname,
+        organizationSlug: data.organizationSlug ?? undefined,
+      }),
+    [items, data.projects, pathname, data.organizationSlug],
   );
 
   const toggleCollapsed = useCallback(() => {
@@ -84,16 +102,30 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       if (event.key === "?") {
         event.preventDefault();
         setShortcutsOpen(true);
+        return;
+      }
+      if (event.key === "g") {
+        jumpArmedAt.current = Date.now();
+        return;
+      }
+      if (jumpArmedAt.current && Date.now() - jumpArmedAt.current < JUMP_WINDOW_MS) {
+        jumpArmedAt.current = 0;
+        const href = shortcutHref(items, event.key);
+        if (href) {
+          event.preventDefault();
+          router.push(href);
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleCollapsed]);
+  }, [items, router, toggleCollapsed]);
 
   const sidebarProps = {
     items,
     activeId,
     organizationName: data.organizationName,
+    organizationSlug: data.organizationSlug,
     projects: data.projects,
     project,
     account: data.account,
@@ -148,7 +180,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       </Dialog.Root>
 
       <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} entries={entries} />
-      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} items={items} />
       <Toaster />
     </TooltipProvider>
   );

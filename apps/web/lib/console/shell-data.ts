@@ -10,6 +10,7 @@ export type ConsoleAccount = { name: string; email: string | null };
 
 export type ConsoleScope = {
   organizationName: string;
+  organizationSlug: string;
   role: OrgRole;
   account: ConsoleAccount;
   /** The session organization's projects, oldest first: the only ones a console route may show. */
@@ -27,6 +28,7 @@ export const getConsoleScope = cache(async (): Promise<ConsoleScope | null> => {
   const projects = await listProjectsForOrganization(context.organization.id);
   return {
     organizationName: context.organization.name,
+    organizationSlug: context.organization.slug,
     role: context.role,
     account: {
       name: context.user.name ?? context.user.username ?? context.user.email ?? "Operator",

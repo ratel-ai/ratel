@@ -28,6 +28,9 @@ export type QuotaBlocked = Exclude<QuotaResult, { ok: true }>;
 /** A short plan identifier for display and analytics; `"oss"` in the open-source edition. */
 export type PlanId = string;
 
+/** What plan resolution reads from an organization; the limit view carries it here. */
+export type AccountPlanView = OrgLimitView;
+
 export function resolvePlanId(org: OrgLimitView): PlanId {
   return composition.entitlements.planId(org);
 }

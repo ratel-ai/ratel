@@ -16,6 +16,7 @@ export type SidebarProps = {
   items: readonly NavItem[];
   activeId: string | null;
   organizationName: string | null;
+  organizationSlug: string | null;
   projects: readonly ConsoleProject[];
   project: ConsoleProject | undefined;
   account: ConsoleAccount | null;
@@ -36,6 +37,7 @@ export function SidebarContent({
   items,
   activeId,
   organizationName,
+  organizationSlug,
   projects,
   project,
   account,
@@ -52,6 +54,7 @@ export function SidebarContent({
       >
         <ProjectSwitcher
           organizationName={organizationName}
+          organizationSlug={organizationSlug}
           projects={projects}
           project={project}
           collapsed={collapsed}
@@ -162,7 +165,11 @@ function RailLink({
   );
   if (!collapsed) return link;
   return (
-    <Tooltip content={item.label} side="right">
+    <Tooltip
+      content={item.label}
+      side="right"
+      shortcut={item.shortcut ? `G ${item.shortcut.toUpperCase()}` : undefined}
+    >
       {link}
     </Tooltip>
   );

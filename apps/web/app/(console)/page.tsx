@@ -10,7 +10,7 @@ import { isDbConfigured } from "@/lib/platform/db/client";
 // a static page would bake one edition into the build and ignore the runtime value.
 export const dynamic = "force-dynamic";
 
-/** The console entry: the first project, or the first-run state when there is none. */
+/** The console entry: the first project, else the organization's projects page. */
 export default async function HomePage() {
   if (!isDbConfigured()) {
     return (
@@ -21,7 +21,7 @@ export default async function HomePage() {
     );
   }
   const scope = await getConsoleScope();
-  const href = entryHref(scope?.projects ?? []);
+  const href = entryHref(scope?.projects ?? [], scope?.organizationSlug);
   if (href) redirect(href);
   return (
     <Page>
@@ -29,13 +29,8 @@ export default async function HomePage() {
       <PageBody>
         <EmptyState
           emblem
-          title="No project yet"
-          description="A project holds the traces, logs and catalog an agent sends. This organization has none."
-          secondary={
-            <span className="text-sm text-fg-muted">
-              Locally, <code>pnpm --filter @ratel/platform seed</code> creates a demo project.
-            </span>
-          }
+          title="No session"
+          description="The console could not resolve who is signed in, so it has no organization to show."
         />
       </PageBody>
     </Page>

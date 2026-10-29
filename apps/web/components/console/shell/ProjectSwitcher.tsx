@@ -2,27 +2,36 @@
 
 import { BadgerMark } from "@ratel/design-system/badger-mark";
 import { cn } from "@ratel/design-system/cn";
-import { Menu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@ratel/design-system/menu";
-import { Check, ChevronsUpDown, FolderClosed } from "lucide-react";
+import {
+  Menu,
+  MenuContent,
+  MenuGroup,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "@ratel/design-system/menu";
+import { Building2, Check, ChevronsUpDown, FolderClosed, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { switchProjectHref } from "@/lib/console/navigation";
+import { newProjectHref, organizationRoot, switchProjectHref } from "@/lib/console/navigation";
 import type { ConsoleProject } from "@/lib/console/shell-data";
 
 const TRIGGER =
   "flex h-9 min-w-0 items-center gap-2 rounded-md px-1.5 text-left outline-none transition-colors duration-120 hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus";
 
 /**
- * The top of the rail: the brand, the current project, and the organization's other projects.
- * Switching project keeps the section you were reading. One organization, no project creation.
+ * The top of the rail: the brand, where you are, and the way to the organization's other
+ * projects. Switching project keeps the section you were reading. One organization.
  */
 export function ProjectSwitcher({
   organizationName,
+  organizationSlug,
   projects,
   project,
   collapsed,
 }: {
   organizationName: string | null;
+  organizationSlug: string | null;
   projects: readonly ConsoleProject[];
   project: ConsoleProject | undefined;
   collapsed: boolean;
@@ -49,7 +58,7 @@ export function ProjectSwitcher({
   );
   const width = collapsed ? "w-9 justify-center px-0" : "flex-1";
 
-  if (projects.length === 0) {
+  if (!organizationSlug) {
     return (
       <Link href="/" aria-label={`${title} home`} className={cn(TRIGGER, width)}>
         {label}
@@ -58,6 +67,7 @@ export function ProjectSwitcher({
   }
 
   const search = params.toString();
+  const root = organizationRoot(organizationSlug);
   return (
     <Menu>
       <MenuTrigger
@@ -85,6 +95,13 @@ export function ProjectSwitcher({
             </MenuItem>
           ))}
         </MenuGroup>
+        {projects.length > 0 ? <MenuSeparator /> : null}
+        <MenuItem icon={<Building2 />} onClick={() => router.push(root)}>
+          All projects
+        </MenuItem>
+        <MenuItem icon={<Plus />} onClick={() => router.push(newProjectHref(root))}>
+          New project
+        </MenuItem>
       </MenuContent>
     </Menu>
   );

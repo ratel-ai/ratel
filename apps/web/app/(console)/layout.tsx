@@ -22,6 +22,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
       <AppFrame
         data={{
           organizationName: scope?.organizationName ?? null,
+          organizationSlug: scope?.organizationSlug ?? null,
           projects: scope?.projects ?? [],
           account: scope?.account ?? null,
           editionNav: composition.nav,
