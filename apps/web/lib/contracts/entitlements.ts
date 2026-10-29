@@ -41,6 +41,14 @@ export type FeatureAccess =
   | { ok: false; reason: "not_on_plan"; plan: string; message: string }
   | { ok: false; reason: "exhausted"; plan: string; limit: number; message: string };
 
+/**
+ * The answer to "may this organization accept more events this period?", asked before an ingest
+ * write. `used` and `limit` let the caller report how far over the cap the organization is.
+ */
+export type EventQuotaResult =
+  | { ok: true }
+  | { ok: false; plan: string; limit: number; used: number; message: string };
+
 export type EntitlementsPort = {
   /** A short plan identifier for display and analytics (`"oss"`, `"free"`, `"pro"`, ...). */
   planId(org: OrgLimitView): string;
@@ -54,4 +62,17 @@ export type EntitlementsPort = {
     used: number,
     noun: string,
   ): FeatureAccess;
+  /**
+   * Before an ingest write: whether the organization may accept more events in the current
+   * period. Async, unlike the operations above, because an edition that counts keeps the counter
+   * in a table (and resets an elapsed period here). The open-source edition has no cap.
+   */
+  checkEventQuota(org: OrgLimitView): Promise<EventQuotaResult>;
+  /**
+   * After an ingest write: count the events actually stored, which is only known then. Two
+   * operations rather than one so a batch partly rejected by validation is never over-counted.
+   * Best-effort: an implementation must never throw into the caller, and the ingest result never
+   * depends on it.
+   */
+  recordEventUsage(org: OrgLimitView, stored: number): Promise<void>;
 };

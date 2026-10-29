@@ -43,6 +43,16 @@ const cloudPorts: CompositionPorts = {
     }),
     checkQuota: () => ({ ok: true }),
     checkMeteredFeature: () => ({ ok: true, limit: 4, used: 0, remaining: 4 }),
+    async checkEventQuota() {
+      return {
+        ok: false,
+        plan: "pro",
+        limit: 5_000_000,
+        used: 5_000_000,
+        message: "Monthly event limit reached for your plan.",
+      };
+    },
+    async recordEventUsage() {},
   },
   telemetry: {
     async trackEvent() {},
@@ -76,6 +86,7 @@ describe("createComposition", () => {
     assert.equal(await composition.session.accessGranted(principal), true);
     assert.equal(await composition.session.actingAs(), null);
     assert.equal(composition.entitlements.planId({ id: "org" }), "oss");
+    assert.deepEqual(await composition.entitlements.checkEventQuota({ id: "org" }), { ok: true });
     assert.equal(composition.embeddingProvider.local, true);
     assert.deepEqual(composition.registry.registrations(), []);
   });
@@ -84,6 +95,10 @@ describe("createComposition", () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(composition.edition, "Ratel Cloud");
     assert.equal(composition.entitlements.planId({ id: "org" }), "pro");
+    const quota = await composition.entitlements.checkEventQuota({ id: "org" });
+    assert.equal(quota.ok, false);
+    if (!quota.ok) assert.equal(quota.used, 5_000_000);
+    await composition.entitlements.recordEventUsage({ id: "org" }, 12);
     const actingAs = await composition.session.actingAs();
     assert.equal(actingAs?.kind, "organization");
   });
