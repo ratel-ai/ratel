@@ -467,13 +467,11 @@ function toParsed(type: string, data: Record<string, unknown>, raw: unknown): Pa
   let hitCount: number | null = null;
 
   if (type === "search" && Array.isArray(data.hits)) {
-    // biome-ignore lint/suspicious/useIterableCallbackReturn: synced from upstream as is
     (data.hits as Array<Record<string, unknown>>).forEach((h, rank) =>
       hits.push({ rank, targetType: "tool", targetId: String(h.tool_id), score: num(h.score) }),
     );
     hitCount = hits.length;
   } else if (type === "skill_search" && Array.isArray(data.hits)) {
-    // biome-ignore lint/suspicious/useIterableCallbackReturn: synced from upstream as is
     (data.hits as Array<Record<string, unknown>>).forEach((h, rank) =>
       hits.push({ rank, targetType: "skill", targetId: String(h.skill_id), score: num(h.score) }),
     );

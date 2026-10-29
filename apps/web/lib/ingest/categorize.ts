@@ -241,7 +241,6 @@ export function categorize(event: CloudEvent): EventMetrics {
     budget,
   );
   const tokensByCategory = {} as Record<ContextSource, number>;
-  // biome-ignore lint/suspicious/useIterableCallbackReturn: synced from upstream as is
   SOURCE_ORDER.forEach((k, i) => (tokensByCategory[k] = allocated[i]));
 
   // Allocate the (rounded) tools total across the individual tool defs by their

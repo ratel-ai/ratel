@@ -15,7 +15,8 @@
     "migrate": "tsx scripts/migrate.mts",
     "db:regenerate": "node scripts/db-regenerate.mjs",
     "db:check": "node scripts/db-regenerate.mjs --check",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed": "tsx scripts/seed.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",

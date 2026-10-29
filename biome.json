@@ -40,7 +40,9 @@
   },
   "overrides": [
     {
-      "includes": ["apps/web/**"],
+      "includes": [
+        "apps/web/**"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -63,6 +65,111 @@
         "rules": {
           "suspicious": {
             "noConsole": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/lib/platform/logger.ts",
+        "apps/web/lib/platform/request-log.ts",
+        "apps/web/lib/platform/rate-limit.ts",
+        "apps/web/lib/platform/rate-limit.test.ts",
+        "apps/web/lib/platform/env-number.ts",
+        "apps/web/lib/platform/env-number.test.ts",
+        "apps/web/lib/platform/public-url.ts",
+        "apps/web/lib/platform/public-url.test.ts",
+        "apps/web/lib/platform/v1-errors.ts",
+        "apps/web/lib/platform/v1-errors.test.ts",
+        "apps/web/lib/platform/flags-env.ts",
+        "apps/web/lib/platform/flags-env.test.ts",
+        "apps/web/lib/platform/organization.ts",
+        "apps/web/lib/platform/organization.test.ts",
+        "apps/web/lib/platform/api-keys.ts",
+        "apps/web/lib/platform/api-keys.test.ts",
+        "apps/web/lib/platform/resilient-read.ts",
+        "apps/web/lib/platform/resilient-read.test.ts",
+        "apps/web/lib/platform/http/**",
+        "apps/web/lib/platform/otel/**",
+        "!apps/web/lib/platform/otel/config.ts",
+        "!apps/web/lib/platform/otel/config.test.ts",
+        "!apps/web/lib/platform/otel/shutdown.ts",
+        "!apps/web/lib/platform/otel/shutdown.test.ts",
+        "apps/web/lib/platform/db/statement-timeout.ts",
+        "apps/web/lib/platform/db/statement-timeout.test.ts",
+        "apps/web/lib/platform/db/statement-timeout.integration.test.ts",
+        "apps/web/lib/jobs/route-helpers.ts",
+        "apps/web/lib/jobs/claim-bound.integration.test.ts",
+        "apps/web/lib/jobs/reaper.integration.test.ts",
+        "apps/web/lib/ingest/categorize.ts",
+        "apps/web/lib/ingest/categorize.test.ts",
+        "apps/web/lib/ingest/pricing.ts",
+        "apps/web/lib/ingest/pricing.test.ts",
+        "apps/web/lib/ingest/cloud-schema.ts",
+        "apps/web/lib/ingest/context.ts",
+        "apps/web/lib/ingest/gateway-tools.ts",
+        "apps/web/lib/platform/api-key-bearer.ts",
+        "apps/web/lib/ingest/trace-events/parse.ts",
+        "apps/web/lib/ingest/trace-events/parse.test.ts",
+        "apps/web/lib/ingest/trace-events/route-handler.ts",
+        "apps/web/lib/ingest/trace-events/route-handler.test.ts",
+        "apps/web/lib/ingest/trace-events/event-types.ts",
+        "apps/web/lib/ingest/otlp/**",
+        "!apps/web/lib/ingest/otlp/schema.ts",
+        "!apps/web/lib/ingest/otlp/queries.ts",
+        "!apps/web/lib/ingest/otlp/route-handler.ts",
+        "!apps/web/lib/ingest/otlp/route-handler.test.ts",
+        "!apps/web/lib/ingest/otlp/route-handler.agent-health.test.ts",
+        "!apps/web/lib/ingest/otlp/logs-route-handler.ts",
+        "!apps/web/lib/ingest/otlp/logs-route-handler.test.ts",
+        "!apps/web/lib/ingest/otlp/ingest-observability.ts",
+        "!apps/web/lib/ingest/otlp/ingest-observability.test.ts",
+        "!apps/web/lib/ingest/otlp/ingest-spans.ts",
+        "!apps/web/lib/ingest/otlp/agent-health-bridge.ts",
+        "!apps/web/lib/ingest/otlp/agent-span-dedupe.ts",
+        "apps/web/lib/ingest/runtime-catalog/queries.ts",
+        "apps/web/lib/ingest/catalogs/**",
+        "!apps/web/lib/ingest/catalogs/schema.ts",
+        "!apps/web/lib/ingest/catalogs/queries.ts",
+        "!apps/web/lib/ingest/catalogs/snapshot-handler.test.ts",
+        "!apps/web/lib/ingest/catalogs/snapshot-handler.ts",
+        "apps/web/lib/ingest/runtime-catalog/**",
+        "!apps/web/lib/ingest/runtime-catalog/schema.ts",
+        "!apps/web/lib/ingest/runtime-catalog/override-queries.ts",
+        "apps/web/lib/catalog/skills/**",
+        "apps/web/lib/catalog/wire.ts",
+        "apps/web/lib/catalog/wire.test.ts",
+        "apps/web/lib/catalog/wire-v2.ts",
+        "apps/web/lib/catalog/wire-v2.test.ts",
+        "apps/web/lib/catalog/manage.ts",
+        "apps/web/lib/catalog/import.ts",
+        "apps/web/lib/catalog/import.test.ts",
+        "apps/web/lib/catalog/pull-route-handler.ts",
+        "apps/web/lib/catalog/pull-route-handler.test.ts",
+        "apps/web/lib/catalog/pull-route-handler-v2.ts",
+        "apps/web/lib/catalog/pull-route-handler-v2.test.ts",
+        "apps/web/lib/catalog/__fixtures__/**",
+        "apps/web/app/api/v1/catalog/**",
+        "!apps/web/app/api/v1/catalog/route.ts",
+        "!apps/web/app/api/v1/catalog/snapshot/route.test.ts",
+        "apps/web/app/api/v2/catalog/**",
+        "!apps/web/app/api/v2/catalog/route.ts",
+        "apps/web/app/api/v1/runtime-catalog/**",
+        "apps/web/app/api/v1/skills/**",
+        "!apps/web/app/api/v1/skills/route.ts",
+        "apps/web/lib/console/seed/local-database.ts",
+        "apps/web/lib/console/seed/local-database.test.ts",
+        "apps/web/lib/console/seed/site-copilot-rng.ts",
+        "apps/web/lib/console/seed/site-copilot-catalog.ts",
+        "apps/web/lib/console/seed/site-copilot-turns.ts",
+        "apps/web/lib/console/seed/site-copilot-plan.ts",
+        "apps/web/lib/console/seed/site-copilot-otlp.ts",
+        "apps/web/lib/console/seed/demo-runtime-catalog.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "useIterableCallbackReturn": "off"
           }
         }
       }

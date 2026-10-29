@@ -1,0 +1,346 @@
+{
+  "nested": {
+    "ratel": {
+      "nested": {
+        "otlp": {
+          "nested": {
+            "ExportTraceServiceRequest": {
+              "fields": {
+                "resourceSpans": {
+                  "rule": "repeated",
+                  "type": "ResourceSpans",
+                  "id": 1,
+                  "protoName": "resource_spans"
+                }
+              }
+            },
+            "ResourceSpans": {
+              "fields": {
+                "resource": {
+                  "type": "Resource",
+                  "id": 1
+                },
+                "scopeSpans": {
+                  "rule": "repeated",
+                  "type": "ScopeSpans",
+                  "id": 2,
+                  "protoName": "scope_spans"
+                },
+                "schemaUrl": {
+                  "type": "string",
+                  "id": 3,
+                  "protoName": "schema_url"
+                }
+              }
+            },
+            "Resource": {
+              "fields": {
+                "attributes": {
+                  "rule": "repeated",
+                  "type": "KeyValue",
+                  "id": 1
+                },
+                "droppedAttributesCount": {
+                  "type": "uint32",
+                  "id": 2,
+                  "protoName": "dropped_attributes_count"
+                }
+              }
+            },
+            "ScopeSpans": {
+              "fields": {
+                "scope": {
+                  "type": "InstrumentationScope",
+                  "id": 1
+                },
+                "spans": {
+                  "rule": "repeated",
+                  "type": "Span",
+                  "id": 2
+                },
+                "schemaUrl": {
+                  "type": "string",
+                  "id": 3,
+                  "protoName": "schema_url"
+                }
+              }
+            },
+            "InstrumentationScope": {
+              "fields": {
+                "name": {
+                  "type": "string",
+                  "id": 1
+                },
+                "version": {
+                  "type": "string",
+                  "id": 2
+                },
+                "attributes": {
+                  "rule": "repeated",
+                  "type": "KeyValue",
+                  "id": 3
+                },
+                "droppedAttributesCount": {
+                  "type": "uint32",
+                  "id": 4,
+                  "protoName": "dropped_attributes_count"
+                }
+              }
+            },
+            "Span": {
+              "fields": {
+                "traceId": {
+                  "type": "bytes",
+                  "id": 1,
+                  "protoName": "trace_id"
+                },
+                "spanId": {
+                  "type": "bytes",
+                  "id": 2,
+                  "protoName": "span_id"
+                },
+                "traceState": {
+                  "type": "string",
+                  "id": 3,
+                  "protoName": "trace_state"
+                },
+                "parentSpanId": {
+                  "type": "bytes",
+                  "id": 4,
+                  "protoName": "parent_span_id"
+                },
+                "name": {
+                  "type": "string",
+                  "id": 5
+                },
+                "kind": {
+                  "type": "SpanKind",
+                  "id": 6
+                },
+                "startTimeUnixNano": {
+                  "type": "fixed64",
+                  "id": 7,
+                  "protoName": "start_time_unix_nano"
+                },
+                "endTimeUnixNano": {
+                  "type": "fixed64",
+                  "id": 8,
+                  "protoName": "end_time_unix_nano"
+                },
+                "attributes": {
+                  "rule": "repeated",
+                  "type": "KeyValue",
+                  "id": 9
+                },
+                "droppedAttributesCount": {
+                  "type": "uint32",
+                  "id": 10,
+                  "protoName": "dropped_attributes_count"
+                },
+                "events": {
+                  "rule": "repeated",
+                  "type": "Event",
+                  "id": 11
+                },
+                "droppedEventsCount": {
+                  "type": "uint32",
+                  "id": 12,
+                  "protoName": "dropped_events_count"
+                },
+                "links": {
+                  "rule": "repeated",
+                  "type": "Link",
+                  "id": 13
+                },
+                "droppedLinksCount": {
+                  "type": "uint32",
+                  "id": 14,
+                  "protoName": "dropped_links_count"
+                },
+                "status": {
+                  "type": "Status",
+                  "id": 15
+                },
+                "flags": {
+                  "type": "uint32",
+                  "id": 16
+                }
+              },
+              "nested": {
+                "SpanKind": {
+                  "values": {
+                    "SPAN_KIND_UNSPECIFIED": 0,
+                    "SPAN_KIND_INTERNAL": 1,
+                    "SPAN_KIND_SERVER": 2,
+                    "SPAN_KIND_CLIENT": 3,
+                    "SPAN_KIND_PRODUCER": 4,
+                    "SPAN_KIND_CONSUMER": 5
+                  }
+                },
+                "Event": {
+                  "fields": {
+                    "timeUnixNano": {
+                      "type": "fixed64",
+                      "id": 1,
+                      "protoName": "time_unix_nano"
+                    },
+                    "name": {
+                      "type": "string",
+                      "id": 2
+                    },
+                    "attributes": {
+                      "rule": "repeated",
+                      "type": "KeyValue",
+                      "id": 3
+                    },
+                    "droppedAttributesCount": {
+                      "type": "uint32",
+                      "id": 4,
+                      "protoName": "dropped_attributes_count"
+                    }
+                  }
+                },
+                "Link": {
+                  "fields": {
+                    "traceId": {
+                      "type": "bytes",
+                      "id": 1,
+                      "protoName": "trace_id"
+                    },
+                    "spanId": {
+                      "type": "bytes",
+                      "id": 2,
+                      "protoName": "span_id"
+                    },
+                    "traceState": {
+                      "type": "string",
+                      "id": 3,
+                      "protoName": "trace_state"
+                    },
+                    "attributes": {
+                      "rule": "repeated",
+                      "type": "KeyValue",
+                      "id": 4
+                    },
+                    "droppedAttributesCount": {
+                      "type": "uint32",
+                      "id": 5,
+                      "protoName": "dropped_attributes_count"
+                    },
+                    "flags": {
+                      "type": "uint32",
+                      "id": 6
+                    }
+                  }
+                }
+              }
+            },
+            "Status": {
+              "fields": {
+                "message": {
+                  "type": "string",
+                  "id": 2
+                },
+                "code": {
+                  "type": "StatusCode",
+                  "id": 3
+                }
+              },
+              "nested": {
+                "StatusCode": {
+                  "values": {
+                    "STATUS_CODE_UNSET": 0,
+                    "STATUS_CODE_OK": 1,
+                    "STATUS_CODE_ERROR": 2
+                  }
+                }
+              }
+            },
+            "KeyValue": {
+              "fields": {
+                "key": {
+                  "type": "string",
+                  "id": 1
+                },
+                "value": {
+                  "type": "AnyValue",
+                  "id": 2
+                }
+              }
+            },
+            "AnyValue": {
+              "oneofs": {
+                "value": {
+                  "oneof": [
+                    "stringValue",
+                    "boolValue",
+                    "intValue",
+                    "doubleValue",
+                    "arrayValue",
+                    "kvlistValue",
+                    "bytesValue"
+                  ]
+                }
+              },
+              "fields": {
+                "stringValue": {
+                  "type": "string",
+                  "id": 1,
+                  "protoName": "string_value"
+                },
+                "boolValue": {
+                  "type": "bool",
+                  "id": 2,
+                  "protoName": "bool_value"
+                },
+                "intValue": {
+                  "type": "int64",
+                  "id": 3,
+                  "protoName": "int_value"
+                },
+                "doubleValue": {
+                  "type": "double",
+                  "id": 4,
+                  "protoName": "double_value"
+                },
+                "arrayValue": {
+                  "type": "ArrayValue",
+                  "id": 5,
+                  "protoName": "array_value"
+                },
+                "kvlistValue": {
+                  "type": "KeyValueList",
+                  "id": 6,
+                  "protoName": "kvlist_value"
+                },
+                "bytesValue": {
+                  "type": "bytes",
+                  "id": 7,
+                  "protoName": "bytes_value"
+                }
+              }
+            },
+            "ArrayValue": {
+              "fields": {
+                "values": {
+                  "rule": "repeated",
+                  "type": "AnyValue",
+                  "id": 1
+                }
+              }
+            },
+            "KeyValueList": {
+              "fields": {
+                "values": {
+                  "rule": "repeated",
+                  "type": "KeyValue",
+                  "id": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

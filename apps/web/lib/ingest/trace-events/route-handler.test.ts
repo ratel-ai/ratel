@@ -284,7 +284,6 @@ test("replayed batches report duplicates and remain successful", async () => {
   const { deps } = makeDeps({
     insertTraceEvents: async (_projectId, rows) => {
       const accepted = rows.filter((row) => !seen.has(row.clientEventId));
-      // biome-ignore lint/suspicious/useIterableCallbackReturn: synced from upstream as is
       rows.forEach((row) => seen.add(row.clientEventId));
       return { accepted: accepted.length };
     },
