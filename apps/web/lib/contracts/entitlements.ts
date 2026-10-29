@@ -1,8 +1,10 @@
 /**
  * What an organization may have and use. The open-source edition has no plans and answers
  * "unlimited"; the Cloud edition answers from its billing tables. Pure and synchronous on
- * purpose: callers hold the organization row already and decide inline (a creation path, a
- * page slice), and the Cloud side keeps the plan columns on the row it is handed.
+ * purpose, except the event counter: callers hold the organization row already and decide
+ * inline (a creation path, a page slice), and the Cloud side keeps the plan columns on the row
+ * it is handed. The two event-quota operations are async because the counting edition reads
+ * and writes a table for them.
  */
 export interface PlanLimits {
   maxProjects: number;
@@ -72,7 +74,8 @@ export type EntitlementsPort = {
    * After an ingest write: count the events actually stored, which is only known then. Two
    * operations rather than one so a batch partly rejected by validation is never over-counted.
    * Best-effort: an implementation must never throw into the caller, and the ingest result never
-   * depends on it.
+   * depends on it. `stored` may be 0 (nothing to count; the caller may skip the call, as upstream
+   * does, or make it) and is never negative.
    */
   recordEventUsage(org: OrgLimitView, stored: number): Promise<void>;
 };

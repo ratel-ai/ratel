@@ -27,7 +27,8 @@ test("the shim answers from the composed edition: unlimited, plan oss", () => {
 
 test("the event quota shim allows and records through the composed edition", async () => {
   assert.deepEqual(await checkEventQuota(org), { ok: true });
-  await incrementEventUsage(org, 250);
+  await incrementEventUsage(org.id, 250);
+  await incrementEventUsage(org.id, 0);
   assert.deepEqual(await checkEventQuota(org), { ok: true });
 });
 

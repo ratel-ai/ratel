@@ -114,9 +114,10 @@ export function checkEventQuota(org: OrgLimitView): Promise<EventQuotaResult> {
 }
 
 /**
- * After an ingest write: the upstream name, now over the port. Best-effort by contract, so the
- * caller may `.catch` and log exactly as upstream did.
+ * After an ingest write: the upstream name and signature (the organization id, as the ingest
+ * code holds it), now over the port. Best-effort by contract, so the caller may `.catch` and log
+ * exactly as upstream did.
  */
-export function incrementEventUsage(org: OrgLimitView, stored: number): Promise<void> {
-  return composition.entitlements.recordEventUsage(org, stored);
+export function incrementEventUsage(organizationId: string, stored: number): Promise<void> {
+  return composition.entitlements.recordEventUsage({ id: organizationId }, stored);
 }
