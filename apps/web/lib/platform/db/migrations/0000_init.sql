@@ -181,6 +181,19 @@ CREATE TABLE "runtime_event_sources" (
 	CONSTRAINT "runtime_event_sources_project_id_source_id_pk" PRIMARY KEY("project_id","source_id")
 );
 --> statement-breakpoint
+CREATE TABLE "intent_graph_runtime_status" (
+	"project_id" uuid NOT NULL,
+	"source_id" text NOT NULL,
+	"status" text NOT NULL,
+	"reason" text NOT NULL,
+	"rev" bigint,
+	"graph_key" text,
+	"learn" boolean DEFAULT true NOT NULL,
+	"model" text,
+	"observed_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "intent_graph_runtime_status_project_id_source_id_pk" PRIMARY KEY("project_id","source_id")
+);
+--> statement-breakpoint
 CREATE TABLE "tool_usage_counters" (
 	"project_id" uuid NOT NULL,
 	"source_id" text NOT NULL,
@@ -336,6 +349,7 @@ ALTER TABLE "otel_logs" ADD CONSTRAINT "otel_logs_project_id_projects_id_fk" FOR
 ALTER TABLE "otel_spans" ADD CONSTRAINT "otel_spans_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "runtime_catalog_entries" ADD CONSTRAINT "runtime_catalog_entries_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "runtime_event_sources" ADD CONSTRAINT "runtime_event_sources_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_graph_runtime_status" ADD CONSTRAINT "intent_graph_runtime_status_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tool_usage_counters" ADD CONSTRAINT "tool_usage_counters_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trace_event_hits" ADD CONSTRAINT "trace_event_hits_trace_event_id_trace_events_id_fk" FOREIGN KEY ("trace_event_id") REFERENCES "public"."trace_events"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trace_event_hits" ADD CONSTRAINT "trace_event_hits_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
