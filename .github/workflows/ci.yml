@@ -227,6 +227,9 @@ jobs:
       # customer string reaches the public tree.
       - name: Check ee boundary, layers and private strings
         run: pnpm check:boundary && pnpm check:layers && pnpm check:private
+      # The committed baseline migration must match the composed schema (ADR-0030).
+      - name: Check platform migrations match the schema
+        run: pnpm --filter @ratel/platform db:check
       # Example wiring (Vercel AI SDK) — folded in here to keep one TS check row.
       # Drives the real ToolLoopAgent loop with a scripted MockLanguageModel (no API
       # key), catching framework-integration drift the SDK-level tests can't see. The
