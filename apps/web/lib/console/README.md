@@ -1,6 +1,7 @@
 # `lib/console` (L6)
 
-Development seeds.
+Console helpers above ingest and the catalog: navigation, shell data, sidebar state, command
+search, projects, settings, and development seeds.
 
 | Path | Holds |
 |---|---|
