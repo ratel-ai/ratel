@@ -2,11 +2,13 @@
 
 import { IconButton } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
+import { Kbd } from "@ratel/design-system/kbd";
 import { Tooltip } from "@ratel/design-system/tooltip";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import Link from "next/link";
 import type { NavItem } from "@/lib/console/navigation";
-import type { ConsoleProject } from "@/lib/console/shell-data";
+import type { ConsoleAccount, ConsoleProject } from "@/lib/console/shell-data";
+import { AccountMenu } from "./AccountMenu";
 import { NAV_ICONS } from "./nav-icons";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 
@@ -16,15 +18,18 @@ export type SidebarProps = {
   organizationName: string | null;
   projects: readonly ConsoleProject[];
   project: ConsoleProject | undefined;
+  account: ConsoleAccount | null;
   collapsed: boolean;
   /** Absent in the mobile drawer, which is always expanded. */
   onToggleCollapsed?: () => void;
+  onSearch: () => void;
+  onShortcuts: () => void;
   /** Called when a link is followed, so the mobile drawer can close. */
   onNavigate?: () => void;
 };
 
 /**
- * The left of the inverted L (DESIGN.md, Layout): where you are and the flat rail. Dimmer than
+ * The left of the inverted L (DESIGN.md, Layout): where you are, search, the flat rail, and you. Dimmer than
  * the page; the selection mark is the only color on it.
  */
 export function SidebarContent({
@@ -33,8 +38,11 @@ export function SidebarContent({
   organizationName,
   projects,
   project,
+  account,
   collapsed,
   onToggleCollapsed,
+  onSearch,
+  onShortcuts,
   onNavigate,
 }: SidebarProps) {
   return (
@@ -59,8 +67,8 @@ export function SidebarContent({
         ) : null}
       </div>
 
-      {onToggleCollapsed && collapsed ? (
-        <div className="flex shrink-0 flex-col items-center px-2 pb-2">
+      <div className={cn("flex shrink-0 flex-col gap-1 px-2 pb-2", collapsed && "items-center")}>
+        {onToggleCollapsed && collapsed ? (
           <IconButton
             label="Expand sidebar"
             shortcut="["
@@ -68,8 +76,27 @@ export function SidebarContent({
             icon={<PanelLeftOpen />}
             onClick={onToggleCollapsed}
           />
-        </div>
-      ) : null}
+        ) : null}
+        {collapsed ? (
+          <IconButton
+            label="Search"
+            shortcut="⌘K"
+            size="icon-sm"
+            icon={<Search />}
+            onClick={onSearch}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={onSearch}
+            className="flex h-8 w-full items-center gap-2 rounded-md border border-line bg-app px-2 text-ui text-fg-subtle outline-none transition-colors duration-120 hover:border-line-strong hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <Search className="size-3.5 shrink-0" aria-hidden />
+            <span className="flex-1 text-left">Search…</span>
+            <Kbd>⌘K</Kbd>
+          </button>
+        )}
+      </div>
 
       <nav
         aria-label={project ? "Project" : "Console"}
@@ -88,6 +115,12 @@ export function SidebarContent({
           />
         ))}
       </nav>
+
+      {account ? (
+        <div className="shrink-0 border-t border-line p-2">
+          <AccountMenu account={account} collapsed={collapsed} onShortcuts={onShortcuts} />
+        </div>
+      ) : null}
     </div>
   );
 }

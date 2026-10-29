@@ -23,6 +23,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
         data={{
           organizationName: scope?.organizationName ?? null,
           projects: scope?.projects ?? [],
+          account: scope?.account ?? null,
           editionNav: composition.nav,
           initiallyCollapsed: parseSidebarCollapsedCookie(
             cookieStore.get(SIDEBAR_COLLAPSED_COOKIE)?.value,

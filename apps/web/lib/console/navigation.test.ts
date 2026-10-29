@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createComposition } from "@/lib/composition/ports";
 import {
   activeNavItemId,
+  commandEntries,
   consoleNav,
   entryHref,
   findProject,
@@ -36,7 +37,12 @@ test("with a project, the rail links every core destination to that project", ()
   const items = consoleNav({ projectId: P1, additions: [] });
   assert.deepEqual(
     items.map(({ id, href }) => ({ id, href })),
-    [{ id: "overview", href: `/project/${P1}` }],
+    [
+      { id: "overview", href: `/project/${P1}` },
+      { id: "tools", href: `/project/${P1}/catalogs/tools` },
+      { id: "calls", href: `/project/${P1}/calls` },
+      { id: "settings", href: `/project/${P1}/settings` },
+    ],
   );
 });
 
@@ -48,13 +54,13 @@ test("composition additions follow the core destinations with stable ids", () =>
   const additions = [{ href: "/admin", label: "Admin" }];
   const withProject = consoleNav({ projectId: P1, additions });
   const without = consoleNav({ projectId: undefined, additions });
-  assert.deepEqual(
-    withProject.map(({ id, href, label }) => ({ id, href, label })),
-    [
-      { id: "overview", href: `/project/${P1}`, label: "Overview" },
-      { id: "edition:/admin", href: "/admin", label: "Admin" },
-    ],
-  );
+  assert.deepEqual(withProject.at(-1), {
+    id: "edition:/admin",
+    href: "/admin",
+    label: "Admin",
+    icon: "edition",
+  });
+  assert.equal(withProject.length, 5);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -65,14 +71,17 @@ test("the OSS composition adds no destination", () => {
   const items = consoleNav({ projectId: P1, additions: createComposition("oss").nav });
   assert.deepEqual(
     items.map(({ id }) => id),
-    ["overview"],
+    ["overview", "tools", "calls", "settings"],
   );
 });
 
 test("the active item matches exact index pages and nested paths", () => {
   const items = consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] });
   assert.equal(activeNavItemId(`/project/${P1}`, items), "overview");
-  assert.equal(activeNavItemId(`/project/${P1}/settings`, items), null);
+  assert.equal(activeNavItemId(`/project/${P1}/settings`, items), "settings");
+  assert.equal(activeNavItemId(`/project/${P1}/settings/general`, items), "settings");
+  assert.equal(activeNavItemId(`/project/${P1}/calls`, items), "calls");
+  assert.equal(activeNavItemId(`/project/${P1}/unknown`, items), null);
   assert.equal(activeNavItemId("/admin", items), "edition:/admin");
   assert.equal(activeNavItemId("/admin/users", items), "edition:/admin");
   assert.equal(activeNavItemId("/administer", items), null);
@@ -98,4 +107,25 @@ test("a project outside the organization's list is not found", () => {
 test("the entry goes to the first project, or nowhere when there is none", () => {
   assert.equal(entryHref(PROJECTS), `/project/${P1}`);
   assert.equal(entryHref([]), null);
+});
+
+test("the command menu lists the rail's destinations, then every project", () => {
+  const entries = commandEntries({
+    items: consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] }),
+    projects: PROJECTS,
+    pathname: `/project/${P1}/calls`,
+  });
+  assert.deepEqual(
+    entries.map(({ label, group, href }) => `${group}|${label}|${href}`),
+    [
+      `Pages|Overview|/project/${P1}`,
+      `Pages|Tools|/project/${P1}/catalogs/tools`,
+      `Pages|Model calls|/project/${P1}/calls`,
+      `Pages|Settings|/project/${P1}/settings`,
+      "Pages|Admin|/admin",
+      `Projects|One|/project/${P1}/calls`,
+      `Projects|Two|/project/${P2}/calls`,
+    ],
+  );
+  assert.equal(new Set(entries.map(({ id }) => id)).size, entries.length);
 });

@@ -6,7 +6,7 @@ import type { NavItem as EditionNavItem } from "@/lib/composition/ports";
  * listed: a page that has not landed is absent, never disabled.
  */
 
-export type NavIconName = "overview" | "edition";
+export type NavIconName = "overview" | "tools" | "calls" | "settings" | "edition";
 
 export interface NavItem {
   /** Stable across renders and projects: core ids are fixed, edition ids derive from the href. */
@@ -42,15 +42,13 @@ export function consoleNav({
   projectId: string | undefined;
   additions: readonly EditionNavItem[];
 }): NavItem[] {
-  const core: NavItem[] = projectId
+  const root = projectId ? projectRoot(projectId) : null;
+  const core: NavItem[] = root
     ? [
-        {
-          id: "overview",
-          label: "Overview",
-          href: projectRoot(projectId),
-          icon: "overview",
-          exact: true,
-        },
+        { id: "overview", label: "Overview", href: root, icon: "overview", exact: true },
+        { id: "tools", label: "Tools", href: `${root}/catalogs/tools`, icon: "tools" },
+        { id: "calls", label: "Model calls", href: `${root}/calls`, icon: "calls" },
+        { id: "settings", label: "Settings", href: `${root}/settings`, icon: "settings" },
       ]
     : [];
   return [
@@ -60,6 +58,29 @@ export function consoleNav({
       label: item.label,
       href: item.href,
       icon: "edition" as const,
+    })),
+  ];
+}
+
+export type CommandEntry = { id: string; label: string; group: string; href: string };
+
+/** What ⌘K searches: the rail's destinations, then every project at the section being read. */
+export function commandEntries({
+  items,
+  projects,
+  pathname,
+}: {
+  items: readonly NavItem[];
+  projects: readonly { id: string; name: string }[];
+  pathname: string;
+}): CommandEntry[] {
+  return [
+    ...items.map(({ id, label, href }) => ({ id: `page:${id}`, label, group: "Pages", href })),
+    ...projects.map(({ id, name }) => ({
+      id: `project:${id}`,
+      label: name,
+      group: "Projects",
+      href: switchProjectHref(pathname, id),
     })),
   ];
 }

@@ -162,7 +162,13 @@
         "apps/web/lib/console/seed/site-copilot-otlp.ts",
         "apps/web/lib/console/sidebar-cookie.ts",
         "apps/web/lib/console/sidebar-cookie.test.ts",
-        "apps/web/components/console/shell/DatabaseUnavailable.tsx"
+        "apps/web/components/console/shell/DatabaseUnavailable.tsx",
+        "apps/web/lib/console/scope/command-search.ts",
+        "apps/web/lib/console/scope/command-search.test.ts",
+        "apps/web/lib/platform/format.ts",
+        "apps/web/lib/platform/projects/names.ts",
+        "apps/web/lib/platform/projects/names.test.ts",
+        "apps/web/components/console/settings/SettingsFrame.tsx"
       ],
       "linter": {
         "rules": {

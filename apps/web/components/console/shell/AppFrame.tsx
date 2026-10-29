@@ -4,23 +4,27 @@ import { Dialog } from "@base-ui/react/dialog";
 import { IconButton } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
 import { isTypingTarget } from "@ratel/design-system/peek";
+import { Toaster } from "@ratel/design-system/toast";
 import { TooltipProvider } from "@ratel/design-system/tooltip";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   activeNavItemId,
+  commandEntries,
   consoleNav,
   findProject,
   projectIdFromPath,
 } from "@/lib/console/navigation";
 import { serializeSidebarCollapsedCookie } from "@/lib/console/sidebar-cookie";
+import { CommandMenu } from "./CommandMenu";
+import { ShortcutsDialog } from "./ShortcutsDialog";
 import { SidebarContent } from "./Sidebar";
 import type { ShellData } from "./types";
 
 /**
  * The console shell (DESIGN.md, Layout): rail on the left, the page on the right, no top bar.
- * Owns the `[` shortcut and the mobile drawer.
+ * Owns the global keyboard (⌘K, `[`, `?`), the mobile drawer and the app-wide overlays.
  */
 export function AppFrame({ data, children }: { data: ShellData; children: ReactNode }) {
   const pathname = usePathname();
@@ -32,6 +36,8 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     (open: boolean) => setMobileOpenOn(open ? pathname : null),
     [pathname],
   );
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const project = findProject(data.projects, projectIdFromPath(pathname));
   const items = useMemo(
@@ -39,6 +45,10 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     [project, data.editionNav],
   );
   const activeId = activeNavItemId(pathname, items);
+  const entries = useMemo(
+    () => commandEntries({ items, projects: data.projects, pathname }),
+    [items, data.projects, pathname],
+  );
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((current) => {
@@ -51,6 +61,11 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen((current) => !current);
+        return;
+      }
       if (
         event.defaultPrevented ||
         event.metaKey ||
@@ -64,6 +79,11 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       if (event.key === "[") {
         event.preventDefault();
         toggleCollapsed();
+        return;
+      }
+      if (event.key === "?") {
+        event.preventDefault();
+        setShortcutsOpen(true);
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -76,6 +96,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     organizationName: data.organizationName,
     projects: data.projects,
     project,
+    account: data.account,
+    onSearch: () => setCommandOpen(true),
+    onShortcuts: () => setShortcutsOpen(true),
   };
 
   return (
@@ -102,6 +125,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
             <span className="min-w-0 flex-1 truncate text-ui font-semibold">
               {project?.name ?? data.organizationName ?? "Ratel"}
             </span>
+            <IconButton label="Search" icon={<Search />} onClick={() => setCommandOpen(true)} />
           </div>
           <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 outline-none">
             {children}
@@ -122,6 +146,10 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
+
+      <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} entries={entries} />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <Toaster />
     </TooltipProvider>
   );
 }
