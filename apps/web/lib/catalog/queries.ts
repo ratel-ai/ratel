@@ -19,7 +19,7 @@ type SkillStatus = Skill["status"];
    the read side (`getPublishedCatalog` + the stored `catalog_version`) backs the
    Bearer-authed `/v1/catalog` pull-sync. Every helper takes an optional `db` so
    the pglite integration test exercises the real functions; production passes
-   nothing and gets the Neon client. */
+   nothing and gets the shared pg client. */
 
 /** The subset of the Drizzle client the catalog helpers use — lets a test inject pglite. */
 export type SkillsDb = Pick<ReturnType<typeof getDb>, "select" | "insert" | "update">;
@@ -204,12 +204,11 @@ export async function getProjectCatalogVersionV2(
 
 /**
  * Overwrite the stored catalog ETag. Also the sync endpoint's **self-heal** hook:
- * because `recomputeCatalogVersion` is a non-atomic read-then-write (the neon-http
- * driver has no interactive transactions), two concurrent set-changing mutations can
- * race and leave `catalog_version` stale. The sync 200 path — which hashes the set it
- * actually served — calls this whenever that authoritative hash differs from the
- * stored one, so any full read (a cache miss by any consumer) converges the stored
- * value back to correct. See {@link recomputeCatalogVersion}.
+ * because `recomputeCatalogVersion` is a read-then-write outside any transaction, two
+ * concurrent set-changing mutations can race and leave `catalog_version` stale. The
+ * sync 200 path, which hashes the set it actually served, calls this whenever that
+ * authoritative hash differs from the stored one, so any full read (a cache miss by any
+ * consumer) converges the stored value back to correct. See {@link recomputeCatalogVersion}.
  */
 export async function setProjectCatalogVersion(
   projectId: string,
@@ -237,12 +236,11 @@ export async function setProjectCatalogVersionV2(
  * serves, so the stored value and a freshly computed one can never disagree on
  * identical content).
  *
- * This read-then-write is not atomic (neon-http has no interactive transaction), so
- * two concurrent set-changing mutations on the same project can race and leave the
- * stored value stale. The sync 200 path is the safety net — it serves the freshly
- * hashed set and self-heals the stored value on any mismatch (see
- * {@link setProjectCatalogVersion}) — so the drift converges on the next full read
- * rather than persisting.
+ * This read-then-write runs outside a transaction, so two concurrent set-changing
+ * mutations on the same project can race and leave the stored value stale. The sync
+ * 200 path is the safety net: it serves the freshly hashed set and self-heals the
+ * stored value on any mismatch (see {@link setProjectCatalogVersion}), so the drift
+ * converges on the next full read rather than persisting.
  */
 export async function recomputeCatalogVersion(
   projectId: string,

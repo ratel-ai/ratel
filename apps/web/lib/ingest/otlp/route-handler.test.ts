@@ -490,7 +490,7 @@ test("a search captured in BOTH message content and a ratel.search span derives 
 test("derived-insert failure on an anchor-less batch → 500 (exporter must retry)", async () => {
   const { deps } = makeDeps({
     insertTraceEvents: async () => {
-      throw new Error("neon hiccup");
+      throw new Error("database hiccup");
     },
   });
   const body = JSON.stringify({
@@ -525,7 +525,7 @@ test("derived-insert failure on an anchor-less batch → 500 (exporter must retr
 test("derived-insert failure stays best-effort when events rows were stored", async () => {
   const { deps, inserted } = makeDeps({
     insertTraceEvents: async () => {
-      throw new Error("neon hiccup");
+      throw new Error("database hiccup");
     },
   });
   const res = await handleTracesRequest(req(otlpJsonWithDuplicateSearch("q"), auth), deps);

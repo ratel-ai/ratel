@@ -40,9 +40,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "apps/web/**"
-      ],
+      "includes": ["apps/web/**"],
       "linter": {
         "rules": {
           "style": {
@@ -142,8 +140,6 @@
         "apps/web/lib/catalog/wire-v2.ts",
         "apps/web/lib/catalog/wire-v2.test.ts",
         "apps/web/lib/catalog/manage.ts",
-        "apps/web/lib/catalog/import.ts",
-        "apps/web/lib/catalog/import.test.ts",
         "apps/web/lib/catalog/pull-route-handler.ts",
         "apps/web/lib/catalog/pull-route-handler.test.ts",
         "apps/web/lib/catalog/pull-route-handler-v2.ts",
@@ -163,8 +159,7 @@
         "apps/web/lib/console/seed/site-copilot-catalog.ts",
         "apps/web/lib/console/seed/site-copilot-turns.ts",
         "apps/web/lib/console/seed/site-copilot-plan.ts",
-        "apps/web/lib/console/seed/site-copilot-otlp.ts",
-        "apps/web/lib/console/seed/demo-runtime-catalog.test.ts"
+        "apps/web/lib/console/seed/site-copilot-otlp.ts"
       ],
       "linter": {
         "rules": {

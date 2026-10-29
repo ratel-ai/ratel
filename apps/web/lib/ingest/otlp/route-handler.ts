@@ -46,7 +46,7 @@ type ReportServerException = typeof reportServerException;
  * normalized rows into `otel_spans`.
  */
 
-/** Reject bodies above this size (Vercel serverless functions cap request bodies). */
+/** Reject bodies above this size, before decoding. */
 export const MAX_BODY_BYTES = 4_000_000;
 /** A compressed body may expand to this much, and no further (a small zip bomb stops here). */
 export const MAX_INFLATED_BYTES = 4 * MAX_BODY_BYTES;
@@ -189,7 +189,7 @@ export async function handleTracesRequest(
       return rejectTraceRequest(
         json(
           {
-            error: "Monthly event limit reached for your plan — upgrade in Billing to ingest more.",
+            error: "Monthly event limit reached for this organization.",
           },
           429,
         ),

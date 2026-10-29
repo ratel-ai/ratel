@@ -32,9 +32,8 @@ type IncrementEventUsage = (organizationId: string, n: number) => Promise<void>;
 /**
  * Store decoded OTLP spans under a project: the half of trace ingest that
  * comes after authentication and decoding. `/v1/traces` calls it for every
- * export; the Agent health importer (`lib/health-imports`) calls it with spans
- * built from Langfuse, LangSmith or Postgres, so imported runs land in exactly
- * the tables, ledger rows and signals a live exporter produces.
+ * export, and any other caller with decoded spans gets exactly the tables,
+ * ledger rows and signals a live exporter produces.
  *
  * Every row id is deterministic, so storing the same spans twice is a no-op.
  */

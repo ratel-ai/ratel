@@ -13,5 +13,5 @@ The catalog contract: the skills a project publishes and the tool definitions th
 | `serialize.ts`, `resolve-project.ts`, `http.ts` | management API serialization and session project resolve |
 | `skills/` | markdown and model-json helpers for skill bodies |
 
-Routes: `GET /api/v1/catalog`, `GET /api/v2/catalog`, `POST /api/v1/catalog/snapshot`,
+Routes: `GET /api/v1/catalog`, `GET /api/v2/catalog`, `PUT /api/v1/catalog/snapshot`,
 `/api/v1/skills/**`. Copies and owned files are listed in `scripts/platform-sync/map.json`.

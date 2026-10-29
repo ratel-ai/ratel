@@ -26,14 +26,10 @@
 import { eq, sql } from "drizzle-orm";
 import { siteCopilotCatalogEntries } from "@/lib/console/seed/site-copilot-catalog";
 import { assertLocalDatabase } from "@/lib/console/seed/local-database";
-import {
-  chatDedupeHash,
-  renderSiteCopilotOtlp,
-  SITE_COPILOT_DAYS,
-  type SiteChatSpan,
-} from "@/lib/console/seed/site-copilot-otlp";
-import { planSiteCopilot, SITE_COPILOT_SEED, SITE_COPILOT_TURNS } from "@/lib/console/seed/site-copilot-plan";
+import { renderSiteCopilotOtlp, SITE_COPILOT_DAYS } from "@/lib/console/seed/site-copilot-otlp";
+import { planSiteCopilot } from "@/lib/console/seed/site-copilot-plan";
 import { replaceProject, resolveSeedOrganization } from "@/lib/console/seed/replace-project";
+import { parseSeedArgs } from "@/lib/console/seed/seed-args";
 import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/queries";
@@ -48,42 +44,7 @@ import { createApiKey, findActiveApiKeyByHash, touchApiKey } from "@/lib/platfor
 
 const logger = getLogger("scripts/seed");
 const PROJECT_NAME = "Site Copilot";
-const DEFAULT_SLUG = "site-copilot";
 const KEY_NAME = "site-copilot-seed";
-const MINUTE_MS = 60_000;
-const BACKFILL_CHUNK = 500;
-
-interface Args {
-  org?: string;
-  slug: string;
-  anchorMs: number;
-  turns: number;
-  seed: number;
-}
-
-function parseArgs(argv: readonly string[]): Args {
-  const valued = new Set(["--slug", "--anchor", "--turns", "--seed"]);
-  const valueOf = (flag: string) => {
-    const i = argv.indexOf(flag);
-    return i === -1 ? undefined : argv[i + 1];
-  };
-  const unknown = argv.filter((arg) => arg.startsWith("--") && !valued.has(arg));
-  if (unknown.length > 0) throw new Error(`unknown flag ${unknown[0]}; see the header of scripts/seed.mts`);
-  const anchorArg = valueOf("--anchor");
-  const anchorMs = anchorArg ? new Date(anchorArg).getTime() : Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS;
-  if (!Number.isFinite(anchorMs)) throw new Error(`--anchor is not a date: ${anchorArg}`);
-  const turns = Number(valueOf("--turns") ?? SITE_COPILOT_TURNS);
-  const seed = Number(valueOf("--seed") ?? SITE_COPILOT_SEED);
-  if (!Number.isInteger(turns) || turns < 1) throw new Error("--turns takes a positive integer");
-  if (!Number.isInteger(seed)) throw new Error("--seed takes an integer");
-  return {
-    org: argv.find((arg, i) => !arg.startsWith("--") && !valued.has(argv[i - 1] ?? "")),
-    slug: valueOf("--slug") ?? DEFAULT_SLUG,
-    anchorMs,
-    turns,
-    seed,
-  };
-}
 
 /** The seed's own key, created fresh with the project. */
 async function createSeedKey(projectId: string): Promise<string> {
@@ -119,34 +80,6 @@ async function send(apiKey: string, body: object): Promise<Record<string, number
   );
 }
 
-/**
- * Point each model call's `events` row at its trace and span, so a captured
- * reply joins its turn. Until OTLP ingest writes them this fills them for the
- * seed's own rows (matched by the dedupe hash ingest gives a response id), and
- * once ingest does, it finds nothing to fill. Null when the database predates
- * the columns.
- */
-async function fillEventTraceIds(projectId: string, chats: readonly SiteChatSpan[]): Promise<number | null> {
-  const db = getDb();
-  const columns = await db.execute(
-    sql`select 1 from information_schema.columns where table_name = 'events' and column_name = 'trace_id'`,
-  );
-  if (columns.rows.length === 0) return null;
-  let filled = 0;
-  for (let i = 0; i < chats.length; i += BACKFILL_CHUNK) {
-    const values = sql.join(
-      chats.slice(i, i + BACKFILL_CHUNK).map((chat) => sql`(${chatDedupeHash(chat.responseId)}, ${chat.traceId}, ${chat.spanId})`),
-      sql`, `,
-    );
-    const result = await db.execute(sql`
-      update events as e set trace_id = v.trace_id, span_id = v.span_id
-      from (values ${values}) as v(dedupe_hash, trace_id, span_id)
-      where e.project_id = ${projectId} and e.dedupe_hash = v.dedupe_hash and e.trace_id is null`);
-    filled += result.rowCount ?? 0;
-  }
-  return filled;
-}
-
 async function storedCounts(
   projectId: string,
 ): Promise<{ events: number; spans: number; traceEvents: Record<string, number> }> {
@@ -168,7 +101,7 @@ async function storedCounts(
 
 async function seed() {
   assertLocalDatabase("seed Site Copilot");
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseSeedArgs(process.argv.slice(2));
   const db = getDb();
   const org = await resolveSeedOrganization(db, args.org);
   const [organization] = await db.select().from(organizations).where(eq(organizations.id, org.id)).limit(1);
@@ -190,8 +123,7 @@ async function seed() {
       accepted[key] = (accepted[key] ?? 0) + n;
     }
   }
-  const filled = await fillEventTraceIds(project.id, rendered.chatSpans);
-  return { org, windowDays, project, plan, rendered, accepted, filled, stored: await storedCounts(project.id) };
+  return { org, windowDays, project, plan, rendered, accepted, stored: await storedCounts(project.id) };
 }
 
 function report(out: Awaited<ReturnType<typeof seed>>): string {
@@ -213,12 +145,11 @@ function report(out: Awaited<ReturnType<typeof seed>>): string {
     `   accepted: ${Object.entries(out.accepted)
       .map(([key, n]) => `${key} ${n}`)
       .join(", ")}`,
-    `   stored: events ${stored.events}, otel_spans ${stored.spans}, trace_events ${Object.entries(stored.traceEvents)
-      .map(([type, n]) => `${type} ${n}`)
-      .join(", ")}`,
-    out.filled === null
-      ? "   events.trace_id: this database predates the trace_id columns, so replies cannot be joined to turns"
-      : `   events.trace_id: filled on ${out.filled} model-call rows`,
+    `   stored: events ${stored.events}, otel_spans ${stored.spans}, trace_events ${
+      Object.entries(stored.traceEvents)
+        .map(([type, n]) => `${type} ${n}`)
+        .join(", ") || "none"
+    }`,
     `   failed calls: ${top(s.failedCalls, 12)}`,
     `   after a failure: retried ${s.behaviors.retry}, switched ${s.behaviors.switch}, gave up ${s.behaviors.gaveUp}`,
     `   tasks planted (runs): ${top(s.chains, 9)}`,

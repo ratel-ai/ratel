@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import { memberships, organizations } from "@/lib/platform/identity/schema";
 import { projects } from "@/lib/platform/projects/schema";
+import { resolveSessionContext } from "@/lib/platform/session";
 
 /**
  * Helpers the local data scripts share (`scripts/seed.mts`): find the
@@ -20,11 +21,21 @@ export interface SeedOrganization {
   slug: string;
 }
 
+/** What a first console visit does: provision the session's user and personal organization. */
+async function openConsole(): Promise<SeedOrganization | null> {
+  return (await resolveSessionContext())?.organization ?? null;
+}
+
 /**
  * The organization named by `slug`; else the operator's; else the only
- * organization with a member. Throws when none of those settles it.
+ * organization with a member; else, when none has one, the one a first
+ * console visit provisions. Throws when none of those settles it.
  */
-export async function resolveSeedOrganization(db: Db, slug?: string): Promise<SeedOrganization> {
+export async function resolveSeedOrganization(
+  db: Db,
+  slug?: string,
+  provision: () => Promise<SeedOrganization | null> = openConsole,
+): Promise<SeedOrganization> {
   const columns = { id: organizations.id, slug: organizations.slug };
   const bySlug = async (value: string) =>
     (await db.select(columns).from(organizations).where(eq(organizations.slug, value)).limit(1))[0];
@@ -42,6 +53,8 @@ export async function resolveSeedOrganization(db: Db, slug?: string): Promise<Se
   const only = withMembers.length === 1 ? withMembers[0] : undefined;
   if (only) return only;
   if (withMembers.length === 0) {
+    const provisioned = await provision();
+    if (provisioned) return { id: provisioned.id, slug: provisioned.slug };
     throw new Error("No organization has a member yet. Open the console once, then rerun.");
   }
   throw new Error(
