@@ -153,7 +153,7 @@ export const traceEvents = pgTable(
     // a project in received order, from the fold cursor forward. Partial so it
     // stays small on projects that emit mostly churn / auth events. The list
     // is `FOLD_EVENT_TYPES` + `OTLP_FOLD_EVENT_TYPES` spelled out, since the
-    // migration holds this SQL verbatim; `event-types.test.ts` keeps them equal.
+    // migration holds this SQL verbatim; keep it in step with those lists.
     index("trace_events_project_received_fold_idx")
       .on(t.projectId, t.receivedAt, t.id)
       .where(
