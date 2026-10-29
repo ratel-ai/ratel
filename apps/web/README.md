@@ -35,5 +35,14 @@ pnpm --filter @ratel/platform test         # node:test; integration tests run on
 pnpm check:boundary && pnpm check:layers   # from the repository root: the structural rules
 ```
 
+Postgres for local work comes from the root `docker-compose.yml`:
+
+```sh
+docker compose up db                       # Postgres 16 on localhost:5432
+cp apps/web/.env.example apps/web/.env.local
+pnpm --filter @ratel/platform dev          # migrates on boot, then serves
+docker compose up --build                  # or the whole OSS edition in containers, http://localhost:3000
+```
+
 `dev`, `build` and `typecheck` run `scripts/link-ee.mjs --auto` first, which installs the private
 route stubs when `ee/src` exists and removes them otherwise.
