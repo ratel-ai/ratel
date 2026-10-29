@@ -70,6 +70,9 @@
         "NewTraceEventReject": "@/lib/ingest/trace-events/schema",
         "ToolUsageCounter": "@/lib/ingest/trace-events/schema",
         "NewToolUsageCounter": "@/lib/ingest/trace-events/schema",
+        "intentGraphRuntimeStatus": "@/lib/ingest/trace-events/schema",
+        "IntentGraphRuntimeStatusRow": "@/lib/ingest/trace-events/schema",
+        "NewIntentGraphRuntimeStatusRow": "@/lib/ingest/trace-events/schema",
         "runtimeEventSources": "@/lib/ingest/runtime-events/schema",
         "RuntimeEventSource": "@/lib/ingest/runtime-events/schema",
         "NewRuntimeEventSource": "@/lib/ingest/runtime-events/schema",
@@ -91,6 +94,10 @@
     "@/lib/db/queries": {
       "default": "@/lib/platform/db/queries",
       "symbols": {
+        "insertTraceEvents": "@/lib/ingest/trace-events/queries",
+        "insertTraceEventRejects": "@/lib/ingest/trace-events/queries",
+        "TraceDb": "@/lib/ingest/trace-events/queries",
+        "TraceEventRejectInput": "@/lib/ingest/trace-events/queries",
         "upsertUserByExternalId": "@/lib/platform/identity/queries",
         "getUserById": "@/lib/platform/identity/queries",
         "getUserByExternalId": "@/lib/platform/identity/queries",
