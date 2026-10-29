@@ -26,6 +26,8 @@ import { cn } from "@ratel/design-system/cn";
 Each file in `src/components/` is its own entry point. Components use only the semantic tokens,
 never raw colors.
 
+The rules for using them, and for any UI in the platform, are in [`DESIGN.md`](DESIGN.md).
+
 ## Layout
 
 | Path | Contents |
@@ -35,3 +37,4 @@ never raw colors.
 | `src/components/*.tsx` | primitives |
 | `src/components/*.ts` | pure logic: keyboard, sorting, tree, peek URL state |
 | `test/` | `node:test` suites, run with `pnpm test` |
+| `DESIGN.md` | the design language: principles, tokens, components, patterns, copy |
