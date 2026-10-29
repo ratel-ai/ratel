@@ -7,7 +7,7 @@
  * self-corrections, follow-ups) is described in
  * `lib/console/seed/site-copilot-plan.ts` and `site-copilot-turns.ts`.
  *
- *   pnpm --filter @ratel/platform seed              # into local-dev, on $DATABASE_URL
+ *   pnpm --filter @ratel/platform seed              # into the operator's organization, on $DATABASE_URL
  *   DATABASE_URL=postgres://... pnpm --filter @ratel/platform seed [org-slug] [flags]
  *
  *   --slug <slug>      project slug (default site-copilot)

@@ -12,8 +12,8 @@ import { projects } from "@/lib/platform/projects/schema";
 
 type Db = ReturnType<typeof getDb>;
 
-/** The workspace `DEV_AUTH_BYPASS=1` signs in to. */
-export const LOCAL_DEV_ORG_SLUG = "local-dev";
+/** The personal organization of the OSS operator (`lib/adapters/oss/session.ts`), made on the first console visit. */
+export const LOCAL_ORG_SLUG = "local-operator";
 
 export interface SeedOrganization {
   id: string;
@@ -21,7 +21,7 @@ export interface SeedOrganization {
 }
 
 /**
- * The organization named by `slug`; else `local-dev`; else the only
+ * The organization named by `slug`; else the operator's; else the only
  * organization with a member. Throws when none of those settles it.
  */
 export async function resolveSeedOrganization(db: Db, slug?: string): Promise<SeedOrganization> {
@@ -33,7 +33,7 @@ export async function resolveSeedOrganization(db: Db, slug?: string): Promise<Se
     if (!named) throw new Error(`no organization with slug "${slug}"`);
     return named;
   }
-  const local = await bySlug(LOCAL_DEV_ORG_SLUG);
+  const local = await bySlug(LOCAL_ORG_SLUG);
   if (local) return local;
   const withMembers = await db
     .selectDistinct(columns)
@@ -42,10 +42,10 @@ export async function resolveSeedOrganization(db: Db, slug?: string): Promise<Se
   const only = withMembers.length === 1 ? withMembers[0] : undefined;
   if (only) return only;
   if (withMembers.length === 0) {
-    throw new Error("No organization has a member yet. Sign in to the console first, then rerun.");
+    throw new Error("No organization has a member yet. Open the console once, then rerun.");
   }
   throw new Error(
-    `Several organizations have members and none is ${LOCAL_DEV_ORG_SLUG}; pass one: ${withMembers.map((o) => o.slug).join(", ")}`,
+    `Several organizations have members and none is ${LOCAL_ORG_SLUG}; pass one: ${withMembers.map((o) => o.slug).join(", ")}`,
   );
 }
 
