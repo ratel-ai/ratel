@@ -19,5 +19,6 @@ here; OTLP and the catalogs follow.
 | `catalogs/schema.ts` | `catalog_snapshots`, `catalog_tool_definitions` |
 | `runtime-catalog/schema.ts` | `runtime_catalog_entries` |
 
-Copies and owned files are listed in `scripts/platform-sync/map.json`. `categorize.ts` is a copy
-with one `biome-ignore`, to put back after each sync.
+Copies and owned files are listed in `scripts/platform-sync/map.json`. Four copies carry a
+`biome-ignore` to put back after each sync: one in `categorize.ts`, two in `trace-events/parse.ts`
+and one in `trace-events/route-handler.test.ts`.

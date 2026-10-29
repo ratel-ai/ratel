@@ -19,6 +19,7 @@ npm packages.
 | `environment.ts` | `APP_ENV` as the one public runtime value; local-environment allowlist |
 | `logger.ts`, `request-log.ts`, `rate-limit.ts`, `http/`, `otel/` | pino with error redaction, per-request logging, token buckets, body caps, self-telemetry |
 | `organization.ts`, `api-keys.ts`, `api-keys-observability.ts` | pure helpers: slugs and roles, key generation and hashing, expired-key reporting |
+| `api-key-bearer.ts` | `resolveProjectFromBearer`: the project a `/api/v1/*` bearer key belongs to |
 
 Owned here rather than synced (see `scripts/platform-sync/map.json`): the client, the schema and
 query fragments, session, entitlements, telemetry, environment, the OTel config and shutdown, and

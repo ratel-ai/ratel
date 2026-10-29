@@ -168,7 +168,7 @@ export const traceEvents = pgTable(
     // The turn-ledger builder's cursor scan (Agent health): the searches and
     // invocations of a project in received order, from the build cursor forward.
     // Partial so it skips churn, auth, catalog and upstream events. Keep the type
-    // list in step with TURN_EVENT_TYPES in lib/trace-signals/constants.ts.
+    // list in step with TURN_EVENT_TYPES in turns-schedule.ts.
     index("trace_events_project_received_turn_idx")
       .on(t.projectId, t.receivedAt, t.id)
       .where(

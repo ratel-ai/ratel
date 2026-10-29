@@ -73,7 +73,7 @@
     { "from": "apps/web/lib/trace-events/route-handler.ts", "to": "apps/web/lib/ingest/trace-events/route-handler.ts", "mode": "copy" },
     { "from": "apps/web/lib/trace-events/route-handler.test.ts", "to": "apps/web/lib/ingest/trace-events/route-handler.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/intent-graph/event-types.ts", "to": "apps/web/lib/ingest/trace-events/event-types.ts", "mode": "copy" },
-    { "from": "apps/web/lib/intent-graph/schedule.ts", "to": "apps/web/lib/ingest/trace-events/fold-schedule.ts", "mode": "owned", "$why": "the enqueue signatures are local types until the intent-graph and intent-engine slices land" },
+    { "from": "apps/web/lib/intent-graph/schedule.ts", "to": "apps/web/lib/ingest/trace-events/fold-schedule.ts", "mode": "owned", "$why": "the enqueue signatures are local types until the intent-graph and intent-engine slices land; FOLD_MIN_INTERVAL_MS is 5 minutes, as on upstream main after the pinned commit" },
     { "from": "apps/web/lib/trace-signals/turns/schedule.ts", "to": "apps/web/lib/ingest/trace-events/turns-schedule.ts", "mode": "owned", "$why": "no feature-flag gate (the Agent health gate is always on); TURN_EVENT_TYPES lives here, since trace-signals/constants.ts names a Cloud vendor" },
     { "from": "apps/web/lib/trace-events/consolidate.ts", "to": "apps/web/lib/ingest/trace-events/consolidate.ts", "mode": "owned", "$why": "the intent-graph live sync is an injected dependency until the intent-graph slice lands" },
     { "from": "apps/web/lib/db/queries.ts", "to": "apps/web/lib/ingest/trace-events/queries.ts", "mode": "owned", "$why": "the trace event inserts" },

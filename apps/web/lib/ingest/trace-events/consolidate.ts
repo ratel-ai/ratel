@@ -27,7 +27,8 @@ export type ConsolidateTraceEventsOptions = {
    * Keep the per-runtime ranking-status row and the graphs' live state from
    * `usage_ranking_status` events. Off, the events are stored like any other
    * and nothing else is written: the row and the live sync serve the
-   * Cloud-built intent graph, so the route passes the build flag's value.
+   * intent graph, so the route turns it on when the batch holds a
+   * `usage_ranking_status` event.
    */
   intentGraphRuntimeStatus?: boolean;
   /**
