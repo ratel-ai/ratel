@@ -1,0 +1,127 @@
+"use client";
+
+import { Dialog } from "@base-ui/react/dialog";
+import { IconButton } from "@ratel/design-system/button";
+import { cn } from "@ratel/design-system/cn";
+import { isTypingTarget } from "@ratel/design-system/peek";
+import { TooltipProvider } from "@ratel/design-system/tooltip";
+import { Menu } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  activeNavItemId,
+  consoleNav,
+  findProject,
+  projectIdFromPath,
+} from "@/lib/console/navigation";
+import { serializeSidebarCollapsedCookie } from "@/lib/console/sidebar-cookie";
+import { SidebarContent } from "./Sidebar";
+import type { ShellData } from "./types";
+
+/**
+ * The console shell (DESIGN.md, Layout): rail on the left, the page on the right, no top bar.
+ * Owns the `[` shortcut and the mobile drawer.
+ */
+export function AppFrame({ data, children }: { data: ShellData; children: ReactNode }) {
+  const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(data.initiallyCollapsed);
+  // The drawer remembers the page it was opened on, so any navigation closes it without an effect.
+  const [mobileOpenOn, setMobileOpenOn] = useState<string | null>(null);
+  const mobileOpen = mobileOpenOn === pathname;
+  const setMobileOpen = useCallback(
+    (open: boolean) => setMobileOpenOn(open ? pathname : null),
+    [pathname],
+  );
+
+  const project = findProject(data.projects, projectIdFromPath(pathname));
+  const items = useMemo(
+    () => consoleNav({ projectId: project?.id, additions: data.editionNav }),
+    [project, data.editionNav],
+  );
+  const activeId = activeNavItemId(pathname, items);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((current) => {
+      const next = !current;
+      // biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API is not in every supported browser
+      document.cookie = serializeSidebarCollapsedCookie(next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        isTypingTarget(event.target)
+      )
+        return;
+      // An open dialog or panel owns the keyboard.
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      if (event.key === "[") {
+        event.preventDefault();
+        toggleCollapsed();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [toggleCollapsed]);
+
+  const sidebarProps = {
+    items,
+    activeId,
+    organizationName: data.organizationName,
+    projects: data.projects,
+    project,
+  };
+
+  return (
+    <TooltipProvider>
+      <div className="flex min-h-dvh bg-app text-fg">
+        <aside
+          aria-label="Sidebar"
+          data-collapsed={collapsed || undefined}
+          className={cn(
+            "sticky top-0 z-rail hidden h-dvh shrink-0 border-r border-line bg-rail transition-[width] duration-200 ease-enter motion-reduce:transition-none md:block",
+            collapsed ? "w-12" : "w-60",
+          )}
+        >
+          <SidebarContent
+            {...sidebarProps}
+            collapsed={collapsed}
+            onToggleCollapsed={toggleCollapsed}
+          />
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="sticky top-0 z-sticky flex h-12 items-center gap-2 border-b border-line bg-rail px-2 md:hidden">
+            <IconButton label="Open menu" icon={<Menu />} onClick={() => setMobileOpen(true)} />
+            <span className="min-w-0 flex-1 truncate text-ui font-semibold">
+              {project?.name ?? data.organizationName ?? "Ratel"}
+            </span>
+          </div>
+          <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 outline-none">
+            {children}
+          </main>
+        </div>
+      </div>
+
+      <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-dialog bg-scrim transition-opacity duration-160 data-starting-style:opacity-0 data-ending-style:opacity-0 md:hidden" />
+          <Dialog.Popup className="fixed inset-y-0 left-0 z-dialog w-[min(18rem,85vw)] border-r border-line bg-rail outline-none transition-[translate] duration-200 ease-enter data-starting-style:-translate-x-full data-ending-style:-translate-x-full motion-reduce:transition-none md:hidden">
+            <Dialog.Title className="sr-only">Navigation</Dialog.Title>
+            <SidebarContent
+              {...sidebarProps}
+              collapsed={false}
+              onNavigate={() => setMobileOpen(false)}
+            />
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </TooltipProvider>
+  );
+}

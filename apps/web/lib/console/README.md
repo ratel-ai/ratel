@@ -4,6 +4,9 @@ Development seeds.
 
 | Path | Holds |
 |---|---|
+| `navigation.ts` | the rail model: project URLs, the destinations this build has plus `composition.nav`, the active item, project switching |
+| `shell-data.ts` | the session organization and its projects, once per request, for the shell and the pages |
+| `sidebar-cookie.ts` | the persisted collapse state of the sidebar |
 | `seed/` | local-database guard, seed organization and project replace, seed command-line args, Site Copilot OTLP/catalog fixtures |
 
 `pnpm --filter @ratel/platform seed` runs `scripts/seed.mts`, which writes Site Copilot through the

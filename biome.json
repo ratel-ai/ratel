@@ -159,7 +159,10 @@
         "apps/web/lib/console/seed/site-copilot-catalog.ts",
         "apps/web/lib/console/seed/site-copilot-turns.ts",
         "apps/web/lib/console/seed/site-copilot-plan.ts",
-        "apps/web/lib/console/seed/site-copilot-otlp.ts"
+        "apps/web/lib/console/seed/site-copilot-otlp.ts",
+        "apps/web/lib/console/sidebar-cookie.ts",
+        "apps/web/lib/console/sidebar-cookie.test.ts",
+        "apps/web/components/console/shell/DatabaseUnavailable.tsx"
       ],
       "linter": {
         "rules": {
