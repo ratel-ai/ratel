@@ -679,12 +679,14 @@ test("trace rejections classify every response path", async () => {
           req(otlpJson(), auth),
           makeDeps({
             trackServerEvent,
-            getOrganizationByProjectId: async () =>
-              ({
-                id: "org-1",
-                limitOverrides: { monthlyEventLimit: 100 },
-              }) as never,
-            resetEventUsageIfElapsed: async () => 50_000,
+            getOrganizationByProjectId: async () => ({ id: "org-1" }) as never,
+            checkEventQuota: async () => ({
+              ok: false,
+              plan: "free",
+              limit: 100,
+              used: 50_000,
+              message: "Monthly event limit reached for your plan.",
+            }),
           }).deps,
         ),
     },

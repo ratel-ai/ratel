@@ -12,6 +12,7 @@ test("defaults: no org, site-copilot, now to the minute, the plan's turns and se
     anchorMs: Date.parse("2026-03-04T05:06:00.000Z"),
     turns: SITE_COPILOT_TURNS,
     seed: SITE_COPILOT_SEED,
+    drain: 0,
   });
 });
 
@@ -26,6 +27,8 @@ test("reads the org positional and every flag, in any order", () => {
     "2026-01-01T00:00:00Z",
     "--seed",
     "-3",
+    "--drain",
+    "3",
   ];
   assert.deepEqual(parseSeedArgs(argv, NOW), {
     org: "acme",
@@ -33,6 +36,7 @@ test("reads the org positional and every flag, in any order", () => {
     anchorMs: Date.parse("2026-01-01T00:00:00Z"),
     turns: 20,
     seed: -3,
+    drain: 3,
   });
 });
 
@@ -46,4 +50,8 @@ test("rejects unknown flags and bad values", () => {
   assert.throws(() => parseSeedArgs(["--turns", "0"], NOW), /--turns takes a positive integer/);
   assert.throws(() => parseSeedArgs(["--turns", "1.5"], NOW), /--turns takes a positive integer/);
   assert.throws(() => parseSeedArgs(["--seed", "x"], NOW), /--seed takes an integer/);
+  assert.throws(
+    () => parseSeedArgs(["--drain", "-1"], NOW),
+    /--drain takes a non-negative integer/,
+  );
 });

@@ -1,3 +1,4 @@
+import { and, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
 import {
   eventMetrics,
   events,
@@ -13,6 +14,7 @@ import type { NewRuntimeCatalogEntry } from "@/lib/ingest/runtime-catalog/schema
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
+import { NON_ROUND_TRIP_OPERATIONS } from "./constants";
 
 /** The event, span and log writes (owned fragment of the upstream queries hub, ADR-0030). */
 
@@ -164,4 +166,33 @@ export async function insertOtelLogs(
   }
 
   return result;
+}
+
+/**
+ * The subset of `traceIds` with a stored model-call span: an `llm_call` that is neither an
+ * agent wrapper nor an embeddings or retrieval operation. Feeds the agent-span dedupe,
+ * which must not count a wrapper's summed usage as one more call; uses
+ * `otel_spans_project_trace_idx`.
+ */
+export async function findTracesWithModelCalls(
+  projectId: string,
+  traceIds: string[],
+  db: Pick<ReturnType<typeof getDb>, "selectDistinct"> = getDb(),
+): Promise<Set<string>> {
+  if (traceIds.length === 0) return new Set();
+  const rows = await db
+    .selectDistinct({ traceId: otelSpans.traceId })
+    .from(otelSpans)
+    .where(
+      and(
+        eq(otelSpans.projectId, projectId),
+        inArray(otelSpans.traceId, traceIds),
+        eq(otelSpans.spanClass, "llm_call"),
+        or(
+          isNull(otelSpans.operationName),
+          notInArray(otelSpans.operationName, [...NON_ROUND_TRIP_OPERATIONS]),
+        ),
+      ),
+    );
+  return new Set(rows.map((row) => row.traceId));
 }

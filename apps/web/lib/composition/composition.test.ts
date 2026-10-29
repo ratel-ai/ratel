@@ -169,6 +169,18 @@ describe("registry root", () => {
     );
   });
 
+  it("the core modules landed so far register their jobs and steps in layer order", () => {
+    assert.deepEqual(Object.keys(jobHandlers()).sort(), ["build_trace_turns"]);
+    assert.deepEqual(
+      drainSteps().map((s) => `${s.phase}:${s.name}${s.retentionOnly ? ":retention" : ""}`),
+      [
+        "before:trace_turns_build_enqueue",
+        "after:runtime_events_prune:retention",
+        "after:runtime_event_rejects_prune:retention",
+      ],
+    );
+  });
+
   it("refuses a job kind or drain step registered twice", () => {
     const twice = [{ jobs: { a: async () => 1 } }, { jobs: { a: async () => 2 } }];
     assert.throws(() => jobHandlers(twice), /job kind registered twice: a/);

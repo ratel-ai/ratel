@@ -159,7 +159,20 @@
         "apps/web/lib/console/seed/site-copilot-catalog.ts",
         "apps/web/lib/console/seed/site-copilot-turns.ts",
         "apps/web/lib/console/seed/site-copilot-plan.ts",
-        "apps/web/lib/console/seed/site-copilot-otlp.ts"
+        "apps/web/lib/console/seed/site-copilot-otlp.ts",
+        "apps/web/lib/ingest/trace-events/maintenance.ts",
+        "apps/web/lib/ledger/types.ts",
+        "apps/web/lib/ledger/hash.test.ts",
+        "apps/web/lib/ledger/test-support.ts",
+        "apps/web/lib/ledger/turns/aggregate.ts",
+        "apps/web/lib/ledger/turns/attribute.ts",
+        "apps/web/lib/ledger/turns/attribute.test.ts",
+        "apps/web/lib/ledger/turns/build-turn.ts",
+        "apps/web/lib/ledger/turns/build-turn.test.ts",
+        "apps/web/lib/ledger/turns/segment.test.ts",
+        "apps/web/lib/ledger/turns/segment-root-tool.test.ts",
+        "apps/web/lib/ledger/turns/normalize.ts",
+        "apps/web/lib/ledger/turn-pages.ts"
       ],
       "linter": {
         "rules": {
