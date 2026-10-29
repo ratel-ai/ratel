@@ -33,6 +33,8 @@ files this repository maintains, and ports what applies by hand.
 
 - Never edit a `copy` file here: the next sync overwrites it. Fix it upstream, or change its mode
   to `owned` in `map.json` with a reason.
+- The `biome.json` override for copied code is `copyIncludes(map)` from `sync.mjs`; `sync.test.mjs`
+  fails when the two differ, so regenerate it after changing a `copy` entry.
 - A new `@/lib/*` specifier the rules do not map is reported as *unmapped*; add the move to
   `map.json` (or a rule to `rewrites.json`) before landing.
 - A private-string hit is never worked around in the list; the file is excluded or fixed upstream.

@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+// Self-contained OTLP logs wire schema — enough of opentelemetry-proto to
+// decode an ExportLogsServiceRequest posted to /v1/logs.
+//
+// This is a flattened copy of the stable OTLP transport messages. Protobuf wire
+// compatibility depends on field numbers and types, not local package names.
+//
+// Regenerate the JSON descriptor next to this file after editing:
+//   node scripts/gen-otlp-descriptor.mjs
+package ratel.otlp;
+
+message ExportLogsServiceRequest {
+  repeated ResourceLogs resource_logs = 1;
+}
+
+message ResourceLogs {
+  Resource resource = 1;
+  repeated ScopeLogs scope_logs = 2;
+  string schema_url = 3;
+}
+
+message Resource {
+  repeated KeyValue attributes = 1;
+  uint32 dropped_attributes_count = 2;
+}
+
+message ScopeLogs {
+  InstrumentationScope scope = 1;
+  repeated LogRecord log_records = 2;
+  string schema_url = 3;
+}
+
+message InstrumentationScope {
+  string name = 1;
+  string version = 2;
+  repeated KeyValue attributes = 3;
+  uint32 dropped_attributes_count = 4;
+}
+
+message LogRecord {
+  fixed64 time_unix_nano = 1;
+  SeverityNumber severity_number = 2;
+  string severity_text = 3;
+  AnyValue body = 5;
+  repeated KeyValue attributes = 6;
+  uint32 dropped_attributes_count = 7;
+  fixed32 flags = 8;
+  bytes trace_id = 9;
+  bytes span_id = 10;
+  fixed64 observed_time_unix_nano = 11;
+  string event_name = 12;
+}
+
+enum SeverityNumber {
+  SEVERITY_NUMBER_UNSPECIFIED = 0;
+  SEVERITY_NUMBER_TRACE = 1;
+  SEVERITY_NUMBER_TRACE2 = 2;
+  SEVERITY_NUMBER_TRACE3 = 3;
+  SEVERITY_NUMBER_TRACE4 = 4;
+  SEVERITY_NUMBER_DEBUG = 5;
+  SEVERITY_NUMBER_DEBUG2 = 6;
+  SEVERITY_NUMBER_DEBUG3 = 7;
+  SEVERITY_NUMBER_DEBUG4 = 8;
+  SEVERITY_NUMBER_INFO = 9;
+  SEVERITY_NUMBER_INFO2 = 10;
+  SEVERITY_NUMBER_INFO3 = 11;
+  SEVERITY_NUMBER_INFO4 = 12;
+  SEVERITY_NUMBER_WARN = 13;
+  SEVERITY_NUMBER_WARN2 = 14;
+  SEVERITY_NUMBER_WARN3 = 15;
+  SEVERITY_NUMBER_WARN4 = 16;
+  SEVERITY_NUMBER_ERROR = 17;
+  SEVERITY_NUMBER_ERROR2 = 18;
+  SEVERITY_NUMBER_ERROR3 = 19;
+  SEVERITY_NUMBER_ERROR4 = 20;
+  SEVERITY_NUMBER_FATAL = 21;
+  SEVERITY_NUMBER_FATAL2 = 22;
+  SEVERITY_NUMBER_FATAL3 = 23;
+  SEVERITY_NUMBER_FATAL4 = 24;
+}
+
+message KeyValue {
+  string key = 1;
+  AnyValue value = 2;
+}
+
+message AnyValue {
+  oneof value {
+    string string_value = 1;
+    bool bool_value = 2;
+    int64 int_value = 3;
+    double double_value = 4;
+    ArrayValue array_value = 5;
+    KeyValueList kvlist_value = 6;
+    bytes bytes_value = 7;
+  }
+}
+
+message ArrayValue {
+  repeated AnyValue values = 1;
+}
+
+message KeyValueList {
+  repeated KeyValue values = 1;
+}

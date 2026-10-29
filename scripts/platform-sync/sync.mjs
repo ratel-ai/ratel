@@ -47,6 +47,22 @@ function expand(entry, sourceRoot) {
   });
 }
 
+/**
+ * The biome override for copied code, in map order: a copied file as itself, a copied folder as a
+ * glob followed by the owned files inside it, negated. `[` and `]` are escaped for biome.
+ */
+export function copyIncludes(map, repoRoot = REPO_ROOT) {
+  const glob = (p) => p.replace(/[[\]]/g, "\\$&");
+  const owned = map.entries.filter((e) => e.mode === "owned").map((e) => e.to);
+  return map.entries
+    .filter((e) => e.mode === "copy")
+    .flatMap((e) => {
+      const dest = join(repoRoot, e.to);
+      if (!existsSync(dest) || !statSync(dest).isDirectory()) return [glob(e.to)];
+      return [`${glob(e.to)}/**`, ...owned.filter((o) => under(o, e.to)).map((o) => `!${glob(o)}`)];
+    });
+}
+
 /** Format one file's content the way the repository's biome would, so a plan compares like with like. */
 export function formatWithBiome(repoRoot, path, content) {
   try {

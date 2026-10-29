@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { findPrivateStrings, hashToken, scanDir } from "./private-strings.mjs";
 import { absolutizeRelative, buildRules, partitionImports, renameIdentifiers, rewriteSource, rewriteSpecifiers } from "./rewrite-imports.mjs";
-import { applySync, planSync } from "./sync.mjs";
+import { applySync, copyIncludes, planSync } from "./sync.mjs";
 
 const MAP = {
   entries: [
@@ -251,5 +252,33 @@ describe("sync", () => {
     const { report } = plan({ only: "apps/web/lib/platform" });
     assert.deepEqual(report.copied, []);
     assert.deepEqual(report.ownedBootstrapped, ["apps/web/lib/platform/db/client.ts"]);
+  });
+});
+
+describe("biome copy override", () => {
+  it("lists copy entries, a folder as a glob followed by the owned files inside it", () => {
+    repo = mkdtempSync(join(tmpdir(), "ratel-sync-repo-"));
+    put(repo, "apps/web/lib/ingest/otlp/a.ts", "");
+    const map = {
+      entries: [
+        ...MAP.entries,
+        { from: "apps/web/lib/otlp/own.ts", to: "apps/web/lib/ingest/otlp/own.ts", mode: "owned" },
+        { from: "apps/web/lib/seed/[id].ts", to: "apps/web/lib/console/seed/[id].ts", mode: "copy" },
+      ],
+    };
+    assert.deepEqual(copyIncludes(map, repo), [
+      "apps/web/lib/ingest/otlp/**",
+      "!apps/web/lib/ingest/otlp/own.ts",
+      "apps/web/lib/console/seed/\\[id\\].ts",
+    ]);
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("matches map.json in the repository's biome.json", () => {
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const map = JSON.parse(readFileSync(join(root, "scripts/platform-sync/map.json"), "utf8"));
+    const biome = JSON.parse(readFileSync(join(root, "biome.json"), "utf8"));
+    const override = biome.overrides.find((o) => o.linter?.rules?.suspicious?.useIterableCallbackReturn === "off");
+    assert.deepEqual(override.includes, copyIncludes(map, root));
   });
 });
