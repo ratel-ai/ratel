@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { isGatewayTool } from "@/lib/ingest/gateway-tools";
+import { eventMetrics } from "@/lib/ingest/otlp/schema";
 import {
   type NewRuntimeCatalogEntry,
   runtimeCatalogEntries,
@@ -9,6 +11,142 @@ import { getDb } from "@/lib/platform/db/client";
 export type RuntimeCatalogChannel = "events" | "snapshot";
 
 export type RuntimeCatalogWriteDb = Pick<ReturnType<typeof getDb>, "insert">;
+
+/** A tool the runtime declared: the newest definition under its name. */
+export interface RuntimeToolDefinition {
+  entryId: string;
+  name: string;
+  description: string;
+  tags: string[];
+  inputSchema: unknown;
+  outputSchema: unknown;
+  searchableDescription: string;
+  searchableDescriptionOverridden: boolean;
+  useCloudDefinitions?: boolean | null;
+  provenance: "events" | "snapshot" | "both";
+  searchableDescriptionOverride: string | null;
+  lastSeenAt: Date;
+}
+
+/** A tool name seen only in retained trace metrics, with no definition yet. */
+export interface RuntimeObservedTool {
+  entryId: null;
+  name: string;
+  provenance: "observed";
+  lastSeenAt: Date;
+}
+
+export type RuntimeToolCatalogEntry = RuntimeToolDefinition | RuntimeObservedTool;
+
+/**
+ * Managed definitions plus names seen only in retained trace metrics, in one read: the
+ * project's tools as the readings know them (the intent engine's vocabulary). Gateway tools
+ * are left out. The newest definition wins under a name shared by several entry ids.
+ */
+export async function getRuntimeToolCatalogEntries(
+  projectId: string,
+  db: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
+): Promise<RuntimeToolCatalogEntry[]> {
+  const result = await db.execute(sql`
+    with definitions as (
+      select
+        entry_id,
+        name,
+        description,
+        tags,
+        input_schema,
+        output_schema,
+        searchable_description,
+        searchable_description_overridden,
+        use_cloud_definitions,
+        searchable_description_override,
+        provenance,
+        last_seen_at,
+        row_number() over (
+          partition by name
+          order by last_seen_at desc, entry_id asc
+        ) as position
+      from ${runtimeCatalogEntries}
+      where project_id = ${projectId} and kind = 'tool'
+    ),
+    observed as (
+      select tool.name, max(metric.event_time) as last_seen_at
+      from ${eventMetrics} as metric
+      cross join lateral jsonb_object_keys(metric.tools_by_name) as tool(name)
+      where metric.project_id = ${projectId}
+      group by tool.name
+    )
+    select
+      entry_id,
+      name,
+      description,
+      tags,
+      input_schema,
+      output_schema,
+      searchable_description,
+      searchable_description_overridden,
+      use_cloud_definitions,
+      searchable_description_override,
+      provenance,
+      last_seen_at
+    from definitions
+    where position = 1
+    union all
+    select
+      null::text as entry_id,
+      observed.name,
+      null::text as description,
+      null::jsonb as tags,
+      null::jsonb as input_schema,
+      null::jsonb as output_schema,
+      null::text as searchable_description,
+      null::boolean as searchable_description_overridden,
+      null::boolean as use_cloud_definitions,
+      null::text as searchable_description_override,
+      'observed'::text as provenance,
+      observed.last_seen_at
+    from observed
+    where not exists (
+      select 1 from definitions where definitions.name = observed.name
+    )
+    order by name asc
+  `);
+
+  return result.rows.map(toRuntimeToolCatalogEntry).filter((entry) => !isGatewayTool(entry.name));
+}
+
+function toRuntimeToolCatalogEntry(raw: unknown): RuntimeToolCatalogEntry {
+  const row = raw as Record<string, unknown>;
+  const name = String(row.name);
+  const lastSeenAt = new Date(row.last_seen_at as string | Date);
+  if (row.entry_id === null) {
+    return { entryId: null, name, provenance: "observed", lastSeenAt };
+  }
+  return {
+    entryId: String(row.entry_id),
+    name,
+    description: String(row.description),
+    tags: row.tags as string[],
+    inputSchema: row.input_schema,
+    outputSchema: row.output_schema,
+    searchableDescription: String(row.searchable_description),
+    searchableDescriptionOverridden: Boolean(row.searchable_description_overridden),
+    useCloudDefinitions: Boolean(row.use_cloud_definitions),
+    searchableDescriptionOverride:
+      row.searchable_description_override === null
+        ? null
+        : String(row.searchable_description_override),
+    provenance: runtimeCatalogProvenance(row.provenance),
+    lastSeenAt,
+  };
+}
+
+function runtimeCatalogProvenance(value: unknown): RuntimeToolDefinition["provenance"] {
+  if (value === "events" || value === "snapshot" || value === "both") {
+    return value;
+  }
+  throw new Error(`invalid runtime catalog provenance: ${String(value)}`);
+}
 
 /**
  * A row renders 15 bind parameters, and Postgres counts them in an int16, so a

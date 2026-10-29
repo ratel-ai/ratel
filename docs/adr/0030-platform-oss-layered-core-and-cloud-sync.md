@@ -90,8 +90,9 @@ and all infrastructure (Terraform, Helm, deploy workflows).
 `ANTHROPIC_API_KEY` for engine level-1 names, topic names, the match-quality analyst and task
 labels; `OPENAI_API_KEY` for topics placement and sentiment, the match-quality judge, Agent health
 workflow decisions and Playground embeddings. The intent engine clusters lexically at every
-level; a model only writes names. With no key there is no outbound call and every feature
-degrades as upstream does. Retention is on by default in OSS (`DATA_RETENTION_ENABLED=1`, 30
+level; a model only writes names. The decisions client ships with OpenAI only: `DECISION_ENGINE`
+names no other engine here, and the Jev and Sage clients stay private. With no key there is no
+outbound call and every feature degrades as upstream does. Retention is on by default in OSS (`DATA_RETENTION_ENABLED=1`, 30
 days), and no event or log carries member text, queries, prompts or labels.
 
 **`@ratel-ai/sdk` from npm**, pinned to the version `ratel-cloud` runs, hoisted only inside the

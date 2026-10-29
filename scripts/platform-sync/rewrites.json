@@ -4,31 +4,131 @@
     {
       "from": "@/components/ds/",
       "to": "@ratel/design-system/",
-      "except": ["@/components/ds/entity", "@/components/ds/dot-loader"]
+      "except": [
+        "@/components/ds/entity",
+        "@/components/ds/dot-loader"
+      ]
     },
-    { "from": "@/lib/utils", "to": "@ratel/design-system/cn", "exact": true },
-    { "from": "@/lib/cn", "to": "@ratel/design-system/cn", "exact": true },
-    { "from": "@/lib/db/index", "to": "@/lib/platform/db/client", "exact": true },
-    { "from": "@/lib/db", "to": "@/lib/platform/db/client", "exact": true },
-    { "from": "@/lib/db/test-support", "to": "@/lib/platform/db/test-support", "exact": true },
-    { "from": "@/lib/db/statement-timeout", "to": "@/lib/platform/db/statement-timeout", "exact": true },
-    { "from": "@/lib/auth-user", "to": "@/lib/platform/session", "exact": true },
-    { "from": "@/lib/entitlements", "to": "@/lib/platform/entitlements", "exact": true },
-    { "from": "@/lib/analytics/track-server", "to": "@/lib/platform/telemetry", "exact": true },
-    { "from": "@/lib/analytics/product-events", "to": "@/lib/platform/telemetry", "exact": true },
-    { "from": "@/lib/observability/report-exception", "to": "@/lib/platform/telemetry", "exact": true },
-    { "from": "@/lib/observability/resilient-read", "to": "@/lib/platform/resilient-read", "exact": true },
-    { "from": "@/lib/environment", "to": "@/lib/platform/environment", "exact": true },
-    { "from": "@/lib/scope/cookie", "to": "@/lib/console/scope/cookie", "exact": true },
-    { "from": "@/lib/cron/drain", "to": "@/lib/jobs/drain", "exact": true },
-    { "from": "@/lib/stripe/subscription", "to": "@/lib/platform/entitlements", "exact": true },
-    { "from": "@/lib/stripe/plans", "to": "@/lib/platform/entitlements", "exact": true },
-    { "from": "@/lib/api-keys/bearer", "to": "@/lib/platform/api-key-bearer", "exact": true },
-    { "from": "@/lib/v1-errors", "to": "@/lib/platform/v1-errors", "exact": true },
-    { "from": "@/lib/rate-limit", "to": "@/lib/platform/rate-limit", "exact": true },
-    { "from": "@/lib/request-log", "to": "@/lib/platform/request-log", "exact": true },
-    { "from": "@/lib/logger", "to": "@/lib/platform/logger", "exact": true },
-    { "from": "@/lib/api-keys", "to": "@/lib/platform/api-keys", "exact": true }
+    {
+      "from": "@/lib/utils",
+      "to": "@ratel/design-system/cn",
+      "exact": true
+    },
+    {
+      "from": "@/lib/cn",
+      "to": "@ratel/design-system/cn",
+      "exact": true
+    },
+    {
+      "from": "@/lib/db/index",
+      "to": "@/lib/platform/db/client",
+      "exact": true
+    },
+    {
+      "from": "@/lib/db",
+      "to": "@/lib/platform/db/client",
+      "exact": true
+    },
+    {
+      "from": "@/lib/db/test-support",
+      "to": "@/lib/platform/db/test-support",
+      "exact": true
+    },
+    {
+      "from": "@/lib/db/statement-timeout",
+      "to": "@/lib/platform/db/statement-timeout",
+      "exact": true
+    },
+    {
+      "from": "@/lib/auth-user",
+      "to": "@/lib/platform/session",
+      "exact": true
+    },
+    {
+      "from": "@/lib/entitlements",
+      "to": "@/lib/platform/entitlements",
+      "exact": true
+    },
+    {
+      "from": "@/lib/analytics/track-server",
+      "to": "@/lib/platform/telemetry",
+      "exact": true
+    },
+    {
+      "from": "@/lib/analytics/product-events",
+      "to": "@/lib/platform/telemetry",
+      "exact": true
+    },
+    {
+      "from": "@/lib/observability/report-exception",
+      "to": "@/lib/platform/telemetry",
+      "exact": true
+    },
+    {
+      "from": "@/lib/observability/resilient-read",
+      "to": "@/lib/platform/resilient-read",
+      "exact": true
+    },
+    {
+      "from": "@/lib/environment",
+      "to": "@/lib/platform/environment",
+      "exact": true
+    },
+    {
+      "from": "@/lib/scope/cookie",
+      "to": "@/lib/console/scope/cookie",
+      "exact": true
+    },
+    {
+      "from": "@/lib/cron/drain",
+      "to": "@/lib/jobs/drain",
+      "exact": true
+    },
+    {
+      "from": "@/lib/stripe/subscription",
+      "to": "@/lib/platform/entitlements",
+      "exact": true
+    },
+    {
+      "from": "@/lib/stripe/plans",
+      "to": "@/lib/platform/entitlements",
+      "exact": true
+    },
+    {
+      "from": "@/lib/api-keys/bearer",
+      "to": "@/lib/platform/api-key-bearer",
+      "exact": true
+    },
+    {
+      "from": "@/lib/v1-errors",
+      "to": "@/lib/platform/v1-errors",
+      "exact": true
+    },
+    {
+      "from": "@/lib/rate-limit",
+      "to": "@/lib/platform/rate-limit",
+      "exact": true
+    },
+    {
+      "from": "@/lib/request-log",
+      "to": "@/lib/platform/request-log",
+      "exact": true
+    },
+    {
+      "from": "@/lib/logger",
+      "to": "@/lib/platform/logger",
+      "exact": true
+    },
+    {
+      "from": "@/lib/api-keys",
+      "to": "@/lib/platform/api-keys",
+      "exact": true
+    },
+    {
+      "from": "@/lib/trace-signals/workflows/label-job",
+      "to": "@/lib/readings/model-defaults",
+      "exact": true
+    }
   ],
   "partitions": {
     "@/lib/db/schema": {
@@ -100,7 +200,32 @@
         "skills": "@/lib/catalog/schema",
         "toolDefinitions": "@/lib/catalog/schema",
         "Skill": "@/lib/catalog/schema",
-        "NewSkill": "@/lib/catalog/schema"
+        "NewSkill": "@/lib/catalog/schema",
+        "queryIntents": "@/lib/readings/query-intents/schema",
+        "queryIntentOccurrences": "@/lib/readings/query-intents/schema",
+        "QueryIntent": "@/lib/readings/query-intents/schema",
+        "NewQueryIntent": "@/lib/readings/query-intents/schema",
+        "QueryIntentOccurrence": "@/lib/readings/query-intents/schema",
+        "NewQueryIntentOccurrence": "@/lib/readings/query-intents/schema",
+        "intentGraphs": "@/lib/readings/intent-graph/schema",
+        "intentGraphRevisions": "@/lib/readings/intent-graph/schema",
+        "intentGraphClusters": "@/lib/readings/intent-graph/schema",
+        "intentGraphEdges": "@/lib/readings/intent-graph/schema",
+        "intentGraphShadowTurns": "@/lib/readings/intent-graph/schema",
+        "IntentGraphRow": "@/lib/readings/intent-graph/schema",
+        "NewIntentGraphRow": "@/lib/readings/intent-graph/schema",
+        "IntentGraphRevisionRow": "@/lib/readings/intent-graph/schema",
+        "NewIntentGraphRevisionRow": "@/lib/readings/intent-graph/schema",
+        "IntentGraphClusterRow": "@/lib/readings/intent-graph/schema",
+        "NewIntentGraphClusterRow": "@/lib/readings/intent-graph/schema",
+        "IntentGraphEdgeRow": "@/lib/readings/intent-graph/schema",
+        "NewIntentGraphEdgeRow": "@/lib/readings/intent-graph/schema",
+        "IntentGraphShadowTurnRow": "@/lib/readings/intent-graph/schema",
+        "intentEngineState": "@/lib/readings/intent-engine/schema",
+        "intentClusters": "@/lib/readings/intent-engine/schema",
+        "intentClusterAssignments": "@/lib/readings/intent-engine/schema",
+        "IntentClusterRow": "@/lib/readings/intent-engine/schema",
+        "IntentClusterAssignmentRow": "@/lib/readings/intent-engine/schema"
       }
     },
     "@/lib/db/queries": {
@@ -203,7 +328,22 @@
         "claimNextQueuedJob": "@/lib/jobs/queries",
         "markJobDone": "@/lib/jobs/queries",
         "markJobError": "@/lib/jobs/queries",
-        "getJobForProject": "@/lib/jobs/queries"
+        "getJobForProject": "@/lib/jobs/queries",
+        "QueryIntentsDb": "@/lib/readings/query-intents/queries",
+        "getQueryIntentsWatermark": "@/lib/readings/query-intents/queries",
+        "advanceQueryIntentsWatermark": "@/lib/readings/query-intents/queries",
+        "listNewSearchQueryEvents": "@/lib/readings/query-intents/queries",
+        "getQueryIntentsByNormalizedTexts": "@/lib/readings/query-intents/queries",
+        "listQueryIntentsForMatching": "@/lib/readings/query-intents/queries",
+        "QUERY_INTENT_MATCH_LIMIT_BM25": "@/lib/readings/query-intents/queries",
+        "ResolvedQueryOccurrenceInput": "@/lib/readings/query-intents/queries",
+        "recordQueryIntentOccurrences": "@/lib/readings/query-intents/queries",
+        "QUERY_INTENTS_TRIGGER_COUNT": "@/lib/readings/query-intents/queries",
+        "enqueueDueQueryCategorizations": "@/lib/readings/query-intents/queries",
+        "enqueueFoldIntentGraphJob": "@/lib/readings/intent-graph/queries",
+        "listProjectsWithUnfoldedEvents": "@/lib/readings/intent-graph/queries",
+        "getRuntimeToolCatalogEntries": "@/lib/ingest/runtime-catalog/queries",
+        "RuntimeToolCatalogEntry": "@/lib/ingest/runtime-catalog/queries"
       }
     }
   },

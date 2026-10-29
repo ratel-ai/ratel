@@ -40,7 +40,9 @@
   },
   "overrides": [
     {
-      "includes": ["apps/web/**"],
+      "includes": [
+        "apps/web/**"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -125,7 +127,6 @@
         "!apps/web/lib/ingest/otlp/ingest-spans.ts",
         "!apps/web/lib/ingest/otlp/agent-health-bridge.ts",
         "!apps/web/lib/ingest/otlp/agent-span-dedupe.ts",
-        "apps/web/lib/ingest/runtime-catalog/queries.ts",
         "apps/web/lib/ingest/catalogs/**",
         "!apps/web/lib/ingest/catalogs/schema.ts",
         "!apps/web/lib/ingest/catalogs/queries.ts",
@@ -133,6 +134,7 @@
         "!apps/web/lib/ingest/catalogs/snapshot-handler.ts",
         "apps/web/lib/ingest/runtime-catalog/**",
         "!apps/web/lib/ingest/runtime-catalog/schema.ts",
+        "!apps/web/lib/ingest/runtime-catalog/queries.ts",
         "!apps/web/lib/ingest/runtime-catalog/override-queries.ts",
         "apps/web/lib/catalog/skills/**",
         "apps/web/lib/catalog/wire.ts",
@@ -172,12 +174,73 @@
         "apps/web/lib/ledger/turns/segment.test.ts",
         "apps/web/lib/ledger/turns/segment-root-tool.test.ts",
         "apps/web/lib/ledger/turns/normalize.ts",
-        "apps/web/lib/ledger/turn-pages.ts"
+        "apps/web/lib/ledger/turn-pages.ts",
+        "apps/web/lib/readings/intent-types/wire.ts",
+        "apps/web/lib/readings/intent-types/engine-types.ts",
+        "apps/web/lib/readings/text/cluster.ts",
+        "apps/web/lib/readings/text/cluster.test.ts",
+        "apps/web/lib/readings/decisions/test-helpers.ts",
+        "apps/web/lib/readings/query-intents/relevance.ts",
+        "apps/web/lib/readings/query-intents/relevance.test.ts",
+        "apps/web/lib/readings/query-intents/normalize.ts",
+        "apps/web/lib/readings/query-intents/normalize.test.ts",
+        "apps/web/lib/readings/query-intents/intent-text.ts",
+        "apps/web/lib/readings/query-intents/intent-text.test.ts",
+        "apps/web/lib/readings/query-intents/member-text.ts",
+        "apps/web/lib/readings/query-intents/member-text.test.ts",
+        "apps/web/lib/readings/query-intents/clusterer.ts",
+        "apps/web/lib/readings/query-intents/clusterer.test.ts",
+        "apps/web/lib/readings/query-intents/bm25-clusterer.ts",
+        "apps/web/lib/readings/query-intents/bm25-clusterer.test.ts",
+        "apps/web/lib/readings/query-intents/resolve-canonicals.ts",
+        "apps/web/lib/readings/query-intents/resolve-canonicals.test.ts",
+        "apps/web/lib/readings/query-intents/pipeline.ts",
+        "apps/web/lib/readings/query-intents/pipeline.test.ts",
+        "apps/web/lib/readings/query-intents/pipeline.integration.test.ts",
+        "apps/web/lib/readings/intent-graph/compact.ts",
+        "apps/web/lib/readings/intent-graph/fold.ts",
+        "apps/web/lib/readings/intent-graph/maintenance.ts",
+        "apps/web/lib/readings/intent-graph/get-handler.ts",
+        "apps/web/lib/readings/intent-graph/get-handler.test.ts",
+        "apps/web/lib/readings/intent-graph/put-handler.ts",
+        "apps/web/lib/readings/intent-graph/user-messages.test.ts",
+        "apps/web/lib/readings/intent-graph/fold-coalesce.integration.test.ts",
+        "apps/web/lib/readings/intent-graph/consolidate-ranking-status.integration.test.ts",
+        "apps/web/lib/readings/intent-engine/text.ts",
+        "apps/web/lib/readings/intent-engine/match.ts",
+        "apps/web/lib/readings/intent-engine/actions.ts",
+        "apps/web/lib/readings/intent-engine/engine.ts",
+        "apps/web/lib/readings/intent-engine/compact.ts",
+        "apps/web/lib/readings/intent-engine/seed.ts",
+        "apps/web/lib/readings/intent-engine/bounds.ts",
+        "apps/web/lib/readings/intent-engine/diagnose.ts",
+        "apps/web/lib/readings/intent-engine/eval.ts",
+        "apps/web/lib/readings/intent-engine/frames.ts",
+        "apps/web/lib/readings/intent-engine/levels.ts",
+        "apps/web/lib/readings/intent-engine/naming.ts",
+        "apps/web/lib/readings/intent-engine/split.ts",
+        "apps/web/lib/readings/intent-engine/names.ts",
+        "apps/web/lib/readings/intent-engine/catalog.ts",
+        "apps/web/lib/readings/intent-engine/store.ts",
+        "apps/web/lib/readings/intent-engine/jobs.ts",
+        "apps/web/lib/readings/intent-engine/text.test.ts",
+        "apps/web/lib/readings/intent-engine/bounds.test.ts",
+        "apps/web/lib/readings/intent-engine/compact.test.ts",
+        "apps/web/lib/readings/intent-engine/diagnose.test.ts",
+        "apps/web/lib/readings/intent-engine/engine.test.ts",
+        "apps/web/lib/readings/intent-engine/eval.test.ts",
+        "apps/web/lib/readings/intent-engine/names.test.ts",
+        "apps/web/lib/readings/intent-engine/names-job.test.ts",
+        "apps/web/lib/readings/intent-engine/seed.test.ts",
+        "apps/web/lib/readings/intent-engine/job.integration.test.ts",
+        "apps/web/app/api/v1/intent-graph/route.ts",
+        "apps/web/app/api/v1/intent-graph/route.test.ts"
       ],
       "linter": {
         "rules": {
           "suspicious": {
-            "useIterableCallbackReturn": "off"
+            "useIterableCallbackReturn": "off",
+            "noAssignInExpressions": "off"
           }
         }
       }
