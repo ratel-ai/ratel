@@ -51,6 +51,18 @@ describe("oss entitlements", () => {
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.limit, 2);
   });
+
+  it("has no event cap: the quota check always allows and recording usage changes nothing", async () => {
+    assert.deepEqual(await ossEntitlements.checkEventQuota(org), { ok: true });
+    await ossEntitlements.recordEventUsage(org, 1_000_000);
+    assert.deepEqual(await ossEntitlements.checkEventQuota(org), { ok: true });
+    const capped = { id: "org_2", limitOverrides: { monthlyEventLimit: 1 } };
+    assert.deepEqual(
+      await ossEntitlements.checkEventQuota(capped),
+      { ok: true },
+      "no counter exists to compare an override against",
+    );
+  });
 });
 
 describe("oss telemetry", () => {

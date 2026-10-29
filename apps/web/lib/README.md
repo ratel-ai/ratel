@@ -28,4 +28,8 @@ Files maintained here rather than synced from `ratel-cloud` (`owned` in
 `scripts/platform-sync/map.json`) keep the upstream export names so call sites stay identical.
 In `jobs/` those are the runner (job kinds are open strings), the store (handlers from the
 registry), the drain (steps from the registry), the observability seam (telemetry port) and the
-scheduler, which has no upstream counterpart.
+scheduler, which has no upstream counterpart. One deliberate exception to the naming rule:
+`platform/entitlements.ts` exports `checkEventQuota`, which replaces upstream's
+`resetEventUsageIfElapsed` plus the `monthlyEventLimit` comparison in the ingest route, because
+the counting edition now does both behind the entitlements port. `incrementEventUsage` keeps its
+upstream name and signature.

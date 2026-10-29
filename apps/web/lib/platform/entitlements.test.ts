@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   billableProjectCount,
+  checkEventQuota,
   checkMeteredFeature,
   checkQuota,
   getAgentHealthLimits,
   getLimits,
   hasPaidAccess,
+  incrementEventUsage,
   mergeLimitOverrides,
   planLabel,
   resolvePlanId,
@@ -21,6 +23,13 @@ test("the shim answers from the composed edition: unlimited, plan oss", () => {
   assert.equal(getLimits(org).maxProjects, Number.POSITIVE_INFINITY);
   assert.deepEqual(checkQuota(org, "maxMembers", 10_000), { ok: true });
   assert.equal(checkMeteredFeature(org, "matchQualityRunsPerMonth", 3, "Match quality").ok, true);
+});
+
+test("the event quota shim allows and records through the composed edition", async () => {
+  assert.deepEqual(await checkEventQuota(org), { ok: true });
+  await incrementEventUsage(org.id, 250);
+  await incrementEventUsage(org.id, 0);
+  assert.deepEqual(await checkEventQuota(org), { ok: true });
 });
 
 test("agent health limits are the three window fields", () => {

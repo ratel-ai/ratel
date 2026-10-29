@@ -1,5 +1,6 @@
 import { composition } from "@/lib/composition/ports";
 import type {
+  EventQuotaResult,
   FeatureAccess,
   MeteredFeatureKey,
   OrgLimitView,
@@ -13,7 +14,15 @@ import type {
  * caller keeps its import and its call. The numbers come from the composed edition: unlimited
  * in open source, the plan tables in Cloud.
  */
-export type { FeatureAccess, MeteredFeatureKey, OrgLimitView, PlanLimits, QuotaKey, QuotaResult };
+export type {
+  EventQuotaResult,
+  FeatureAccess,
+  MeteredFeatureKey,
+  OrgLimitView,
+  PlanLimits,
+  QuotaKey,
+  QuotaResult,
+};
 export type QuotaBlocked = Exclude<QuotaResult, { ok: true }>;
 
 /** A short plan identifier for display and analytics; `"oss"` in the open-source edition. */
@@ -93,4 +102,22 @@ export function checkMeteredFeature(
   noun: string,
 ): FeatureAccess {
   return composition.entitlements.checkMeteredFeature(org, key, used, noun);
+}
+
+/**
+ * Before an ingest write: whether the organization may accept more events this period. Replaces
+ * upstream's `resetEventUsageIfElapsed` plus the `monthlyEventLimit` comparison: the edition that
+ * counts does both behind the port, and the route keeps its 429 on `ok: false`.
+ */
+export function checkEventQuota(org: OrgLimitView): Promise<EventQuotaResult> {
+  return composition.entitlements.checkEventQuota(org);
+}
+
+/**
+ * After an ingest write: the upstream name and signature (the organization id, as the ingest
+ * code holds it), now over the port. Best-effort by contract, so the caller may `.catch` and log
+ * exactly as upstream did.
+ */
+export function incrementEventUsage(organizationId: string, stored: number): Promise<void> {
+  return composition.entitlements.recordEventUsage({ id: organizationId }, stored);
 }
