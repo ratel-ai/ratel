@@ -4,64 +4,99 @@ import type { CompositionPorts } from "@/lib/contracts/composition";
 
 process.env.RATEL_COMPOSITION = "oss";
 const { createComposition } = await import("@/lib/composition");
+const { drainSteps, jobHandlers } = await import("@/lib/composition/registry");
 const { scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.mjs");
 
 /** Stand-in commercial ports so tests do not reach into ee/ through the core tree. */
 const cloudPorts: CompositionPorts = {
-  identity: {
+  session: {
     async resolvePrincipal() {
-      return { id: "cloud-operator", label: "fausto@ratel.sh · Acme Inc" };
+      return {
+        id: "user_cloud",
+        email: "fausto@ratel.sh",
+        emailVerified: true,
+        name: "Fausto",
+        username: "fausto",
+        avatarUrl: null,
+      };
+    },
+    async accessGranted() {
+      return false;
+    },
+    async actingAs() {
+      return { kind: "organization", targetId: "org_1", readOnly: true };
     },
   },
-  workspace: {
-    async listWorkspaces() {
-      return [
-        { id: "ws-1", name: "Production" },
-        { id: "ws-2", name: "Staging" },
-        { id: "ws-3", name: "Sandbox" },
-      ];
+  entitlements: {
+    planId: () => "pro",
+    getLimits: () => ({
+      maxProjects: 10,
+      maxSkillsPerProject: 1000,
+      maxMembers: 25,
+      monthlyEventLimit: 5_000_000,
+      embeddingMonthlyAllowanceUsd: 20,
+      matchQualityRunsPerMonth: 4,
+      agentHealthSignalsShown: Number.POSITIVE_INFINITY,
+      agentHealthEvidenceTurns: 6,
+      agentHealthWindowDays: 90,
+      toolPickerMonthlyAllowanceUsd: 40,
+    }),
+    checkQuota: () => ({ ok: true }),
+    checkMeteredFeature: () => ({ ok: true, limit: 4, used: 0, remaining: 4 }),
+  },
+  telemetry: {
+    async trackEvent() {},
+    reportException() {},
+  },
+  embeddingProvider: {
+    model: "hosted",
+    local: false,
+    isAvailable: () => true,
+    async embed(texts) {
+      return texts.map(() => [1]);
     },
-    async currentWorkspace() {
-      return { id: "ws-1", name: "Production" };
-    },
+  },
+  registry: {
+    registrations: () => [
+      {
+        jobs: { grant_allowances: async () => "granted" },
+        drainSteps: [{ name: "stripe_sync", phase: "after", run: async () => 1 }],
+      },
+    ],
   },
 };
 
 describe("createComposition", () => {
-  it("assembles the OSS edition with both ports", async () => {
+  it("assembles the OSS edition with the five ports", async () => {
     const composition = createComposition("oss");
     assert.equal(composition.edition, "Ratel OSS");
-
-    const principal = await composition.identity.resolvePrincipal();
+    const principal = await composition.session.resolvePrincipal();
     assert.ok(principal);
-    assert.equal(principal.label, "Local operator");
-
-    const workspaces = await composition.workspace.listWorkspaces();
-    assert.equal(workspaces.length, 1);
-    assert.equal(workspaces[0].name, "Local workspace");
+    assert.equal(principal.name, "Local operator");
+    assert.equal(await composition.session.accessGranted(principal), true);
+    assert.equal(await composition.session.actingAs(), null);
+    assert.equal(composition.entitlements.planId({ id: "org" }), "oss");
+    assert.equal(composition.embeddingProvider.local, true);
+    assert.deepEqual(composition.registry.registrations(), []);
   });
 
-  it("assembles the Cloud edition with three workspaces", async () => {
+  it("assembles the Cloud edition from the seam", async () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(composition.edition, "Ratel Cloud");
-
-    const workspaces = await composition.workspace.listWorkspaces();
-    assert.equal(workspaces.length, 3);
-
-    const current = await composition.workspace.currentWorkspace();
-    assert.equal(current.id, workspaces[0].id);
+    assert.equal(composition.entitlements.planId({ id: "org" }), "pro");
+    const actingAs = await composition.session.actingAs();
+    assert.equal(actingAs?.kind, "organization");
   });
 
   it("throws when a port is missing or the edition key is unknown", () => {
     assert.throws(
-      () => createComposition("oss", { ports: { workspace: undefined } }),
+      () => createComposition("oss", { ports: { telemetry: undefined } }),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.match(error.message, /workspace/);
+        assert.match(error.message, /telemetry/);
         return true;
       },
     );
-
     assert.throws(
       () => createComposition("nope"),
       (error: unknown) => {
@@ -75,9 +110,7 @@ describe("createComposition", () => {
   });
 
   it("supplies nav for Cloud and an empty nav for OSS", () => {
-    const oss = createComposition("oss");
-    assert.deepEqual(oss.nav, []);
-
+    assert.deepEqual(createComposition("oss").nav, []);
     const cloud = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(cloud.nav.length, 1);
     assert.equal(cloud.nav[0].href, "/admin");
@@ -95,7 +128,39 @@ describe("createComposition", () => {
   });
 
   it("reports zero ee boundary violations on the real tree", () => {
-    const violations = scanEeBoundary();
-    assert.deepEqual(violations, []);
+    assert.deepEqual(scanEeBoundary(), []);
+  });
+});
+
+describe("registry root", () => {
+  it("merges core and port registrations, before steps first", () => {
+    const core = [
+      {
+        jobs: { cluster_intents: async () => "ok" },
+        drainSteps: [
+          { name: "prune_spans", phase: "after" as const, retentionOnly: true, run: async () => 0 },
+          { name: "enqueue_folds", phase: "before" as const, run: async () => 1 },
+        ],
+      },
+    ];
+    const registrations = [...core, ...cloudPorts.registry.registrations()];
+    assert.deepEqual(Object.keys(jobHandlers(registrations)).sort(), [
+      "cluster_intents",
+      "grant_allowances",
+    ]);
+    assert.deepEqual(
+      drainSteps(registrations).map((s) => s.name),
+      ["enqueue_folds", "prune_spans", "stripe_sync"],
+    );
+  });
+
+  it("refuses a job kind or drain step registered twice", () => {
+    const twice = [{ jobs: { a: async () => 1 } }, { jobs: { a: async () => 2 } }];
+    assert.throws(() => jobHandlers(twice), /job kind registered twice: a/);
+    const steps = [
+      { drainSteps: [{ name: "s", phase: "before" as const, run: async () => 1 }] },
+      { drainSteps: [{ name: "s", phase: "after" as const, run: async () => 1 }] },
+    ];
+    assert.throws(() => drainSteps(steps), /drain step registered twice: s/);
   });
 });

@@ -8,7 +8,8 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { assertComposition } = await import("./instrumentation.node");
+    const { assertComposition, bootBackground } = await import("./instrumentation.node");
     await assertComposition();
+    await bootBackground();
   }
 }

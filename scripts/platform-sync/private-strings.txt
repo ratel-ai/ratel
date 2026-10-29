@@ -1,0 +1,23 @@
+# The guard list (ADR-0030). Two kinds of line, both case-insensitive:
+#   - a regular expression: guards the application tree, apps/web, against Cloud-only code.
+#     Vendor and product names are not secrets; the ADRs name them.
+#   - sha256:<hex>: a confidential word as a salted hash, so the word never appears in this
+#     repository. A token hashing to it fails the check anywhere in the tree, and the sync never
+#     lands an upstream path containing it. Add one with
+#       node scripts/platform-sync/private-strings.mjs --hash <word>
+#     A hash of one word resists reading, not a determined guess: the protection is that the
+#     word is not written down here.
+# Cloud-only vendors and products (apps/web)
+@clerk/
+\bclerk(Middleware|Client|_|Id)\b
+\bstripe\b
+\bposthog\b
+\bresend\b
+\bdeepinfra\b
+# Decision engines that stay private (apps/web)
+\bTYPESAFE_API_KEY\b
+\bSAGE_API_KEY\b
+\blevanto\b
+\bjev(-|_|\.)?(client|judge|1\.)
+# Confidential names (whole repository)
+sha256:a74dcec0a28ece4a63fb5200d881ad5d201032e3846a0009bcdf3abbb31c9c3e

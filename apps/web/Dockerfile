@@ -2,7 +2,9 @@
 #   docker build -f apps/web/Dockerfile --target oss -t ratel-oss:spike .
 #   docker build -f apps/web/Dockerfile --target cloud -t ratel-cloud:spike .
 
-FROM node:24-bookworm-slim AS base
+# Debian 13 (trixie, glibc 2.41): the @ratel-ai/sdk linux prebuild needs glibc 2.39+, which
+# bookworm (2.36) does not have.
+FROM node:24-trixie-slim AS base
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 
@@ -40,7 +42,15 @@ COPY src/sdk/ts/npm/linux-x64-gnu/package.json src/sdk/ts/npm/linux-x64-gnu/
 COPY src/sdk/ts/npm/win32-x64-msvc/package.json src/sdk/ts/npm/win32-x64-msvc/
 COPY src/telemetry/ts/package.json src/telemetry/ts/
 
-RUN pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
+# Hoisted node_modules, in the image only: `next build` with `output: "standalone"` traces real
+# files and does not recreate pnpm's symlinks for serverExternalPackages, so with the workspace's
+# isolated linker the native @ratel-ai/sdk addon would land only under .pnpm and fail to load at
+# runtime. The lockfile is linker-independent, so the workspace itself stays isolated.
+RUN pnpm install --frozen-lockfile --config.node-linker=hoisted --filter @ratel/platform... --filter @ratel/ee...
+# Fail on native-addon or base-image ABI drift before the slower Next build. From the app
+# directory: the workspace package at src/sdk/ts shares the SDK's name, so the hoisted install
+# keeps the registry build beside the app instead of at the root.
+RUN cd apps/web && node -e 'import("@ratel-ai/sdk")'
 
 # --- source: app + shared packages only (ee/ stays out until build-cloud) ---
 FROM deps AS source
@@ -66,7 +76,7 @@ COPY ee ee
 RUN pnpm --filter @ratel/platform build
 
 # --- runtime base: minimal Node, no toolchain -----------------------------
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-trixie-slim AS runtime
 WORKDIR /app
 RUN groupadd --system --gid 1001 ratel \
   && useradd --system --uid 1001 --gid ratel ratel

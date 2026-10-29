@@ -20,6 +20,7 @@
       "ee/**/*.tsx",
       "apps/**/*.ts",
       "apps/**/*.tsx",
+      "apps/**/*.mjs",
       "packages/**/*.ts",
       "packages/**/*.tsx",
       "!**/.next"
@@ -37,6 +38,36 @@
       "recommended": true
     }
   },
+  "overrides": [
+    {
+      "includes": ["apps/web/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "warn"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/lib/**",
+        "apps/web/app/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!apps/web/lib/platform/environment.ts",
+        "!apps/web/app/error.tsx",
+        "!apps/web/app/global-error.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "error"
+          }
+        }
+      }
+    }
+  ],
   "javascript": {
     "formatter": {
       "quoteStyle": "double",

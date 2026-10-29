@@ -1,5 +1,5 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
-import { WorkspaceCard } from "@/components/workspace-card";
+import { Section } from "@ratel/design-system/section";
 import { getRuntime } from "@/lib/runtime";
 
 // The composition is selected at boot, so the console must not be prerendered:
@@ -8,12 +8,15 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const runtime = await getRuntime();
+  const principal = runtime.principal;
 
   return (
     <Page>
-      <PageHeader title={runtime.edition} description={runtime.principal?.label} />
+      <PageHeader title={runtime.edition} description={principal?.name ?? undefined} />
       <PageBody>
-        <WorkspaceCard workspace={runtime.workspace} workspaces={runtime.workspaces} />
+        <Section title="Signed in" description={principal?.email ?? "No principal"}>
+          {principal?.username ?? "No session"}
+        </Section>
       </PageBody>
     </Page>
   );

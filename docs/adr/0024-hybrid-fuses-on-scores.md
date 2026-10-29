@@ -31,7 +31,7 @@ another candidate is added.
 The second consequence is the one that motivated this. `RRF_K = 60` makes consecutive ranks
 1.6% apart, and the maximum reachable score is "first in every arm" — which says nothing about
 whether the match is good. A query the catalog answers precisely and a query it cannot answer at
-all both return ~1.0 at the top. Kestral's integration displayed that number as a confidence and
+all both return ~1.0 at the top. The partner's integration displayed that number as a confidence and
 read certainty into rank arithmetic; the SDK's own docs already said the magnitude was
 meaningless. A fusion whose magnitude cannot be displayed is a fusion that will be displayed
 wrongly.

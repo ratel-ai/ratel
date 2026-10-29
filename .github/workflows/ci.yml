@@ -205,10 +205,15 @@ jobs:
         run: pnpm -r lint
       - name: Test
         run: pnpm -r test
-      # Release tooling lives at repo root (outside the pnpm workspace), so run its
-      # dependency-free node:test suite here rather than via `pnpm -r test`.
-      - name: Test release tooling
-        run: node --test scripts/*.test.mjs
+      # Release and platform tooling lives at repo root (outside the pnpm workspace), so run
+      # its dependency-free node:test suites here rather than via `pnpm -r test`.
+      - name: Test repo tooling
+        run: node --test "scripts/**/*.test.mjs"
+      # The platform application's structural rules (ADR-0029, ADR-0030): nothing in core
+      # imports the private modules, layers only import downward, and no Cloud-only vendor or
+      # customer string reaches the public tree.
+      - name: Check ee boundary, layers and private strings
+        run: pnpm check:boundary && pnpm check:layers && pnpm check:private
       # Example wiring (Vercel AI SDK) — folded in here to keep one TS check row.
       # Drives the real ToolLoopAgent loop with a scripted MockLanguageModel (no API
       # key), catching framework-integration drift the SDK-level tests can't see. The
