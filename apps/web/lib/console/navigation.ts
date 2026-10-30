@@ -6,7 +6,7 @@ import type { NavItem as EditionNavItem } from "@/lib/composition/ports";
  * listed: a page that has not landed is absent, never disabled.
  */
 
-export type NavIconName = "overview" | "tools" | "calls" | "settings" | "projects" | "edition";
+export type NavIconName = "overview" | "catalog" | "traces" | "settings" | "projects" | "edition";
 
 export interface NavItem {
   /** Stable across renders and projects: core ids are fixed, edition ids derive from the href. */
@@ -18,6 +18,15 @@ export interface NavItem {
   exact?: boolean;
   /** The key after `g` that jumps here. */
   shortcut?: string;
+  /** The rail section it sits in; the rail leaves a gap between sections. Absent means `main`. */
+  section?: "settings" | "edition";
+  /** Sub-pages folded under this item; its own href is the group's landing page. */
+  children?: readonly NavItem[];
+}
+
+/** Every item, children included, in rail order. */
+export function flattenNav(items: readonly NavItem[]): NavItem[] {
+  return items.flatMap((item) => [item, ...(item.children ?? [])]);
 }
 
 const PROJECT_ROUTE = /^\/project\/([^/?#]+)/;
@@ -79,6 +88,7 @@ export function consoleNav({
           href: `${organizationRoot(organizationSlug)}/settings`,
           icon: "settings",
           shortcut: "s",
+          section: "settings",
         },
       ]
     : [];
@@ -92,20 +102,36 @@ export function consoleNav({
           exact: true,
           shortcut: "o",
         },
+        { id: "traces", label: "Traces", href: `${root}/traces`, icon: "traces", shortcut: "t" },
         {
-          id: "tools",
-          label: "Tools",
-          href: `${root}/catalogs/tools`,
-          icon: "tools",
+          id: "catalog",
+          label: "Catalog",
+          href: `${root}/catalogs`,
+          icon: "catalog",
+          exact: true,
           shortcut: "c",
+          children: [
+            {
+              id: "catalog-tools",
+              label: "Tools",
+              href: `${root}/catalogs/tools`,
+              icon: "catalog",
+            },
+            {
+              id: "catalog-skills",
+              label: "Skills",
+              href: `${root}/catalogs/skills`,
+              icon: "catalog",
+            },
+          ],
         },
-        { id: "calls", label: "Model calls", href: `${root}/calls`, icon: "calls", shortcut: "t" },
         {
           id: "settings",
           label: "Settings",
           href: `${root}/settings`,
           icon: "settings",
           shortcut: "s",
+          section: "settings",
         },
       ]
     : organization;
@@ -116,6 +142,7 @@ export function consoleNav({
       label: item.label,
       href: item.href,
       icon: "edition" as const,
+      section: "edition" as const,
     })),
   ];
 }
@@ -136,7 +163,12 @@ export function commandEntries({
 }): CommandEntry[] {
   const root = organizationSlug ? organizationRoot(organizationSlug) : null;
   return [
-    ...items.map(({ id, label, href }) => ({ id: `page:${id}`, label, group: "Pages", href })),
+    ...flattenNav(items).map(({ id, label, href }) => ({
+      id: `page:${id}`,
+      label,
+      group: "Pages",
+      href,
+    })),
     ...projects.map(({ id, name }) => ({
       id: `project:${id}`,
       label: name,
@@ -163,13 +195,13 @@ function matches(pathname: string, href: string): boolean {
 
 /** Where `g` then `key` goes, or null when no rail item owns the key. */
 export function shortcutHref(items: readonly NavItem[], key: string): string | null {
-  return items.find((item) => item.shortcut === key.toLowerCase())?.href ?? null;
+  return flattenNav(items).find((item) => item.shortcut === key.toLowerCase())?.href ?? null;
 }
 
-/** The item for this path; the longest matching href wins. */
+/** The item for this path, children included; the longest matching href wins. */
 export function activeNavItemId(pathname: string, items: readonly NavItem[]): string | null {
   let best: NavItem | null = null;
-  for (const item of items) {
+  for (const item of flattenNav(items)) {
     const hit = item.exact ? pathname === item.href : matches(pathname, item.href);
     if (hit && (!best || item.href.length >= best.href.length)) best = item;
   }

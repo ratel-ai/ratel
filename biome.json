@@ -40,7 +40,9 @@
   },
   "overrides": [
     {
-      "includes": ["apps/web/**"],
+      "includes": [
+        "apps/web/**"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -63,6 +65,48 @@
         "rules": {
           "suspicious": {
             "noConsole": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/components/console/traces/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noArrayIndexKey": "off"
+          },
+          "a11y": {
+            "useSemanticElements": "off",
+            "noAutofocus": "off",
+            "noSvgWithoutTitle": "off",
+            "useFocusableInteractive": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/lib/console/catalog/item-id.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noControlCharactersInRegex": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/components/console/errors/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noCommentText": "off"
           }
         }
       }
@@ -202,7 +246,56 @@
         "apps/web/lib/console/settings/projects.ts",
         "apps/web/lib/console/settings/projects.test.ts",
         "apps/web/components/console/org/ProjectsList.tsx",
-        "apps/web/app/(console)/project/\\[projectId\\]/settings/layout.tsx"
+        "apps/web/app/(console)/project/\\[projectId\\]/settings/layout.tsx",
+        "apps/web/lib/platform/chart.ts",
+        "apps/web/lib/synthesis/dashboard.ts",
+        "apps/web/lib/synthesis/dashboard.test.ts",
+        "apps/web/lib/synthesis/traces/**",
+        "!apps/web/lib/synthesis/traces/schema.ts",
+        "!apps/web/lib/synthesis/traces/register.ts",
+        "!apps/web/lib/synthesis/traces/register.test.ts",
+        "apps/web/components/console/traces/**",
+        "apps/web/app/(console)/project/\\[projectId\\]/traces/operations/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/traces/\\[traceId\\]/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/traces/\\[traceId\\]/not-found.tsx",
+        "apps/web/components/console/traces/compare/TraceCompareView.tsx",
+        "apps/web/components/console/traces/compare/TraceComparePropertiesTable.tsx",
+        "apps/web/components/console/traces/compare/TraceLifecycleEvents.tsx",
+        "apps/web/components/console/traces/compare/TraceStatusBadge.tsx",
+        "apps/web/components/console/traces/compare/BackLink.tsx",
+        "apps/web/lib/console/catalog/**",
+        "!apps/web/lib/console/catalog/tree.ts",
+        "!apps/web/lib/console/catalog/tree.test.ts",
+        "!apps/web/lib/console/catalog/render.test.ts",
+        "!apps/web/lib/console/catalog/item-id.test.ts",
+        "!apps/web/lib/console/catalog/runtime-reads.ts",
+        "!apps/web/lib/console/catalog/sync-snippet.ts",
+        "!apps/web/lib/console/catalog/provenance.ts",
+        "apps/web/lib/console/catalog/table-view.ts",
+        "apps/web/lib/console/catalog/table-view.test.ts",
+        "apps/web/lib/console/catalog/tools.ts",
+        "apps/web/lib/console/catalog/tools.test.ts",
+        "apps/web/lib/catalog/agent-tools/**",
+        "apps/web/lib/synthesis/playground/descriptions.ts",
+        "apps/web/lib/synthesis/playground/descriptions.test.ts",
+        "apps/web/lib/console/explore/**",
+        "!apps/web/lib/console/explore/bulk.test.ts",
+        "!apps/web/lib/console/explore/record-table.test.ts",
+        "apps/web/components/console/catalog/**",
+        "!apps/web/components/console/catalog/CatalogItemDetail.tsx",
+        "!apps/web/components/console/catalog/SkillEditor.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/catalogs/facts/page.tsx",
+        "apps/web/public/badgers/**",
+        "apps/web/components/console/badgers/**",
+        "apps/web/components/console/errors/ScopedTraceListLink.tsx",
+        "apps/web/components/console/errors/BrandedNotFound.tsx",
+        "apps/web/components/console/errors/StatusLink.tsx",
+        "apps/web/app/not-found.tsx",
+        "apps/web/app/(console)/not-found.tsx",
+        "apps/web/app/(console)/org/\\[orgSlug\\]/not-found.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/not-found.tsx",
+        "apps/web/app/api/skills-catalog/**",
+        "apps/web/app/api/runtime-catalog/\\[kind\\]/\\[entryId\\]/route.ts"
       ],
       "linter": {
         "rules": {

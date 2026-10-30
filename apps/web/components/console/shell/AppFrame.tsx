@@ -159,7 +159,13 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
             </span>
             <IconButton label="Search" icon={<Search />} onClick={() => setCommandOpen(true)} />
           </div>
-          <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 outline-none">
+          {/* A screen ported unchanged brings its own layout and wants the padding; a design system
+              <Page> (data-page) owns its edges. */}
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="min-w-0 flex-1 px-6 py-8 outline-none lg:px-10 has-[>[data-page]]:p-0"
+          >
             {children}
           </main>
         </div>

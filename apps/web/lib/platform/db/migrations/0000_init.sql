@@ -338,6 +338,27 @@ CREATE TABLE "projects" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "otel_trace_summaries" (
+	"project_id" uuid NOT NULL,
+	"trace_id" text NOT NULL,
+	"started_at" timestamp with time zone NOT NULL,
+	"duration_ms" double precision NOT NULL,
+	"has_error" boolean NOT NULL,
+	"input_tokens" bigint NOT NULL,
+	"output_tokens" bigint NOT NULL,
+	"cost_usd" numeric(18, 6) NOT NULL,
+	"spans_max_received_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "otel_trace_summaries_project_id_trace_id_pk" PRIMARY KEY("project_id","trace_id")
+);
+--> statement-breakpoint
+CREATE TABLE "trace_summary_cursor" (
+	"id" text PRIMARY KEY NOT NULL,
+	"received_at" timestamp with time zone NOT NULL,
+	"span_row_id" uuid NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 ALTER TABLE "skills" ADD CONSTRAINT "skills_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tool_definitions" ADD CONSTRAINT "tool_definitions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "catalog_snapshots" ADD CONSTRAINT "catalog_snapshots_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -362,6 +383,7 @@ ALTER TABLE "users" ADD CONSTRAINT "users_current_organization_id_organizations_
 ALTER TABLE "users" ADD CONSTRAINT "users_last_project_id_projects_id_fk" FOREIGN KEY ("last_project_id") REFERENCES "public"."projects"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "projects" ADD CONSTRAINT "projects_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "otel_trace_summaries" ADD CONSTRAINT "otel_trace_summaries_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "skills_project_name_active_idx" ON "skills" USING btree ("project_id","name") WHERE "skills"."status" <> 'archived';--> statement-breakpoint
 CREATE INDEX "skills_project_status_idx" ON "skills" USING btree ("project_id","status");--> statement-breakpoint
 CREATE UNIQUE INDEX "tool_definitions_project_name_idx" ON "tool_definitions" USING btree ("project_id","name");--> statement-breakpoint
@@ -419,4 +441,6 @@ CREATE UNIQUE INDEX "memberships_user_org_idx" ON "memberships" USING btree ("us
 CREATE INDEX "memberships_org_id_idx" ON "memberships" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "api_keys_key_hash_idx" ON "api_keys" USING btree ("key_hash");--> statement-breakpoint
 CREATE INDEX "api_keys_project_id_idx" ON "api_keys" USING btree ("project_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "projects_organization_slug_idx" ON "projects" USING btree ("organization_id","slug");
+CREATE UNIQUE INDEX "projects_organization_slug_idx" ON "projects" USING btree ("organization_id","slug");--> statement-breakpoint
+CREATE INDEX "otel_trace_summaries_project_started_idx" ON "otel_trace_summaries" USING btree ("project_id","started_at");--> statement-breakpoint
+CREATE INDEX "otel_trace_summaries_spans_max_received_idx" ON "otel_trace_summaries" USING btree ("spans_max_received_at");

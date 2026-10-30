@@ -1,12 +1,13 @@
 import { composition } from "@/lib/composition/ports";
 import type { DrainStep, JobHandler, Registration } from "@/lib/contracts/registry";
+import { tracesRegistration } from "@/lib/synthesis/traces/register";
 
 /**
  * The other composition root: the one file that imports every module's `register.ts` and so the
  * one file `check-layers` exempts from the downward-only rule. Core modules are listed here as
  * they land; the Cloud edition contributes through the registry port.
  */
-const CORE: Registration[] = [];
+const CORE: Registration[] = [tracesRegistration];
 
 export function collectRegistrations(
   core: Registration[] = CORE,

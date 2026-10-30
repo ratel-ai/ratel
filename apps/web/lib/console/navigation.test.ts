@@ -42,9 +42,17 @@ test("with a project, the rail links every core destination to that project", ()
     items.map(({ id, href }) => ({ id, href })),
     [
       { id: "overview", href: `/project/${P1}` },
-      { id: "tools", href: `/project/${P1}/catalogs/tools` },
-      { id: "calls", href: `/project/${P1}/calls` },
+      { id: "traces", href: `/project/${P1}/traces` },
+      { id: "catalog", href: `/project/${P1}/catalogs` },
       { id: "settings", href: `/project/${P1}/settings` },
+    ],
+  );
+  const catalog = items.find(({ id }) => id === "catalog");
+  assert.deepEqual(
+    catalog?.children?.map(({ id, href }) => ({ id, href })),
+    [
+      { id: "catalog-tools", href: `/project/${P1}/catalogs/tools` },
+      { id: "catalog-skills", href: `/project/${P1}/catalogs/skills` },
     ],
   );
 });
@@ -71,7 +79,7 @@ test("outside a project, the organization rail lists its projects page", () => {
   // Inside a project the rail is the project's, even when the organization is known.
   assert.deepEqual(
     consoleNav({ projectId: P1, organizationSlug: "acme", additions: [] }).map(({ id }) => id),
-    ["overview", "tools", "calls", "settings"],
+    ["overview", "traces", "catalog", "settings"],
   );
 });
 
@@ -84,6 +92,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     href: "/admin",
     label: "Admin",
     icon: "edition",
+    section: "edition",
   });
   assert.equal(withProject.length, 5);
   assert.deepEqual(
@@ -96,7 +105,20 @@ test("the OSS composition adds no destination", () => {
   const items = consoleNav({ projectId: P1, additions: createComposition("oss").nav });
   assert.deepEqual(
     items.map(({ id }) => id),
-    ["overview", "tools", "calls", "settings"],
+    ["overview", "traces", "catalog", "settings"],
+  );
+});
+
+test("Settings sits in a section of its own in both rails, the edition's items in another", () => {
+  const sectionsOf = (items: ReturnType<typeof consoleNav>) =>
+    items.map(({ id, section }) => `${section ?? "main"}:${id}`);
+  assert.deepEqual(
+    sectionsOf(consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] })),
+    ["main:overview", "main:traces", "main:catalog", "settings:settings", "edition:edition:/admin"],
+  );
+  assert.deepEqual(
+    sectionsOf(consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] })),
+    ["main:projects", "settings:org-settings"],
   );
 });
 
@@ -105,7 +127,10 @@ test("the active item matches exact index pages and nested paths", () => {
   assert.equal(activeNavItemId(`/project/${P1}`, items), "overview");
   assert.equal(activeNavItemId(`/project/${P1}/settings`, items), "settings");
   assert.equal(activeNavItemId(`/project/${P1}/settings/general`, items), "settings");
-  assert.equal(activeNavItemId(`/project/${P1}/calls`, items), "calls");
+  assert.equal(activeNavItemId(`/project/${P1}/traces/abc`, items), "traces");
+  assert.equal(activeNavItemId(`/project/${P1}/catalogs`, items), "catalog");
+  assert.equal(activeNavItemId(`/project/${P1}/catalogs/tools`, items), "catalog-tools");
+  assert.equal(activeNavItemId(`/project/${P1}/catalogs/skills/x`, items), "catalog-skills");
   assert.equal(activeNavItemId(`/project/${P1}/unknown`, items), null);
   assert.equal(activeNavItemId("/admin", items), "edition:/admin");
   assert.equal(activeNavItemId("/admin/users", items), "edition:/admin");
@@ -139,19 +164,21 @@ test("the command menu lists the rail's destinations, then every project", () =>
   const entries = commandEntries({
     items: consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] }),
     projects: PROJECTS,
-    pathname: `/project/${P1}/calls`,
+    pathname: `/project/${P1}/traces`,
     organizationSlug: "acme",
   });
   assert.deepEqual(
     entries.map(({ label, group, href }) => `${group}|${label}|${href}`),
     [
       `Pages|Overview|/project/${P1}`,
+      `Pages|Traces|/project/${P1}/traces`,
+      `Pages|Catalog|/project/${P1}/catalogs`,
       `Pages|Tools|/project/${P1}/catalogs/tools`,
-      `Pages|Model calls|/project/${P1}/calls`,
+      `Pages|Skills|/project/${P1}/catalogs/skills`,
       `Pages|Settings|/project/${P1}/settings`,
       "Pages|Admin|/admin",
-      `Projects|One|/project/${P1}/calls`,
-      `Projects|Two|/project/${P2}/calls`,
+      `Projects|One|/project/${P1}/traces`,
+      `Projects|Two|/project/${P2}/traces`,
       "Projects|All projects|/org/acme",
       "Projects|New project|/org/acme?new=1",
     ],
@@ -163,9 +190,10 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
   const project = consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] });
   assert.deepEqual(
     project.map(({ id, shortcut }) => `${id}:${shortcut ?? ""}`),
-    ["overview:o", "tools:c", "calls:t", "settings:s", "edition:/admin:"],
+    ["overview:o", "traces:t", "catalog:c", "settings:s", "edition:/admin:"],
   );
-  assert.equal(shortcutHref(project, "T"), `/project/${P1}/calls`);
+  assert.equal(shortcutHref(project, "T"), `/project/${P1}/traces`);
+  assert.equal(shortcutHref(project, "c"), `/project/${P1}/catalogs`);
   assert.equal(shortcutHref(project, "x"), null);
   const organization = consoleNav({
     projectId: undefined,
