@@ -111,6 +111,9 @@ Geist Sans; Geist Mono for ids, code and keys; Geist Pixel Square for brand mome
 Nothing below 12 px, no uppercase eyebrows, tabular figures for numbers, weights 400, 500 and 600
 only.
 
+One declared exception: the error pages and the trace comparison, ported unchanged from the Cloud
+app, keep its brand names and global classes (`src/ratel.css`), and are outside these rules.
+
 ### Radius, elevation, layers
 
 | Material | Radius | Elevation | Examples |

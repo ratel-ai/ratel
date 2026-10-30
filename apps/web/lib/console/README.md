@@ -7,13 +7,13 @@ search, projects, settings, and development seeds.
 |---|---|
 | `navigation.ts` | the rail model: project URLs, the destinations this build has plus `composition.nav`, the active item, project switching, the ⌘K entries |
 | `scope/command-search.ts` | the ⌘K ranking |
-| `calls.ts` | the Model calls page: a project's `events`, newest first, keyset-paged |
 | `project-settings.ts` | renaming a project of the session organization |
 | `create-project.ts` | creating a project: the session organization, the plan's cap, a slug unique in the organization |
 | `organization-settings.ts` | renaming the session organization and its address, admins only |
 | `settings/` | the settings tabs, the API key rows, the SDK events views and payload read, the redirect settle helper, the projects list model and UTC date formats |
 | `delete-project.ts` | deleting a project of the session organization once its name is typed back |
-| `format.ts` | timestamps that render the same on the server and in the browser |
+| `catalog/` | the Catalog pages' models: the tool and skill rows, the tree, search, paging, the loaders, the runtime-catalog and adoption reads |
+| `explore/` | the browser client for the skills API, its form payloads and error copy |
 | `shell-data.ts` | the session organization and its projects, once per request, for the shell and the pages |
 | `sidebar-cookie.ts` | the persisted collapse state of the sidebar |
 | `seed/` | local-database guard, seed organization and project replace, seed command-line args, Site Copilot OTLP/catalog fixtures |

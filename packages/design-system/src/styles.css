@@ -13,6 +13,9 @@
  */
 @import "@ratel/brand/theme.css";
 
+/* The brand names on the semantic tokens, and the global classes. */
+@import "./ratel.css";
+
 /* Tailwind does not scan workspace packages: point it at the components. */
 @source "./components";
 

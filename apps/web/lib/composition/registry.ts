@@ -5,6 +5,7 @@ import { ledgerRegistration } from "@/lib/ledger/register";
 import { intentEngineRegistration } from "@/lib/readings/intent-engine/register";
 import { intentGraphRegistration } from "@/lib/readings/intent-graph/register";
 import { queryIntentsRegistration } from "@/lib/readings/query-intents/register";
+import { tracesRegistration } from "@/lib/synthesis/traces/register";
 
 /**
  * The other composition root: the one file that imports every module's `register.ts` and so the
@@ -17,6 +18,7 @@ const CORE: Registration[] = [
   queryIntentsRegistration,
   intentGraphRegistration,
   intentEngineRegistration,
+  tracesRegistration,
 ];
 
 export function collectRegistrations(

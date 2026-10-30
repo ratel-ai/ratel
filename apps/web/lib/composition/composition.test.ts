@@ -178,7 +178,7 @@ describe("registry root", () => {
     ]);
     // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick
     // can carry events through turns, recurring asks, the graph and the engine. After-steps are
-    // the retention passes, ingest first.
+    // the retention passes, ingest first, followed by the trace-summary refresh.
     assert.deepEqual(
       drainSteps().map((s) => `${s.phase}:${s.name}${s.retentionOnly ? ":retention" : ""}`),
       [
@@ -190,6 +190,7 @@ describe("registry root", () => {
         "after:runtime_event_rejects_prune:retention",
         "after:intent_graph_revisions_prune:retention",
         "after:intent_engine_expire:retention",
+        "after:trace_summary_refresh",
       ],
     );
   });

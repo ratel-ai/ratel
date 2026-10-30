@@ -33,6 +33,7 @@ The rules for using them, and for any UI in the platform, are in [`DESIGN.md`](D
 | Path | Contents |
 |---|---|
 | `src/styles.css` | tokens, utilities, focus styles |
+| `src/ratel.css` | the brand's palette and type names (`canvas`, `cream`, `forest`, ...) on the semantic tokens, and the global classes `.eyebrow`, `.card-enter`, `.tabular` (also on `.font-mono`) and `.pixel-header` |
 | `src/cn.ts` | `clsx` plus a `tailwind-merge` that knows the custom scale |
 | `src/components/*.tsx` | primitives |
 | `src/components/*.ts` | pure logic: keyboard, sorting, tree, peek URL state |

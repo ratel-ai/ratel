@@ -1,4 +1,6 @@
 import { and, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
+import type { CategorySplits } from "@/lib/ingest/categorize";
+import type { ContextSource } from "@/lib/ingest/context";
 import {
   eventMetrics,
   events,
@@ -26,6 +28,22 @@ export type EventWithMetric = {
 };
 
 export type EventsDb = Pick<ReturnType<typeof getDb>, "insert">;
+
+/** A per-source token map for one aggregate bucket. */
+export type SourceSums = Record<ContextSource, number>;
+
+/** One UTC day of `event_metrics`, the shape the dashboard model folds. */
+export type DailyAggregateRow = {
+  day: string;
+  /** Input tokens per source (from event_metrics.tokens_by_category). */
+  spend: SourceSums;
+  /** History cached/uncached + tools used/unused, summed for the day. */
+  splits: CategorySplits;
+  outputTokens: number;
+  latencyMs: number;
+  costUsd: number;
+  runs: number;
+};
 
 /**
  * Store a batch of agent events and their derived metrics (ADR-0013). Raw events go into

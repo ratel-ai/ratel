@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { getJobForProject, listInFlightJobs, reapStaleRunningJobs } from "@/lib/jobs/queries";
+import { jobs } from "@/lib/jobs/schema";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 
@@ -49,7 +50,7 @@ test("reapStaleRunningJobs errors the zombie and leaves the fresh job running", 
   const reaped = await reapStaleRunningJobs(new Date(Date.now() - 10 * 60 * 1000), db);
   assert.equal(reaped, 1);
 
-  const rows = await db.select().from(schema.jobs);
+  const rows = await db.select().from(jobs);
   const byId = new Map(rows.map((r) => [r.id, r]));
   assert.equal(byId.get(JOB_STALE)?.status, "error");
   assert.ok(byId.get(JOB_STALE)?.finishedAt, "a reaped job is stamped finished");
@@ -58,10 +59,7 @@ test("reapStaleRunningJobs errors the zombie and leaves the fresh job running", 
 
 test("a queued (never-started) job is not reaped — it's still waiting to run", async () => {
   const db = await setup();
-  await db
-    .update(schema.jobs)
-    .set({ status: "queued", startedAt: null })
-    .where(eq(schema.jobs.id, JOB_STALE));
+  await db.update(jobs).set({ status: "queued", startedAt: null }).where(eq(jobs.id, JOB_STALE));
   const reaped = await reapStaleRunningJobs(new Date(Date.now() - 10 * 60 * 1000), db);
   assert.equal(reaped, 0, "queued jobs are valid work, never zombies");
 });

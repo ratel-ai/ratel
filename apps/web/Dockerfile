@@ -92,6 +92,7 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 FROM runtime AS oss
 COPY --from=build-oss --chown=ratel:ratel /app/apps/web/.next/standalone ./
 COPY --from=build-oss --chown=ratel:ratel /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build-oss --chown=ratel:ratel /app/apps/web/public ./apps/web/public
 ENV RATEL_COMPOSITION=oss
 USER ratel
 CMD ["node", "apps/web/server.js"]
@@ -99,6 +100,7 @@ CMD ["node", "apps/web/server.js"]
 FROM runtime AS cloud
 COPY --from=build-cloud --chown=ratel:ratel /app/apps/web/.next/standalone ./
 COPY --from=build-cloud --chown=ratel:ratel /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build-cloud --chown=ratel:ratel /app/apps/web/public ./apps/web/public
 ENV RATEL_COMPOSITION=cloud
 USER ratel
 CMD ["node", "apps/web/server.js"]
