@@ -92,7 +92,9 @@ labels; `OPENAI_API_KEY` for topics placement and sentiment, the match-quality j
 workflow decisions and Playground embeddings. The intent engine clusters lexically at every
 level; a model only writes names. The decisions client ships with OpenAI only: `DECISION_ENGINE`
 names no other engine here, and the other engine clients stay private. With no key there is no
-outbound call and every feature degrades as upstream does. Retention is on by default in OSS (`DATA_RETENTION_ENABLED=1`, 30
+outbound call and every feature degrades as upstream does: workflows keep their tool-order
+names and topics are named from their own asks. The Agent health and Tool Explorer gates are
+always on in the open-source edition: every project with recent turns is swept. Retention is on by default in OSS (`DATA_RETENTION_ENABLED=1`, 30
 days), and no event or log carries member text, queries, prompts or labels.
 
 **`@ratel-ai/sdk` from npm**, pinned to the version `ratel-cloud` runs, hoisted only inside the

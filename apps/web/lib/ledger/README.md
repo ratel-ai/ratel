@@ -18,12 +18,13 @@ turns, never from raw events, so a 90-day window survives the 30-day event prune
 
 Three kicks start a build: the traces and events routes after a stored batch (then a
 post-response drain), the drain's before-step for projects with unbuilt events or idle open
-turns, and a reading request from the health pages (later). A turn closes when the next
+turns, and a reading request (`BuildJobRequest.reading`) that the health page's "read now"
+will carry. A turn closes when the next
 one starts, on a gap or cap, or when its session has been quiet for 30 minutes. The idle
 clock is receipt time, not the event's own time, so right after a seed or a backfill about
 half the turns stay open until that window passes (`TRACE_TURNS_IDLE_CLOSE_MS` shortens it).
 
 **Seams the trace-signals reading fills.** `build-job.ts` exports `ledgerSeams`: `enqueueReading`
 (the signal run a request asked for) and `onBacklogDrained` (the first-reading enqueue once
-the ledger has enough closed turns). The trace-signals registration sets them; the ledger
-never imports L4. Owned files and why are listed in `lib/README.md`.
+the ledger has enough closed turns). `readings/trace-signals/register.ts` sets them when the
+registry loads; the ledger never imports L4. Owned files and why are listed in `lib/README.md`.

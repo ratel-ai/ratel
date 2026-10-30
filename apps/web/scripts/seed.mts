@@ -15,10 +15,13 @@
  *   --turns <n>        turns to plan (default 1500)
  *   --seed <n>         the plan's seed (default fixed, so every run plans the same conversations)
  *   --drain <n>        run n drain ticks afterwards, so the turn ledger (and whatever else is
- *                      registered) is built from what was sent; 0 by default. A turn closes
- *                      when the next one starts or on a gap, and otherwise by receipt time:
- *                      roughly half of a fresh seed stays open until the 30-minute idle window
- *                      passes (set TRACE_TURNS_IDLE_CLOSE_MS=1000 for one more tick to close them)
+ *                      registered) is built from what was sent; 0 by default. A tick drains
+ *                      only the jobs queued before it started: the build takes one, the signal
+ *                      run it was asked for the next, and what the run queues the one after.
+ *                      A turn closes when the next one starts or on a gap, and otherwise by
+ *                      receipt time: roughly half of a fresh seed stays open until the
+ *                      30-minute idle window passes (set TRACE_TURNS_IDLE_CLOSE_MS=1000 for one
+ *                      more tick to close them, so 4 ticks read everything)
  *
  * Writes through the traces route handler in-process, so `events`,
  * `trace_events` and `otel_spans` get exactly the rows live ingest writes, and the
@@ -118,6 +121,12 @@ async function storedCounts(
   turns: Record<string, number>;
   graphs: number;
   clusters: Record<string, number>;
+  signalRuns: Record<string, number>;
+  signals: Record<string, number>;
+  signalKinds: Record<string, number>;
+  selfCorrections: Record<string, number>;
+  workflowLabels: number;
+  workflowVerdicts: number;
 }> {
   const db = getDb();
   const [events] = (await db.execute<{ n: number }>(sql`select count(*)::int as n from events where project_id = ${projectId}`))
@@ -137,6 +146,24 @@ async function storedCounts(
   const clusters = await db.execute<{ level: number; n: number }>(
     sql`select level, count(*)::int as n from intent_clusters where project_id = ${projectId} group by level order by level`,
   );
+  const signalRuns = await db.execute<{ status: string; trigger: string; n: number }>(
+    sql`select status, trigger, count(*)::int as n from trace_signal_runs where project_id = ${projectId} group by status, trigger order by status, trigger`,
+  );
+  const signals = await db.execute<{ status: string; n: number }>(
+    sql`select status, count(*)::int as n from trace_signals where project_id = ${projectId} group by status order by status`,
+  );
+  const signalKinds = await db.execute<{ kind: string; n: number }>(
+    sql`select kind, count(*)::int as n from trace_signals where project_id = ${projectId} and status = 'open' group by kind order by n desc, kind`,
+  );
+  const selfCorrections = await db.execute<{ kind: string; n: number }>(
+    sql`select kind, count(*)::int as n from trace_self_corrections where project_id = ${projectId} group by kind order by n desc, kind`,
+  );
+  const [labels] = (
+    await db.execute<{ n: number }>(sql`select count(*)::int as n from trace_workflow_labels where project_id = ${projectId}`)
+  ).rows;
+  const [verdicts] = (
+    await db.execute<{ n: number }>(sql`select count(*)::int as n from trace_workflow_verdicts where project_id = ${projectId}`)
+  ).rows;
   return {
     events: events?.n ?? 0,
     spans: spans?.n ?? 0,
@@ -144,6 +171,12 @@ async function storedCounts(
     turns: Object.fromEntries(turns.rows.map((row) => [row.status, row.n])),
     graphs: graphs?.n ?? 0,
     clusters: Object.fromEntries(clusters.rows.map((row) => [`level ${row.level}`, row.n])),
+    signalRuns: Object.fromEntries(signalRuns.rows.map((row) => [`${row.status} (${row.trigger})`, row.n])),
+    signals: Object.fromEntries(signals.rows.map((row) => [row.status, row.n])),
+    signalKinds: Object.fromEntries(signalKinds.rows.map((row) => [row.kind, row.n])),
+    selfCorrections: Object.fromEntries(selfCorrections.rows.map((row) => [row.kind, row.n])),
+    workflowLabels: labels?.n ?? 0,
+    workflowVerdicts: verdicts?.n ?? 0,
   };
 }
 
@@ -171,6 +204,10 @@ async function seed() {
       accepted[key] = (accepted[key] ?? 0) + n;
     }
   }
+  // The page's "read now": a build that, once caught up, enqueues the signal run. One tick
+  // drains only the jobs queued before it started, so build, run and what the run queues
+  // take one tick each (one more when the idle close is what closes the last turns).
+  await enqueueBuildTraceTurnsJob(project.id, undefined, { reading: "manual" });
   const ticks = await drain(args.drain);
   return { org, windowDays, project, plan, rendered, accepted, ticks, stored: await storedCounts(project.id) };
 }
@@ -209,6 +246,18 @@ function report(out: Awaited<ReturnType<typeof seed>>): string {
         .map(([level, n]) => `${level} ${n}`)
         .join(", ") || "none"
     }`,
+    `   agent health: trace_signal_runs ${
+      Object.entries(stored.signalRuns)
+        .map(([key, n]) => `${key} ${n}`)
+        .join(", ") || "none"
+    }; trace_signals ${
+      Object.entries(stored.signals)
+        .map(([status, n]) => `${status} ${n}`)
+        .join(", ") || "none"
+    }${Object.keys(stored.signalKinds).length > 0 ? ` (open kinds: ${top(stored.signalKinds, 8)})` : ""}`,
+    `   self-corrections: ${top(stored.selfCorrections, 8) || "none"}; workflow labels ${stored.workflowLabels}, verdicts ${
+      stored.workflowVerdicts
+    }${stored.workflowLabels + stored.workflowVerdicts === 0 ? " (skipped without a model key)" : ""}`,
     `   failed calls: ${top(s.failedCalls, 12)}`,
     `   after a failure: retried ${s.behaviors.retry}, switched ${s.behaviors.switch}, gave up ${s.behaviors.gaveUp}`,
     `   tasks planted (runs): ${top(s.chains, 9)}`,

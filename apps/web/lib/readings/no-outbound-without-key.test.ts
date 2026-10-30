@@ -3,6 +3,17 @@ import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
 import { parseTraceEvents } from "@/lib/ingest/trace-events/parse";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
+import { TURN_IDLE_CLOSE_MS } from "@/lib/ledger/constants";
+import { buildProjectTraceTurns } from "@/lib/ledger/turns/build-job";
+import {
+  closeIdleTraceTurns,
+  enqueueBuildTraceTurnsJob,
+  getTraceTurnsCursor,
+  listTurnEventHits,
+  listTurnEventsPage,
+  loadReloadableTurns,
+  writeTurnPage,
+} from "@/lib/ledger/turns/queries";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { loadCatalogTools } from "@/lib/readings/intent-engine/catalog";
@@ -23,13 +34,26 @@ import {
   upsertIntentGraphShadowTurns,
 } from "@/lib/readings/intent-graph/queries";
 import { CLOUD_INTENT_GRAPH_KEY } from "@/lib/readings/intent-types/wire";
+import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
+import {
+  jobDeps,
+  type Db as SignalsDb,
+} from "@/lib/readings/trace-signals/signals/integration-support";
+import { latestSignalRun } from "@/lib/readings/trace-signals/signals/queries";
+import { defaultDecideDeps } from "@/lib/readings/trace-signals/workflows/decide-job";
+import { labelProjectWorkflows } from "@/lib/readings/trace-signals/workflows/label-job";
+import {
+  loadLatestWorkflows,
+  loadWorkflowLabels,
+} from "@/lib/readings/trace-signals/workflows/label-queries";
 
 /**
  * The open-source edition's promise (ADR-0030): with no model key set, every reading that
  * can run without one still runs, and nothing leaves the process. The lexical readings (the
  * intent graph fold, the intent engine's clustering) must complete on a seeded database with
- * `fetch` disabled, and the engine's naming step must make no call rather than try.
- * The signal runs and topics extend this when they land.
+ * `fetch` disabled, and the engine's naming step must make no call rather than try. The
+ * signal run completes on the built ledger and queues no workflow names, and the label job
+ * reports itself skipped. Topics extend this when they land.
  */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -160,5 +184,69 @@ test("the graph fold and the engine run on a seeded database with no key and no 
     assert.equal(defaultNameDeps(NO_KEYS).complete, null, "no completion without a key");
     assert.equal(run.naming.calls, 0);
     assert.equal(run.naming.named, 0);
+  });
+});
+
+/** The turn build bound to the test database, as the job runner would run it. */
+function buildDeps(db: Db, now: Date) {
+  const sdb = db as unknown as SignalsDb;
+  return {
+    getCursor: (p: string) => getTraceTurnsCursor(p, sdb),
+    listEvents: (p: string, since: Date | string, _db: unknown, limit?: number) =>
+      listTurnEventsPage(p, since, sdb, limit),
+    listHits: (ids: readonly string[]) => listTurnEventHits(ids, sdb),
+    loadTurns: (
+      p: string,
+      s: readonly string[],
+      k: readonly string[],
+      reach: Parameters<typeof loadReloadableTurns>[3],
+    ) => loadReloadableTurns(p, s, k, reach, sdb),
+    writePage: (input: Parameters<typeof writeTurnPage>[0]) => writeTurnPage(input, sdb),
+    closeIdle: (p: string, before: Date, at: Date) => closeIdleTraceTurns(p, before, at, sdb),
+    enqueueBuild: (p: string) => enqueueBuildTraceTurnsJob(p, sdb),
+    observability: { trackSystemEvent: async () => undefined },
+    salt: "test-salt",
+    now: () => now,
+  };
+}
+
+test("the signal run and the label job complete on the built ledger with no key and no network", async () => {
+  const db = await setup();
+  await ingest(db, [
+    ...turn("find the onboarding task", "find_task"),
+    ...turn("assign it to emp-1", "assign_task"),
+    ...turn("find the release task", "find_task"),
+    ...turn("close the release task", "update_status"),
+  ]);
+  // Past the idle window, so the last declared turn closes too.
+  const later = new Date(Date.now() + TURN_IDLE_CLOSE_MS + 60_000);
+  const built = await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, later));
+  assert.ok(built.pages > 0 || built.idleClosed > 0, "the ledger has turns to read");
+  const sdb = db as unknown as SignalsDb;
+
+  await withNoNetwork(async () => {
+    // `canLabel` is left to the job's own reading of an environment with no key.
+    const { canLabel: _unset, ...deps } = jobDeps(sdb, later);
+    const run = await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, deps, NO_KEYS);
+    assert.equal(run.outcome, "completed");
+    assert.ok(run.turnsScanned > 0, "the closed turns were read");
+    assert.equal((await latestSignalRun(PROJECT_ID, sdb))?.status, "completed");
+    const labelJobs = await db.select().from(schema.jobs);
+    assert.deepEqual(
+      labelJobs.filter((job) => job.kind === "label_workflows"),
+      [],
+      "no model key: no workflow names are queued",
+    );
+
+    const labels = await labelProjectWorkflows(PROJECT_ID, {
+      // The real completion factory reads `process.env`; null is what it returns without a key.
+      complete: null,
+      decide: defaultDecideDeps(NO_KEYS),
+      loadLatestWorkflows: (p) => loadLatestWorkflows(p, sdb),
+      loadWorkflowLabels: (p) => loadWorkflowLabels(p, sdb),
+    });
+    assert.equal(labels.skipped, "no_model");
+    assert.equal(labels.decisions?.skipped, "no_judge");
+    assert.equal(defaultDecideDeps(NO_KEYS).judge, null, "no decision engine without a key");
   });
 });
