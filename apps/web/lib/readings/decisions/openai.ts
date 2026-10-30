@@ -16,7 +16,7 @@
  *     text: OpenAI over-weights long keyword lists (a 60-word tail made
  *     `update_task` win "get task details by id"). Top-5 95.6% -> 97.0%.
  *   - Asking again over the first answer's top RERANK_DEPTH options: 84.1% top-1
- *     and 66% answered at >= 0.8, at the same ~99.5% accuracy. Parity with Jev.
+ *     and 66% answered at >= 0.8, at the same ~99.5% accuracy. Parity with the private judge.
  *   - Did not help, all within noise: "pick the FIRST step" instructions, option
  *     shuffling, wrapping the query as data, either description alone.
  *

@@ -83,7 +83,7 @@ owned set stays small.
 (Stripe, wallets, pricing), identity (Clerk, memberships, invitations, platform invites, MCP
 OAuth), the Tool Picker and Embedding APIs and their guide pages, the access waitlist and the
 one remaining feature flag, PostHog, the admin console and support sessions, the "held for us"
-review path of Agent health imports, the Jev and Sage decision clients, the customer replay seed,
+review path of Agent health imports, the private decision-engine clients, the customer replay seed,
 and all infrastructure (Terraform, Helm, deploy workflows).
 
 **Model use in the open-source edition** is server-side, environment-keyed and opt-in:
@@ -91,7 +91,7 @@ and all infrastructure (Terraform, Helm, deploy workflows).
 labels; `OPENAI_API_KEY` for topics placement and sentiment, the match-quality judge, Agent health
 workflow decisions and Playground embeddings. The intent engine clusters lexically at every
 level; a model only writes names. The decisions client ships with OpenAI only: `DECISION_ENGINE`
-names no other engine here, and the Jev and Sage clients stay private. With no key there is no
+names no other engine here, and the other engine clients stay private. With no key there is no
 outbound call and every feature degrades as upstream does. Retention is on by default in OSS (`DATA_RETENTION_ENABLED=1`, 30
 days), and no event or log carries member text, queries, prompts or labels.
 
