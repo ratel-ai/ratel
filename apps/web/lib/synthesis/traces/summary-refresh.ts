@@ -17,7 +17,8 @@ interface ChangedTrace {
 }
 
 interface SweepCursor {
-  receivedAt: Date;
+  /** Postgres text at full precision: a Date would drop the microseconds and re-read spans. */
+  receivedAt: string;
   spanRowId: string;
 }
 
@@ -60,7 +61,7 @@ export const TRACE_SUMMARY_VISIBILITY_LAG_MS = 5_000;
 const TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE = 500;
 /** Arbitrary but stable; only this sweep takes it. */
 const TRACE_SUMMARY_ADVISORY_LOCK_KEY = 823_100_023;
-const EPOCH = new Date(0);
+const EPOCH = "1970-01-01 00:00:00+00";
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 const MAX_INTERVAL_MS = 2_000_000_000;
 
@@ -132,13 +133,14 @@ async function sweepOneBatch(
       id: otelSpans.id,
       projectId: otelSpans.projectId,
       traceId: otelSpans.traceId,
-      receivedAt: otelSpans.receivedAt,
+      // Unmapped, so the driver's text comes back with its microseconds.
+      receivedAt: sql<string>`${otelSpans.receivedAt}`,
     })
     .from(otelSpans)
     .where(
       and(
         // Row-wise comparison so the walk stays on (received_at, id).
-        sql`(${otelSpans.receivedAt}, ${otelSpans.id}) > (${cursor.receivedAt.toISOString()}::timestamptz, ${cursor.spanRowId}::uuid)`,
+        sql`(${otelSpans.receivedAt}, ${otelSpans.id}) > (${cursor.receivedAt}::timestamptz, ${cursor.spanRowId}::uuid)`,
         lt(otelSpans.receivedAt, settledBefore(visibilityLagMs)),
       ),
     )

@@ -357,7 +357,7 @@ test("refresh advances the cursor to the last span it folded in", async () => {
 
   assert.deepEqual(await readCursor(db), {
     id: TRACE_SUMMARY_CURSOR_ID,
-    receivedAt: received(3),
+    receivedAt: "2026-07-30 08:00:03+00",
     spanRowId: uuid(71),
   });
   await client.close();
@@ -417,7 +417,7 @@ test("refresh honors its batch and time budget, then resumes from the cursor", a
     (await readSummaries(db)).map(({ traceId: id }) => id),
     [traceId(80)],
   );
-  assert.equal((await readCursor(db))?.receivedAt.getTime(), received(1).getTime());
+  assert.equal((await readCursor(db))?.receivedAt, "2026-07-30 08:00:01+00");
 
   // A later tick resumes where the budget cut off and drains the rest.
   const resumed = await refreshTraceSummaries({ batchSize: 1, visibilityLagMs: 0 }, db);
@@ -540,7 +540,7 @@ async function readCursor(db: TestDb) {
 async function rewindCursor(db: TestDb): Promise<void> {
   await db
     .update(traceSummaryCursor)
-    .set({ receivedAt: new Date(0), spanRowId: uuid(0) })
+    .set({ receivedAt: "1970-01-01 00:00:00+00", spanRowId: uuid(0) })
     .where(eq(traceSummaryCursor.id, TRACE_SUMMARY_CURSOR_ID));
 }
 
