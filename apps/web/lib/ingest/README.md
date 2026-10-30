@@ -17,6 +17,7 @@ What the SDKs send: OTLP traces and logs, runtime events, catalog snapshots.
 | `trace-events/maintenance.ts`, `register.ts` | the bounded retention prunes of runtime events and rejects, registered as retention-only drain steps |
 | `otlp/queries.ts` `findTracesWithModelCalls` | the storage half of the agent-span dedupe the traces route wires |
 | `runtime-events/schema.ts` | `runtime_event_sources` |
+| `runtime-events/queries.ts`, `view.ts` | the reads behind Settings > Developer: events, rejects, client drops, facets |
 | `catalogs/` | catalog snapshot ingest (`PUT /api/v1/catalog/snapshot`), vocabulary, observed/synced tool queries |
 | `catalogs/schema.ts` | `catalog_snapshots`, `catalog_tool_definitions` |
 | `runtime-catalog/` | upsert from events/snapshots, override pull (`GET /v1/runtime-catalog/overrides`) and edit, adoption; the edit handler's `PATCH` route lands with the console slice |
