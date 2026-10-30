@@ -285,7 +285,6 @@
         "!apps/web/components/console/catalog/CatalogItemDetail.tsx",
         "!apps/web/components/console/catalog/SkillEditor.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/catalogs/facts/page.tsx",
-        "apps/web/public/badgers/**",
         "apps/web/components/console/badgers/**",
         "apps/web/components/console/errors/ScopedTraceListLink.tsx",
         "apps/web/components/console/errors/BrandedNotFound.tsx",

@@ -360,7 +360,7 @@
     { "from": "apps/web/app/(app)/project/[projectId]/catalogs/catalog-pages.test.ts", "mode": "excluded", "$why": "asserts the upstream route files and their scope resolver" },
     { "from": "apps/web/app/(app)/project/[projectId]/playground/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/playground/page.tsx", "mode": "owned", "$why": "a placeholder: upstream's Playground predates the design system and needs the experiments module" },
     { "from": "apps/web/app/(app)/project/[projectId]/playground/loading.tsx", "mode": "excluded", "$why": "the placeholder needs no skeleton" },
-    { "from": "apps/web/public/badgers", "to": "apps/web/public/badgers", "mode": "copy" },
+    { "from": "apps/web/public/badgers", "to": "apps/web/public/badgers", "mode": "owned", "$why": "compressed with pngquant and oxipng, same dimensions; the originals are upstream's" },
     { "from": "apps/web/components/badgers", "to": "apps/web/components/console/badgers", "mode": "copy" },
     { "from": "apps/web/components/errors/ScopedTraceListLink.tsx", "to": "apps/web/components/console/errors/ScopedTraceListLink.tsx", "mode": "copy" },
     { "from": "apps/web/components/errors/BrandedNotFound.tsx", "to": "apps/web/components/console/errors/BrandedNotFound.tsx", "mode": "copy" },
