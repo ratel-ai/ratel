@@ -48,11 +48,11 @@ import {
  * `MAX_PAGES_PER_JOB` pages with backlog left, a fresh job is enqueued so no
  * single run outlives the stale-job reaper or the cron route's time budget.
  *
- * Guardrails: the flag is re-checked here (an enqueue that raced a flag flip is
- * a no-op); the scratch catalog's sink is discarded, so nothing folded is ever
+ * Guardrails: the scratch catalog's sink is discarded, so nothing folded is ever
  * re-ingested; a graph that fails validation or the byte cap is not written and
  * the cursor does not move, so the job errors visibly instead of silently
- * dropping evidence; logs carry counts and rev only, never query text.
+ * dropping evidence; logs carry counts and rev only, never query text. There is
+ * no feature-flag gate: every project with foldable events is folded.
  */
 
 const MAX_PAGES_PER_JOB = 10;
