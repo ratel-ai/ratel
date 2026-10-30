@@ -1,0 +1,69 @@
+/*
+ * The brand's palette and type names, on the design system's surfaces. `@ratel/brand` defines
+ * `canvas`, `cream`, `forest` and the rest with the brand's own values; here they point at the
+ * semantic tokens, so `bg-canvas` and `bg-app` are the same surface. `coral` stays the brand's.
+ * Unlayered on purpose: it must beat the theme layer.
+ */
+:root {
+  --color-canvas: var(--ds-app);
+  --color-base-deep: var(--ds-rail);
+  --color-forest-600: var(--ds-raised);
+  --color-forest: var(--ds-selected);
+  --color-forest-300: var(--ds-line);
+  --color-cream: var(--ds-fg);
+  --color-cream-dim: var(--ds-fg-muted);
+  --color-warm-muted: var(--ds-fg-subtle);
+  --font-display: var(--font-sans);
+  /* Geist Mono in place of the pixel face, which renders jagged in Chrome. */
+  --font-pixel: var(--font-mono);
+  /* The etched dot texture behind a page-title band. */
+  --pixel-grid-image-soft: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--color-forest-300) 55%, transparent) 1px,
+    transparent 1.5px
+  );
+  --pixel-grid-size: 12px 12px;
+}
+
+/* Monospaced text and numbers in columns line their figures up. */
+.font-mono,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Uppercase mono micro-label. */
+.eyebrow {
+  font-family: var(--font-pixel);
+  -webkit-font-smoothing: antialiased;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.6875rem;
+  color: var(--color-warm-muted);
+}
+
+/* A card that rises into place on load. Reduced motion gets the final state. */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card-enter {
+    animation: card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+
+/* A page-title band over the dot texture, fading into the page. */
+.pixel-header {
+  background-image:
+    linear-gradient(to bottom, transparent, var(--color-canvas) 7.5rem),
+    var(--pixel-grid-image-soft);
+  background-size: auto, var(--pixel-grid-size);
+  background-repeat: no-repeat, repeat;
+}
