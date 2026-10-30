@@ -8,6 +8,11 @@ import {
 } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { RANGE_PRESETS } from "@/lib/synthesis/dashboard";
+import { createExperimentService } from "@/lib/synthesis/experiments/service";
+import type { ExperimentMode, ExperimentSummary } from "@/lib/synthesis/experiments/types";
+import { calibrationDetailPath } from "@/lib/synthesis/traces/calibration-view";
+import { createExperimentQueries } from "@/lib/synthesis/traces/experiment-queries";
+import { selectExperimentBanner } from "@/lib/synthesis/traces/experiment-view";
 import {
   EMPTY_TRACE_FACETS,
   getTraceAggregates,
@@ -29,9 +34,15 @@ import {
   toTraceSummaryView,
 } from "@/lib/synthesis/traces/view";
 
+const EXPERIMENT_MODE: Readonly<Record<ExperimentMode, string>> = {
+  split: "Runs in this window are split between its variants.",
+  shadow: "A comparison variant runs alongside each run in this window.",
+  mixed: "Runs in this window are split between its variants and compared.",
+};
+
 /**
  * The v2 Runs page's data. The same reads the v1 page makes (the trace list,
- * the filtered aggregate, the facets), with the
+ * the filtered aggregate, the facets, the experiment banner), with the
  * aggregate's volume hourly for short windows and two extra bounded reads for
  * the page's tools and asks. Each supplementary read degrades on its own and
  * says so on the page: a failed aggregate is never shown as zero.
@@ -55,7 +66,7 @@ export async function RunsPageV2({
   const timeoutMs = supplementaryReadTimeoutMs();
   const hourly = needsHourlyVolume(view.range.days.length);
 
-  const [page, facets, aggregate] = await Promise.all([
+  const [page, facets, aggregate, experiments] = await Promise.all([
     withStatementTimeout((db) => listTraces(project.id, view.queryOptions, db), {
       operation: "trace_list",
     }),
@@ -87,6 +98,20 @@ export async function RunsPageV2({
               db,
             ),
           { operation: "trace_filtered_aggregates", timeoutMs },
+        ),
+    }),
+    loadOrFallback({
+      operation: "trace_experiments",
+      distinctId,
+      fallback: [] as ExperimentSummary[],
+      load: () =>
+        withStatementTimeout(
+          (db) =>
+            createExperimentService(createExperimentQueries(db)).listExperiments(project.id, {
+              since: view.range.since,
+              until: view.range.until,
+            }),
+          { operation: "trace_experiments", timeoutMs },
         ),
     }),
   ]);
@@ -143,6 +168,15 @@ export async function RunsPageV2({
     (preset) => resolveTraceRange({ range: preset }, now).from,
   );
 
+  const running = selectExperimentBanner(experiments, view.filters.experiment);
+  const experiment = running
+    ? {
+        name: running.name,
+        description: EXPERIMENT_MODE[running.mode],
+        href: `${calibrationDetailPath(`/project/${project.id}/calibration`, running.name)}${windowQuery(view.range)}`,
+      }
+    : null;
+
   return (
     <RunsView
       projectId={project.id}
@@ -184,8 +218,13 @@ export async function RunsPageV2({
             }
           : null
       }
-      // No experiments module in this build: no running-experiment banner.
-      experiment={null}
+      experiment={experiment}
     />
   );
+}
+
+function windowQuery(range: { preset: string; from: string; to: string }): string {
+  return range.preset === "custom"
+    ? `?range=custom&from=${range.from}&to=${range.to}`
+    : `?range=${range.preset}`;
 }

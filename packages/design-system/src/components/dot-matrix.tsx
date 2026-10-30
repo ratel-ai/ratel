@@ -39,6 +39,24 @@ export function DotEmblem({ className }: { className?: string }) {
   );
 }
 
+/** The 5×5 mark in motion, for a wait: a band of light crossing its diagonals. */
+export function DotLoader({ className }: { className?: string }) {
+  return (
+    <span aria-hidden className={cn("inline-grid grid-cols-5 gap-[1.5px] text-fg", className)}>
+      {Array.from({ length: 25 }, (_, index) => {
+        const diagonal = Math.floor(index / 5) + (index % 5);
+        return (
+          <span
+            key={index}
+            className="dot-loader-dot size-1 rounded-full bg-current"
+            style={{ animationDelay: `${diagonal * 90}ms` }}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 /**
  * A share as a row of square pixels (coverage, first try, capacity). The number
  * always sits next to it in text; the dots are the shape, not the value.

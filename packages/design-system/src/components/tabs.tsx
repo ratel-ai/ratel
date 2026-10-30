@@ -109,12 +109,15 @@ export function SegmentedControl<T extends string>({
   value,
   onValueChange,
   label,
+  variant = "default",
   className,
 }: {
-  options: readonly { value: T; label: ReactNode }[];
+  options: readonly { value: T; label: ReactNode; disabled?: boolean; title?: string }[];
   value: T;
   onValueChange: (value: T) => void;
   label: string;
+  /** `inverse` is the filled selection of the Micro style (DESIGN.md, Declared exceptions). */
+  variant?: "default" | "inverse";
   className?: string;
 }) {
   return (
@@ -126,7 +129,9 @@ export function SegmentedControl<T extends string>({
         if (picked !== undefined) onValueChange(picked as T);
       }}
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-md border border-line bg-app p-0.5",
+        variant === "inverse"
+          ? "inline-flex rounded-lg border border-line bg-rail/40 p-0.5"
+          : "inline-flex items-center gap-0.5 rounded-md border border-line bg-app p-0.5",
         className,
       )}
     >
@@ -134,7 +139,13 @@ export function SegmentedControl<T extends string>({
         <Toggle
           key={option.value}
           value={option.value}
-          className="inline-flex h-6 items-center rounded-[4px] px-2 text-ui font-medium text-fg-muted outline-none transition-colors duration-120 hover:text-fg focus-visible:ring-2 focus-visible:ring-focus data-pressed:bg-selected data-pressed:text-fg"
+          disabled={option.disabled}
+          title={option.title}
+          className={
+            variant === "inverse"
+              ? "h-7 rounded-[0.4rem] px-2.5 text-[11px] font-medium text-fg-muted outline-none transition-colors duration-150 hover:bg-selected/50 hover:text-fg focus-visible:ring-2 focus-visible:ring-focus data-pressed:bg-fg data-pressed:text-rail data-pressed:hover:bg-fg data-pressed:hover:text-rail data-disabled:cursor-not-allowed data-disabled:text-fg-subtle/45 data-disabled:hover:bg-transparent data-disabled:hover:text-fg-subtle/45"
+              : "inline-flex h-6 items-center rounded-[4px] px-2 text-ui font-medium text-fg-muted outline-none transition-colors duration-120 hover:text-fg focus-visible:ring-2 focus-visible:ring-focus data-pressed:bg-selected data-pressed:text-fg"
+          }
         >
           {option.label}
         </Toggle>
