@@ -47,7 +47,7 @@ imports no module; `lib/composition/registry.ts` imports every module's `registe
 | L0 | `contracts`, `adapters`, `composition` | ports, their OSS implementations, the roots |
 | L1 | `platform`, `jobs` | db client and migrator, logger, request log, rate limit, http, otel, env; the job runner, store, drain and scheduler |
 | L2 | `ingest`, `catalog` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
-| L3 | `ledger` | turns, steps, closed-turn reader, verdict store |
+| L3 | `ledger` | turns, steps, closed-turn reader (the signal verdict and insight store depends on the judge and the workflow labels, so it is part of the trace-signals reading in L4) |
 | L4 | `readings` | intent engine, intent graph, topics, signals, workflows, self-corrections, match quality, tool explorer, decisions |
 | L5 | `synthesis` | tasks, fixes, health summary, quality, experiments, playground, traces, tool crafter, health imports |
 | L6 | `views`, `console` | page and view models; scope, navigation, settings, projects, onboarding, seeds |
