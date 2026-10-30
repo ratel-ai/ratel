@@ -78,7 +78,8 @@ export const otelTraceSummaries = pgTable(
 export const traceSummaryCursor = pgTable("trace_summary_cursor", {
   // Constant key; the table holds at most one row.
   id: text("id").primaryKey(),
-  receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+  // A string, not a Date: a Date keeps milliseconds and `received_at` has microseconds.
+  receivedAt: timestamp("received_at", { withTimezone: true, mode: "string" }).notNull(),
   // `otel_spans.id`, the received_at tie-break, not a span's OTel span id.
   spanRowId: uuid("span_row_id").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
