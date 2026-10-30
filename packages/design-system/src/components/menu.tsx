@@ -79,11 +79,21 @@ export function MenuSeparator() {
   return <BaseMenu.Separator className="mx-1 my-1 h-px bg-line" />;
 }
 
-export function MenuGroup({ label, children }: { label?: string; children: ReactNode }) {
+export function MenuGroup({
+  label,
+  labelClassName,
+  children,
+}: {
+  label?: string;
+  labelClassName?: string;
+  children: ReactNode;
+}) {
   return (
     <BaseMenu.Group>
       {label ? (
-        <BaseMenu.GroupLabel className="px-2 pt-1.5 pb-1 text-xs text-fg-subtle">
+        <BaseMenu.GroupLabel
+          className={cn("px-2 pt-1.5 pb-1 text-xs text-fg-subtle", labelClassName)}
+        >
           {label}
         </BaseMenu.GroupLabel>
       ) : null}

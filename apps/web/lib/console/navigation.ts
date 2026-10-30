@@ -123,6 +123,12 @@ export function consoleNav({
               href: `${root}/catalogs/skills`,
               icon: "catalog",
             },
+            {
+              id: "catalog-test",
+              label: "Test a search",
+              href: `${root}/playground`,
+              icon: "catalog",
+            },
           ],
         },
         {
