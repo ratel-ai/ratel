@@ -49,8 +49,8 @@ imports no module; `lib/composition/registry.ts` imports every module's `registe
 | L2 | `ingest`, `catalog` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
 | L3 | `ledger` | turns, steps, closed-turn reader (the signal verdict and insight store depends on the judge and the workflow labels, so it is part of the trace-signals reading in L4) |
 | L4 | `readings` | intent engine, intent graph, topics, signals, workflows, self-corrections, match quality, tool explorer, decisions |
-| L5 | `synthesis` | tasks, fixes, health summary, quality, experiments, playground, traces, tool crafter, health imports |
-| L6 | `views`, `console` | page and view models; scope, navigation, settings, projects, onboarding, seeds |
+| L5 | `synthesis` | quality, experiments, playground, traces, tool crafter, health imports |
+| L6 | `views`, `console` | the page read models (Agent health, Tasks, Fixes, Intents: upstream's trace-signals page files, tasks, fixes, health summary, topics views, intent-graph v2); scope, navigation, settings, projects, onboarding, seeds |
 | L7 | `mcp` | the MCP operations |
 
 `scripts/check-layers.mjs` enforces it with the import walker of `check-ee-boundary.mjs`: a file
@@ -83,8 +83,9 @@ owned set stays small.
 (Stripe, wallets, pricing), identity (Clerk, memberships, invitations, platform invites, MCP
 OAuth), the Tool Picker and Embedding APIs and their guide pages, the access waitlist and the
 one remaining feature flag, PostHog, the admin console and support sessions, the "held for us"
-review path of Agent health imports, the private decision-engine clients, the customer replay seed,
-and all infrastructure (Terraform, Helm, deploy workflows).
+review path of Agent health imports and the importer itself, the public share links of Agent
+health, the private decision-engine clients, the customer replay seed, and all infrastructure
+(Terraform, Helm, deploy workflows).
 
 **Model use in the open-source edition** is server-side, environment-keyed and opt-in:
 `ANTHROPIC_API_KEY` for engine level-1 names, topic names, the match-quality analyst and task

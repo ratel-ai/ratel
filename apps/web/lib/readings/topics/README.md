@@ -27,4 +27,4 @@ the process (`readings/no-outbound-without-key.test.ts`).
 **Owned files** (the rest mirror upstream): `job.ts` (OpenAI is the one decision engine; the
 judge comes from `readings/decisions`), `patterns.test.ts` (a fixture with a neutral tenant),
 `schema.ts`, `register.ts` and its test. The Intents page read models (`view`, `explain`,
-`map-model`, `flow-layout`, `examples`, `steps`, `steps-load`) land with the console pages.
+`map-model`, `flow-layout`, `examples`, `steps`, `steps-load`) are `lib/views/intents/topics-*`.

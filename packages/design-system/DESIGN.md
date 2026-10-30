@@ -300,16 +300,34 @@ A headline is a stat, a trend is a line or bars, a share is a `ShareBar`. No pie
 - Sequential in blue, diverging blue to magenta; status colors are never series.
 - 2 px lines, 4 px rounded bar ends, one y-axis.
 
-## Baseline
+## Accessibility
 
-WCAG 2.2 AA, every flow usable from the keyboard with `ring-focus` visible, one `h1` per page
-(PageHeader). Pages render on the server; client code only where there is
-interaction.
+WCAG 2.2 AA.
+
+- Every flow works by keyboard. Focus rings use `ring-focus` (2 px, 2 px offset) on
+  `:focus-visible`.
+- Hit targets at least 24 px, 44 px on touch.
+- Text contrast at least 4.5:1, large text and marks 3:1 (the color table above is measured
+  against `bg-app`).
+- Icon-only buttons have an `aria-label`. Decorative icons are `aria-hidden`.
+- One `h1` per page (the PageHeader title), headings in order, landmarks, a skip link.
+- Async results announce through `aria-live="polite"` (Toast does this).
+- Status never relies on color alone.
+- `prefers-reduced-motion` turns transitions off (`usePrefersReducedMotion`).
+- Inputs never block paste; mobile inputs are 16 px so iOS does not zoom.
+
+## Performance
+
+- Server components by default; client components only where there is interaction.
+- Lists over 200 rows are virtualized or paged.
+- Heavy visualizations (d3) are imported inside the client effect, never in the server bundle.
+- Skeleton dimensions match the final layout, so nothing shifts when data lands.
+- Mutations update the UI optimistically and reconcile with the server.
 
 ## Pull request checklist for UI changes
 
 - [ ] Design-system primitives and semantic tokens only.
-- [ ] Principles 2, 3, 6 and 7 hold; Baseline met.
+- [ ] Principles 2, 3, 6 and 7 hold; Accessibility and Performance met.
 - [ ] Screenshots of the empty and dense state, desktop and phone width.
 
 ## Where things live
@@ -319,4 +337,5 @@ interaction.
 | Palette, fonts, logo assets | `packages/brand` |
 | Semantic tokens | `packages/design-system/src/styles.css` |
 | Primitives | `packages/design-system/src/components/` |
+| Noun pins and icons, task colors | `packages/design-system/src/components/entity.tsx`, `task-colors.ts` |
 | Console shell | `apps/web/app/(console)/layout.tsx` |

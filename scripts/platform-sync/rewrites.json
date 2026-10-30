@@ -1,7 +1,7 @@
 {
   "$comment": "Explicit import-specifier rules; apps/web/lib moves are derived from map.json. Longest `from` wins. `partitions` split named imports from hub modules per symbol (unlisted symbols go to `default` and are reported). `identifiers` are whole-word renames applied to every copied file.",
   "rules": [
-    { "from": "@/components/ds/", "to": "@ratel/design-system/", "except": ["@/components/ds/entity", "@/components/ds/dot-loader"] },
+    { "from": "@/components/ds/", "to": "@ratel/design-system/", "except": ["@/components/ds/dot-loader"] },
     { "from": "@/lib/utils", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/cn", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/db/index", "to": "@/lib/platform/db/client", "exact": true },
@@ -26,6 +26,17 @@
     { "from": "@/lib/logger", "to": "@/lib/platform/logger", "exact": true },
     { "from": "@/lib/api-keys", "to": "@/lib/platform/api-keys", "exact": true },
     { "from": "@/lib/match-quality/judges/jev", "to": "@/lib/readings/decisions/judge", "exact": true },
+    { "from": "@/lib/tool-crafter/types", "to": "@/lib/views/fixes/crafter-types", "exact": true },
+    { "from": "@/lib/tool-crafter/suggestion-model", "to": "@/lib/views/fixes/crafter-types", "exact": true },
+    { "from": "@/lib/tool-crafter/view", "to": "@/lib/views/fixes/crafter-types", "exact": true },
+    { "from": "@/lib/tool-crafter/round-trip", "to": "@/lib/views/fixes/crafter-types", "exact": true },
+    { "from": "@/lib/quality/v2/suggestions", "to": "@/lib/views/fixes/crafter-types", "exact": true },
+    { "from": "@/lib/health-imports/queries", "to": "@/lib/views/health/imports-types", "exact": true },
+    { "from": "@/lib/health-imports/spans", "to": "@/lib/views/health/imports-types", "exact": true },
+    { "from": "@/lib/health-imports/copy", "to": "@/lib/views/health/imports-types", "exact": true },
+    { "from": "@/lib/traces/v2/format", "to": "@/lib/synthesis/traces/v2/format", "exact": true },
+    { "from": "@/lib/navigation/v2", "to": "@/lib/console/navigation", "exact": true },
+    { "from": "@/lib/tasks/palette", "to": "@ratel/design-system/task-colors", "exact": true },
     { "from": "@/components/settings/v2/", "to": "@/components/console/settings/" },
     { "from": "@/components/traces/v2/", "to": "@/components/console/traces/" },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
@@ -325,6 +336,18 @@
       "default": "@/lib/readings/match-quality/types",
       "symbols": {
         "CorpusEntry": "@/lib/readings/decisions/judge"
+      }
+    },
+    "@/lib/intent-graph/view": {
+      "default": "@/lib/views/intents/adaptive-view",
+      "symbols": {
+        "capabilityCatalogHref": "@/lib/views/intents/hrefs"
+      }
+    },
+    "@/lib/dotmatrix-hooks": {
+      "default": "@/lib/platform/dotmatrix-hooks",
+      "symbols": {
+        "usePrefersReducedMotion": "@ratel/design-system/use-prefers-reduced-motion"
       }
     }
   },

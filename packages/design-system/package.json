@@ -15,6 +15,8 @@
     "./table-model": "./src/components/table-model.ts",
     "./tree-model": "./src/components/tree-model.ts",
     "./use-copy-to-clipboard": "./src/components/use-copy-to-clipboard.ts",
+    "./task-colors": "./src/components/task-colors.ts",
+    "./use-prefers-reduced-motion": "./src/components/use-prefers-reduced-motion.ts",
     "./*": "./src/components/*.tsx"
   },
   "scripts": {

@@ -48,6 +48,7 @@ readers are `lib/ledger/closed-turns.ts`); `sweep-service.ts` (no gate, no organ
 catalog); `signals/integration-support.ts`, `signals/compute-job.integration.test.ts`,
 `signals/linked-runs.integration.test.ts`, `sweep.test.ts` and `workflows/fixed-order.test.ts`
 (no flag or page-model cases; the compose-candidate case lands with the tool crafter). The page
-read models (`page-model*`, `page-state*`, `tiles`, `flow-*`, `turn-detail*`, `issue-examples`,
-`ledger-facts*`, `replay*`, `share/`, `signals/claims-*`, `signals/story`, the self-corrections
-page files) land with the console pages.
+read models (`page-model*`, `page-state*`, `tiles`, `flow-*`, `issue-examples`, `ledger-facts*`,
+`signals/claims-*`, `signals/story`, the self-corrections page files) are `lib/views/health`;
+`turn-detail*` is the turn page of Traces, and `replay*` and `share/` are not part of this
+edition.
