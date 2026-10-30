@@ -12,7 +12,7 @@ never a higher one; nothing here imports the UI (`@/components`, `@/app`) outsid
 | L1 | `platform/` | db client and migrator, logger, request log, rate limit, http, otel, environment |
 | L1 | `jobs/` | runner, store, drain, scheduler |
 | L2 | `ingest/`, `catalog/` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
-| L3 | `ledger/` | turns, steps, the closed-turn reader, the verdict store |
+| L3 | `ledger/` | turns, steps, the closed-turn reader (the signal verdict and insight store imports the judge and the workflow labels, so it lands with the trace-signals reading in L4) |
 | L4 | `readings/` | intent engine, intent graph, topics, signals, workflows, self-corrections, match quality, tool explorer, decisions |
 | L5 | `synthesis/` | tasks, fixes, health summary, quality, experiments, playground, traces, tool crafter, health imports |
 | L6 | `views/`, `console/` | page and view models; scope, navigation, settings, projects, onboarding, seeds |
