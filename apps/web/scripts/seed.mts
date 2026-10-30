@@ -15,7 +15,10 @@
  *   --turns <n>        turns to plan (default 1500)
  *   --seed <n>         the plan's seed (default fixed, so every run plans the same conversations)
  *   --drain <n>        run n drain ticks afterwards, so the turn ledger (and whatever else is
- *                      registered) is built from what was sent; 0 by default
+ *                      registered) is built from what was sent; 0 by default. A turn closes
+ *                      when the next one starts or on a gap, and otherwise by receipt time:
+ *                      roughly half of a fresh seed stays open until the 30-minute idle window
+ *                      passes (set TRACE_TURNS_IDLE_CLOSE_MS=1000 for one more tick to close them)
  *
  * Writes through the traces route handler in-process, so `events`,
  * `trace_events` and `otel_spans` get exactly the rows live ingest writes, and the
