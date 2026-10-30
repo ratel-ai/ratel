@@ -359,7 +359,7 @@ function finalize(
 
 /**
  * Raw gaps (ms, negative for a backwards clock) between consecutive events of
- * every runtime session, in the order the segmenter compares them. The Phase 0
+ * every runtime session, in the order the segmenter compares them. An offline
  * replay histograms these to validate `gapMs`.
  */
 export function consecutiveGaps(
