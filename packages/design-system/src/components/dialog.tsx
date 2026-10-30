@@ -33,6 +33,7 @@ export function DialogContent({
   children,
   footer,
   className,
+  titleClassName,
 }: {
   title: string;
   description?: ReactNode;
@@ -40,13 +41,16 @@ export function DialogContent({
   /** Buttons, right-aligned: secondary first, the primary action last. */
   footer?: ReactNode;
   className?: string;
+  titleClassName?: string;
 }) {
   return (
     <BaseDialog.Portal>
       <BaseDialog.Backdrop className={BACKDROP} />
       <BaseDialog.Popup className={cn(POPUP, className)}>
         <div className="pr-8">
-          <BaseDialog.Title className="text-sm font-semibold text-fg">{title}</BaseDialog.Title>
+          <BaseDialog.Title className={cn("text-sm font-semibold text-fg", titleClassName)}>
+            {title}
+          </BaseDialog.Title>
           {description ? (
             <BaseDialog.Description className="mt-1 text-sm text-fg-muted">
               {description}

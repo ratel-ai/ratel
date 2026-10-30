@@ -4,7 +4,8 @@ import { cva } from "class-variance-authority";
  * The one button (DESIGN.md, Components). `primary` is coral and appears once
  * per view, for the action the view exists for; `secondary` is the default;
  * `ghost` is for toolbars and rows; `danger` is only for the confirming button
- * of a destructive dialog.
+ * of a destructive dialog. `inverse` and `outline` belong to the Micro
+ * style (DESIGN.md, Declared exceptions).
  */
 export const buttonVariants = cva(
   [
@@ -21,8 +22,11 @@ export const buttonVariants = cva(
         secondary: "border-line-strong bg-raised text-fg hover:border-line-active hover:bg-hover",
         ghost: "border-transparent bg-transparent text-fg-muted hover:bg-hover hover:text-fg",
         danger: "border-transparent bg-danger-fill text-accent-fg hover:bg-danger-fill/90",
+        inverse: "border-transparent bg-fg text-rail shadow-sm hover:bg-fg-muted",
+        outline: "border-line bg-transparent text-fg-muted hover:bg-selected/40 hover:text-fg",
       },
       size: {
+        xs: "h-6 gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 px-2.5 text-ui",
         md: "h-8 px-3 text-ui",
         "icon-sm": "size-7 text-ui",
