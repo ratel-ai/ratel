@@ -90,11 +90,11 @@ jobs:
         include:
           - triple: darwin-arm64
             target: aarch64-apple-darwin
-            runs-on: macos-14
+            runs-on: macos-15
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target aarch64-apple-darwin --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
           - triple: darwin-x64
             target: x86_64-apple-darwin
-            runs-on: macos-14
+            runs-on: macos-15
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-apple-darwin --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
           - triple: linux-x64-gnu
             target: x86_64-unknown-linux-gnu
@@ -311,11 +311,11 @@ jobs:
         include:
           - triple: darwin-arm64
             target: aarch64-apple-darwin
-            runs-on: macos-14
+            runs-on: macos-15
             manylinux: ''
           - triple: darwin-x64
             target: x86_64-apple-darwin
-            runs-on: macos-14
+            runs-on: macos-15
             manylinux: ''
           - triple: linux-x64-gnu
             target: x86_64-unknown-linux-gnu
@@ -720,10 +720,10 @@ jobs:
         include:
           - triple: darwin-arm64
             target: aarch64-apple-darwin
-            runs-on: macos-14
+            runs-on: macos-15
           - triple: darwin-x64
             target: x86_64-apple-darwin
-            runs-on: macos-14
+            runs-on: macos-15
           - triple: linux-x64-gnu
             target: x86_64-unknown-linux-gnu
             runs-on: ubuntu-latest
@@ -888,11 +888,11 @@ jobs:
         include:
           - triple: darwin-arm64
             target: aarch64-apple-darwin
-            runs-on: macos-14
+            runs-on: macos-15
             manylinux: ''
           - triple: darwin-x64
             target: x86_64-apple-darwin
-            runs-on: macos-14
+            runs-on: macos-15
             manylinux: ''
           - triple: linux-x64-gnu
             target: x86_64-unknown-linux-gnu

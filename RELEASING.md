@@ -280,8 +280,8 @@ therefore needs telemetry-py at **GA**, not at an RC.
   --frozen-lockfile` from failing on subpackages that don't yet exist on the registry, and it
   enforces that every subpackage version matches the loader — so a bump is "edit the version
   fields, push the tag".
-- **macOS x64 is cross-compiled from `macos-14`** (Apple Silicon). GitHub's `macos-13` (Intel)
-  pool has very long queues. Building `x86_64-apple-darwin` on `macos-14` with Rust's
+- **macOS x64 is cross-compiled from `macos-15`** (Apple Silicon). GitHub's `macos-13` (Intel)
+  pool has very long queues. Building `x86_64-apple-darwin` on `macos-15` with Rust's
   `--target` flag works because the Apple Silicon runners ship both SDKs. Don't switch back
   unless you've confirmed the Intel pool latency has improved.
 - **Linux arm64-gnu builds natively on `ubuntu-24.04-arm`**, deliberately *not* with NAPI-RS's
