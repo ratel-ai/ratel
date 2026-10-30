@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildToolsCatalog } from "@/lib/console/catalog/tools";
+import { buildToolsCatalog } from "@/lib/synthesis/catalog/tools";
 
 test("buildToolsCatalog unions definitions with exact calls and approximate metrics", () => {
   const rows = buildToolsCatalog(

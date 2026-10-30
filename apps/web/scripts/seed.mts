@@ -23,7 +23,8 @@
  *                      30-minute idle window passes (set TRACE_TURNS_IDLE_CLOSE_MS=1000 for one
  *                      more tick to close them, so 4 ticks read everything)
  *
- * Writes through the traces route handler in-process, so `events`,
+ * Also stores one capability search per topic-opening turn, which is what Test a search offers
+ * as real prompts. Writes through the traces route handler in-process, so `events`,
  * `trace_events` and `otel_spans` get exactly the rows live ingest writes, and the
  * turn-ledger build is enqueued the way the route enqueues it. Idempotent: the project
  * is deleted (with everything it owns) and created again under the same id before
@@ -38,10 +39,12 @@ import { renderSiteCopilotOtlp, SITE_COPILOT_DAYS } from "@/lib/console/seed/sit
 import { planSiteCopilot } from "@/lib/console/seed/site-copilot-plan";
 import { replaceProject, resolveSeedOrganization } from "@/lib/console/seed/replace-project";
 import { parseSeedArgs } from "@/lib/console/seed/seed-args";
+import { siteCopilotSearchEvents } from "@/lib/console/seed/site-copilot-searches";
 import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/queries";
+import { parseTraceEvents } from "@/lib/ingest/trace-events/parse";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { runDrainTick } from "@/lib/jobs/drain";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
@@ -214,6 +217,14 @@ async function seed() {
       accepted[key] = (accepted[key] ?? 0) + n;
     }
   }
+  // The searches an agent on the SDK reports, which the spans alone do not produce.
+  const searches = parseTraceEvents(siteCopilotSearchEvents(plan, { anchorMs: args.anchorMs }));
+  if (searches.rejected.length > 0) throw new Error(`${searches.rejected.length} search events rejected`);
+  await insertTraceEvents(
+    project.id,
+    searches.valid.map((event) => ({ ...event, ingestSource: "runtime" as const })),
+  );
+
   // The page's "read now": a build that, once caught up, enqueues the signal run. One tick
   // drains only the jobs queued before it started, so build, run and what the run queues
   // take one tick each (one more when the idle close is what closes the last turns).

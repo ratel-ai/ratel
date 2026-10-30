@@ -13,7 +13,7 @@ import {
   toolsCatalogRangeLabel,
   toolsCatalogSearchParams,
 } from "@/lib/console/catalog/table-view";
-import type { CatalogTool } from "@/lib/console/catalog/tools";
+import type { CatalogTool } from "@/lib/synthesis/catalog/tools";
 import type { RuntimeCatalogEntry } from "@/lib/synthesis/dashboard";
 
 test("rows are managed only when the runtime ingested a definition", () => {
