@@ -133,6 +133,7 @@
         "apps/web/lib/ingest/runtime-catalog/**",
         "!apps/web/lib/ingest/runtime-catalog/schema.ts",
         "!apps/web/lib/ingest/runtime-catalog/queries.ts",
+        "!apps/web/lib/ingest/runtime-catalog/queries.integration.test.ts",
         "!apps/web/lib/ingest/runtime-catalog/override-queries.ts",
         "apps/web/lib/catalog/skills/**",
         "apps/web/lib/catalog/wire.ts",

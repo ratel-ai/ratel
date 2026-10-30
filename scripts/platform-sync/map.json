@@ -115,7 +115,7 @@
     { "from": "apps/web/lib/catalogs/tools.test.ts", "mode": "excluded", "$why": "pairs with the excluded tools.ts" },
     { "from": "apps/web/lib/catalogs/tools-catalog-ui.test.ts", "mode": "excluded", "$why": "imports a catalog UI component" },
     { "from": "apps/web/lib/catalogs/sync-snippet.ts", "mode": "excluded", "$why": "embeds the Cloud SDK package name" },
-    { "from": "apps/web/lib/catalogs/queries.integration.test.ts", "mode": "excluded", "$why": "needs dashboard runtime-catalog adoption reads; copy with the console slice" },
+    { "from": "apps/web/lib/catalogs/queries.integration.test.ts", "to": "apps/web/lib/ingest/runtime-catalog/queries.integration.test.ts", "mode": "owned", "$why": "only the runtime tool catalog case is ported, with the newest-definition and gateway-filter branches added; the other cases need the console's adoption reads and land with the console pages" },
     { "from": "apps/web/lib/catalogs/snapshot-handler.test.ts", "to": "apps/web/lib/ingest/catalogs/snapshot-handler.test.ts", "mode": "owned", "$why": "fixtures rename a design-partner source id" },
     { "from": "apps/web/lib/db/queries.ts", "to": "apps/web/lib/catalog/queries.ts", "mode": "owned", "$why": "the skills catalog reads and writes" },
     { "from": "apps/web/lib/db/queries.ts", "to": "apps/web/lib/ingest/runtime-catalog/override-queries.ts", "mode": "owned", "$why": "runtime-catalog override pull and edit helpers" },
