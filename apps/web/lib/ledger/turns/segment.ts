@@ -12,7 +12,7 @@ import type {
 /**
  * The turn boundary rule, pure. Events -> turns, per (lane, session).
  *
- * 1. Order: `received_at`, then event time, then id. The same order the RC-204
+ * 1. Order: `received_at`, then event time, then id. The same order the
  *    intent-graph fold reads in, and the one that makes the builder idempotent:
  *    every new page sorts after every stored step, so re-deriving an open turn
  *    from `stored steps + new events` walks the timeline a full rebuild walks.
@@ -359,7 +359,7 @@ function finalize(
 
 /**
  * Raw gaps (ms, negative for a backwards clock) between consecutive events of
- * every runtime session, in the order the segmenter compares them. The Phase 0
+ * every runtime session, in the order the segmenter compares them. An offline
  * replay histograms these to validate `gapMs`.
  */
 export function consecutiveGaps(
