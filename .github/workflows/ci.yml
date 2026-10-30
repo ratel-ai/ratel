@@ -599,8 +599,8 @@ jobs:
           tier=reduced
           if [ "${{ github.event_name }}" != "pull_request" ]; then tier=full; fi
 
-          FULL='[{"triple":"darwin-arm64","os":"macos-14","target":"aarch64-apple-darwin","arch":"arm64"},{"triple":"darwin-x64","os":"macos-14","target":"x86_64-apple-darwin","arch":"x64"},{"triple":"linux-x64-gnu","os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu","arch":"x64"},{"triple":"linux-arm64-gnu","os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-gnu","arch":"arm64"},{"triple":"win32-x64-msvc","os":"windows-latest","target":"x86_64-pc-windows-msvc","arch":"x64"}]'
-          REDUCED='[{"triple":"linux-x64-gnu","os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu","arch":"x64"},{"triple":"darwin-arm64","os":"macos-14","target":"aarch64-apple-darwin","arch":"arm64"}]'
+          FULL='[{"triple":"darwin-arm64","os":"macos-15","target":"aarch64-apple-darwin","arch":"arm64"},{"triple":"darwin-x64","os":"macos-15","target":"x86_64-apple-darwin","arch":"x64"},{"triple":"linux-x64-gnu","os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu","arch":"x64"},{"triple":"linux-arm64-gnu","os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-gnu","arch":"arm64"},{"triple":"win32-x64-msvc","os":"windows-latest","target":"x86_64-pc-windows-msvc","arch":"x64"}]'
+          REDUCED='[{"triple":"linux-x64-gnu","os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu","arch":"x64"},{"triple":"darwin-arm64","os":"macos-15","target":"aarch64-apple-darwin","arch":"arm64"}]'
 
           if [ "$tier" = "full" ]; then m="$FULL"; else m="$REDUCED"; fi
           {
@@ -644,7 +644,7 @@ jobs:
           set -e
           python -m pip install --upgrade pip maturin
           ( cd src/sdk/python && maturin build --release --target ${{ matrix.target }} --out dist )
-          # The darwin-x64 wheel is x86_64-only, but the macos-14 runner is arm64 —
+          # The darwin-x64 wheel is x86_64-only, but the macos-15 runner is arm64 —
           # and even setup-python's "x64" interpreter runs as arm64 here (it's
           # universal2), so pip computes arm64 tags and rejects the wheel ("not a
           # supported wheel on this platform"). Install + run the e2e through
