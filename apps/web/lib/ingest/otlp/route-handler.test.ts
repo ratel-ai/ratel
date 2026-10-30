@@ -994,3 +994,56 @@ test("agent span dedupe: the agent root is not a call of its own", async () => {
   assert.equal(res.status, 202);
   assert.equal(inserted[0].length, 1);
 });
+
+test("a successful write counts the accepted events against the organization, once", async () => {
+  const increments: Array<[string, number]> = [];
+  const { deps } = makeDeps({
+    getOrganizationByProjectId: async () => ({ id: "org-1" }) as never,
+    checkEventQuota: async () => ({ ok: true }),
+    incrementEventUsage: async (organizationId, n) => {
+      increments.push([organizationId, n]);
+    },
+  });
+  const res = await handleTracesRequest(req(otlpJson(3), auth), deps);
+  assert.equal(res.status, 202);
+  assert.deepEqual(increments, [["org-1", 3]], "the stored count, not the span count");
+});
+
+test("the usage increment is best-effort: a failure never downgrades the 202", async () => {
+  const { deps, inserted } = makeDeps({
+    getOrganizationByProjectId: async () => ({ id: "org-1" }) as never,
+    checkEventQuota: async () => ({ ok: true }),
+    incrementEventUsage: async () => {
+      throw new Error("counter down");
+    },
+  });
+  const res = await handleTracesRequest(req(otlpJson(2), auth), deps);
+  assert.equal(res.status, 202);
+  assert.equal(inserted.length, 1, "the rows were stored before the counter was touched");
+});
+
+test("nothing is counted without a quota gate, or when nothing was stored", async () => {
+  const increments: number[] = [];
+  const increment = async (_organizationId: string, n: number) => {
+    increments.push(n);
+  };
+  // No checkEventQuota wired: the organization is not metered, so no increment either.
+  const ungated = makeDeps({
+    getOrganizationByProjectId: async () => ({ id: "org-1" }) as never,
+    incrementEventUsage: increment,
+  });
+  assert.equal((await handleTracesRequest(req(otlpJson(2), auth), ungated.deps)).status, 202);
+  // Gated, but the export carried no LLM spans: accepted 0, nothing to count.
+  const empty = makeDeps({
+    getOrganizationByProjectId: async () => ({ id: "org-1" }) as never,
+    checkEventQuota: async () => ({ ok: true }),
+    incrementEventUsage: increment,
+  });
+  const body = JSON.stringify({
+    resourceSpans: [
+      { resource: { attributes: [] }, scopeSpans: [{ scope: { name: "x" }, spans: [] }] },
+    ],
+  });
+  assert.equal((await handleTracesRequest(req(body, auth), empty.deps)).status, 202);
+  assert.deepEqual(increments, []);
+});
