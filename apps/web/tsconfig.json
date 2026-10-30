@@ -40,6 +40,7 @@
     "**/*.tsx",
     "../../ee/src/**/*.ts",
     "../../ee/src/**/*.tsx",
+    "../../packages/design-system/src/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
