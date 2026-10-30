@@ -14,12 +14,17 @@
  *   --anchor <iso>     the end of the window (default: now, to the minute)
  *   --turns <n>        turns to plan (default 1500)
  *   --seed <n>         the plan's seed (default fixed, so every run plans the same conversations)
+ *   --drain <n>        run n drain ticks afterwards, so the turn ledger (and whatever else is
+ *                      registered) is built from what was sent; 0 by default. A turn closes
+ *                      when the next one starts or on a gap, and otherwise by receipt time:
+ *                      roughly half of a fresh seed stays open until the 30-minute idle window
+ *                      passes (set TRACE_TURNS_IDLE_CLOSE_MS=1000 for one more tick to close them)
  *
  * Writes through the traces route handler in-process, so `events`,
- * `trace_events` and `otel_spans` get exactly the rows live ingest writes.
- * Idempotent: the project is deleted (with everything it owns) and created
- * again under the same id before anything is sent. Turn building and the rest
- * of the pipeline stay out until those modules land.
+ * `trace_events` and `otel_spans` get exactly the rows live ingest writes, and the
+ * turn-ledger build is enqueued the way the route enqueues it. Idempotent: the project
+ * is deleted (with everything it owns) and created again under the same id before
+ * anything is sent. The rest of the pipeline joins as its modules land.
  *
  * Refuses a database that is not on this machine. Prints counts, never text.
  */
@@ -32,8 +37,11 @@ import { replaceProject, resolveSeedOrganization } from "@/lib/console/seed/repl
 import { parseSeedArgs } from "@/lib/console/seed/seed-args";
 import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
+import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/queries";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
+import { runDrainTick } from "@/lib/jobs/drain";
+import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
@@ -54,8 +62,9 @@ async function createSeedKey(projectId: string): Promise<string> {
 }
 
 /**
- * The traces route handler in-process, wired as `app/api/v1/traces/route.ts`
- * wires it, minus the ingest analytics (a seed is not customer traffic).
+ * The traces route handler in-process, wired as `app/api/v1/traces/route.ts` wires it,
+ * minus the ingest analytics (a seed is not customer traffic) and the post-response
+ * drain (`--drain` runs the ticks explicitly once everything is sent).
  */
 async function send(apiKey: string, body: object): Promise<Record<string, number>> {
   const request = new Request("http://seed.local/v1/traces", {
@@ -72,6 +81,8 @@ async function send(apiKey: string, body: object): Promise<Record<string, number
     insertOtelSpans,
     insertTraceEvents,
     getOrganizationByProjectId,
+    traceTurns: { enqueueBuild: (projectId) => enqueueBuildTraceTurnsJob(projectId), scheduleProjectDrain: () => {} },
+    findRuntimeInvokes: (projectId, probe) => findRuntimeInvokes(projectId, probe),
   });
   if (response.status !== 202) throw new Error(`ingest returned ${response.status}`);
   const counts = (await response.json()) as Record<string, unknown>;
@@ -80,9 +91,20 @@ async function send(apiKey: string, body: object): Promise<Record<string, number
   );
 }
 
+/** The drain, `n` ticks: each runs the registered before-steps, the queued jobs, then the after-steps. */
+async function drain(n: number): Promise<Array<{ done: number; failed: number }>> {
+  const ticks: Array<{ done: number; failed: number }> = [];
+  for (let i = 0; i < n; i++) {
+    const tick = await runDrainTick();
+    ticks.push({ done: tick.done, failed: tick.failed });
+    if (!tick.ok) throw new Error(`drain tick ${i + 1} failed: ${tick.error ?? "unknown"}`);
+  }
+  return ticks;
+}
+
 async function storedCounts(
   projectId: string,
-): Promise<{ events: number; spans: number; traceEvents: Record<string, number> }> {
+): Promise<{ events: number; spans: number; traceEvents: Record<string, number>; turns: Record<string, number> }> {
   const db = getDb();
   const [events] = (await db.execute<{ n: number }>(sql`select count(*)::int as n from events where project_id = ${projectId}`))
     .rows;
@@ -92,10 +114,14 @@ async function storedCounts(
   const types = await db.execute<{ type: string; n: number }>(
     sql`select type, count(*)::int as n from trace_events where project_id = ${projectId} group by type order by type`,
   );
+  const turns = await db.execute<{ status: string; n: number }>(
+    sql`select status, count(*)::int as n from trace_turns where project_id = ${projectId} group by status order by status`,
+  );
   return {
     events: events?.n ?? 0,
     spans: spans?.n ?? 0,
     traceEvents: Object.fromEntries(types.rows.map((row) => [row.type, row.n])),
+    turns: Object.fromEntries(turns.rows.map((row) => [row.status, row.n])),
   };
 }
 
@@ -123,7 +149,8 @@ async function seed() {
       accepted[key] = (accepted[key] ?? 0) + n;
     }
   }
-  return { org, windowDays, project, plan, rendered, accepted, stored: await storedCounts(project.id) };
+  const ticks = await drain(args.drain);
+  return { org, windowDays, project, plan, rendered, accepted, ticks, stored: await storedCounts(project.id) };
 }
 
 function report(out: Awaited<ReturnType<typeof seed>>): string {
@@ -148,6 +175,11 @@ function report(out: Awaited<ReturnType<typeof seed>>): string {
     `   stored: events ${stored.events}, otel_spans ${stored.spans}, trace_events ${
       Object.entries(stored.traceEvents)
         .map(([type, n]) => `${type} ${n}`)
+        .join(", ") || "none"
+    }`,
+    `   drained: ${out.ticks.length} tick(s), ${out.ticks.reduce((n, t) => n + t.done, 0)} job(s) done, ${out.ticks.reduce((n, t) => n + t.failed, 0)} failed; trace_turns ${
+      Object.entries(stored.turns)
+        .map(([status, n]) => `${status} ${n}`)
         .join(", ") || "none"
     }`,
     `   failed calls: ${top(s.failedCalls, 12)}`,
