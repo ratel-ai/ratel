@@ -121,9 +121,12 @@ export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patt
     writes.set(pair.to, { from: pair.from, content });
   };
 
+  // The most specific entry wins: a folder entry skips a file that has an entry of its own.
+  const ownEntry = new Set(map.entries.filter((e) => e.mode !== "excluded").map((e) => e.from));
   for (const entry of entries) {
     if (entry.mode === "excluded") continue;
     for (const pair of expand(entry, sourceRoot)) {
+      if (pair.from !== entry.from && ownEntry.has(pair.from)) continue;
       if (entry.mode === "owned") {
         if (existsSync(join(repoRoot, pair.to))) report.ownedKept.push(pair.to);
         else land(pair, true);

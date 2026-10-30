@@ -116,6 +116,21 @@ describe("partitions and identifiers", () => {
     );
   });
 
+  it("imports a partitioned member of a namespace from its own module", () => {
+    const code = ['import * as schema from "@/lib/db/schema";', "db.select().from(schema.traceEvents).where(schema.projects.id);", "drizzle(client, { schema });"].join("\n");
+    const { code: out, unmapped } = partitionImports(code, partitions);
+    assert.equal(
+      out,
+      [
+        'import * as schema from "@/lib/platform/db/tables";',
+        'import { traceEvents } from "@/lib/ingest/schema";',
+        "db.select().from(traceEvents).where(schema.projects.id);",
+        "drizzle(client, { schema });",
+      ].join("\n"),
+    );
+    assert.deepEqual(unmapped, []);
+  });
+
   it("keeps relative imports inside one moved folder and absolutizes the ones that cross entries", () => {
     const entries = [
       { from: "apps/web/lib/otlp", to: "apps/web/lib/ingest/otlp", mode: "copy" },
@@ -127,6 +142,11 @@ describe("partitions and identifiers", () => {
     const fileEntry = absolutizeRelative('import { getDb } from "./index";\nimport type { X } from "./schema";', "apps/web/lib/db/statement-timeout.ts", entries);
     assert.equal(fileEntry, 'import { getDb } from "@/lib/db";\nimport type { X } from "@/lib/db/schema";');
     assert.equal(absolutizeRelative('import x from "./y";', "scripts/x.ts", entries), 'import x from "./y";');
+    const moved = [...entries, { from: "apps/web/lib/otlp/view.ts", to: "apps/web/lib/console/view.ts", mode: "copy" }];
+    assert.equal(
+      absolutizeRelative('import { v } from "./vocabulary";', "apps/web/lib/otlp/view.ts", moved),
+      'import { v } from "@/lib/otlp/vocabulary";',
+    );
   });
 
   it("renames identifiers on word boundaries only", () => {
@@ -208,6 +228,15 @@ describe("sync", () => {
     assert.ok(!existsSync(join(repo, "apps/web/lib/ingest/otlp/billing-hook.ts")));
     assert.ok(!existsSync(join(repo, "apps/web/lib/stripe")));
     assert.deepEqual(report.copied.sort(), ["apps/web/lib/ingest/otlp/a.ts", "apps/web/lib/ingest/otlp/nested/b.ts"]);
+  });
+
+  it("lands a file with its own entry only there, not in its copied folder", () => {
+    const map = { entries: [...MAP.entries, { from: "apps/web/lib/otlp/nested/b.ts", to: "apps/web/lib/console/b.ts", mode: "copy" }] };
+    const { actions, report } = plan({ map });
+    applySync(actions, { repoRoot: repo });
+    assert.ok(existsSync(join(repo, "apps/web/lib/console/b.ts")));
+    assert.ok(!existsSync(join(repo, "apps/web/lib/ingest/otlp/nested/b.ts")));
+    assert.deepEqual(report.copied.sort(), ["apps/web/lib/console/b.ts", "apps/web/lib/ingest/otlp/a.ts"]);
   });
 
   it("bootstraps an owned file once and never overwrites it afterwards", () => {

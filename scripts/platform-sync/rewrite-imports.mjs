@@ -96,11 +96,27 @@ export function partitionImports(code, partitions) {
       .map(([dest, items]) => `${keyword}${t} { ${items.join(", ")} } from ${quote}${dest}${quote};`)
       .join("\n");
   });
+  // A namespace keeps the default module; `ns.symbol` for a partitioned symbol becomes a named
+  // import from that symbol's module.
+  const members = new Map(); // dest -> Set(symbol)
   out = out.replace(NAMESPACE_RE, (whole, typeOnly, name, quote, hub) => {
     const partition = partitions[hub];
     if (!partition) return whole;
-    return `import ${typeOnly ? "type " : ""}* as ${name} from ${quote}${partition.default}${quote};`;
+    const t = typeOnly ? "type " : "";
+    const extra = [];
+    const groups = new Map();
+    for (const [symbol, dest] of Object.entries(partition.symbols ?? {})) {
+      if (dest === partition.default || !new RegExp(`\\b${name}\\.${symbol}\\b`).test(code)) continue;
+      if (!groups.has(dest)) groups.set(dest, []);
+      groups.get(dest).push(symbol);
+      members.set(`${name}.${symbol}`, symbol);
+    }
+    for (const [dest, symbols] of groups) extra.push(`import ${t}{ ${symbols.join(", ")} } from ${quote}${dest}${quote};`);
+    return [`import ${t}* as ${name} from ${quote}${partition.default}${quote};`, ...extra].join("\n");
   });
+  for (const [access, symbol] of members) {
+    out = out.replace(new RegExp(`\\b${access.replace(".", "\\.")}\\b`, "g"), symbol);
+  }
   return { code: out, unmapped: [...unmapped].sort() };
 }
 
@@ -126,18 +142,24 @@ const posixJoin = (dir, spec) => {
 
 const stripExt = (p) => p.replace(/\.tsx?$/, "").replace(/\/index$/, "");
 
+/** Where a source path lands under its entry. */
+const destination = (path, entry) =>
+  /\.tsx?$/.test(entry.from) ? stripExt(entry.to ?? entry.from) : `${entry.to ?? entry.from}${path.slice(entry.from.length)}`;
+
 /** The map entry that carries a source path, or null. Files are matched with or without extension. */
 export function entryFor(path, entries) {
   const bare = stripExt(path);
-  for (const entry of entries ?? []) {
-    if (entry.mode === "excluded") continue;
-    if (/\.tsx?$/.test(entry.from)) {
-      if (stripExt(entry.from) === bare) return entry;
-    } else if (path === entry.from || path.startsWith(`${entry.from}/`)) {
-      return entry;
-    }
-  }
-  return null;
+  const live = (entries ?? []).filter((entry) => entry.mode !== "excluded");
+  // A file's own entry wins over the folder entry it sits in.
+  const file = live.find((entry) => /\.tsx?$/.test(entry.from) && stripExt(entry.from) === bare);
+  return (
+    file ??
+    live.find(
+      (entry) =>
+        !/\.tsx?$/.test(entry.from) && (path === entry.from || path.startsWith(`${entry.from}/`)),
+    ) ??
+    null
+  );
 }
 
 /**
@@ -154,7 +176,11 @@ export function absolutizeRelative(code, sourcePath, entries) {
     if (!specifier?.startsWith(".")) return whole;
     const target = posixJoin(dir, specifier);
     const targetEntry = entryFor(target, entries);
-    if (own && targetEntry === own && !/\.tsx?$/.test(own.from)) return whole;
+    // Inside a moved folder, still relative when it reaches the target's destination from here.
+    if (own && targetEntry && !/\.tsx?$/.test(own.from)) {
+      const here = destination(sourcePath, own).split("/").slice(0, -1).join("/");
+      if (posixJoin(here, specifier) === stripExt(destination(target, targetEntry))) return whole;
+    }
     if (!target.startsWith("apps/web/")) return whole;
     const alias = `@/${stripExt(target.slice("apps/web/".length))}`;
     return whole.replace(`"${specifier}"`, `"${alias}"`).replace(`'${specifier}'`, `'${alias}'`);

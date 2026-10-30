@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
 import { claimNextQueuedJob, readJobQueueClock } from "@/lib/jobs/queries";
+import { jobs } from "@/lib/jobs/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -39,7 +40,7 @@ test("the queue clock reads the database's time", async () => {
 test("a job queued after the bound is not claimed; one queued before it is", async () => {
   const db = await setup();
   const createdBefore = await readJobQueueClock(db);
-  await db.insert(schema.jobs).values({
+  await db.insert(jobs).values({
     id: JOB_NEW,
     projectId: PROJ,
     kind: "craft_tools",
