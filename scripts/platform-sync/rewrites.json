@@ -29,7 +29,10 @@
     { "from": "@/lib/request-log", "to": "@/lib/platform/request-log", "exact": true },
     { "from": "@/lib/logger", "to": "@/lib/platform/logger", "exact": true },
     { "from": "@/lib/api-keys", "to": "@/lib/platform/api-keys", "exact": true },
-    { "from": "@/lib/trace-signals/workflows/label-job", "to": "@/lib/readings/model-defaults", "exact": true }
+    { "from": "@/lib/trace-signals/workflows/label-job", "to": "@/lib/readings/model-defaults", "exact": true },
+    { "from": "@/components/settings/v2/", "to": "@/components/console/settings/" },
+    { "from": "@/app/(app)/settings/api-key-actions", "to": "@/app/(console)/project/[projectId]/settings/api-keys/actions", "exact": true },
+    { "from": "@/app/(app)/project/[projectId]/settings/developer/actions", "to": "@/app/(console)/project/[projectId]/settings/developer/actions", "exact": true }
   ],
   "partitions": {
     "@/lib/db/schema": {
