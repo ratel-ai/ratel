@@ -51,7 +51,7 @@ quality selections and lands with match quality; plus the fold enqueue and the u
 read from the hub), `intent-graph/fold-job.ts` (the shadow replay over the tool catalog is the
 `foldSeams.loadShadow` seam the match-quality registration fills, so the fold never imports
 match quality), `intent-engine/names-job.ts` (`DEFAULT_LABEL_MODEL` comes from
-`readings/model-defaults.ts`, shared with the step 9 label jobs), `decisions/engine.ts` (OpenAI is
+`readings/model-defaults.ts`, shared with the topic and workflow label jobs), `decisions/engine.ts` (OpenAI is
 the one decision engine here; the private engines are excluded), two files with a reworded
 comment (`intent-engine/job.ts`, `decisions/openai.ts`) and the tests whose fixtures named a
 confidential word, copied with a neutral tenant. `intent-graph/event-types.test.ts` reads the

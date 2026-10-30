@@ -12,7 +12,7 @@ import type {
 /**
  * The turn boundary rule, pure. Events -> turns, per (lane, session).
  *
- * 1. Order: `received_at`, then event time, then id. The same order the RC-204
+ * 1. Order: `received_at`, then event time, then id. The same order the
  *    intent-graph fold reads in, and the one that makes the builder idempotent:
  *    every new page sorts after every stored step, so re-deriving an open turn
  *    from `stored steps + new events` walks the timeline a full rebuild walks.

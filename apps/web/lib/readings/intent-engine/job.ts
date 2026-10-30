@@ -123,7 +123,7 @@ export const ENGINE_DEFAULTS = {
   frames: true,
   /**
    * Let the model also key query clusters (action, object) when naming. Off:
-   * the keys need every query cluster named (ten times the calls), and #264
+   * the keys need every query cluster named (ten times the calls), and a comparison run
    * measured them trading precision for recall (80% to 58%), the merge risk.
    */
   llmKeys: false,

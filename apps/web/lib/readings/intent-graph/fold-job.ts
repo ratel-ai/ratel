@@ -62,7 +62,7 @@ export interface FoldJobDeps {
   /** Runs each page inside one transaction that holds the project row, so two
    * folds of the same project never read the same cursor. */
   db?: Pick<ReturnType<typeof getDb>, "transaction">;
-  /** Compaction gates (each page's graph is compacted before it is stored, RC-208); the defaults are production's. Tests shorten the settling time. */
+  /** Compaction gates (each page's graph is compacted before it is stored); the defaults are production's. Tests shorten the settling time. */
   compactionOptions?: CompactionOptions;
   getCursor: typeof getIntentGraphFoldCursorFn;
   advanceCursor: typeof advanceIntentGraphFoldCursorFn;

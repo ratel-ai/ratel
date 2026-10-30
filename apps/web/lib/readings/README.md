@@ -5,7 +5,7 @@ the adaptive-ranking intent graph and the intent engine's clusters. Every readin
 registered job plus a drain step; the lexical ones run with no model key, the naming and
 judging ones report themselves skipped without one (ADR-0030). This slice holds the first
 three readings; signals, topics, workflows, self-corrections, match quality and the tool
-explorer follow in steps 9 and 10.
+explorer follow as later slices of the sync.
 
 | Module | Holds | Job / steps |
 |---|---|---|
@@ -26,7 +26,7 @@ graph's compaction; the graph never imports the engine.
 tool registries the match-quality reading builds over the project's catalog, for Cloud's own
 with-and-without ranking of each search. Unset, the fold builds the graph and stores no
 shadow turns. The Boost panel's reads of those turns (`loadBoostSelections` and the outcomes
-around live) land with match quality (step 10), as do the Intents page read models
+around live) land with match quality, as do the Intents page read models
 (`breakdown`, `asks-tree`, `setup`, `view`, `v2`). The ledger's own seams are listed in
 `lib/ledger/README.md`.
 

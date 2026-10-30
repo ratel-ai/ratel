@@ -23,7 +23,7 @@ one starts, on a gap or cap, or when its session has been quiet for 30 minutes. 
 clock is receipt time, not the event's own time, so right after a seed or a backfill about
 half the turns stay open until that window passes (`TRACE_TURNS_IDLE_CLOSE_MS` shortens it).
 
-**Seams the readings fill (step 9).** `build-job.ts` exports `ledgerSeams`: `enqueueReading`
+**Seams the trace-signals reading fills.** `build-job.ts` exports `ledgerSeams`: `enqueueReading`
 (the signal run a request asked for) and `onBacklogDrained` (the first-reading enqueue once
 the ledger has enough closed turns). The trace-signals registration sets them; the ledger
 never imports L4. Owned files and why are listed in `lib/README.md`.

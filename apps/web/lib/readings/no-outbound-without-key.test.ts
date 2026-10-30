@@ -29,7 +29,7 @@ import { CLOUD_INTENT_GRAPH_KEY } from "@/lib/readings/intent-types/wire";
  * can run without one still runs, and nothing leaves the process. The lexical readings (the
  * intent graph fold, the intent engine's clustering) must complete on a seeded database with
  * `fetch` disabled, and the engine's naming step must make no call rather than try.
- * Step 9 extends this to the signal runs and topics.
+ * The signal runs and topics extend this when they land.
  */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
