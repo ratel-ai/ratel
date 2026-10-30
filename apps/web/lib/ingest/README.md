@@ -18,7 +18,7 @@ What the SDKs send: OTLP traces and logs, runtime events, catalog snapshots.
 | `runtime-events/queries.ts`, `view.ts` | the reads behind Settings > Developer: events, rejects, client drops, facets |
 | `catalogs/` | catalog snapshot ingest (`PUT /api/v1/catalog/snapshot`), vocabulary, observed/synced tool queries |
 | `catalogs/schema.ts` | `catalog_snapshots`, `catalog_tool_definitions` |
-| `runtime-catalog/` | upsert from events/snapshots, override pull (`GET /v1/runtime-catalog/overrides`) and edit, adoption; the edit handler's `PATCH` route lands with the console slice |
+| `runtime-catalog/` | upsert from events/snapshots, override pull (`GET /v1/runtime-catalog/overrides`) and edit, adoption; the edit route is `PATCH /api/runtime-catalog/:kind/:entryId` |
 | `runtime-catalog/schema.ts` | `runtime_catalog_entries` |
 
 Copies and owned files are listed in `scripts/platform-sync/map.json`.
