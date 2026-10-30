@@ -8,7 +8,7 @@ import type { insertTraceEvents as insertTraceEventsFn } from "@/lib/ingest/trac
 import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
 import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
 import type { isDbConfigured as isDbConfiguredFn } from "@/lib/platform/db/client";
-import { getLimits } from "@/lib/platform/entitlements";
+import type { EventQuotaResult, OrgLimitView } from "@/lib/platform/entitlements";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/identity/queries";
 import { getLogger, type LogError } from "@/lib/platform/logger";
@@ -32,8 +32,12 @@ import { persistDecodedSpans } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 
-/** Optional monthly-event counter; the entitlements port owns the real one. */
-type ResetEventUsageIfElapsed = (organizationId: string, periodEnd: Date) => Promise<number>;
+/**
+ * The monthly event cap, through the entitlements port: `checkEventQuota` before the
+ * write (the counting edition resets an elapsed period and compares), `incrementEventUsage`
+ * after it by the events actually stored. Both optional; unit tests omit them.
+ */
+type CheckEventQuota = (organization: OrgLimitView) => Promise<EventQuotaResult>;
 type IncrementEventUsage = (organizationId: string, n: number) => Promise<void>;
 type ReportServerException = typeof reportServerException;
 
@@ -83,10 +87,9 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   insertEventsWithMetrics: typeof insertEventsWithMetricsFn;
   insertTraceEvents: typeof insertTraceEventsFn;
   insertOtelSpans: typeof insertOtelSpansFn;
-  // Optional monthly-event-cap enforcement — wired in by the route once the
-  // entitlements port grows the counter; unit tests omit these deps.
+  // Optional monthly-event-cap enforcement, wired by the route; unit tests omit these deps.
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
-  resetEventUsageIfElapsed?: ResetEventUsageIfElapsed;
+  checkEventQuota?: CheckEventQuota;
   incrementEventUsage?: IncrementEventUsage;
   reportServerException?: ReportServerException;
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
@@ -100,9 +103,6 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   /** Storage lookup for agent-wrapper span dedupe; absent, off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;
 }
-
-/** Rolling window for the per-plan event cap (~30 days). */
-const EVENT_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 
 export async function handleTracesRequest(
   req: Request,
@@ -168,8 +168,8 @@ export async function handleTracesRequest(
     );
   }
 
-  // 1b. Plan cap: reject once the org is over its monthly trace-event allotment.
-  // Optional (unit tests omit these deps); the lazy period reset self-heals.
+  // 1b. Plan cap: reject once the org is over its monthly trace-event allotment. The
+  // entitlements port answers; the open-source edition always allows.
   const organization = deps.getOrganizationByProjectId
     ? await deps.getOrganizationByProjectId(apiKey.projectId)
     : null;
@@ -178,21 +178,12 @@ export async function handleTracesRequest(
     ...(organization ? { org_id: organization.id } : {}),
   });
   let quotaOrgId: string | undefined;
-  if (organization && deps.resetEventUsageIfElapsed) {
+  if (organization && deps.checkEventQuota) {
     quotaOrgId = organization.id;
-    const now = deps.now?.() ?? new Date();
-    const used = await deps.resetEventUsageIfElapsed(
-      organization.id,
-      new Date(now.getTime() + EVENT_PERIOD_MS),
-    );
-    if (used >= getLimits(organization).monthlyEventLimit) {
+    const quota = await deps.checkEventQuota(organization);
+    if (!quota.ok) {
       return rejectTraceRequest(
-        json(
-          {
-            error: "Monthly event limit reached for this organization.",
-          },
-          429,
-        ),
+        json({ error: quota.message }, 429),
         "quota",
         startedAt,
         deps,

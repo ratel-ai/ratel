@@ -47,7 +47,7 @@ imports no module; `lib/composition/registry.ts` imports every module's `registe
 | L0 | `contracts`, `adapters`, `composition` | ports, their OSS implementations, the roots |
 | L1 | `platform`, `jobs` | db client and migrator, logger, request log, rate limit, http, otel, env; the job runner, store, drain and scheduler |
 | L2 | `ingest`, `catalog` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
-| L3 | `ledger` | turns, steps, closed-turn reader, verdict store |
+| L3 | `ledger` | turns, steps, closed-turn reader (the signal verdict and insight store depends on the judge and the workflow labels, so it is part of the trace-signals reading in L4) |
 | L4 | `readings` | intent engine, intent graph, topics, signals, workflows, self-corrections, match quality, tool explorer, decisions |
 | L5 | `synthesis` | tasks, fixes, health summary, quality, experiments, playground, traces, tool crafter, health imports |
 | L6 | `views`, `console` | page and view models; scope, navigation, settings, projects, onboarding, seeds |
@@ -83,15 +83,16 @@ owned set stays small.
 (Stripe, wallets, pricing), identity (Clerk, memberships, invitations, platform invites, MCP
 OAuth), the Tool Picker and Embedding APIs and their guide pages, the access waitlist and the
 one remaining feature flag, PostHog, the admin console and support sessions, the "held for us"
-review path of Agent health imports, the Jev and Sage decision clients, the customer replay seed,
+review path of Agent health imports, the private decision-engine clients, the customer replay seed,
 and all infrastructure (Terraform, Helm, deploy workflows).
 
 **Model use in the open-source edition** is server-side, environment-keyed and opt-in:
 `ANTHROPIC_API_KEY` for engine level-1 names, topic names, the match-quality analyst and task
 labels; `OPENAI_API_KEY` for topics placement and sentiment, the match-quality judge, Agent health
 workflow decisions and Playground embeddings. The intent engine clusters lexically at every
-level; a model only writes names. With no key there is no outbound call and every feature
-degrades as upstream does. Retention is on by default in OSS (`DATA_RETENTION_ENABLED=1`, 30
+level; a model only writes names. The decisions client ships with OpenAI only: `DECISION_ENGINE`
+names no other engine here, and the other engine clients stay private. With no key there is no
+outbound call and every feature degrades as upstream does. Retention is on by default in OSS (`DATA_RETENTION_ENABLED=1`, 30
 days), and no event or log carries member text, queries, prompts or labels.
 
 **`@ratel-ai/sdk` from npm**, pinned to the version `ratel-cloud` runs, hoisted only inside the

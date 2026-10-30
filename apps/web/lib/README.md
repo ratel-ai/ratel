@@ -12,7 +12,7 @@ never a higher one; nothing here imports the UI (`@/components`, `@/app`) outsid
 | L1 | `platform/` | db client and migrator, logger, request log, rate limit, http, otel, environment |
 | L1 | `jobs/` | runner, store, drain, scheduler |
 | L2 | `ingest/`, `catalog/` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
-| L3 | `ledger/` | turns, steps, the closed-turn reader, the verdict store |
+| L3 | `ledger/` | turns, steps, the closed-turn reader (the signal verdict and insight store imports the judge and the workflow labels, so it lands with the trace-signals reading in L4) |
 | L4 | `readings/` | intent engine, intent graph, topics, signals, workflows, self-corrections, match quality, tool explorer, decisions |
 | L5 | `synthesis/` | tasks, fixes, health summary, quality, experiments, playground, traces, tool crafter, health imports |
 | L6 | `views/`, `console/` | page and view models; scope, navigation, settings, projects, onboarding, seeds |
@@ -33,3 +33,27 @@ scheduler, which has no upstream counterpart. One deliberate exception to the na
 `resetEventUsageIfElapsed` plus the `monthlyEventLimit` comparison in the ingest route, because
 the counting edition now does both behind the entitlements port. `incrementEventUsage` keeps its
 upstream name and signature.
+
+In `ledger/` the owned files are `constants.ts` (`TURN_EVENT_TYPES` has one source, the
+ingest kick; imported sources are recognised by suffix, not an enumerated vendor list),
+`hash.ts` (`queryKey` inlined from the L4 match-quality labels), `same-ask.ts` (a comment),
+`turns/queries.ts` and `turns/build-job.ts` (no retired feature-flag gate; the run-trigger
+vocabulary lives in `run-trigger.ts`; the two seams into the signal runs, `enqueueReading`
+and `onBacklogDrained`, are set by the readings' registration instead of imported from L4),
+`closed-turns.ts` (the reader half of upstream's `signals/ledger.ts`; the analysis-context
+loaders read L4 tables and land with the readings) and the build-job integration test.
+Upstream's `workflows/decide-queries.ts` is a workflow concern and lands with the readings.
+
+In `readings/` the owned files are the three schema fragments and three `register.ts` files
+(no upstream counterpart), `query-intents/queries.ts` (the query-intents partition of upstream's
+queries hub), `intent-graph/queries.ts` (minus the Boost panel block, which reads the L5
+quality selections and lands with match quality; plus the fold enqueue and the unfolded-projects
+read from the hub), `intent-graph/fold-job.ts` (the shadow replay over the tool catalog is the
+`foldSeams.loadShadow` seam the match-quality registration fills, so the fold never imports
+match quality), `intent-engine/names-job.ts` (`DEFAULT_LABEL_MODEL` comes from
+`readings/model-defaults.ts`, shared with the step 9 label jobs), `decisions/engine.ts` (OpenAI is
+the one decision engine here; the private engines are excluded), two files with a reworded
+comment (`intent-engine/job.ts`, `decisions/openai.ts`) and the tests whose fixtures named a
+confidential word, copied with a neutral tenant. `intent-graph/event-types.test.ts` reads the
+ingest schema fragment and the single init migration. Deferred with a `$why`: the Intents page
+read models (`breakdown*`, `asks-tree`, `setup`, `view`, `v2`) and `boost-view`.

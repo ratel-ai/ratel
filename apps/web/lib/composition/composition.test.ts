@@ -169,6 +169,32 @@ describe("registry root", () => {
     );
   });
 
+  it("the core modules landed so far register their jobs and steps in layer order", () => {
+    assert.deepEqual(Object.keys(jobHandlers()).sort(), [
+      "build_trace_turns",
+      "categorize_queries",
+      "cluster_intents",
+      "fold_intent_graph",
+    ]);
+    // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick
+    // can carry events through turns, recurring asks, the graph and the engine. After-steps are
+    // the retention passes, ingest first, followed by the trace-summary refresh.
+    assert.deepEqual(
+      drainSteps().map((s) => `${s.phase}:${s.name}${s.retentionOnly ? ":retention" : ""}`),
+      [
+        "before:trace_turns_build_enqueue",
+        "before:query_categorizations_enqueue",
+        "before:intent_graph_fold_enqueue",
+        "before:intent_engine_enqueue",
+        "after:runtime_events_prune:retention",
+        "after:runtime_event_rejects_prune:retention",
+        "after:intent_graph_revisions_prune:retention",
+        "after:intent_engine_expire:retention",
+        "after:trace_summary_refresh",
+      ],
+    );
+  });
+
   it("refuses a job kind or drain step registered twice", () => {
     const twice = [{ jobs: { a: async () => 1 } }, { jobs: { a: async () => 2 } }];
     assert.throws(() => jobHandlers(twice), /job kind registered twice: a/);
