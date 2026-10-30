@@ -147,6 +147,7 @@ Enter with `ease-enter`, exit faster with `ease-exit`.
 | Where | Use | Primitive |
 |---|---|---|
 | Empty and first-run states | The 5×5 mark at rest, in `fg-faint` | `EmptyState`, `DotEmblem` |
+| A Micro screen's wait | The 5×5 mark, a band of light crossing it | `DotLoader` |
 | A share next to its number | A row of square pixels beside the number | `DotMeter` |
 | A trend under a stat | Columns of pixels per bucket, the latest coral | `DotSpark` |
 | Canvases, maps, empty areas | A dot grid at 8 px pitch | `dot-grid`, `dot-grid-fade` |
@@ -187,7 +188,7 @@ Built on Base UI where it has the part, styled with the tokens, merged with `cn`
 | `Steps` | An ordered sequence |
 | `CodeBlock`, `CopyButton`, `KeyReveal` | Snippets, API keys shown once |
 | `ShareBar` | A share of a whole as one stacked bar |
-| `DotEmblem`, `DotMeter`, `DotSpark` | The brand marks |
+| `DotEmblem`, `DotLoader`, `DotMeter`, `DotSpark` | The brand marks |
 
 ### Overlays: which one
 
@@ -316,7 +317,8 @@ interaction.
 
 **The Micro style** is the look of the screens the Cloud app built before this design system, named
 after its small mono type. Its palette is `forest`, `cream`, `canvas`, `base-deep`, `warm-muted` and
-`indigo-300`. A Micro screen is identical to the Cloud app's, except for its name where this document renames it.
+`indigo-300`. A Micro screen is identical to the Cloud app's, except for its name where this document renames it
+and its loader (`DotLoader`).
 It is still built from this package's components, with its look passed through variants and
 `className`. No new screen uses it.
 

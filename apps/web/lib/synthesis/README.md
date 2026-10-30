@@ -1,6 +1,6 @@
 # `lib/synthesis` (L5)
 
-Read models built on the layers below. The traces module and one Playground helper have landed.
+Read models built on the layers below. Traces, Test a search and its experiment reads have landed.
 
 | Path | Holds |
 |---|---|
@@ -10,8 +10,10 @@ Read models built on the layers below. The traces module and one Playground help
 | `traces/queries.ts`, `run-details.ts`, `events-queries.ts` | the trace, span, operation and log reads over `otel_spans`, `otel_logs` and the summaries |
 | `traces/view.ts`, `events-view.ts` | search params to query options and cursors, rows to view models |
 | `traces/waterfall.ts`, `tree.ts`, `content-view.ts`, `format.ts` | one trace as a span tree, a waterfall and its message content |
-| `playground/descriptions.ts` | which description a search ranks on, for the Catalog detail |
+| `playground/` | Test a search (upstream's Playground): rank a prompt with the SDK's engine against the live catalog, with what-if edits. `embed.ts` goes through the embedding-provider port, `rank-route.ts` is the route's logic |
+| `experiments/` | experiment detection and comparison over recorded rankings |
+| `catalog/` | the tools table model, data provenance and the runtime-catalog reads, shared by Test a search and the Catalog pages |
 | `traces/v2/` | the console Traces pages' models: filters, runs, run summary, timeline, volume |
 
-The experiment and calibration reads stay upstream until the experiments module lands. Copies
-and owned files are listed in `scripts/platform-sync/map.json`.
+The experiment reads are in `traces/` (`experiment-*`, `calibration-view`); the Calibration pages and
+their services stay upstream until they land. Copies and owned files are listed in `scripts/platform-sync/map.json`.

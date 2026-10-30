@@ -23,8 +23,6 @@
     transparent 1.5px
   );
   --pixel-grid-size: 12px 12px;
-  /* The dot-matrix loader's solid color. */
-  --color-dot-on: var(--color-coral);
 }
 
 /* Monospaced text and numbers in columns line their figures up. */
@@ -179,5 +177,28 @@
   .intent-exit {
     overflow: hidden;
     animation: intent-exit 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+}
+
+/* DotLoader: each dot brightens in turn. Reduced motion rests at the middle. */
+@keyframes dot-loader-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.16;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+.dot-loader-dot {
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dot-loader-dot {
+    opacity: 0.16;
+    animation: dot-loader-pulse 1.4s ease-in-out infinite;
   }
 }
