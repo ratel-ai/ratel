@@ -5,6 +5,7 @@ import {
   clipInput,
   embeddingsConfigured,
   embedTexts,
+  MAX_CACHE_ENTRIES,
   MAX_INPUT_CHARS,
   MAX_TEXTS,
   PROVIDER_BATCH_SIZE,
@@ -137,6 +138,22 @@ test("a hosted provider's result is not labelled local", async () => {
 
   assert.ok(result.ok);
   assert.equal(result.local, undefined);
+});
+
+test("a full cache evicting a text this call counted as a hit still returns its vector", async () => {
+  const cache = new Map<string, number[]>();
+  const { provider } = fakeProvider();
+  const first = await embedTexts(["oldest"], { provider, cache });
+  assert.ok(first.ok);
+  for (let i = cache.size; i < MAX_CACHE_ENTRIES; i++) cache.set(`filler-${i}`, [0, 0]);
+
+  const result = await embedTexts(["oldest", "new"], { provider, cache });
+
+  assert.ok(result.ok);
+  assert.deepEqual(result.vectors[0], first.vectors[0]);
+  assert.equal(result.vectors[1].length, 2);
+  assert.equal(result.embeddedCount, 1);
+  assert.equal(result.cachedCount, 1);
 });
 
 test("clipInput trims and caps", () => {

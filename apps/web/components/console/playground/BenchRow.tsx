@@ -63,11 +63,11 @@ export function BenchRow({
       )}
     >
       <div className="flex items-center">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={onToggle}
           aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-3 text-left transition-colors hover:bg-forest/25"
+          className="h-auto min-w-0 flex-1 shrink justify-start gap-2 rounded-none border-0 py-1.5 pr-0 pl-3 text-left font-normal transition-colors hover:bg-forest/25 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-offset-0"
         >
           <ChevronRight
             className={cn(
@@ -130,7 +130,7 @@ export function BenchRow({
               </span>
             )}
           </span>
-        </button>
+        </Button>
 
         <Button
           variant="ghost"

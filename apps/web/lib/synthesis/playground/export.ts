@@ -27,7 +27,7 @@ export interface EditedCapability {
   id: string;
   /**
    * The text retrieval matches on, before and after. For a managed entry that
-   * is its searchable description, not the agent description — which is the one
+   * is its searchable description, not the agent description, which is the one
    * an edit here can actually change, and the one the receiving end has to
    * apply.
    */

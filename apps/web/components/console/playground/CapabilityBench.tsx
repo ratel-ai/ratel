@@ -162,14 +162,14 @@ export function CapabilityBench({
           : "border-forest-300 bg-forest-600/35",
       )}
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         onClick={() => onCollapsedChange(!collapsed)}
         aria-expanded={!collapsed}
         aria-controls="playground-bench-body"
         className={cn(
-          "group/toggle flex w-full shrink-0 items-center gap-3 px-4 py-3 text-left transition-colors",
-          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-indigo-300/60",
+          "group/toggle h-auto w-full justify-start gap-3 rounded-none border-0 px-4 py-3 text-left font-normal whitespace-normal transition-colors",
+          "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-indigo-300/60 focus-visible:ring-offset-0",
           collapsed ? "hover:bg-indigo-300/[0.06]" : "bg-base-deep/30 hover:bg-base-deep/50",
         )}
       >
@@ -223,7 +223,7 @@ export function CapabilityBench({
           )}
           aria-hidden
         />
-      </button>
+      </Button>
 
       <div
         id="playground-bench-body"
@@ -453,17 +453,17 @@ function BenchTab({
   edited: number;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
       role="tab"
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        "relative -mb-px inline-flex items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs",
+        "relative -mb-px h-auto gap-1.5 rounded-t-lg rounded-b-none border-b-0 px-3 py-1.5 text-xs font-normal",
         "transition-[background-color,color,transform] duration-150 active:translate-y-px motion-reduce:transition-none motion-reduce:active:translate-y-0",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-indigo-300/60",
+        "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-indigo-300/60 focus-visible:ring-offset-0",
         active
-          ? "border-forest-300 bg-forest-600 font-medium text-cream"
+          ? "border-forest-300 bg-forest-600 font-medium text-cream hover:bg-forest-600 hover:text-cream"
           : "border-transparent bg-base-deep/50 text-warm-muted hover:bg-base-deep/70 hover:text-cream-dim",
       )}
     >
@@ -490,6 +490,6 @@ function BenchTab({
           aria-label={`${edited} edited`}
         />
       )}
-    </button>
+    </Button>
   );
 }

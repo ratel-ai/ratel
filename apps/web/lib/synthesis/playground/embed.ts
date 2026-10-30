@@ -14,7 +14,7 @@ export const PROVIDER_BATCH_SIZE = 128;
 /** Overall ceiling for one call: a sanity bound, not a realistic catalog size. */
 export const MAX_TEXTS = 2_048;
 /** Entries kept in the process-wide vector cache. */
-const MAX_CACHE_ENTRIES = 4_000;
+export const MAX_CACHE_ENTRIES = 4_000;
 const PROVIDER_TIMEOUT_MS = 30_000;
 
 export type EmbeddingFailureReason =
@@ -122,8 +122,12 @@ export async function embedTexts(texts: readonly string[], deps: EmbedDeps): Pro
   const keys = clipped.map(cacheKey);
   // One slot per distinct uncached text: repeated descriptions must not pay for each copy.
   const pending = new Map<string, string>();
+  // This call's vectors, held apart from the cache: a full cache can evict a hit before the end.
+  const resolved = new Map<string, number[]>();
   keys.forEach((key, index) => {
-    if (!cache.has(key) && !pending.has(key)) pending.set(key, clipped[index]);
+    const hit = cache.get(key);
+    if (hit) resolved.set(key, hit);
+    else if (!pending.has(key)) pending.set(key, clipped[index]);
   });
 
   // Chunks run in order so a partial failure leaves the cache consistent with what succeeded.
@@ -134,13 +138,14 @@ export async function embedTexts(texts: readonly string[], deps: EmbedDeps): Pro
     const batch = await embedBatch(inputs, deps);
     if (!batch.ok) return batch;
     chunkKeys.forEach((key, index) => {
+      resolved.set(key, batch.vectors[index]);
       remember(cache, key, batch.vectors[index]);
     });
   }
 
   return {
     ok: true,
-    vectors: keys.map((key) => cache.get(key) ?? []),
+    vectors: keys.map((key) => resolved.get(key) ?? []),
     embeddedCount: pending.size,
     cachedCount: keys.length - pending.size,
   };

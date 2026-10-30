@@ -330,13 +330,13 @@ function LayersHelp() {
         </dl>
       }
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         aria-label="How the searchable description is resolved"
-        className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-warm-muted/70 outline-none transition-colors hover:text-cream focus-visible:ring-2 focus-visible:ring-coral/50"
+        className="size-4 rounded-full border-0 p-0 text-warm-muted/70 transition-colors hover:bg-transparent hover:text-cream focus-visible:ring-coral/50 focus-visible:ring-offset-0"
       >
         <CircleHelp className="size-3.5" strokeWidth={1.8} aria-hidden />
-      </button>
+      </Button>
     </Tooltip>
   );
 }

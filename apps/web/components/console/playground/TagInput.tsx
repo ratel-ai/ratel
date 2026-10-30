@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@ratel/design-system/button";
+import { Input } from "@ratel/design-system/input";
 import { X } from "lucide-react";
 import { type KeyboardEvent, useState } from "react";
 
@@ -44,17 +46,17 @@ export function TagInput({
           className="inline-flex items-center gap-1 rounded-md border border-forest-300 bg-forest/50 py-0.5 pr-1 pl-1.5 font-mono text-[10px] text-cream-dim"
         >
           {tag}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             aria-label={`Remove tag ${tag}`}
             onClick={() => onChange(tags.filter((candidate) => candidate !== tag))}
-            className="rounded text-warm-muted transition-colors hover:text-coral"
+            className="size-auto rounded border-0 p-0 text-warm-muted transition-colors hover:bg-transparent hover:text-coral focus-visible:ring-1 focus-visible:ring-offset-0"
           >
             <X className="size-3" aria-hidden />
-          </button>
+          </Button>
         </span>
       ))}
-      <input
+      <Input
         value={draft}
         aria-label={label}
         placeholder={tags.length === 0 ? "add a tag…" : ""}
@@ -70,7 +72,7 @@ export function TagInput({
         }}
         onKeyDown={handleKeyDown}
         onBlur={() => commit(draft)}
-        className="min-w-24 flex-1 bg-transparent py-0.5 font-mono text-[11px] text-cream placeholder:text-warm-muted/50 focus:outline-none"
+        className="h-auto w-auto min-w-24 flex-1 rounded-none border-0 bg-transparent px-0 py-0.5 font-mono text-[11px] text-cream placeholder:text-warm-muted/50 focus-visible:ring-0 max-md:text-[11px]"
       />
     </div>
   );

@@ -168,15 +168,8 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .intent-new-glow {
-    animation: intent-new-fade 2.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-  .intent-arrive {
-    animation: intent-arrive 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .intent-exit {
-    overflow: hidden;
-    animation: intent-exit 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  .analyze-scan-fill {
+    animation: analyze-scan 1.15s linear infinite;
   }
 }
 
