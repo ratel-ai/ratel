@@ -43,3 +43,17 @@ and `onBacklogDrained`, are set by the readings' registration instead of importe
 `closed-turns.ts` (the reader half of upstream's `signals/ledger.ts`; the analysis-context
 loaders read L4 tables and land with the readings) and the build-job integration test.
 Upstream's `workflows/decide-queries.ts` is a workflow concern and lands with the readings.
+
+In `readings/` the owned files are the three schema fragments and three `register.ts` files
+(no upstream counterpart), `query-intents/queries.ts` (the query-intents partition of upstream's
+queries hub), `intent-graph/queries.ts` (minus the Boost panel block, which reads the L5
+quality selections and lands with match quality; plus the fold enqueue and the unfolded-projects
+read from the hub), `intent-graph/fold-job.ts` (the shadow replay over the tool catalog is the
+`foldSeams.loadShadow` seam the match-quality registration fills, so the fold never imports
+match quality), `intent-engine/names-job.ts` (`DEFAULT_LABEL_MODEL` comes from
+`readings/model-defaults.ts`, shared with the step 9 label jobs), `decisions/engine.ts` (OpenAI is
+the one decision engine here; the private engines are excluded), two files with a reworded
+comment (`intent-engine/job.ts`, `decisions/openai.ts`) and the tests whose fixtures named a
+confidential word, copied with a neutral tenant. `intent-graph/event-types.test.ts` reads the
+ingest schema fragment and the single init migration. Deferred with a `$why`: the Intents page
+read models (`breakdown*`, `asks-tree`, `setup`, `view`, `v2`) and `boost-view`.

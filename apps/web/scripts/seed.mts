@@ -42,6 +42,8 @@ import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/querie
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { runDrainTick } from "@/lib/jobs/drain";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
+import { enqueueClusterIntentsJob } from "@/lib/readings/intent-engine/jobs";
+import { enqueueFoldIntentGraphJob } from "@/lib/readings/intent-graph/queries";
 import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
@@ -82,6 +84,11 @@ async function send(apiKey: string, body: object): Promise<Record<string, number
     insertTraceEvents,
     getOrganizationByProjectId,
     traceTurns: { enqueueBuild: (projectId) => enqueueBuildTraceTurnsJob(projectId), scheduleProjectDrain: () => {} },
+    // The readings' first run for a project comes from this ingest kick (the drain's
+    // safety net only revisits projects it has met), so the seed queues them like the route.
+    enqueueFoldIntentGraphJob: (projectId, _payload, options) => enqueueFoldIntentGraphJob(projectId, undefined, options),
+    enqueueClusterIntentsJob: (projectId, _payload, options) => enqueueClusterIntentsJob(projectId, undefined, options),
+    scheduleProjectDrain: () => {},
     findRuntimeInvokes: (projectId, probe) => findRuntimeInvokes(projectId, probe),
   });
   if (response.status !== 202) throw new Error(`ingest returned ${response.status}`);
@@ -104,7 +111,14 @@ async function drain(n: number): Promise<Array<{ done: number; failed: number }>
 
 async function storedCounts(
   projectId: string,
-): Promise<{ events: number; spans: number; traceEvents: Record<string, number>; turns: Record<string, number> }> {
+): Promise<{
+  events: number;
+  spans: number;
+  traceEvents: Record<string, number>;
+  turns: Record<string, number>;
+  graphs: number;
+  clusters: Record<string, number>;
+}> {
   const db = getDb();
   const [events] = (await db.execute<{ n: number }>(sql`select count(*)::int as n from events where project_id = ${projectId}`))
     .rows;
@@ -117,11 +131,19 @@ async function storedCounts(
   const turns = await db.execute<{ status: string; n: number }>(
     sql`select status, count(*)::int as n from trace_turns where project_id = ${projectId} group by status order by status`,
   );
+  const [graphs] = (
+    await db.execute<{ n: number }>(sql`select count(*)::int as n from intent_graphs where project_id = ${projectId}`)
+  ).rows;
+  const clusters = await db.execute<{ level: number; n: number }>(
+    sql`select level, count(*)::int as n from intent_clusters where project_id = ${projectId} group by level order by level`,
+  );
   return {
     events: events?.n ?? 0,
     spans: spans?.n ?? 0,
     traceEvents: Object.fromEntries(types.rows.map((row) => [row.type, row.n])),
     turns: Object.fromEntries(turns.rows.map((row) => [row.status, row.n])),
+    graphs: graphs?.n ?? 0,
+    clusters: Object.fromEntries(clusters.rows.map((row) => [`level ${row.level}`, row.n])),
   };
 }
 
@@ -180,6 +202,11 @@ function report(out: Awaited<ReturnType<typeof seed>>): string {
     `   drained: ${out.ticks.length} tick(s), ${out.ticks.reduce((n, t) => n + t.done, 0)} job(s) done, ${out.ticks.reduce((n, t) => n + t.failed, 0)} failed; trace_turns ${
       Object.entries(stored.turns)
         .map(([status, n]) => `${status} ${n}`)
+        .join(", ") || "none"
+    }`,
+    `   readings: intent_graphs ${stored.graphs}, intent_clusters ${
+      Object.entries(stored.clusters)
+        .map(([level, n]) => `${level} ${n}`)
         .join(", ") || "none"
     }`,
     `   failed calls: ${top(s.failedCalls, 12)}`,

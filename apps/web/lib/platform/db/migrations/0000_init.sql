@@ -400,6 +400,153 @@ CREATE TABLE "projects" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "intent_cluster_assignments" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
+	"trace_event_id" uuid NOT NULL,
+	"ask_index" integer DEFAULT 0 NOT NULL,
+	"cluster_id" uuid NOT NULL,
+	"kind" text NOT NULL,
+	"session_id" text,
+	"turn_id" text,
+	"trace_id" text,
+	"source_id" text,
+	"occurred_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "intent_clusters" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
+	"level" integer DEFAULT 0 NOT NULL,
+	"parent_id" uuid,
+	"graph_id" text,
+	"label" text DEFAULT '' NOT NULL,
+	"terms" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"members" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"served_members" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"children" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"support" integer DEFAULT 0 NOT NULL,
+	"asks" integer DEFAULT 0 NOT NULL,
+	"edges" jsonb DEFAULT '{"tools":{},"skills":{}}'::jsonb NOT NULL,
+	"usage" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"sources" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"first_ts" bigint,
+	"last_ts" bigint,
+	"query_intent_id" uuid,
+	"llm_label" text,
+	"llm_label_hash" text,
+	"llm_action" text,
+	"llm_object" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "intent_engine_state" (
+	"project_id" uuid PRIMARY KEY NOT NULL,
+	"clustered_through" timestamp with time zone,
+	"next_graph_n" integer DEFAULT 0 NOT NULL,
+	"seeded_at" timestamp with time zone,
+	"named_at" timestamp with time zone,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "intent_graph_clusters" (
+	"project_id" uuid NOT NULL,
+	"graph_key" text NOT NULL,
+	"cluster_id" text NOT NULL,
+	"label" text NOT NULL,
+	"label_override" text,
+	"terms" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"members" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"member_count" integer NOT NULL,
+	"support" integer NOT NULL,
+	"seeded_support" integer DEFAULT 0 NOT NULL,
+	"last_ts" timestamp with time zone,
+	"has_centroid" boolean NOT NULL,
+	CONSTRAINT "intent_graph_clusters_project_id_graph_key_cluster_id_pk" PRIMARY KEY("project_id","graph_key","cluster_id")
+);
+--> statement-breakpoint
+CREATE TABLE "intent_graph_edges" (
+	"project_id" uuid NOT NULL,
+	"graph_key" text NOT NULL,
+	"cluster_id" text NOT NULL,
+	"kind" text NOT NULL,
+	"capability_id" text NOT NULL,
+	"weight" double precision NOT NULL,
+	"surfaced" integer,
+	CONSTRAINT "intent_graph_edges_project_id_graph_key_cluster_id_kind_capability_id_pk" PRIMARY KEY("project_id","graph_key","cluster_id","kind","capability_id")
+);
+--> statement-breakpoint
+CREATE TABLE "intent_graph_revisions" (
+	"project_id" uuid NOT NULL,
+	"graph_key" text NOT NULL,
+	"rev" bigint NOT NULL,
+	"document" jsonb NOT NULL,
+	"content_hash" text NOT NULL,
+	"cluster_count" integer NOT NULL,
+	"received_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "intent_graph_revisions_project_id_graph_key_rev_pk" PRIMARY KEY("project_id","graph_key","rev")
+);
+--> statement-breakpoint
+CREATE TABLE "intent_graph_shadow_turns" (
+	"project_id" uuid NOT NULL,
+	"graph_key" text NOT NULL,
+	"search_event_id" uuid NOT NULL,
+	"source_id" text,
+	"occurred_at" timestamp with time zone NOT NULL,
+	"plain_ids" jsonb NOT NULL,
+	"boosted_ids" jsonb NOT NULL,
+	"matched" boolean DEFAULT false NOT NULL,
+	"live" boolean DEFAULT false NOT NULL,
+	"reported" boolean DEFAULT false NOT NULL,
+	"invoked_tool_id" text,
+	CONSTRAINT "intent_graph_shadow_turns_project_id_graph_key_search_event_id_pk" PRIMARY KEY("project_id","graph_key","search_event_id")
+);
+--> statement-breakpoint
+CREATE TABLE "intent_graphs" (
+	"project_id" uuid NOT NULL,
+	"graph_key" text NOT NULL,
+	"producer" text NOT NULL,
+	"document" jsonb NOT NULL,
+	"rev" bigint NOT NULL,
+	"schema_version" integer NOT NULL,
+	"model" text,
+	"built_from_ts" timestamp with time zone NOT NULL,
+	"cluster_count" integer NOT NULL,
+	"byte_size" integer NOT NULL,
+	"content_hash" text NOT NULL,
+	"received_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"pulled_at" timestamp with time zone,
+	"live_at" timestamp with time zone,
+	CONSTRAINT "intent_graphs_project_id_graph_key_pk" PRIMARY KEY("project_id","graph_key")
+);
+--> statement-breakpoint
+CREATE TABLE "query_intent_occurrences" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"query_intent_id" uuid NOT NULL,
+	"project_id" uuid NOT NULL,
+	"trace_event_id" uuid NOT NULL,
+	"intent_index" integer DEFAULT 0 NOT NULL,
+	"query" text NOT NULL,
+	"session_id" text,
+	"end_user_id" text,
+	"occurred_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "query_intents" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
+	"normalized_text" text NOT NULL,
+	"text" text NOT NULL,
+	"occurrences" integer DEFAULT 0 NOT NULL,
+	"first_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"last_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"member_text" text DEFAULT '' NOT NULL
+);
+--> statement-breakpoint
 ALTER TABLE "skills" ADD CONSTRAINT "skills_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tool_definitions" ADD CONSTRAINT "tool_definitions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "catalog_snapshots" ADD CONSTRAINT "catalog_snapshots_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -427,6 +574,20 @@ ALTER TABLE "users" ADD CONSTRAINT "users_current_organization_id_organizations_
 ALTER TABLE "users" ADD CONSTRAINT "users_last_project_id_projects_id_fk" FOREIGN KEY ("last_project_id") REFERENCES "public"."projects"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "projects" ADD CONSTRAINT "projects_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_cluster_assignments" ADD CONSTRAINT "intent_cluster_assignments_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_cluster_assignments" ADD CONSTRAINT "intent_cluster_assignments_trace_event_id_trace_events_id_fk" FOREIGN KEY ("trace_event_id") REFERENCES "public"."trace_events"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_clusters" ADD CONSTRAINT "intent_clusters_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_clusters" ADD CONSTRAINT "intent_clusters_query_intent_id_query_intents_id_fk" FOREIGN KEY ("query_intent_id") REFERENCES "public"."query_intents"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_engine_state" ADD CONSTRAINT "intent_engine_state_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_graph_clusters" ADD CONSTRAINT "intent_graph_clusters_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_graph_edges" ADD CONSTRAINT "intent_graph_edges_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_graph_revisions" ADD CONSTRAINT "intent_graph_revisions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_graph_shadow_turns" ADD CONSTRAINT "intent_graph_shadow_turns_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "intent_graphs" ADD CONSTRAINT "intent_graphs_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "query_intent_occurrences" ADD CONSTRAINT "query_intent_occurrences_query_intent_id_query_intents_id_fk" FOREIGN KEY ("query_intent_id") REFERENCES "public"."query_intents"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "query_intent_occurrences" ADD CONSTRAINT "query_intent_occurrences_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "query_intent_occurrences" ADD CONSTRAINT "query_intent_occurrences_trace_event_id_trace_events_id_fk" FOREIGN KEY ("trace_event_id") REFERENCES "public"."trace_events"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "query_intents" ADD CONSTRAINT "query_intents_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "skills_project_name_active_idx" ON "skills" USING btree ("project_id","name") WHERE "skills"."status" <> 'archived';--> statement-breakpoint
 CREATE INDEX "skills_project_status_idx" ON "skills" USING btree ("project_id","status");--> statement-breakpoint
 CREATE UNIQUE INDEX "tool_definitions_project_name_idx" ON "tool_definitions" USING btree ("project_id","name");--> statement-breakpoint
@@ -491,4 +652,21 @@ CREATE UNIQUE INDEX "memberships_user_org_idx" ON "memberships" USING btree ("us
 CREATE INDEX "memberships_org_id_idx" ON "memberships" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "api_keys_key_hash_idx" ON "api_keys" USING btree ("key_hash");--> statement-breakpoint
 CREATE INDEX "api_keys_project_id_idx" ON "api_keys" USING btree ("project_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "projects_organization_slug_idx" ON "projects" USING btree ("organization_id","slug");
+CREATE UNIQUE INDEX "projects_organization_slug_idx" ON "projects" USING btree ("organization_id","slug");--> statement-breakpoint
+CREATE UNIQUE INDEX "intent_cluster_assignments_event_idx" ON "intent_cluster_assignments" USING btree ("trace_event_id","ask_index");--> statement-breakpoint
+CREATE INDEX "intent_cluster_assignments_cluster_idx" ON "intent_cluster_assignments" USING btree ("project_id","cluster_id");--> statement-breakpoint
+CREATE INDEX "intent_cluster_assignments_trace_idx" ON "intent_cluster_assignments" USING btree ("project_id","trace_id") WHERE "intent_cluster_assignments"."trace_id" is not null;--> statement-breakpoint
+CREATE INDEX "intent_cluster_assignments_turn_idx" ON "intent_cluster_assignments" USING btree ("project_id","session_id","turn_id") WHERE "intent_cluster_assignments"."turn_id" is not null;--> statement-breakpoint
+CREATE INDEX "intent_clusters_project_level_last_idx" ON "intent_clusters" USING btree ("project_id","level","last_ts" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "intent_clusters_project_parent_idx" ON "intent_clusters" USING btree ("project_id","parent_id");--> statement-breakpoint
+CREATE INDEX "intent_clusters_query_intent_idx" ON "intent_clusters" USING btree ("query_intent_id");--> statement-breakpoint
+CREATE INDEX "intent_graph_clusters_project_key_support_idx" ON "intent_graph_clusters" USING btree ("project_id","graph_key","support");--> statement-breakpoint
+CREATE INDEX "intent_graph_edges_capability_idx" ON "intent_graph_edges" USING btree ("project_id","kind","capability_id");--> statement-breakpoint
+CREATE INDEX "intent_graph_revisions_project_key_received_idx" ON "intent_graph_revisions" USING btree ("project_id","graph_key","received_at");--> statement-breakpoint
+CREATE INDEX "intent_graph_shadow_turns_graph_time_idx" ON "intent_graph_shadow_turns" USING btree ("project_id","graph_key","occurred_at");--> statement-breakpoint
+CREATE INDEX "intent_graphs_project_updated_idx" ON "intent_graphs" USING btree ("project_id","updated_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "query_intent_occurrences_trace_event_idx" ON "query_intent_occurrences" USING btree ("trace_event_id","intent_index");--> statement-breakpoint
+CREATE INDEX "query_intent_occurrences_query_intent_idx" ON "query_intent_occurrences" USING btree ("query_intent_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "query_intents_project_normalized_idx" ON "query_intents" USING btree ("project_id","normalized_text");--> statement-breakpoint
+CREATE INDEX "query_intents_project_occurrences_idx" ON "query_intents" USING btree ("project_id","occurrences");--> statement-breakpoint
+CREATE INDEX "query_intents_project_last_seen_idx" ON "query_intents" USING btree ("project_id","last_seen_at");
