@@ -40,9 +40,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "apps/web/**"
-      ],
+      "includes": ["apps/web/**"],
       "linter": {
         "rules": {
           "style": {
@@ -70,9 +68,7 @@
       }
     },
     {
-      "includes": [
-        "apps/web/components/console/traces/**"
-      ],
+      "includes": ["apps/web/components/console/traces/**"],
       "linter": {
         "rules": {
           "suspicious": {
@@ -88,9 +84,7 @@
       }
     },
     {
-      "includes": [
-        "apps/web/lib/console/catalog/item-id.ts"
-      ],
+      "includes": ["apps/web/lib/console/catalog/item-id.ts"],
       "linter": {
         "rules": {
           "suspicious": {
@@ -100,9 +94,7 @@
       }
     },
     {
-      "includes": [
-        "apps/web/components/console/errors/**"
-      ],
+      "includes": ["apps/web/components/console/errors/**"],
       "linter": {
         "rules": {
           "suspicious": {
@@ -345,16 +337,21 @@
         "!apps/web/lib/console/catalog/tree.test.ts",
         "!apps/web/lib/console/catalog/render.test.ts",
         "!apps/web/lib/console/catalog/item-id.test.ts",
-        "!apps/web/lib/console/catalog/runtime-reads.ts",
         "!apps/web/lib/console/catalog/sync-snippet.ts",
-        "!apps/web/lib/console/catalog/provenance.ts",
         "apps/web/lib/console/catalog/table-view.ts",
         "apps/web/lib/console/catalog/table-view.test.ts",
-        "apps/web/lib/console/catalog/tools.ts",
-        "apps/web/lib/console/catalog/tools.test.ts",
+        "apps/web/lib/synthesis/catalog/tools.ts",
+        "apps/web/lib/synthesis/catalog/tools.test.ts",
         "apps/web/lib/catalog/agent-tools/**",
-        "apps/web/lib/synthesis/playground/descriptions.ts",
-        "apps/web/lib/synthesis/playground/descriptions.test.ts",
+        "apps/web/lib/synthesis/playground/**",
+        "!apps/web/lib/synthesis/playground/embed.ts",
+        "!apps/web/lib/synthesis/playground/embed.test.ts",
+        "!apps/web/lib/synthesis/playground/client.ts",
+        "!apps/web/lib/synthesis/playground/export.ts",
+        "!apps/web/lib/synthesis/playground/export.test.ts",
+        "!apps/web/lib/synthesis/playground/rank-route.ts",
+        "!apps/web/lib/synthesis/playground/rank-route.test.ts",
+        "apps/web/lib/synthesis/experiments/**",
         "apps/web/lib/console/explore/**",
         "!apps/web/lib/console/explore/bulk.test.ts",
         "!apps/web/lib/console/explore/record-table.test.ts",

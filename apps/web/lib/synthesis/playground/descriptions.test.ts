@@ -5,7 +5,7 @@ import {
   resolveSearchableDescription,
   searchableDescriptionSource,
   searchableMatchesAgentDescription,
-} from "@/lib/synthesis/playground/descriptions";
+} from "./descriptions";
 
 /**
  * The precedence retrieval uses, pinned.

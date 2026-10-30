@@ -1,5 +1,5 @@
-import type { DataProvenance } from "@/lib/console/catalog/provenance";
 import type { ObservedTool, SyncedTool } from "@/lib/ingest/catalogs/queries";
+import type { DataProvenance } from "@/lib/synthesis/catalog/provenance";
 
 export type SyncedToolDefinition = {
   name: string;

@@ -2,13 +2,6 @@ import type { SkillFull } from "@/lib/catalog/agent-tools/outputs";
 import { serializeSkillFull } from "@/lib/catalog/agent-tools/serialize";
 import { listSkills } from "@/lib/catalog/queries";
 import {
-  getRuntimeCatalogOverrideAdoption,
-  getRuntimeSkillCatalogEntries,
-  getRuntimeToolDefinitions,
-  getSkillCatalogAdoption,
-} from "@/lib/console/catalog/runtime-reads";
-import { buildToolsCatalog, type CatalogTool } from "@/lib/console/catalog/tools";
-import {
   listObservedTools,
   listSkillRunCounts,
   listSyncedTools,
@@ -16,6 +9,13 @@ import {
 } from "@/lib/ingest/catalogs/queries";
 import type { Organization } from "@/lib/platform/identity/schema";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
+import {
+  getRuntimeCatalogOverrideAdoption,
+  getRuntimeSkillCatalogEntries,
+  getRuntimeToolDefinitions,
+  getSkillCatalogAdoption,
+} from "@/lib/synthesis/catalog/runtime-reads";
+import { buildToolsCatalog, type CatalogTool } from "@/lib/synthesis/catalog/tools";
 import type { RuntimeCatalogEntry, RuntimeToolDefinition } from "@/lib/synthesis/dashboard";
 import { isoOrNull, type SkillRun } from "./items";
 

@@ -1,9 +1,9 @@
-import type { CatalogTool } from "@/lib/console/catalog/tools";
 import {
   CATALOG_PROVENANCE,
   CATALOG_PROVENANCE_ORDER,
   type CatalogProvenance,
 } from "@/lib/ingest/catalogs/vocabulary";
+import type { CatalogTool } from "@/lib/synthesis/catalog/tools";
 import type { RuntimeCatalogEntry } from "@/lib/synthesis/dashboard";
 
 /**

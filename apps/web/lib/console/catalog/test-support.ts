@@ -1,7 +1,7 @@
 import type { SkillFull } from "@/lib/catalog/agent-tools/outputs";
 import { buildToolsCatalogRows } from "@/lib/console/catalog/table-view";
-import { buildToolsCatalog } from "@/lib/console/catalog/tools";
 import type { ObservedTool, SyncedTool } from "@/lib/ingest/catalogs/queries";
+import { buildToolsCatalog } from "@/lib/synthesis/catalog/tools";
 import type { RuntimeCatalogDefinition } from "@/lib/synthesis/dashboard";
 import { buildSkillItems, type SkillItemsInput, type ToolItem, toolItemFromRow } from "./items";
 

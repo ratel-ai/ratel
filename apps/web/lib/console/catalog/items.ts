@@ -1,7 +1,7 @@
 import type { SkillFull } from "@/lib/catalog/agent-tools/outputs";
 import type { ToolsCatalogRow } from "@/lib/console/catalog/table-view";
-import type { CatalogTool } from "@/lib/console/catalog/tools";
 import type { SyncedTool } from "@/lib/ingest/catalogs/queries";
+import type { CatalogTool } from "@/lib/synthesis/catalog/tools";
 import type { RuntimeCatalogDefinition, RuntimeCatalogEntry } from "@/lib/synthesis/dashboard";
 import { resolveSearchableDescription } from "@/lib/synthesis/playground/descriptions";
 import { itemKey } from "./item-id";

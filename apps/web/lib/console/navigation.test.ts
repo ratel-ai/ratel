@@ -53,6 +53,7 @@ test("with a project, the rail links every core destination to that project", ()
     [
       { id: "catalog-tools", href: `/project/${P1}/catalogs/tools` },
       { id: "catalog-skills", href: `/project/${P1}/catalogs/skills` },
+      { id: "catalog-test", href: `/project/${P1}/playground` },
     ],
   );
 });
@@ -175,6 +176,7 @@ test("the command menu lists the rail's destinations, then every project", () =>
       `Pages|Catalog|/project/${P1}/catalogs`,
       `Pages|Tools|/project/${P1}/catalogs/tools`,
       `Pages|Skills|/project/${P1}/catalogs/skills`,
+      `Pages|Test a search|/project/${P1}/playground`,
       `Pages|Settings|/project/${P1}/settings`,
       "Pages|Admin|/admin",
       `Projects|One|/project/${P1}/traces`,
