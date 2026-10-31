@@ -152,18 +152,23 @@ Related open-source projects extend and validate this repository:
 
 ```
 src/
-├── core/              # ratel-ai-core — Rust retrieval engine
-├── sdk/ts/            # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
-├── sdk/python/        # ratel-ai — Python SDK (PyO3-bound)
+├── core/                      # ratel-ai-core — Rust retrieval engine
+├── sdk/ts/                    # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
+├── sdk/python/                # ratel-ai — Python SDK (PyO3-bound)
 ├── adapters/ts-vercel-ai-sdk/ # @ratel-ai/vercel-ai-sdk — Vercel AI SDK adapter
-├── adapters/ts-mastra/ # @ratel-ai/mastra — Mastra adapter
-├── rankers/           # @ratel-ai/rankers-plugin / ratel-ai-rankers-plugin — vendor rankers (Jev, OpenAI Decisions)
-└── telemetry/         # OTel conventions + helper packages
-protocol/              # catalog-source wire contract
-examples/              # End-to-end SDK examples
+├── adapters/ts-mastra/        # @ratel-ai/mastra — Mastra adapter
+├── rankers/                   # @ratel-ai/rankers-plugin / ratel-ai-rankers-plugin — vendor rankers (Jev, OpenAI Decisions)
+└── telemetry/                 # OTel conventions + helper packages
+apps/
+└── web/                       # @ratel/platform — the Ratel Platform console
+packages/
+├── brand/                     # @ratel/brand: palette, fonts and logo assets
+└── design-system/             # @ratel/design-system: semantic tokens and UI primitives
+protocol/                      # catalog-source wire contract
+examples/                      # End-to-end SDK examples
 docs/
-├── adr/                # Architecture decision records
-└── assets/             # Images and other static assets
+├── adr/                       # Architecture decision records
+└── assets/                    # Images and other static assets
 ```
 
 ## Build & test
@@ -175,6 +180,19 @@ cargo build --workspace && cargo test --workspace   # Rust
 pnpm install && pnpm -r build && pnpm -r test       # TypeScript
 # Python: see src/sdk/python/README.md
 ```
+
+### Ratel Platform (in development)
+
+```bash
+pnpm install
+pnpm --filter @ratel/platform dev  # http://localhost:3000
+pnpm --filter @ratel/platform typecheck
+pnpm --filter @ratel/platform test
+
+docker compose up --build          # the OSS edition with Postgres, http://localhost:3000
+```
+
+Postgres alone for `dev`: `docker compose up db` (see [apps/web/README.md](apps/web/README.md)).
 
 ## Contributing
 

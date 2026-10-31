@@ -11,6 +11,10 @@ reframed by the catalog-source pivot ([ADR-0003](0003-catalog-source-interface.m
 standalone server product is deferred, not decided-and-coming. Git history holds the
 pre-compaction records.
 
+The repo-boundary rule is amended by
+[ADR-0029](0029-platform-cloud-modules-private-repository.md): the Cloud modules share source
+with the platform application rather than a protocol.
+
 ## Context
 
 Ratel is one engine that decides what enters an agent's context window. The real variable is
@@ -32,9 +36,11 @@ rather than left implicit.
 `ratel-bench` (the benchmark harness and its published results) is a sibling OSS repo,
 [`ratel-ai/ratel-bench`](https://github.com/ratel-ai/ratel-bench).
 
-The adoption gradient is **in-process SDK → local distribution → managed cloud**. A
-self-hosted server rung is deferred until real demand; if one ships it implements the
-published `protocol/` contract ([ADR-0003](0003-catalog-source-interface.md)).
+The adoption gradient is **in-process SDK → local distribution → self-hosted platform → managed
+cloud**. The self-hosted rung is the open-source edition of the platform application at
+`apps/web` ([ADR-0029](0029-platform-cloud-modules-private-repository.md),
+[ADR-0030](0030-platform-oss-layered-core-and-cloud-sync.md)); it serves the published
+`protocol/` contract ([ADR-0003](0003-catalog-source-interface.md)).
 
 ### One SDK API, two transports
 

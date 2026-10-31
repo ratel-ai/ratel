@@ -16,7 +16,7 @@ framework-neutral orchestration), and
 
 Hosts need to compare retrieval strategies without changing the result served to a user.
 Today they build their own assignment, detached-shadow, comparison, and telemetry harnesses.
-Kestral's reference implementation reached roughly 2,400 lines and 204 tests, demonstrating
+A design partner's reference implementation reached roughly 2,400 lines and 204 tests, demonstrating
 both the demand and how many edge cases a one-off harness has to rediscover.
 
 The initial `defineExperiment` proposal left several load-bearing details ambiguous:

@@ -56,6 +56,7 @@ jobs:
       telemetry: ${{ steps.f.outputs.telemetry }}
       protocol: ${{ steps.f.outputs.protocol }}
       release: ${{ steps.f.outputs.release }}
+      platform: ${{ steps.f.outputs.platform }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
@@ -94,6 +95,11 @@ jobs:
               # the shared cross-language pin, so a fixture edit must re-run this leg.
               - 'src/telemetry/conformance/**'
               - 'examples/**'
+              # The platform app, its design system and the Cloud modules manifest
+              # are workspace members, so `pnpm -r` builds, lints and tests them.
+              - 'apps/**'
+              - 'packages/**'
+              - 'ee/**'
               - 'scripts/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -130,6 +136,18 @@ jobs:
               - '.github/workflows/ci.yml'
             protocol:
               - 'protocol/**'
+              - '.github/workflows/ci.yml'
+            # What the OSS image and its compose file are built from.
+            platform:
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'ee/package.json'
+              - 'scripts/link-ee.mjs'
+              - 'docker-compose.yml'
+              - '.dockerignore'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
               - '.github/workflows/ci.yml'
             # Gates the heavy `verify` matrix: only the paths whose change alters what
             # actually ships (the crate, the wheel, the npm loader + native binding, the
@@ -200,10 +218,18 @@ jobs:
         run: pnpm -r lint
       - name: Test
         run: pnpm -r test
-      # Release tooling lives at repo root (outside the pnpm workspace), so run its
-      # dependency-free node:test suite here rather than via `pnpm -r test`.
-      - name: Test release tooling
-        run: node --test scripts/*.test.mjs
+      # Release and platform tooling lives at repo root (outside the pnpm workspace), so run
+      # its dependency-free node:test suites here rather than via `pnpm -r test`.
+      - name: Test repo tooling
+        run: node --test "scripts/**/*.test.mjs"
+      # The platform application's structural rules (ADR-0029, ADR-0030): nothing in core
+      # imports the private modules, layers only import downward, and no Cloud-only vendor or
+      # customer string reaches the public tree.
+      - name: Check ee boundary, layers and private strings
+        run: pnpm check:boundary && pnpm check:layers && pnpm check:private
+      # The committed baseline migration must match the composed schema (ADR-0030).
+      - name: Check platform migrations match the schema
+        run: pnpm --filter @ratel/platform db:check
       # Example wiring (Vercel AI SDK) — folded in here to keep one TS check row.
       # Drives the real ToolLoopAgent loop with a scripted MockLanguageModel (no API
       # key), catching framework-integration drift the SDK-level tests can't see. The
@@ -574,6 +600,30 @@ jobs:
       - name: Verify v2 conformance vectors
         run: node protocol/v2/conformance/verify.mjs
 
+  # The OSS edition as an operator runs it: docker-compose.yml builds the image, starts
+  # Postgres, migrates on boot and serves.
+  platform-compose:
+    needs: changes
+    if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start
+        run: docker compose up --build --detach --wait --wait-timeout 180
+      - name: Health, console and migrated schema
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:3000/api/health
+          curl --fail --silent --show-error --output /dev/null http://127.0.0.1:3000/
+          tables=$(docker compose exec -T db psql -U ratel -d ratel -Atc \
+            "select count(*) from information_schema.tables where table_schema = 'public'")
+          test "$tables" -gt 0
+      - name: Logs
+        if: failure()
+        run: docker compose logs
+      - name: Stop
+        if: always()
+        run: docker compose down --volumes
+
   # Release-readiness matrix. Builds the REAL distributables (wheel, npm loader + native
   # binding, crate, sdist) from this PR, installs each into a clean environment, and runs
   # the cross-SDK end-to-end scenario through every SDK — catching packaging / binding /
@@ -729,7 +779,7 @@ jobs:
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, rust, ts, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, setup, verify]
+    needs: [changes, rust, ts, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, platform-compose, setup, verify]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -737,7 +787,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} ts=${{ needs.ts.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
+          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} ts=${{ needs.ts.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} platform-compose=${{ needs.platform-compose.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||

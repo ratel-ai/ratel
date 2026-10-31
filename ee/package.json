@@ -1,0 +1,25 @@
+{
+  "name": "@ratel/ee",
+  "version": "0.1.0",
+  "description": "Manifest for Ratel Cloud edition modules. Source code lives in a private repository, checked out at ee/src.",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ratel/design-system": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.13.1",
+    "react": "19.2.4"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.3",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.20.6"
+  },
+  "scripts": {
+    "lint": "biome check . --no-errors-on-unmatched",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "db:generate": "drizzle-kit generate --config src/db/drizzle.config.ts"
+  }
+}

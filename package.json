@@ -6,7 +6,13 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test"
+    "ee:link": "node scripts/link-ee.mjs",
+    "ee:unlink": "node scripts/link-ee.mjs --unlink",
+    "test": "pnpm -r test",
+    "check:boundary": "node scripts/check-ee-boundary.mjs",
+    "check:layers": "node scripts/check-layers.mjs",
+    "check:private": "node scripts/platform-sync/private-strings.mjs",
+    "platform:sync": "node scripts/platform-sync/sync.mjs --source ../ratel-cloud"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13"

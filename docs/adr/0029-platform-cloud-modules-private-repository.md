@@ -1,0 +1,74 @@
+# 29. Ratel Platform: two editions, Cloud modules in a private repository checked out at `ee/src`
+
+Date: 2026-10-23
+
+## Status
+
+Accepted
+
+Amends the repo-boundary rule of [ADR-0002](0002-product-split-engine-local-cloud.md) with one
+exception (the Cloud modules share source with the core rather than a protocol). Consistent with
+[ADR-0009](0009-licensing.md): no proprietary code enters this repository.
+
+Amended by [ADR-0030](0030-platform-oss-layered-core-and-cloud-sync.md): the two spike ports
+(identity, workspace) become five, the core is layered, and the application code arrives from
+`ratel-cloud` through a repeatable sync until that repository is retired.
+
+## Context
+
+Ratel Cloud and a self-hostable Ratel OSS are to run on one core: the same application, the same
+design system, one build. The editions differ in identity, workspaces, billing, admin and support,
+which Cloud has and OSS does not. Two copies of the application would drift from the first day;
+the core has to stay unaware of which edition it is running as.
+
+Two further requirements: the Cloud code stays private, and this repository stays canonical — an
+outside contributor clones, installs, tests and opens a pull request with no extra step.
+
+## Decision
+
+**One application, two compositions.** `apps/web` (`@ratel/platform`) holds the core. Every
+capability that differs by edition is a port declared in `apps/web/lib/contracts/`, with an OSS
+implementation in `apps/web/lib/adapters/oss/`. A composition root reads `RATEL_COMPOSITION`
+(`oss` or `cloud`; unset means `oss`), mounts one set of implementations, and exits the process
+at startup if the set is incomplete — never "ready" and then failing on every request.
+
+**The Cloud modules live in a private repository, `ratel-ai/ratel-platform`, checked out at
+`ee/src`**, which is ignored by git here. `ee/package.json` stays public, so the lockfile and
+`pnpm install --frozen-lockfile` are identical with and without the checkout. The checkout is a
+plain clone, not a submodule: a submodule would put a pointer-bump commit here for every Cloud
+change and publish private commit hashes.
+
+**Routes are copied, not committed.** The private repository holds one-line route stubs in
+`routes/`. `scripts/link-ee.mjs --auto` runs before `dev`, `build` and `typecheck`: it copies them
+to `apps/web/app/(ee)/` (ignored by git) when `ee/src` exists, and removes them when it does not.
+Copied rather than symlinked, because Turbopack rejects symlinks leaving the project root and
+`next dev` does not discover routes behind a symlink. With the checkout absent, every command
+builds Ratel OSS; nobody runs a step to get the right tree.
+
+**One boundary rule, checked mechanically** by `scripts/check-ee-boundary.mjs`, which the test
+suite runs, and the paired CI below will run in the private repository: nothing outside `ee/`
+imports from `ee/` (except the copied route stubs), and `ee/src` imports only
+`@/lib/contracts/*`, itself, and npm packages.
+
+**One Dockerfile, two targets** (`oss`, `cloud`). The Cloud adapters are reached through one
+build-time alias, `#ee-composition`, resolved to `ee/src/composition.ts` for Cloud and to an
+empty stub otherwise. The OSS target never copies `ee/`; the Cloud target builds where the
+checkout exists, and fails without it rather than producing an OSS image under the Cloud name.
+
+**Paired CI** (to build): the private repository's CI checks out the public branch of the same
+name, falling back to `main`, and a nightly job builds Cloud against the public `main`.
+
+## Consequences
+
+- Contributors never see or need the Cloud code. The public repository builds, tests and ships
+  Ratel OSS alone.
+- A Cloud developer works in one tree, with one dev server: typecheck, lint and tests cover both
+  sides locally, and edits under `ee/src` reload live.
+- A change that touches core and Cloud is two pull requests, merged public first. The private
+  `main` can break between the two merges, and a public change from an outside contributor is not
+  checked against Cloud until CI does it. Mitigated by paired CI and by additive contract changes;
+  this is the standing cost of the decision.
+- Copied route stubs outlive the checkout unless every entry point resynchronises them, which is
+  why `typecheck` runs `link-ee.mjs` as `dev` and `build` do.
+- The OSS image contains no Cloud code by construction; the image check still searches for
+  strings unique to a Cloud page and a Cloud adapter, with the Cloud image as the control.

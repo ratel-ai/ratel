@@ -1,0 +1,27 @@
+/*
+ * Ratel brand tokens — single source of truth for both sites.
+ * Sourced from www.ratel.sh. Consume via:  @import "@ratel/brand/tokens.css";
+ *
+ * These are raw brand colors. App-specific theming (e.g. Fumadocs `--color-fd-*`)
+ * should reference these variables rather than re-hardcoding hex values.
+ */
+:root {
+  /* Primary — deep electric indigo (the UI accent) */
+  --ratel-indigo: #140092;
+  --ratel-indigo-700: #1d0bb0;
+  --ratel-indigo-600: #2a16c4;
+  --ratel-indigo-300: #9b8cff; /* legible on dark surfaces */
+
+  /* Signature — cream (the badger mark) */
+  --ratel-cream: #eee3ce;
+
+  /* Expressive secondaries (marketing surfaces, callouts) */
+  --ratel-forest: #023a2e;
+  --ratel-green: #239452;
+  --ratel-coral: #c4431f;
+
+  /* Neutrals */
+  --ratel-ink: #111113;
+  --ratel-near-black: #09090b;
+  --ratel-paper: #ffffff;
+}

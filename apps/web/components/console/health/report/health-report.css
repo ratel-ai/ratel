@@ -1,0 +1,498 @@
+/*
+ * The Agent health report: A4, light and typeset, printed to PDF from the
+ * browser (see `ReportToolbar`): vector text and brand fonts, and no headless
+ * browser in the container image. Every rule is
+ * scoped to `.hr`, and the root reset applies only to a document holding one,
+ * so nothing here reaches the app.
+ */
+
+@page {
+  size: A4;
+  margin: 15mm 14mm 16mm;
+}
+
+:root:has(.hr) {
+  color-scheme: light;
+}
+
+html:has(.hr),
+body:has(.hr) {
+  background: #f4f3ef;
+  color: #111312;
+  overflow-x: visible;
+}
+
+@media print {
+  html:has(.hr),
+  body:has(.hr) {
+    background: #ffffff !important;
+  }
+  .hr-toolbar {
+    display: none !important;
+  }
+  .hr {
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}
+
+.hr {
+  --hr-ink: #111312;
+  --hr-muted: #5b5d58;
+  --hr-faint: #8c8e88;
+  --hr-rule: #e4e3dd;
+  --hr-coral: #d9471f;
+  --hr-amber: #b7791f;
+  --hr-green: #23835b;
+  --hr-forest: #0f1a15;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 10pt;
+  line-height: 1.5;
+  color: var(--hr-ink);
+  background: #ffffff;
+  max-width: 190mm;
+  margin: 18px auto 48px;
+  padding: 14mm 14mm 16mm;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 40px rgba(0, 0, 0, 0.08);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.hr-display {
+  font-family: var(--font-display, var(--font-sans)), ui-sans-serif, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.hr-mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.hr-kicker {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 7.5pt;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hr-muted);
+}
+
+/* - Masthead ------------------------------------------------------------ */
+
+.hr-masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hr-rule);
+}
+
+.hr-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 10pt;
+}
+
+.hr-brand svg {
+  height: 14px;
+  width: auto;
+}
+
+.hr-cover {
+  position: relative;
+  margin: 18px 0 20px;
+  padding: 22px 22px 20px;
+  border-radius: 14px;
+  background: var(--hr-forest);
+  color: #f3eee4;
+  overflow: hidden;
+}
+
+.hr-cover::after {
+  content: "";
+  position: absolute;
+  inset: auto -40px -60px auto;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(237, 81, 38, 0.35), transparent);
+}
+
+.hr-cover .hr-kicker {
+  color: #c9c2b4;
+}
+
+.hr-cover h1 {
+  margin: 6px 0 4px;
+  font-size: 26pt;
+  line-height: 1.08;
+  font-weight: 600;
+}
+
+.hr-cover .hr-cover-sub {
+  color: #c9c2b4;
+  font-size: 10pt;
+}
+
+.hr-verdict {
+  position: relative;
+  z-index: 1;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(243, 238, 228, 0.16);
+  font-size: 12pt;
+  line-height: 1.45;
+  max-width: 135mm;
+}
+
+.hr-verdict strong {
+  color: #ffffff;
+}
+
+/* - Sections -------------------------------------------------------------- */
+
+.hr-section {
+  margin-top: 22px;
+  break-inside: auto;
+}
+
+.hr-section > h2 {
+  font-size: 14pt;
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+
+.hr-section > h2,
+.hr-section > .hr-lead {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.hr-section > .hr-lead {
+  color: var(--hr-muted);
+  margin: 0 0 12px;
+}
+
+.hr-page-break {
+  break-before: page;
+  page-break-before: always;
+}
+
+/* - Readings ------------------------------------------------------------- */
+
+.hr-readings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hr-readings.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hr-reading {
+  border: 1px solid var(--hr-rule);
+  border-radius: 10px;
+  padding: 10px 11px 8px;
+  break-inside: avoid;
+}
+
+.hr-reading .hr-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.hr-reading .hr-value {
+  font-size: 19pt;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.hr-reading .hr-unit {
+  font-size: 7.5pt;
+  color: var(--hr-muted);
+}
+
+.hr-delta {
+  font-size: 7.5pt;
+  font-weight: 600;
+}
+
+.hr-delta.good {
+  color: var(--hr-green);
+}
+
+.hr-delta.bad {
+  color: var(--hr-coral);
+}
+
+.hr-reading .hr-sub {
+  margin-top: 4px;
+  font-size: 7.5pt;
+  line-height: 1.35;
+  color: var(--hr-muted);
+}
+
+.hr-reading svg {
+  display: block;
+  margin-top: 6px;
+  width: 100%;
+  height: 26px;
+}
+
+/* - Shapes --------------------------------------------------------------- */
+
+.hr-shapes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 18px;
+}
+
+.hr-shape {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--hr-rule);
+  break-inside: avoid;
+}
+
+.hr-shape .hr-shape-name {
+  font-weight: 600;
+}
+
+.hr-shape .hr-shape-desc {
+  grid-column: 1 / -1;
+  font-size: 8.5pt;
+  color: var(--hr-muted);
+}
+
+.hr-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 2px;
+  background: #efeee9;
+  overflow: hidden;
+}
+
+.hr-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--hr-ink);
+}
+
+/* - Problems -------------------------------------------------------------- */
+
+.hr-problem {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 18px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--hr-rule);
+  border-left: 3px solid var(--hr-amber);
+  border-radius: 8px;
+  break-inside: avoid;
+}
+
+.hr-problem.coral {
+  border-left-color: var(--hr-coral);
+}
+
+.hr-problem h3 {
+  margin: 0;
+  font-size: 11pt;
+  font-weight: 600;
+}
+
+.hr-problem .hr-tools {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 8pt;
+  color: var(--hr-muted);
+}
+
+.hr-problem .hr-claim {
+  grid-column: 1 / 2;
+  margin: 2px 0 0;
+}
+
+.hr-problem .hr-fix {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px dashed var(--hr-rule);
+  font-size: 9pt;
+}
+
+.hr-problem .hr-fix b {
+  font-weight: 600;
+}
+
+.hr-problem .hr-cost {
+  grid-column: 1 / -1;
+  font-size: 8.5pt;
+  color: var(--hr-muted);
+}
+
+.hr-problem .hr-big {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  text-align: right;
+}
+
+.hr-problem .hr-big .hr-value {
+  font-size: 18pt;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.hr-problem .hr-big .hr-caption {
+  font-size: 7.5pt;
+  color: var(--hr-muted);
+}
+
+.hr-tone {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 7pt;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hr-amber);
+}
+
+.hr-tone.coral {
+  color: var(--hr-coral);
+}
+
+.hr-tone::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* - Tables ---------------------------------------------------------------- */
+
+.hr table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.hr th,
+.hr td {
+  text-align: left;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--hr-rule);
+  vertical-align: top;
+}
+
+.hr th {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 7pt;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hr-muted);
+  font-weight: 500;
+}
+
+.hr td.num,
+.hr th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.hr tr {
+  break-inside: avoid;
+}
+
+.hr-status {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--hr-rule);
+  font-size: 7.5pt;
+  color: var(--hr-muted);
+  white-space: nowrap;
+}
+
+.hr-status.failing {
+  border-color: #f2c4b5;
+  color: var(--hr-coral);
+}
+
+.hr-steps {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 7.5pt;
+  color: var(--hr-muted);
+}
+
+/* - Colophon ------------------------------------------------------------- */
+
+.hr-colophon {
+  margin-top: 26px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hr-rule);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  font-size: 8.5pt;
+  color: var(--hr-muted);
+  break-inside: avoid;
+}
+
+.hr-colophon h4 {
+  margin: 0 0 4px;
+  color: var(--hr-ink);
+  font-size: 8.5pt;
+}
+
+.hr-colophon ul {
+  margin: 0;
+  padding-left: 14px;
+}
+
+.hr-empty {
+  padding: 14px;
+  border: 1px dashed var(--hr-rule);
+  border-radius: 10px;
+  color: var(--hr-muted);
+}
+
+/* - Screen-only toolbar --------------------------------------------------- */
+
+.hr-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: rgba(244, 243, 239, 0.92);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--hr-rule, #e4e3dd);
+  font-size: 12px;
+  color: #5b5d58;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.hr-toolbar button {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: #111312;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
