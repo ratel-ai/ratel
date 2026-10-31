@@ -5,6 +5,7 @@ import { ledgerRegistration } from "@/lib/ledger/register";
 import { intentEngineRegistration } from "@/lib/readings/intent-engine/register";
 import { intentGraphRegistration } from "@/lib/readings/intent-graph/register";
 import { queryIntentsRegistration } from "@/lib/readings/query-intents/register";
+import { topicsRegistration } from "@/lib/readings/topics/register";
 import { traceSignalsRegistration } from "@/lib/readings/trace-signals/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
 
@@ -20,6 +21,7 @@ const CORE: Registration[] = [
   intentGraphRegistration,
   intentEngineRegistration,
   traceSignalsRegistration,
+  topicsRegistration,
   tracesRegistration,
 ];
 

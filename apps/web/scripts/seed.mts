@@ -130,6 +130,8 @@ async function storedCounts(
   selfCorrections: Record<string, number>;
   workflowLabels: number;
   workflowVerdicts: number;
+  topics: Record<string, number>;
+  turnTopics: Record<string, number>;
 }> {
   const db = getDb();
   const [events] = (await db.execute<{ n: number }>(sql`select count(*)::int as n from events where project_id = ${projectId}`))
@@ -167,6 +169,12 @@ async function storedCounts(
   const [verdicts] = (
     await db.execute<{ n: number }>(sql`select count(*)::int as n from trace_workflow_verdicts where project_id = ${projectId}`)
   ).rows;
+  const topics = await db.execute<{ label_source: string; n: number }>(
+    sql`select label_source, count(*)::int as n from trace_topics where project_id = ${projectId} and retired_at is null group by label_source order by label_source`,
+  );
+  const turnTopics = await db.execute<{ verdict: string; n: number }>(
+    sql`select verdict, count(*)::int as n from trace_turn_topics where project_id = ${projectId} group by verdict order by verdict`,
+  );
   return {
     events: events?.n ?? 0,
     spans: spans?.n ?? 0,
@@ -180,6 +188,8 @@ async function storedCounts(
     selfCorrections: Object.fromEntries(selfCorrections.rows.map((row) => [row.kind, row.n])),
     workflowLabels: labels?.n ?? 0,
     workflowVerdicts: verdicts?.n ?? 0,
+    topics: Object.fromEntries(topics.rows.map((row) => [row.label_source, row.n])),
+    turnTopics: Object.fromEntries(turnTopics.rows.map((row) => [row.verdict, row.n])),
   };
 }
 
@@ -269,6 +279,15 @@ function report(out: Awaited<ReturnType<typeof seed>>): string {
     `   self-corrections: ${top(stored.selfCorrections, 8) || "none"}; workflow labels ${stored.workflowLabels}, verdicts ${
       stored.workflowVerdicts
     }${stored.workflowLabels + stored.workflowVerdicts === 0 ? " (skipped without a model key)" : ""}`,
+    `   topics: trace_topics ${
+      Object.entries(stored.topics)
+        .map(([source, n]) => `${source} ${n}`)
+        .join(", ") || "none"
+    }; trace_turn_topics ${
+      Object.entries(stored.turnTopics)
+        .map(([verdict, n]) => `${verdict} ${n}`)
+        .join(", ") || "none"
+    }`,
     `   failed calls: ${top(s.failedCalls, 12)}`,
     `   after a failure: retried ${s.behaviors.retry}, switched ${s.behaviors.switch}, gave up ${s.behaviors.gaveUp}`,
     `   tasks planted (runs): ${top(s.chains, 9)}`,

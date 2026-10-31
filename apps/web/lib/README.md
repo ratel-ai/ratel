@@ -66,4 +66,5 @@ the one engine, from match quality; the sampling and verdict application land wi
 `ingest/runtime-catalog/inventory.ts` (the corpus fingerprint and the tool corpus, with the
 two searchable-text resolvers inlined; recording fingerprints stays with quality). The two
 schema fragments `trace-signals/schema.ts` and `topics/schema.ts` are hand-written partitions
-of the upstream schema hub. The reading's own owned files are listed in its `README.md`.
+of the upstream schema hub. Each reading's own owned files are listed in its `README.md`
+(for topics: `job.ts`, OpenAI only, and `patterns.test.ts`, a fixture with a neutral tenant).

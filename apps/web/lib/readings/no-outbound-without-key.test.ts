@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
 import { parseTraceEvents } from "@/lib/ingest/trace-events/parse";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
+import { listClosedTurnsPage } from "@/lib/ledger/closed-turns";
 import { TURN_IDLE_CLOSE_MS } from "@/lib/ledger/constants";
 import { buildProjectTraceTurns } from "@/lib/ledger/turns/build-job";
 import {
@@ -34,6 +35,26 @@ import {
   upsertIntentGraphShadowTurns,
 } from "@/lib/readings/intent-graph/queries";
 import { CLOUD_INTENT_GRAPH_KEY } from "@/lib/readings/intent-types/wire";
+import {
+  anthropicTopicNamer,
+  assignProjectTopics,
+  topicJudgeFromEnv,
+} from "@/lib/readings/topics/job";
+import { TOPIC_FRAMING } from "@/lib/readings/topics/place";
+import {
+  loadHelperTools,
+  loadModelOnlyTraces,
+  loadPreviousPlacements,
+  loadRefusedTraces,
+  loadSelfCorrectionKinds,
+  loadStoredTopics,
+  loadTopicReading,
+  loadTurnTasks,
+  readingStart,
+  saveTopicReading,
+} from "@/lib/readings/topics/queries";
+import { traceTopics } from "@/lib/readings/topics/schema";
+import { SENTIMENT_FRAMING } from "@/lib/readings/topics/sentiment";
 import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
 import {
   jobDeps,
@@ -41,8 +62,10 @@ import {
 } from "@/lib/readings/trace-signals/signals/integration-support";
 import { latestSignalRun } from "@/lib/readings/trace-signals/signals/queries";
 import { defaultDecideDeps } from "@/lib/readings/trace-signals/workflows/decide-job";
+import { loadVerdicts, saveVerdicts } from "@/lib/readings/trace-signals/workflows/decide-queries";
 import { labelProjectWorkflows } from "@/lib/readings/trace-signals/workflows/label-job";
 import {
+  loadAskSourcesByTurn,
   loadLatestWorkflows,
   loadWorkflowLabels,
 } from "@/lib/readings/trace-signals/workflows/label-queries";
@@ -52,8 +75,9 @@ import {
  * can run without one still runs, and nothing leaves the process. The lexical readings (the
  * intent graph fold, the intent engine's clustering) must complete on a seeded database with
  * `fetch` disabled, and the engine's naming step must make no call rather than try. The
- * signal run completes on the built ledger and queues no workflow names, and the label job
- * reports itself skipped. Topics extend this when they land.
+ * signal run completes on the built ledger and queues no workflow names, the label job
+ * reports itself skipped, and the topics reading places asks by wording and names topics
+ * from their own words.
  */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -212,12 +236,17 @@ function buildDeps(db: Db, now: Date) {
 
 test("the signal run and the label job complete on the built ledger with no key and no network", async () => {
   const db = await setup();
-  await ingest(db, [
-    ...turn("find the onboarding task", "find_task"),
-    ...turn("assign it to emp-1", "assign_task"),
-    ...turn("find the release task", "find_task"),
-    ...turn("close the release task", "update_status"),
-  ]);
+  // Recent turns: the topics reading looks back 30 days from now, the signal run 90.
+  const recent = Date.now() - 60 * 60_000;
+  await ingest(
+    db,
+    [
+      ...turn("find the onboarding task", "find_task"),
+      ...turn("assign it to emp-1", "assign_task"),
+      ...turn("find the release task", "find_task"),
+      ...turn("close the release task", "update_status"),
+    ].map((event, i) => ({ ...event, ts: recent + i * 1_000 })),
+  );
   // Past the idle window, so the last declared turn closes too.
   const later = new Date(Date.now() + TURN_IDLE_CLOSE_MS + 60_000);
   const built = await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, later));
@@ -248,5 +277,38 @@ test("the signal run and the label job complete on the built ledger with no key 
     assert.equal(labels.skipped, "no_model");
     assert.equal(labels.decisions?.skipped, "no_judge");
     assert.equal(defaultDecideDeps(NO_KEYS).judge, null, "no decision engine without a key");
+
+    // Topics: the judges and the namer, read from an environment with no key, are null, so
+    // asks are placed by wording and topics are named from their own asks.
+    const topics = await assignProjectTopics(PROJECT_ID, {
+      judge: topicJudgeFromEnv(TOPIC_FRAMING, NO_KEYS),
+      sentimentJudge: topicJudgeFromEnv(SENTIMENT_FRAMING, NO_KEYS),
+      name: anthropicTopicNamer("unused", NO_KEYS),
+      listPage: (p, range, _db, limit) => listClosedTurnsPage(p, range, sdb, limit),
+      loadAsks: (p, ids) => loadAskSourcesByTurn(p, ids, sdb),
+      readingStart: (p, w, max) => readingStart(p, w, max, sdb),
+      loadModelOnlyTraces: (p, w, before, max) => loadModelOnlyTraces(p, w, before, max, sdb),
+      loadRefusedTraces: (p, ids) => loadRefusedTraces(p, ids, sdb),
+      loadTurnTasks: (p, ids) => loadTurnTasks(p, ids, sdb),
+      loadHelperTools: (p) => loadHelperTools(p, sdb),
+      loadSelfCorrections: (p, ids) => loadSelfCorrectionKinds(p, ids, sdb),
+      loadTopics: (p) => loadStoredTopics(p, sdb),
+      loadPreviousPlacements: (p, ids) => loadPreviousPlacements(p, ids, sdb),
+      loadReading: (p) => loadTopicReading(p, sdb),
+      loadVerdicts: (p, h, ids) => loadVerdicts(p, h, ids, sdb),
+      saveVerdicts: (p, h, m, rows) => saveVerdicts(p, h, m, rows, sdb),
+      saveReading: (p, reading) => saveTopicReading(p, reading, sdb),
+      observability: { trackSystemEvent: async () => undefined },
+      now: () => later,
+    });
+    assert.ok(topics.turns > 0, "the closed turns were read");
+    assert.equal(topics.judged, 0);
+    assert.equal(topics.sentimentJudged, 0);
+    assert.ok(topics.placement === "words" || topics.placement === "none");
+    const rows = await db.select().from(traceTopics);
+    assert.ok(
+      rows.every((row) => row.labelSource === "words"),
+      "topics are named from their own asks",
+    );
   });
 });

@@ -171,6 +171,7 @@ describe("registry root", () => {
 
   it("the core modules landed so far register their jobs and steps in layer order", () => {
     assert.deepEqual(Object.keys(jobHandlers()).sort(), [
+      "assign_topics",
       "build_trace_turns",
       "categorize_queries",
       "cluster_intents",
