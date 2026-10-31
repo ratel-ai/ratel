@@ -1,3 +1,4 @@
+import "@/lib/views/quality/fix-rewrites";
 import { and, eq } from "drizzle-orm";
 import { skills as skillsTable } from "@/lib/catalog/schema";
 import {

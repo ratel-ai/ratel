@@ -17,6 +17,7 @@ here rather than in the design system.
 | `tasks/` | Agent health › Tasks: the table, one task (steps, panels, flow diagram, sections), a session turn by turn, the skeletons |
 | `self-corrections/` | Agent health › Self-corrections: the hero, where it happens, what the agent said, the change to make, filters and the examples read on demand |
 | `fixes/` | Improvements › Fixes: the header and filters, one table per thing you do, a fix's panel, and the kind icons the fix leads and marks share |
+| `quality/` | Quality: the header with its window and analysis menu, Misses, Descriptions (rewrites to review, apply or dismiss) and Experiments |
 | `intents/` | the Intents pages: All intents (the table, an intent's panel with its breakdown, steps, sentiment and examples), Flows (the canvas and step panel) and Map (the lens views), the skeletons, the states before a reading and "Read now"; all copies, the adaptive-ranking graph picker left out |
 | `intent-map/` | the Map's drawing: intents as blobs, the asks pack, the tool network and globe, their chrome, marks, labels and measurements; all copies |
 

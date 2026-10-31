@@ -18,7 +18,6 @@ import { type ReactNode, useMemo, useState, useTransition } from "react";
 import { dismissDraftedFixAction } from "@/app/(console)/project/[projectId]/improvement/fixes/actions";
 import { formatTimestamp } from "@/lib/synthesis/traces/format";
 import { type Acted, withActed } from "@/lib/views/fixes/acted";
-import { settle } from "@/lib/views/fixes/crafter-types";
 import {
   FIX_GROUP_LINES,
   FIX_GROUP_TITLES,
@@ -31,6 +30,7 @@ import { FIX_KIND_LABELS, FIX_KINDS, type FixKind } from "@/lib/views/fixes/kind
 import { relativeTimeLabel } from "@/lib/views/fixes/relative-time";
 import { filterFixes, findFix } from "@/lib/views/fixes/select";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
+import { settle } from "@/lib/views/quality/suggestions";
 import { CopyChangeButton } from "./CopyChangeButton";
 import { AffectsPins } from "./FixAffects";
 import { EffectValue, EvidenceValue, FixTitleCell } from "./FixCells";

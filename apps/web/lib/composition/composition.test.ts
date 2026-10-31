@@ -178,6 +178,7 @@ describe("registry root", () => {
       "compute_trace_signals",
       "fold_intent_graph",
       "label_workflows",
+      "match_quality_run",
     ]);
     // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick
     // can carry events through turns, recurring asks, the graph and the engine. After-steps are
@@ -195,6 +196,8 @@ describe("registry root", () => {
         "after:intent_engine_expire:retention",
         "after:trace_signal_sweep",
         "after:trace_summary_refresh",
+        "after:quality_snapshot_refresh",
+        "after:match_quality_sweep",
       ],
     );
   });

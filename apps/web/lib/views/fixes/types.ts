@@ -1,12 +1,8 @@
 import type { TaskColorSlot } from "@ratel/design-system/task-colors";
-import type {
-  CraftKind,
-  EffectChip,
-  EvidenceFact,
-  SuggestionRow,
-} from "@/lib/views/fixes/crafter-types";
+import type { CraftKind, EffectChip, EvidenceFact } from "@/lib/views/fixes/crafter-types";
 import type { FixGroup } from "@/lib/views/fixes/groups";
 import type { FixKind } from "@/lib/views/fixes/kinds";
+import type { SuggestionRow } from "@/lib/views/quality/suggestions";
 
 /**
  * One Fix: a concrete change that would make the agent better, whichever

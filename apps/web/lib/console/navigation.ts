@@ -197,6 +197,13 @@ export function consoleNav({
               icon: "improvements",
               shortcut: "f",
             },
+            {
+              id: "quality",
+              label: "Quality",
+              href: `${root}/quality`,
+              icon: "improvements",
+              shortcut: "q",
+            },
           ],
         },
         {

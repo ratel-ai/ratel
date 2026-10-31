@@ -71,7 +71,10 @@ test("with a project, the rail links every core destination to that project", ()
   const improvements = items.find(({ id }) => id === "improvements");
   assert.deepEqual(
     improvements?.children?.map(({ id, href }) => ({ id, href })),
-    [{ id: "fixes", href: `/project/${P1}/improvement/fixes` }],
+    [
+      { id: "fixes", href: `/project/${P1}/improvement/fixes` },
+      { id: "quality", href: `/project/${P1}/quality` },
+    ],
   );
   const catalog = items.find(({ id }) => id === "catalog");
   assert.deepEqual(
@@ -226,6 +229,7 @@ test("the command menu lists the rail's destinations, then every project", () =>
       `Pages|Map|/project/${P1}/intents/map`,
       `Pages|Improvements|/project/${P1}/improvement`,
       `Pages|Fixes|/project/${P1}/improvement/fixes`,
+      `Pages|Quality|/project/${P1}/quality`,
       `Pages|Settings|/project/${P1}/settings`,
       "Pages|Admin|/admin",
       `Projects|One|/project/${P1}/traces`,
