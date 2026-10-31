@@ -76,7 +76,7 @@ test("a save writes the new text, says so, and its Undo writes the old value bac
   toasts[0].action?.onClick();
   await settle();
   assert.equal(writes.length, 2);
-  assert.equal(writes[1].stored, null, "there was no Cloud copy before, so Undo clears it");
+  assert.equal(writes[1].stored, null, "there was no Ratel copy before, so Undo clears it");
   assert.equal(
     writes[1].target.type === "runtime" && writes[1].target.override,
     "grep files for a regex",

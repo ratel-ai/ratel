@@ -221,7 +221,7 @@ test("the rewrite panel: what the replay finds, the description now and rewritte
       catalogHref: "/project/p1/catalogs/tools?highlight=get_project_schedule",
       actions: createElement("span", { "data-testid": "actions" }),
       caveat:
-        "Nothing has fetched this project's Cloud overrides recently, so an applied rewrite may not reach your agent yet.",
+        "Nothing has fetched this project's Ratel overrides recently, so an applied rewrite may not reach your agent yet.",
     }),
   );
   const text = visibleText(html);

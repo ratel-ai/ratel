@@ -6,6 +6,7 @@ import type {
   RuntimeSourceStatus,
 } from "@/lib/ingest/runtime-events/queries";
 import type { RuntimeEventsRange, RuntimeEventsTab } from "@/lib/ingest/runtime-events/view";
+import { APP_NAME } from "@/lib/platform/app-config";
 
 /**
  * Settings > Developer > SDK events (DESIGN.md, Glossary: "Runtime events"
@@ -234,7 +235,7 @@ export function summaryVerdict(
 ): { tone: "success" | "warning" | "danger"; text: string } | null {
   const { received, dropped, rejected } = summary;
   if (received === null || dropped === null || rejected === null) return null;
-  const refused = `Ratel Cloud refused ${countOf(rejected, "event")}`;
+  const refused = `${APP_NAME} refused ${countOf(rejected, "event")}`;
   const shed = `${countOf(dropped, "event")} before sending`;
   if (rejected > 0 && dropped > 0) {
     return { tone: "danger", text: `${refused}, and the SDK dropped ${shed}.` };

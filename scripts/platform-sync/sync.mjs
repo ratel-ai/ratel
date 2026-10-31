@@ -91,6 +91,7 @@ export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patt
     rules: buildRules(map, rewrites),
     partitions: rewrites?.partitions ?? {},
     identifiers: rewrites?.identifiers ?? {},
+    brand: rewrites?.brand,
     entries: map.entries,
   };
 

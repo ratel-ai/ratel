@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/platform/app-config";
 /**
  * The intent map's model: ask groups, the tools and skills that answered them,
  * and the links between the two, in plain terms. Built on the server from the
@@ -295,7 +296,7 @@ export function problemRule(reading: FirstTryReading): string {
   return (
     `A group needs a look when its main tool left your catalog, or when, over ${FIRST_TRY_MIN_SEARCHES} or more of its searches in ${scope}, ` +
     `the first result was the tool the agent ran under ${Math.round(FIRST_TRY_PROBLEM_RATE * 100)}% of the time. ` +
-    "Searches whose list a Cloud graph ranked are not counted."
+    `Searches whose list a ${APP_NAME} graph ranked are not counted.`
   );
 }
 
@@ -307,7 +308,7 @@ export function firstTrySentence(
   const days = `the last ${reading.windowDays} days`;
   const left =
     ask.rankedByGraph > 0
-      ? ` ${ask.rankedByGraph.toLocaleString("en-US")} more ${ask.rankedByGraph === 1 ? "was" : "were"} ranked by a Cloud graph and ${ask.rankedByGraph === 1 ? "is" : "are"} not counted.`
+      ? ` ${ask.rankedByGraph.toLocaleString("en-US")} more ${ask.rankedByGraph === 1 ? "was" : "were"} ranked by a ${APP_NAME} graph and ${ask.rankedByGraph === 1 ? "is" : "are"} not counted.`
       : "";
   if (!ask.firstTry)
     return `Not measured: none of its searches in ${days} showed a list and then ran a tool.${left}`;

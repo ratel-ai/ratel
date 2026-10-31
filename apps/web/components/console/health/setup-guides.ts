@@ -1,3 +1,4 @@
+import { BASE_URL } from "@/lib/platform/app-config";
 import type { SetupKey } from "@/lib/readings/trace-signals/setup-facts";
 
 /**
@@ -202,7 +203,7 @@ const GUIDES: Readonly<Record<SetupKey, readonly SetupGuide[]>> = {
       code: lines(
         'import * as ratelCloud from "@ratel-ai/cloud-sdk/runtime";',
         "",
-        "ratelCloud.attach(r);",
+        `ratelCloud.attach(r, { baseUrl: "${BASE_URL}" });`,
       ),
       note: "Each search sends its query once attached. Using ratel-local? Set privacy to Tool details or Full content.",
     },

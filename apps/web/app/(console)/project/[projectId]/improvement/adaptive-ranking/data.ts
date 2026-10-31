@@ -6,6 +6,7 @@ import type {
 } from "@/components/console/adaptive-ranking/RankingDetails";
 import type { RankingGraphView } from "@/components/console/adaptive-ranking/RankingView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
   getIntentGraphDetail,
@@ -65,7 +66,7 @@ const DETAIL_CLUSTERS = 50;
 
 const STEP_TITLES: Record<SetupStep["key"], string> = {
   events: "Send searches and tool calls",
-  building: "Cloud builds the intent map",
+  building: `${APP_NAME} builds the intent map`,
   connected: "Rank from the graph in your runtime",
   following: "Keep up with new revisions",
 };
@@ -94,7 +95,7 @@ const WAITING_STEPS: SetupStep[] = [
     key: "following",
     label: STEP_TITLES.following,
     state: "pending",
-    detail: "Cloud then checks that your runtime adopts each new revision as the map learns.",
+    detail: `${APP_NAME} then checks that your runtime adopts each new revision as the map learns.`,
   },
 ];
 

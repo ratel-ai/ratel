@@ -46,6 +46,7 @@ import {
   type ToolsCatalogSortKey,
 } from "@/lib/console/catalog/table-view";
 import { CATALOG_STALE_DAYS } from "@/lib/ingest/catalogs/vocabulary";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { CatalogItemDetail } from "./CatalogItemDetail";
 import { ProvenanceBadge } from "./ProvenanceBadge";
 import { TablePager } from "./TablePager";
@@ -55,7 +56,7 @@ import { useSearchParamState, useUrlWriter } from "./use-url-param";
 const PROVENANCE_LABEL: Record<Exclude<ProvenanceFilter, "all">, string> = {
   managed: "Managed",
   observed: "Observed",
-  cloud: "Cloud",
+  cloud: `${APP_NAME}`,
 };
 
 function None() {

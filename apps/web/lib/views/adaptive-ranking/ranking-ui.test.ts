@@ -58,7 +58,7 @@ function checklist() {
     },
     {
       key: "building",
-      label: "Cloud builds the intent map",
+      label: "Ratel builds the intent map",
       detail: "The first map appears soon.",
       state: "pending",
     },
@@ -72,7 +72,7 @@ function checklist() {
     {
       key: "following",
       label: "Keep up with new revisions",
-      detail: "Cloud checks adoption.",
+      detail: "Ratel checks adoption.",
       state: "pending",
     },
   ]);
@@ -148,7 +148,7 @@ function rankingGraph(): RankingGraphView {
       {
         key: "following",
         label: "Keep up with new revisions",
-        detail: "Cloud checks adoption.",
+        detail: "Ratel checks adoption.",
         state: "pending",
       },
     ]),
@@ -211,7 +211,7 @@ test("Adaptive ranking leads with whether it is served and one plain headline; t
   );
   assert.match(
     html,
-    /data-ranking-notes=""[\s\S]*Estimated by replaying your searches on Cloud&#x27;s keyword index/,
+    /data-ranking-notes=""[\s\S]*Estimated by replaying your searches on Ratel&#x27;s keyword index/,
     "an estimate says so",
   );
   assert.match(html, /<a[^>]*href="\/project\/p1\/intents"[^>]*>See the intents/);

@@ -1,4 +1,5 @@
 import { CATALOG_DESCRIPTIONS } from "@/lib/ingest/catalogs/vocabulary";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { ATTRIBUTION_NOTES } from "@/lib/synthesis/quality/ground-truth";
 import { type Candidate, type CorpusEntry, coverageOf, type RunCensus } from "./types";
 
@@ -204,7 +205,7 @@ function corpusSection(corpus: readonly CorpusEntry[], candidates: readonly Cand
   let dropped = 0;
   for (const entry of ordered) {
     const tags = entry.tags.length > 0 ? `\n  tags: ${entry.tags.join(", ")}` : "";
-    const note = entry.source === "override" ? " (already overridden in Cloud)" : "";
+    const note = entry.source === "override" ? ` (already overridden in ${APP_NAME})` : "";
     const line = `- ${entry.entryId}${note}\n  name: ${entry.name}\n  searchable: ${entry.searchable}${tags}`;
     if (line.length > budget) {
       dropped += 1;
@@ -247,7 +248,7 @@ function retrievalSection(retrieval: RetrievalObservation): string {
     // Said explicitly rather than omitted. A model given no configuration section
     // assumes a default; a model told we did not observe one will say so.
     return (
-      "Not observed in this window. Ratel Cloud does not store a per-project retrieval " +
+      `Not observed in this window. ${APP_NAME} does not store a per-project retrieval ` +
       "configuration, and no search in this window reported its stages, so assume nothing " +
       "about whether a dense pass ran."
     );

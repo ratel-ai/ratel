@@ -42,7 +42,7 @@ test("a failing migration still releases the lock and rethrows", async () => {
   assert.match(calls[1][0], /unlock/);
 });
 
-test("migrate on boot: on by default for OSS, off for Cloud, explicit flag wins, never without a database", () => {
+test("migrate on boot: on by default for OSS, off for Ratel, explicit flag wins, never without a database", () => {
   const url = { DATABASE_URL: "postgres://x" };
   assert.equal(migrateOnBootEnabled({ ...url }), true);
   assert.equal(migrateOnBootEnabled({ ...url, RATEL_COMPOSITION: "oss" }), true);

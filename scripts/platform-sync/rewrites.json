@@ -1,5 +1,6 @@
 {
-  "$comment": "Explicit import-specifier rules; apps/web/lib moves are derived from map.json. Longest `from` wins. `partitions` split named imports from hub modules per symbol (unlisted symbols go to `default` and are reported). `identifiers` are whole-word renames applied to every copied file.",
+  "$comment": "Explicit import-specifier rules; apps/web/lib moves are derived from map.json. Longest `from` wins. `partitions` split named imports from hub modules per symbol (unlisted symbols go to `default` and are reported). `identifiers` are whole-word renames applied to every copied file. `brand` turns the product's name in copied strings into the configured one.",
+  "brand": { "name": "APP_NAME", "import": "@/lib/platform/app-config", "testName": "Ratel", "skip": ["apps/web/lib/decisions/"] },
   "rules": [
     { "from": "@/components/ds/", "to": "@ratel/design-system/" },
     { "from": "@/components/ds/dot-loader", "to": "@ratel/design-system/dot-matrix", "exact": true },

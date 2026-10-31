@@ -202,11 +202,11 @@ test("the summary sums the SDK's drop reports and says what was lost", () => {
   });
   assert.deepEqual(summaryVerdict({ received: 9, dropped: 0, rejected: 1, sources: 1 }), {
     tone: "danger",
-    text: "Ratel Cloud refused 1 event. Fix the reason it gives and send again.",
+    text: "Ratel refused 1 event. Fix the reason it gives and send again.",
   });
   assert.deepEqual(summaryVerdict({ received: 9, dropped: 0, rejected: 3, sources: 1 }), {
     tone: "danger",
-    text: "Ratel Cloud refused 3 events. Fix the reasons they give and send again.",
+    text: "Ratel refused 3 events. Fix the reasons they give and send again.",
   });
   assert.deepEqual(summaryVerdict({ received: 9, dropped: 1, rejected: 0, sources: 1 }), {
     tone: "warning",
@@ -214,7 +214,7 @@ test("the summary sums the SDK's drop reports and says what was lost", () => {
   });
   assert.deepEqual(summaryVerdict({ received: 9, dropped: 1200, rejected: 2, sources: 1 }), {
     tone: "danger",
-    text: "Ratel Cloud refused 2 events, and the SDK dropped 1,200 events before sending.",
+    text: "Ratel refused 2 events, and the SDK dropped 1,200 events before sending.",
   });
 });
 

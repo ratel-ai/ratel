@@ -1,5 +1,6 @@
 import { MAX_DESCRIPTION } from "@/lib/catalog/manage";
 import { getRetrievalDescriptionAdoption } from "@/lib/ingest/runtime-catalog/adoption";
+import { APP_NAME } from "@/lib/platform/app-config";
 import type { SearchableOrigin, SearchableState, SearchableTarget } from "./items";
 
 /**
@@ -71,7 +72,7 @@ export function targetAfterWrite(
 
 /** One quiet line about where the text comes from. The agent case is said by the agent description itself. */
 export const SEARCHABLE_ORIGIN_NOTE: Record<SearchableOrigin, string | null> = {
-  cloud: "Set here in Cloud.",
+  cloud: `Set here in ${APP_NAME}.`,
   runtime: "From your runtime.",
   agent: null,
 };

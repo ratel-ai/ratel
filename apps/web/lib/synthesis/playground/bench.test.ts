@@ -187,7 +187,7 @@ test("a draft on a managed tool changes the retrieval text, not the agent's", ()
   assert.equal(
     drafted.description,
     MANAGED_TOOL.description,
-    "what the agent receives is untouched — Cloud does not own it",
+    "what the agent receives is untouched — Ratel does not own it",
   );
   assert.equal(toolIsEdited(MANAGED_TOOL, { description: "reserve a room" }), true);
 });

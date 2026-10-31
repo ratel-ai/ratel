@@ -11,6 +11,7 @@ import {
   type RejectView,
   SDK_EVENT_LIST_LIMIT,
 } from "@/lib/console/settings/sdk-events";
+import { APP_NAME } from "@/lib/platform/app-config";
 
 /**
  * What did not make it in this window: events Ratel Cloud refused (with the
@@ -150,13 +151,13 @@ export function UndeliveredEvents({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         <ListHeading
-          title="Rejected by Ratel Cloud"
+          title={`Rejected by ${APP_NAME}`}
           note={
             rejects.length >= SDK_EVENT_LIST_LIMIT ? `The newest ${SDK_EVENT_LIST_LIMIT}` : null
           }
         />
         <DataTable
-          caption="Events Ratel Cloud rejected"
+          caption={`Events ${APP_NAME} rejected`}
           columns={rejectColumns}
           rows={rejects}
           rowKey={(reject) => reject.key}

@@ -117,7 +117,7 @@ test("the headline is the relative change in how often the right tool comes firs
   );
   assert.equal(projected.estimated, true);
   assert.deepEqual(projected.notes, [
-    "Estimated by replaying your searches on Cloud's keyword index, with and without the graph as it stood at each search. Your runtime's own ranking may differ.",
+    "Estimated by replaying your searches on Ratel's keyword index, with and without the graph as it stood at each search. Your runtime's own ranking may differ.",
   ]);
   assert.equal(projected.upperBound, false, "the agent chose from the plain list");
   assert.doesNotMatch(projected.title + projected.detail, /recall|ndcg|mrr|@/i, "plain words only");

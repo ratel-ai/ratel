@@ -188,10 +188,58 @@ export function absolutizeRelative(code, sourcePath, entries) {
 }
 
 /** The whole codemod for one file; `sourcePath` is the upstream path, for relative imports. */
-export function rewriteSource(code, { rules, partitions, identifiers, entries }, sourcePath) {
+const BRAND_WORD = /\b(?:Ratel )?Cloud\b(?! SDK)/;
+const BRAND_WORDS = new RegExp(BRAND_WORD.source, "g");
+const COMMENT_LINE = /^\s*(\/\/|\/\*|\*)/;
+const IMPORT_LINE = /^\s*(import|export \*)\b/;
+const STRING_OR_COMMENT = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/.*$/g;
+
+/** A string naming the product, as a template over the configured name. */
+function brandLiteral(token, name) {
+  const quote = token[0];
+  const body = token.slice(1, -1);
+  const text = quote === "`" ? body : body.replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+  const unescaped = quote === '"' ? text.replace(/\\"/g, '"') : quote === "'" ? text.replace(/\\'/g, "'") : text;
+  return `\`${unescaped.replace(BRAND_WORDS, `\${${name}}`)}\``;
+}
+
+/**
+ * The product's name in a copied string becomes the configured one, so a copy stays a copy and an
+ * edition names itself. Line by line: a string that spans lines is left alone, and an owned file
+ * handles its own. A test asserts on the rendered text, so it gets the default name, as is.
+ */
+export function brandStrings(code, brand, sourcePath) {
+  if (!brand || !BRAND_WORD.test(code)) return code;
+  if ((brand.skip ?? []).some((path) => sourcePath.startsWith(path))) return code;
+  const isTest = /\.test\.tsx?$|test-support|fixtures?\./.test(sourcePath);
+  let branded = false;
+  const lines = code.split("\n").map((line) => {
+    if (COMMENT_LINE.test(line) || IMPORT_LINE.test(line) || !BRAND_WORD.test(line)) return line;
+    if (isTest) {
+      const at = line.search(/\s\/\/\s/);
+      const [head, tail] = at < 0 ? [line, ""] : [line.slice(0, at), line.slice(at)];
+      return head.replace(BRAND_WORDS, brand.testName) + tail;
+    }
+    return line.replace(STRING_OR_COMMENT, (token, offset) => {
+      if (token.startsWith("//") || !BRAND_WORD.test(token)) return token;
+      branded = true;
+      const literal = brandLiteral(token, brand.name);
+      // Formatted code has no space around a variable's `=`: this is a JSX attribute.
+      return line[offset - 1] === "=" ? `{${literal}}` : literal;
+    });
+  });
+  if (!branded) return lines.join("\n");
+  const statement = `import { ${brand.name} } from "${brand.import}";`;
+  let at = 0;
+  while (/^\s*("use [a-z]+"|'use [a-z]+');?\s*$/.test(lines[at] ?? "")) at++;
+  lines.splice(at, 0, statement);
+  return lines.join("\n");
+}
+
+export function rewriteSource(code, { rules, partitions, identifiers, entries, brand }, sourcePath) {
   const a0 = absolutizeRelative(code, sourcePath, entries);
   const a = partitionImports(a0, partitions);
   const b = rewriteSpecifiers(a.code, rules);
   const c = renameIdentifiers(b.code, identifiers);
-  return { code: c, unmapped: [...a.unmapped, ...b.unmapped] };
+  return { code: brandStrings(c, brand, sourcePath), unmapped: [...a.unmapped, ...b.unmapped] };
 }

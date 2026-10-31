@@ -28,7 +28,7 @@ const skill = (stored: string | null = null): SearchableTarget => ({
   stored,
 });
 
-test("a new text on a runtime entry is stored as its Cloud copy, trimmed", () => {
+test("a new text on a runtime entry is stored as its Ratel copy, trimmed", () => {
   assert.deepEqual(
     planSearchableSave(runtime(), "Search a working tree.", "  grep regex search files  "),
     {
@@ -39,7 +39,7 @@ test("a new text on a runtime entry is stored as its Cloud copy, trimmed", () =>
   );
 });
 
-test("emptying the field or typing the runtime's own text back clears the Cloud copy", () => {
+test("emptying the field or typing the runtime's own text back clears the Ratel copy", () => {
   assert.deepEqual(planSearchableSave(runtime("old copy"), "x", "   "), {
     type: "write",
     stored: null,
@@ -62,7 +62,7 @@ test("saving what is already stored writes nothing", () => {
   assert.deepEqual(planSearchableSave(skill("kept"), "Use it.", " kept "), { type: "noop" });
 });
 
-test("a Cloud skill stores its own text, and its description back means none", () => {
+test("a Ratel skill stores its own text, and its description back means none", () => {
   assert.deepEqual(planSearchableSave(skill(), "Review a pull request.", "review PR diff"), {
     type: "write",
     stored: "review PR diff",
@@ -84,7 +84,7 @@ test("an oversized text is refused before it reaches the route", () => {
   assert.match(plan.type === "invalid" ? plan.error : "", /4,096 characters/);
 });
 
-test("reset clears a runtime entry's Cloud copy and does nothing elsewhere", () => {
+test("reset clears a runtime entry's Ratel copy and does nothing elsewhere", () => {
   assert.deepEqual(planSearchableReset(runtime("copy")), {
     type: "write",
     stored: null,
@@ -117,9 +117,9 @@ test("the agent description is only repeated when it differs", () => {
   assert.equal(matchesAgentDescription(same, null), false);
 });
 
-test("an adoption notice appears only for a Cloud copy the runtime has not confirmed", () => {
+test("an adoption notice appears only for a Ratel copy the runtime has not confirmed", () => {
   const plain = runtimeSearchable("tool", runtimeDefinition("a"), true);
-  assert.equal(adoptionNotice(plain, null), null, "no Cloud copy, nothing to adopt");
+  assert.equal(adoptionNotice(plain, null), null, "no Ratel copy, nothing to adopt");
   const copied = runtimeSearchable(
     "tool",
     runtimeDefinition("a", { searchableDescriptionOverride: "copy" }),
@@ -132,7 +132,7 @@ test("an adoption notice appears only for a Cloud copy the runtime has not confi
     runtimeDefinition("a", { searchableDescriptionOverride: "copy", useCloudDefinitions: true }),
     true,
   );
-  assert.equal(adoptionNotice(flagged, null), null, "the runtime says it reads Cloud definitions");
+  assert.equal(adoptionNotice(flagged, null), null, "the runtime says it reads Ratel definitions");
   const skillCopy = runtimeSearchable(
     "skill",
     runtimeDefinition("s", { searchableDescriptionOverride: "copy" }),
@@ -146,6 +146,6 @@ test("an adoption notice appears only for a Cloud copy the runtime has not confi
   assert.equal(
     adoptionNotice(cloudSkillSearchable(skillRecord("x", { searchableDescription: "own" })), false),
     null,
-    "a Cloud skill is not a runtime copy",
+    "a Ratel skill is not a runtime copy",
   );
 });

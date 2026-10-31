@@ -1,11 +1,12 @@
 import { Badge, StatusDot } from "@ratel/design-system/badge";
 import { Cloud, Eye, type LucideIcon, Plug } from "lucide-react";
 import type { CatalogProvenance, SkillStatus } from "@/lib/console/catalog/items";
+import { APP_NAME } from "@/lib/platform/app-config";
 
 const PROVENANCE: Record<CatalogProvenance, { label: string; icon: LucideIcon; hint: string }> = {
   managed: { label: "Managed", icon: Plug, hint: "Synced from your runtime." },
   observed: { label: "Observed", icon: Eye, hint: "Seen in traces only." },
-  cloud: { label: "Cloud", icon: Cloud, hint: "Created here in Cloud." },
+  cloud: { label: `${APP_NAME}`, icon: Cloud, hint: `Created here in ${APP_NAME}.` },
 };
 
 /** Where an item's definition comes from, as a word with a shape: a plug, an eye or a cloud. */

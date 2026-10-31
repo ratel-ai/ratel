@@ -173,7 +173,7 @@ test("a changed graph bumps rev, appends a revision, and fully replaces the proj
   assert.equal(gone.rows.length, 0);
 });
 
-test("a Cloud-built graph keeps no revision rows; a runtime push still appends one", async () => {
+test("a Ratel-built graph keeps no revision rows; a runtime push still appends one", async () => {
   const { client, db } = await setup();
   const cloud = (over: Partial<Parameters<typeof putIntentGraph>[0]> = {}) =>
     putIntentGraph(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { BASE_URL } from "@/lib/platform/app-config";
 import {
   buildBoostWarning,
   buildGraphSteps,
@@ -51,11 +52,11 @@ test("a project with nothing yet has both steps pending, with the lines to paste
   assert.deepEqual(projectStates(project()), { events: "pending", building: "pending" });
   assert.match(
     steps[0]!.snippet ?? "",
-    /attach\(runtime, \{ apiKey: process\.env\.RATEL_API_KEY, sourceId: "your-runtime" \}\)/,
+    /attach\(runtime, \{ baseUrl: "[^"]+", apiKey: process\.env\.RATEL_API_KEY, sourceId: "your-runtime" \}\)/,
   );
 });
 
-test("the snippet is filled with the runtime's own source and its Cloud graph key, in the order that works", () => {
+test("the snippet is filled with the runtime's own source and its Ratel graph key, in the order that works", () => {
   const code = connectSnippet("billing-agent");
   assert.match(code, /graphKey: "cloud\/billing-agent"/);
   assert.match(code, /learn: false/);
@@ -136,7 +137,7 @@ test("an agent without the SDK counts too: its asks over OpenTelemetry, and the 
   );
 
   // Nothing at all: pending, with the lines to paste and the OpenTelemetry alternative named.
-  assert.match(detail(project()).detail, /OpenTelemetry exporter at Cloud with content capture on/);
+  assert.match(detail(project()).detail, /OpenTelemetry exporter at Ratel with content capture on/);
 });
 
 const graphFacts = (over: Partial<GraphSetupFacts> = {}): GraphSetupFacts => ({
@@ -306,4 +307,11 @@ test("the live recall waits for enough turns on both sides and says which way it
   });
   assert.equal(buildLiveRecall({ before: side(100, 0.7), after: side(80, 0.66) })?.improved, false);
   assert.equal(buildLiveRecall({ before: side(100, 0.7), after: side(80, 0.702) })?.improved, null);
+});
+
+test("the snippet points at this deployment, not the hosted default", () => {
+  const code = connectSnippet("billing-agent");
+  assert.ok(code.includes(`baseUrl: "${BASE_URL}"`));
+  assert.ok(code.includes(`endpoint: "${BASE_URL}/intent-graph"`));
+  assert.equal(code.includes("cloud.ratel.sh"), false);
 });

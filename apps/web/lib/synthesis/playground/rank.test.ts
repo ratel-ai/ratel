@@ -369,7 +369,7 @@ test("the payload carries the agent description, and names the matched text", ()
   assert.equal(hit.searchableDescriptionSource, "runtime");
 });
 
-test("a Cloud override replaces the runtime's retrieval text for ranking", () => {
+test("a Ratel override replaces the runtime's retrieval text for ranking", () => {
   const overridden: BenchTool = {
     ...SPLIT_TOOL,
     searchableDescriptionOverride: "reserve a conference room",

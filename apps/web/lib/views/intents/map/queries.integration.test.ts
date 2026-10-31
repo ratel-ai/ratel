@@ -109,7 +109,7 @@ async function search(
   if (input.elsewhereLive) await turn(input.elsewhereLive, true);
 }
 
-test("every search is attributed by the SDK's matcher and scored on its own tool; lists a Cloud graph ranked are counted apart", async () => {
+test("every search is attributed by the SDK's matcher and scored on its own tool; lists a Ratel graph ranked are counted apart", async () => {
   resetAskOutcomeCache();
   const { client, db } = await setup();
   // Orders: three searches, one worded the way no stored phrasing is; two put the right tool first.

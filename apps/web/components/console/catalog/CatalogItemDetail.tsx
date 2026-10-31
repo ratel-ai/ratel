@@ -18,6 +18,7 @@ import {
 import type { CatalogItem, SkillItem, ToolItem } from "@/lib/console/catalog/items";
 import { adoptionNotice, matchesAgentDescription } from "@/lib/console/catalog/searchable";
 import { CATALOG_DESCRIPTIONS, CATALOG_STALE_DAYS } from "@/lib/ingest/catalogs/vocabulary";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { ProvenanceBadge, provenanceHint, SkillStatusDot } from "./ProvenanceBadge";
 import { SearchableDescription } from "./SearchableDescription";
 import type { SkillBodyLoader } from "./skill-body";
@@ -122,7 +123,7 @@ export function CatalogItemDetail({
             </h3>
             <p className="text-xs text-fg-subtle">
               {CATALOG_DESCRIPTIONS.agent.hint}
-              {/* A Cloud skill's description is Cloud's own, changed with the rest of the skill. */}
+              {/* A Cloud skill`s description is ${APP_NAME}`s own, changed with the rest of the skill. */}
               {item.provenance === "cloud" ? null : " Read only."}
             </p>
           </div>
@@ -180,15 +181,15 @@ function AdoptionNote({
 }) {
   const pickUp =
     kind === "tool"
-      ? "It picks this up once it attaches with Cloud definitions."
-      : "It picks this up once it reads through the Cloud catalog loader.";
+      ? `It picks this up once it attaches with ${APP_NAME} definitions.`
+      : `It picks this up once it reads through the ${APP_NAME} catalog loader.`;
   return (
     <p role="note" className="flex items-start gap-1.5 text-xs text-fg-subtle">
       <Info aria-hidden strokeWidth={1.5} className="mt-px size-3.5 shrink-0 text-info" />
       <span>
         {notice === "still-own-copy"
-          ? "Saved in Cloud. Your runtime is still using its own copy."
-          : "Saved in Cloud. Your runtime may still be using its own copy."}{" "}
+          ? `Saved in ${APP_NAME}. Your runtime is still using its own copy.`
+          : `Saved in ${APP_NAME}. Your runtime may still be using its own copy.`}{" "}
         {pickUp}
       </span>
     </p>

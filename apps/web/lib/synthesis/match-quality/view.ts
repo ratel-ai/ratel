@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/platform/app-config";
 import { MATCH_QUALITY_RUN_INTERVAL_MS } from "@/lib/readings/match-quality/sweep";
 import type {
   MatchQualityProposalRow,
@@ -247,7 +248,7 @@ export function proposalFailures(raw: unknown): CandidateFailure[] {
 
 /** Where a proposal's current text came from, in the catalog's own words. */
 export function sourceLabel(source: string): string {
-  if (source === "override") return "Cloud override";
+  if (source === "override") return `${APP_NAME} override`;
   if (source === "runtime") return "Runtime default";
   return "Same as the agent description";
 }
