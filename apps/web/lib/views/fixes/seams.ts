@@ -51,6 +51,8 @@ export interface FixSeams {
     db: BoundReadDb,
     context: { names: ReadonlyMap<string, string>; price: RoundTripPrice },
   ) => Promise<DraftFixInput[]>;
+  /** Dismiss one drafted change; false when it is already gone. Unset: nothing can be dismissed. */
+  dismissDraft?: (projectId: string, proposalId: string, now: Date) => Promise<boolean>;
   /** Quality's rewrites (pending and applied), their dismissals and the override adoption. Unset: rewrites are off. */
   loadRewrites?: (
     projectId: string,

@@ -1,12 +1,8 @@
 import type { TaskColorSlot } from "@ratel/design-system/task-colors";
-import type {
-  CraftKind,
-  EffectChip,
-  EvidenceFact,
-  SuggestionRow,
-} from "@/lib/views/fixes/crafter-types";
+import type { CraftKind, EffectChip, EvidenceFact } from "@/lib/views/fixes/crafter-types";
 import type { FixGroup } from "@/lib/views/fixes/groups";
 import type { FixKind } from "@/lib/views/fixes/kinds";
+import type { SuggestionRow } from "@/lib/views/quality/suggestions";
 
 /**
  * One Fix: a concrete change that would make the agent better, whichever
@@ -84,6 +80,15 @@ export interface FixEffect {
   tone: "good" | "bad" | "neutral";
   /** A replay of past searches, or the agent's own runs. */
   basis: "replay" | "runs";
+  /** The other numbers it moves, shown as marks beside the headline in the row; the headline is not repeated. */
+  also: EffectReading[];
+}
+
+/** One more number a fix moves: the mark a row shows, and the whole reading for its tooltip. */
+export interface EffectReading {
+  icon: EffectChip["icon"];
+  /** "−686 ms/request waiting", with how it adds up when the source said: "40 model calls × $0.0095 per model call". */
+  label: string;
 }
 
 /** What the fix saves over the window, when the source measured it; summed with care (`fixStats`). */

@@ -33,7 +33,6 @@
     { "from": "@/lib/tool-crafter/suggestion-model", "to": "@/lib/views/fixes/crafter-types", "exact": true },
     { "from": "@/lib/tool-crafter/view", "to": "@/lib/views/fixes/crafter-types", "exact": true },
     { "from": "@/lib/tool-crafter/round-trip", "to": "@/lib/views/fixes/crafter-types", "exact": true },
-    { "from": "@/lib/quality/v2/suggestions", "to": "@/lib/views/fixes/crafter-types", "exact": true },
     { "from": "@/lib/health-imports/queries", "to": "@/lib/views/health/imports-types", "exact": true },
     { "from": "@/lib/health-imports/spans", "to": "@/lib/views/health/imports-types", "exact": true },
     { "from": "@/lib/health-imports/copy", "to": "@/lib/views/health/imports-types", "exact": true },
@@ -44,7 +43,12 @@
     { "from": "@/components/health/", "to": "@/components/console/health/" },
     { "from": "@/components/tasks/", "to": "@/components/console/tasks/" },
     { "from": "@/components/self-corrections/", "to": "@/components/console/self-corrections/" },
-    { "from": "@/components/fixes/v2/kind-icons", "to": "@/components/console/fixes/kind-icons", "exact": true },
+    { "from": "@/components/fixes/v2/", "to": "@/components/console/fixes/" },
+    { "from": "@/components/adaptive-ranking/v2/", "to": "@/components/console/adaptive-ranking/" },
+    { "from": "@/components/quality/v2/", "to": "@/components/console/quality/" },
+    { "from": "@/app/(app)/project/[projectId]/improvement/match-quality/", "to": "@/app/(console)/project/[projectId]/improvement/match-quality/" },
+    { "from": "@/components/ui/useCopyToClipboard", "to": "@ratel/design-system/use-copy-to-clipboard", "exact": true },
+    { "from": "@/app/(app)/project/[projectId]/improvement/fixes/", "to": "@/app/(console)/project/[projectId]/improvement/fixes/" },
     { "from": "@/components/traces/v2/", "to": "@/components/console/traces/" },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
     { "from": "@/components/traces/TraceComparePropertiesTable", "to": "@/components/console/traces/compare/TraceComparePropertiesTable", "exact": true },
@@ -68,6 +72,26 @@
     "@/lib/db/schema": {
       "default": "@/lib/platform/db/tables",
       "symbols": {
+        "catalogFingerprints": "@/lib/synthesis/quality/schema",
+        "CatalogFingerprintEntry": "@/lib/synthesis/quality/schema",
+        "CatalogFingerprintRow": "@/lib/synthesis/quality/schema",
+        "NewCatalogFingerprint": "@/lib/synthesis/quality/schema",
+        "qualitySnapshots": "@/lib/synthesis/quality/schema",
+        "QualitySnapshotRow": "@/lib/synthesis/quality/schema",
+        "NewQualitySnapshot": "@/lib/synthesis/quality/schema",
+        "matchQualityRuns": "@/lib/synthesis/match-quality/schema",
+        "matchQualityEvalItems": "@/lib/synthesis/match-quality/schema",
+        "matchQualityLabels": "@/lib/synthesis/match-quality/schema",
+        "matchQualityProposals": "@/lib/synthesis/match-quality/schema",
+        "MatchQualityEvalArm": "@/lib/synthesis/match-quality/schema",
+        "MatchQualityRunRow": "@/lib/synthesis/match-quality/schema",
+        "NewMatchQualityRun": "@/lib/synthesis/match-quality/schema",
+        "MatchQualityEvalItemRow": "@/lib/synthesis/match-quality/schema",
+        "NewMatchQualityEvalItem": "@/lib/synthesis/match-quality/schema",
+        "MatchQualityProposalRow": "@/lib/synthesis/match-quality/schema",
+        "NewMatchQualityProposal": "@/lib/synthesis/match-quality/schema",
+        "MatchQualityLabelRow": "@/lib/synthesis/match-quality/schema",
+        "NewMatchQualityLabel": "@/lib/synthesis/match-quality/schema",
         "organizations": "@/lib/platform/identity/schema",
         "users": "@/lib/platform/identity/schema",
         "memberships": "@/lib/platform/identity/schema",
@@ -344,7 +368,7 @@
       }
     },
     "@/lib/match-quality/types": {
-      "default": "@/lib/readings/match-quality/types",
+      "default": "@/lib/synthesis/match-quality/types",
       "symbols": {
         "CorpusEntry": "@/lib/readings/decisions/judge"
       }
@@ -353,6 +377,39 @@
       "default": "@/lib/views/intents/adaptive-view",
       "symbols": {
         "capabilityCatalogHref": "@/lib/views/intents/hrefs"
+      }
+    },
+    "@/lib/match-quality/judge": {
+      "default": "@/lib/readings/decisions/judge",
+      "symbols": {
+        "MAX_DISPUTED_CASES": "@/lib/synthesis/match-quality/judge",
+        "MAX_CONTROL_CASES": "@/lib/synthesis/match-quality/judge",
+        "SHORTLIST_PER_ARM": "@/lib/synthesis/match-quality/judge",
+        "TARGET_ANSWERS_PER_STRATUM": "@/lib/synthesis/match-quality/judge",
+        "TRICKLE_SHARE": "@/lib/synthesis/match-quality/judge",
+        "JUDGE_BUDGET_USD": "@/lib/synthesis/match-quality/judge",
+        "JudgeCensus": "@/lib/synthesis/match-quality/judge",
+        "sampleForJudging": "@/lib/synthesis/match-quality/judge",
+        "validateVerdicts": "@/lib/synthesis/match-quality/judge",
+        "applyVerdicts": "@/lib/synthesis/match-quality/judge",
+        "labelsFromVerdicts": "@/lib/synthesis/match-quality/judge",
+        "stratifiedAccuracy": "@/lib/synthesis/match-quality/judge",
+        "judgeTargets": "@/lib/synthesis/match-quality/judge"
+      }
+    },
+    "@/lib/match-quality/service": {
+      "default": "@/lib/ingest/runtime-catalog/inventory",
+      "symbols": {
+        "ServiceDb": "@/lib/synthesis/match-quality/service",
+        "loadCorpusWithFingerprint": "@/lib/synthesis/match-quality/service"
+      }
+    },
+    "@/lib/quality/fingerprint": {
+      "default": "@/lib/ingest/runtime-catalog/inventory",
+      "symbols": {
+        "FingerprintSourceRow": "@/lib/synthesis/quality/fingerprint",
+        "FingerprintDb": "@/lib/synthesis/quality/fingerprint",
+        "recordCatalogFingerprint": "@/lib/synthesis/quality/fingerprint"
       }
     },
     "@/lib/dotmatrix-hooks": {

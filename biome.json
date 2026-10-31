@@ -722,6 +722,67 @@
         "apps/web/app/api/v1/query-intents/\\[\\[...path\\]\\]/route.ts",
         "apps/web/lib/views/intents/map/intent-map-ui.test.ts",
         "apps/web/lib/views/intents/map/tool-network-ui.test.ts",
+        "apps/web/components/console/fixes/**",
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/fixes/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/fixes/loading.tsx",
+        "apps/web/lib/views/home/overview-model.ts",
+        "apps/web/lib/views/home/overview-model.test.ts",
+        "apps/web/lib/views/fixes/fixes-view.test.ts",
+        "apps/web/lib/synthesis/match-quality/**",
+        "!apps/web/lib/synthesis/match-quality/queries.integration.test.ts",
+        "!apps/web/lib/synthesis/match-quality/judges.ts",
+        "!apps/web/lib/synthesis/match-quality/context.test.ts",
+        "!apps/web/lib/synthesis/match-quality/evidence.test.ts",
+        "!apps/web/lib/synthesis/match-quality/evidence.ts",
+        "!apps/web/lib/synthesis/match-quality/job.test.ts",
+        "!apps/web/lib/synthesis/match-quality/mock-fixture.ts",
+        "!apps/web/lib/synthesis/match-quality/mock.ts",
+        "!apps/web/lib/synthesis/match-quality/pipeline.test.ts",
+        "!apps/web/lib/synthesis/match-quality/pipeline.ts",
+        "!apps/web/lib/synthesis/match-quality/view.ts",
+        "!apps/web/lib/synthesis/match-quality/window.ts",
+        "!apps/web/lib/synthesis/match-quality/judge.test.ts",
+        "!apps/web/lib/synthesis/match-quality/schema.ts",
+        "apps/web/lib/console/seed/site-copilot-quality.ts",
+        "apps/web/lib/console/seed/site-copilot-quality.test.ts",
+        "apps/web/lib/console/seed/site-copilot-quality-fixture.ts",
+        "apps/web/components/console/quality/**",
+        "apps/web/app/(console)/project/\\[projectId\\]/quality/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/quality/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/quality/descriptions/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/quality/experiments/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/quality/suggestions/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/match-quality/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/match-quality/loading.tsx",
+        "apps/web/lib/synthesis/quality/headline.test.ts",
+        "apps/web/lib/synthesis/quality/headline.ts",
+        "apps/web/lib/synthesis/quality/queries.ts",
+        "apps/web/lib/synthesis/quality/service.ts",
+        "apps/web/lib/synthesis/quality/snapshot.ts",
+        "apps/web/lib/synthesis/quality/tokens.test.ts",
+        "apps/web/lib/synthesis/quality/tokens.ts",
+        "apps/web/lib/synthesis/quality/trend-view.test.ts",
+        "apps/web/lib/synthesis/quality/trend-view.ts",
+        "apps/web/lib/synthesis/quality/window.ts",
+        "apps/web/lib/views/quality/**",
+        "!apps/web/lib/views/quality/fix-rewrites.ts",
+        "!apps/web/lib/views/quality/fix-rewrites.test.ts",
+        "!apps/web/lib/views/quality/context.ts",
+        "apps/web/lib/synthesis/quality/metrics.ts",
+        "apps/web/lib/synthesis/quality/fingerprint.ts",
+        "apps/web/lib/synthesis/quality/fingerprint.test.ts",
+        "apps/web/lib/synthesis/match-quality/service.ts",
+        "apps/web/lib/synthesis/match-quality/judge.ts",
+        "apps/web/lib/synthesis/match-quality/judge.test.ts",
+        "apps/web/components/console/adaptive-ranking/**",
+        "apps/web/components/console/intents/GraphPicker.tsx",
+        "apps/web/lib/views/adaptive-ranking/boost-view.ts",
+        "apps/web/lib/views/adaptive-ranking/boost-view.test.ts",
+        "apps/web/lib/views/adaptive-ranking/setup.ts",
+        "apps/web/lib/views/adaptive-ranking/setup.test.ts",
+        "apps/web/lib/views/adaptive-ranking/ranking.ts",
+        "apps/web/lib/views/adaptive-ranking/ranking.test.ts",
         "apps/web/lib/console/sidebar-cookie.ts",
         "apps/web/lib/console/sidebar-cookie.test.ts",
         "apps/web/components/console/shell/DatabaseUnavailable.tsx",
@@ -837,6 +898,9 @@
         "apps/web/components/console/health/**",
         "apps/web/components/console/tasks/**",
         "apps/web/components/console/self-corrections/**",
+        "apps/web/components/console/adaptive-ranking/**",
+        "apps/web/components/console/quality/**",
+        "apps/web/components/console/fixes/**",
         "apps/web/lib/views/**/*-ui.test.ts",
         "apps/web/components/console/intents/**",
         "apps/web/components/console/intent-map/**"
@@ -860,6 +924,23 @@
           },
           "security": {
             "noDangerouslySetInnerHtml": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/lib/views/quality/*-view.test.ts",
+        "apps/web/lib/synthesis/match-quality/mock.ts"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useButtonType": "off"
+          },
+          "correctness": {
+            "noChildrenProp": "off",
+            "useHookAtTopLevel": "off"
           }
         }
       }

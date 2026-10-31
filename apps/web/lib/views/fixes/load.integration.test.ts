@@ -132,7 +132,7 @@ async function organization(db: Db) {
   return org;
 }
 
-test("the issue and topic sources read into one list, linked by subject; the seams add nothing while empty", async () => {
+test("the issue and topic sources read into one list, linked by subject; a seam adds nothing while it has nothing to read", async () => {
   const { client, db } = await setup();
   await seedSources(client);
   const model = await loadFixes({
@@ -143,7 +143,7 @@ test("the issue and topic sources read into one list, linked by subject; the sea
   });
 
   assert.deepEqual(model.failed, []);
-  assert.equal(model.rewritesOn, false, "no rewrites until quality fills its seam");
+  assert.equal(model.rewritesOn, true, "quality fills its seam; with no run there are no rewrites");
   assert.deepEqual(
     model.open.map((fix) => fix.id),
     ["issue:44444444-4444-4444-8444-444444444441"],

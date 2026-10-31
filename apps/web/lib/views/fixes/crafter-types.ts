@@ -57,8 +57,8 @@ export const NO_PRICE: RoundTripPrice = {
 
 /** One span of a proposed description, marked where it differs from the current one. */
 export interface DiffSpan {
+  op: "same" | "added" | "removed";
   text: string;
-  kind: "same" | "added" | "removed";
 }
 
 export type ChangeDirection = "up" | "down" | "flat";

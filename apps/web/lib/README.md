@@ -13,8 +13,8 @@ never a higher one; nothing here imports the UI (`@/components`, `@/app`) outsid
 | L1 | `jobs/` | runner, store, drain, scheduler |
 | L2 | `ingest/`, `catalog/` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
 | L3 | `ledger/` | turns, steps, the closed-turn reader |
-| L4 | `readings/` | intent engine, intent graph, topics, signals, workflows, self-corrections, match quality, tool explorer, decisions |
-| L5 | `synthesis/` | quality, experiments, playground, traces, tool crafter, health imports |
+| L4 | `readings/` | intent engine, intent graph, topics, signals, workflows, self-corrections, tool explorer, decisions |
+| L5 | `synthesis/` | match quality, quality, experiments, playground, traces, tool crafter, health imports |
 | L6 | `views/`, `console/` | the page read models (Agent health, Tasks, Fixes, Intents); scope, navigation, settings, projects, onboarding, seeds |
 | L7 | `mcp/` | the MCP operations |
 
@@ -36,7 +36,7 @@ upstream name and signature.
 
 In `ledger/` the owned files are `constants.ts` (`TURN_EVENT_TYPES` has one source, the
 ingest kick; imported sources are recognised by suffix, not an enumerated vendor list),
-`hash.ts` (`queryKey` inlined from the L4 match-quality labels), `same-ask.ts` (a comment),
+`hash.ts` (`queryKey` inlined from the match-quality labels), `same-ask.ts` (a comment),
 `turns/queries.ts` and `turns/build-job.ts` (no retired feature-flag gate; the run-trigger
 vocabulary lives in `run-trigger.ts`; the two seams into the signal runs, `enqueueReading`
 and `onBacklogDrained`, are set by the readings' registration instead of imported from L4),
@@ -56,8 +56,8 @@ the one decision engine here; the private engines are excluded), two files with 
 comment (`intent-engine/job.ts`, `decisions/openai.ts`) and the tests whose fixtures named a
 confidential word, copied with a neutral tenant. `intent-graph/event-types.test.ts` reads the
 ingest schema fragment and the single init migration. The Intents page read models
-(`breakdown*`, `asks-tree`, `v2`) are `views/intents`; `setup`, `view` and `boost-view` (the
-Boost panel, adaptive ranking) are deferred with a `$why`.
+(`breakdown*`, `asks-tree`, `v2`) are `views/intents`; `setup`, `boost-view`, `ranking` and the Boost
+reads are `views/adaptive-ranking`; the view helpers are `views/intents/adaptive-view.ts`.
 
 `views/` (L6) holds the read models of the Agent health, Tasks, Fixes and Intents pages, cut
 from upstream's `trace-signals`, `tasks`, `fixes`, `health-summary`, `topics`, `intent-engine`

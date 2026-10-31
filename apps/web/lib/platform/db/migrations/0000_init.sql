@@ -684,6 +684,129 @@ CREATE TABLE "trace_workflow_verdicts" (
 	CONSTRAINT "trace_workflow_verdicts_project_id_prompt_hash_options_hash_pk" PRIMARY KEY("project_id","prompt_hash","options_hash")
 );
 --> statement-breakpoint
+CREATE TABLE "match_quality_eval_items" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"run_id" uuid NOT NULL,
+	"project_id" uuid NOT NULL,
+	"selection_id" text NOT NULL,
+	"occurred_at" timestamp with time zone NOT NULL,
+	"query" text,
+	"target_entry_id" text NOT NULL,
+	"target_kind" text DEFAULT 'tool' NOT NULL,
+	"target_source" text NOT NULL,
+	"arms" jsonb DEFAULT '[]'::jsonb NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "match_quality_labels" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
+	"query_key" text NOT NULL,
+	"query" text NOT NULL,
+	"entry_id" text NOT NULL,
+	"source" text NOT NULL,
+	"confident" boolean DEFAULT true NOT NULL,
+	"confidence" double precision,
+	"runner_up" text,
+	"catalog_fingerprint" text,
+	"model" text,
+	"selection_id" text,
+	"occurrences" integer DEFAULT 1 NOT NULL,
+	"observed_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "match_quality_proposals" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"run_id" uuid NOT NULL,
+	"project_id" uuid NOT NULL,
+	"entry_id" text NOT NULL,
+	"entry_name" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"current_searchable" text NOT NULL,
+	"current_source" text NOT NULL,
+	"proposed_searchable" text NOT NULL,
+	"rationale" text NOT NULL,
+	"evidence" jsonb NOT NULL,
+	"preview" jsonb NOT NULL,
+	"backtest" jsonb,
+	"applied_at" timestamp with time zone,
+	"applied_by" text,
+	"reverted_at" timestamp with time zone,
+	"previous_override" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "match_quality_runs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
+	"experiment_name" text NOT NULL,
+	"trigger" text NOT NULL,
+	"status" text DEFAULT 'queued' NOT NULL,
+	"window_days" integer NOT NULL,
+	"window_start" timestamp with time zone NOT NULL,
+	"window_end" timestamp with time zone NOT NULL,
+	"selections_evaluated" integer DEFAULT 0 NOT NULL,
+	"revealed_n" integer DEFAULT 0 NOT NULL,
+	"reference_n" integer DEFAULT 0 NOT NULL,
+	"judged_n" integer DEFAULT 0 NOT NULL,
+	"queries_captured" integer DEFAULT 0 NOT NULL,
+	"truncated" boolean DEFAULT false NOT NULL,
+	"attribution_mode" text DEFAULT 'none' NOT NULL,
+	"invoked_tool_key" text,
+	"revealed_source" text DEFAULT 'none' NOT NULL,
+	"baseline_arm" text,
+	"serving_arm" text,
+	"tuned_arm" text,
+	"follow_through" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"observed_stages" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"scores" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"corpus_fingerprint" text,
+	"model" text,
+	"mocked" boolean DEFAULT false NOT NULL,
+	"diagnosis" text,
+	"diagnosis_points" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"declined_reason" text,
+	"judge" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"scorer" text DEFAULT 'none' NOT NULL,
+	"backtest" jsonb,
+	"refinement_rounds" integer DEFAULT 0 NOT NULL,
+	"error" text,
+	"started_at" timestamp with time zone,
+	"finished_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "catalog_fingerprints" (
+	"project_id" uuid NOT NULL,
+	"fingerprint" text NOT NULL,
+	"entry_count" integer NOT NULL,
+	"searchable_chars" integer NOT NULL,
+	"overridden_count" integer NOT NULL,
+	"distinct_count" integer NOT NULL,
+	"entries" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"first_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"last_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "catalog_fingerprints_project_id_fingerprint_pk" PRIMARY KEY("project_id","fingerprint")
+);
+--> statement-breakpoint
+CREATE TABLE "quality_snapshots" (
+	"project_id" uuid NOT NULL,
+	"experiment_name" text NOT NULL,
+	"arm" text NOT NULL,
+	"tier" text NOT NULL,
+	"day" timestamp with time zone NOT NULL,
+	"n" integer NOT NULL,
+	"contained" integer NOT NULL,
+	"credit_sum" double precision NOT NULL,
+	"reciprocal_sum" double precision NOT NULL,
+	"rank_histogram" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"fingerprint" text,
+	"computed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "quality_snapshots_project_id_experiment_name_arm_tier_day_pk" PRIMARY KEY("project_id","experiment_name","arm","tier","day")
+);
+--> statement-breakpoint
 CREATE TABLE "otel_trace_summaries" (
 	"project_id" uuid NOT NULL,
 	"trace_id" text NOT NULL,
@@ -758,6 +881,14 @@ ALTER TABLE "trace_signals" ADD CONSTRAINT "trace_signals_last_run_id_trace_sign
 ALTER TABLE "trace_workflow_insights" ADD CONSTRAINT "trace_workflow_insights_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trace_workflow_labels" ADD CONSTRAINT "trace_workflow_labels_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trace_workflow_verdicts" ADD CONSTRAINT "trace_workflow_verdicts_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "match_quality_eval_items" ADD CONSTRAINT "match_quality_eval_items_run_id_match_quality_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."match_quality_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "match_quality_eval_items" ADD CONSTRAINT "match_quality_eval_items_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "match_quality_labels" ADD CONSTRAINT "match_quality_labels_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "match_quality_proposals" ADD CONSTRAINT "match_quality_proposals_run_id_match_quality_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."match_quality_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "match_quality_proposals" ADD CONSTRAINT "match_quality_proposals_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "match_quality_runs" ADD CONSTRAINT "match_quality_runs_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "catalog_fingerprints" ADD CONSTRAINT "catalog_fingerprints_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "quality_snapshots" ADD CONSTRAINT "quality_snapshots_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "otel_trace_summaries" ADD CONSTRAINT "otel_trace_summaries_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "skills_project_name_active_idx" ON "skills" USING btree ("project_id","name") WHERE "skills"."status" <> 'archived';--> statement-breakpoint
 CREATE INDEX "skills_project_status_idx" ON "skills" USING btree ("project_id","status");--> statement-breakpoint
@@ -848,5 +979,16 @@ CREATE INDEX "trace_signal_runs_project_created_idx" ON "trace_signal_runs" USIN
 CREATE UNIQUE INDEX "trace_signal_runs_project_live_idx" ON "trace_signal_runs" USING btree ("project_id") WHERE "trace_signal_runs"."status" in ('queued', 'running');--> statement-breakpoint
 CREATE UNIQUE INDEX "trace_signals_project_kind_subject_idx" ON "trace_signals" USING btree ("project_id","kind","subject_key");--> statement-breakpoint
 CREATE INDEX "trace_signals_project_status_idx" ON "trace_signals" USING btree ("project_id","status");--> statement-breakpoint
+CREATE INDEX "match_quality_eval_items_run_idx" ON "match_quality_eval_items" USING btree ("run_id");--> statement-breakpoint
+CREATE INDEX "match_quality_eval_items_project_occurred_idx" ON "match_quality_eval_items" USING btree ("project_id","occurred_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "match_quality_labels_project_query_idx" ON "match_quality_labels" USING btree ("project_id","query_key");--> statement-breakpoint
+CREATE INDEX "match_quality_labels_project_entry_idx" ON "match_quality_labels" USING btree ("project_id","entry_id");--> statement-breakpoint
+CREATE INDEX "match_quality_proposals_run_idx" ON "match_quality_proposals" USING btree ("run_id");--> statement-breakpoint
+CREATE INDEX "match_quality_proposals_project_status_idx" ON "match_quality_proposals" USING btree ("project_id","status");--> statement-breakpoint
+CREATE UNIQUE INDEX "match_quality_proposals_pending_entry_idx" ON "match_quality_proposals" USING btree ("project_id","entry_id") WHERE "match_quality_proposals"."status" = 'pending';--> statement-breakpoint
+CREATE INDEX "match_quality_runs_project_created_idx" ON "match_quality_runs" USING btree ("project_id","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "match_quality_runs_project_live_idx" ON "match_quality_runs" USING btree ("project_id") WHERE "match_quality_runs"."status" in ('queued', 'running');--> statement-breakpoint
+CREATE INDEX "catalog_fingerprints_project_last_seen_idx" ON "catalog_fingerprints" USING btree ("project_id","last_seen_at");--> statement-breakpoint
+CREATE INDEX "quality_snapshots_project_day_idx" ON "quality_snapshots" USING btree ("project_id","day");--> statement-breakpoint
 CREATE INDEX "otel_trace_summaries_project_started_idx" ON "otel_trace_summaries" USING btree ("project_id","started_at");--> statement-breakpoint
 CREATE INDEX "otel_trace_summaries_spans_max_received_idx" ON "otel_trace_summaries" USING btree ("spans_max_received_at");

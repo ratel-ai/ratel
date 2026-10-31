@@ -8,6 +8,7 @@ import {
   House,
   Orbit,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import type { NavIconName } from "@/lib/console/navigation";
 
@@ -16,6 +17,7 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   overview: House,
   health: HeartPulse,
   intents: Orbit,
+  improvements: Sparkles,
   catalog: BookOpen,
   traces: Activity,
   settings: Settings,

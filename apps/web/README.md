@@ -33,6 +33,7 @@ pnpm --filter @ratel/platform typecheck
 pnpm --filter @ratel/platform lint         # biome
 pnpm --filter @ratel/platform test         # node:test; integration tests run on an embedded Postgres (pglite)
 pnpm --filter @ratel/platform seed         # Site Copilot OTLP + catalog into the local database
+pnpm --filter @ratel/platform seed:quality # Quality: its searches, answer key, runs and rewrites (needs the seed above)
 pnpm check:boundary && pnpm check:layers   # from the repository root: the structural rules
 ```
 

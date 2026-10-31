@@ -459,7 +459,7 @@ function replayEffect(figure: string, detail: string | null, tone: FixEffect["to
       : tone === "bad" && !/\d/.test(figure)
         ? { figure, unit: "in a replay" }
         : { figure, unit: "found" };
-  return { value: effectLine(compact), ...compact, detail, tone, basis: "replay" };
+  return { value: effectLine(compact), ...compact, detail, tone, basis: "replay", also: [] };
 }
 
 /** A drafted change, as its filler told it: the seed carries what the filler measured. */

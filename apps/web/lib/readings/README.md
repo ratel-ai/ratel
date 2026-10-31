@@ -14,7 +14,7 @@ quality and the tool explorer follow.
 | `decisions/` | `openai.ts`, the OpenAI Decisions client; `engine.ts`, which engine answers closed-set questions (OpenAI only here); `judge.ts`, the judge contract and helpers the readings share (cases, verdicts, corpus entries, option narrowing); `openai-judge.ts`, the one judge engine | — |
 | `model-defaults.ts` | `DEFAULT_LABEL_MODEL`, the naming model when the operator sets none | — |
 | `stats.ts` | `wilsonInterval`, `CONFIDENT_SCORE_RATIO`: the two statistics the detectors share with the quality meter (L5) | — |
-| `match-quality/` | `sweep.ts` only so far: the project rotation the signal sweep reuses | — |
+| `match-quality/` | `sweep.ts`: the project rotation the signal sweep reuses; match quality itself is in `synthesis/` | — |
 | `tool-explorer/` | `units`, `types`, `reliability`, `transitions`, `timing`: the per-call helpers the signals and self-corrections read; the explorer's own job lands later | — |
 | `query-intents/` | `query_intents`, `query_intent_occurrences`: a project's searches folded into canonical recurring asks (`normalize` → `intent-text` → `resolve-canonicals`, `pipeline`) | `categorize_queries`; before-step `query_categorizations_enqueue` (count-based) |
 | `intent-graph/` | `intent_graphs`, `_revisions`, `_clusters`, `_edges`, `_shadow_turns`: a runtime's pushed graph and the Cloud-built one (`fold` over the foldable events, `compact`, `maintenance`); the `/api/v1/intent-graph` handlers | `fold_intent_graph`; before-step `intent_graph_fold_enqueue`, retention step `intent_graph_revisions_prune` |
@@ -34,7 +34,7 @@ exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 tool registries the match-quality reading builds over the project's catalog, for Cloud's own
 with-and-without ranking of each search. Unset, the fold builds the graph and stores no
 shadow turns. The Boost panel's reads of those turns (`loadBoostSelections` and the outcomes
-around live) land with match quality, as do the Intents page read models
+around live) are in `views/adaptive-ranking`, as the Intents page read models are in `views/intents`
 (`breakdown`, `asks-tree`, `setup`, `view`, `v2`). The ledger's own seams are listed in
 `lib/ledger/README.md`.
 
