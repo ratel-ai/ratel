@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/platform/app-config";
 /**
  * Adaptive ranking in one reading (DESIGN.md, One question per page: "Does
  * adaptive ranking help?"): whether a graph is served, one headline from the
@@ -71,8 +72,8 @@ function headlineNotes(view: BoostView, flags: { upperBound: boolean; mixed: boo
   if (view.estimated) {
     notes.push(
       view.reported
-        ? "Searches a runtime served are what it reported, with and without the graph; the rest are estimated by replaying your searches on Cloud's keyword index."
-        : "Estimated by replaying your searches on Cloud's keyword index, with and without the graph as it stood at each search. Your runtime's own ranking may differ.",
+        ? `Searches a runtime served are what it reported, with and without the graph; the rest are estimated by replaying your searches on ${APP_NAME}'s keyword index.`
+        : `Estimated by replaying your searches on ${APP_NAME}'s keyword index, with and without the graph as it stood at each search. Your runtime's own ranking may differ.`,
     );
   }
   if (flags.upperBound) {
@@ -286,8 +287,7 @@ export function servingState(
   return {
     tone: "neutral",
     label: "Not served yet",
-    sentence:
-      "Cloud builds this graph and compares it with your current ranking. No runtime ranks from it yet.",
+    sentence: `${APP_NAME} builds this graph and compares it with your current ranking. No runtime ranks from it yet.`,
     served: false,
   };
 }

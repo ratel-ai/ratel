@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/platform/app-config";
 /**
  * The catalog's user-facing words, defined once.
  *
@@ -59,21 +60,20 @@ export const CATALOG_DESCRIPTIONS_SAME_LABEL = "Searchable and agent description
 export const CATALOG_SEARCHABLE_SOURCE = {
   runtime: {
     label: "Runtime default",
-    hint: "Your runtime supplies this text. Override it to have Cloud own it instead.",
+    hint: `Your runtime supplies this text. Override it to have ${APP_NAME} own it instead.`,
   },
   cloud: {
-    label: "Cloud override",
-    hint: "Cloud supplies this text, replacing whatever the runtime sent. Re-ingest never overwrites it.",
+    label: `${APP_NAME} override`,
+    hint: `${APP_NAME} supplies this text, replacing whatever the runtime sent. Re-ingest never overwrites it.`,
   },
 } as const;
 
-export const CATALOG_OVERRIDE_ACTION = "Override in Cloud";
+export const CATALOG_OVERRIDE_ACTION = `Override in ${APP_NAME}`;
 export const CATALOG_RESET_ACTION = "Reset to runtime default";
 export const CATALOG_MATCH_AGENT_ACTION = "Match the agent description";
 
 /** Why the reset button and an emptied field do the same thing. */
-export const CATALOG_EMPTY_RESETS =
-  "Clearing the field and saving removes the Cloud override, so the runtime's text applies again.";
+export const CATALOG_EMPTY_RESETS = `Clearing the field and saving removes the ${APP_NAME} override, so the runtime's text applies again.`;
 
 /**
  * The whole story, for a help popover. Three layers is one more than most
@@ -90,7 +90,7 @@ export const CATALOG_LAYERS_HELP: readonly { title: string; body: string }[] = [
     body: "The text your runtime reports for matching. If the SDK caller did not set one, it is a copy of the agent description.",
   },
   {
-    title: "Cloud override",
+    title: `${APP_NAME} override`,
     body: "An optional replacement you set here. While it exists it wins over the runtime's text, and re-ingest never clears it.",
   },
 ];
@@ -121,9 +121,9 @@ export type CatalogProvenanceTerm = CatalogTerm & {
 
 export const CATALOG_PROVENANCE: Record<CatalogProvenance, CatalogProvenanceTerm> = {
   cloud: {
-    label: "Cloud",
-    description: "Cloud-authored: created here, so Cloud owns every field.",
-    hint: "Created in Ratel Cloud.",
+    label: `${APP_NAME}`,
+    description: `${APP_NAME}-authored: created here, so ${APP_NAME} owns every field.`,
+    hint: `Created in ${APP_NAME}.`,
     editable: true,
   },
   managed: {

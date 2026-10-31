@@ -2,6 +2,7 @@
 
 import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { Disclosure } from "@ratel/design-system/disclosure";
+import { APP_NAME } from "@/lib/platform/app-config";
 
 export type RankingMetric = {
   id: string;
@@ -111,7 +112,7 @@ export function RankingDetails({ data }: { data: RankingDetailsData }) {
               Over {data.searches.toLocaleString("en-US")} searches the agent acted on, scored on
               the tool it ran.
               {data.estimated
-                ? " Some rankings are Cloud's replay of your searches, not what a runtime served."
+                ? ` Some rankings are ${APP_NAME}'s replay of your searches, not what a runtime served.`
                 : ""}
             </p>
           </div>

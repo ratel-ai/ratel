@@ -173,7 +173,7 @@ test("the rule and each group's reading are said in words", () => {
   const reading = { searches: 598, capped: false, windowDays: 30 };
   assert.equal(
     problemRule(reading),
-    "A group needs a look when its main tool left your catalog, or when, over 10 or more of its searches in the last 30 days, the first result was the tool the agent ran under 50% of the time. Searches whose list a Cloud graph ranked are not counted.",
+    "A group needs a look when its main tool left your catalog, or when, over 10 or more of its searches in the last 30 days, the first result was the tool the agent ran under 50% of the time. Searches whose list a Ratel graph ranked are not counted.",
   );
   assert.match(
     problemRule({ searches: 2000, capped: true, windowDays: 30 }),
@@ -181,7 +181,7 @@ test("the rule and each group's reading are said in words", () => {
   );
   assert.equal(
     firstTrySentence({ firstTry: { rate: 0.19, searches: 36 }, rankedByGraph: 4 }, reading),
-    "Of its 36 searches in the last 30 days that showed a list and then ran a tool, the first result was that tool 19% of the time. 4 more were ranked by a Cloud graph and are not counted.",
+    "Of its 36 searches in the last 30 days that showed a list and then ran a tool, the first result was that tool 19% of the time. 4 more were ranked by a Ratel graph and are not counted.",
   );
   assert.equal(
     firstTrySentence({ firstTry: null, rankedByGraph: 0 }, reading),

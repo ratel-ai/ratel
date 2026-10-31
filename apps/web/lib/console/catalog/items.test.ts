@@ -46,7 +46,7 @@ test("a managed tool reads its text from the runtime and its usage from traces",
   assert.deepEqual(ripgrep.definition?.tags, ["code"]);
 });
 
-test("a Cloud copy wins over the runtime's text, and a runtime's own wording reads as its own", () => {
+test("a Ratel copy wins over the runtime's text, and a runtime's own wording reads as its own", () => {
   const items = toolItems({
     definitions: [
       runtimeDefinition("test_runner", {
@@ -100,7 +100,7 @@ test("the freshest live source is where a tool comes from", () => {
   assert.equal(primarySource([]), null);
 });
 
-test("Cloud skills carry their status, record and own searchable text; runtime and observed skills do not", () => {
+test("Ratel skills carry their status, record and own searchable text; runtime and observed skills do not", () => {
   const items = skillItems({
     skills: [
       skillRecord("review-pull-request", { searchableDescription: "review a PR diff", version: 3 }),
@@ -152,13 +152,13 @@ test("Cloud skills carry their status, record and own searchable text; runtime a
   );
 });
 
-test("a Cloud skill shows no searchable description until the field is rolled out", () => {
+test("a Ratel skill shows no searchable description until the field is rolled out", () => {
   const [item] = skillItems({ skills: [skillRecord("deploy-service")], searchableEnabled: false });
   assert.equal(item.searchable, null);
   assert.equal(item.agentDescription, "Use deploy-service.");
 });
 
-test("saved Cloud copies apply to their entry only", () => {
+test("saved Ratel copies apply to their entry only", () => {
   const entries = [runtimeDefinition("a"), runtimeDefinition("b")];
   const next = withRuntimeOverrides(
     entries,

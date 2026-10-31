@@ -18,6 +18,7 @@ import {
   dismissProposalAction,
   revertProposalAction,
 } from "@/app/(console)/project/[projectId]/improvement/match-quality/actions";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { formatTimestamp } from "@/lib/synthesis/traces/format";
 import { relativeTimeLabel } from "@/lib/views/intents/adaptive-view";
 import {
@@ -213,7 +214,7 @@ export function RewritesList({
           description:
             overridesAdopted === true
               ? "Searches match the new wording now."
-              : "Saved in Cloud; your agent gets them once it attaches with Cloud definitions.",
+              : `Saved in ${APP_NAME}; your agent gets them once it attaches with ${APP_NAME} definitions.`,
           tone: "success",
           action: {
             label: "Undo",

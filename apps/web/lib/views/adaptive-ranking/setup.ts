@@ -1,3 +1,4 @@
+import { APP_NAME, BASE_URL } from "@/lib/platform/app-config";
 import {
   CLOUD_INTENT_GRAPH_KEY,
   cloudGraphSource,
@@ -83,10 +84,10 @@ export function connectSnippet(
 ): string {
   return `import { attach, attachIntentGraphSync } from "@ratel-ai/cloud-sdk/runtime";
 
-// 1. Send this runtime's searches and tool calls to Cloud. Attach first.
-attach(runtime, { apiKey: process.env.RATEL_API_KEY, sourceId: "${sourceId}" });
+// 1. Send this runtime's searches and tool calls to ${APP_NAME}. Attach first.
+attach(runtime, { baseUrl: "${BASE_URL}", apiKey: process.env.RATEL_API_KEY, sourceId: "${sourceId}" });
 
-// 2. Rank from the graph Cloud builds, without learning locally.
+// 2. Rank from the graph ${APP_NAME} builds, without learning locally.
 const catalog = runtime.tools.catalog;
 const use = (graph) => {
   catalog.experimentalDisableAdaptiveRanking();
@@ -96,6 +97,7 @@ const use = (graph) => {
 // 3. Pull it, and adopt every newer revision. Without onReplaced the runtime
 //    keeps the first graph it loaded for as long as it runs.
 const sync = await attachIntentGraphSync(runtime, {
+  endpoint: "${BASE_URL}/intent-graph",
   mode: "consume",
   graphKey: "${graphKey}",
   onReplaced: use,
@@ -150,7 +152,7 @@ export function buildProjectSteps(facts: ProjectSetupFacts): SetupSteps {
           state: silent.length > 0 ? "problem" : "done",
           detail:
             silent.length > 0
-              ? `${sentences.join("; ")} in the last day. Content capture is off for ${silent.map((s) => s.sourceId).join(", ")}: Cloud sees the tool calls but not what the user asked, so there is nothing to learn from them. Turn on content capture in the exporter.`
+              ? `${sentences.join("; ")} in the last day. Content capture is off for ${silent.map((s) => s.sourceId).join(", ")}: ${APP_NAME} sees the tool calls but not what the user asked, so there is nothing to learn from them. Turn on content capture in the exporter.`
               : `${sentences.join("; ")} in the last day.`,
         }
       : silent.length > 0
@@ -158,22 +160,20 @@ export function buildProjectSteps(facts: ProjectSetupFacts): SetupSteps {
             key: "events",
             label: "Events arriving",
             state: "problem",
-            detail: `Content capture is off for ${silent.map((s) => s.sourceId).join(", ")}: Cloud sees the tool calls but not what the user asked, so there is nothing to learn from. Turn on content capture in the exporter.`,
+            detail: `Content capture is off for ${silent.map((s) => s.sourceId).join(", ")}: ${APP_NAME} sees the tool calls but not what the user asked, so there is nothing to learn from. Turn on content capture in the exporter.`,
           }
         : searches > 0 || asks > 0
           ? {
               key: "events",
               label: "Events arriving",
               state: "problem",
-              detail:
-                "Cloud sees searches but no tool calls. It learns from the pair: a search or an ask, and the tool the agent then ran.",
+              detail: `${APP_NAME} sees searches but no tool calls. It learns from the pair: a search or an ask, and the tool the agent then ran.`,
             }
           : {
               key: "events",
               label: "Events arriving",
               state: "pending",
-              detail:
-                "Nothing from a runtime or an agent in the last day. Attach telemetry so Cloud receives searches and tool calls, or point your OpenTelemetry exporter at Cloud with content capture on.",
+              detail: `Nothing from a runtime or an agent in the last day. Attach telemetry so ${APP_NAME} receives searches and tool calls, or point your OpenTelemetry exporter at ${APP_NAME} with content capture on.`,
               snippet: connectSnippet(exampleSource),
             };
 
@@ -184,7 +184,7 @@ export function buildProjectSteps(facts: ProjectSetupFacts): SetupSteps {
         key: "building",
         label: "Graph building",
         state: "done",
-        detail: `Cloud has learned ${plural(merged.rev, "turn", "turns")} into ${plural(merged.clusterCount, "query group", "query groups")}.`,
+        detail: `${APP_NAME} has learned ${plural(merged.rev, "turn", "turns")} into ${plural(merged.clusterCount, "query group", "query groups")}.`,
       }
     : {
         key: "building",
@@ -218,7 +218,7 @@ export function buildGraphSteps(facts: GraphSetupFacts): SetupSteps {
           key: "connected",
           label: "Runtime connected",
           state: "pending",
-          detail: `No runtime ranks from this graph yet. It starts in your code: add these lines where ${source ?? "the runtime"} starts. Until then Cloud only watches and compares.`,
+          detail: `No runtime ranks from this graph yet. It starts in your code: add these lines where ${source ?? "the runtime"} starts. Until then ${APP_NAME} only watches and compares.`,
           snippet,
         }
       : learningCopy
@@ -226,7 +226,7 @@ export function buildGraphSteps(facts: GraphSetupFacts): SetupSteps {
             key: "connected",
             label: "Runtime connected",
             state: "problem",
-            detail: `${learningCopy.sourceId} is learning into its copy of this graph. Cloud already learns from its events, and the next revision overwrites the copy. Enable with learn: false.`,
+            detail: `${learningCopy.sourceId} is learning into its copy of this graph. ${APP_NAME} already learns from its events, and the next revision overwrites the copy. Enable with learn: false.`,
             snippet,
           }
         : {
@@ -255,14 +255,14 @@ export function buildGraphSteps(facts: GraphSetupFacts): SetupSteps {
           key: "following",
           label: "Runtime following updates",
           state: "pending",
-          detail: "Once a runtime is connected, Cloud checks that it adopts each newer revision.",
+          detail: `Once a runtime is connected, ${APP_NAME} checks that it adopts each newer revision.`,
         }
       : stuck
         ? {
             key: "following",
             label: "Runtime following updates",
             state: "problem",
-            detail: `${stuck.sourceId} is still on revision ${stuck.rev} and has not adopted the newer graph. It needs an onReplaced handler that re-enables ranking on each new revision; without one, nothing Cloud learns after startup reaches it.`,
+            detail: `${stuck.sourceId} is still on revision ${stuck.rev} and has not adopted the newer graph. It needs an onReplaced handler that re-enables ranking on each new revision; without one, nothing ${APP_NAME} learns after startup reaches it.`,
             snippet,
           }
         : {
@@ -305,7 +305,7 @@ export function buildGraphWarnings(input: {
     input.lastEventAt.getTime() - input.graphUpdatedAt.getTime() > STALE_GRAPH_MS
   ) {
     warnings.push(
-      "The Cloud graph has not caught up with recent searches. Events are arriving but the graph stopped updating; tell us if this persists.",
+      `The ${APP_NAME} graph has not caught up with recent searches. Events are arriving but the graph stopped updating; tell us if this persists.`,
     );
   }
   return warnings;

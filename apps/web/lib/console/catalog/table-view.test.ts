@@ -281,7 +281,7 @@ test("the source facet offers only what the catalog contains", () => {
   assert.deepEqual(
     provenanceFilterChoices(presentProvenances(rows), "all").map((c) => c.value),
     ["all", "managed", "observed"],
-    "no Cloud option on a catalog with no Cloud-authored rows",
+    "no Ratel option on a catalog with no Ratel-authored rows",
   );
 });
 

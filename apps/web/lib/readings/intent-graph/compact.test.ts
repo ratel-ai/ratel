@@ -275,7 +275,7 @@ test("a tool edge and a skill edge with the same id never group", () => {
   assert.equal(result.report.merged, 0);
 });
 
-test("the output is accepted by the SDK, validates on Cloud, and carries recomputed labels and terms", () => {
+test("the output is accepted by the SDK, validates on Ratel, and carries recomputed labels and terms", () => {
   const { graph: out } = compactIntentGraph(fragmentedGraph());
   const validation = validateIntentGraph(out);
   assert.ok(validation.ok, validation.ok ? "" : validation.details.join("; "));

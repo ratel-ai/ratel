@@ -9,6 +9,7 @@ npm packages.
 | `db/client.ts` | the lazy drizzle client over node-postgres; `isDbConfigured`, `sslConfig` |
 | `db/migrate.ts`, `scripts/migrate.mts` | the migrator; `DATABASE_MIGRATE_ON_BOOT=1` runs it at startup |
 | `db/migrations/` | the generated migration set (`pnpm db:regenerate`, checked by `pnpm db:check`) |
+| `app-config.ts` | `APP_NAME` and `BASE_URL`, from the environment, on the server and in the browser |
 | `db/tables.ts`, `db/queries.ts` | barrels over the L1 fragments; higher layers export their own |
 | `db/test-support.ts` | `createMigratedPGlite()`: one migrated snapshot per process, a fresh copy per test |
 | `db/statement-timeout.ts` | bounded reads with `SET LOCAL statement_timeout` |

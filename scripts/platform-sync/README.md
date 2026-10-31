@@ -37,4 +37,6 @@ files this repository maintains, and ports what applies by hand.
   fails when the two differ, so regenerate it after changing a `copy` entry.
 - A new `@/lib/*` specifier the rules do not map is reported as *unmapped*; add the move to
   `map.json` (or a rule to `rewrites.json`) before landing.
+- The product's name in a copied string becomes `APP_NAME` (the `brand` rule in `rewrites.json`); a
+  test gets the default name. A string that spans lines is left alone: own the file.
 - A private-string hit is never worked around in the list; the file is excluded or fixed upstream.

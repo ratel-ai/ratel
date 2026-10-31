@@ -17,6 +17,7 @@ import {
   CATALOG_RESET_ACTION,
   CATALOG_SEARCHABLE_SOURCE,
 } from "@/lib/ingest/catalogs/vocabulary";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { Tooltip } from "./BenchTooltip";
 import { FIELD } from "./field";
 
@@ -200,7 +201,7 @@ export function DescriptionPanel({
               }
             >
               <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-forest-300/70 bg-forest/20 p-3 text-xs leading-5 text-cream-dim">
-                {editing.value.trim() || "(empty, this removes the Cloud override)"}
+                {editing.value.trim() || `(empty, this removes the ${APP_NAME} override)`}
               </p>
             </DialogContent>
           </Dialog>

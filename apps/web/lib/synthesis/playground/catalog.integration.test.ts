@@ -160,7 +160,7 @@ test("loadBench includes tools registered by runtime catalog snapshots", async (
  * the columns existed, the product used them, and the bench simply never read
  * the table.
  */
-test("loadBench carries the searchable description and Cloud override through to the ranker", async () => {
+test("loadBench carries the searchable description and Ratel override through to the ranker", async () => {
   const { client, db } = await setup();
   await client.exec(`
     insert into runtime_catalog_entries

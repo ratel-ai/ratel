@@ -43,7 +43,7 @@ test("the view reads from the URL and falls back to newest first", () => {
   );
 });
 
-test("search matches names and descriptions; a status keeps Cloud skills only", () => {
+test("search matches names and descriptions; a status keeps Ratel skills only", () => {
   assert.deepEqual(names(filterSkillItems(items, { query: "PULL request", status: "all" })), [
     "review-pull-request",
   ]);

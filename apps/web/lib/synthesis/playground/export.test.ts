@@ -134,7 +134,7 @@ test("editsToDiff shows the before and after under a kind-qualified header", () 
   assert.match(diff, /whoever runs the agent/);
 });
 
-test("the exports carry the feature's UI name and no Cloud source", () => {
+test("the exports carry the feature's UI name and no Ratel source", () => {
   const edits = collectEdits([], [tool("ripgrep")], {
     skill: {},
     tool: { ripgrep: { description: "Search a tree, fast." } },

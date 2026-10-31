@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { findPrivateStrings, hashToken, scanDir } from "./private-strings.mjs";
-import { absolutizeRelative, buildRules, partitionImports, renameIdentifiers, rewriteSource, rewriteSpecifiers } from "./rewrite-imports.mjs";
+import { absolutizeRelative, brandStrings, buildRules, partitionImports, renameIdentifiers, rewriteSource, rewriteSpecifiers } from "./rewrite-imports.mjs";
 import { applySync, copyIncludes, planSync } from "./sync.mjs";
 
 const MAP = {
@@ -185,6 +185,56 @@ describe("partitions and identifiers", () => {
       ].join("\n"),
     );
     assert.deepEqual(unmapped, []);
+  });
+});
+
+describe("brand strings", () => {
+  const brand = { name: "APP_NAME", import: "@/lib/platform/app-config", testName: "Ratel" };
+
+  it("turns the product's name in a string into the configured name, with its import", () => {
+    const out = brandStrings(`"use client";\nconst a = "Cloud builds this graph";\n`, brand, "a.ts");
+    assert.equal(
+      out,
+      `"use client";\nimport { APP_NAME } from "@/lib/platform/app-config";\nconst a = \`\${APP_NAME} builds this graph\`;\n`,
+    );
+  });
+
+  it("takes 'Ratel Cloud' whole, and keeps a template's own expressions", () => {
+    const out = brandStrings("const a = `Ratel Cloud refused ${n} on Cloud`;\n", brand, "a.ts");
+    assert.match(out, /`\$\{APP_NAME\} refused \$\{n\} on \$\{APP_NAME\}`/);
+  });
+
+  it("wraps a JSX attribute in braces", () => {
+    const out = brandStrings('<Empty title="Rejected by Ratel Cloud" />;\n', brand, "a.tsx");
+    assert.match(out, /title=\{`Rejected by \$\{APP_NAME\}`\}/);
+  });
+
+  it("escapes what a template would read as code", () => {
+    const out = brandStrings('const a = "Cloud `x` ${y}";\n', brand, "a.ts");
+    assert.match(out, /`\$\{APP_NAME\} \\`x\\` \\\$\{y\}`/);
+  });
+
+  it("leaves comments, identifiers, the SDK's name and files without the word alone", () => {
+    for (const code of [
+      "// Cloud builds it\n",
+      " * Cloud builds it\n",
+      "const icon = Cloud;\n",
+      'const a = "the Cloud SDK";\n',
+      'import { Cloud } from "lucide-react";\n',
+      'const a = "@ratel-ai/cloud-sdk/runtime"; // Cloud\n',
+    ]) {
+      assert.equal(brandStrings(code, brand, "a.ts"), code);
+    }
+  });
+
+  it("skips a listed path, where the word is someone else's product in a fixture", () => {
+    const code = 'const a = "Jira Cloud Sync";\n';
+    assert.equal(brandStrings(code, { ...brand, skip: ["lib/decisions/"] }, "lib/decisions/a.test.ts"), code);
+  });
+
+  it("writes the default name into a test's assertions, which read the default environment", () => {
+    const out = brandStrings('assert.match(text, /Cloud builds "x"/);\n// Cloud\n', brand, "a.test.ts");
+    assert.equal(out, 'assert.match(text, /Ratel builds "x"/);\n// Cloud\n');
   });
 });
 

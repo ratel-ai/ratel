@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/platform/app-config";
 import { type DiffSpan, diffWords, isPureAddition } from "@/lib/synthesis/match-quality/diff";
 import type { MatchQualityProposalRow } from "@/lib/synthesis/match-quality/schema";
 import { toolEffectView } from "@/lib/synthesis/match-quality/tool-effect";
@@ -166,8 +167,8 @@ export function appliedToast(
         description: `${toolName} now matches searches with the new wording.`,
       }
     : {
-        title: "Rewrite saved in Cloud",
-        description: `${toolName} gets it once your agent attaches with Cloud definitions.`,
+        title: `Rewrite saved in ${APP_NAME}`,
+        description: `${toolName} gets it once your agent attaches with ${APP_NAME} definitions.`,
       };
 }
 
@@ -183,8 +184,7 @@ export function revertedToast(
 }
 
 /** Shown wherever a rewrite can be applied while nothing has fetched the overrides recently. */
-export const NOT_REACHING_RUNTIME =
-  "Nothing has fetched this project's Cloud overrides recently, so an applied rewrite may not reach your agent yet.";
+export const NOT_REACHING_RUNTIME = `Nothing has fetched this project's ${APP_NAME} overrides recently, so an applied rewrite may not reach your agent yet.`;
 
 /** The replay's change in how often the right tool is in the results, or null when it has none. */
 export function containmentDelta(raw: unknown): number | null {

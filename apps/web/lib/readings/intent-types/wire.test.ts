@@ -198,7 +198,7 @@ test("surfaced counts are typed and validated: non-negative integers per capabil
   assert.equal(absent.ok, true);
 });
 
-test("cloud keys: the merged graph and every per-source graph belong to Cloud", () => {
+test("cloud keys: the merged graph and every per-source graph belong to Ratel", () => {
   assert.equal(cloudSourceGraphKey("acme-bm25"), "cloud/acme-bm25");
   assert.equal(cloudGraphSource("cloud/acme-bm25"), "acme-bm25");
   assert.equal(cloudGraphSource("cloud"), null);

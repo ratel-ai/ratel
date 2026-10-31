@@ -20,6 +20,7 @@ import {
   summaryVerdict,
   windowLabel,
 } from "@/lib/console/settings/sdk-events";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { fmtCount } from "@/lib/platform/format";
 
 export interface SdkEventsData {
@@ -73,7 +74,7 @@ export function SdkEventsView({ data }: { data: SdkEventsData }) {
     {
       label: "Rejected",
       value: fmtCount(summary.rejected ?? 0),
-      hint: "Refused by Ratel Cloud",
+      hint: `Refused by ${APP_NAME}`,
       href: summary.rejected ? lostHref : undefined,
     },
   ];

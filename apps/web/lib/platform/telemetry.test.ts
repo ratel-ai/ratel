@@ -26,7 +26,7 @@ test("contexts resolve to one distinct id: user, project or explicit", () => {
   });
 });
 
-test("event names stay unique and carry no Cloud-only event", () => {
+test("event names stay unique and carry no Ratel-only event", () => {
   assert.equal(new Set(SERVER_EVENT_NAMES).size, SERVER_EVENT_NAMES.length);
   for (const name of SERVER_EVENT_NAMES) {
     assert.doesNotMatch(

@@ -46,5 +46,9 @@ pnpm --filter @ratel/platform dev          # migrates on boot, then serves
 docker compose up --build                  # or the whole OSS edition in containers, http://localhost:3000
 ```
 
+`BASE_URL` is where the console's SDK snippets point: this deployment's API, with its `/api/v1`
+prefix. It defaults to `http://localhost:3000/api/v1`; set it in `.env.local`, or on the container,
+when the app runs anywhere else.
+
 `dev`, `build` and `typecheck` run `scripts/link-ee.mjs --auto` first, which installs the private
 route stubs when `ee/src` exists and removes them otherwise.

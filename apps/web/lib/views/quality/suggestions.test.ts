@@ -243,7 +243,7 @@ test("applying promises the new wording only when the agent fetches overrides", 
   });
   for (const unknown of [null, false]) {
     const toast = appliedToast("update_task", unknown);
-    assert.equal(toast.title, "Rewrite saved in Cloud");
+    assert.equal(toast.title, "Rewrite saved in Ratel");
     assert.doesNotMatch(toast.description, /now matches/);
   }
   assert.match(NOT_REACHING_RUNTIME, /may not reach your agent yet/);

@@ -110,7 +110,7 @@ test("the page answers first: received, dropped and rejected in the window", () 
 test("refused events lead with one alert that points at what was lost", () => {
   const html = render();
   assert.match(html, /role="alert"/);
-  assert.match(html, /Ratel Cloud refused 2 events\. Fix the reasons they give and send again\./);
+  assert.match(html, /Ratel refused 2 events\. Fix the reasons they give and send again\./);
   assert.match(
     html,
     /<a[^>]*href="\/project\/p1\/settings\/developer\?tab=dropped"[^>]*>See what was lost<\/a>/,
@@ -198,7 +198,7 @@ test("the dropped view lists refusals with their reason and the SDK's drop repor
       },
     ],
   });
-  assert.match(html, /<caption[^>]*>Events Ratel Cloud rejected<\/caption>/);
+  assert.match(html, /<caption[^>]*>Events Ratel rejected<\/caption>/);
   assert.match(html, />query: required</);
   assert.match(html, /<caption[^>]*>Events the SDK dropped before sending<\/caption>/);
   assert.match(html, />Queue overflow</, "a reason code reads as words");

@@ -199,7 +199,7 @@ function cloudDeps(liveAt: Date | null = new Date("2026-09-30T10:00:00Z")) {
   return { ...base, asked, touchedKeys };
 }
 
-test("source=cloud answers with the merged graph Cloud built, and records the pull under that key", async () => {
+test("source=cloud answers with the merged graph Ratel built, and records the pull under that key", async () => {
   const { deps, asked, touchedKeys, events } = cloudDeps();
   const response = await handleIntentGraphGet(request("cloud"), deps);
   assert.equal(response.status, 200);
@@ -211,7 +211,7 @@ test("source=cloud answers with the merged graph Cloud built, and records the pu
   assert.equal((events[0]?.properties as Record<string, unknown>).graph_key, "cloud");
 });
 
-test("a runtime asking for its own key gets its own graph, never a Cloud-built one", async () => {
+test("a runtime asking for its own key gets its own graph, never a Ratel-built one", async () => {
   const { deps, asked } = cloudDeps();
   const response = await handleIntentGraphGet(request("worker-a"), deps);
   assert.equal(response.status, 200);

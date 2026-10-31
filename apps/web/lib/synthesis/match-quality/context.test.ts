@@ -139,7 +139,7 @@ test("an already-overridden entry is labelled in the corpus", () => {
     ...context(),
     corpus: [entry("refund_payment", "override")],
   });
-  assert.match(user, /refund_payment \(already overridden in Cloud\)/);
+  assert.match(user, /refund_payment \(already overridden in Ratel\)/);
 });
 
 test("an oversized corpus keeps the candidates and reports what it dropped", () => {

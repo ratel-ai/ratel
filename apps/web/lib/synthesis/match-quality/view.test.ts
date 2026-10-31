@@ -204,7 +204,7 @@ test("stored failures survive the round trip, and junk does not", () => {
 });
 
 test("the source of the current text is named in the catalog's own words", () => {
-  assert.equal(sourceLabel("override"), "Cloud override");
+  assert.equal(sourceLabel("override"), "Ratel override");
   assert.equal(sourceLabel("runtime"), "Runtime default");
   assert.equal(sourceLabel("description"), "Same as the agent description");
 });

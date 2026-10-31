@@ -688,7 +688,7 @@ test("a search the agent never acted on stops holding the fold once the grace ha
   assert.equal(later.rev, 1, "the complete turn is learned; the orphan teaches nothing");
 });
 
-test("with a tool catalog the fold stores Cloud's own with-and-without ranking per search, per graph", async () => {
+test("with a tool catalog the fold stores Ratel's own with-and-without ranking per search, per graph", async () => {
   const { client, db } = await setup();
   const corpus = [
     ["docker_build", "Build a docker image from a Dockerfile"],

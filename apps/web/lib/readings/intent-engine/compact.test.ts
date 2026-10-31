@@ -25,7 +25,7 @@ function cluster(p: Partial<EngineCluster> & Pick<EngineCluster, "id" | "members
   };
 }
 
-test("edge lane: settled fragments that agree on edges and wording merge, Cloud fields too", () => {
+test("edge lane: settled fragments that agree on edges and wording merge, Ratel fields too", () => {
   const big = cluster({
     id: "intent_1",
     members: ["search tasks about billing"],

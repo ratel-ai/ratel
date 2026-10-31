@@ -21,9 +21,9 @@ test("an operator override outranks the runtime's own retrieval text", () => {
   const tool = {
     description: "Agent-facing prose.",
     searchableDescription: "Runtime retrieval prose.",
-    searchableDescriptionOverride: "Cloud retrieval prose.",
+    searchableDescriptionOverride: "Ratel retrieval prose.",
   };
-  assert.equal(resolveSearchableDescription(tool), "Cloud retrieval prose.");
+  assert.equal(resolveSearchableDescription(tool), "Ratel retrieval prose.");
   assert.equal(searchableDescriptionSource(tool), "override");
 });
 

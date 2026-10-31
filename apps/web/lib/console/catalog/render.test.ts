@@ -166,12 +166,12 @@ test("an observed tool explains why there is nothing to edit", () => {
   assert.doesNotMatch(html, /aria-expanded/, "no definition to disclose");
 });
 
-test("a Cloud copy the runtime has not confirmed says so", () => {
+test("a Ratel copy the runtime has not confirmed says so", () => {
   const [copied] = toolItems({
     definitions: [runtimeDefinition("ripgrep", { searchableDescriptionOverride: "grep files" })],
   });
   const html = detail({ item: copied, adopted: { tool: null, skill: null } });
-  assert.match(html, /Set here in Cloud\./);
+  assert.match(html, /Set here in Ratel\./);
   assert.match(html, /Your runtime may still be using its own copy\./);
   assert.doesNotMatch(
     detail({ item: copied, adopted: { tool: true, skill: null } }),
@@ -179,14 +179,14 @@ test("a Cloud copy the runtime has not confirmed says so", () => {
   );
 });
 
-test("a Cloud skill shows its status, runs and instructions; in a Panel the Panel names it", () => {
+test("a Ratel skill shows its status, runs and instructions; in a Panel the Panel names it", () => {
   const [skill] = skills;
   const html = detail({ item: skill });
   assert.match(html, /Published/);
   assert.match(html, /Runs<\/dt>/);
   assert.match(html, /Instructions<\/button>/);
-  assert.doesNotMatch(html, /Read only\./, "Cloud owns a Cloud skill's description");
+  assert.doesNotMatch(html, /Read only\./, "Ratel owns a Ratel skill's description");
   const panel = detail({ item: skill, layout: "panel" });
   assert.doesNotMatch(panel, /<h2/, "the Panel's title is the heading");
-  assert.match(panel, /Created here in Cloud\./);
+  assert.match(panel, /Created here in Ratel\./);
 });

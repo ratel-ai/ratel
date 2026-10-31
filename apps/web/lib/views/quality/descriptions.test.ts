@@ -221,7 +221,7 @@ test("a tool with no rewrite: its description, where it comes from, and its sear
     id: "search_spec_book",
     name: "search_spec_book",
     description: "Search a project's spec book.",
-    source: "Cloud override",
+    source: "Ratel override",
     tally: { searches: 12, first: 7, found: 10 },
     catalogHref: "/project/p1/catalogs/tools?highlight=search_spec_book",
   });

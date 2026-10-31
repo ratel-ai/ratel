@@ -30,7 +30,7 @@ test("each search is scored on the tool its own agent ran, so an even split betw
   assert.deepEqual(outcomes, [{ clusterId: "customers", ranked: 12, firstTry: 12, shaped: 0 }]);
 });
 
-test("a list a Cloud graph ranked is counted apart, a search that served nothing is skipped, and only kept groups return", () => {
+test("a list a Ratel graph ranked is counted apart, a search that served nothing is skipped, and only kept groups return", () => {
   const searches = [
     search("find an order", "lookup_order", "lookup_order"),
     search("find order 7", "lookup_order", "stripe_list_invoices"),

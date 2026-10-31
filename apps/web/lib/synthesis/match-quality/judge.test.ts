@@ -470,9 +470,9 @@ test("every verdict becomes a label, abstentions as unclear, dated by the judgin
   assert.ok(labels.every((row) => row.observedAt === judgedAt && row.catalogFingerprint === "fp"));
 });
 
-test("the identity fingerprint ignores Cloud overrides but not the customer's own text", () => {
+test("the identity fingerprint ignores Ratel overrides but not the customer's own text", () => {
   const base = CORPUS.map((entry) => ({ ...entry, description: `d ${entry.entryId}` }));
-  const overridden = base.map((entry) => ({ ...entry, searchable: "a Cloud rewrite" }));
+  const overridden = base.map((entry) => ({ ...entry, searchable: "a Ratel rewrite" }));
   const edited = base.map((entry, index) =>
     index === 0 ? { ...entry, description: "the customer changed this" } : entry,
   );
