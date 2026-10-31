@@ -17,6 +17,8 @@ here rather than in the design system.
 | `tasks/` | Agent health › Tasks: the table, one task (steps, panels, flow diagram, sections), a session turn by turn, the skeletons |
 | `self-corrections/` | Agent health › Self-corrections: the hero, where it happens, what the agent said, the change to make, filters and the examples read on demand |
 | `fixes/` | the kind icons the fix leads and marks share; the Fixes page itself lands with the tool crafter |
+| `intents/` | the Intents pages: All intents (the table, an intent's panel with its breakdown, steps, sentiment and examples), Flows (the canvas and step panel) and Map (the lens views), the skeletons, the states before a reading and "Read now"; all copies, the adaptive-ranking graph picker left out |
+| `intent-map/` | the Map's drawing: intents as blobs, the asks pack, the tool network and globe, their chrome, marks, labels and measurements; all copies |
 
 The navigation model behind the rail is `lib/console/navigation.ts`. Copies and owned files are
 listed in `scripts/platform-sync/map.json`.

@@ -1,7 +1,10 @@
 {
   "$comment": "Explicit import-specifier rules; apps/web/lib moves are derived from map.json. Longest `from` wins. `partitions` split named imports from hub modules per symbol (unlisted symbols go to `default` and are reported). `identifiers` are whole-word renames applied to every copied file.",
   "rules": [
-    { "from": "@/components/ds/", "to": "@ratel/design-system/", "except": ["@/components/ds/dot-loader"] },
+    { "from": "@/components/ds/", "to": "@ratel/design-system/" },
+    { "from": "@/components/ds/dot-loader", "to": "@ratel/design-system/dot-matrix", "exact": true },
+    { "from": "@/components/intents/v2/", "to": "@/components/console/intents/" },
+    { "from": "@/components/intent-map/", "to": "@/components/console/intent-map/" },
     { "from": "@/lib/utils", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/cn", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/db/index", "to": "@/lib/platform/db/client", "exact": true },
@@ -55,6 +58,8 @@
     { "from": "@/components/shell/DatabaseUnavailable", "to": "@/components/console/shell/DatabaseUnavailable", "exact": true },
     { "from": "@/components/explore/SkillEditor", "to": "@/components/console/catalog/SkillEditor", "exact": true },
     { "from": "@/components/data/PartialDataValue", "to": "@/lib/synthesis/catalog/provenance", "exact": true },
+    { "from": "@/app/(app)/project/[projectId]/intents/actions", "to": "@/app/(console)/project/[projectId]/intents/actions", "exact": true },
+    { "from": "@/app/(app)/project/[projectId]/intents/data", "to": "@/app/(console)/project/[projectId]/intents/data", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/health/signal-actions", "to": "@/app/(console)/project/[projectId]/health/signal-actions", "exact": true },
     { "from": "@/app/(app)/settings/api-key-actions", "to": "@/app/(console)/project/[projectId]/settings/api-keys/actions", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/settings/developer/actions", "to": "@/app/(console)/project/[projectId]/settings/developer/actions", "exact": true }

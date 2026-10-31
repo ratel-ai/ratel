@@ -39,20 +39,32 @@ export function DotEmblem({ className }: { className?: string }) {
   );
 }
 
-/** The 5×5 mark in motion, for a wait: a band of light crossing its diagonals. */
-export function DotLoader({ className }: { className?: string }) {
+/**
+ * The 5×5 mark in motion, for a wait: a band of light crossing its diagonals. With a `label` it
+ * is a status a screen reader announces ("Loading intents"); without one it is decoration.
+ */
+export function DotLoader({ className, label }: { className?: string; label?: string }) {
+  const dots = Array.from({ length: 25 }, (_, index) => {
+    const diagonal = Math.floor(index / 5) + (index % 5);
+    return (
+      <span
+        key={index}
+        className="dot-loader-dot size-1 rounded-full bg-current"
+        style={{ animationDelay: `${diagonal * 90}ms` }}
+      />
+    );
+  });
+  const grid = cn("inline-grid grid-cols-5 gap-[1.5px] text-fg", className);
+  if (label) {
+    return (
+      <span role="status" aria-label={label} className={grid}>
+        {dots}
+      </span>
+    );
+  }
   return (
-    <span aria-hidden className={cn("inline-grid grid-cols-5 gap-[1.5px] text-fg", className)}>
-      {Array.from({ length: 25 }, (_, index) => {
-        const diagonal = Math.floor(index / 5) + (index % 5);
-        return (
-          <span
-            key={index}
-            className="dot-loader-dot size-1 rounded-full bg-current"
-            style={{ animationDelay: `${diagonal * 90}ms` }}
-          />
-        );
-      })}
+    <span aria-hidden className={grid}>
+      {dots}
     </span>
   );
 }
