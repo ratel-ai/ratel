@@ -1,11 +1,7 @@
 {
   "$comment": "Explicit import-specifier rules; apps/web/lib moves are derived from map.json. Longest `from` wins. `partitions` split named imports from hub modules per symbol (unlisted symbols go to `default` and are reported). `identifiers` are whole-word renames applied to every copied file.",
   "rules": [
-    {
-      "from": "@/components/ds/",
-      "to": "@ratel/design-system/",
-      "except": ["@/components/ds/entity", "@/components/ds/dot-loader"]
-    },
+    { "from": "@/components/ds/", "to": "@ratel/design-system/", "except": ["@/components/ds/entity", "@/components/ds/dot-loader"] },
     { "from": "@/lib/utils", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/cn", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/db/index", "to": "@/lib/platform/db/client", "exact": true },
@@ -29,7 +25,7 @@
     { "from": "@/lib/request-log", "to": "@/lib/platform/request-log", "exact": true },
     { "from": "@/lib/logger", "to": "@/lib/platform/logger", "exact": true },
     { "from": "@/lib/api-keys", "to": "@/lib/platform/api-keys", "exact": true },
-    { "from": "@/lib/trace-signals/workflows/label-job", "to": "@/lib/readings/model-defaults", "exact": true },
+    { "from": "@/lib/match-quality/judges/jev", "to": "@/lib/readings/decisions/judge", "exact": true },
     { "from": "@/components/settings/v2/", "to": "@/components/console/settings/" },
     { "from": "@/components/traces/v2/", "to": "@/components/console/traces/" },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
@@ -144,7 +140,20 @@
         "intentClusters": "@/lib/readings/intent-engine/schema",
         "intentClusterAssignments": "@/lib/readings/intent-engine/schema",
         "IntentClusterRow": "@/lib/readings/intent-engine/schema",
-        "IntentClusterAssignmentRow": "@/lib/readings/intent-engine/schema"
+        "IntentClusterAssignmentRow": "@/lib/readings/intent-engine/schema",
+        "traceSignalRuns": "@/lib/readings/trace-signals/schema",
+        "traceSignals": "@/lib/readings/trace-signals/schema",
+        "traceWorkflowLabels": "@/lib/readings/trace-signals/schema",
+        "traceWorkflowVerdicts": "@/lib/readings/trace-signals/schema",
+        "traceWorkflowInsights": "@/lib/readings/trace-signals/schema",
+        "traceSelfCorrections": "@/lib/readings/trace-signals/schema",
+        "TraceSignalRunRow": "@/lib/readings/trace-signals/schema",
+        "NewTraceSignalRunRow": "@/lib/readings/trace-signals/schema",
+        "TraceSignalRow": "@/lib/readings/trace-signals/schema",
+        "NewTraceSignalRow": "@/lib/readings/trace-signals/schema",
+        "traceTopics": "@/lib/readings/topics/schema",
+        "traceTurnTopics": "@/lib/readings/topics/schema",
+        "traceTopicInsights": "@/lib/readings/topics/schema"
       }
     },
     "@/lib/db/queries": {
@@ -270,6 +279,54 @@
         "getRuntimeToolCatalogEntries": "@/lib/ingest/runtime-catalog/queries",
         "RuntimeToolCatalogEntry": "@/lib/ingest/runtime-catalog/queries"
       }
+    },
+    "@/lib/trace-signals/signals/ledger": {
+      "default": "@/lib/ledger/closed-turns",
+      "symbols": {
+        "countFixesSince": "@/lib/readings/trace-signals/signals/analysis-context",
+        "loadCatalogFacts": "@/lib/readings/trace-signals/signals/analysis-context",
+        "loadUsageFacts": "@/lib/readings/trace-signals/signals/analysis-context",
+        "loadClusterFacts": "@/lib/readings/trace-signals/signals/analysis-context",
+        "loadAnalysisContext": "@/lib/readings/trace-signals/signals/analysis-context",
+        "loadRunBasisCounts": "@/lib/readings/trace-signals/signals/analysis-context",
+        "loadCatalogNames": "@/lib/readings/trace-signals/signals/analysis-context",
+        "SignalsDb": "@/lib/ledger/closed-turns",
+        "TURN_PAGE_SIZE": "@/lib/ledger/closed-turns",
+        "TurnCursor": "@/lib/ledger/closed-turns",
+        "ClosedTurnPage": "@/lib/ledger/closed-turns",
+        "listClosedTurnsPage": "@/lib/ledger/closed-turns",
+        "loadStepsByTurn": "@/lib/ledger/closed-turns",
+        "countClosedTurns": "@/lib/ledger/closed-turns",
+        "hasModelCallsSince": "@/lib/ledger/closed-turns",
+        "hasLedger": "@/lib/ledger/closed-turns",
+        "ledgerStartedAt": "@/lib/ledger/closed-turns"
+      }
+    },
+    "@/lib/trace-signals/workflows/label-job": {
+      "default": "@/lib/readings/trace-signals/workflows/label-job",
+      "symbols": {
+        "DEFAULT_LABEL_MODEL": "@/lib/readings/model-defaults",
+        "LABEL_WORKFLOWS_JOB_KIND": "@/lib/readings/trace-signals/workflows/label-job",
+        "MAX_LABELS_PER_JOB": "@/lib/readings/trace-signals/workflows/label-job",
+        "LabelJobDeps": "@/lib/readings/trace-signals/workflows/label-job",
+        "LabelJobResult": "@/lib/readings/trace-signals/workflows/label-job",
+        "anthropicLabelComplete": "@/lib/readings/trace-signals/workflows/label-job",
+        "labelProjectWorkflows": "@/lib/readings/trace-signals/workflows/label-job"
+      }
+    },
+    "@/lib/quality/metrics": {
+      "default": "@/lib/synthesis/quality/metrics",
+      "symbols": {
+        "wilsonInterval": "@/lib/readings/stats",
+        "ConfidenceInterval": "@/lib/readings/stats",
+        "CONFIDENT_SCORE_RATIO": "@/lib/readings/stats"
+      }
+    },
+    "@/lib/match-quality/types": {
+      "default": "@/lib/readings/match-quality/types",
+      "symbols": {
+        "CorpusEntry": "@/lib/readings/decisions/judge"
+      }
     }
   },
   "identifiers": {
@@ -278,6 +335,7 @@
     "clerkId": "externalId",
     "clerk_id": "external_id",
     "upsertUserByClerkId": "upsertUserByExternalId",
-    "getUserByClerkId": "getUserByExternalId"
+    "getUserByClerkId": "getUserByExternalId",
+    "JevFraming": "JudgeFraming"
   }
 }

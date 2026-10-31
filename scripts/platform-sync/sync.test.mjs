@@ -163,6 +163,29 @@ describe("partitions and identifiers", () => {
     assert.equal(out, 'import { users } from "@/lib/platform/identity/schema";\nimport { a } from "@/lib/ingest/otlp/a";\nconst id = user.externalId;');
     assert.deepEqual(unmapped, []);
   });
+
+  it("splits a relative import into a partitioned hub once it is absolutized", () => {
+    // Upstream's signals ledger module lands in two layers: the closed-turn readers in the
+    // ledger, the analysis-context loaders with the reading. A sibling file's `./ledger`
+    // import must reach both.
+    const real = (name) => JSON.parse(readFileSync(new URL(name, import.meta.url), "utf8"));
+    const map = real("./map.json");
+    const rewrites = real("./rewrites.json");
+    const codemod = { rules: buildRules(map, rewrites), partitions: rewrites.partitions, identifiers: {}, entries: map.entries };
+    const { code: out, unmapped } = rewriteSource(
+      'import { listClosedTurnsPage, loadAnalysisContext, TURN_PAGE_SIZE } from "./ledger";',
+      codemod,
+      "apps/web/lib/trace-signals/signals/compute.ts",
+    );
+    assert.equal(
+      out,
+      [
+        'import { listClosedTurnsPage, TURN_PAGE_SIZE } from "@/lib/ledger/closed-turns";',
+        'import { loadAnalysisContext } from "@/lib/readings/trace-signals/signals/analysis-context";',
+      ].join("\n"),
+    );
+    assert.deepEqual(unmapped, []);
+  });
 });
 
 describe("private-strings", () => {

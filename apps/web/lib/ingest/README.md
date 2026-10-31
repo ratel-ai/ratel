@@ -23,5 +23,6 @@ What the SDKs send: OTLP traces and logs, runtime events, catalog snapshots.
 | `runtime-catalog/` | upsert from events/snapshots, override pull (`GET /v1/runtime-catalog/overrides`) and edit, adoption; the edit route is `PATCH /api/runtime-catalog/:kind/:entryId` |
 | `runtime-catalog/schema.ts` | `runtime_catalog_entries` |
 | `runtime-catalog/queries.ts` | the upserts from both channels, and `getRuntimeToolCatalogEntries`, the tool list the readings take their vocabulary from (definitions plus names seen only in trace metrics, gateway tools left out) |
+| `runtime-catalog/inventory.ts` | the catalog as retrieval sees it: `loadCatalogInventory` (the corpus fingerprint a signal run is stored against) and `loadToolCorpus` (the tools a judge chooses between); owned, the read half of upstream's quality fingerprint |
 
 Copies and owned files are listed in `scripts/platform-sync/map.json`.

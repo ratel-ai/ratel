@@ -12,7 +12,7 @@ never a higher one; nothing here imports the UI (`@/components`, `@/app`) outsid
 | L1 | `platform/` | db client and migrator, logger, request log, rate limit, http, otel, environment |
 | L1 | `jobs/` | runner, store, drain, scheduler |
 | L2 | `ingest/`, `catalog/` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
-| L3 | `ledger/` | turns, steps, the closed-turn reader (the signal verdict and insight store imports the judge and the workflow labels, so it lands with the trace-signals reading in L4) |
+| L3 | `ledger/` | turns, steps, the closed-turn reader |
 | L4 | `readings/` | intent engine, intent graph, topics, signals, workflows, self-corrections, match quality, tool explorer, decisions |
 | L5 | `synthesis/` | tasks, fixes, health summary, quality, experiments, playground, traces, tool crafter, health imports |
 | L6 | `views/`, `console/` | page and view models; scope, navigation, settings, projects, onboarding, seeds |
@@ -57,3 +57,13 @@ comment (`intent-engine/job.ts`, `decisions/openai.ts`) and the tests whose fixt
 confidential word, copied with a neutral tenant. `intent-graph/event-types.test.ts` reads the
 ingest schema fragment and the single init migration. Deferred with a `$why`: the Intents page
 read models (`breakdown*`, `asks-tree`, `setup`, `view`, `v2`) and `boost-view`.
+
+The Agent health reading (`readings/trace-signals/`) adds the shared helpers cut down from
+L5 modules: `readings/stats.ts` (the Wilson interval and the confident-score ratio from the
+quality metrics), `readings/decisions/judge.ts` and `openai-judge.ts` (the judge contract and
+the one engine, from match quality; the sampling and verdict application land with it),
+`readings/match-quality/sweep.ts` (the project rotation, run trigger inlined) and, in L2,
+`ingest/runtime-catalog/inventory.ts` (the corpus fingerprint and the tool corpus, with the
+two searchable-text resolvers inlined; recording fingerprints stays with quality). The two
+schema fragments `trace-signals/schema.ts` and `topics/schema.ts` are hand-written partitions
+of the upstream schema hub. The reading's own owned files are listed in its `README.md`.
