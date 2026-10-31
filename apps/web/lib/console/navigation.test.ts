@@ -46,6 +46,7 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "traces", href: `/project/${P1}/traces` },
       { id: "catalog", href: `/project/${P1}/catalogs` },
       { id: "intents", href: `/project/${P1}/intents` },
+      { id: "improvements", href: `/project/${P1}/improvement` },
       { id: "settings", href: `/project/${P1}/settings` },
     ],
   );
@@ -66,6 +67,11 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "intents-flows", href: `/project/${P1}/intents/flows` },
       { id: "intents-map", href: `/project/${P1}/intents/map` },
     ],
+  );
+  const improvements = items.find(({ id }) => id === "improvements");
+  assert.deepEqual(
+    improvements?.children?.map(({ id, href }) => ({ id, href })),
+    [{ id: "fixes", href: `/project/${P1}/improvement/fixes` }],
   );
   const catalog = items.find(({ id }) => id === "catalog");
   assert.deepEqual(
@@ -100,7 +106,7 @@ test("outside a project, the organization rail lists its projects page", () => {
   // Inside a project the rail is the project's, even when the organization is known.
   assert.deepEqual(
     consoleNav({ projectId: P1, organizationSlug: "acme", additions: [] }).map(({ id }) => id),
-    ["overview", "health", "traces", "catalog", "intents", "settings"],
+    ["overview", "health", "traces", "catalog", "intents", "improvements", "settings"],
   );
 });
 
@@ -115,7 +121,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     icon: "edition",
     section: "edition",
   });
-  assert.equal(withProject.length, 7);
+  assert.equal(withProject.length, 8);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -126,7 +132,7 @@ test("the OSS composition adds no destination", () => {
   const items = consoleNav({ projectId: P1, additions: createComposition("oss").nav });
   assert.deepEqual(
     items.map(({ id }) => id),
-    ["overview", "health", "traces", "catalog", "intents", "settings"],
+    ["overview", "health", "traces", "catalog", "intents", "improvements", "settings"],
   );
 });
 
@@ -141,6 +147,7 @@ test("Settings sits in a section of its own in both rails, the edition's items i
       "main:traces",
       "main:catalog",
       "main:intents",
+      "main:improvements",
       "settings:settings",
       "edition:edition:/admin",
     ],
@@ -217,6 +224,8 @@ test("the command menu lists the rail's destinations, then every project", () =>
       `Pages|All intents|/project/${P1}/intents`,
       `Pages|Flows|/project/${P1}/intents/flows`,
       `Pages|Map|/project/${P1}/intents/map`,
+      `Pages|Improvements|/project/${P1}/improvement`,
+      `Pages|Fixes|/project/${P1}/improvement/fixes`,
       `Pages|Settings|/project/${P1}/settings`,
       "Pages|Admin|/admin",
       `Projects|One|/project/${P1}/traces`,
@@ -238,12 +247,14 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
       "traces:t",
       "catalog:c",
       "intents:i",
+      "improvements:",
       "settings:s",
       "edition:/admin:",
     ],
   );
   assert.equal(shortcutHref(project, "T"), `/project/${P1}/traces`);
   assert.equal(shortcutHref(project, "c"), `/project/${P1}/catalogs`);
+  assert.equal(shortcutHref(project, "f"), `/project/${P1}/improvement/fixes`);
   assert.equal(shortcutHref(project, "x"), null);
   const organization = consoleNav({
     projectId: undefined,

@@ -226,12 +226,13 @@ test("the expected effect comes from the source's own measurement", () => {
     detail: "3 → 5 of 5 searches",
     tone: "good",
     basis: "replay",
+    also: [],
   });
   // A draft's effect is what its filler measured, carried as is.
   const merge = byTitle("Merge find_task and assign_task");
   assert.equal(merge.effect?.value, "2 → 1 calls");
   assert.deepEqual([merge.effect?.figure, merge.effect?.unit], ["2 → 1", "calls"]);
-  assert.equal(merge.effect?.detail, "−40 model calls in all");
+  assert.equal(merge.effect?.detail, "−40 model calls in all, over the window · 40 times together");
   assert.equal(merge.effect?.basis, "runs");
   assert.deepEqual(merge.gain, { roundTrips: 40, calls: 40, ms: 0 });
   assert.equal(byTitle("Retire legacy_export").effect?.value, "−1 tool per list");

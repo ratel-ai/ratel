@@ -1,15 +1,18 @@
-import { redirect } from "next/navigation";
+import { loadFixesPage } from "@/app/(console)/project/[projectId]/improvement/fixes/data";
+import { FixesNoDatabase, FixesPage } from "@/components/console/fixes/FixesPage";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Fixes" };
 
 /**
- * Where a fix is made. The Fixes page is not part of this build yet, so the links the health
- * cards, Tasks and Self-corrections carry lead to the Agent health summary, where each fix's
- * issue is listed. A temporary redirect: the page lands under this path.
+ * Improvements, Fixes: one list of the changes that would make the agent
+ * better, whatever found them. Filters (`?kind=`, `?task=`, `?tool=`,
+ * `?topic=`) and the open fix (`?peek=`) live in the URL and are read on
+ * the client.
  */
-export default async function FixesRedirectPage({
-  params,
-}: {
-  params: Promise<{ projectId: string }>;
-}) {
+export default async function FixesRoute({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  redirect(`/project/${encodeURIComponent(projectId)}/health`);
+  const data = await loadFixesPage(projectId);
+  if (data.kind === "no-db") return <FixesNoDatabase />;
+  return <FixesPage projectId={data.projectId} model={data.model} now={data.now} />;
 }

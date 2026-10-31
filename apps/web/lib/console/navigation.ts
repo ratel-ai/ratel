@@ -10,6 +10,7 @@ export type NavIconName =
   | "overview"
   | "health"
   | "intents"
+  | "improvements"
   | "catalog"
   | "traces"
   | "settings"
@@ -180,6 +181,22 @@ export function consoleNav({
             },
             { id: "intents-flows", label: "Flows", href: `${root}/intents/flows`, icon: "intents" },
             { id: "intents-map", label: "Map", href: `${root}/intents/map`, icon: "intents" },
+          ],
+        },
+        {
+          id: "improvements",
+          label: "Improvements",
+          href: `${root}/improvement`,
+          icon: "improvements",
+          exact: true,
+          children: [
+            {
+              id: "fixes",
+              label: "Fixes",
+              href: `${root}/improvement/fixes`,
+              icon: "improvements",
+              shortcut: "f",
+            },
           ],
         },
         {

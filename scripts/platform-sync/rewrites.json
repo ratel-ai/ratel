@@ -44,7 +44,9 @@
     { "from": "@/components/health/", "to": "@/components/console/health/" },
     { "from": "@/components/tasks/", "to": "@/components/console/tasks/" },
     { "from": "@/components/self-corrections/", "to": "@/components/console/self-corrections/" },
-    { "from": "@/components/fixes/v2/kind-icons", "to": "@/components/console/fixes/kind-icons", "exact": true },
+    { "from": "@/components/fixes/v2/", "to": "@/components/console/fixes/" },
+    { "from": "@/components/ui/useCopyToClipboard", "to": "@ratel/design-system/use-copy-to-clipboard", "exact": true },
+    { "from": "@/app/(app)/project/[projectId]/improvement/fixes/", "to": "@/app/(console)/project/[projectId]/improvement/fixes/" },
     { "from": "@/components/traces/v2/", "to": "@/components/console/traces/" },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
     { "from": "@/components/traces/TraceComparePropertiesTable", "to": "@/components/console/traces/compare/TraceComparePropertiesTable", "exact": true },
@@ -352,7 +354,8 @@
     "@/lib/intent-graph/view": {
       "default": "@/lib/views/intents/adaptive-view",
       "symbols": {
-        "capabilityCatalogHref": "@/lib/views/intents/hrefs"
+        "capabilityCatalogHref": "@/lib/views/intents/hrefs",
+        "relativeTimeLabel": "@/lib/views/fixes/relative-time"
       }
     },
     "@/lib/dotmatrix-hooks": {

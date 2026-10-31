@@ -63,5 +63,5 @@ Not here, with a `$why` in the map: the public share links and the v1 Summary co
 alone use, the health importer, the turn detail (it is the turn page of Traces), the Boost
 panel (adaptive ranking), and the render tests, which import components and land with the pages.
 
-Fix leads still point at `/improvement/fixes` and `/quality/descriptions`, as upstream does;
-those routes redirect to the Summary and the Catalog until the Fixes and Quality pages land.
+Fix leads point at `/improvement/fixes` and `/quality/descriptions`, as upstream does; the
+second redirects to the Catalog until the Quality pages land.

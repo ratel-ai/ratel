@@ -84,6 +84,15 @@ export interface FixEffect {
   tone: "good" | "bad" | "neutral";
   /** A replay of past searches, or the agent's own runs. */
   basis: "replay" | "runs";
+  /** The other numbers it moves, shown as marks beside the headline in the row; the headline is not repeated. */
+  also: EffectReading[];
+}
+
+/** One more number a fix moves: the mark a row shows, and the whole reading for its tooltip. */
+export interface EffectReading {
+  icon: EffectChip["icon"];
+  /** "−686 ms/request waiting", with how it adds up when the source said: "40 model calls × $0.0095 per model call". */
+  label: string;
 }
 
 /** What the fix saves over the window, when the source measured it; summed with care (`fixStats`). */

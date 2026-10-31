@@ -57,8 +57,8 @@ export const NO_PRICE: RoundTripPrice = {
 
 /** One span of a proposed description, marked where it differs from the current one. */
 export interface DiffSpan {
+  op: "same" | "added" | "removed";
   text: string;
-  kind: "same" | "added" | "removed";
 }
 
 export type ChangeDirection = "up" | "down" | "flat";
@@ -93,4 +93,21 @@ export interface SuggestionRow {
   rationale: string;
   examples: SuggestionExample[];
   moreExamples: number;
+}
+
+const ACTION_FAILED = "Something went wrong. Nothing changed; try again in a moment.";
+
+/**
+ * A server action's answer, with a throw (a network drop, a server error) folded into a
+ * failure, so the caller always gets one to show and the row it hid comes back.
+ */
+export async function settle(
+  action: () => Promise<{ ok: boolean; message?: string }>,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const result = await action();
+    return result.ok ? { ok: true } : { ok: false, message: result.message ?? ACTION_FAILED };
+  } catch {
+    return { ok: false, message: ACTION_FAILED };
+  }
 }

@@ -16,7 +16,7 @@ here rather than in the design system.
 | `health/` | Agent health's Summary (`v2/`: the state block, readings, turn shapes, issues with their fix leads and example turns, the self-corrections row, tasks that need a look, call order, unserved asks, the window switch and the report menu), the tool journey it draws, the setup callout and guide, and `report/` (the printable member report). Owned: `v2/SummaryView`, `v2/SummaryMenu`, `v2/HealthStateV2`, `v2/WindowSwitch` (no importer, share link or plan link), `v2/IssuesSection` and `v2/IssueExamples` (the lock on what the limits hide names no plan) and `capture-nudge-model` |
 | `tasks/` | Agent health › Tasks: the table, one task (steps, panels, flow diagram, sections), a session turn by turn, the skeletons |
 | `self-corrections/` | Agent health › Self-corrections: the hero, where it happens, what the agent said, the change to make, filters and the examples read on demand |
-| `fixes/` | the kind icons the fix leads and marks share; the Fixes page itself lands with the tool crafter |
+| `fixes/` | Improvements › Fixes: the header and filters, one table per thing you do, a fix's panel, and the kind icons the fix leads and marks share |
 | `intents/` | the Intents pages: All intents (the table, an intent's panel with its breakdown, steps, sentiment and examples), Flows (the canvas and step panel) and Map (the lens views), the skeletons, the states before a reading and "Read now"; all copies, the adaptive-ranking graph picker left out |
 | `intent-map/` | the Map's drawing: intents as blobs, the asks pack, the tool network and globe, their chrome, marks, labels and measurements; all copies |
 
