@@ -38,6 +38,10 @@
     { "from": "@/lib/navigation/v2", "to": "@/lib/console/navigation", "exact": true },
     { "from": "@/lib/tasks/palette", "to": "@ratel/design-system/task-colors", "exact": true },
     { "from": "@/components/settings/v2/", "to": "@/components/console/settings/" },
+    { "from": "@/components/health/", "to": "@/components/console/health/" },
+    { "from": "@/components/tasks/", "to": "@/components/console/tasks/" },
+    { "from": "@/components/self-corrections/", "to": "@/components/console/self-corrections/" },
+    { "from": "@/components/fixes/v2/kind-icons", "to": "@/components/console/fixes/kind-icons", "exact": true },
     { "from": "@/components/traces/v2/", "to": "@/components/console/traces/" },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
     { "from": "@/components/traces/TraceComparePropertiesTable", "to": "@/components/console/traces/compare/TraceComparePropertiesTable", "exact": true },
@@ -51,6 +55,7 @@
     { "from": "@/components/shell/DatabaseUnavailable", "to": "@/components/console/shell/DatabaseUnavailable", "exact": true },
     { "from": "@/components/explore/SkillEditor", "to": "@/components/console/catalog/SkillEditor", "exact": true },
     { "from": "@/components/data/PartialDataValue", "to": "@/lib/synthesis/catalog/provenance", "exact": true },
+    { "from": "@/app/(app)/project/[projectId]/health/signal-actions", "to": "@/app/(console)/project/[projectId]/health/signal-actions", "exact": true },
     { "from": "@/app/(app)/settings/api-key-actions", "to": "@/app/(console)/project/[projectId]/settings/api-keys/actions", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/settings/developer/actions", "to": "@/app/(console)/project/[projectId]/settings/developer/actions", "exact": true }
   ],

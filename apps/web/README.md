@@ -17,7 +17,7 @@ intelligence that reads them. One Next.js app, two editions
 ## Layout
 
 ```
-app/              routes: the console pages, the /api/* handlers, (ee)/ stubs when ee/src is present (gitignored)
+app/              routes: the console pages (Overview, Agent health, Traces, Catalog, Settings), the printable report under (report)/, the /api/* handlers, (ee)/ stubs when ee/src is present (gitignored)
 components/       React components; the design system lives in packages/design-system
 lib/              the core, in layers (see lib/README.md)
 Dockerfile        targets `oss` and `cloud`; build context is the repository root
