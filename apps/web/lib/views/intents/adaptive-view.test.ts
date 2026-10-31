@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { relativeTimeLabel } from "./relative-time";
+import { relativeTimeLabel } from "./adaptive-view";
 
 test("relativeTimeLabel picks the coarsest useful unit", () => {
   const now = new Date("2026-06-01T00:00:00Z");

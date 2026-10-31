@@ -19,7 +19,7 @@ import {
   revertProposalAction,
 } from "@/app/(console)/project/[projectId]/improvement/match-quality/actions";
 import { formatTimestamp } from "@/lib/synthesis/traces/format";
-import { relativeTimeLabel } from "@/lib/views/fixes/relative-time";
+import { relativeTimeLabel } from "@/lib/views/intents/adaptive-view";
 import {
   catalogEditHref,
   descriptionsSearch,

@@ -10,7 +10,7 @@ import { SquareArrowOutUpRight } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatTimestamp } from "@/lib/synthesis/traces/format";
-import { relativeTimeLabel } from "@/lib/views/fixes/relative-time";
+import { relativeTimeLabel } from "@/lib/views/intents/adaptive-view";
 import { DISAGREEMENT_LABEL, type DisagreementRow } from "@/lib/views/quality/experiments";
 import { percent } from "@/lib/views/quality/model";
 import { diffRows, RankingList } from "./RankingList";

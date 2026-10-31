@@ -204,6 +204,13 @@ export function consoleNav({
               icon: "improvements",
               shortcut: "q",
             },
+            {
+              id: "adaptive-ranking",
+              label: "Adaptive ranking",
+              href: `${root}/improvement/adaptive-ranking`,
+              icon: "improvements",
+              shortcut: "a",
+            },
           ],
         },
         {

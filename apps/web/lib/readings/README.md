@@ -34,7 +34,7 @@ exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 tool registries the match-quality reading builds over the project's catalog, for Cloud's own
 with-and-without ranking of each search. Unset, the fold builds the graph and stores no
 shadow turns. The Boost panel's reads of those turns (`loadBoostSelections` and the outcomes
-around live) land with match quality, as do the Intents page read models
+around live) are in `views/adaptive-ranking`, as the Intents page read models are in `views/intents`
 (`breakdown`, `asks-tree`, `setup`, `view`, `v2`). The ledger's own seams are listed in
 `lib/ledger/README.md`.
 

@@ -4,7 +4,7 @@ import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { formatTimestamp } from "@/lib/synthesis/traces/format";
-import { relativeTimeLabel } from "@/lib/views/fixes/relative-time";
+import { relativeTimeLabel } from "@/lib/views/intents/adaptive-view";
 import type { ExperimentRow } from "@/lib/views/quality/experiments";
 import { NO_VALUE, percent } from "@/lib/views/quality/model";
 

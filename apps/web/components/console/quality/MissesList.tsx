@@ -14,7 +14,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { formatTimestamp } from "@/lib/synthesis/traces/format";
-import { relativeTimeLabel } from "@/lib/views/fixes/relative-time";
+import { relativeTimeLabel } from "@/lib/views/intents/adaptive-view";
 import type { MissRow } from "@/lib/views/quality/miss-rows";
 import {
   EVIDENCE_LABEL,

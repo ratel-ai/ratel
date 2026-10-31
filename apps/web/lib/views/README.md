@@ -65,5 +65,7 @@ panel (adaptive ranking), and the render tests, which import components and land
 
 Fix leads point at `/improvement/fixes` and `/quality/descriptions`, as upstream does.
 
+`adaptive-ranking/` holds the Adaptive ranking page's read models and the Boost reads.
+
 `quality/` holds the Quality pages' read models. `quality/fix-rewrites.ts` fills
 `fixSeams.loadRewrites` when `fixes/load.ts` loads it.

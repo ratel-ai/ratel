@@ -74,6 +74,7 @@ test("with a project, the rail links every core destination to that project", ()
     [
       { id: "fixes", href: `/project/${P1}/improvement/fixes` },
       { id: "quality", href: `/project/${P1}/quality` },
+      { id: "adaptive-ranking", href: `/project/${P1}/improvement/adaptive-ranking` },
     ],
   );
   const catalog = items.find(({ id }) => id === "catalog");
@@ -230,6 +231,7 @@ test("the command menu lists the rail's destinations, then every project", () =>
       `Pages|Improvements|/project/${P1}/improvement`,
       `Pages|Fixes|/project/${P1}/improvement/fixes`,
       `Pages|Quality|/project/${P1}/quality`,
+      `Pages|Adaptive ranking|/project/${P1}/improvement/adaptive-ranking`,
       `Pages|Settings|/project/${P1}/settings`,
       "Pages|Admin|/admin",
       `Projects|One|/project/${P1}/traces`,

@@ -27,9 +27,9 @@ import {
 } from "@/lib/views/fixes/groups";
 import { descriptionHref, type FixFilters, hasFilters } from "@/lib/views/fixes/href";
 import { FIX_KIND_LABELS, FIX_KINDS, type FixKind } from "@/lib/views/fixes/kinds";
-import { relativeTimeLabel } from "@/lib/views/fixes/relative-time";
 import { filterFixes, findFix } from "@/lib/views/fixes/select";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
+import { relativeTimeLabel } from "@/lib/views/intents/adaptive-view";
 import { settle } from "@/lib/views/quality/suggestions";
 import { CopyChangeButton } from "./CopyChangeButton";
 import { AffectsPins } from "./FixAffects";

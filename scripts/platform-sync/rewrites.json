@@ -44,6 +44,7 @@
     { "from": "@/components/tasks/", "to": "@/components/console/tasks/" },
     { "from": "@/components/self-corrections/", "to": "@/components/console/self-corrections/" },
     { "from": "@/components/fixes/v2/", "to": "@/components/console/fixes/" },
+    { "from": "@/components/adaptive-ranking/v2/", "to": "@/components/console/adaptive-ranking/" },
     { "from": "@/components/quality/v2/", "to": "@/components/console/quality/" },
     { "from": "@/app/(app)/project/[projectId]/improvement/match-quality/", "to": "@/app/(console)/project/[projectId]/improvement/match-quality/" },
     { "from": "@/components/ui/useCopyToClipboard", "to": "@ratel/design-system/use-copy-to-clipboard", "exact": true },
@@ -375,8 +376,7 @@
     "@/lib/intent-graph/view": {
       "default": "@/lib/views/intents/adaptive-view",
       "symbols": {
-        "capabilityCatalogHref": "@/lib/views/intents/hrefs",
-        "relativeTimeLabel": "@/lib/views/fixes/relative-time"
+        "capabilityCatalogHref": "@/lib/views/intents/hrefs"
       }
     },
     "@/lib/match-quality/judge": {
