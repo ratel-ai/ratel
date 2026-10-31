@@ -56,6 +56,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   `health/flow-journey-layout.test.ts`, `intents/topics-view.test.ts`, `intents/map/{classify,
   flow,map-model,tool-globe}.test.ts` and `intents/map/tool-network-fixture.ts`.
 
+The render tests of the Intents pages sit here too (`intents/intents-ui.test.ts`, owned without
+the adaptive-ranking cases, and `intents/map/{intent-map,tool-network}-ui.test.ts`).
+
 Not here, with a `$why` in the map: the public share links and the v1 Summary components they
 alone use, the health importer, the turn detail (it is the turn page of Traces), the Boost
 panel (adaptive ranking), and the render tests, which import components and land with the pages.

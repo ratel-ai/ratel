@@ -6,6 +6,7 @@ import {
   FolderKanban,
   HeartPulse,
   House,
+  Orbit,
   Settings,
 } from "lucide-react";
 import type { NavIconName } from "@/lib/console/navigation";
@@ -14,6 +15,7 @@ import type { NavIconName } from "@/lib/console/navigation";
 export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   overview: House,
   health: HeartPulse,
+  intents: Orbit,
   catalog: BookOpen,
   traces: Activity,
   settings: Settings,

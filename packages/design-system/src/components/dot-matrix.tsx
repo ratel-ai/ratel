@@ -39,10 +39,18 @@ export function DotEmblem({ className }: { className?: string }) {
   );
 }
 
-/** The 5×5 mark in motion, for a wait: a band of light crossing its diagonals. */
-export function DotLoader({ className }: { className?: string }) {
+/**
+ * The 5×5 mark in motion, for a wait: a band of light crossing its diagonals. With a `label` it
+ * is a status a screen reader announces ("Loading intents"); without one it is decoration.
+ */
+export function DotLoader({ className, label }: { className?: string; label?: string }) {
   return (
-    <span aria-hidden className={cn("inline-grid grid-cols-5 gap-[1.5px] text-fg", className)}>
+    <span
+      role={label ? "status" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+      className={cn("inline-grid grid-cols-5 gap-[1.5px] text-fg", className)}
+    >
       {Array.from({ length: 25 }, (_, index) => {
         const diagonal = Math.floor(index / 5) + (index % 5);
         return (

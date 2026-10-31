@@ -45,6 +45,7 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "health", href: `/project/${P1}/health` },
       { id: "traces", href: `/project/${P1}/traces` },
       { id: "catalog", href: `/project/${P1}/catalogs` },
+      { id: "intents", href: `/project/${P1}/intents` },
       { id: "settings", href: `/project/${P1}/settings` },
     ],
   );
@@ -55,6 +56,15 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "health-summary", href: `/project/${P1}/health` },
       { id: "health-tasks", href: `/project/${P1}/health/tasks` },
       { id: "health-self-corrections", href: `/project/${P1}/health/self-corrections` },
+    ],
+  );
+  const intents = items.find(({ id }) => id === "intents");
+  assert.deepEqual(
+    intents?.children?.map(({ id, href }) => ({ id, href })),
+    [
+      { id: "intents-topics", href: `/project/${P1}/intents` },
+      { id: "intents-flows", href: `/project/${P1}/intents/flows` },
+      { id: "intents-map", href: `/project/${P1}/intents/map` },
     ],
   );
   const catalog = items.find(({ id }) => id === "catalog");
@@ -90,7 +100,7 @@ test("outside a project, the organization rail lists its projects page", () => {
   // Inside a project the rail is the project's, even when the organization is known.
   assert.deepEqual(
     consoleNav({ projectId: P1, organizationSlug: "acme", additions: [] }).map(({ id }) => id),
-    ["overview", "health", "traces", "catalog", "settings"],
+    ["overview", "health", "traces", "catalog", "intents", "settings"],
   );
 });
 
@@ -105,7 +115,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     icon: "edition",
     section: "edition",
   });
-  assert.equal(withProject.length, 6);
+  assert.equal(withProject.length, 7);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -116,7 +126,7 @@ test("the OSS composition adds no destination", () => {
   const items = consoleNav({ projectId: P1, additions: createComposition("oss").nav });
   assert.deepEqual(
     items.map(({ id }) => id),
-    ["overview", "health", "traces", "catalog", "settings"],
+    ["overview", "health", "traces", "catalog", "intents", "settings"],
   );
 });
 
@@ -130,6 +140,7 @@ test("Settings sits in a section of its own in both rails, the edition's items i
       "main:health",
       "main:traces",
       "main:catalog",
+      "main:intents",
       "settings:settings",
       "edition:edition:/admin",
     ],
@@ -149,6 +160,7 @@ test("the active item matches exact index pages and nested paths", () => {
   // The Summary child shares the group's href: the most specific item wins, and the group opens around it.
   assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health-summary");
   assert.equal(activeNavItemId(`/project/${P1}/health/tasks/t1`, items), "health-tasks");
+  assert.equal(activeNavItemId(`/project/${P1}/intents/map`, items), "intents-map");
   assert.equal(activeNavItemId(`/project/${P1}/catalogs`, items), "catalog");
   assert.equal(activeNavItemId(`/project/${P1}/catalogs/tools`, items), "catalog-tools");
   assert.equal(activeNavItemId(`/project/${P1}/catalogs/skills/x`, items), "catalog-skills");
@@ -201,6 +213,10 @@ test("the command menu lists the rail's destinations, then every project", () =>
       `Pages|Tools|/project/${P1}/catalogs/tools`,
       `Pages|Skills|/project/${P1}/catalogs/skills`,
       `Pages|Test a search|/project/${P1}/playground`,
+      `Pages|Intents|/project/${P1}/intents`,
+      `Pages|All intents|/project/${P1}/intents`,
+      `Pages|Flows|/project/${P1}/intents/flows`,
+      `Pages|Map|/project/${P1}/intents/map`,
       `Pages|Settings|/project/${P1}/settings`,
       "Pages|Admin|/admin",
       `Projects|One|/project/${P1}/traces`,
@@ -216,7 +232,15 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
   const project = consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] });
   assert.deepEqual(
     project.map(({ id, shortcut }) => `${id}:${shortcut ?? ""}`),
-    ["overview:o", "health:h", "traces:t", "catalog:c", "settings:s", "edition:/admin:"],
+    [
+      "overview:o",
+      "health:h",
+      "traces:t",
+      "catalog:c",
+      "intents:i",
+      "settings:s",
+      "edition:/admin:",
+    ],
   );
   assert.equal(shortcutHref(project, "T"), `/project/${P1}/traces`);
   assert.equal(shortcutHref(project, "c"), `/project/${P1}/catalogs`);

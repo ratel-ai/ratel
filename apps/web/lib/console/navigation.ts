@@ -9,6 +9,7 @@ import type { NavItem as EditionNavItem } from "@/lib/composition/ports";
 export type NavIconName =
   | "overview"
   | "health"
+  | "intents"
   | "catalog"
   | "traces"
   | "settings"
@@ -160,6 +161,25 @@ export function consoleNav({
               href: `${root}/playground`,
               icon: "catalog",
             },
+          ],
+        },
+        {
+          id: "intents",
+          label: "Intents",
+          href: `${root}/intents`,
+          icon: "intents",
+          exact: true,
+          shortcut: "i",
+          children: [
+            {
+              id: "intents-topics",
+              label: "All intents",
+              href: `${root}/intents`,
+              icon: "intents",
+              exact: true,
+            },
+            { id: "intents-flows", label: "Flows", href: `${root}/intents/flows`, icon: "intents" },
+            { id: "intents-map", label: "Map", href: `${root}/intents/map`, icon: "intents" },
           ],
         },
         {
