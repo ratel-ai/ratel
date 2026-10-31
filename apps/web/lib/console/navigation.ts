@@ -6,7 +6,14 @@ import type { NavItem as EditionNavItem } from "@/lib/composition/ports";
  * listed: a page that has not landed is absent, never disabled.
  */
 
-export type NavIconName = "overview" | "catalog" | "traces" | "settings" | "projects" | "edition";
+export type NavIconName =
+  | "overview"
+  | "health"
+  | "catalog"
+  | "traces"
+  | "settings"
+  | "projects"
+  | "edition";
 
 export interface NavItem {
   /** Stable across renders and projects: core ids are fixed, edition ids derive from the href. */
@@ -101,6 +108,30 @@ export function consoleNav({
           icon: "overview",
           exact: true,
           shortcut: "o",
+        },
+        {
+          id: "health",
+          label: "Agent health",
+          href: `${root}/health`,
+          icon: "health",
+          exact: true,
+          shortcut: "h",
+          children: [
+            {
+              id: "health-summary",
+              label: "Summary",
+              href: `${root}/health`,
+              icon: "health",
+              exact: true,
+            },
+            { id: "health-tasks", label: "Tasks", href: `${root}/health/tasks`, icon: "health" },
+            {
+              id: "health-self-corrections",
+              label: "Self-corrections",
+              href: `${root}/health/self-corrections`,
+              icon: "health",
+            },
+          ],
         },
         { id: "traces", label: "Traces", href: `${root}/traces`, icon: "traces", shortcut: "t" },
         {

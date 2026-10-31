@@ -13,6 +13,10 @@ here rather than in the design system.
 | `badgers/` | the honey-badger illustrations from `public/badgers/`, with the badger mark as the fallback when a file is missing |
 | `catalog/` | the Catalog pages: the tree of tools and skills, Tools, Skills, the item detail, and the skill editor (rebuilt on the design system) |
 | `playground/` | Test a search: a prompt ranked against the live catalog, with what-if edits to descriptions (rebuilt on the design system) |
+| `health/` | Agent health's Summary (`v2/`: the state block, readings, turn shapes, issues with their fix leads and example turns, the self-corrections row, tasks that need a look, call order, unserved asks, the window switch and the report menu), the tool journey it draws, the setup callout and guide, and `report/` (the printable member report). Owned: `v2/SummaryView`, `v2/SummaryMenu`, `v2/HealthStateV2`, `v2/WindowSwitch` (no importer, share link or plan link), `v2/IssuesSection` and `v2/IssueExamples` (the lock on what the limits hide names no plan) and `capture-nudge-model` |
+| `tasks/` | Agent health › Tasks: the table, one task (steps, panels, flow diagram, sections), a session turn by turn, the skeletons |
+| `self-corrections/` | Agent health › Self-corrections: the hero, where it happens, what the agent said, the change to make, filters and the examples read on demand |
+| `fixes/` | the kind icons the fix leads and marks share; the Fixes page itself lands with the tool crafter |
 
 The navigation model behind the rail is `lib/console/navigation.ts`. Copies and owned files are
 listed in `scripts/platform-sync/map.json`.
