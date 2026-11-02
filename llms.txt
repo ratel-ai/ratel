@@ -20,7 +20,7 @@ cd ratel
 docker compose up -d --build --wait
 ```
 
-The console is then at `http://localhost:3000`. `--wait` returns once the application is healthy, so its exit code is reliable. The command is safe to run again, and migrations run on boot.
+The console is then on port 3000 of that machine. `--wait` returns once the application is healthy, so its exit code is reliable. The command is safe to run again, and migrations run on boot.
 
 Optional demo data, a sample project with 30 days of agent activity. Running it again replaces that project:
 
