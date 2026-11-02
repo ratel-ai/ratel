@@ -337,7 +337,17 @@
         "enqueueFoldIntentGraphJob": "@/lib/readings/intent-graph/queries",
         "listProjectsWithUnfoldedEvents": "@/lib/readings/intent-graph/queries",
         "getRuntimeToolCatalogEntries": "@/lib/ingest/runtime-catalog/queries",
-        "RuntimeToolCatalogEntry": "@/lib/ingest/runtime-catalog/queries"
+        "RuntimeToolCatalogEntry": "@/lib/ingest/runtime-catalog/queries",
+        "hasProjectIngestedEvents": "@/lib/ingest/otlp/queries",
+        "EventPresenceDb": "@/lib/ingest/otlp/queries",
+        "getDailyAggregates": "@/lib/ingest/otlp/queries",
+        "getToolMetrics": "@/lib/ingest/otlp/queries",
+        "listSkillsSearchedButNeverInvoked": "@/lib/ingest/trace-events/queries",
+        "listTopErroringTools": "@/lib/ingest/trace-events/queries",
+        "listSearchQueriesForSkillHit": "@/lib/ingest/trace-events/queries",
+        "getProjectHomeEntityCounts": "@/lib/views/home/queries",
+        "ProjectHomeEntityCounts": "@/lib/views/home/queries",
+        "ProjectHomeQueriesDb": "@/lib/views/home/queries"
       }
     },
     "@/lib/trace-signals/signals/ledger": {

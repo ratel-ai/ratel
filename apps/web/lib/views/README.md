@@ -17,6 +17,7 @@ identical.
 | `fixes/` | Fixes, the one list of changes the pages link an issue to: `build` (the model), `load` (the reads), `select`, `groups`, `effect`, `acted`, `skill-gaps`, `topics`, `copy`, `kinds`, `href` |
 | `intents/` | the Intents pages: the topic list and detail (`topics-*`), an intent's breakdown and asks tree (`breakdown*`, `asks-tree`), `hrefs` |
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
+| `home/` | the Overview: `overview-model` (the window, change figures and context split as plain data) and `queries` (`getProjectHomeEntityCounts`: the skill and experiment counts the recap and the MCP project overview open with) |
 
 ## Seams
 
@@ -59,6 +60,8 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   with its PGlite test `tool-steps.integration.test.ts`); `intents/hrefs.ts`:
   `capabilityCatalogHref` on its own (the rest of upstream's file is the adaptive-ranking page
   view).
+- `home/queries.ts`: the home-recap partition of upstream's queries hub (`getProjectHomeEntityCounts`),
+  with its PGlite test `home/queries.integration.test.ts`.
 - Tests whose fixtures named a confidential word, copied with a neutral tenant:
   `health/flow-journey-layout.test.ts`, `intents/topics-view.test.ts`, `intents/map/{classify,
   flow,map-model,tool-globe}.test.ts` and `intents/map/tool-network-fixture.ts`.
