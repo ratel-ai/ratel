@@ -1222,7 +1222,7 @@
     { "from": "apps/web/lib/health-imports/ready-email.ts", "mode": "excluded" },
     { "from": "apps/web/lib/health-imports/relay.ts", "mode": "excluded" },
     { "from": "apps/web/lib/health-imports/relay-secrets.ts", "mode": "excluded" },
-    { "from": "apps/web/lib/mcp/oauth-metadata.ts", "mode": "excluded" },
+    { "from": "apps/web/lib/mcp/oauth-metadata.ts", "mode": "excluded", "$why": "OAuth discovery needs the private identity provider" },
     { "from": "apps/web/scripts/seed-quality-shadow.mts", "mode": "excluded" },
     { "from": "apps/web/scripts/.local", "mode": "excluded" },
     { "from": "apps/web/app/(admin)", "mode": "excluded" },
@@ -1258,6 +1258,17 @@
     { "from": "infra", "mode": "excluded" },
     { "from": "deploy", "mode": "excluded" },
     { "$slice": "mcp", "from": "apps/web/app/api/v1/jobs/[id]/route.ts", "to": "apps/web/app/api/v1/jobs/[id]/route.ts", "mode": "copy" },
-    { "from": "apps/web/app/api/v1/suggestions/[[...path]]/route.ts", "to": "apps/web/app/api/v1/suggestions/[[...path]]/route.ts", "mode": "copy" }
+    { "from": "apps/web/app/api/v1/suggestions/[[...path]]/route.ts", "to": "apps/web/app/api/v1/suggestions/[[...path]]/route.ts", "mode": "copy" },
+    { "from": "apps/web/lib/mcp", "to": "apps/web/lib/mcp", "mode": "copy" },
+    { "from": "apps/web/lib/mcp/README.md", "to": "apps/web/lib/mcp/README.md", "mode": "owned", "$why": "no upstream counterpart; keeps the module's README out of the folder mirror" },
+    { "from": "apps/web/lib/mcp/auth.ts", "to": "apps/web/lib/mcp/auth.ts", "mode": "owned", "$why": "project keys only: the OAuth verifier needs the private identity provider; the organization is a plain id, slug and plan" },
+    { "from": "apps/web/lib/mcp/naming.ts", "to": "apps/web/lib/mcp/naming.ts", "mode": "owned", "$why": "one internal product name is a confidential word" },
+    { "from": "apps/web/lib/mcp/route-handler.test.ts", "to": "apps/web/lib/mcp/route-handler.test.ts", "mode": "owned", "$why": "the verifier-crash fixture names no vendor" },
+    { "from": "apps/web/lib/mcp/operations/account.ts", "to": "apps/web/lib/mcp/operations/account.ts", "mode": "owned", "$why": "no get_embedding_usage: the Embedding API and its credit ledger stay private" },
+    { "from": "apps/web/lib/mcp/operations/playground.ts", "to": "apps/web/lib/mcp/operations/playground.ts", "mode": "owned", "$why": "embeds through the embedding-provider port, not a vendor key" },
+    { "from": "apps/web/lib/mcp/operations/contract.test.ts", "to": "apps/web/lib/mcp/operations/contract.test.ts", "mode": "owned", "$why": "the reviewed snapshot without get_embedding_usage" },
+    { "from": "apps/web/lib/mcp/operations/compatibility.test.ts", "to": "apps/web/lib/mcp/operations/compatibility.test.ts", "mode": "owned", "$why": "the published surface without get_embedding_usage" },
+    { "from": "apps/web/lib/mcp/oauth-metadata.test.ts", "mode": "excluded", "$why": "OAuth discovery needs the private identity provider" },
+    { "from": "apps/web/app/api/mcp/route.ts", "to": "apps/web/app/api/mcp/route.ts", "mode": "copy" }
   ]
 }

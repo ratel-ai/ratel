@@ -912,7 +912,17 @@
         "apps/web/app/api/skills-catalog/**",
         "apps/web/app/api/runtime-catalog/\\[kind\\]/\\[entryId\\]/route.ts",
         "apps/web/app/api/v1/jobs/\\[id\\]/route.ts",
-        "apps/web/app/api/v1/suggestions/\\[\\[...path\\]\\]/route.ts"
+        "apps/web/app/api/v1/suggestions/\\[\\[...path\\]\\]/route.ts",
+        "apps/web/lib/mcp/**",
+        "!apps/web/lib/mcp/README.md",
+        "!apps/web/lib/mcp/auth.ts",
+        "!apps/web/lib/mcp/naming.ts",
+        "!apps/web/lib/mcp/route-handler.test.ts",
+        "!apps/web/lib/mcp/operations/account.ts",
+        "!apps/web/lib/mcp/operations/playground.ts",
+        "!apps/web/lib/mcp/operations/contract.test.ts",
+        "!apps/web/lib/mcp/operations/compatibility.test.ts",
+        "apps/web/app/api/mcp/route.ts"
       ],
       "linter": {
         "rules": {

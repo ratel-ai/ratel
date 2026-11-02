@@ -399,7 +399,9 @@
       "default": "@/lib/synthesis/match-quality/types",
       "symbols": {
         "CorpusEntry": "@/lib/readings/decisions/judge",
-        "Candidate": "@/lib/synthesis/match-quality/types"
+        "Candidate": "@/lib/synthesis/match-quality/types",
+        "PROPOSAL_STATUSES": "@/lib/synthesis/match-quality/types",
+        "ProposalStatus": "@/lib/synthesis/match-quality/types"
       }
     },
     "@/lib/intent-graph/view": {
@@ -457,6 +459,7 @@
     "clerk_id": "external_id",
     "upsertUserByClerkId": "upsertUserByExternalId",
     "getUserByClerkId": "getUserByExternalId",
+    "clerkUserId": "externalUserId",
     "JevFraming": "JudgeFraming"
   }
 }

@@ -16,7 +16,7 @@ never a higher one; nothing here imports the UI (`@/components`, `@/app`) outsid
 | L4 | `readings/` | intent engine, intent graph, topics, signals, workflows, self-corrections, tool explorer, decisions |
 | L5 | `synthesis/` | match quality, quality, experiments, playground, traces, tool crafter, health imports |
 | L6 | `views/`, `console/` | the page read models (Agent health, Tasks, Fixes, Intents); scope, navigation, settings, projects, onboarding, seeds |
-| L7 | `mcp/` | the MCP operations |
+| L7 | `mcp/` | the MCP server behind `POST /api/mcp`: auth, dispatch, the operations, and the connect page's snippets (`mcp/connect/`); its owned files are listed in `mcp/README.md` |
 
 Each module owns its `schema.ts` (tables), `queries.ts` and `register.ts` (job handlers and drain
 steps). `platform/db` holds no table; it composes the fragments.
