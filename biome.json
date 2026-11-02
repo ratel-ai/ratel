@@ -910,7 +910,9 @@
         "apps/web/app/(console)/org/\\[orgSlug\\]/not-found.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/not-found.tsx",
         "apps/web/app/api/skills-catalog/**",
-        "apps/web/app/api/runtime-catalog/\\[kind\\]/\\[entryId\\]/route.ts"
+        "apps/web/app/api/runtime-catalog/\\[kind\\]/\\[entryId\\]/route.ts",
+        "apps/web/app/api/v1/jobs/\\[id\\]/route.ts",
+        "apps/web/app/api/v1/suggestions/\\[\\[...path\\]\\]/route.ts"
       ],
       "linter": {
         "rules": {

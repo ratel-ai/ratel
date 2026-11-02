@@ -1256,6 +1256,8 @@
     { "from": "apps/web/components/ds", "mode": "excluded" },
     { "from": "apps/web/instrumentation-client.ts", "mode": "excluded" },
     { "from": "infra", "mode": "excluded" },
-    { "from": "deploy", "mode": "excluded" }
+    { "from": "deploy", "mode": "excluded" },
+    { "$slice": "mcp", "from": "apps/web/app/api/v1/jobs/[id]/route.ts", "to": "apps/web/app/api/v1/jobs/[id]/route.ts", "mode": "copy" },
+    { "from": "apps/web/app/api/v1/suggestions/[[...path]]/route.ts", "to": "apps/web/app/api/v1/suggestions/[[...path]]/route.ts", "mode": "copy" }
   ]
 }
