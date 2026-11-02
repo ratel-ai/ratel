@@ -8,13 +8,15 @@ import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { organizations } from "@/lib/platform/identity/schema";
+import { dismissCraftProposal } from "@/lib/synthesis/tool-crafter/queries";
 import { loadFixes } from "./load";
 import { fixSeams } from "./seams";
 import { findFix } from "./select";
 
 /**
- * Owned (ADR-0030): upstream also seeds the tool crafter's drafts and quality's rewrites; here
- * those sources arrive through `fixSeams`, which the tests leave empty and fill with a stub.
+ * Owned (ADR-0030): the tool crafter's drafts and quality's rewrites arrive through `fixSeams`,
+ * filled by `craft-drafts.ts` and `quality/fix-rewrites.ts` when `load.ts` loads. The crafter's
+ * rows are seeded as upstream seeds them; the rewrite cases live with quality.
  */
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -126,6 +128,56 @@ async function seedSources(client: PGlite): Promise<void> {
   );
 }
 
+/** Drafted changes: one pending merge, one superseded that must not show. */
+async function seedDrafts(client: PGlite): Promise<void> {
+  await client.query(
+    `insert into tool_craft_runs (id, project_id, trigger, status, created_at) values ('55555555-5555-4555-8555-555555555555', $1, 'chained', 'crafted', $2)`,
+    [PROJECT, ago(1)],
+  );
+  const merge = {
+    kind: "merge_tools",
+    merge: {
+      scope: "turn",
+      support: 40,
+      unitsA: 42,
+      unitsB: 41,
+      jaccard: 0.93,
+      jaccardLow: 0.88,
+      pAb: 0.95,
+      pBa: 0.97,
+      nextP: 0.9,
+      orderAb: 38,
+      orderBa: 2,
+      exampleSessions: [],
+    },
+  };
+  for (const [id, status] of [
+    ["66666666-6666-4666-8666-666666666661", "pending"],
+    ["66666666-6666-4666-8666-666666666662", "superseded"],
+  ] as const) {
+    await client.query(
+      `insert into tool_craft_proposals (id, run_id, project_id, kind, status, source_tool_ids, source_definitions, crafted, rationale, evidence, created_at)
+       values ($1, '55555555-5555-4555-8555-555555555555', $2, 'merge_tools', $3, '{find_task,assign_task}', $4::jsonb, '[]'::jsonb, 'Always together.', $5::jsonb, $6)`,
+      [
+        id,
+        PROJECT,
+        status,
+        JSON.stringify(
+          ["find_task", "assign_task"].map((tool) => ({
+            id: tool,
+            name: tool,
+            description: "",
+            searchableDescription: null,
+            inputSchema: null,
+          })),
+        ),
+        JSON.stringify(merge),
+        ago(1),
+      ],
+    );
+  }
+}
+
 async function organization(db: Db) {
   const [org] = await db.select().from(organizations).where(eq(organizations.id, ORG));
   assert.ok(org);
@@ -165,74 +217,76 @@ test("the issue and topic sources read into one list, linked by subject; a seam 
   await client.close();
 });
 
-test("a filled draft seam contributes its fixes, and a failing one is named", async () => {
+test("the crafter's pending draft is a fix with its effect, evidence and price; dismissed, it is gone; a failing read is named", async () => {
   const { client, db } = await setup();
   await seedSources(client);
-  const before = { ...fixSeams };
-  try {
-    fixSeams.loadDrafts = async (_projectId, _db, context) => [
-      {
-        id: "66666666-6666-4666-8666-666666666661",
-        kind: "merge_tools",
-        key: "merge_tools:assign_task,find_task",
-        createdAt: ago(1),
-        toolIds: ["find_task", "assign_task"],
-        taskIds: [],
-        intentId: null,
-        ask: null,
-        why: `Always together (${context.names.size} tools named).`,
-        effect: null,
-        gain: { roundTrips: 40, calls: 40, ms: 0 },
-        evidence: { strength: "strong", label: "Strong", detail: "Seen 40 times in this window" },
-        copy: { label: "Copy prompt", text: "## Problem" },
-        detail: {
-          source: "craft",
-          craftKind: "merge_tools",
-          plain: "",
-          why: ["Always together."],
-          worth: [],
-          worthCaption: null,
-          replay: null,
-          change: [],
-          facts: [],
-          sources: [],
-          crafted: [],
-        },
-        measured: true,
-        score: 40,
-      },
-    ];
-    const model = await loadFixes({
-      projectId: PROJECT,
-      organization: await organization(db),
-      now: NOW,
-      deps: { db },
-    });
-    assert.deepEqual(model.failed, []);
-    const merge = findFix(model.open, "craft:66666666-6666-4666-8666-666666666661");
-    assert.equal(merge?.title, "Merge find_task and assign_task");
-    assert.deepEqual(
-      merge?.subject.tasks.map((task) => [task.id, task.label, task.color]),
-      [["wf_assign", "Hand a task over", "chart-1"]],
-    );
+  await seedDrafts(client);
+  assert.equal(
+    typeof fixSeams.loadDrafts,
+    "function",
+    "craft-drafts.ts filled the seam when load.ts loaded",
+  );
+  assert.equal(typeof fixSeams.dismissDraft, "function");
+  const model = await loadFixes({
+    projectId: PROJECT,
+    organization: await organization(db),
+    now: NOW,
+    deps: { db },
+  });
+  assert.deepEqual(model.failed, []);
+  assert.deepEqual(
+    model.open.filter((fix) => fix.source === "craft").map((fix) => fix.id),
+    ["craft:66666666-6666-4666-8666-666666666661"],
+    "the superseded draft does not show",
+  );
+  const merge = findFix(model.open, "craft:66666666-6666-4666-8666-666666666661");
+  assert.equal(merge?.title, "Merge find_task and assign_task");
+  assert.equal(merge?.effect?.value, "2 → 1 calls");
+  assert.equal(merge?.effect?.detail, "−40 model calls in all");
+  assert.deepEqual(merge?.evidence, {
+    strength: "strong",
+    label: "Strong",
+    detail: "Seen 40 times in this window",
+  });
+  assert.deepEqual(merge?.gain, { roundTrips: 40, calls: 40, ms: 0 });
+  assert.deepEqual(
+    merge?.subject.tasks.map((task) => [task.id, task.label, task.color]),
+    [["wf_assign", "Hand a task over", "chart-1"]],
+  );
+  assert.equal(merge?.actions.dismiss, true);
+  assert.equal(merge?.actions.apply, false);
+  // The run's day buckets carry no linked model calls, so the price is none: no cost figure on the draft.
+  assert.equal(
+    merge?.effect?.also.some((reading) => reading.icon === "cost"),
+    false,
+  );
 
-    fixSeams.loadDrafts = async () => {
-      throw new Error("the crafter's table is gone");
-    };
-    const partial = await loadFixes({
-      projectId: PROJECT,
-      organization: await organization(db),
-      now: NOW,
-      deps: { db },
-    });
-    assert.deepEqual(partial.failed, ["craft"]);
-    assert.ok(
-      findFix(partial.open, "issue:44444444-4444-4444-8444-444444444441"),
-      "the other sources still list",
-    );
-  } finally {
-    fixSeams.loadDrafts = before.loadDrafts;
-  }
+  // Dismissed (what the Fixes action does through the seam), it is gone from the next read.
+  assert.equal(
+    await dismissCraftProposal(PROJECT, "66666666-6666-4666-8666-666666666661", NOW, db),
+    true,
+  );
+  const after = await loadFixes({
+    projectId: PROJECT,
+    organization: await organization(db),
+    now: NOW,
+    deps: { db },
+  });
+  assert.deepEqual(after.failed, []);
+  assert.equal(findFix(after.open, "craft:66666666-6666-4666-8666-666666666661"), null);
+
+  await client.exec("drop table tool_craft_proposals cascade");
+  const partial = await loadFixes({
+    projectId: PROJECT,
+    organization: await organization(db),
+    now: NOW,
+    deps: { db },
+  });
+  assert.deepEqual(partial.failed, ["craft"]);
+  assert.ok(
+    findFix(partial.open, "issue:44444444-4444-4444-8444-444444444441"),
+    "the other sources still list",
+  );
   await client.close();
 });
 

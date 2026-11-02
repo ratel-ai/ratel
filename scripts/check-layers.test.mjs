@@ -54,6 +54,15 @@ describe("check-layers", () => {
     assert.equal(violations[0].reason, "lib/ imports the UI");
   });
 
+  it("lets a test read a layer above its own; the module's own files still point downward", () => {
+    file("readings/explorer/timing.test.ts", 'import { pairTiming } from "@/lib/synthesis/crafter/candidates";\n');
+    file("readings/explorer/timing.ts", 'import { pairTiming } from "@/lib/synthesis/crafter/candidates";\n');
+    file("readings/explorer/test-support.ts", 'import { x } from "@/lib/mcp/x";\n');
+    const { violations } = scanLayers({ libRoot: lib });
+    assert.deepEqual(violations.map((v) => v.path), ["readings/explorer/timing.ts"]);
+    assert.match(violations[0].reason, /readings \(L4\) imports synthesis \(L5\)/);
+  });
+
   it("exempts the composition root and flags files outside every layer", () => {
     file("composition/registry.ts", 'import { r } from "@/lib/mcp/register";\n');
     file("runtime.ts", 'import { c } from "@/lib/composition/ports";\n');
