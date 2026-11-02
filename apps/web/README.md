@@ -37,12 +37,13 @@ pnpm --filter @ratel/platform seed:quality # Quality: its searches, answer key, 
 pnpm check:boundary && pnpm check:layers   # from the repository root: the structural rules
 ```
 
-Postgres for local work comes from the root `docker-compose.yml`:
+Local development uses Postgres from the root `docker-compose.yml`. From the repository root, with Node 24+, pnpm 10.28+ and Docker:
 
 ```sh
+pnpm install
 docker compose up db                       # Postgres 16 on localhost:5432
 cp apps/web/.env.example apps/web/.env.local
-pnpm --filter @ratel/platform dev          # migrates on boot, then serves
+pnpm --filter @ratel/platform dev          # http://localhost:3000; migrates on boot, then serves
 docker compose up --build                  # or the whole OSS edition in containers, http://localhost:3000
 ```
 
