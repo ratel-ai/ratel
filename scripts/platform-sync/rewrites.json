@@ -51,6 +51,8 @@
     { "from": "@/components/traces/TraceComparePropertiesTable", "to": "@/components/console/traces/compare/TraceComparePropertiesTable", "exact": true },
     { "from": "@/components/traces/TraceLifecycleEvents", "to": "@/components/console/traces/compare/TraceLifecycleEvents", "exact": true },
     { "from": "@/components/traces/TraceStatusBadge", "to": "@/components/console/traces/compare/TraceStatusBadge", "exact": true },
+    { "from": "@/components/traces/TurnDetailView", "to": "@/components/console/traces/TurnDetailView", "exact": true },
+    { "from": "@/components/traces/TurnLinkedPanel", "to": "@/components/console/traces/TurnLinkedPanel", "exact": true },
     { "from": "@/components/dashboard/BackLink", "to": "@/components/console/traces/compare/BackLink", "exact": true },
     { "from": "@/components/catalog/v2/", "to": "@/components/console/catalog/" },
     { "from": "@/components/badgers/", "to": "@/components/console/badgers/" },

@@ -8,7 +8,7 @@ here rather than in the design system.
 | `shell/` | the inverted-L frame (DESIGN.md, Layout): `AppFrame` (rail, mobile drawer, ⌘K, `[` and `?`), `Sidebar`, `ProjectSwitcher`, `AccountMenu`, `CommandMenu`, `ShortcutsDialog`, `DatabaseUnavailable` |
 | `settings/` | project Settings: General (name), API keys (create, revoke), Developer (SDK events, undelivered events), Danger zone (delete) |
 | `org/` | the organization's pages: Projects (list, New project dialog), Integrations (`IntegrationsPage`, `McpConnect`, `McpExample`: connect an MCP client to `/api/mcp` with a project key, the worked example and the tool groups) and Settings > General (name, address) |
-| `traces/` | the Traces pages: Runs (volume, stats, run panel), Spans (list or grouped), Logs, and one trace (timeline, conversation, details, ranking); `compare/` holds the trace comparison, unchanged from the Cloud app |
+| `traces/` | the Traces pages: Runs (volume, stats, run panel), Spans (list or grouped), Logs, one trace (timeline, conversation, details, ranking), and one turn call by call (`TurnDetailView`, the call an Agent health example is about ringed and scrolled to; `TurnLinkedPanel` for an SDK run's linked model calls); `compare/` holds the trace comparison, unchanged from the Cloud app |
 | `errors/` | the 404 (`BrandedNotFound`, the searching badger) and its one link back, and the way back to a project's traces |
 | `badgers/` | the honey-badger illustrations from `public/badgers/`, with the badger mark as the fallback when a file is missing |
 | `catalog/` | the Catalog pages: the tree of tools and skills, Tools, Skills, the item detail, and the skill editor (rebuilt on the design system) |
