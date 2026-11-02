@@ -1269,6 +1269,14 @@
     { "from": "apps/web/lib/mcp/operations/contract.test.ts", "to": "apps/web/lib/mcp/operations/contract.test.ts", "mode": "owned", "$why": "the reviewed snapshot without get_embedding_usage" },
     { "from": "apps/web/lib/mcp/operations/compatibility.test.ts", "to": "apps/web/lib/mcp/operations/compatibility.test.ts", "mode": "owned", "$why": "the published surface without get_embedding_usage" },
     { "from": "apps/web/lib/mcp/oauth-metadata.test.ts", "mode": "excluded", "$why": "OAuth discovery needs the private identity provider" },
-    { "from": "apps/web/app/api/mcp/route.ts", "to": "apps/web/app/api/mcp/route.ts", "mode": "copy" }
+    { "from": "apps/web/app/api/mcp/route.ts", "to": "apps/web/app/api/mcp/route.ts", "mode": "copy" },
+    { "from": "apps/web/lib/mcp-connect", "to": "apps/web/lib/mcp/connect", "mode": "copy" },
+    { "from": "apps/web/lib/mcp-connect/snippets.ts", "to": "apps/web/lib/mcp/connect/snippets.ts", "mode": "owned", "$why": "every client carries the project key; there is no browser sign-in" },
+    { "from": "apps/web/lib/mcp-connect/snippets.test.ts", "to": "apps/web/lib/mcp/connect/snippets.test.ts", "mode": "owned", "$why": "tests the key-only snippets" },
+    { "from": "apps/web/components/org/v2/IntegrationsPage.tsx", "to": "apps/web/components/console/org/IntegrationsPage.tsx", "mode": "owned", "$why": "the organization comes from the session; no support-session restriction" },
+    { "from": "apps/web/components/org/v2/McpConnect.tsx", "to": "apps/web/components/console/org/McpConnect.tsx", "mode": "owned", "$why": "the Desktop snippet is a config file, not a URL, so its caption says so" },
+    { "from": "apps/web/components/org/v2/McpExample.tsx", "to": "apps/web/components/console/org/McpExample.tsx", "mode": "copy" },
+    { "from": "apps/web/app/(app)/org/[orgSlug]/mcp/page.tsx", "to": "apps/web/app/(console)/org/[orgSlug]/mcp/page.tsx", "mode": "owned", "$why": "no suspense skeleton; the organization comes from the guarded route" },
+    { "from": "apps/web/app/(app)/org/[orgSlug]/mcp/loading.tsx", "mode": "excluded", "$why": "renders the excluded skeleton" }
   ]
 }

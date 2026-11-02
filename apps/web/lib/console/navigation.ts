@@ -15,6 +15,7 @@ export type NavIconName =
   | "traces"
   | "settings"
   | "projects"
+  | "integrations"
   | "edition";
 
 export interface NavItem {
@@ -90,6 +91,12 @@ export function consoleNav({
           icon: "projects",
           exact: true,
           shortcut: "o",
+        },
+        {
+          id: "integrations",
+          label: "Integrations",
+          href: `${organizationRoot(organizationSlug)}/mcp`,
+          icon: "integrations",
         },
         {
           id: "org-settings",

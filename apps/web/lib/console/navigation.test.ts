@@ -102,10 +102,12 @@ test("outside a project, the organization rail lists its projects page", () => {
     items.map(({ id, href }) => ({ id, href })),
     [
       { id: "projects", href: "/org/acme" },
+      { id: "integrations", href: "/org/acme/mcp" },
       { id: "org-settings", href: "/org/acme/settings" },
     ],
   );
   assert.equal(activeNavItemId("/org/acme", items), "projects");
+  assert.equal(activeNavItemId("/org/acme/mcp", items), "integrations");
   assert.equal(activeNavItemId("/org/acme/settings", items), "org-settings");
   // Inside a project the rail is the project's, even when the organization is known.
   assert.deepEqual(
@@ -158,7 +160,7 @@ test("Settings sits in a section of its own in both rails, the edition's items i
   );
   assert.deepEqual(
     sectionsOf(consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] })),
-    ["main:projects", "settings:org-settings"],
+    ["main:projects", "main:integrations", "settings:org-settings"],
   );
 });
 

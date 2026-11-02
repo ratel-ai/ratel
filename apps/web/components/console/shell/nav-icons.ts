@@ -3,6 +3,7 @@ import {
   Activity,
   Blocks,
   BookOpen,
+  Cable,
   FolderKanban,
   HeartPulse,
   House,
@@ -22,5 +23,6 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   traces: Activity,
   settings: Settings,
   projects: FolderKanban,
+  integrations: Cable,
   edition: Blocks,
 };

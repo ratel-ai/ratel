@@ -20,6 +20,7 @@ identical.
 | `operations/account.ts` | `get_flag_status`, `get_quota_status` (the entitlements port), `get_job_status` (owned) |
 | `operations/playground.ts` | `test_retrieval`: rank a query against the catalog with draft edits, metered per credential |
 | `operations/params.ts`, `mutation-errors.ts` | the shared `projectId` and end-user params; mutation failures as operation errors |
+| `connect/snippets.ts` | the Integrations page's copy-paste client configuration (Claude Code, Claude Desktop, Cursor / VS Code, CI), the worked example and the capability groups; `page-contract.test.ts` keeps the page's tool names real (owned snippets, see below) |
 
 ## Owned files
 
@@ -38,6 +39,10 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 - `operations/playground.ts`: `test_retrieval` embeds through the embedding-provider port
   (`composition.embeddingProvider`), as the Playground route does, instead of a vendor key.
 - `route-handler.test.ts`: the verifier-crash fixture names no vendor.
+- `connect/snippets.ts` and `snippets.test.ts`: every client carries the project key (Claude
+  Code through `--header`, Cursor and VS Code through `${env:RATEL_API_KEY}` in `mcp.json`,
+  Claude Desktop through the `mcp-remote` bridge in its config, CI as upstream), because there is
+  no browser sign-in to offer the interactive clients.
 
 Not here, with a `$why` in the map: `oauth-metadata.ts` and the `.well-known/oauth-*` routes
 (OAuth discovery needs the private identity provider). The copied 401 still advertises the
