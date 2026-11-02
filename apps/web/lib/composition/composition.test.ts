@@ -176,6 +176,8 @@ describe("registry root", () => {
       "categorize_queries",
       "cluster_intents",
       "compute_trace_signals",
+      "craft_tools",
+      "explore_tool_usage",
       "fold_intent_graph",
       "label_workflows",
       "match_quality_run",

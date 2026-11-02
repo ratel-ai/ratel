@@ -83,7 +83,10 @@ export function scanLayers({ libRoot, allow = [] } = {}) {
         violations.push({ ...at, reason: "imports a file outside every layer" });
         continue;
       }
-      if (dest.level > own.level) {
+      // A test reads what it verifies and is not part of the module graph: the explorer's
+      // timing test reads the crafter's sentences over its arithmetic, the readings' no-key
+      // test runs the crafter after the explorer. Only the module's own files point downward.
+      if (dest.level > own.level && !test) {
         violations.push({ ...at, reason: `${own.layer} (L${own.level}) imports ${dest.layer} (L${dest.level})` });
       }
     }

@@ -547,6 +547,80 @@ CREATE TABLE "query_intents" (
 	"member_text" text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "tool_explorer_edges" (
+	"run_id" uuid NOT NULL,
+	"project_id" uuid NOT NULL,
+	"scope" text NOT NULL,
+	"kind" text NOT NULL,
+	"subject" text NOT NULL,
+	"a" text NOT NULL,
+	"b" text NOT NULL,
+	"n" integer NOT NULL,
+	"n_a" integer NOT NULL,
+	"p" double precision NOT NULL,
+	"p_low" double precision NOT NULL,
+	"p_high" double precision NOT NULL,
+	"lift" double precision NOT NULL,
+	"reverse_n" integer DEFAULT 0 NOT NULL,
+	"example_sessions" text[] DEFAULT '{}' NOT NULL,
+	"timed_pairs" integer,
+	"between_ms_total" bigint,
+	"between_ms_median" integer,
+	"searches_between" integer,
+	CONSTRAINT "tool_explorer_edges_run_id_scope_kind_subject_a_b_pk" PRIMARY KEY("run_id","scope","kind","subject","a","b")
+);
+--> statement-breakpoint
+CREATE TABLE "tool_explorer_intent_tools" (
+	"run_id" uuid NOT NULL,
+	"project_id" uuid NOT NULL,
+	"scope" text NOT NULL,
+	"intent_id" uuid NOT NULL,
+	"intent_units" integer NOT NULL,
+	"tool_id" text NOT NULL,
+	"n" integer NOT NULL,
+	"share" double precision NOT NULL,
+	"share_low" double precision NOT NULL,
+	CONSTRAINT "tool_explorer_intent_tools_run_id_scope_intent_id_tool_id_pk" PRIMARY KEY("run_id","scope","intent_id","tool_id")
+);
+--> statement-breakpoint
+CREATE TABLE "tool_explorer_runs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
+	"trigger" text NOT NULL,
+	"status" text DEFAULT 'queued' NOT NULL,
+	"window_days" integer NOT NULL,
+	"window_start" timestamp with time zone NOT NULL,
+	"window_end" timestamp with time zone NOT NULL,
+	"signal_run_id" uuid,
+	"turns_scanned" integer DEFAULT 0 NOT NULL,
+	"sessions_scanned" integer DEFAULT 0 NOT NULL,
+	"turns_with_intents" integer DEFAULT 0 NOT NULL,
+	"summary" jsonb,
+	"error" text,
+	"started_at" timestamp with time zone,
+	"finished_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "tool_explorer_sets" (
+	"run_id" uuid NOT NULL,
+	"project_id" uuid NOT NULL,
+	"scope" text NOT NULL,
+	"subject" text NOT NULL,
+	"key" text NOT NULL,
+	"items" text[] NOT NULL,
+	"size" integer NOT NULL,
+	"support" integer NOT NULL,
+	"share" double precision NOT NULL,
+	"jaccard" double precision,
+	"jaccard_low" double precision,
+	"p_ab" double precision,
+	"p_ba" double precision,
+	"workflow_id" text,
+	"example_sessions" text[] DEFAULT '{}' NOT NULL,
+	CONSTRAINT "tool_explorer_sets_run_id_scope_subject_key_pk" PRIMARY KEY("run_id","scope","subject","key")
+);
+--> statement-breakpoint
 CREATE TABLE "trace_topic_insights" (
 	"project_id" uuid PRIMARY KEY NOT NULL,
 	"data" jsonb NOT NULL,
@@ -807,6 +881,41 @@ CREATE TABLE "quality_snapshots" (
 	CONSTRAINT "quality_snapshots_project_id_experiment_name_arm_tier_day_pk" PRIMARY KEY("project_id","experiment_name","arm","tier","day")
 );
 --> statement-breakpoint
+CREATE TABLE "tool_craft_proposals" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"run_id" uuid NOT NULL,
+	"project_id" uuid NOT NULL,
+	"kind" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"source_tool_ids" text[] NOT NULL,
+	"source_definitions" jsonb NOT NULL,
+	"crafted" jsonb NOT NULL,
+	"hidden_tool_ids" text[] DEFAULT '{}' NOT NULL,
+	"rationale" text NOT NULL,
+	"details" text DEFAULT '' NOT NULL,
+	"expected_effect" text DEFAULT '' NOT NULL,
+	"migration_notes" text DEFAULT '' NOT NULL,
+	"evidence" jsonb NOT NULL,
+	"backtest" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "tool_craft_runs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"project_id" uuid NOT NULL,
+	"trigger" text NOT NULL,
+	"status" text DEFAULT 'queued' NOT NULL,
+	"explorer_run_id" uuid,
+	"candidates" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"proposals_created" integer DEFAULT 0 NOT NULL,
+	"declined_reason" text,
+	"error" text,
+	"started_at" timestamp with time zone,
+	"finished_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "otel_trace_summaries" (
 	"project_id" uuid NOT NULL,
 	"trace_id" text NOT NULL,
@@ -869,6 +978,14 @@ ALTER TABLE "query_intent_occurrences" ADD CONSTRAINT "query_intent_occurrences_
 ALTER TABLE "query_intent_occurrences" ADD CONSTRAINT "query_intent_occurrences_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "query_intent_occurrences" ADD CONSTRAINT "query_intent_occurrences_trace_event_id_trace_events_id_fk" FOREIGN KEY ("trace_event_id") REFERENCES "public"."trace_events"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "query_intents" ADD CONSTRAINT "query_intents_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_explorer_edges" ADD CONSTRAINT "tool_explorer_edges_run_id_tool_explorer_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."tool_explorer_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_explorer_edges" ADD CONSTRAINT "tool_explorer_edges_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_explorer_intent_tools" ADD CONSTRAINT "tool_explorer_intent_tools_run_id_tool_explorer_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."tool_explorer_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_explorer_intent_tools" ADD CONSTRAINT "tool_explorer_intent_tools_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_explorer_runs" ADD CONSTRAINT "tool_explorer_runs_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_explorer_runs" ADD CONSTRAINT "tool_explorer_runs_signal_run_id_trace_signal_runs_id_fk" FOREIGN KEY ("signal_run_id") REFERENCES "public"."trace_signal_runs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_explorer_sets" ADD CONSTRAINT "tool_explorer_sets_run_id_tool_explorer_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."tool_explorer_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_explorer_sets" ADD CONSTRAINT "tool_explorer_sets_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trace_topic_insights" ADD CONSTRAINT "trace_topic_insights_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trace_topics" ADD CONSTRAINT "trace_topics_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trace_turn_topics" ADD CONSTRAINT "trace_turn_topics_turn_id_trace_turns_id_fk" FOREIGN KEY ("turn_id") REFERENCES "public"."trace_turns"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -889,6 +1006,10 @@ ALTER TABLE "match_quality_proposals" ADD CONSTRAINT "match_quality_proposals_pr
 ALTER TABLE "match_quality_runs" ADD CONSTRAINT "match_quality_runs_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "catalog_fingerprints" ADD CONSTRAINT "catalog_fingerprints_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "quality_snapshots" ADD CONSTRAINT "quality_snapshots_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_craft_proposals" ADD CONSTRAINT "tool_craft_proposals_run_id_tool_craft_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."tool_craft_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_craft_proposals" ADD CONSTRAINT "tool_craft_proposals_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_craft_runs" ADD CONSTRAINT "tool_craft_runs_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tool_craft_runs" ADD CONSTRAINT "tool_craft_runs_explorer_run_id_tool_explorer_runs_id_fk" FOREIGN KEY ("explorer_run_id") REFERENCES "public"."tool_explorer_runs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "otel_trace_summaries" ADD CONSTRAINT "otel_trace_summaries_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "skills_project_name_active_idx" ON "skills" USING btree ("project_id","name") WHERE "skills"."status" <> 'archived';--> statement-breakpoint
 CREATE INDEX "skills_project_status_idx" ON "skills" USING btree ("project_id","status");--> statement-breakpoint
@@ -972,6 +1093,11 @@ CREATE INDEX "query_intent_occurrences_query_intent_idx" ON "query_intent_occurr
 CREATE UNIQUE INDEX "query_intents_project_normalized_idx" ON "query_intents" USING btree ("project_id","normalized_text");--> statement-breakpoint
 CREATE INDEX "query_intents_project_occurrences_idx" ON "query_intents" USING btree ("project_id","occurrences");--> statement-breakpoint
 CREATE INDEX "query_intents_project_last_seen_idx" ON "query_intents" USING btree ("project_id","last_seen_at");--> statement-breakpoint
+CREATE INDEX "tool_explorer_edges_run_a_idx" ON "tool_explorer_edges" USING btree ("run_id","scope","kind","a","n");--> statement-breakpoint
+CREATE INDEX "tool_explorer_intent_tools_run_intent_idx" ON "tool_explorer_intent_tools" USING btree ("run_id","scope","intent_id","n");--> statement-breakpoint
+CREATE INDEX "tool_explorer_runs_project_created_idx" ON "tool_explorer_runs" USING btree ("project_id","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "tool_explorer_runs_project_live_idx" ON "tool_explorer_runs" USING btree ("project_id") WHERE "tool_explorer_runs"."status" in ('queued', 'running');--> statement-breakpoint
+CREATE INDEX "tool_explorer_sets_run_support_idx" ON "tool_explorer_sets" USING btree ("run_id","scope","subject","size","support");--> statement-breakpoint
 CREATE INDEX "trace_turn_topics_project_topic_idx" ON "trace_turn_topics" USING btree ("project_id","topic_id","started_at");--> statement-breakpoint
 CREATE INDEX "trace_self_corrections_project_time_idx" ON "trace_self_corrections" USING btree ("project_id","occurred_at");--> statement-breakpoint
 CREATE INDEX "trace_self_corrections_turn_idx" ON "trace_self_corrections" USING btree ("turn_id");--> statement-breakpoint
@@ -990,5 +1116,9 @@ CREATE INDEX "match_quality_runs_project_created_idx" ON "match_quality_runs" US
 CREATE UNIQUE INDEX "match_quality_runs_project_live_idx" ON "match_quality_runs" USING btree ("project_id") WHERE "match_quality_runs"."status" in ('queued', 'running');--> statement-breakpoint
 CREATE INDEX "catalog_fingerprints_project_last_seen_idx" ON "catalog_fingerprints" USING btree ("project_id","last_seen_at");--> statement-breakpoint
 CREATE INDEX "quality_snapshots_project_day_idx" ON "quality_snapshots" USING btree ("project_id","day");--> statement-breakpoint
+CREATE INDEX "tool_craft_proposals_project_status_idx" ON "tool_craft_proposals" USING btree ("project_id","status");--> statement-breakpoint
+CREATE INDEX "tool_craft_proposals_run_idx" ON "tool_craft_proposals" USING btree ("run_id");--> statement-breakpoint
+CREATE INDEX "tool_craft_runs_project_created_idx" ON "tool_craft_runs" USING btree ("project_id","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "tool_craft_runs_project_live_idx" ON "tool_craft_runs" USING btree ("project_id") WHERE "tool_craft_runs"."status" in ('queued', 'running');--> statement-breakpoint
 CREATE INDEX "otel_trace_summaries_project_started_idx" ON "otel_trace_summaries" USING btree ("project_id","started_at");--> statement-breakpoint
 CREATE INDEX "otel_trace_summaries_spans_max_received_idx" ON "otel_trace_summaries" USING btree ("spans_max_received_at");

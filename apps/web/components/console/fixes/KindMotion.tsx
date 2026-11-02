@@ -1,4 +1,4 @@
-import type { CraftKind } from "@/lib/views/fixes/crafter-types";
+import type { CraftKind } from "@/lib/synthesis/tool-crafter/types";
 
 /**
  * One small looping drawing per kind of suggestion, showing the fix as a

@@ -5,9 +5,11 @@ import { ledgerRegistration } from "@/lib/ledger/register";
 import { intentEngineRegistration } from "@/lib/readings/intent-engine/register";
 import { intentGraphRegistration } from "@/lib/readings/intent-graph/register";
 import { queryIntentsRegistration } from "@/lib/readings/query-intents/register";
+import { toolExplorerRegistration } from "@/lib/readings/tool-explorer/register";
 import { topicsRegistration } from "@/lib/readings/topics/register";
 import { traceSignalsRegistration } from "@/lib/readings/trace-signals/register";
 import { qualityRegistration } from "@/lib/synthesis/quality/register";
+import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
 
 /**
@@ -22,9 +24,11 @@ const CORE: Registration[] = [
   intentGraphRegistration,
   intentEngineRegistration,
   traceSignalsRegistration,
+  toolExplorerRegistration,
   topicsRegistration,
   tracesRegistration,
   qualityRegistration,
+  toolCrafterRegistration,
 ];
 
 export function collectRegistrations(

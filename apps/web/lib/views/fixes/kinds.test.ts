@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CRAFT_KINDS } from "@/lib/views/fixes/crafter-types";
+import { CRAFT_KINDS } from "@/lib/synthesis/tool-crafter/types";
 import {
   CRAFT_FIX_KIND,
   FIX_KIND_LABELS,

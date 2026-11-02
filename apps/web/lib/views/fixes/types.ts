@@ -1,5 +1,7 @@
 import type { TaskColorSlot } from "@ratel/design-system/task-colors";
-import type { CraftKind, EffectChip, EvidenceFact } from "@/lib/views/fixes/crafter-types";
+import type { EffectChip } from "@/lib/synthesis/tool-crafter/suggestion-model";
+import type { CraftKind } from "@/lib/synthesis/tool-crafter/types";
+import type { EvidenceFact } from "@/lib/synthesis/tool-crafter/view";
 import type { FixGroup } from "@/lib/views/fixes/groups";
 import type { FixKind } from "@/lib/views/fixes/kinds";
 import type { SuggestionRow } from "@/lib/views/quality/suggestions";

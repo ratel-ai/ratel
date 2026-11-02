@@ -90,8 +90,8 @@ export async function loadIntentsPage(projectIdParam: string): Promise<IntentsPa
 
 /**
  * The Map's model from a reading, and the "came next" steps between its tools
- * from the latest tool reading, a bonus bounded on its own: when it fails (or,
- * here, while the tool explorer has not landed) the Tools view draws no arrows.
+ * from the tool explorer's latest completed run, a bonus bounded on its own: when
+ * it fails (or the project has no explorer run yet) the Tools view draws no arrows.
  */
 export async function loadTopicMap(
   projectId: string,

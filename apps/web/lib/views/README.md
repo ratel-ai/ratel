@@ -20,16 +20,17 @@ identical.
 
 ## Seams
 
-Three readings this edition does not ship yet are read through seams: objects declared here,
-empty, that a later module's `register.ts` fills (the pattern of `computeSeams` in
-`readings/trace-signals`). With every seam empty the pages render as upstream minus the parts
-named below.
+Readings the pages depend on are read through seams: objects declared here, empty, that a
+later module fills (the pattern of `computeSeams` in `readings/trace-signals`): a module's
+`register.ts`, or, when the reading is lower than the view, a filler here that the page's
+queries import for its side effect. With a seam empty the page renders as upstream minus the
+part named below.
 
 | Seam | Filled by | Empty means |
 |---|---|---|
-| `fixes/seams.ts` `fixSeams.loadDrafts`, `.loadRewrites`, `.priceOf` | the tool crafter (drafts and the round-trip price) and match quality (description rewrites) | Fixes lists the issue and intent sources only; `rewritesOn` is false, nothing can be applied, no per-run cost |
-| `tasks/seams.ts` `tasksSeams.loadDrafts` | the tool crafter | a task's page shows no drafted fix |
-| `intents/map/seams.ts` `mapSeams.loadToolSteps` | the tool explorer | the Map draws no "came next" arrows between tools |
+| `fixes/seams.ts` `fixSeams.loadDrafts`, `.dismissDraft`, `.priceOf`, `.loadRewrites` | filled: the tool crafter's drafts, their dismissal and the round-trip price by `fixes/craft-drafts.ts` (upstream's `craftSeed` and `craftEffect` over `synthesis/tool-crafter`), which `fixes/load.ts` imports for its side effect; match quality's description rewrites by `quality/fix-rewrites.ts` | Fixes lists the issue and intent sources only; `rewritesOn` is false, nothing can be applied or dismissed, no per-run cost |
+| `tasks/seams.ts` `tasksSeams.loadDrafts` | filled: the tool crafter's pending drafts by `fixes/craft-drafts.ts` (upstream's `fixSources`), loaded with `fixes/load.ts`, which `tasks/page-model.ts` imports | a task's page shows no drafted fix |
+| `intents/map/seams.ts` `mapSeams.loadToolSteps` | the tool explorer: `intents/map/tool-steps.ts` reads the latest completed run's turn-scope `next` edges (`readings/tool-explorer/queries.ts#listTransitions`) and `map/queries.ts` imports it | the Map draws no "came next" arrows between tools |
 
 `health/imports-types.ts` types the import states (`importing`, `held`, `imported_no_tools`)
 that `page-state` keeps reachable only through `imports`, which the pages pass as `null`: the
@@ -45,13 +46,19 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   the ledger's source suffix; `mock-fixture.ts`: the development fixture with a neutral tenant;
   `imports-types.ts`: new, see above.
 - `tasks/page-model.ts` and `tasks/queries.ts`: the crafter's reads are `tasksSeams` and
-  `fixSeams.priceOf`.
-- `fixes/build.ts`, `fixes/load.ts`, `fixes/seams.ts`, `fixes/crafter-types.ts` (structural
-  stand-ins for the crafter's and quality's types, re-exports once they land),
-  `fixes/test-fixtures.ts`, `fixes/build.test.ts`, `fixes/load.integration.test.ts`: drafted
-  changes arrive as `DraftFixInput` through the seam; the crafter's own cases live with it.
-- `intents/map/queries.ts`: `mapSeams.loadToolSteps`; `intents/hrefs.ts`: `capabilityCatalogHref`
-  on its own (the rest of upstream's file is the adaptive-ranking page view).
+  `fixSeams.priceOf`, filled by `fixes/craft-drafts.ts`; `tasks/page-model.integration.test.ts`
+  reads a drafted fix onto its task through them.
+- `fixes/build.ts`, `fixes/load.ts`, `fixes/seams.ts`, `fixes/crafter-types.ts` (re-exports of
+  the crafter's types under the names the fixes model was written against; quality's rewrite
+  rows stay here), `fixes/craft-drafts.ts` (new: the crafter's filler, see Seams, with its
+  `craft-drafts.test.ts`), `fixes/test-fixtures.ts`, `fixes/build.test.ts`,
+  `fixes/load.integration.test.ts`: drafted changes arrive as `DraftFixInput` through the seam;
+  the build's craft cases run on `DraftFixInput` fixtures and the filler's on the crafter's cards.
+- `intents/map/queries.ts`: the tool-step read is `mapSeams.loadToolSteps`, filled by
+  `intents/map/tool-steps.ts` (new: upstream's `loadToolSteps` body and `TOOL_STEP_READ_LIMIT`,
+  with its PGlite test `tool-steps.integration.test.ts`); `intents/hrefs.ts`:
+  `capabilityCatalogHref` on its own (the rest of upstream's file is the adaptive-ranking page
+  view).
 - Tests whose fixtures named a confidential word, copied with a neutral tenant:
   `health/flow-journey-layout.test.ts`, `intents/topics-view.test.ts`, `intents/map/{classify,
   flow,map-model,tool-globe}.test.ts` and `intents/map/tool-network-fixture.ts`.
