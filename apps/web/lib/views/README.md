@@ -1,10 +1,10 @@
 # `lib/views` (L6)
 
-The read models behind the Agent health and Intents pages: what each page loads, in which
-order, with which fallbacks, and the pure functions that turn rows into the words, numbers and
-layouts the components draw. Nothing here imports a component or a page; the pages
-(`app/(console)/project/[projectId]/{health,intents}`) and the components land with the console
-pages and call into these modules. Export names follow upstream so copied call sites stay
+The read models behind the Agent health, Intents and Traces turn pages: what each page loads,
+in which order, with which fallbacks, and the pure functions that turn rows into the words,
+numbers and layouts the components draw. Nothing here imports a component or a page; the pages
+(`app/(console)/project/[projectId]/{health,intents,traces/turns}`) and the components land with
+the console pages and call into these modules. Export names follow upstream so copied call sites stay
 identical.
 
 | Folder | Holds |
@@ -17,6 +17,7 @@ identical.
 | `fixes/` | Fixes, the one list of changes the pages link an issue to: `build` (the model), `load` (the reads), `select`, `groups`, `effect`, `acted`, `skill-gaps`, `topics`, `copy`, `kinds`, `href` |
 | `intents/` | the Intents pages: the topic list and detail (`topics-*`), an intent's breakdown and asks tree (`breakdown*`, `asks-tree`), `hrefs` |
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
+| `traces/` | the turn page of Traces, where an Agent health example's "Open in Traces" lands: `turn-detail` (one turn's calls in ledger order, the live query and error text read by event id, a trace link only where Traces holds the trace, the session's neighbouring turns), `turn-detail-linked` (an SDK run's linked OpenTelemetry model calls), `turn-linked` (the linked text, pure) |
 
 ## Seams
 
@@ -67,8 +68,9 @@ The render tests of the Intents pages sit here too (`intents/intents-ui.test.ts`
 the adaptive-ranking cases, and `intents/map/{intent-map,tool-network}-ui.test.ts`).
 
 Not here, with a `$why` in the map: the public share links and the v1 Summary components they
-alone use, the health importer, the turn detail (it is the turn page of Traces), the Boost
-panel (adaptive ranking), and the render tests, which import components and land with the pages.
+alone use, the health importer, the Boost panel (adaptive ranking), and the render tests, which
+import components and land with the pages (`traces/turn-detail.test.ts` is upstream's file as
+is, half model and half render, so it stays beside its model).
 
 Fix leads point at `/improvement/fixes` and `/quality/descriptions`, as upstream does.
 
