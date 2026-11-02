@@ -42,14 +42,14 @@ jobs:
       matrix:
         include:
           - label: darwin-arm64
-            runs-on: macos-14
+            runs-on: macos-15
             node_arch: arm64
           # darwin-x64 runs under Rosetta on Apple Silicon: x64 Node is
           # downloaded by setup-node, all child processes inherit x64,
           # npm installs @ratel-ai/sdk-darwin-x64, the binding loads via
           # Rosetta. Avoids the long macos-13 (Intel) runner queue.
           - label: darwin-x64
-            runs-on: macos-14
+            runs-on: macos-15
             node_arch: x64
           - label: linux-x64-gnu
             runs-on: ubuntu-latest
@@ -394,14 +394,14 @@ jobs:
       matrix:
         include:
           - label: darwin-arm64
-            runs-on: macos-14
+            runs-on: macos-15
             python_arch: arm64
           # darwin-x64 runs under Rosetta on Apple Silicon (same trick as the npm
           # `verify` job): setup-python fetches an x64 interpreter, so pip installs
           # the x86_64-apple-darwin wheel and loads it via Rosetta. Avoids the long
           # macos-13 (Intel) runner queue while still smoke-testing the x64 wheel.
           - label: darwin-x64
-            runs-on: macos-14
+            runs-on: macos-15
             python_arch: x64
           - label: linux-x64-gnu
             runs-on: ubuntu-latest
