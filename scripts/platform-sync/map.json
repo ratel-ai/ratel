@@ -620,7 +620,7 @@
     {"from": "apps/web/lib/tasks/paths.test.ts", "to": "apps/web/lib/views/tasks/paths.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/tasks/page-model.ts", "to": "apps/web/lib/views/tasks/page-model.ts", "mode": "owned", "$why": "the tool crafter's drafts and price are the tasksSeams and fixSeams, filled when it lands"},
     {"from": "apps/web/lib/tasks/queries.ts", "to": "apps/web/lib/views/tasks/queries.ts", "mode": "owned", "$why": "the drafted-fix read moves to the tool crafter's seam filler"},
-    {"from": "apps/web/lib/tasks/page-model.integration.test.ts", "to": "apps/web/lib/views/tasks/page-model.integration.test.ts", "mode": "copy"},
+    {"from": "apps/web/lib/tasks/page-model.integration.test.ts", "to": "apps/web/lib/views/tasks/page-model.integration.test.ts", "mode": "owned", "$why": "the drafted-fix case reads a pending proposal onto its task through tasksSeams (the crafter's filler), not through the crafter's queries"},
     {"from": "apps/web/lib/tasks/queries.integration.test.ts", "to": "apps/web/lib/views/tasks/queries.integration.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/tasks/palette.ts", "mode": "excluded", "$why": "the task colors live in the design system (task-colors.ts)"},
     {"from": "apps/web/lib/tasks/palette.test.ts", "mode": "excluded", "$why": "with palette.ts"},

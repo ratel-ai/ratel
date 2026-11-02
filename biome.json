@@ -537,7 +537,6 @@
         "apps/web/lib/views/tasks/test-support.ts",
         "apps/web/lib/views/tasks/paths.ts",
         "apps/web/lib/views/tasks/paths.test.ts",
-        "apps/web/lib/views/tasks/page-model.integration.test.ts",
         "apps/web/lib/views/tasks/queries.integration.test.ts",
         "apps/web/lib/views/fixes/types.ts",
         "apps/web/lib/views/fixes/kinds.ts",
