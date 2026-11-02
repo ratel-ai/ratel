@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import {
+  DEFAULT_MIGRATIONS_DIR,
   type LockClient,
   MIGRATION_LOCK_KEY,
   migrateOnBootEnabled,
@@ -54,4 +57,25 @@ test("migrate on boot: on by default for OSS, off for Ratel, explicit flag wins,
   );
   assert.equal(migrateOnBootEnabled({ DATABASE_MIGRATE_ON_BOOT: "1" }), false);
   assert.equal(migrateOnBootEnabled({}), false);
+});
+
+// The migrator applies only entries newer than the last one it recorded, so a lower `when` is
+// skipped silently, and the integration tests read the folder while production reads the journal.
+test("the journal lists every migration file, in order, with strictly increasing times", () => {
+  const { entries } = JSON.parse(
+    readFileSync(join(DEFAULT_MIGRATIONS_DIR, "meta/_journal.json"), "utf8"),
+  ) as { entries: Array<{ tag: string; when: number }> };
+  const files = readdirSync(DEFAULT_MIGRATIONS_DIR)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  assert.deepEqual(
+    entries.map((entry) => `${entry.tag}.sql`),
+    files,
+  );
+  for (let i = 1; i < entries.length; i++) {
+    assert.ok(
+      entries[i].when > entries[i - 1].when,
+      `${entries[i].tag} is not newer than the one before`,
+    );
+  }
 });
