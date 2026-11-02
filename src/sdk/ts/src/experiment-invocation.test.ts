@@ -105,6 +105,63 @@ describe("createExperimentInvocationBuffer", () => {
     ]);
   });
 
+  it("attributes last-offering-selection to the newest selection that offered the tool", () => {
+    let nowMs = 0;
+    const buffer = createExperimentInvocationBuffer<"legacy" | "candidate">(
+      { window: { turns: 5 }, attribution: "last-offering-selection" },
+      () => nowMs,
+    );
+    buffer.recordSelection({
+      unitId: "unit-a",
+      selectionId: "selection-1",
+      effectiveArm: "candidate",
+      ids: ["read-logs", "inspect-ci"],
+    });
+    nowMs = 10;
+    buffer.recordSelection({
+      unitId: "unit-a",
+      selectionId: "selection-2",
+      effectiveArm: "legacy",
+      ids: ["retry-build"],
+    });
+    nowMs = 30;
+
+    expect(buffer.evaluateInvocation({ unitId: "unit-a", toolId: "inspect-ci" })).toEqual([
+      {
+        attributed: true,
+        selectionId: "selection-1",
+        effectiveArm: "candidate",
+        rank: 1,
+        ageMs: 30,
+      },
+    ]);
+  });
+
+  it("leaves last-offering-selection unattributed when no windowed selection offered the tool", () => {
+    let nowMs = 0;
+    const buffer = createExperimentInvocationBuffer(
+      { window: { turns: 1 }, attribution: "last-offering-selection" },
+      () => nowMs,
+    );
+    buffer.recordSelection({
+      unitId: "unit-a",
+      selectionId: "selection-1",
+      effectiveArm: "legacy",
+      ids: ["inspect-ci"],
+    });
+    nowMs = 10;
+    buffer.recordSelection({
+      unitId: "unit-a",
+      selectionId: "selection-2",
+      effectiveArm: "legacy",
+      ids: ["read-logs"],
+    });
+
+    expect(buffer.evaluateInvocation({ unitId: "unit-a", toolId: "inspect-ci" })).toEqual([
+      { attributed: false },
+    ]);
+  });
+
   it("requires selections to satisfy both positional and age bounds", () => {
     let nowMs = 0;
     const buffer = createExperimentInvocationBuffer(
