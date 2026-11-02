@@ -144,6 +144,7 @@ jobs:
               - 'ee/package.json'
               - 'scripts/link-ee.mjs'
               - 'docker-compose.yml'
+              - '.env.example'
               - '.dockerignore'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -617,12 +618,37 @@ jobs:
           tables=$(docker compose exec -T db psql -U ratel -d ratel -Atc \
             "select count(*) from information_schema.tables where table_schema = 'public'")
           test "$tables" -gt 0
+      - name: Quick start from .env.example
+        run: |
+          docker compose down --volumes
+          cp .env.example .env
+          sed -i \
+            -e 's/^RATEL_ORG_NAME=.*/RATEL_ORG_NAME=CI \& Co/' \
+            -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 32)/" \
+            -e "s/^TRACE_SIGNALS_HASH_SALT=.*/TRACE_SIGNALS_HASH_SALT=$(openssl rand -hex 32)/" \
+            .env
+          docker compose up --detach --wait --wait-timeout 60
+          curl --fail --silent --show-error --location http://127.0.0.1:3000/ | grep --quiet 'CI &amp; Co'
+          counts() {
+            docker compose exec -T db psql -U ratel -d ratel -Atc \
+              "select (select count(*) from organizations), (select count(*) from users), (select count(*) from projects)"
+          }
+          test "$(counts)" = "1|1|0"
+          docker compose up --detach --wait --wait-timeout 60
+          curl --fail --silent --show-error --location --output /dev/null http://127.0.0.1:3000/
+          test "$(counts)" = "1|1|0"
+      - name: Demo data
+        run: |
+          docker compose --profile demo run --rm demo
+          turns=$(docker compose exec -T db psql -U ratel -d ratel -Atc \
+            "select count(*) from trace_turns t join projects p on p.id = t.project_id where p.is_demo and t.status = 'closed'")
+          test "$turns" -gt 0
       - name: Logs
         if: failure()
         run: docker compose logs
       - name: Stop
         if: always()
-        run: docker compose down --volumes
+        run: docker compose --profile demo down --volumes
 
   # Release-readiness matrix. Builds the REAL distributables (wheel, npm loader + native
   # binding, crate, sdist) from this PR, installs each into a clean environment, and runs
