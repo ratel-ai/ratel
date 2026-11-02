@@ -38,7 +38,7 @@ Across local, open-source, and frontier model setups, Ratel cuts token usage and
 
 Guides: [Quickstart](https://docs.ratel.sh/docs/quickstart) · [TypeScript SDK](https://docs.ratel.sh/docs/sdks/typescript) · [Python SDK](https://docs.ratel.sh/docs/sdks/python)
 
-Examples: [Vercel AI SDK](examples/ai-sdk/README.md) · [Pydantic AI](examples/pydantic-ai/README.md)
+Examples: [Vercel AI SDK](../../examples/ai-sdk/README.md) · [Pydantic AI](../../examples/pydantic-ai/README.md)
 
 ### Typescript
 
@@ -177,10 +177,10 @@ pnpm install && pnpm -r build && pnpm -r test       # TypeScript
 ```
 ## Contributing
 
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [AGENTS.md](AGENTS.md) — for coding agents working in this repo
+- [CONTRIBUTING.md](../../CONTRIBUTING.md)
+- [AGENTS.md](../../AGENTS.md) — for coding agents working in this repo
 
 ## License
 
-The `ratel-ai-core` engine is licensed under [Apache-2.0](LICENSE-APACHE) — an explicit patent grant for the engine others embed. Everything else (SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.
+The `ratel-ai-core` engine is licensed under [Apache-2.0](../../LICENSE-APACHE) — an explicit patent grant for the engine others embed. Everything else (SDKs, telemetry helpers, examples) is [MIT](../../LICENSE.md). See [ADR-0009](../../docs/adr/0009-licensing.md) for the rationale.
 
