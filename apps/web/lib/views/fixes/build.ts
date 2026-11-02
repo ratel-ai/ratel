@@ -452,7 +452,11 @@ export function plainChip(chip: EffectChip): EffectChip {
 }
 
 /** A replay of past searches: how much more often the right tool is found; a flat one is "No change". */
-function replayEffect(figure: string, detail: string | null, tone: FixEffect["tone"]): FixEffect {
+export function replayEffect(
+  figure: string,
+  detail: string | null,
+  tone: FixEffect["tone"],
+): FixEffect {
   const compact =
     tone === "neutral"
       ? { figure: "No change", unit: "" }
