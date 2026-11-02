@@ -3,9 +3,9 @@
 What the platform reads out of the turn ledger and the raw runtime events: recurring asks,
 the adaptive-ranking intent graph and the intent engine's clusters. Every reading is a
 registered job plus a drain step; the lexical ones run with no model key, the naming and
-judging ones report themselves skipped without one (ADR-0030). Five readings are in: the
-three lexical ones, Agent health (signals, workflows, self-corrections) and topics; match
-quality and the tool explorer follow.
+judging ones report themselves skipped without one (ADR-0030). Six readings are in: the
+three lexical ones, Agent health (signals, workflows, self-corrections), topics and the tool
+explorer; match quality follows.
 
 | Module | Holds | Job / steps |
 |---|---|---|
@@ -15,7 +15,7 @@ quality and the tool explorer follow.
 | `model-defaults.ts` | `DEFAULT_LABEL_MODEL`, the naming model when the operator sets none | — |
 | `stats.ts` | `wilsonInterval`, `CONFIDENT_SCORE_RATIO`: the two statistics the detectors share with the quality meter (L5) | — |
 | `match-quality/` | `sweep.ts`: the project rotation the signal sweep reuses; match quality itself is in `synthesis/` | — |
-| `tool-explorer/` | `units`, `types`, `reliability`, `transitions`, `timing`: the per-call helpers the signals and self-corrections read; the explorer's own job lands later | — |
+| `tool-explorer/` | `tool_explorer_runs`, `_edges`, `_sets`, `_intent_tools`: which tools run together and which comes next, per turn and per session, read off the closed turns of the signal run's window (`compute`, `analyze`, `cousage`, `transitions`, `intents`); `reliability`, `timing`, `units` are the per-call helpers the signals and self-corrections also read; its own `README.md` | `explore_tool_usage`, enqueued by each signal run through `computeSeams.enqueueExplore` |
 | `query-intents/` | `query_intents`, `query_intent_occurrences`: a project's searches folded into canonical recurring asks (`normalize` → `intent-text` → `resolve-canonicals`, `pipeline`) | `categorize_queries`; before-step `query_categorizations_enqueue` (count-based) |
 | `intent-graph/` | `intent_graphs`, `_revisions`, `_clusters`, `_edges`, `_shadow_turns`: a runtime's pushed graph and the Cloud-built one (`fold` over the foldable events, `compact`, `maintenance`); the `/api/v1/intent-graph` handlers | `fold_intent_graph`; before-step `intent_graph_fold_enqueue`, retention step `intent_graph_revisions_prune` |
 | `intent-engine/` | `intent_engine_state`, `intent_clusters`, `intent_cluster_assignments`: asks clustered by action and object (`engine`, `frames`, `levels`, `compact`, `names`), named with a model key | `cluster_intents`; before-step `intent_engine_enqueue`, retention step `intent_engine_expire` |
@@ -30,7 +30,10 @@ graph's compaction; the graph never imports the engine.
 **Seams.** The ledger's `ledgerSeams` (`enqueueReading`, `onBacklogDrained`) are filled by
 `trace-signals/register.ts` when the registry loads. `trace-signals/signals/compute-job.ts`
 exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
-`enqueueExplore` (the tool explorer, later). `intent-graph/fold-job.ts` exports `foldSeams.loadShadow`: the two
+`enqueueExplore` (filled by `tool-explorer/register.ts` with the signal run's id).
+`tool-explorer/job.ts` exports `exploreSeams.enqueueCraft`: the tool crafter (L5) is a reading
+of the explorer's reading, so its registration fills the seam when it lands; unset, a completed
+explorer run queues nothing. `intent-graph/fold-job.ts` exports `foldSeams.loadShadow`: the two
 tool registries the match-quality reading builds over the project's catalog, for Cloud's own
 with-and-without ranking of each search. Unset, the fold builds the graph and stores no
 shadow turns. The Boost panel's reads of those turns (`loadBoostSelections` and the outcomes
@@ -41,5 +44,5 @@ around live) are in `views/adaptive-ranking`, as the Intents page read models ar
 Two guard tests live here: `pure-core.test.ts` (the ledger and the readings import no
 framework, page or higher layer) and `no-outbound-without-key.test.ts` (the fold, the
 engine, the signal run and the topics reading complete on a seeded database with `fetch`
-disabled and no key; naming, workflow names, decisions and topic names make no call). Owned files and why are listed in
+disabled and no key, and the tool explorer stores its edges from the same ledger; naming, workflow names, decisions and topic names make no call). Owned files and why are listed in
 `lib/README.md` and in `trace-signals/README.md`.

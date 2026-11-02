@@ -1,3 +1,4 @@
+import "@/lib/views/intents/map/tool-steps";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import {
@@ -173,8 +174,9 @@ async function readOutcomes(
 
 /**
  * Which tool came right after which in one turn, as steps between the tools in `keep` (the ones
- * on the map). Read from the tool explorer's latest run once it lands (`mapSeams.loadToolSteps`);
- * until then the map draws no "came next" arrows. Tool ids only; no query text is read.
+ * on the map). Read through `mapSeams.loadToolSteps`, which `tool-steps.ts` (imported above for
+ * that) fills from the tool explorer's latest completed run; with the seam unset the map draws
+ * no "came next" arrows. Tool ids only; no query text is read.
  */
 export async function loadToolSteps(
   input: { projectId: string; keep: ReadonlySet<string> },

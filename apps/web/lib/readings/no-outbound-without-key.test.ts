@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { parseTraceEvents } from "@/lib/ingest/trace-events/parse";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
@@ -35,6 +36,20 @@ import {
   upsertIntentGraphShadowTurns,
 } from "@/lib/readings/intent-graph/queries";
 import { CLOUD_INTENT_GRAPH_KEY } from "@/lib/readings/intent-types/wire";
+import { computeToolExplorer } from "@/lib/readings/tool-explorer/compute";
+import { exploreProjectToolUsage } from "@/lib/readings/tool-explorer/job";
+import {
+  errorMessagesFor,
+  intentsForTurns,
+  loadIntentTexts,
+} from "@/lib/readings/tool-explorer/ledger";
+import {
+  failExplorerRun,
+  latestExplorerRun,
+  persistExplorerRun,
+  reapStaleExplorerRuns,
+  startExplorerRun,
+} from "@/lib/readings/tool-explorer/queries";
 import {
   anthropicTopicNamer,
   assignProjectTopics,
@@ -61,6 +76,7 @@ import {
   type Db as SignalsDb,
 } from "@/lib/readings/trace-signals/signals/integration-support";
 import { latestSignalRun } from "@/lib/readings/trace-signals/signals/queries";
+import { loadPreviousWorkflows } from "@/lib/readings/trace-signals/signals/workflow-previous";
 import { defaultDecideDeps } from "@/lib/readings/trace-signals/workflows/decide-job";
 import { loadVerdicts, saveVerdicts } from "@/lib/readings/trace-signals/workflows/decide-queries";
 import { labelProjectWorkflows } from "@/lib/readings/trace-signals/workflows/label-job";
@@ -76,8 +92,8 @@ import {
  * intent graph fold, the intent engine's clustering) must complete on a seeded database with
  * `fetch` disabled, and the engine's naming step must make no call rather than try. The
  * signal run completes on the built ledger and queues no workflow names, the label job
- * reports itself skipped, and the topics reading places asks by wording and names topics
- * from their own words.
+ * reports itself skipped, the tool explorer stores its edges from the same ledger, and the
+ * topics reading places asks by wording and names topics from their own words.
  */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -234,7 +250,7 @@ function buildDeps(db: Db, now: Date) {
   };
 }
 
-test("the signal run and the label job complete on the built ledger with no key and no network", async () => {
+test("the signal run, the explorer and the label job complete on the built ledger with no key and no network", async () => {
   const db = await setup();
   // Recent turns: the topics reading looks back 30 days from now, the signal run 90.
   const recent = Date.now() - 60 * 60_000;
@@ -266,6 +282,39 @@ test("the signal run and the label job complete on the built ledger with no key 
       [],
       "no model key: no workflow names are queued",
     );
+
+    // The tool explorer: one more reading of the same ledger, with no model anywhere in it.
+    const explored = await exploreProjectToolUsage(
+      PROJECT_ID,
+      { trigger: "chained", signalRunId: run.runId },
+      {
+        getOrganizationByProjectId: async () => {
+          const [org] = await db
+            .select()
+            .from(schema.organizations)
+            .where(eq(schema.organizations.id, ORGANIZATION_ID));
+          return org ?? null;
+        },
+        reapStale: (p, before, _db, at) => reapStaleExplorerRuns(p, before, sdb, at),
+        startRun: (input, _db, at) => startExplorerRun(input, sdb, at),
+        failRun: (id, error, _db, at) => failExplorerRun(id, error, sdb, at),
+        persist: (input) => persistExplorerRun(input, sdb),
+        compute: (p, window, options) =>
+          computeToolExplorer(p, window, {
+            ...options,
+            listPage: (pp, range, _db, limit) => listClosedTurnsPage(pp, range, sdb, limit),
+            loadWorkflows: (pp) => loadPreviousWorkflows(pp, sdb),
+            intentsForTurns: (pp, turns) => intentsForTurns(pp, turns, sdb),
+            loadIntentTexts: (pp, ids) => loadIntentTexts(pp, ids, sdb),
+            loadErrorMessages: (pp, ids) => errorMessagesFor(pp, ids, sdb),
+          }),
+        observability: { trackSystemEvent: async () => undefined },
+        now: () => later,
+      },
+    );
+    assert.equal(explored.outcome, "completed");
+    assert.ok(explored.turnsScanned > 0, "the explorer read the closed turns");
+    assert.equal((await latestExplorerRun(PROJECT_ID, sdb))?.status, "completed");
 
     const labels = await labelProjectWorkflows(PROJECT_ID, {
       // The real completion factory reads `process.env`; null is what it returns without a key.
