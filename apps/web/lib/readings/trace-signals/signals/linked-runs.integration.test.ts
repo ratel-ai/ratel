@@ -18,6 +18,7 @@ import {
 import { linkRunsPage } from "@/lib/readings/trace-signals/signals/linked-runs-query";
 import { times } from "@/lib/readings/trace-signals/signals/test-fixtures";
 import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
+import { loadTurnDetail } from "@/lib/views/traces/turn-detail";
 
 /**
  * Linking SDK runs to OpenTelemetry model calls over a real schema: a project
@@ -147,12 +148,7 @@ test("an SDK-only project never reads for links and stores exactly what it did",
   );
   await seedLedger(client, db, fixtures);
   let reads = 0;
-  const counted = deps(db, {
-    linkPage: async (_p, turns) => {
-      reads += 1;
-      return [...turns];
-    },
-  });
+  const counted = deps(db, { linkPage: async (_p, turns) => ((reads += 1), [...turns]) });
   const linked = await computeSignals(PROJECT_ID, signalWindow(END, 7), counted);
   const plain = await computeSignals(
     PROJECT_ID,
@@ -185,6 +181,29 @@ test("an OpenTelemetry-only project reads exactly as it did", async () => {
   await client.close();
 });
 
+test("a linked SDK run's Traces page shows what was asked next to what was searched", async () => {
+  const { client, db } = await setupDb();
+  await seedSdkWithModelCalls(client, db);
+  await seedOtelAgent(client, db);
+  const ids = await client.query<{ id: string; lane: string }>(
+    `select id, lane from trace_turns where session_id in ('both-0', 'solo-0') order by lane`,
+  );
+  const [otlp, runtime] = ids.rows;
+  const detail = await loadTurnDetail(PROJECT_ID, runtime!.id, db);
+  assert.deepEqual(detail?.linked, {
+    modelCalls: 3,
+    inputTokens: 6_000,
+    outputTokens: 600,
+    costUsd: 0.027,
+    modelMs: 2_400,
+    asked: "assign the Falcon bug to Ada",
+    searched: "find the task",
+  });
+  const plain = await loadTurnDetail(PROJECT_ID, otlp!.id, db);
+  assert.equal(plain && "linked" in plain, false);
+  await client.close();
+});
+
 test("SDK runs whose events carry the OTel trace id link to that trace's model calls, whatever their session", async () => {
   const { client, db } = await setupDb();
   // The OTel exporter sets no conversation id: its model calls' session is the trace id.
@@ -205,5 +224,10 @@ test("SDK runs whose events carry the OTel trace id link to that trace's model c
   const calls = result.summary.daily.reduce((sum, day) => sum + (day.linked?.modelCalls ?? 0), 0);
   assert.equal(calls, 12);
 
+  const [head] = (
+    await client.query<{ id: string }>(`select id from trace_turns where session_id = 'sdk-0'`)
+  ).rows;
+  const detail = await loadTurnDetail(PROJECT_ID, head!.id, db);
+  assert.equal(detail?.linked?.modelCalls, 2, "the Traces page links by trace id too");
   await client.close();
 });

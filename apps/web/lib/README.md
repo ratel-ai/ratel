@@ -15,7 +15,7 @@ never a higher one; nothing here imports the UI (`@/components`, `@/app`) outsid
 | L3 | `ledger/` | turns, steps, the closed-turn reader |
 | L4 | `readings/` | intent engine, intent graph, topics, signals, workflows, self-corrections, tool explorer, decisions |
 | L5 | `synthesis/` | match quality, quality, experiments, playground, traces, tool crafter, health imports |
-| L6 | `views/`, `console/` | the page read models (Agent health, Tasks, Fixes, Intents); scope, navigation, settings, projects, onboarding, seeds |
+| L6 | `views/`, `console/` | the page read models (Agent health, Tasks, Fixes, Intents, the Traces turn page); scope, navigation, settings, projects, onboarding, seeds |
 | L7 | `mcp/` | the MCP operations |
 
 Each module owns its `schema.ts` (tables), `queries.ts` and `register.ts` (job handlers and drain
@@ -61,7 +61,8 @@ ingest schema fragment and the single init migration. The Intents page read mode
 (`breakdown*`, `asks-tree`, `v2`) are `views/intents`; `setup`, `boost-view`, `ranking` and the Boost
 reads are `views/adaptive-ranking`; the view helpers are `views/intents/adaptive-view.ts`.
 
-`views/` (L6) holds the read models of the Agent health, Tasks, Fixes and Intents pages, cut
+`views/` (L6) holds the read models of the Agent health, Tasks, Fixes and Intents pages and of
+the Traces turn page (`views/traces`, an L6 view because it reads the L5 trace summaries), cut
 from upstream's `trace-signals`, `tasks`, `fixes`, `health-summary`, `topics`, `intent-engine`
 and `intent-graph/v2`; its owned files and the three seams the tool crafter, match quality and
 the tool explorer fill are listed in `views/README.md`. `console/scope/project-scope.ts` is the
