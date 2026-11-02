@@ -49,13 +49,15 @@ imports no module; `lib/composition/registry.ts` imports every module's `registe
 | L2 | `ingest`, `catalog` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
 | L3 | `ledger` | turns, steps, closed-turn reader (the signal verdict and insight store depends on the judge and the workflow labels, so it is part of the trace-signals reading in L4) |
 | L4 | `readings` | intent engine, intent graph, topics, signals, workflows, self-corrections, tool explorer, decisions |
-| L5 | `synthesis` | match quality (it reads the experiments and shares its ground truth with the quality meter), quality, experiments, playground, traces, tool crafter, health imports |
+| L5 | `synthesis` | match quality (it reads the experiments and shares its ground truth with the quality meter), quality, experiments, playground, traces, tool crafter (`craft_tools`, a reading of the tool explorer's reading; owned: `schema.ts`, `job.ts` without the flag gate, `job.integration.test.ts`, `register.ts`, which fills the explorer's `enqueueCraft` seam), health imports |
 | L6 | `views`, `console` | the page read models (Agent health, Tasks, Fixes, Intents: upstream's trace-signals page files, tasks, fixes, health summary, topics views, intent-graph v2); scope, navigation, settings, projects, onboarding, seeds |
 | L7 | `mcp` | the MCP operations |
 
 `scripts/check-layers.mjs` enforces it with the import walker of `check-ee-boundary.mjs`: a file
 in level L imports only levels at or below L; nothing under `lib/` imports `@/components` or
-`@/app` outside tests; `lib/composition/registry.ts` is the one root exempt from the rule.
+`@/app`; a test file (`*.test.ts`, `test-support.ts`) is exempt from both, since it reads what
+it verifies and is not part of the module graph (the explorer's timing test reads the crafter's
+sentences over its arithmetic); `lib/composition/registry.ts` is the one root exempt from the rule.
 `scripts/layers-allow.json` is a ratchet: an entry silences one violation while copied code is
 being layered, a stale entry fails the check, so the list can only shrink. `app/**`,
 `components/**`, `proxy.ts` and `instrumentation*.ts` sit above L7 and may import any layer.

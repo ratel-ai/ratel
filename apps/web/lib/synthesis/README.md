@@ -15,6 +15,7 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 | `playground/` | Test a search (upstream's Playground): rank a prompt with the SDK's engine against the live catalog, with what-if edits. `embed.ts` goes through the embedding-provider port, `rank-route.ts` is the route's logic |
 | `experiments/` | experiment detection and comparison over recorded rankings |
 | `catalog/` | the tools table model, data provenance and the runtime-catalog reads, shared by Test a search and the Catalog pages |
+| `tool-crafter/` | the `craft_tools` job: rule-drafted changes to a project's tools (merges, folds, retirements, tightened schemas…) with their backtest and round-trip price, read off the tool explorer, match quality and the topic patterns; `register.ts` fills `exploreSeams.enqueueCraft`. Owned: `schema.ts`, `job.ts`, `job.integration.test.ts`, `register.ts` |
 | `traces/v2/` | the console Traces pages' models: filters, runs, run summary, timeline, volume |
 
 The experiment reads are in `traces/` (`experiment-*`, `calibration-view`); the Calibration pages and

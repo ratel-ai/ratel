@@ -1,4 +1,4 @@
-import type { CraftKind } from "@/lib/views/fixes/crafter-types";
+import type { CraftKind } from "@/lib/synthesis/tool-crafter/types";
 
 /**
  * The kinds of fix, in plain words, and how every engine's output maps onto

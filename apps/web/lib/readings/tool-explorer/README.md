@@ -18,7 +18,7 @@ It needs no model key and makes no outbound call.
 | `queries.ts` | the run lifecycle, the one-transaction persist, the coalesced enqueue, and the reads: `listTransitions`, `listCousage`, `listMergeCandidates`, `listIntentTools` |
 | `compute.ts` | the pass over the ledger (`walkClosedTurnPages`), the window (`explorerWindowDays`: the plan's Agent health window, 30 to 90 days) and the time budget |
 | `analyze.ts` | the per-turn accumulators and `finish`, which turns them into the stored result |
-| `cousage.ts`, `transitions.ts`, `intents.ts`, `reliability.ts`, `timing.ts` | the arithmetic: frequent itemsets, next/before edges, intent groups and shares, failure rates, hand-off timing |
+| `cousage.ts`, `transitions.ts`, `intents.ts`, `reliability.ts`, `timing.ts` | the arithmetic: frequent itemsets, next/before edges, intent groups and shares, failure rates, hand-off timing (`timing.test.ts` reads the crafter's `pairTiming` and `timingSentences` over it) |
 | `thresholds.ts` | `ALWAYS_TOGETHER_LOW`, `SURE_HOP_P`: the bounds the reads and the crafter share |
 | `view.ts` | the scope labels and duration formatting the pages and the crafter use |
 | `types.ts`, `units.ts` | the row shapes, the summary, and the turn and session units |
@@ -28,18 +28,17 @@ It needs no model key and makes no outbound call.
 partition of the upstream schema hub; `job.ts`, with no flag gates (the explorer runs for every
 project here, as the signal run does) and the crafter enqueue as a seam; and
 `job.integration.test.ts`, without the flag cases. Everything else mirrors upstream. Upstream's
-`page-model.ts` is the explorer page's read model and lands with the page; `timing.test.ts`
-reads the tool crafter and lands with it.
+`page-model.ts` is the explorer page's read model and lands with the page.
 
 **Seams.** `job.ts` exports `exploreSeams.enqueueCraft`: the tool crafter (L5,
 `synthesis/tool-crafter`) is a reading of this reading, so its registration fills the seam
-when it lands, and a completed run queues it. Unset, a run completes and queues nothing: this
-module never imports upward. The Intents Map's "came next" arrows (`mapSeams.loadToolSteps`
+(`enqueueCraftJob(projectId, undefined, "chained")`), and a completed run queues it. Unset, a
+run completes and queues nothing: this module never imports upward. The Intents Map's "came next" arrows (`mapSeams.loadToolSteps`
 in `lib/views/intents/map`) are read from this module's turn-scope `next` edges by a filler in
 `views` (L6).
 
-Tests: `register.test.ts` (the job kind and the seam fill), `analyze`, `intents`, `reliability`
-(the arithmetic) and `job.integration.test.ts` (a signal run queues the explorer on PGlite, the
+Tests: `register.test.ts` (the job kind and the seam fill), `analyze`, `intents`, `reliability`,
+`timing` (the arithmetic) and `job.integration.test.ts` (a signal run queues the explorer on PGlite, the
 run stores edges and sets for both scopes, replaces the previous run, defers behind a live one,
 and completes with the crafter seam empty). Run them with
 `npx -y node@24 --import tsx --test --test-force-exit lib/readings/tool-explorer/*.test.ts`

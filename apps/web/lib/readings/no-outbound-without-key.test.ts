@@ -46,10 +46,14 @@ import {
 import {
   failExplorerRun,
   latestExplorerRun,
+  listCousage,
+  listMergeCandidates,
+  listTransitions,
   persistExplorerRun,
   reapStaleExplorerRuns,
   startExplorerRun,
 } from "@/lib/readings/tool-explorer/queries";
+import type { ExplorerNode } from "@/lib/readings/tool-explorer/types";
 import {
   anthropicTopicNamer,
   assignProjectTopics,
@@ -85,6 +89,15 @@ import {
   loadLatestWorkflows,
   loadWorkflowLabels,
 } from "@/lib/readings/trace-signals/workflows/label-queries";
+import { craftProjectTools } from "@/lib/synthesis/tool-crafter/job";
+import {
+  type CrafterDb,
+  failCraftRun,
+  finishCraftRun,
+  latestCraftRun,
+  reapStaleCraftRuns,
+  startCraftRun,
+} from "@/lib/synthesis/tool-crafter/queries";
 
 /**
  * The open-source edition's promise (ADR-0030): with no model key set, every reading that
@@ -92,8 +105,9 @@ import {
  * intent graph fold, the intent engine's clustering) must complete on a seeded database with
  * `fetch` disabled, and the engine's naming step must make no call rather than try. The
  * signal run completes on the built ledger and queues no workflow names, the label job
- * reports itself skipped, the tool explorer stores its edges from the same ledger, and the
- * topics reading places asks by wording and names topics from their own words.
+ * reports itself skipped, the tool explorer stores its edges from the same ledger, the tool
+ * crafter drafts from that reading by rules, and the topics reading places asks by wording
+ * and names topics from their own words.
  */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -315,6 +329,53 @@ test("the signal run, the explorer and the label job complete on the built ledge
     assert.equal(explored.outcome, "completed");
     assert.ok(explored.turnsScanned > 0, "the explorer read the closed turns");
     assert.equal((await latestExplorerRun(PROJECT_ID, sdb))?.status, "completed");
+
+    // The tool crafter: a reading of the explorer's reading, drafted by rules, with no model
+    // anywhere in it. The project declares no tools here, so it completes with nothing to draft.
+    const cdb = db as unknown as CrafterDb;
+    const crafted = await craftProjectTools(
+      PROJECT_ID,
+      {
+        getOrganizationByProjectId: async () => {
+          const [org] = await db
+            .select()
+            .from(schema.organizations)
+            .where(eq(schema.organizations.id, ORGANIZATION_ID));
+          return org ?? null;
+        },
+        reapStale: (p, before, _db, at) => reapStaleCraftRuns(p, before, cdb, at),
+        startRun: (input, _db, at) => startCraftRun(input, cdb, at),
+        failRun: (id, error, _db, at) => failCraftRun(id, error, cdb, at),
+        finishRun: (input) => finishCraftRun(input, cdb),
+        reads: {
+          loadExplorer: async (p) => {
+            const run = await latestExplorerRun(p, sdb, "completed");
+            const [sets, pairs, next, before] = await Promise.all([
+              listMergeCandidates(p, { scope: "turn" }, sdb),
+              listCousage(p, { scope: "turn", size: 2 }, sdb),
+              listTransitions(p, { scope: "turn", kind: "next" }, sdb),
+              listTransitions(p, { scope: "turn", kind: "before" }, sdb),
+            ]);
+            const summary = (run?.summary ?? null) as { nodes?: ExplorerNode[] } | null;
+            return {
+              runId: run?.id ?? null,
+              windowDays: run?.windowDays ?? 0,
+              sets,
+              pairs,
+              edges: [...next, ...before],
+              nodes: summary?.nodes ?? [],
+            };
+          },
+          loadSources: async () => [],
+          loadDeficits: async () => [],
+        },
+        observability: { trackSystemEvent: async () => undefined },
+        now: () => later,
+      },
+      { trigger: "chained" },
+    );
+    assert.equal(crafted.outcome, "crafted");
+    assert.equal((await latestCraftRun(PROJECT_ID, cdb))?.status, "crafted");
 
     const labels = await labelProjectWorkflows(PROJECT_ID, {
       // The real completion factory reads `process.env`; null is what it returns without a key.

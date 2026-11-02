@@ -20,7 +20,8 @@ import type {
   TaskStepReading,
   TaskStepRole,
 } from "@/lib/readings/trace-signals/workflows/reading";
-import type { CraftKind, RoundTripPrice } from "@/lib/views/fixes/crafter-types";
+import type { RoundTripPrice } from "@/lib/synthesis/tool-crafter/round-trip";
+import type { CraftKind } from "@/lib/synthesis/tool-crafter/types";
 import { claimModel, type SignalRecord } from "@/lib/views/health/signals/claims-model";
 import {
   basisView,

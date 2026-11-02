@@ -9,6 +9,7 @@ import { toolExplorerRegistration } from "@/lib/readings/tool-explorer/register"
 import { topicsRegistration } from "@/lib/readings/topics/register";
 import { traceSignalsRegistration } from "@/lib/readings/trace-signals/register";
 import { qualityRegistration } from "@/lib/synthesis/quality/register";
+import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
 
 /**
@@ -27,6 +28,7 @@ const CORE: Registration[] = [
   topicsRegistration,
   tracesRegistration,
   qualityRegistration,
+  toolCrafterRegistration,
 ];
 
 export function collectRegistrations(

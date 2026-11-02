@@ -30,10 +30,6 @@
     { "from": "@/lib/logger", "to": "@/lib/platform/logger", "exact": true },
     { "from": "@/lib/api-keys", "to": "@/lib/platform/api-keys", "exact": true },
     { "from": "@/lib/match-quality/judges/jev", "to": "@/lib/readings/decisions/judge", "exact": true },
-    { "from": "@/lib/tool-crafter/types", "to": "@/lib/views/fixes/crafter-types", "exact": true },
-    { "from": "@/lib/tool-crafter/suggestion-model", "to": "@/lib/views/fixes/crafter-types", "exact": true },
-    { "from": "@/lib/tool-crafter/view", "to": "@/lib/views/fixes/crafter-types", "exact": true },
-    { "from": "@/lib/tool-crafter/round-trip", "to": "@/lib/views/fixes/crafter-types", "exact": true },
     { "from": "@/lib/health-imports/queries", "to": "@/lib/views/health/imports-types", "exact": true },
     { "from": "@/lib/health-imports/spans", "to": "@/lib/views/health/imports-types", "exact": true },
     { "from": "@/lib/health-imports/copy", "to": "@/lib/views/health/imports-types", "exact": true },
@@ -209,6 +205,12 @@
         "NewToolExplorerSetRow": "@/lib/readings/tool-explorer/schema",
         "ToolExplorerIntentToolRow": "@/lib/readings/tool-explorer/schema",
         "NewToolExplorerIntentToolRow": "@/lib/readings/tool-explorer/schema",
+        "toolCraftRuns": "@/lib/synthesis/tool-crafter/schema",
+        "toolCraftProposals": "@/lib/synthesis/tool-crafter/schema",
+        "ToolCraftRunRow": "@/lib/synthesis/tool-crafter/schema",
+        "NewToolCraftRunRow": "@/lib/synthesis/tool-crafter/schema",
+        "ToolCraftProposalRow": "@/lib/synthesis/tool-crafter/schema",
+        "NewToolCraftProposalRow": "@/lib/synthesis/tool-crafter/schema",
         "traceTopics": "@/lib/readings/topics/schema",
         "traceTurnTopics": "@/lib/readings/topics/schema",
         "traceTopicInsights": "@/lib/readings/topics/schema"
@@ -377,13 +379,17 @@
       "symbols": {
         "wilsonInterval": "@/lib/readings/stats",
         "ConfidenceInterval": "@/lib/readings/stats",
+        "QualityScore": "@/lib/synthesis/quality/metrics",
+        "hitCredit": "@/lib/synthesis/quality/metrics",
+        "scoreObservations": "@/lib/synthesis/quality/metrics",
         "CONFIDENT_SCORE_RATIO": "@/lib/readings/stats"
       }
     },
     "@/lib/match-quality/types": {
       "default": "@/lib/synthesis/match-quality/types",
       "symbols": {
-        "CorpusEntry": "@/lib/readings/decisions/judge"
+        "CorpusEntry": "@/lib/readings/decisions/judge",
+        "Candidate": "@/lib/synthesis/match-quality/types"
       }
     },
     "@/lib/intent-graph/view": {
@@ -414,7 +420,9 @@
       "default": "@/lib/ingest/runtime-catalog/inventory",
       "symbols": {
         "ServiceDb": "@/lib/synthesis/match-quality/service",
-        "loadCorpusWithFingerprint": "@/lib/synthesis/match-quality/service"
+        "loadCorpusWithFingerprint": "@/lib/synthesis/match-quality/service",
+        "loadToolCorpus": "@/lib/synthesis/match-quality/service"
+
       }
     },
     "@/lib/quality/fingerprint": {
