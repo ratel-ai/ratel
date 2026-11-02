@@ -19,6 +19,7 @@ npm packages.
 | `session.ts` | the principal-to-rows bridge: `getSessionContext()` with user, organization, role, memberships |
 | `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
+| `deployment-config.ts` | `RATEL_ORG_NAME`, and the warnings at boot for a public `BASE_URL` on public defaults |
 | `environment.ts` | `APP_ENV` as the one public runtime value; local-environment allowlist |
 | `logger.ts`, `request-log.ts`, `rate-limit.ts`, `http/`, `otel/` | pino with error redaction, per-request logging, token buckets, body caps, self-telemetry |
 | `api-key-actions.ts` | create and revoke a project's keys, behind the settings server actions |

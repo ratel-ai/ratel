@@ -47,6 +47,7 @@ function deps(state: {
   user?: User;
   actingAs?: ActingAs;
   organizations?: Organization[];
+  organizationName?: string;
 }) {
   const calls: string[] = [];
   const events: string[] = [];
@@ -58,9 +59,10 @@ function deps(state: {
       return state.user ?? user();
     },
     listMemberships: async () => state.memberships,
-    ensurePersonalOrganization: async ({ preferredSlug }) => {
+    organizationName: () => state.organizationName ?? null,
+    ensurePersonalOrganization: async ({ preferredSlug, name }) => {
       calls.push(`provision:${preferredSlug}`);
-      const organization = org("o-new", preferredSlug);
+      const organization = { ...org("o-new", preferredSlug), name };
       state.memberships = [{ organization, role: "admin" }];
       return { organization, role: "admin", created: true };
     },
@@ -90,6 +92,36 @@ test("a first sign-in upserts the user, provisions a personal organization and r
   const second = await loadSessionContext(d);
   assert.equal(second?.organization.id, "o-new");
   assert.deepEqual(events, ["organization_created"], "a reused organization is not reported again");
+});
+
+test("a configured organization name names the organization when it is created", async () => {
+  const { d, calls } = deps({ memberships: [], organizationName: "Acme & Sons" });
+
+  const context = await loadSessionContext(d);
+  assert.equal(context?.organization.name, "Acme & Sons");
+  assert.equal(context?.organization.slug, "acme-sons");
+  assert.deepEqual(calls, ["upsert:local-operator", "provision:acme-sons"]);
+});
+
+test("a configured organization name does not rename an organization that exists", async () => {
+  const existing = org("o-1", "renamed-in-settings");
+  const { d, calls } = deps({
+    memberships: [{ organization: existing, role: "admin" }],
+    user: user({ currentOrganizationId: "o-1" }),
+    organizationName: "Acme",
+  });
+
+  const context = await loadSessionContext(d);
+  assert.equal(context?.organization.name, "renamed-in-settings");
+  assert.deepEqual(calls, ["upsert:local-operator"]);
+});
+
+test("a configured name with no usable slug characters still gets a slug", async () => {
+  const { d } = deps({ memberships: [], organizationName: "株式会社" });
+
+  const context = await loadSessionContext(d);
+  assert.equal(context?.organization.name, "株式会社");
+  assert.equal(context?.organization.slug, "org");
 });
 
 test("a stale active-organization pointer heals to the first membership and is persisted", async () => {

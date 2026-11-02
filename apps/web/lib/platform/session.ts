@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { composition } from "@/lib/composition/ports";
 import type { ActingAs, Principal } from "@/lib/contracts/session";
+import { configuredOrganizationName } from "@/lib/platform/deployment-config";
 import {
   ensurePersonalOrganization,
   getOrganizationById,
@@ -40,6 +41,7 @@ export type SessionDeps = {
   upsertUser: typeof upsertUserByExternalId;
   listMemberships: typeof listOrganizationsForUser;
   ensurePersonalOrganization: typeof ensurePersonalOrganization;
+  organizationName: () => string | null;
   setCurrentOrganization: typeof setCurrentOrganization;
   getOrganizationById: typeof getOrganizationById;
   getUserById: typeof getUserById;
@@ -52,6 +54,7 @@ const defaultDeps = (): SessionDeps => ({
   upsertUser: upsertUserByExternalId,
   listMemberships: listOrganizationsForUser,
   ensurePersonalOrganization,
+  organizationName: configuredOrganizationName,
   setCurrentOrganization,
   getOrganizationById,
   getUserById,
@@ -85,8 +88,9 @@ export async function resolveSessionContext(
   const user = await deps.upsertUser(identityFromPrincipal(principal));
   const memberships = await deps.listMemberships(user.id);
   if (memberships.length === 0) {
-    const base = slugify(user.username || user.name || "org") || "org";
-    const name = user.name || user.username || "Personal organization";
+    const configured = deps.organizationName();
+    const base = slugify(configured || user.username || user.name || "org") || "org";
+    const name = configured || user.name || user.username || "Personal organization";
     const { organization, role, created } = await deps.ensurePersonalOrganization({
       userId: user.id,
       preferredSlug: base,
