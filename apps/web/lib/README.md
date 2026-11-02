@@ -44,8 +44,10 @@ and `onBacklogDrained`, are set by the readings' registration instead of importe
 loaders read L4 tables and land with the readings) and the build-job integration test.
 Upstream's `workflows/decide-queries.ts` is a workflow concern and lands with the readings.
 
-In `readings/` the owned files are the three schema fragments and three `register.ts` files
-(no upstream counterpart), `query-intents/queries.ts` (the query-intents partition of upstream's
+In `readings/` the owned files are the schema fragments and the `register.ts` files
+(no upstream counterpart), `tool-explorer/job.ts` (no retired flag gates; the crafter enqueue is
+the `exploreSeams.enqueueCraft` seam the crafter's registration fills, so L4 never imports L5)
+with its integration test, `query-intents/queries.ts` (the query-intents partition of upstream's
 queries hub), `intent-graph/queries.ts` (minus the Boost panel block, which reads the L5
 quality selections and lands with match quality; plus the fold enqueue and the unfolded-projects
 read from the hub), `intent-graph/fold-job.ts` (the shadow replay over the tool catalog is the
