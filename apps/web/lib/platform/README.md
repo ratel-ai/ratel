@@ -8,7 +8,7 @@ npm packages.
 |---|---|
 | `db/client.ts` | the lazy drizzle client over node-postgres; `isDbConfigured`, `sslConfig` |
 | `db/migrate.ts`, `scripts/migrate.mts` | the migrator; `DATABASE_MIGRATE_ON_BOOT=1` runs it at startup |
-| `db/migrations/` | the generated migration set (`pnpm db:regenerate`, checked by `pnpm db:check`) |
+| `db/migrations/` | the migrations: one baseline file per schema fragment, then one file per change (`pnpm db:generate`, checked by `pnpm db:check`) |
 | `app-config.ts` | `APP_NAME` and `BASE_URL`, from the environment, on the server and in the browser |
 | `db/tables.ts`, `db/queries.ts` | barrels over the L1 fragments; higher layers export their own |
 | `db/test-support.ts` | `createMigratedPGlite()`: one migrated snapshot per process, a fresh copy per test |
@@ -19,6 +19,7 @@ npm packages.
 | `session.ts` | the principal-to-rows bridge: `getSessionContext()` with user, organization, role, memberships |
 | `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
+| `deployment-config.ts` | `RATEL_ORG_NAME`, and the warnings at boot for a public `BASE_URL` on public defaults |
 | `environment.ts` | `APP_ENV` as the one public runtime value; local-environment allowlist |
 | `logger.ts`, `request-log.ts`, `rate-limit.ts`, `http/`, `otel/` | pino with error redaction, per-request logging, token buckets, body caps, self-telemetry |
 | `api-key-actions.ts` | create and revoke a project's keys, behind the settings server actions |

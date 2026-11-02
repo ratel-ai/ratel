@@ -96,7 +96,10 @@ const docs = {
     new URL("../src/rankers/ts/README.md", import.meta.url),
     "utf8",
   ),
-  "llms.txt": readFileSync(new URL("../llms.txt", import.meta.url), "utf8"),
+  "packages/sdk/llms.txt": readFileSync(
+    new URL("../packages/sdk/llms.txt", import.meta.url),
+    "utf8",
+  ),
 };
 
 for (const [path, text] of Object.entries(docs)) {

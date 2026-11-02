@@ -8,6 +8,8 @@
 export async function assertComposition(): Promise<void> {
   try {
     await import("@/lib/composition");
+    const { configuredOrganizationName } = await import("@/lib/platform/deployment-config");
+    configuredOrganizationName();
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
@@ -23,6 +25,8 @@ export async function assertComposition(): Promise<void> {
  */
 export async function bootBackground(): Promise<void> {
   if (!process.env.DATABASE_URL) return;
+  const { exposureWarnings } = await import("@/lib/platform/deployment-config");
+  for (const warning of exposureWarnings()) console.warn(`[deployment] ${warning}`);
   const { migrateOnBootEnabled, runMigrations } = await import("@/lib/platform/db/migrate");
   if (migrateOnBootEnabled()) {
     try {

@@ -66,8 +66,9 @@ being layered, a stale entry fails the check, so the list can only shrink. `app/
 migrator, the statement-timeout helper and a schema composer; it holds no table. A module ships
 `schema.ts`, `queries.ts` and `register.ts` (its job handlers and drain steps), and `jobs/` learns
 of them only through the registry. The open-source edition starts from a fresh migration set
-generated from the composed schema, regenerated as `0000_init` until the first OSS release tag;
-`db:check` in CI fails on drift. The Cloud database is not migrated by this work.
+generated from the composed schema: one baseline file per schema fragment, holding only the final
+tables, with no upstream history. Every later change is its own file; an existing file is never
+edited. `db:check` in CI fails when the schema has changes no file covers. The Cloud database is not migrated by this work.
 
 **A repeatable sync from `ratel-cloud` main**, in `scripts/platform-sync/`. `map.json` lists what
 moves where in three modes: `copy` (mirrored on every sync, import specifiers rewritten to the

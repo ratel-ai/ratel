@@ -21,7 +21,7 @@ test("the fold index predicate names exactly the types the fold reads, in schema
   const predicate = /trace_events_project_received_fold_idx[\s\S]{0,400}?in \(([^)]*)\)/;
   for (const file of [
     "lib/ingest/trace-events/schema.ts",
-    "lib/platform/db/migrations/0000_init.sql",
+    "lib/platform/db/migrations/0004_trace_events.sql",
   ]) {
     const match = readFileSync(file, "utf8").match(predicate);
     assert.ok(match, `${file}: fold index predicate not found`);

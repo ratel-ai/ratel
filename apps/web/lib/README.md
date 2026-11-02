@@ -57,7 +57,7 @@ match quality), `intent-engine/names-job.ts` (`DEFAULT_LABEL_MODEL` comes from
 the one decision engine here; the private engines are excluded), two files with a reworded
 comment (`intent-engine/job.ts`, `decisions/openai.ts`) and the tests whose fixtures named a
 confidential word, copied with a neutral tenant. `intent-graph/event-types.test.ts` reads the
-ingest schema fragment and the single init migration. The Intents page read models
+ingest schema fragment and its migration. The Intents page read models
 (`breakdown*`, `asks-tree`, `v2`) are `views/intents`; `setup`, `boost-view`, `ranking` and the Boost
 reads are `views/adaptive-ranking`; the view helpers are `views/intents/adaptive-view.ts`.
 

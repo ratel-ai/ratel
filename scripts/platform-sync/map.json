@@ -253,7 +253,7 @@
     {"from": "apps/web/lib/intent-graph/put-handler.ts", "to": "apps/web/lib/readings/intent-graph/put-handler.ts", "mode": "copy"},
     {"from": "apps/web/lib/intent-graph/put-handler.test.ts", "to": "apps/web/lib/readings/intent-graph/put-handler.test.ts", "mode": "owned", "$why": "a fixture named a confidential word"},
     {"from": "apps/web/lib/intent-graph/user-messages.test.ts", "to": "apps/web/lib/readings/intent-graph/user-messages.test.ts", "mode": "copy"},
-    {"from": "apps/web/lib/intent-graph/event-types.test.ts", "to": "apps/web/lib/readings/intent-graph/event-types.test.ts", "mode": "owned", "$why": "reads the ingest schema fragment and the single init migration"},
+    {"from": "apps/web/lib/intent-graph/event-types.test.ts", "to": "apps/web/lib/readings/intent-graph/event-types.test.ts", "mode": "owned", "$why": "reads the ingest schema fragment and its migration"},
     {"from": "apps/web/lib/intent-graph/view.test.ts", "mode": "excluded", "$why": "with view"},
     {"from": "apps/web/lib/db/jobs-fold-coalesce.integration.test.ts", "to": "apps/web/lib/readings/intent-graph/fold-coalesce.integration.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-events/consolidate-ranking-status.integration.test.ts", "to": "apps/web/lib/readings/intent-graph/consolidate-ranking-status.integration.test.ts", "mode": "copy", "$why": "asserts the live sync through the intent-graph reader, so it lives with the readings (an ingest test may not import L4)"},

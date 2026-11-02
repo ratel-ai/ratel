@@ -74,6 +74,8 @@ ENV RATEL_COMPOSITION=${RATEL_COMPOSITION}
 # the deps stage already created for @ratel/ee.
 COPY ee ee
 RUN pnpm --filter @ratel/platform build
+# The deploy step: bundled runners and their SQL, because the runtime image has no tsx or source.
+RUN node ee/src/db/bundle-migrator.mjs /app/migrator
 
 # --- runtime base: minimal Node, no toolchain -----------------------------
 FROM node:24-trixie-slim AS runtime
@@ -101,6 +103,14 @@ FROM runtime AS cloud
 COPY --from=build-cloud --chown=ratel:ratel /app/apps/web/.next/standalone ./
 COPY --from=build-cloud --chown=ratel:ratel /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build-cloud --chown=ratel:ratel /app/apps/web/public ./apps/web/public
+COPY --from=build-cloud --chown=ratel:ratel /app/migrator ./migrator
 ENV RATEL_COMPOSITION=cloud
 USER ratel
 CMD ["node", "apps/web/server.js"]
+
+# One-shot demo data: the source tree with its dev tools, so the runtime targets stay without them.
+FROM source AS demo
+ENV NODE_ENV=production
+ENV RATEL_COMPOSITION=oss
+WORKDIR /app/apps/web
+USER node

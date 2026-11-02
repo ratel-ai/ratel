@@ -13,8 +13,8 @@
     "test": "tsx --test --test-force-exit ${TEST_SHARD:+--test-shard=$TEST_SHARD} \"lib/**/*.test.ts\" \"app/**/*.test.ts\" \"scripts/**/*.test.mjs\"",
     "check:ds-tokens": "node scripts/check-ds-tokens.mjs",
     "migrate": "tsx scripts/migrate.mts",
-    "db:regenerate": "node scripts/db-regenerate.mjs",
-    "db:check": "node scripts/db-regenerate.mjs --check",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "node scripts/db-check.mjs",
     "db:studio": "drizzle-kit studio",
     "seed": "tsx scripts/seed.mts",
     "seed:quality": "tsx scripts/seed-site-copilot-quality.mts"
