@@ -102,65 +102,15 @@ An organization holds projects, and each project is one agent's view:
 | **Improvements** | **Fixes** is the one list of changes that would make your agent find and finish more. **Quality** measures how well searches find the right tool, with misses, description rewrites and experiments. **Adaptive ranking** puts the tool your agent needs first, using what people asked before. |
 | **Settings** | Projects general settings, **API keys**, SDK events under **Developer**, and a danger zone. |
 
-## Ratel SDKs
-
-The SDKs are how an agent sends data to Ratel and uses its tools. They wrap an in-process retrieval engine that indexes your tools and skills, so the agent searches for what each turn needs instead of loading everything up front. No vector DB and no server are needed for that part, and it works with or without the platform. To send data to your platform, create an API key in the project's Settings, set it as `RATEL_API_KEY` where your agent runs, and export OpenTelemetry to your deployment: see the [telemetry guide](https://docs.ratel.sh/docs/telemetry) and [src/telemetry](src/telemetry/README.md). The full SDK overview is in [README-SDK.md](README-SDK.md).
-
-[![npm](https://img.shields.io/npm/v/@ratel-ai/sdk?label=npm&color=cb3837)](https://www.npmjs.com/package/@ratel-ai/sdk) [![PyPI](https://img.shields.io/pypi/v/ratel-ai?label=PyPI&color=3775a9)](https://pypi.org/project/ratel-ai/) [![crates.io](https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300)](https://crates.io/crates/ratel-ai-core)
-
-<div align="center">
-  <img src="./docs/assets/ratel-hero.gif" width="960" alt="Ratel hero animation" />
-</div>
-
-```bash
-pnpm add @ratel-ai/sdk   # TypeScript
-pip install ratel-ai     # Python
-```
-
-Guides: [Docs](https://docs.ratel.sh) · [Quickstart](https://docs.ratel.sh/docs/quickstart) · [TypeScript SDK](https://docs.ratel.sh/docs/sdks/typescript) · [Python SDK](https://docs.ratel.sh/docs/sdks/python)
-
-Examples: [All examples](examples/README.md) · [Vercel AI SDK](examples/ai-sdk/README.md) · [Pydantic AI](examples/pydantic-ai/README.md)
-
-Benchmarks: [benchmark.ratel.sh](https://benchmark.ratel.sh)
-
-| Package | Folder |
-|---|---|
-| `@ratel-ai/sdk`, the TypeScript SDK | [src/sdk/ts](src/sdk/ts/README.md) |
-| `ratel-ai`, the Python SDK | [src/sdk/python](src/sdk/python/README.md) |
-| `ratel-ai-core`, the Rust retrieval engine | [src/core](src/core/README.md) |
-| `@ratel-ai/vercel-ai-sdk`, the Vercel AI SDK adapter | [src/adapters/ts-vercel-ai-sdk](src/adapters/ts-vercel-ai-sdk/README.md) |
-| `@ratel-ai/mastra`, the Mastra adapter | [src/adapters/ts-mastra](src/adapters/ts-mastra/README.md) |
-| `@ratel-ai/rankers-plugin`, `ratel-ai-rankers-plugin`, experimental decision-model rankers | [src/rankers](src/rankers/README.md) |
-| `@ratel-ai/telemetry`, `ratel-ai-telemetry`, OpenTelemetry conventions and helpers | [src/telemetry](src/telemetry/README.md) |
-
-## Related projects
-
-| Project | Repo | What it is |
-|---|---|---|
-| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution for your Coding Agents: Ratel in front of your MCP setup. |
-| **ratel-bench** | [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) | The benchmark harness behind [benchmark.ratel.sh](https://benchmark.ratel.sh). |
-| **skills** | [ratel-ai/skills](https://github.com/ratel-ai/skills) | Claude Code, Cursor and Codex skills to work on and improve AI agent codebases. |
-
 ## Repo layout
 
 ```
 apps/
-└── web/                       # @ratel/platform: the console, the APIs, the jobs and the readings
+└── web/                       # @ratel/platform: the console and APIs
 packages/
 ├── brand/                     # @ratel/brand: palette, fonts and logo assets
 ├── design-system/             # @ratel/design-system: semantic tokens and UI primitives
-└── sdk/                       # SDK development commands; sources are under src/
-src/
-├── core/                      # ratel-ai-core: Rust retrieval engine
-├── sdk/ts/                    # @ratel-ai/sdk: TypeScript SDK (NAPI-bound)
-├── sdk/python/                # ratel-ai: Python SDK (PyO3-bound)
-├── adapters/ts-vercel-ai-sdk/ # @ratel-ai/vercel-ai-sdk: Vercel AI SDK adapter
-├── adapters/ts-mastra/        # @ratel-ai/mastra: Mastra adapter
-├── rankers/                   # @ratel-ai/rankers-plugin, ratel-ai-rankers-plugin: decision-model rankers
-└── telemetry/                 # OTel conventions and helper packages
-protocol/                      # catalog-source wire contract
-examples/                      # End-to-end SDK examples
-e2e/                           # Checks against the installed SDK packages
+└── sdk/                       # Ratel SDK
 scripts/                       # Repository checks and release tooling
 docs/
 ├── adr/                       # Architecture decision records
@@ -172,10 +122,17 @@ The application's own layout and commands are in [apps/web/README.md](apps/web/R
 
 ## Development
 
-Prerequisites: Node 24+ and pnpm 10.28+, with Docker for the platform's Postgres. The Rust workspace and the SDKs' native addons need Rust stable (pinned via `rust-toolchain.toml`). The Python SDK also needs Python 3.11 and [`uv`](https://docs.astral.sh/uv/).
+### Ratel Platform
 
-- **Ratel Platform:** [apps/web/README.md](apps/web/README.md)
-- **Ratel SDK:** [packages/sdk/README.md](packages/sdk/README.md)
+Prerequisites: Node 24+ and pnpm 10.28+, with Docker for the platform's Postgres. 
+
+- [apps/web/README.md](apps/web/README.md)
+
+### Ratel SDK
+
+Prerequisites: The Rust workspace and the SDKs' native addons need Rust stable (pinned via `rust-toolchain.toml`). The Python SDK also needs Python 3.11 and [`uv`](https://docs.astral.sh/uv/).
+
+- [packages/sdk/README.md](packages/sdk/README.md)
 
 ## Contributing
 
