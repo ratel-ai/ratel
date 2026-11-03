@@ -198,6 +198,9 @@ importers:
 
   ee:
     dependencies:
+      '@clerk/backend':
+        specifier: ^3.26.5
+        version: 3.26.5(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@clerk/nextjs':
         specifier: ^7.5.17
         version: 7.9.23(next@16.2.4(@opentelemetry/api@1.9.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -228,6 +231,9 @@ importers:
       resend:
         specifier: ^4.5.1
         version: 4.8.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.5.3
