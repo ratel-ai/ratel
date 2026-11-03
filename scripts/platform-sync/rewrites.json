@@ -65,7 +65,20 @@
     { "from": "@/app/(app)/project/[projectId]/intents/data", "to": "@/app/(console)/project/[projectId]/intents/data", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/health/signal-actions", "to": "@/app/(console)/project/[projectId]/health/signal-actions", "exact": true },
     { "from": "@/app/(app)/settings/api-key-actions", "to": "@/app/(console)/project/[projectId]/settings/api-keys/actions", "exact": true },
-    { "from": "@/app/(app)/project/[projectId]/settings/developer/actions", "to": "@/app/(console)/project/[projectId]/settings/developer/actions", "exact": true }
+    { "from": "@/app/(app)/project/[projectId]/settings/developer/actions", "to": "@/app/(console)/project/[projectId]/settings/developer/actions", "exact": true },
+    { "from": "@/components/calibration/", "to": "@/components/console/calibration/" },
+    { "from": "@/components/experiments/", "to": "@/components/console/calibration/" },
+    { "from": "@/components/dashboard/DateRangeControl", "to": "@/components/console/calibration/DateRangeControl", "exact": true },
+    { "from": "@/components/dashboard/ProjectRouteSkeleton", "to": "@/components/console/calibration/ProjectRouteSkeleton", "exact": true },
+    { "from": "@/components/traces/DeltaChip", "to": "@/components/console/calibration/DeltaChip", "exact": true },
+    { "from": "@/components/traces/ExperimentBadge", "to": "@/components/console/calibration/ExperimentBadge", "exact": true },
+    { "from": "@/components/traces/ArmComparisonGrid", "to": "@/components/console/calibration/ArmComparisonGrid", "exact": true },
+    { "from": "@/components/traces/CapabilityRankDiffTable", "to": "@/components/console/calibration/CapabilityRankDiffTable", "exact": true },
+    { "from": "@/components/traces/ExperimentIssuesPanel", "to": "@/components/console/calibration/ExperimentIssuesPanel", "exact": true },
+    { "from": "@/components/traces/ExperimentLifecyclePanels", "to": "@/components/console/calibration/ExperimentLifecyclePanels", "exact": true },
+    { "from": "@/app/(app)/project/[projectId]/calibration/[name]/actions", "to": "@/app/(console)/project/[projectId]/calibration/[name]/actions", "exact": true },
+    { "from": "@/app/(app)/project/[projectId]/calibration/[name]/ranking-content", "to": "@/app/(console)/project/[projectId]/calibration/[name]/ranking-content", "exact": true },
+    { "from": "@/app/(app)/experiments/[name]/content", "to": "@/app/(console)/project/[projectId]/calibration/[name]/content", "exact": true }
   ],
   "partitions": {
     "@/lib/db/schema": {
