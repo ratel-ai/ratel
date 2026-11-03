@@ -800,7 +800,6 @@
         "apps/web/lib/synthesis/quality/headline.test.ts",
         "apps/web/lib/synthesis/quality/headline.ts",
         "apps/web/lib/synthesis/quality/queries.ts",
-        "apps/web/lib/synthesis/quality/service.ts",
         "apps/web/lib/synthesis/quality/snapshot.ts",
         "apps/web/lib/synthesis/quality/tokens.test.ts",
         "apps/web/lib/synthesis/quality/tokens.ts",

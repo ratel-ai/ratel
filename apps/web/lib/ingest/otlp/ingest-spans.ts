@@ -13,8 +13,8 @@ import {
   scheduleTraceTurnBuild,
   type TraceTurnsIngestDeps,
 } from "@/lib/ingest/trace-events/turns-schedule";
-import type { Organization } from "@/lib/platform/identity/schema";
 import type { LogError } from "@/lib/platform/logger";
+import type { Organization } from "@/lib/platform/organizations";
 import { agentHealthToolRows } from "./agent-health-bridge";
 import { type AgentSpanDedupeDeps, resolveAgentSpanDedupe } from "./agent-span-dedupe";
 import { attrString } from "./anyvalue";

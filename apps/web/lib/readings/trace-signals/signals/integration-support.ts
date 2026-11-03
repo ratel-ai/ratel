@@ -10,8 +10,7 @@ import {
 } from "@/lib/ledger/turns/queries";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
-import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { organizations } from "@/lib/platform/identity/schema";
+import { createMigratedPGlite, organizations } from "@/lib/platform/db/test-support";
 import { recordSelfCorrections } from "@/lib/readings/trace-signals/self-corrections/run";
 import { selfCorrectionRunDeps } from "@/lib/readings/trace-signals/self-corrections/run-job";
 import {

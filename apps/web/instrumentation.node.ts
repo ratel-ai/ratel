@@ -7,7 +7,8 @@
  */
 export async function assertComposition(): Promise<void> {
   try {
-    await import("@/lib/composition");
+    const { composition } = await import("@/lib/composition");
+    composition.session.assertConfigured?.();
     const { configuredOrganizationName } = await import("@/lib/platform/deployment-config");
     configuredOrganizationName();
   } catch (error) {

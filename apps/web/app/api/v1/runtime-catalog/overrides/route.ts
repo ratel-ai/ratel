@@ -9,7 +9,7 @@ import {
   touchRuntimeCatalogOverridesPull,
 } from "@/lib/ingest/runtime-catalog/override-queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 

@@ -3,7 +3,7 @@ import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
 } from "@/lib/platform/db/statement-timeout";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { loadCatalogNames } from "@/lib/readings/trace-signals/signals/analysis-context";
 import { listOpenSignals } from "@/lib/readings/trace-signals/signals/queries";

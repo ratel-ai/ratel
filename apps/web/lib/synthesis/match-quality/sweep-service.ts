@@ -1,9 +1,9 @@
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { enqueueJob } from "@/lib/jobs/queries";
 import { getDb } from "@/lib/platform/db/client";
 import { checkMeteredFeature } from "@/lib/platform/entitlements";
-import { organizations } from "@/lib/platform/identity/schema";
 import { getLogger } from "@/lib/platform/logger";
+import { getOrganizationById } from "@/lib/platform/organizations";
 import { projects } from "@/lib/platform/projects/schema";
 import {
   dueProjectsInRotation,
@@ -89,15 +89,20 @@ export async function sweepMatchQuality(deps: SweepDeps = {}): Promise<SweepResu
   });
   if (due.length === 0) return IDLE_MATCH_QUALITY_SWEEP;
 
-  const rows = await db
+  const projectRows = await db
     .select({
       projectId: projects.id,
       projectName: projects.name,
-      organization: organizations,
+      organizationId: projects.organizationId,
     })
     .from(projects)
-    .innerJoin(organizations, eq(projects.organizationId, organizations.id))
     .where(inArray(projects.id, due));
+  // The edition owns organizations: a project whose organization it does not know is skipped.
+  const rows = [];
+  for (const { organizationId, ...row } of projectRows) {
+    const organization = await getOrganizationById(organizationId);
+    if (organization) rows.push({ ...row, organization });
+  }
 
   const byProject = new Map(rows.map((row) => [row.projectId, row]));
   const candidates: SweepCandidate[] = [];

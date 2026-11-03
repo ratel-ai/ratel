@@ -9,6 +9,9 @@
 // inside one. The stubs are one-line re-exports, so a copy costs nothing; the code they point
 // at stays in ee/src. Without ee/src the repository is the open-source edition.
 //
+// The proxy is the same exception: Next.js only reads it from apps/web/proxy.ts, and the
+// open-source edition must not have one.
+//
 //   node scripts/link-ee.mjs           install the commercial routes; fails if the checkout is missing
 //   node scripts/link-ee.mjs --auto    install them if the checkout is there, remove them otherwise;
 //                                      never fails. Runs before every dev and build
@@ -22,11 +25,17 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTES = join(ROOT, "ee", "src", "routes");
 // Generated and gitignored: nothing tracked ever lives here.
 const TARGET = join(ROOT, "apps", "web", "app", "(ee)");
+const PROXY_SOURCE = join(ROOT, "ee", "src", "proxy.ts");
+const PROXY_TARGET = join(ROOT, "apps", "web", "proxy.ts");
 
-const remove = () => rmSync(TARGET, { recursive: true, force: true });
+const remove = () => {
+  rmSync(TARGET, { recursive: true, force: true });
+  rmSync(PROXY_TARGET, { force: true });
+};
 const install = () => {
   remove();
   cpSync(ROUTES, TARGET, { recursive: true });
+  if (existsSync(PROXY_SOURCE)) cpSync(PROXY_SOURCE, PROXY_TARGET);
 };
 
 const mode = process.argv[2] ?? "--link";

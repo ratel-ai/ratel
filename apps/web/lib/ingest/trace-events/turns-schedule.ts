@@ -1,5 +1,5 @@
-import type { Organization } from "@/lib/platform/identity/schema";
 import { getLogger, type LogError } from "@/lib/platform/logger";
+import type { Organization } from "@/lib/platform/organizations";
 import { reportServerException as reportServerExceptionFn } from "@/lib/platform/telemetry";
 
 /**

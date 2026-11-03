@@ -3,7 +3,7 @@ import { Page, PageHeader } from "@ratel/design-system/page-header";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { loadSkillsCatalog, loadToolsCatalog } from "@/lib/console/catalog/load";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import type { Project } from "@/lib/platform/projects/schema";
 import { CatalogHome } from "./CatalogHome";
 import { SkillsCatalog } from "./SkillsCatalog";

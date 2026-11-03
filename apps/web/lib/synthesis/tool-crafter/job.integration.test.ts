@@ -5,7 +5,7 @@ import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/querie
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import { listClosedTurnsPage } from "@/lib/ledger/closed-turns";
 import * as schema from "@/lib/platform/db/tables";
-import { organizations } from "@/lib/platform/identity/schema";
+import { organizations } from "@/lib/platform/db/test-support";
 import { computeToolExplorer } from "@/lib/readings/tool-explorer/compute";
 import { exploreProjectToolUsage } from "@/lib/readings/tool-explorer/job";
 import {

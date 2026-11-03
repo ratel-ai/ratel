@@ -4,5 +4,4 @@
  * one import for the platform-level functions. Higher layers are never re-exported from here.
  */
 export * from "@/lib/platform/db/errors";
-export * from "@/lib/platform/identity/queries";
 export * from "@/lib/platform/projects/queries";

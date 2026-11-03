@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import { PROJECT_ID, setupDb } from "@/lib/readings/trace-signals/signals/integration-support";
 import { NO_PRICE } from "@/lib/synthesis/tool-crafter/round-trip";
 import { buildTaskList } from "@/lib/views/tasks/model";

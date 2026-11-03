@@ -1,8 +1,8 @@
 import { countClosedTurns, hasLedger, hasModelCallsSince } from "@/lib/ledger/closed-turns";
 import { getDb } from "@/lib/platform/db/client";
 import { type AgentHealthLimits, getAgentHealthLimits } from "@/lib/platform/entitlements";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
 import { getLogger } from "@/lib/platform/logger";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { reportServerException } from "@/lib/platform/telemetry";
 import {
   DISMISSABLE_KINDS,

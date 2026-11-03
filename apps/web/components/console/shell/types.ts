@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { NavItem as EditionNavItem } from "@/lib/composition/ports";
 import type { ConsoleAccount, ConsoleProject } from "@/lib/console/shell-data";
 
@@ -10,5 +11,7 @@ export type ShellData = {
   account: ConsoleAccount | null;
   /** Destinations the edition adds (`composition.nav`). */
   editionNav: EditionNavItem[];
+  /** Menu items the edition adds to the account menu, rendered on the server. */
+  accountMenuItems: ReactNode;
   initiallyCollapsed: boolean;
 };

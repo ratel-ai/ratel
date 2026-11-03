@@ -17,7 +17,7 @@ import {
   writeTurnPage,
 } from "@/lib/ledger/turns/queries";
 import * as schema from "@/lib/platform/db/tables";
-import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+import { createMigratedPGlite, organizations } from "@/lib/platform/db/test-support";
 import { loadCatalogTools } from "@/lib/readings/intent-engine/catalog";
 import { runIntentEngine } from "@/lib/readings/intent-engine/job";
 import { defaultNameDeps } from "@/lib/readings/intent-engine/names-job";
@@ -305,8 +305,8 @@ test("the signal run, the explorer and the label job complete on the built ledge
         getOrganizationByProjectId: async () => {
           const [org] = await db
             .select()
-            .from(schema.organizations)
-            .where(eq(schema.organizations.id, ORGANIZATION_ID));
+            .from(organizations)
+            .where(eq(organizations.id, ORGANIZATION_ID));
           return org ?? null;
         },
         reapStale: (p, before, _db, at) => reapStaleExplorerRuns(p, before, sdb, at),
@@ -339,8 +339,8 @@ test("the signal run, the explorer and the label job complete on the built ledge
         getOrganizationByProjectId: async () => {
           const [org] = await db
             .select()
-            .from(schema.organizations)
-            .where(eq(schema.organizations.id, ORGANIZATION_ID));
+            .from(organizations)
+            .where(eq(organizations.id, ORGANIZATION_ID));
           return org ?? null;
         },
         reapStale: (p, before, _db, at) => reapStaleCraftRuns(p, before, cdb, at),

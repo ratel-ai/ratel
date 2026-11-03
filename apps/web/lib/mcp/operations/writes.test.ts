@@ -4,7 +4,7 @@ import type { Skill } from "@/lib/catalog/schema";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import { type WriteOperationDeps, writeOperations } from "./writes";
 
 /**

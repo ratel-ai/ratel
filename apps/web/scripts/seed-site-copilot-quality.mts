@@ -14,7 +14,7 @@
  *
  *   pnpm --filter @ratel/platform seed:quality                # site-copilot of the operator's organization, on $DATABASE_URL
  *   pnpm --filter @ratel/platform seed:quality --capture      # draft the rewrites with the real analyst first
- *   DATABASE_URL=... pnpm --filter @ratel/platform seed:quality [org-slug] [--slug <slug>] [--capture]
+ *   DATABASE_URL=... pnpm --filter @ratel/platform seed:quality [organization-id] [--slug <slug>] [--capture]
  *
  * Needs the Site Copilot project (`pnpm --filter @ratel/platform seed`): it reads when
  * each stored turn happened. Deterministic and idempotent: everything Match
@@ -68,7 +68,7 @@ import { insertOtelLogs } from "@/lib/ingest/otlp/queries";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { getLogger } from "@/lib/platform/logger";
 import { createApiKey, findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
 import { projects } from "@/lib/platform/projects/schema";
@@ -139,7 +139,7 @@ function parseArgs(argv: readonly string[]): Args {
 }
 
 async function resolveProject(db: Db, args: Args): Promise<{ id: string; name: string }> {
-  const org = await resolveSeedOrganization(db, args.org);
+  const org = await resolveSeedOrganization(args.org);
   const [project] = await db
     .select({ id: projects.id, name: projects.name, isDemo: projects.isDemo })
     .from(projects)

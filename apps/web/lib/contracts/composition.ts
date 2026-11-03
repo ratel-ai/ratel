@@ -1,3 +1,4 @@
+import type { ComponentType, ReactNode } from "react";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
 import type { RegistryPort } from "@/lib/contracts/registry";
@@ -11,12 +12,22 @@ import type { TelemetryPort } from "@/lib/contracts/telemetry";
  * resolves to a single candidate so the open-source build excludes the private modules, which
  * means this shared type is what keeps the two shapes from drifting.
  */
+/** What an edition adds to the console's UI. Loaded by the layouts, never at boot. */
+export type EditionUi = {
+  /** Wraps the whole app, in the root layout. */
+  RootProvider: ComponentType<{ children: ReactNode }>;
+  /** Menu items above the docs in the account menu. */
+  AccountMenuItems: ComponentType;
+};
+
 export type CompositionPorts = {
   session: SessionPort;
   entitlements: EntitlementsPort;
   telemetry: TelemetryPort;
   embeddingProvider: EmbeddingProviderPort;
   registry: RegistryPort;
+  /** Absent in the open-source edition. A loader, so the boot path never imports the UI. */
+  ui?: () => Promise<EditionUi>;
 };
 
 export const PORT_NAMES = [

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import { getDb } from "@/lib/platform/db/client";
-import { organizations } from "@/lib/platform/identity/schema";
+import { getOrganizationById } from "@/lib/platform/organizations";
 import { projects } from "@/lib/platform/projects/schema";
 import type { ExperimentWindow } from "@/lib/synthesis/experiments/service";
 import {
@@ -154,10 +154,9 @@ export async function loadQualityView(
       id: projects.id,
       name: projects.name,
       slug: projects.slug,
-      organizationName: organizations.name,
+      organizationId: projects.organizationId,
     })
     .from(projects)
-    .leftJoin(organizations, eq(projects.organizationId, organizations.id))
     .where(eq(projects.id, projectId))
     .limit(1);
   if (!project) return null;
@@ -193,7 +192,7 @@ export async function loadQualityView(
     projectId,
     projectName: project.name,
     projectSlug: project.slug,
-    organizationName: project.organizationName,
+    organizationName: (await getOrganizationById(project.organizationId))?.name ?? null,
     experimentName,
     window,
     tiers,
@@ -505,10 +504,9 @@ export async function listQualityProjectSummaries(
       id: projects.id,
       name: projects.name,
       slug: projects.slug,
-      organizationName: organizations.name,
+      organizationId: projects.organizationId,
     })
     .from(projects)
-    .leftJoin(organizations, eq(projects.organizationId, organizations.id))
     .where(
       inArray(
         projects.id,
@@ -524,7 +522,9 @@ export async function listQualityProjectSummaries(
         projectId: row.projectId,
         projectName: detail?.name ?? "Unknown project",
         projectSlug: detail?.slug ?? row.projectId,
-        organizationName: detail?.organizationName ?? null,
+        organizationName: detail
+          ? ((await getOrganizationById(detail.organizationId))?.name ?? null)
+          : null,
         calibrations: await listQualityCalibrations(row.projectId, window, db),
         comparisonCount: row.comparisonCount,
         lastSeenAt: row.lastSeenAt,

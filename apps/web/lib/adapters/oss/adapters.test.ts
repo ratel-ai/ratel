@@ -8,18 +8,35 @@ import {
   localEmbedding,
 } from "./embedding-provider";
 import { OSS_LIMITS, ossEntitlements } from "./entitlements";
-import { LOCAL_OPERATOR, ossSession } from "./session";
+import { LOCAL_OPERATOR, LOCAL_ORGANIZATION_ID, localOrganization, ossSession } from "./session";
 import { createOssTelemetry } from "./telemetry";
 
 describe("oss session", () => {
-  it("is one stable local operator with access and no acting-as", async () => {
-    const a = await ossSession.resolvePrincipal();
-    const b = await ossSession.resolvePrincipal();
-    assert.deepEqual(a, LOCAL_OPERATOR);
-    assert.equal(a?.id, b?.id);
+  it("is one local operator, admin of one organization, with no acting-as", async () => {
+    const a = await ossSession.resolveSession();
+    const b = await ossSession.resolveSession();
+    assert.deepEqual(a, b);
+    assert.equal(a?.user, LOCAL_OPERATOR);
     assert.match(LOCAL_OPERATOR.email ?? "", /\.invalid$/);
-    assert.equal(await ossSession.accessGranted(LOCAL_OPERATOR), true);
+    assert.equal(a?.organization.id, LOCAL_ORGANIZATION_ID);
+    assert.equal(a?.role, "admin");
+    assert.deepEqual(a?.memberships, [{ organization: a?.organization, role: "admin" }]);
     assert.equal(await ossSession.actingAs(), null);
+  });
+
+  it("names the organization from RATEL_ORG_NAME, keeping its id and slug", () => {
+    const named = localOrganization({ RATEL_ORG_NAME: "  Acme Labs " });
+    assert.deepEqual(named, { id: LOCAL_ORGANIZATION_ID, name: "Acme Labs", slug: "local" });
+    assert.equal(localOrganization({}).name, "Local operator");
+  });
+
+  it("knows its own organization only, with one member", async () => {
+    assert.equal(
+      (await ossSession.getOrganization(LOCAL_ORGANIZATION_ID))?.id,
+      LOCAL_ORGANIZATION_ID,
+    );
+    assert.equal(await ossSession.getOrganization("00000000-0000-4000-8000-000000000999"), null);
+    assert.equal(await ossSession.countMembers(LOCAL_ORGANIZATION_ID), 1);
   });
 });
 

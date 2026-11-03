@@ -9,8 +9,8 @@ import {
   getTraceTurnsCursor as getTraceTurnsCursorFn,
 } from "@/lib/ledger/turns/queries";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
-import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/identity/queries";
 import { getLogger } from "@/lib/platform/logger";
+import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { configured, decisionEngineConfigured } from "@/lib/readings/decisions/engine";
 import type {

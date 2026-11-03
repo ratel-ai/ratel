@@ -10,18 +10,14 @@ const { scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.m
 /** Stand-in commercial ports so tests do not reach into ee/ through the core tree. */
 const cloudPorts: CompositionPorts = {
   session: {
-    async resolvePrincipal() {
-      return {
-        id: "user_cloud",
-        email: "fausto@ratel.sh",
-        emailVerified: true,
-        name: "Fausto",
-        username: "fausto",
-        avatarUrl: null,
-      };
+    async resolveSession() {
+      return null;
     },
-    async accessGranted() {
-      return false;
+    async getOrganization() {
+      return null;
+    },
+    async countMembers() {
+      return 0;
     },
     async actingAs() {
       return { kind: "organization", targetId: "org_1", readOnly: true };
@@ -80,10 +76,8 @@ describe("createComposition", () => {
   it("assembles the OSS edition with the five ports", async () => {
     const composition = createComposition("oss");
     assert.equal(composition.edition, "Ratel OSS");
-    const principal = await composition.session.resolvePrincipal();
-    assert.ok(principal);
-    assert.equal(principal.name, "Local operator");
-    assert.equal(await composition.session.accessGranted(principal), true);
+    const session = await composition.session.resolveSession();
+    assert.equal(session?.user.name, "Local operator");
     assert.equal(await composition.session.actingAs(), null);
     assert.equal(composition.entitlements.planId({ id: "org" }), "oss");
     assert.deepEqual(await composition.entitlements.checkEventQuota({ id: "org" }), { ok: true });
@@ -101,6 +95,15 @@ describe("createComposition", () => {
     await composition.entitlements.recordEventUsage({ id: "org" }, 12);
     const actingAs = await composition.session.actingAs();
     assert.equal(actingAs?.kind, "organization");
+  });
+
+  it("hands the edition's UI loader over, and the open-source edition has none", async () => {
+    const ui = { RootProvider: () => null, AccountMenuItems: () => null };
+    const cloud = createComposition("cloud", {
+      eeComposition: { ...cloudPorts, ui: async () => ui },
+    });
+    assert.equal(await cloud.ui?.(), ui);
+    assert.equal(createComposition("oss", { eeComposition: null }).ui, undefined);
   });
 
   it("throws when a port is missing or the edition key is unknown", () => {

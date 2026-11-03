@@ -4,8 +4,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
-import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { organizations } from "@/lib/platform/identity/schema";
+import { createMigratedPGlite, organizations } from "@/lib/platform/db/test-support";
 import { projects } from "@/lib/platform/projects/schema";
 import { listSearchTelemetryProjects } from "./search-source";
 

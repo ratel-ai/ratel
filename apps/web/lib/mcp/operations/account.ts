@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { countSkills } from "@/lib/catalog/queries";
+import { composition } from "@/lib/composition/ports";
 import { getJobForProject, listInFlightJobs } from "@/lib/jobs/queries";
 import { notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { APP_NAME } from "@/lib/platform/app-config";
 import { checkQuota, getLimits, type QuotaKey } from "@/lib/platform/entitlements";
-import { countMemberships, getOrganizationByProjectId } from "@/lib/platform/identity/queries";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 
 /**
@@ -24,7 +25,7 @@ import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 export interface AccountOperationDeps {
   getOrganizationByProjectId: typeof getOrganizationByProjectId;
   countSkills: typeof countSkills;
-  countMemberships: typeof countMemberships;
+  countMemberships: (organizationId: string) => Promise<number>;
   listProjectsForOrganization: typeof listProjectsForOrganization;
   getJobForProject: typeof getJobForProject;
   listInFlightJobs: typeof listInFlightJobs;
@@ -33,7 +34,7 @@ export interface AccountOperationDeps {
 export const defaultAccountDeps: AccountOperationDeps = {
   getOrganizationByProjectId,
   countSkills,
-  countMemberships,
+  countMemberships: (organizationId) => composition.session.countMembers(organizationId),
   listProjectsForOrganization,
   getJobForProject,
   listInFlightJobs,

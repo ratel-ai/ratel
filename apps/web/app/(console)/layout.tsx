@@ -10,7 +10,12 @@ import {
 
 /** Shell for every console page (DESIGN.md, Layout), with its data resolved on the server. */
 export default async function ConsoleLayout({ children }: { children: ReactNode }) {
-  const [scope, cookieStore] = await Promise.all([getConsoleScope(), cookies()]);
+  const [scope, cookieStore, ui] = await Promise.all([
+    getConsoleScope(),
+    cookies(),
+    composition.ui?.(),
+  ]);
+  const AccountMenuItems = ui?.AccountMenuItems;
   return (
     <div className="min-h-dvh bg-app">
       <a
@@ -26,6 +31,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
           projects: scope?.projects ?? [],
           account: scope?.account ?? null,
           editionNav: composition.nav,
+          accountMenuItems: AccountMenuItems ? <AccountMenuItems /> : null,
           initiallyCollapsed: parseSidebarCollapsedCookie(
             cookieStore.get(SIDEBAR_COLLAPSED_COOKIE)?.value,
           ),

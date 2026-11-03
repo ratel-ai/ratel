@@ -1,7 +1,7 @@
 import { replaceCatalogSnapshot } from "@/lib/ingest/catalogs/queries";
 import { handleCatalogSnapshotRequest } from "@/lib/ingest/catalogs/snapshot-handler";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { trackServerEvent } from "@/lib/platform/telemetry";
