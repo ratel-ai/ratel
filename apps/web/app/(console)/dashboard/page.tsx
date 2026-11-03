@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { legacyDashboardHref } from "@/lib/console/navigation";
+import { dashboardHref } from "@/lib/console/navigation";
 import { getConsoleScope } from "@/lib/console/shell-data";
 
 export const dynamic = "force-dynamic";
@@ -9,5 +9,5 @@ export const dynamic = "force-dynamic";
  * to the session organization's first project. Temporary, since the target follows the session.
  */
 export default async function LegacyDashboardPage() {
-  redirect(legacyDashboardHref((await getConsoleScope())?.projects ?? []));
+  redirect(dashboardHref((await getConsoleScope())?.projects ?? []));
 }

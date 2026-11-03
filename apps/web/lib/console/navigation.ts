@@ -351,6 +351,6 @@ export function entryHref(
 }
 
 /** Where the legacy `/dashboard` lands: the first project's dashboards, else the console entry. */
-export function legacyDashboardHref(projects: readonly { id: string }[]): string {
+export function dashboardHref(projects: readonly { id: string }[]): string {
   return projects[0] ? `${projectRoot(projects[0].id)}/dashboards` : "/";
 }
