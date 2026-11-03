@@ -25,7 +25,7 @@
   },
   "scripts": {
     "lint": "biome check . --no-errors-on-unmatched",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "tsx --test --test-force-exit \"src/**/*.test.ts\"",
     "db:generate": "drizzle-kit generate --config src/db/drizzle.config.ts"
   }
 }
