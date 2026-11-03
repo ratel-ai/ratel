@@ -48,7 +48,8 @@ builds Ratel OSS; nobody runs a step to get the right tree. The proxy is the sam
 
 **One boundary rule, checked mechanically** by `scripts/check-ee-boundary.mjs`, which the test
 suite runs, and the paired CI below will run in the private repository: nothing outside `ee/`
-imports from `ee/` (except the copied route stubs), and `ee/src` imports only
+imports from `ee/` except the copied stubs: anything under `apps/web/app/(ee)`, a gitignored
+folder that holds only them, and `apps/web/proxy.ts`. `ee/src` imports only
 `@/lib/contracts/*`, itself, and npm packages.
 
 **One Dockerfile, two targets** (`oss`, `cloud`). The Cloud adapters are reached through one
