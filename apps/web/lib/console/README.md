@@ -13,6 +13,7 @@ search, projects, settings, and development seeds.
 | `organization-settings.ts` | renaming the session organization and its address, admins only |
 | `settings/` | the settings tabs, the API key rows, the SDK events views and payload read, the redirect settle helper, the projects list model and UTC date formats |
 | `delete-project.ts` | deleting a project of the session organization once its name is typed back |
+| `delete-organization.ts` | deleting the session organization and everything it owns once its name is typed back, admins only; refused in a support session or when the entitlements port says a subscription must go first; the next request provisions an empty organization |
 | `catalog/` | the Catalog pages' models: the tool and skill rows, the tree, search, paging, the loaders |
 | `explore/` | the browser client for the skills API, its form payloads and error copy |
 | `shell-data.ts` | the session organization and its projects, once per request, for the shell and the pages |

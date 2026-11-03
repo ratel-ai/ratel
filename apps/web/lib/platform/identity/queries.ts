@@ -25,6 +25,7 @@ export type UpdateOrganizationSettingsResult =
   | { ok: false; reason: "slug_conflict" };
 export type LastProjectDb = Pick<ReturnType<typeof getDb>, "select" | "update">;
 export type LookupDb = Pick<ReturnType<typeof getDb>, "select">;
+export type DeleteDb = Pick<ReturnType<typeof getDb>, "delete">;
 
 /* Users */
 
@@ -349,7 +350,14 @@ export async function updateOrganizationName(organizationId: string, name: strin
   await getDb().update(organizations).set({ name }).where(eq(organizations.id, organizationId));
 }
 
-/** Permanently delete an organization; projects and memberships cascade. */
-export async function deleteOrganization(organizationId: string): Promise<void> {
-  await getDb().delete(organizations).where(eq(organizations.id, organizationId));
+/**
+ * Permanently delete an organization. Cascades to its projects (and their keys, events and every
+ * reading of them) and memberships; other members' `current_organization_id` self-heals via
+ * ON DELETE SET NULL on their next request.
+ */
+export async function deleteOrganization(
+  organizationId: string,
+  db: DeleteDb = getDb(),
+): Promise<void> {
+  await db.delete(organizations).where(eq(organizations.id, organizationId));
 }
