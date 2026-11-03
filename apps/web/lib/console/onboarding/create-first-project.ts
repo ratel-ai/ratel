@@ -38,6 +38,8 @@ export type FirstProjectSession = {
 };
 
 export type CreateFirstProjectDeps = {
+  /** Whether a database is connected; checked after the name, as upstream does. */
+  dbConfigured: () => boolean;
   /** The session, null when signed out. */
   session: () => Promise<FirstProjectSession | null>;
   /** The session port's support session; any value refuses the write. */
@@ -78,6 +80,12 @@ export async function createFirstProject(
   }
   if (name.length > 60) {
     return { ok: false, error: "Name is too long (max 60 characters)." };
+  }
+  if (!deps.dbConfigured()) {
+    return {
+      ok: false,
+      error: "The database isn't connected yet. Please try again shortly.",
+    };
   }
   if (await deps.actingAs()) {
     return { ok: false, error: SUPPORT_SESSION_RESTRICTED_MESSAGE };

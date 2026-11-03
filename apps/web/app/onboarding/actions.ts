@@ -29,12 +29,6 @@ export async function createProjectAction(
   _prev: CreateProjectState,
   formData: FormData,
 ): Promise<CreateProjectState> {
-  if (!isDbConfigured()) {
-    return {
-      ok: false,
-      error: "The database isn't connected yet. Please try again shortly.",
-    };
-  }
   const organizationId = String(formData.get("organizationId") ?? "").trim() || undefined;
 
   // The plaintext key comes back for the immediate client-side reveal (KeyReveal).
@@ -45,6 +39,7 @@ export async function createProjectAction(
   return createFirstProject(
     { name: String(formData.get("name") ?? ""), organizationId },
     {
+      dbConfigured: isDbConfigured,
       session: async () => (await getSessionContext()) ?? null,
       actingAs: () => composition.session.actingAs(),
       listProjects: (id) => listProjectsForOrganization(id),

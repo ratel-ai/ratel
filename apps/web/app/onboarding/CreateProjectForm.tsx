@@ -16,7 +16,7 @@ import { APP_NAME } from "@/lib/platform/app-config";
  * Shared card chrome: the frosted instrument panel every onboarding step sits in.
  *
  * The surface is deliberately thin (a low-alpha wash over a heavy blur) so the
- * Lightfall field behind it stays legible through the panel instead of being
+ * dot-field behind it stays legible through the panel instead of being
  * boxed out — the blur, the hairline border, and the drop shadow do the
  * separating.
  *
@@ -176,7 +176,8 @@ function KeyReveal({
       router.push(dashboardHref);
       return;
     }
-    // Tell the background to drain its Lightfall streaks like a waterfall.
+    // Tell the background we are leaving (upstream's streak field drains on it;
+    // this edition's static backdrop has nothing to wind down).
     window.dispatchEvent(new CustomEvent(ONBOARDING_LEAVE_EVENT));
     setLeaving(true);
     window.setTimeout(() => router.push(dashboardHref), NAV_DELAY_MS);
@@ -275,12 +276,12 @@ function KeyReveal({
         </Card>
       </div>
 
-      {/* Base-coloured veil that dissolves the whole first-run scene (the Lightfall
-        drain included) into the canvas as we leave. Held OUTSIDE the settling
-        wrapper: nested inside it, this veil's fade-IN would be cancelled by the
-        panel's own fade-OUT (a fixed child still inherits an ancestor's opacity),
-        so the scene never actually dissolved. Out here it fades to base over the
-        drained field, then navigation reveals the dashboard behind. */}
+      {/* Base-coloured veil that dissolves the whole first-run scene into the
+        canvas as we leave. Held OUTSIDE the settling wrapper: nested inside it,
+        this veil's fade-IN would be cancelled by the panel's own fade-OUT (a
+        fixed child still inherits an ancestor's opacity), so the scene never
+        actually dissolved. Out here it fades to base over the dot-field, then
+        navigation reveals the dashboard behind. */}
       {leaving && <div className="onboarding-dissolve fixed inset-0 z-50 bg-canvas" aria-hidden />}
     </>
   );

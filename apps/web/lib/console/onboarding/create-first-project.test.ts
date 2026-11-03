@@ -15,17 +15,20 @@ function harness({
   quota = { ok: true } as const,
   actingAs = null,
   session = { user: USER, organization: ORG },
+  dbConfigured = true,
 }: {
   projects?: { slug: string; isDemo?: boolean }[];
   quota?: { ok: true } | { ok: false; plan: string; limit: number; message: string };
   actingAs?: ActingAs;
   session?: { user: { externalId: string }; organization: typeof ORG } | null;
+  dbConfigured?: boolean;
 } = {}) {
   const created: { organizationId: string; name: string; slug: string }[] = [];
   const keys: { projectId: string; name: string; keyHash: string; keyPrefix: string }[] = [];
   const events: { event: string; context: unknown; properties: unknown }[] = [];
   let counted = -1;
   const deps: CreateFirstProjectDeps = {
+    dbConfigured: () => dbConfigured,
     session: async () => session,
     actingAs: async () => actingAs,
     listProjects: async () => projects,
@@ -102,6 +105,19 @@ test("the name must be between 2 and 60 characters", async () => {
   assert.deepEqual(await createFirstProject({ name: "x".repeat(61) }, h.deps), {
     ok: false,
     error: "Name is too long (max 60 characters).",
+  });
+  assert.deepEqual(h.created, []);
+});
+
+test("without a database the name is still checked first, as upstream does", async () => {
+  const h = harness({ dbConfigured: false });
+  assert.deepEqual(await createFirstProject({ name: "a" }, h.deps), {
+    ok: false,
+    error: "Give your agent a name (at least 2 characters).",
+  });
+  assert.deepEqual(await createFirstProject({ name: "Support Copilot" }, h.deps), {
+    ok: false,
+    error: "The database isn't connected yet. Please try again shortly.",
   });
   assert.deepEqual(h.created, []);
 });
